@@ -1,0 +1,26 @@
+import \"$$sourcePrefix/qtbase/qtbase.qbs\" as Qt
+
+/* Warning: this file contains the Qt configuration as provided by qmake at
+ * configure time. It will be overwritten by if configure is run again, and any
+ * modifications will be lost. Changes to this file may be incompatible with the
+ * settings defined in qconfig.h/cpp and qfeatures.h. */
+
+Qt {
+    sourcePrefix: \"$$sourcePrefix/\"
+
+    version: \"$$QT_VERSION\"
+    hostMkspec: \"$$[QMAKE_SPEC]\"
+    targetMkspec: \"$$[QMAKE_XSPEC]\"
+
+    hostProfile: \"$$HOST_PROFILE\"
+    readonly property string targetProfile: \"$$TARGET_PROFILE\"
+    readonly property stringList targetArchitectures: [$$TARGET_ARCHITECTURES]
+    targetProfiles: targetArchitectures.length
+        ? targetArchitectures.map(function(arch) { return [targetProfile, arch].join(\'-\'); })
+        : [targetProfile]
+
+    qmake: true
+    configPath: \"$$configPath\"
+    config: [$$qmakeConfig]
+    disabledFeatures: [$$disabledFeatures]
+}

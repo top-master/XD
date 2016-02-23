@@ -65,6 +65,7 @@ public:
     void prepareConfigTests();
     void showSummary();
     QString firstLicensePath();
+    void generateQbsProject();
 
     bool showLicense(QString licenseFile);
     void readLicense();

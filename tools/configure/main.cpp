@@ -104,6 +104,9 @@ int runConfigure( int argc, char** argv )
     if( !app.isOk() )
         return 2;
 
+    // generate qt.qbs
+    app.generateQbsProject();
+
     return 0;
 }
 

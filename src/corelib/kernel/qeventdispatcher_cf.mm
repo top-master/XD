@@ -638,6 +638,6 @@ void QEventDispatcherCoreFoundation::invalidateTimer()
 }
 
 #include "qeventdispatcher_cf.moc"
-#include "moc_qeventdispatcher_cf_p.cpp"
+//#include "moc_qeventdispatcher_cf_p.cpp"
 
 QT_END_NAMESPACE

@@ -7437,6 +7437,9 @@ rm -f "$QMAKE_VARS_FILE" 2>/dev/null
 
     "$CFG_QMAKE_PATH" -qtconf "$QTCONFFILE" "$relpathMangled"
 
+    # Generate the qbs project (hide this behind a configure variable?)
+    "$outpath/bin/qmake" "$relpathMangled/qbs"
+
 ) || exit
 
 #-------------------------------------------------------------------------------

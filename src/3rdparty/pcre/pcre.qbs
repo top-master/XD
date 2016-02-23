@@ -1,0 +1,41 @@
+import qbs
+
+StaticLibrary {
+    builtByDefault: false
+    targetName: "pcre16"
+    destinationDirectory: project.libDirectory
+    profiles: project.targetProfiles
+
+    Depends { name: "Android.ndk"; condition: qbs.targetOS.contains("android") }
+    Depends { name: "cpp" }
+
+    cpp.defines: {
+        var defines = [
+            "HAVE_CONFIG_H",
+            "PCRE_HAVE_CONFIG_H",
+            "PCRE_STATIC",
+        ].concat(base);
+        if (qbs.targetOS.contains("winrt"))
+            defines.push("PCRE_DISABLE_JIT");
+        return defines;
+    }
+
+    cpp.includePaths: [
+        project.qtbasePrefix + "src/3rdparty/pcre"
+    ].concat(base)
+
+    Group {
+        name: "sources"
+        prefix: project.qtbasePrefix + "src/3rdparty/pcre/"
+        files: [
+            "*.h",
+            "pcre16_*.c",
+        ]
+    }
+
+    Export {
+        Depends { name: "cpp" }
+        cpp.includePaths: project.qtbasePrefix + "src/3rdparty/pcre"
+        cpp.defines: product.cpp.defines
+    }
+}

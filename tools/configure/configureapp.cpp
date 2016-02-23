@@ -4808,4 +4808,17 @@ bool FileWriter::flush()
     return false;
 }
 
+void Configure::generateQbsProject()
+{
+    const QString oldCwd = QDir::currentPath();
+    QDir::setCurrent(buildPath);
+    const QString cmdLine
+        = buildPath + "/bin/qmake " + sourcePath + "/qbs/qt.qbs.pro";
+    int status = 0;
+    Environment::execute(cmdLine, &status);
+    if (status != 0)
+        cout << "Warning: Failed to create qt.qbs." << endl;
+    QDir::setCurrent(oldCwd);
+}
+
 QT_END_NAMESPACE

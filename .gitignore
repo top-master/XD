@@ -66,6 +66,7 @@ Makefile*
 *.app
 *.pro.user*
 *.qmlproject.user*
+*.qbs.user*
 *.gcov
 *.gcda
 *.gcno

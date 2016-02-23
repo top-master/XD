@@ -39,6 +39,8 @@
 
 #include "qplatformnativeinterface.h"
 
+#include <QtGui/QCursor>
+
 QT_BEGIN_NAMESPACE
 
 /*!
