@@ -102,6 +102,11 @@ QtModuleProject {
             }
         }
 
+        Properties {
+            condition: project.precompiledHeaders
+            cpp.cxxPrecompiledHeader: "kernel/qt_widgets_pch.h"
+        }
+
         Group {
             name: "sources"
             prefix: root.prefix

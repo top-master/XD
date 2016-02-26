@@ -88,6 +88,11 @@ QtModuleProject {
             }
         }
 
+        Properties {
+            condition: project.precompiledHeaders
+            cpp.cxxPrecompiledHeader: "kernel/qt_gui_pch.h"
+        }
+
         Group {
             name: "sources"
             prefix: root.prefix
@@ -106,7 +111,6 @@ QtModuleProject {
                 "image/qiconengine.cpp",
                 "image/qiconengineplugin.cpp",
                 "image/qiconloader.cpp",
-                "image/qimage_compat.cpp",
                 "image/qimage_conversions.cpp",
                 "image/qimage.cpp",
                 "image/qimageiohandler.cpp",
@@ -295,6 +299,12 @@ QtModuleProject {
                 "util/qlayoutpolicy.cpp",
                 "util/qvalidator.cpp",
             ]
+        }
+
+        Group {
+            name: "sources_no_pch"
+            files: ["image/qimage_compat.cpp"]
+            cpp.cxxPrecompiledHeader: undefined
         }
 
         Group {

@@ -37,6 +37,15 @@ QtModuleProject {
         Depends { name: "Qt.dbus"; condition: project.dbus; }
 
         Group {
+            name: "precompiled header from corelib"
+            files: [project.corelibPrecompiledHeader]
+        }
+        Properties {
+            condition: project.precompiledHeaders
+            cpp.cxxPrecompiledHeader: project.corelibPrecompiledHeader
+        }
+
+        Group {
             name: "sources_eglconvenience"
             condition: project.egl
             prefix: root.prefix + "eglconvenience/"

@@ -48,6 +48,15 @@ QtModuleProject {
 
         cpp.includePaths: root.includePaths.concat(base)
 
+        Group {
+            name: "precompiled header"
+            files: [project.corelibPrecompiledHeader]
+        }
+        Properties {
+            condition: project.precompiledHeaders
+            cpp.cxxPrecompiledHeader: project.corelibPrecompiledHeader
+        }
+
         ModuleHeaders { }
 
         Group {

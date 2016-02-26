@@ -35,6 +35,8 @@ Project {
 
     readonly property bool debug_and_release: config.contains("debug_and_release")
     readonly property bool staticBuild: config.contains("staticBuild")
+    readonly property bool precompiledHeaders: config.contains("precompile_header")
+    readonly property string corelibPrecompiledHeader: qtbasePrefix + "src/corelib/global/qt_pch.h"
 
     // Modules
     readonly property bool concurrent: !disabledFeatures.contains("concurrent")

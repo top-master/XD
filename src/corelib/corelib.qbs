@@ -165,6 +165,11 @@ QtModuleProject {
             }
         }
 
+        Properties {
+            condition: project.precompiledHeaders
+            cpp.cxxPrecompiledHeader: project.corelibPrecompiledHeader
+        }
+
         Group {
             name: "sources"
             prefix: root.prefix
@@ -348,7 +353,6 @@ QtModuleProject {
                 "tools/qsize.cpp",
                 "tools/qstack.cpp",
                 "tools/qstringbuilder.cpp",
-                "tools/qstring_compat.cpp",
                 "tools/qstring.cpp",
                 "tools/qstringlist.cpp",
                 "tools/qtextboundaryfinder.cpp",
@@ -362,6 +366,19 @@ QtModuleProject {
                 "xml/qxmlstream.cpp",
                 "xml/qxmlutils.cpp",
             ]
+        }
+
+        Group {
+            name: "sources_no_pch"
+            files: ["tools/qstring_compat.cpp"]
+            cpp.cxxPrecompiledHeader: undefined
+        }
+
+        Group {
+            name: "sources_no_pch_windows"
+            condition: qbs.toolchain.contains("msvc")
+            files: ["tools/qvector_msvc.cpp"]
+            cpp.cxxPrecompiledHeader: undefined
         }
 
         Group {
@@ -541,7 +558,6 @@ QtModuleProject {
                 "tools/qlocale_win.cpp",
                 "tools/qcollator_win.cpp",
                 "tools/qelapsedtimer_win.cpp",
-                "tools/qvector_msvc.cpp",
             ]
         }
 
