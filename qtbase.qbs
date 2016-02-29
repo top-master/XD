@@ -16,6 +16,7 @@ QtProject {
 
     references: [
         qtbasePrefix + "src/android/android.qbs",
+        qtbasePrefix + "src/concurrent/concurrent.qbs",
         qtbasePrefix + "src/3rdparty/3rdparty.qbs",
         qtbasePrefix + "src/tools/tools.qbs",
         qtbasePrefix + "src/corelib/corelib.qbs",
@@ -28,7 +29,7 @@ QtProject {
         qtbasePrefix + "src/testlib/testlib.qbs",
         qtbasePrefix + "src/widgets/widgets.qbs",
         qtbasePrefix + "src/plugins/plugins.qbs",
-        // TODO: android, concurrent, dbus, --opengl--, openglextensions,
+        // TODO: --opengl--, openglextensions,
         // plugins, printsupport, remaining tools, winmain, --xml--
     ]
 }
