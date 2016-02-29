@@ -36,6 +36,7 @@ QtModuleProject {
         Export {
             Depends { name: "cpp" }
             cpp.includePaths: root.publicIncludePaths
+            Depends { name: "glesv2"; condition: project.opengles2 }
         }
 
         Depends { name: root.headersName }

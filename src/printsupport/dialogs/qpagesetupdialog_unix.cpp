@@ -44,7 +44,10 @@
 
 #include <private/qpagesetupdialog_p.h>
 #include <private/qprintdevice_p.h>
+
+#ifndef QT_NO_CUPS
 #include <private/qcups_p.h>
+#endif
 
 #include "qpainter.h"
 #include "qprintdialog.h"

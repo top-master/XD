@@ -35,8 +35,9 @@ Module {
 
             // Simply copy private headers without parsing
             var version = project.version;
-            if (module == "QtGui" && (input.fileName.startsWith("qplatform")
-                || input.fileName.startsWith("qwindowsysteminterface"))) {
+            if ((module == "QtGui" && (input.fileName.startsWith("qplatform")
+                || input.fileName.startsWith("qwindowsysteminterface")))
+                    || (module == "QtPrintSupport" && input.fileName.startsWith("qplatform"))) {
                 return [{
                     filePath: basePath + version + "/" + module + "/qpa/" + input.fileName,
                     fileTags: fileTags.concat(["hpp_qpa"])
