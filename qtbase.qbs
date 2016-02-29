@@ -18,6 +18,7 @@ QtProject {
         qtbasePrefix + "src/android/android.qbs",
         qtbasePrefix + "src/concurrent/concurrent.qbs",
         qtbasePrefix + "src/printsupport/printsupport.qbs",
+        qtbasePrefix + "src/xml/xml.qbs",
         qtbasePrefix + "src/3rdparty/3rdparty.qbs",
         qtbasePrefix + "src/tools/tools.qbs",
         qtbasePrefix + "src/corelib/corelib.qbs",
@@ -31,6 +32,6 @@ QtProject {
         qtbasePrefix + "src/widgets/widgets.qbs",
         qtbasePrefix + "src/plugins/plugins.qbs",
         // TODO: --opengl--, openglextensions,
-        // remaining tools, winmain, --xml--
+        // remaining tools, winmain
     ]
 }
