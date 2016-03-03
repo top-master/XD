@@ -45,7 +45,10 @@ QtModuleProject {
         Depends { name: "gtk+"; condition: project.gtkstyle }
         Depends { name: "x11"; condition: project.gtkstyle }
         Depends { name: "uic"; profiles: project.hostProfile }
-        Depends { name: "Qt"; submodules: ["core", "core-private", "gui", "gui-private"] }
+        Depends {
+            name: "Qt"
+            submodules: ["core", "core-private", "gui", "gui-private", "platformheaders"]
+        }
 
         cpp.defines: {
             var defines = base;

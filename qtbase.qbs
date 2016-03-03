@@ -31,7 +31,8 @@ QtProject {
         qtbasePrefix + "src/testlib/testlib.qbs",
         qtbasePrefix + "src/widgets/widgets.qbs",
         qtbasePrefix + "src/plugins/plugins.qbs",
+        qtbasePrefix + "/tests",
         // TODO: --opengl--, openglextensions,
-        // remaining tools, winmain
+        // remaining tools, winmain, examples
     ]
 }

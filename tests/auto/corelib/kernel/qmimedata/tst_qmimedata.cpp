@@ -28,6 +28,8 @@
 
 #include <QtTest/QtTest>
 
+#include <QtGui/QColor>
+#include <QtGui/QImage>
 #include <QMimeData>
 
 class tst_QMimeData : public QObject
