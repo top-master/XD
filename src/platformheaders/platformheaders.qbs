@@ -20,7 +20,7 @@ QtModuleProject {
             files: [
                 project.qtbasePrefix + "src/platformheaders/**/*.h",
             ]
-            fileTags: "header_sync"
+            fileTags: "hpp_syncable"
         }
     }
 }

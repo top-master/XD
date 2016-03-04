@@ -25,7 +25,8 @@ QtModuleProject {
         sync.classNames: ({
             "qtest.h": ["QTest"],
         })
-        ModuleHeaders { fileTags: "header_sync" }
+        Depends { name: "QtCoreHeaders" }
+        ModuleHeaders { fileTags: "hpp_syncable" }
     }
 
     QtModule {

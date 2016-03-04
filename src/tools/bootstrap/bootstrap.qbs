@@ -65,7 +65,7 @@ QtModuleProject {
                 "qconfig.h",
                 "qfeatures.h",
             ]
-            fileTags: "header_sync"
+            fileTags: "hpp_syncable"
         }
 
         Group {
@@ -222,7 +222,7 @@ QtModuleProject {
                 "xml/qxmlstream.h",
                 "xml/qxmlutils_p.h",
             ]
-            fileTags: "header_sync"
+            fileTags: "hpp_syncable"
         }
     }
 
@@ -231,7 +231,7 @@ QtModuleProject {
         profiles: project.hostProfile
         sync.module: "QtXml"
         sync.prefix: "bootstrap"
-        QtXmlHeaders { fileTags: "header_sync" }
+        QtXmlHeaders { fileTags: "hpp_syncable" }
     }
 
     QtModule {

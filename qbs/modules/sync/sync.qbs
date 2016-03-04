@@ -1,5 +1,6 @@
 import qbs
 import qbs.File
+import qbs.FileInfo
 import qbs.TextFile
 
 // This is a qbs rewrite of syncqt.pl
@@ -7,7 +8,6 @@ Module {
     // Input
     property string module: ""
     property string prefix: "include"
-    property path profile: ""
     property var classNames: ({})
     readonly property var classFileNames: {
         var classFileNames = {};
@@ -18,20 +18,16 @@ Module {
         return classFileNames;
     }
 
-    Depends { name: "cpp" }
-
     Rule {
-        inputs: "header_sync"
-        outputFileTags: {
-            var module = product.moduleProperty("sync", "module");
-            return ["hpp", "hpp_qpa", "hpp_private", "hpp_private_" + module, "hpp_public",
-                    "hpp_public_" + module, "hpp_" + module];
-        }
+        inputs: "hpp_syncable"
+        outputFileTags: [
+            "hpp_qpa", "hpp_private", "hpp_public", "hpp_forwarding", "hpp_module_input",
+            "hpp_to_copy"
+        ]
         outputArtifacts: {
             var module = product.moduleProperty("sync", "module");
-            var basePath = [project.buildDirectory, product.moduleProperty("sync", "prefix"), module].join("/") + "/";
-
-            var fileTags = ["hpp"];
+            var basePath = FileInfo.joinPaths(project.buildDirectory,
+                                              product.moduleProperty("sync", "prefix"), module);
 
             // Simply copy private headers without parsing
             var version = project.version;
@@ -39,22 +35,18 @@ Module {
                 || input.fileName.startsWith("qwindowsysteminterface")))
                     || (module == "QtPrintSupport" && input.fileName.startsWith("qplatform"))) {
                 return [{
-                    filePath: basePath + version + "/" + module + "/qpa/" + input.fileName,
-                    fileTags: fileTags.concat(["hpp_qpa"])
+                    filePath: FileInfo.joinPaths(basePath, version, module, "qpa", input.fileName),
+                    fileTags: ["hpp_qpa", "hpp_to_copy"]
                 }];
             }
 
             if (input.fileName.endsWith("_p.h")) {
                 return [{
-                    filePath: basePath + version + "/" + module + "/private/" + input.fileName,
-                    fileTags: fileTags.concat(["hpp_private", "hpp_private_" + module])
+                    filePath: FileInfo.joinPaths(basePath, version, module, "private",
+                                                 input.fileName),
+                    fileTags: ["hpp_private", "hpp_to_copy"]
                 }];
             }
-
-            // Everything else is public
-            fileTags.push("hpp_public", "hpp_public_" + module);
-
-            var artifacts = [];
 
             // regular expressions used in parsing
             var reFwdDecl = /^(class|struct) +(\w+);$/;
@@ -66,9 +58,11 @@ Module {
             var reNamespace = /^namespace \w+( {)?/; //extern "C" could go here too
 
             var classes = [];
-            var excludeFromModuleInclude = false;
+            var excludeFromModuleInclude
+                    = input.fileName.contains("_") || input.fileName.contains("qconfig");
 
             var insideQt = false;
+
             var file = new TextFile(input.filePath, TextFile.ReadOnly);
             var line = "";
             var braceDepth = 0;
@@ -213,13 +207,14 @@ Module {
             }
             file.close();
 
+            var artifacts = [];
             var classFileNames = product.moduleProperty("sync", "classFileNames");
             for (var i in classes) {
                 if (classes[i] in classFileNames)
                     continue; // skip explicitly defined classes (and handle them below)
                 artifacts.push({
-                    filePath: basePath + classes[i],
-                    fileTags: fileTags
+                    filePath: FileInfo.joinPaths(basePath, classes[i]),
+                    fileTags: ["hpp_forwarding"]
                 });
             }
 
@@ -227,18 +222,17 @@ Module {
             if (input.fileName in classNames) {
                 for (var i in classNames[input.fileName]) {
                     artifacts.push({
-                        filePath: basePath + classNames[input.fileName][i],
-                        fileTags: fileTags
+                        filePath: FileInfo.joinPaths(basePath, classNames[input.fileName][i]),
+                        fileTags: ["hpp_forwarding"]
                     });
                 }
             }
 
-            // Tag for the module header
-            if (classes.length && !excludeFromModuleInclude)
-                fileTags.push("hpp_" + module);
-
+            var fileTags = ["hpp_public", "hpp_to_copy"];
+            if (!excludeFromModuleInclude)
+                fileTags.push("hpp_module_input");
             artifacts.push({
-                filePath: basePath + input.fileName,
+                filePath: FileInfo.joinPaths(basePath, input.fileName),
                 fileTags: fileTags
             });
 
@@ -250,34 +244,21 @@ Module {
             cmd.description = "syncing " + input.fileName;
             cmd.developerBuild = product.moduleProperty("configure", "private_tests");
             cmd.sourceCode = function() {
-                for (var i in outputs.hpp) {
-                    var header = outputs.hpp[i];
-
-                    // uncomment to aid duplicate finding
-                    /*if (File.exists(header.filePath)) {
-                        var file = new TextFile(header.filePath, TextFile.ReadOnly);
-                        var contents = file.readAll();
-                        file.close();
-
-                        throw 'Programming error: tried to write "' + header.filePath + '" multiple times. '
-                              + 'The new forwarding header is "' + input.fileName
-                              + '" and the current content is "' + contents + '"';
-                        return;
-                    }*/
-
+                for (var i in outputs.hpp_to_copy) {
+                    var header = outputs.hpp_to_copy[i];
                     if (developerBuild) {
                         var file = new TextFile(header.filePath, TextFile.WriteOnly);
                         file.writeLine("#include \"" + input.filePath + "\"");
                         file.close();
-                        continue;
-                    }
-
-                    if (input.fileName == header.fileName) {
+                    } else {
                         File.copy(input.filePath, header.filePath);
-                        continue;
                     }
+                }
+                for (i in outputs.hpp_forwarding) {
+                    var header = outputs.hpp_forwarding[i];
                     var file = new TextFile(header.filePath, TextFile.WriteOnly);
-                    file.writeLine("#include \"" + input.fileName + "\"");
+                    file.writeLine("#include \"" +
+                                   (developerBuild ? input.filePath : input.fileName) + "\"");
                     file.close();
                 }
             };
@@ -286,14 +267,45 @@ Module {
     }
 
     Rule {
-        inputs: "hpp_" + product.moduleProperty("sync", "module")
+        inputsFromDependencies: ["hpp_module"]
         multiplex: true
         Artifact {
             filePath: {
                 var module = product.moduleProperty("sync", "module");
-                return [project.buildDirectory, product.moduleProperty("sync", "prefix"), module, module].join('/');
+                return FileInfo.joinPaths(project.buildDirectory,
+                                          product.moduleProperty("sync", "prefix"), module,
+                                          module + "Depends");
             }
-            fileTags: ["hpp", "hpp_public", "hpp_public_" + product.moduleProperty("sync", "module")]
+            fileTags: ["hpp_depends"]
+        }
+        prepare: {
+            var cmd = new JavaScriptCommand();
+            cmd.description = "Creating dependency header " + output.fileName;
+            cmd.sourceCode = function() {
+                var file = new TextFile(output.filePath, TextFile.WriteOnly);
+                file.writeLine("#ifdef __cplusplus /* create empty PCH in C mode */");
+                for (var i = 0; i < inputs.hpp_module.length; ++i) {
+                    var fileName = inputs.hpp_module[i].fileName;
+                    file.writeLine('#include <' + fileName + '/' + fileName + '>');
+                }
+                file.writeLine("#endif");
+                file.close();
+            };
+            return [cmd];
+        }
+    }
+
+    Rule {
+        // TODO: I have observed this rule getting run twice per product during one build. How is that possible?
+        inputs: ["hpp_module_input", "hpp_depends"]
+        multiplex: true
+        Artifact {
+            filePath: {
+                var module = product.moduleProperty("sync", "module");
+                return FileInfo.joinPaths(project.buildDirectory,
+                                          product.moduleProperty("sync", "prefix"), module, module);
+            }
+            fileTags: ["hpp_module"]
         }
         prepare: {
             var cmd = new JavaScriptCommand();
@@ -303,7 +315,10 @@ Module {
                 var file = new TextFile(output.filePath, TextFile.WriteOnly);
                 file.writeLine("#ifndef QT_" + module.toUpperCase() + "_MODULE_H");
                 file.writeLine("#define QT_" + module.toUpperCase() + "_MODULE_H");
-                inputs["hpp_" + module].forEach(function(header) {
+                if (inputs.hpp_depends)
+                    file.writeLine("#include <" + module + '/' + module + "Depends>");
+                var inputHeaders = inputs["hpp_module_input"] || [];
+                inputHeaders.forEach(function(header) {
                     file.writeLine('#include "' + header.fileName + '"');
                 });
                 file.writeLine("#endif");
@@ -311,52 +326,5 @@ Module {
             };
             return cmd;
         }
-    }
-
-    // Helpers for parsing sync.profile... use for creating the class name hashes
-    verify: {
-        if (!profile)
-            return;
-
-        var syncProfile = new TextFile(profile, TextFile.ReadOnly);
-
-        var modules = { };
-        while (!syncProfile.atEof()) {
-            // Module parsing
-            var line = syncProfile.readLine();
-            if (line.startsWith('%modules = (')) {
-                line = syncProfile.readLine();
-                while (!line.startsWith(');')) {
-                    var matches = line.match(/"([\w\/]*)" => "([\w\/\.\$\!]*)",/);
-                    if (matches)
-                        modules[matches[1]] = matches[2].replace(/\$basedir/g, project.sourcePrefix);
-                    line = syncProfile.readLine();
-                }
-            }
-
-            // Class name parsing
-            var line = syncProfile.readLine();
-            if (line.startsWith('%classnames = (')) {
-                line = syncProfile.readLine();
-                while (!line.startsWith(');')) {
-                    var matches = line.match(/"([\w\.]*)" => "([\w,]*)",/);
-                    if (matches)
-                        classNames[matches[1]] = matches[2].split(',');
-                    line = syncProfile.readLine();
-                }
-            }
-        }
-
-        print("moduleNames: ({");
-        for (var i in modules)
-            print('"' + i + '": "' + modules[i] + '",');
-        print("})");
-
-        print("classNames: ({");
-        for (var i in classNames)
-            print('"' + i + '": ["' + classNames[i].join('", "') + '"],');
-        print("})");
-
-        syncProfile.close();
     }
 }

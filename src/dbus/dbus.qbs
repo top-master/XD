@@ -23,8 +23,9 @@ QtModuleProject {
 
     QtHeaders {
         name: root.headersName
+        Depends { name: "QtCoreHeaders" }
         sync.module: root.name
-        ModuleHeaders { fileTags: ["header_sync"] }
+        ModuleHeaders { fileTags: ["hpp_syncable"] }
     }
 
     QtModule {

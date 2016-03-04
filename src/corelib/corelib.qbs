@@ -38,7 +38,7 @@ QtModuleProject {
             "qbytearray.h": ["QByteArrayData"],
             "qbytearraylist.h": ["QByteArrayList"],
         })
-        ModuleHeaders { fileTags: "header_sync" }
+        ModuleHeaders { fileTags: "hpp_syncable" }
     }
 
     QtModule {

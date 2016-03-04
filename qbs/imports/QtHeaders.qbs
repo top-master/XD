@@ -1,7 +1,7 @@
 import qbs
 
 Product {
-    type: "hpp"
+    type: ["hpp_private", "hpp_public", "hpp_forwarding", "hpp_module", "hpp_qpa", "hpp_depends"]
     property bool install: project.buildForVariant
 
     profiles: project.targetProfiles
@@ -9,7 +9,7 @@ Product {
     Depends { name: "sync" }
 
     Group {
-        fileTagsFilter: ["hpp_public", "hpp_" + sync.module]
+        fileTagsFilter: ["hpp_public", "hpp_forwarding", "hpp_module", "hpp_depends"]
         qbs.install: product.install
         qbs.installDir: sync.prefix + '/' + sync.module
     }
