@@ -13,6 +13,8 @@ QtProduct {
     property path qmakeProject
     readonly property string qmakeProjectPrefix: ""
 
+    cpp.commonCompilerFlags: base.concat(project.sse2 ? project.sse2Flags: [])
+
     FileTagger {
         patterns: ["*_p.h"]
         fileTags: ["qt.private_header"]

@@ -23,4 +23,12 @@ Qt {
     configPath: \"$$configPath\"
     config: [$$qmakeConfig]
     disabledFeatures: [$$disabledFeatures]
+    sse2Flags: [$$sse2Flags]
+    sse3Flags: [$$sse3Flags]
+    ssse3Flags: [$$ssse3Flags]
+    sse4_1Flags: [$$sse4_1Flags]
+    sse4_2Flags: [$$sse4_2Flags]
+    avxFlags: [$$avxFlags]
+    avx2Flags: [$$avx2Flags]
+    neonFlags: [$$neonFlags]
 }

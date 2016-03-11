@@ -393,6 +393,8 @@ QtModuleProject {
             name: "sources_sse2"
             condition: project.sse2
             prefix: root.prefix
+            cpp.cxxFlags: outer.concat(project.sse2Flags)
+            cpp.cxxPrecompiledHeader: undefined
             files: [
                 "image/qimage_sse2.cpp",
                 "painting/qdrawhelper_sse2.cpp",
@@ -403,6 +405,8 @@ QtModuleProject {
             name: "sources_ssse3"
             condition: project.ssse3
             prefix: root.prefix
+            cpp.cxxFlags: outer.concat(project.ssse3Flags)
+            cpp.cxxPrecompiledHeader: undefined
             files: [
                 "image/qimage_ssse3.cpp",
                 "painting/qdrawhelper_ssse3.cpp",
@@ -413,6 +417,8 @@ QtModuleProject {
             name: "sources_sse4_1"
             condition: project.sse4_1
             prefix: root.prefix
+            cpp.cxxFlags: outer.concat(project.sse4_1Flags)
+            cpp.cxxPrecompiledHeader: undefined
             files: [
                 "image/qimage_sse4.cpp",
                 "painting/qimagescale_sse4.cpp",
@@ -424,6 +430,8 @@ QtModuleProject {
             name: "sources_avx2"
             condition: project.avx2
             prefix: root.prefix
+            cpp.cxxFlags: outer.concat(project.avx2Flags)
+            cpp.cxxPrecompiledHeader: undefined
             files: [
                 "image/qimage_avx2.cpp",
                 "painting/qdrawhelper_avx2.cpp",
@@ -444,6 +452,8 @@ QtModuleProject {
             name: "sources_neon"
             condition: project.neon
             prefix: root.prefix
+            cpp.commonCompilerFlags: outer.concat(project.neonFlags)
+            cpp.cxxPrecompiledHeader: undefined
             files: [
                 "image/qimage_neon.cpp",
                 "../3rdparty/pixman/pixman-arm-neon-asm.S",

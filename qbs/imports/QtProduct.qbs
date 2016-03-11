@@ -58,8 +58,6 @@ Product {
         return defines;
     }
 
-    cpp.commonCompilerFlags: hostBuild ? [] : project.globalTargetCompilerFlags
-
     cpp.includePaths: [
         project.qtbasePrefix + "mkspecs/" + project.targetMkspec,
         product.buildDirectory + "/.moc",

@@ -53,64 +53,28 @@ Project {
 
     // SIMD
     readonly property bool sse2: config.contains("sse2")
-    readonly property stringList sse2Flags: {
-        if (sse2 && qbs.toolchain.contains("gcc"))
-            return ["-msse2"];
-        return [];
-    }
+    readonly property stringList sse2Flags: []
 
     readonly property bool sse3: config.contains("sse3")
-    readonly property stringList sse3Flags: {
-        if (sse3 && qbs.toolchain.contains("gcc"))
-            return ["-msse3"];
-        return [];
-    }
+    readonly property stringList sse3Flags: []
 
     readonly property bool ssse3: config.contains("ssse3")
-
-    readonly property stringList ssse3Flags: {
-        if (ssse3 && qbs.toolchain.contains("gcc"))
-            return ["-mssse3"];
-        return [];
-    }
+    readonly property stringList ssse3Flags: []
 
     readonly property bool sse4_1: config.contains("sse4_1")
-    readonly property stringList sse4_1Flags: {
-        if (sse4_1 && qbs.toolchain.contains("gcc"))
-            return ["-msse4.1"];
-        return [];
-    }
+    readonly property stringList sse4_1Flags: []
 
     readonly property bool sse4_2: config.contains("sse4_2")
-    readonly property stringList sse4_2Flags: {
-        if (sse4_2 && qbs.toolchain.contains("gcc"))
-            return ["-msse4.2"];
-        return [];
-    }
+    readonly property stringList sse4_2Flags: []
 
     readonly property bool avx: config.contains("avx")
-    readonly property stringList avxFlags: {
-        if (avx && qbs.toolchain.contains("gcc"))
-            return ["-mavx"];
-        return [];
-    }
+    readonly property stringList avxFlags: []
 
     readonly property bool avx2: config.contains("avx2")
-    readonly property stringList avx2Flags: {
-        if (avx2 && qbs.toolchain.contains("gcc"))
-            return ["-mavx2"];
-        return [];
-    }
+    readonly property stringList avx2Flags: []
 
     readonly property bool neon: config.contains("neon")
-    readonly property stringList neonFlags: {
-        if (neon && qbs.toolchain.contains("gcc"))
-            return ["-mfpu=neon"];
-        return [];
-    }
-
-    property stringList globalTargetCompilerFlags: sse2Flags.concat(sse3Flags, ssse3Flags,
-            sse4_1Flags, sse4_2Flags, avxFlags, avx2Flags, neonFlags)
+    readonly property stringList neonFlags: []
 
     // Symbol visibility
     readonly property bool private_tests: config.contains("private_tests")
