@@ -50,6 +50,7 @@ QtModuleProject {
         Depends { name: "libpng" }
         Depends { name: "zlib" }
 
+        cpp.useCxxPrecompiledHeader: project.precompiledHeaders
         cpp.defines: [
             "QT_BUILD_GUI_LIB",
         ].concat(base);
@@ -88,11 +89,6 @@ QtModuleProject {
                     excludeFiles.push("opengl/qopengltimerquery.h");
                 return excludeFiles;
             }
-        }
-
-        Properties {
-            condition: project.precompiledHeaders
-            cpp.cxxPrecompiledHeader: "kernel/qt_gui_pch.h"
         }
 
         Group {
@@ -306,7 +302,7 @@ QtModuleProject {
         Group {
             name: "sources_no_pch"
             files: ["image/qimage_compat.cpp"]
-            cpp.cxxPrecompiledHeader: undefined
+            cpp.useCxxPrecompiledHeader: false
         }
 
         Group {
@@ -394,7 +390,7 @@ QtModuleProject {
             condition: project.sse2
             prefix: root.prefix
             cpp.cxxFlags: outer.concat(project.sse2Flags)
-            cpp.cxxPrecompiledHeader: undefined
+            cpp.useCxxPrecompiledHeader: false
             files: [
                 "image/qimage_sse2.cpp",
                 "painting/qdrawhelper_sse2.cpp",
@@ -406,7 +402,7 @@ QtModuleProject {
             condition: project.ssse3
             prefix: root.prefix
             cpp.cxxFlags: outer.concat(project.ssse3Flags)
-            cpp.cxxPrecompiledHeader: undefined
+            cpp.useCxxPrecompiledHeader: false
             files: [
                 "image/qimage_ssse3.cpp",
                 "painting/qdrawhelper_ssse3.cpp",
@@ -418,7 +414,7 @@ QtModuleProject {
             condition: project.sse4_1
             prefix: root.prefix
             cpp.cxxFlags: outer.concat(project.sse4_1Flags)
-            cpp.cxxPrecompiledHeader: undefined
+            cpp.useCxxPrecompiledHeader: false
             files: [
                 "image/qimage_sse4.cpp",
                 "painting/qimagescale_sse4.cpp",
@@ -431,7 +427,7 @@ QtModuleProject {
             condition: project.avx2
             prefix: root.prefix
             cpp.cxxFlags: outer.concat(project.avx2Flags)
-            cpp.cxxPrecompiledHeader: undefined
+            cpp.useCxxPrecompiledHeader: false
             files: [
                 "image/qimage_avx2.cpp",
                 "painting/qdrawhelper_avx2.cpp",
@@ -453,7 +449,7 @@ QtModuleProject {
             condition: project.neon
             prefix: root.prefix
             cpp.commonCompilerFlags: outer.concat(project.neonFlags)
-            cpp.cxxPrecompiledHeader: undefined
+            cpp.useCxxPrecompiledHeader: false
             files: [
                 "image/qimage_neon.cpp",
                 "../3rdparty/pixman/pixman-arm-neon-asm.S",

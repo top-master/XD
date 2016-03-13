@@ -105,13 +105,7 @@ QtModuleProject {
             name: "precompiled header from corelib"
             files: [project.corelibPrecompiledHeader]
         }
-        Properties {
-            // mingw error message says precompiled headers cannot be used if _WIN32_WINNT
-            // is defined.
-            condition: project.precompiledHeaders && !qbs.toolchain.contains("mingw")
-            cpp.cxxPrecompiledHeader: project.corelibPrecompiledHeader
-        }
-        cpp.cxxPrecompiledHeader: undefined // TODO: Necessary due to some qbs bug; fix!
+        cpp.useCxxPrecompiledHeader: project.precompiledHeaders && !qbs.toolchain.contains("mingw")
 
         Group {
             name: "sources"

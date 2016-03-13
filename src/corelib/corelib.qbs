@@ -63,6 +63,7 @@ QtModuleProject {
         Depends { name: "glib"; condition: project.glib }
         Depends { name: "forkfd"; condition: qbs.targetOS.contains("unix") }
 
+        cpp.useCxxPrecompiledHeader: project.precompiledHeaders
         cpp.defines: {
             var defines = ["QT_BUILD_CORE_LIB"];
             if (project.icu)
@@ -163,11 +164,6 @@ QtModuleProject {
                 }
                 return excludeFiles;
             }
-        }
-
-        Properties {
-            condition: project.precompiledHeaders
-            cpp.cxxPrecompiledHeader: project.corelibPrecompiledHeader
         }
 
         Group {
@@ -371,14 +367,14 @@ QtModuleProject {
         Group {
             name: "sources_no_pch"
             files: ["tools/qstring_compat.cpp"]
-            cpp.cxxPrecompiledHeader: undefined
+            cpp.useCxxPrecompiledHeader: false
         }
 
         Group {
             name: "sources_no_pch_windows"
             condition: qbs.toolchain.contains("msvc")
             files: ["tools/qvector_msvc.cpp"]
-            cpp.cxxPrecompiledHeader: undefined
+            cpp.useCxxPrecompiledHeader: false
         }
 
         Group {

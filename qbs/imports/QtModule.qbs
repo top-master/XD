@@ -16,8 +16,29 @@ QtProduct {
     cpp.commonCompilerFlags: base.concat(project.sse2 ? project.sse2Flags: [])
 
     FileTagger {
+        patterns: ["*_pch.h"]
+        fileTags: ["cpp_pch_src"]
+    }
+
+    FileTagger {
         patterns: ["*_p.h"]
         fileTags: ["qt.private_header"]
+    }
+
+    Rule {
+        inputsFromDependencies: [
+            "hpp_private", "hpp_public", "hpp_forwarding", "hpp_module", "hpp_qpa", "hpp_depends"
+        ]
+        Artifact {
+            filePath: "dummy.hpp";
+            fileTags: ["hpp"]
+        }
+        prepare: {
+            var dummy = new JavaScriptCommand();
+            dummy.silent = true;
+            dummy.sourceCode = function() { };
+            return [dummy];
+        }
     }
 
     Rule {

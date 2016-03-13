@@ -29,6 +29,7 @@ QtModuleProject {
             cpp.includePaths: root.includePaths
         }
 
+        cpp.useCxxPrecompiledHeader: project.precompiledHeaders
         cpp.includePaths: base.concat(root.includePaths)
 
         Depends { name: root.headersName }
@@ -41,10 +42,6 @@ QtModuleProject {
         Group {
             name: "precompiled header from corelib"
             files: [project.corelibPrecompiledHeader]
-        }
-        Properties {
-            condition: project.precompiledHeaders
-            cpp.cxxPrecompiledHeader: project.corelibPrecompiledHeader
         }
 
         Group {

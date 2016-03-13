@@ -53,10 +53,6 @@ QtModuleProject {
             name: "precompiled header"
             files: [project.corelibPrecompiledHeader]
         }
-        Properties {
-            condition: project.precompiledHeaders
-            cpp.cxxPrecompiledHeader: project.corelibPrecompiledHeader
-        }
 
         ModuleHeaders { }
 
