@@ -6,6 +6,7 @@ CppApplication {
     destinationDirectory: project.binDirectory
     cpp.defines: ["QT_USE_QSTRINGBUILDER"]
     Depends { name: "Qt.bootstrap-private" }
+    Depends { name: "osversions" }
 
     Properties {
         condition: qbs.targetOS.contains("linux") && qbs.toolchain.contains("clang")

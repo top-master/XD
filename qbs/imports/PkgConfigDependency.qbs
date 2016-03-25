@@ -16,6 +16,7 @@ Product {
     readonly property stringList dynamicLibraries: found ? QtUtils.dynamicLibraries(probe.libs) : []
 
     Depends { name: "cpp" }
+    Depends { name: "osversions" }
 
     Probes.PkgConfigProbe {
         id: probe

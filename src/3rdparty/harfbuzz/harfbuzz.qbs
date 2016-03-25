@@ -7,6 +7,7 @@ StaticLibrary {
 
     Depends { name: "Android.ndk"; condition: qbs.targetOS.contains("android") }
     Depends { name: "cpp" }
+    Depends { name: "osversions" }
 
     Group {
         name: "sources"

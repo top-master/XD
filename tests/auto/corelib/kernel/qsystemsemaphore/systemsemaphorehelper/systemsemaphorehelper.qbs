@@ -8,5 +8,6 @@ CppApplication {
     cpp.cxxLanguageVersion: "c++11"
     Depends { name: "Qt.core" }
     Depends { name: "Qt.testlib" }
+    Depends { name: "osversions" }
     files: "main.cpp"
 }

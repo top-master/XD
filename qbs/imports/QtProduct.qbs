@@ -7,6 +7,7 @@ Product {
     profiles: project.targetProfiles
 
     Depends { name: "cpp" }
+    Depends { name: "osversions" }
     Depends { name: "rcc"; condition: !product.hostBuild; profiles: project.hostProfile }
     Depends { name: "moc"; condition: !product.hostBuild; profiles: project.hostProfile }
     Depends { name: "Android.ndk"; condition: qbs.targetOS.contains("android") }
