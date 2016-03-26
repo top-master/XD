@@ -58,8 +58,6 @@ QtModuleProject {
             defines.push("QT_BUILD_WIDGETS_LIB");
             if (!project.macstyle)
                 defines.push("QT_NO_STYLE_MAC");
-            if (!project.windowsstyle)
-                defines.push("QT_NO_STYLE_WINDOWS");
             if (!project.windowscestyle)
                 defines.push("QT_NO_STYLE_WINDOWSCE");
             if (!project.windowsmobilestyle)
@@ -227,6 +225,7 @@ QtModuleProject {
                 "styles/qstylesheetstyle.cpp",
                 "styles/qstylesheetstyle_default.cpp",
                 "styles/qstyle.qrc",
+                "styles/qwindowsstyle.cpp",
                 "util/qcolormap.cpp",
                 "util/qcompleter.cpp",
                 "util/qflickgesture.cpp",
@@ -372,15 +371,6 @@ QtModuleProject {
             prefix: root.prefix + "styles/"
             files: [
                 "qmacstyle_mac.mm"
-            ]
-        }
-
-        Group {
-            name: "sources_windowsstyle"
-            condition: project.windowsstyle
-            prefix: root.prefix + "styles/"
-            files: [
-                "qwindowsstyle.cpp",
             ]
         }
 
