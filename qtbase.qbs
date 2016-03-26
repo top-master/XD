@@ -10,8 +10,6 @@ import "qbs/imports/QtProject.qbs" as QtProject
   which will also generate a suitable subclass of this project.
 */
 QtProject {
-    name: "Qt"
-
     qbsSearchPaths: "qbs"
 
     references: [
