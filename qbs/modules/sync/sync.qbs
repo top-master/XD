@@ -53,7 +53,7 @@ Module {
             var reTypedefFn = /^typedef *.*\(\*(Q[^\)]*)\)\(.*\);$/;
             var reTypedef = /^typedef +(unsigned )?([^ ]*)(<[\w, ]+>)? +(Q[^ ]*);$/;
             var reQtMacro = / ?Q_[A-Z_]+/;
-            var reDecl = /^(template <class [\w, ]+> )?(class|struct) +(\w+)( ?: public [\w<>, ]+)?( {)?$/;
+            var reDecl = /^(template <class [\w, ]+> )?(class|struct) +(\w+)( ?:)?( public [\w<>, ]+)?( {)?$/;
             var reIterator = /^Q_DECLARE_\w+ITERATOR\((\w+)\)$/;
             var reNamespace = /^namespace \w+( {)?/; //extern "C" could go here too
 
