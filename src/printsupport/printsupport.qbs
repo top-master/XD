@@ -7,8 +7,16 @@ QtModuleProject {
     simpleName: "printsupport"
     prefix: project.qtbasePrefix + "src/printsupport/"
 
+    defines: {
+        var defines = base;
+        if (!project.cups)
+            defines.push("QT_NO_CUPS");
+        return defines;
+    }
+
     Product {
         name: root.privateName
+        condition: project.printsupport
         profiles: project.targetProfiles
         Depends { name: root.moduleName }
         Export {
@@ -29,6 +37,7 @@ QtModuleProject {
 
     QtModule {
         name: root.moduleName
+        condition: project.printsupport
         parentName: root.name
         simpleName: root.simpleName
         targetName: root.targetName
@@ -45,10 +54,10 @@ QtModuleProject {
             submodules: ["core", "core-private", "gui", "gui-private", "widgets", "widgets-private"]
         }
 
-        cpp.defines: base.concat([
+        cpp.defines: [
             "QT_BUILD_PRINTSUPPORT_LIB",
             "QT_NO_USING_NAMESPACE"
-        ])
+        ].concat(base).concat(root.defines)
 
         cpp.includePaths: {
             var paths = root.includePaths.concat(base);
