@@ -4,6 +4,7 @@ import "headers.qbs" as ModuleHeaders
 QtModuleProject {
     id: root
     name: "QtPlatformSupport"
+    moduleName: "Qt.platformsupport-private"
     simpleName: "platformsupport"
     prefix: project.qtbasePrefix + "src/platformsupport/"
 
@@ -16,7 +17,7 @@ QtModuleProject {
     }
 
     QtModule {
-        name: root.privateName
+        name: root.moduleName
         parentName: root.name
         simpleName: root.simpleName + "_private"
         targetName: root.targetName
@@ -30,14 +31,14 @@ QtModuleProject {
         }
 
         cpp.useCxxPrecompiledHeader: project.precompiledHeaders
-        cpp.includePaths: base.concat(root.includePaths)
+        cpp.includePaths: [path].concat(base).concat(root.includePaths)
 
         Depends { name: root.headersName }
         Depends { name: "egl"; condition: project.egl }
         Depends { name: "freetype2" }
         Depends { name: "glib"; condition: project.glib }
         Depends { name: "Qt"; submodules: ["core", "core-private", "gui", "gui-private", "platformheaders"] }
-        Depends { name: "Qt.dbus"; condition: project.dbus; }
+        Depends { name: "Qt.dbus"; condition: project.dbus }
 
         Group {
             name: "precompiled header from corelib"
@@ -45,8 +46,44 @@ QtModuleProject {
         }
 
         Group {
+            name: "sources_dbusmenu"
+            condition: project.dbus && qbs.targetOS.contains("linux")
+            prefix: root.prefix + "dbusmenu/"
+            files: [
+                "qdbusmenuadaptor.cpp",
+                "qdbusmenuadaptor_p.h",
+                "qdbusmenubar.cpp",
+                "qdbusmenubar_p.h",
+                "qdbusmenuconnection.cpp",
+                "qdbusmenuconnection_p.h",
+                "qdbusmenuregistrarproxy.cpp",
+                "qdbusmenuregistrarproxy_p.h",
+                "qdbusmenutypes.cpp",
+                "qdbusmenutypes_p.h",
+                "qdbusplatformmenu.cpp",
+                "qdbusplatformmenu_p.h",
+            ]
+        }
+
+        Group {
+            name: "sources_dbustray"
+            condition: project.dbus && qbs.targetOS.contains("linux")
+            prefix: root.prefix + "dbustray/"
+            files: [
+                "qdbustrayicon_p.h",
+                "qdbustraytypes_p.h",
+                "qstatusnotifieritemadaptor_p.h",
+                "qxdgnotificationproxy_p.h",
+                "qdbustrayicon.cpp",
+                "qdbustraytypes.cpp",
+                "qstatusnotifieritemadaptor.cpp",
+                "qxdgnotificationproxy.cpp",
+            ]
+        }
+
+        Group {
             name: "sources_eglconvenience"
-            condition: project.egl
+            condition: project.egl && project.opengl
             prefix: root.prefix + "eglconvenience/"
             cpp.defines: outer.concat("MESA_EGL_NO_X11_HEADERS")
             files: [

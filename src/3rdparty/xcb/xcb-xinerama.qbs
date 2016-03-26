@@ -1,5 +1,5 @@
 import qbs
 
 PkgConfigDependency {
-    name: "xcb"
+    name: "xcb-xinerama"
 }
