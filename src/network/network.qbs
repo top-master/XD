@@ -7,6 +7,13 @@ QtModuleProject {
     simpleName: "network"
     prefix: project.qtbasePrefix + "src/network/"
 
+    defines: {
+        var defines = base;
+        if (!project.ssl)
+            defines.push("QT_NO_SSL");
+        return defines;
+    }
+
     Product {
         name: root.privateName
         profiles: project.targetProfiles
@@ -36,6 +43,7 @@ QtModuleProject {
 
         Export {
             Depends { name: "cpp" }
+            cpp.defines: root.defines
             cpp.includePaths: root.publicIncludePaths
         }
 
@@ -47,7 +55,7 @@ QtModuleProject {
 
         cpp.defines: [
             "QT_BUILD_NETWORK_LIB",
-        ].concat(base)
+        ].concat(root.defines).concat(base);
 
         cpp.dynamicLibraries: {
             var dynamicLibraries = [];
