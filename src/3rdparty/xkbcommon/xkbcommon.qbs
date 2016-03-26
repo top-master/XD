@@ -1,4 +1,5 @@
 import qbs
+import qbs.Environment
 
 PkgConfigDependency {
     name: "xkbcommon-x11"
@@ -23,7 +24,7 @@ PkgConfigDependency {
         "-Wno-unused-parameter",
     ].concat(base)
 
-    readonly property string xkbConfigRoot: qbs.getEnv("CFG_XKB_CONFIG_ROOT")
+    readonly property string xkbConfigRoot: Environment.getEnv("CFG_XKB_CONFIG_ROOT")
 
     cpp.defines: [
         'DFLT_XKB_CONFIG_ROOT="' + (xkbConfigRoot || "not found") + '"',
