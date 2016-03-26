@@ -7,6 +7,13 @@ QtModuleProject {
     simpleName: "gui"
     prefix: project.qtbasePrefix + "src/gui/"
 
+    defines: {
+        var defines = base;
+        if (!project.opengl)
+            defines.push("QT_NO_OPENGL");
+        return defines;
+    }
+
     Product {
         name: root.privateName
         profiles: project.targetProfiles
@@ -36,6 +43,7 @@ QtModuleProject {
 
         Export {
             Depends { name: "cpp" }
+            cpp.defines: root.defines
             cpp.includePaths: root.publicIncludePaths
             Depends { name: "glesv2"; condition: project.opengles2 }
         }
@@ -53,7 +61,7 @@ QtModuleProject {
         cpp.useCxxPrecompiledHeader: project.precompiledHeaders
         cpp.defines: [
             "QT_BUILD_GUI_LIB",
-        ].concat(base);
+        ].concat(base).concat(root.defines);
 
         cpp.dynamicLibraries: {
             var dynamicLibraries = base;
@@ -87,6 +95,12 @@ QtModuleProject {
                 var excludeFiles = ["doc/**"];
                 if (project.opengl == "es2")
                     excludeFiles.push("opengl/qopengltimerquery.h");
+                if (!project.opengl) {
+                    excludeFiles.push("opengl/*.h");
+                    excludeFiles.push("kernel/qopenglcontext.h");
+                    excludeFiles.push("kernel/qopenglwindow.h");
+                    excludeFiles.push("kernel/qplatformopenglcontext.h");
+                }
                 return excludeFiles;
             }
         }
@@ -146,8 +160,6 @@ QtModuleProject {
                 "kernel/qkeymapper.cpp",
                 "kernel/qkeysequence.cpp",
                 "kernel/qoffscreensurface.cpp",
-                "kernel/qopenglcontext.cpp",
-                "kernel/qopenglwindow.cpp",
                 "kernel/qpaintdevicewindow.cpp",
                 "kernel/qpalette.cpp",
                 "kernel/qpixelformat.cpp",
@@ -166,7 +178,6 @@ QtModuleProject {
                 "kernel/qplatformmenu.cpp",
                 "kernel/qplatformnativeinterface.cpp",
                 "kernel/qplatformoffscreensurface.cpp",
-                "kernel/qplatformopenglcontext.cpp",
                 "kernel/qplatformscreen.cpp",
                 "kernel/qplatformservices.cpp",
                 "kernel/qplatformsessionmanager.cpp",
@@ -195,29 +206,6 @@ QtModuleProject {
                 "math3d/qvector2d.cpp",
                 "math3d/qvector3d.cpp",
                 "math3d/qvector4d.cpp",
-                "opengl/qopengl2pexvertexarray.cpp",
-                "opengl/qopenglbuffer.cpp",
-                "opengl/qopengl.cpp",
-                "opengl/qopenglcustomshaderstage.cpp",
-                "opengl/qopengldebug.cpp",
-                "opengl/qopenglengineshadermanager.cpp",
-                "opengl/qopenglframebufferobject.cpp",
-                "opengl/qopenglfunctions.cpp",
-                "opengl/qopenglgradientcache.cpp",
-                "opengl/qopenglpaintdevice.cpp",
-                "opengl/qopenglpaintengine.cpp",
-                "opengl/qopenglpixeltransferoptions.cpp",
-                "opengl/qopenglshaderprogram.cpp",
-                "opengl/qopengltextureblitter.cpp",
-                "opengl/qopengltexturecache.cpp",
-                "opengl/qopengltexture.cpp",
-                "opengl/qopengltextureglyphcache.cpp",
-                "opengl/qopengltexturehelper.cpp",
-                "opengl/qopenglversionfunctions.cpp",
-                "opengl/qopenglversionfunctionsfactory.cpp",
-                "opengl/qopenglvertexarrayobject.cpp",
-                "opengl/qtriangulatingstroker.cpp",
-                "opengl/qtriangulator.cpp",
                 "painting/qbackingstore.cpp",
                 "painting/qbezier.cpp",
                 "painting/qblendfunctions.cpp",
@@ -333,7 +321,41 @@ QtModuleProject {
         }
 
         Group {
-            name: "sources_opengles2"
+            name: "sources_opengl"
+            condition: project.opengl
+            prefix: root.prefix
+            files: [
+                "kernel/qopenglcontext.cpp",
+                "kernel/qopenglwindow.cpp",
+                "kernel/qplatformopenglcontext.cpp",
+                "opengl/qopengl2pexvertexarray.cpp",
+                "opengl/qopenglbuffer.cpp",
+                "opengl/qopengl.cpp",
+                "opengl/qopenglcustomshaderstage.cpp",
+                "opengl/qopengldebug.cpp",
+                "opengl/qopenglengineshadermanager.cpp",
+                "opengl/qopenglframebufferobject.cpp",
+                "opengl/qopenglfunctions.cpp",
+                "opengl/qopenglgradientcache.cpp",
+                "opengl/qopenglpaintdevice.cpp",
+                "opengl/qopenglpaintengine.cpp",
+                "opengl/qopenglpixeltransferoptions.cpp",
+                "opengl/qopenglshaderprogram.cpp",
+                "opengl/qopengltextureblitter.cpp",
+                "opengl/qopengltexturecache.cpp",
+                "opengl/qopengltexture.cpp",
+                "opengl/qopengltextureglyphcache.cpp",
+                "opengl/qopengltexturehelper.cpp",
+                "opengl/qopenglversionfunctions.cpp",
+                "opengl/qopenglversionfunctionsfactory.cpp",
+                "opengl/qopenglvertexarrayobject.cpp",
+                "opengl/qtriangulatingstroker.cpp",
+                "opengl/qtriangulator.cpp",
+            ]
+        }
+
+        Group {
+            name: "sources_opengl_es2"
             condition: project.opengles2
             prefix: root.prefix
             files: [
@@ -342,7 +364,7 @@ QtModuleProject {
         }
 
         Group {
-            name: "sources_opengl"
+            name: "sources_opengl_desktop"
             condition: project.opengl && !project.opengles2
             prefix: root.prefix
             files: [

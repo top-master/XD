@@ -193,7 +193,6 @@ QtModuleProject {
                 "kernel/qlayoutengine.cpp",
                 "kernel/qlayoutitem.cpp",
                 "kernel/qmacgesturerecognizer.cpp",
-                "kernel/qopenglwidget.cpp",
                 "kernel/qshortcut.cpp",
                 "kernel/qsizepolicy.cpp",
                 "kernel/qstackedlayout.cpp",
@@ -326,6 +325,15 @@ QtModuleProject {
                 "kernel/qwidgetsfunctions_wince.cpp",
                 "util/qsystemtrayicon_wince.cpp",
                 "widgets/qmenu_wince.cpp",
+            ]
+        }
+
+        Group {
+            name: "sources_opengl"
+            condition: project.opengl
+            prefix: root.prefix
+            files: [
+                "kernel/qopenglwidget.cpp",
             ]
         }
 
