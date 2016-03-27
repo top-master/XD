@@ -3,7 +3,7 @@ import "QtUtils.js" as QtUtils
 
 Project {
     qbsSearchPaths: ["qbs"]
-    minimumQbsVersion: "1.4.2"
+    minimumQbsVersion: "1.5.0"
 
     readonly property string version: "5.6.0"
     readonly property string hostProfile: {
