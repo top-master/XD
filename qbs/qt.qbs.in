@@ -1,14 +1,14 @@
-import \"$$sourcePrefix/qtbase/qtbase.qbs\" as Qt
+import \"$$sourcePrefix/qtbase/qbs/imports/QtProject.qbs\" as QtProject
 
 /* Warning: this file contains the Qt configuration as provided by qmake at
  * configure time. It will be overwritten by if configure is run again, and any
  * modifications will be lost. Changes to this file may be incompatible with the
  * settings defined in qconfig.h/cpp and qfeatures.h. */
 
-Qt {
+QtProject {
     sourcePrefix: \"$$sourcePrefix/\"
+    qbsSearchPaths: [sourcePrefix + \"qtbase/qbs\"]
 
-    version: \"$$QT_VERSION\"
     hostMkspec: \"$$[QMAKE_SPEC]\"
     targetMkspec: \"$$[QMAKE_XSPEC]\"
 
@@ -41,4 +41,6 @@ Qt {
     lFlagsSqlite: [$$qtLFlagsSqlite]
     cFlagsTds: [$$qtCFlagsTds]
     lFlagsTds: [$$qtLFlagsTds]
+
+    references: sourcePrefix + \"qtbase/qtbase.qbs\"
 }
