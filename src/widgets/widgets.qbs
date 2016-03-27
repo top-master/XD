@@ -33,6 +33,7 @@ QtModuleProject {
         parentName: root.name
         simpleName: root.simpleName
         targetName: root.targetName
+        qmakeProject: root.prefix + "widgets.pro"
 
         Export {
             Depends { name: "cpp" }
