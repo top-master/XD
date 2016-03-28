@@ -9,6 +9,7 @@ PkgConfigDependency {
     Export {
         Depends { name: "libGLESv2"; condition: project.angle }
         Depends { name: "cpp" }
+        cpp.defines: project.qmake ? original : [ "QT_OPENGL_ES", "QT_OPENGL_ES_2" ]
         cpp.includePaths: !project.angle && product.found ? product.includePaths : original
         cpp.dynamicLibraries: {
             if (project.angle)
