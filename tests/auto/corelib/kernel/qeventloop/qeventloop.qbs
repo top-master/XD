@@ -2,7 +2,7 @@ import qbs
 
 QtAutotest {
     name: "tst_qeventloop"
-    condition: project.network
+    condition: project.config.contains("testcase_targets") && project.network
     Depends { name: "Qt.core-private" }
     Depends { name: "Qt.network" }
     files: ["tst_qeventloop.cpp"]
