@@ -28,6 +28,7 @@ QtModuleProject {
 
     QtHeaders {
         name: root.headersName
+        condition: project.printsupport
         sync.module: root.name
         Depends { name: "QtCoreHeaders" }
         Depends { name: "QtGuiHeaders" }

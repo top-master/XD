@@ -44,6 +44,7 @@ Project {
     readonly property bool dbus: !disabledFeatures.contains("dbus")
     readonly property bool gui: !disabledFeatures.contains("gui")
     readonly property bool network: !disabledFeatures.contains("network")
+    readonly property bool printsupport: !disabledFeatures.contains("printsupport") && widgets
     readonly property bool sql: !disabledFeatures.contains("sql")
     readonly property bool testlib: !disabledFeatures.contains("testlib")
     readonly property bool widgets: !disabledFeatures.contains("widgets")

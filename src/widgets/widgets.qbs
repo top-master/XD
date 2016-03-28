@@ -9,6 +9,7 @@ QtModuleProject {
 
     Product {
         name: root.privateName
+        condition: project.widgets
         profiles: project.targetProfiles
         type: "hpp"
         Depends { name: root.moduleName }
@@ -21,6 +22,7 @@ QtModuleProject {
 
     QtHeaders {
         name: root.headersName
+        condition: project.widgets
         sync.module: root.name
         Depends { name: "QtCoreHeaders" }
         Depends { name: "QtGuiHeaders" }
