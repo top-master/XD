@@ -6,5 +6,6 @@ Project {
         //"windows/windows.qbs",
         "winrt/winrt.qbs",
         "android/android.qbs",
+        "cocoa/cocoa.qbs",
     ]
 }
