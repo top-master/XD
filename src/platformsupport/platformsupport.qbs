@@ -28,6 +28,16 @@ QtModuleProject {
             Depends { name: "cpp" }
             cpp.defines: root.defines
             cpp.includePaths: root.includePaths
+
+            Properties {
+                condition: qbs.targetOS.contains("darwin")
+                cpp.frameworks: {
+                    var frameworks = ["CoreGraphics", "CoreText"];
+                    if (qbs.targetOS.contains("osx"))
+                        frameworks.push("AppKit", "OpenGL");
+                    return frameworks;
+                }
+            }
         }
 
         cpp.useCxxPrecompiledHeader: project.precompiledHeaders
@@ -43,6 +53,36 @@ QtModuleProject {
         Group {
             name: "precompiled header from corelib"
             files: [project.corelibPrecompiledHeader]
+        }
+
+        Group {
+            name: "sources_accessibility"
+            condition: project.accessibility
+            prefix: root.prefix + "accessibility/"
+            files: [
+                "qaccessiblebridgeutils.cpp",
+                "qaccessiblebridgeutils_p.h",
+            ]
+        }
+
+        Group {
+            name: "sources_cglconvenience"
+            condition: qbs.targetOS.contains("darwin")
+            prefix: root.prefix + "cglconvenience/"
+            files: [
+                "cglconvenience.mm",
+                "cglconvenience_p.h",
+            ]
+        }
+
+        Group {
+            name: "sources_clipboard"
+            condition: qbs.targetOS.contains("darwin")
+            prefix: root.prefix + "clipboard/"
+            files: [
+                "qmacmime.mm",
+                "qmacmime_p.h",
+            ]
         }
 
         Group {
@@ -121,6 +161,18 @@ QtModuleProject {
                 "qgenericunixeventdispatcher.cpp",
                 "qunixeventdispatcher_qpa_p.h",
                 "qgenericunixeventdispatcher_p.h",
+            ]
+        }
+
+        Group {
+            name: "sources_fontdatabases_mac"
+            condition: qbs.targetOS.contains("darwin")
+            prefix: root.prefix + "fontdatabases/mac/"
+            files: [
+                "qcoretextfontdatabase.mm",
+                "qcoretextfontdatabase_p.h",
+                "qfontengine_coretext.mm",
+                "qfontengine_coretext_p.h",
             ]
         }
 
