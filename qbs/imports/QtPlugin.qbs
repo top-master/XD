@@ -10,6 +10,6 @@ QtProduct {
     Group {
         fileTagsFilter: ["debuginfo", "dynamiclibrary", "staticlibrary"]
         qbs.install: true
-        qbs.installDir: "plugins/" + category
+        qbs.installSourceBase: project.buildDirectory
     }
 }
