@@ -52,6 +52,19 @@ Project {
     readonly property bool doubleConversion: config.contains("doubleconversion")
     readonly property bool system_doubleConversion: config.contains("system-doubleconversion")
 
+    // SQL
+    readonly property stringList sqlPlugins: []
+    readonly property stringList cFlagsMysql: []
+    readonly property stringList lFlagsMysql: []
+    readonly property stringList lFlagsOdbc: []
+    readonly property stringList cFlagsPsql: []
+    readonly property stringList lFlagsPsql: []
+    readonly property stringList cFlagsSqlite: []
+    readonly property stringList lFlagsSqlite: []
+    readonly property stringList cFlagsTds: []
+    readonly property stringList lFlagsTds: []
+    readonly property bool system_sqlite: config.contains("system-sqlite")
+
     // SIMD
     readonly property bool sse2: config.contains("sse2")
     readonly property stringList sse2Flags: []

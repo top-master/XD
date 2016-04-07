@@ -8,6 +8,16 @@ FULL_CONFIG = $$CONFIG $$QT_CONFIG
 qmakeConfig = $$join(FULL_CONFIG, "\", \"", "\"", "\"")
 
 disabledFeatures = $$join(QT_DISABLED_FEATURES, "\", \"", "\"", "\"")
+sqlPlugins = $$join(sql-plugins, "\", \"", "\"", "\"")
+qtCFlagsMysql = $$join(QT_CFLAGS_MYSQL, "\", \"", "\"", "\"")
+qtLFlagsMysql = $$join(QT_LFLAGS_MYSQL, "\", \"", "\"", "\"")
+qtLFlagsOdbc = $$join(QT_LFLAGS_ODBC, "\", \"", "\"", "\"")
+qtCFlagsPsql = $$join(QT_CFLAGS_PSQL, "\", \"", "\"", "\"")
+qtLFlagsPsql = $$join(QT_LFLAGS_PSQL, "\", \"", "\"", "\"")
+qtCFlagsSqlite = $$join(QT_CFLAGS_SQLITE, "\", \"", "\"", "\"")
+qtLFlagsSqlite = $$join(QT_LFLAGS_SQLITE, "\", \"", "\"", "\"")
+qtCFlagsTds = $$join(QT_CFLAGS_TDS, "\", \"", "\"", "\"")
+qtLFlagsTds = $$join(QT_LFLAGS_TDS, "\", \"", "\"", "\"")
 
 qbs.input = $$PWD/qt.qbs.in
 qbs.output = $$OUT_PWD/qt.qbs
