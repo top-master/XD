@@ -90,6 +90,8 @@ function includePaths(cflags) {
     for (var i in cflags) {
         if (cflags[i].startsWith("-I"))
             includePaths.push(cflags[i].slice(2));
+        else
+            includePaths.push(cflags[i]);
     }
     return includePaths;
 }
@@ -110,4 +112,13 @@ function dynamicLibraries(libs) {
             dynamicLibraries.push(libs[i].slice(2));
     }
     return dynamicLibraries;
+}
+
+function frameworks(flags) {
+    var frameworks = [];
+    for (var i = 0; i < flags.length; ++i) {
+        if (flags[i] === "-framework" && i < flags.length - 1)
+            frameworks.push(flags[++i]);
+    }
+    return frameworks;
 }

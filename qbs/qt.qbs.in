@@ -48,6 +48,8 @@ QtProject {
     opengles2LibDirs: QtUtils.libraryPaths([$$qtOpenles2LibDirs])
     openglLibs: QtUtils.dynamicLibraries([$$qtOpenglLibs])
     opengles2Libs: QtUtils.dynamicLibraries([$$qtOpengles2Libs])
+    openglFrameworks: QtUtils.frameworks([$$qtOpenglLibs])
+    opengles2Frameworks: QtUtils.frameworks([$$qtOpengles2Libs])
 
     references: sourcePrefix + \"qtbase/qtbase.qbs\"
 }

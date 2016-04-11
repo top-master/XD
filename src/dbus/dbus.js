@@ -41,7 +41,9 @@ function outputFileName(input, suffix)
 
 function createCommands(product, input, outputs, option)
 {
-    var exe = project.buildDirectory + "/bin/qdbusxml2cpp";
+    var exe = FileInfo.joinPaths(product.moduleProperty("qbs", "installRoot"),
+                                 product.moduleProperty("qbs", "installPrefix"),
+                                 "bin", "qdbusxml2cpp");
     var hppOutput = outputs["hpp"][0];
     var hppArgs = [option, hppOutput.fileName + ':', input.filePath];
     var hppCmd = new Command(exe, hppArgs)

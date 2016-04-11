@@ -26,6 +26,7 @@ Project {
     property string configPath: buildDirectory + "/.." // ### for configure builds only...
     property string sourcePrefix: sourceDirectory + '/'
     property string qtbasePrefix: sourcePrefix + "qtbase/"
+    property string examplesInstallDir: "/examples"
 
     // This property restricts certain build rules to one variant when we are building for multiple variants
     readonly property bool buildForVariant: debug_and_release ? qbs.buildVariant === "release" : true
@@ -178,6 +179,8 @@ Project {
     readonly property stringList opengles2LibDirs: []
     readonly property stringList openglLibs: []
     readonly property stringList opengles2Libs: []
+    readonly property stringList openglFrameworks: []
+    readonly property stringList opengles2Frameworks: []
 
     // Features system
     readonly property bool cursor: !disabledFeatures.contains("cursor")

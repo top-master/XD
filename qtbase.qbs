@@ -2,6 +2,7 @@ import qbs
 
 Project {
     references: [
+        "examples/examples.qbs",
         "src/android/android.qbs",
         "src/concurrent/concurrent.qbs",
         "src/printsupport/printsupport.qbs",
@@ -21,6 +22,6 @@ Project {
         "src/widgets/widgets.qbs",
         "src/plugins/plugins.qbs",
         "tests",
-        // TODO: winmain, examples
+        // TODO: winmain
     ]
 }

@@ -55,12 +55,14 @@ QtModuleProject {
                 cpp.includePaths: base.concat(root.publicIncludePaths, project.openglIncludeDirs)
                 cpp.libraryPaths: base.concat(project.openglLibDirs)
                 cpp.dynamicLibraries: base.concat(project.openglLibs)
+                cpp.frameworks: base.concat(project.openglFrameworks)
             }
             Properties {
                 condition: project.opengles2
                 cpp.includePaths: base.concat(root.publicIncludePaths, project.openglesIncludeDirs)
                 cpp.libraryPaths: base.concat(project.openglesLibDirs)
                 cpp.dynamicLibraries: base.concat(project.opengles2Libs)
+                cpp.frameworks: base.concat(project.opengles2Frameworks)
             }
             cpp.includePaths: root.publicIncludePaths
         }
