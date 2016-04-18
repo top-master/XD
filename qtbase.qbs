@@ -22,6 +22,7 @@ QtProject {
         qtbasePrefix + "src/corelib/corelib.qbs",
         qtbasePrefix + "src/dbus/dbus.qbs",
         qtbasePrefix + "src/network/network.qbs",
+        qtbasePrefix + "src/opengl/opengl.qbs",
         qtbasePrefix + "src/platformsupport/platformsupport.qbs",
         qtbasePrefix + "src/platformheaders/platformheaders.qbs",
         qtbasePrefix + "src/gui/gui.qbs",
@@ -30,7 +31,7 @@ QtProject {
         qtbasePrefix + "src/widgets/widgets.qbs",
         qtbasePrefix + "src/plugins/plugins.qbs",
         qtbasePrefix + "/tests",
-        // TODO: --opengl--, openglextensions,
+        // TODO: openglextensions,
         // remaining tools, winmain, examples
     ]
 }
