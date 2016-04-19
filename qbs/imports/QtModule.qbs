@@ -26,6 +26,7 @@ QtProduct {
     }
 
     Rule {
+        multiplex: true
         inputsFromDependencies: [
             "hpp_private", "hpp_public", "hpp_forwarding", "hpp_module", "hpp_qpa", "hpp_depends"
         ]
