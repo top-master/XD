@@ -23,6 +23,7 @@ QtProject {
         qtbasePrefix + "src/dbus/dbus.qbs",
         qtbasePrefix + "src/network/network.qbs",
         qtbasePrefix + "src/opengl/opengl.qbs",
+        qtbasePrefix + "src/openglextensions/openglextensions.qbs",
         qtbasePrefix + "src/platformsupport/platformsupport.qbs",
         qtbasePrefix + "src/platformheaders/platformheaders.qbs",
         qtbasePrefix + "src/gui/gui.qbs",
@@ -31,7 +32,6 @@ QtProject {
         qtbasePrefix + "src/widgets/widgets.qbs",
         qtbasePrefix + "src/plugins/plugins.qbs",
         qtbasePrefix + "/tests",
-        // TODO: openglextensions,
-        // remaining tools, winmain, examples
+        // TODO: remaining tools, winmain, examples
     ]
 }
