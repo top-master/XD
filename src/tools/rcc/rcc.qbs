@@ -1,15 +1,10 @@
 import qbs
 
 QtHostTool {
+    useBootstrapLib: true
     cpp.includePaths: [
         project.qtbasePrefix + "src/tools/rcc",
     ].concat(base)
-
-    Group {
-        fileTagsFilter: "application"
-        qbs.install: true
-        qbs.installDir: "bin"
-    }
 
     Group {
         name: "source"

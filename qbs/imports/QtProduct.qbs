@@ -167,10 +167,10 @@ Product {
             filePath: product.buildDirectory + "/.uic/ui_" + input.baseName + ".h"
         }
         prepare: {
-            var cmd = new Command(project.buildDirectory  + "/bin/uic", [
-                "-o", output.filePath,
-                input.filePath,
-            ]);
+            var installRoot = product.moduleProperty("qbs", "installRoot");
+            var installPrefix = product.moduleProperty("qbs", "installPrefix");
+            var cmd = new Command(FileInfo.joinPaths(installRoot, installPrefix, "bin/uic"),
+                ["-o", output.filePath, input.filePath]);
             cmd.description = "uic " + input.fileName;
             cmd.highlight = "codegen";
             return cmd;

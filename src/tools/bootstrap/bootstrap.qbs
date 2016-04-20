@@ -11,7 +11,6 @@ QtModuleProject {
     prefix: project.qtbasePrefix + "src/corelib/"
     defines: [
         "QT_BOOTSTRAPPED",
-        "QT_CRYPTOGRAPHICHASH_ONLY_SHA1",
         "QT_LITE_UNICODE",
         "QT_NO_CODECS",
         "QT_NO_COMPRESS",
@@ -24,14 +23,13 @@ QtModuleProject {
         "QT_NO_TRANSLATION",
         "QT_NO_UNICODETABLES",
         "QT_NO_USING_NAMESPACE",
-        "QT_NO_CAST_FROM_ASCII",
         "QT_NO_CAST_TO_ASCII",
         "QT_BUILDING_QT",
         "QT_MOC_COMPAT",
         "_USE_MATH_DEFINES",
         "QT_ASCII_CAST_WARNINGS",
         "QT_DEPRECATED_WARNINGS",
-        "QT_DISABLE_DEPRECATED_BEFORE=0x040800",
+        "QT_DISABLE_DEPRECATED_BEFORE=0x050000",
     ]
     includePaths: [
         project.qtbasePrefix + "mkspecs/" + project.hostMkspec,
@@ -255,6 +253,8 @@ QtModuleProject {
             var defines = [
                 "QT_BUILD_BOOTSTRAP_LIB",
                 "QT_USE_QSTRINGBUILDER",
+                "QT_CRYPTOGRAPHICHASH_ONLY_SHA1",
+                "QT_NO_CAST_FROM_ASCII",
             ].concat(root.defines);
             if (qbs.targetOS.contains("windows")) {
                 defines.push("_WIN32");
@@ -339,6 +339,7 @@ QtModuleProject {
                 "tools/qsize.cpp",
                 "tools/qstring_compat.cpp",
                 "tools/qstring.cpp",
+                "tools/qstringbuilder.cpp",
                 "tools/qstringlist.cpp",
                 "tools/qvector.cpp",
                 "tools/qvsnprintf.cpp",

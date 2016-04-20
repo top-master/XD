@@ -100,14 +100,26 @@ QtProduct {
 
     Group {
         fileTagsFilter: [
-            "debuginfo",
-            "dynamiclibrary",
             "dynamiclibrary_import",
             "dynamiclibrary_symlink",
             "staticlibrary",
         ]
         qbs.install: true
         qbs.installDir: "lib"
+        qbs.installSourceBase: FileInfo.joinPaths(project.buildDirectory, "lib")
+    }
+
+    Group {
+        fileTagsFilter: ["dynamiclibrary"]
+        qbs.install: true
+        qbs.installDir: qbs.targetOS.contains("windows") ? "bin" : "lib"
+        qbs.installSourceBase: FileInfo.joinPaths(project.buildDirectory, "lib")
+    }
+
+    Group {
+        fileTagsFilter: ["debuginfo"]
+        qbs.install: true
+        qbs.installDir: qbs.targetOS.contains("windows") && !project.staticBuild ? "bin" : "lib"
         qbs.installSourceBase: FileInfo.joinPaths(project.buildDirectory, "lib")
     }
 

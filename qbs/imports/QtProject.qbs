@@ -12,6 +12,8 @@ Project {
         return profile;
     }
     readonly property stringList targetProfiles: [profile]
+    readonly property bool crossBuild: !(targetProfiles.length === 1
+                                         && hostProfile === targetProfiles[0])
     readonly property string hostMkspec: QtUtils.detectHostMkspec(qbs.hostOS, qbs.toolchain)
     readonly property string targetMkspec: QtUtils.detectTargetMkspec(qbs.targetOS, qbs.toolchain, qbs.architecture)
     property string configPath: buildDirectory + "/.." // ### for configure builds only...

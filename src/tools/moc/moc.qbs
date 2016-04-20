@@ -1,6 +1,7 @@
 import qbs
 
 QtHostTool {
+    useBootstrapLib: true
     Group {
         name: "source"
         files: [

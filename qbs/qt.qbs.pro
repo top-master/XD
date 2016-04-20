@@ -62,24 +62,22 @@ defineReplace(setupProfile) {
     QMAKE_LFLAGS_WINDOWS =
     include($$sourcePrefix/qtbase/mkspecs/$$mkspec/qmake.conf)
 
-    equals(type, target) {
-        sse2Flags = $$join(QMAKE_CFLAGS_SSE2, "\", \"", "\"", "\"")
-        export(sse2Flags)
-        sse3Flags = $$join(QMAKE_CFLAGS_SSE3, "\", \"", "\"", "\"")
-        export(sse3Flags)
-        ssse3Flags = $$join(QMAKE_CFLAGS_SSSE3, "\", \"", "\"", "\"")
-        export(ssse3Flags)
-        sse4_1Flags = $$join(QMAKE_CFLAGS_SSE4_1, "\", \"", "\"", "\"")
-        export(sse4_1Flags)
-        sse4_2Flags = $$join(QMAKE_CFLAGS_SSE4_2, "\", \"", "\"", "\"")
-        export(sse4_2Flags)
-        avxFlags = $$join(QMAKE_CFLAGS_AVX, "\", \"", "\"", "\"")
-        export(avxFlags)
-        avx2Flags = $$join(QMAKE_CFLAGS_AVX2, "\", \"", "\"", "\"")
-        export(avx2Flags)
-        neonFlags = $$join(QMAKE_CFLAGS_NEON, "\", \"", "\"", "\"")
-        export(neonFlags)
-    }
+    sse2Flags = $$join(QMAKE_CFLAGS_SSE2, "\", \"", "\"", "\"")
+    export(sse2Flags)
+    sse3Flags = $$join(QMAKE_CFLAGS_SSE3, "\", \"", "\"", "\"")
+    export(sse3Flags)
+    ssse3Flags = $$join(QMAKE_CFLAGS_SSSE3, "\", \"", "\"", "\"")
+    export(ssse3Flags)
+    sse4_1Flags = $$join(QMAKE_CFLAGS_SSE4_1, "\", \"", "\"", "\"")
+    export(sse4_1Flags)
+    sse4_2Flags = $$join(QMAKE_CFLAGS_SSE4_2, "\", \"", "\"", "\"")
+    export(sse4_2Flags)
+    avxFlags = $$join(QMAKE_CFLAGS_AVX, "\", \"", "\"", "\"")
+    export(avxFlags)
+    avx2Flags = $$join(QMAKE_CFLAGS_AVX2, "\", \"", "\"", "\"")
+    export(avx2Flags)
+    neonFlags = $$join(QMAKE_CFLAGS_NEON, "\", \"", "\"", "\"")
+    export(neonFlags)
 
     compiler = $$replace(QMAKE_CXX, \bg\+\+$, gcc)
     compiler = $$replace(compiler, clang\+\+$, clang)
@@ -108,5 +106,7 @@ contains(QMAKE_PLATFORM, android) {
 }
 
 HOST_PROFILE = $$setupProfile(host)
-TARGET_PROFILE = $$setupProfile(target)
+qmake_spec = $$[QMAKE_SPEC]
+equals(qmake_spec, $$[QMAKE_XSPEC]):TARGET_PROFILE = $$HOST_PROFILE
+else:TARGET_PROFILE = $$setupProfile(target)
 TARGET_ARCHITECTURES = $$join(targetArchitectures, "\", \"", "\"", "\"")
