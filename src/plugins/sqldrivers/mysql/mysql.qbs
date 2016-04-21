@@ -1,4 +1,5 @@
 import qbs
+import "../../../../qbs/imports/QtUtils.js" as QtUtils
 
 QtSqlPlugin {
     condition: project.sqlPlugins.contains("mysql")
@@ -17,9 +18,10 @@ QtSqlPlugin {
     }
 
     cpp.cxxFlags: base.concat(project.cFlagsMysql)
+    cpp.libraryPaths: base.concat(QtUtils.libraryPaths(project.lFlagsMysql))
     cpp.dynamicLibraries: {
         var libs = base || [];
-        libs = libs.concat(project.lFlagsMysql.map(function(flag) { return flag.slice(2); }));
+        libs = libs.concat(QtUtils.dynamicLibraries(project.lFlagsMysql));
         var libsString = libs.toString();
         if (qbs.targetOS.contains("unix")) {
             if (project.lFlagsMysql.length != 0)

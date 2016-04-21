@@ -1,4 +1,5 @@
 import qbs
+import "../../../../qbs/imports/QtUtils.js" as QtUtils
 
 QtSqlPlugin {
     condition: project.sqlPlugins.contains("odbc")
@@ -22,6 +23,13 @@ QtSqlPlugin {
         cpp.defines: base.concat("UNICODE")
     }
 
+    cpp.libraryPaths: {
+        var paths = base || [];
+        if (qbs.targetOS.contains("unix") && !qbs.targetOS.contains("darwin"))
+            paths = paths.concat(QtUtils.libraryPaths(project.lFlagsOdbc));
+        return paths;
+    }
+
     cpp.dynamicLibraries: {
         var libs = base || [];
         if (qbs.targetOS.contains("unix")) {
@@ -30,7 +38,7 @@ QtSqlPlugin {
             if (qbs.targetOS.contains("darwin"))
                 libs.push("iodbc");
             else
-                libs = libs.concat(project.lFlagsOdbc.map(function(flag) { return flag.slice(2); }));
+                libs = libs.concat(QtUtils.dynamicLibraries(project.lFlagsOdbc));
         } else {
             libs.push("odbc32");
         }

@@ -1,4 +1,5 @@
 import qbs
+import "../../../../qbs/imports/QtUtils.js" as QtUtils
 
 QtSqlPlugin {
     condition: project.sqlPlugins.contains("psql")
@@ -21,10 +22,17 @@ QtSqlPlugin {
         cpp.cxxFlags: base.concat(project.cFlagsPsql)
     }
 
+    cpp.libraryPaths: {
+        var paths = base || [];
+        if (qbs.targetOS.contains("unix") || qbs.toolchain.contains("mingw"))
+            paths = paths.concat(QtUtils.libraryPaths(project.lFlagsPsql));
+        return paths;
+    }
+
     cpp.dynamicLibraries: {
         var libs = base || [];
         if (qbs.targetOS.contains("unix") || qbs.toolchain.contains("mingw"))
-            libs = libs.concat(project.lFlagsPsql.map(function(flag) { return flag.slice(2); }));
+            libs = libs.concat(QtUtils.dynamicLibraries(project.lFlagsPsql));
         if (libs.toString().search(/pq/) != -1)
             return libs;
         if (qbs.targetOS.contains("unix") || qbs.toolchain.contains("mingw"))
