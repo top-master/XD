@@ -68,6 +68,7 @@ Product {
 
     Properties {
         condition: qbs.toolchain.contains("gcc") && project.rpath
+        cpp.sonamePrefix: qbs.targetOS.contains("darwin") ? "@rpath" : undefined
         cpp.rpaths: qbs.installRoot + "/lib"
     }
 
