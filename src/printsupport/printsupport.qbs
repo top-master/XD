@@ -104,20 +104,13 @@ QtModuleProject {
         }
 
         Group {
-            name: "CUPS-specific sources"
-            condition: project.cups
-            files: [
-                "widgets/qcupsjobwidget.cpp",
-                "widgets/qcupsjobwidget.ui",
-            ]
-        }
-
-        Group {
             name: "CUPS-specific sources (non-Apple)"
             condition: qbs.targetOS.contains("unix") && !qbs.targetOS.contains("darwin")
                        && project.cups
             files: [
-                "kernel/qcups.cpp"
+                "kernel/qcups.cpp",
+                "widgets/qcupsjobwidget.cpp",
+                "widgets/qcupsjobwidget.ui",
             ]
         }
 
@@ -136,6 +129,7 @@ QtModuleProject {
             condition: qbs.targetOS.contains("osx")
             files: [
                 "dialogs/qpagesetupdialog_mac.mm",
+                "dialogs/qprintdialog_mac.mm"
             ]
         }
 
