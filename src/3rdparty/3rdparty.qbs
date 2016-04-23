@@ -22,6 +22,7 @@ Project {
         "mtdev.qbs",
         "pcre/pcre.qbs",
         "sm.qbs",
+        "x11.qbs",
         "xcb/xcb.qbs",
         "xcb/xcb-icccm.qbs",
         "xcb/xcb-image.qbs",
@@ -32,8 +33,8 @@ Project {
         "xcb/xcb-x11.qbs",
         "xcb/xcb-xfixes.qbs",
         "xcb/xcb-xinerama.qbs",
-        "x11.qbs",
-        "xkbcommon/xkbcommon.qbs",
+        "xkbcommon.qbs",
+        "xkbcommon-x11.qbs",
         "zlib/zlib.qbs",
     ]
 }

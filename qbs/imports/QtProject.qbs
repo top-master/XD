@@ -148,7 +148,8 @@ Project {
     readonly property bool xcb_glx: config.contains("xcb-glx")
     readonly property bool xcb_xlib: config.contains("xcb-xlib")
     readonly property bool xcb_sm: config.contains("xcb-sm")
-    readonly property bool xkb: config.contains("xkb")
+    readonly property bool xkbcommon_evdev: config.contains("xkbcommon-evdev")
+    readonly property bool xkbcommon_x11: config.contains("xkbcommon-x11")
 
     // QtPrintSupport
     readonly property bool cups: config.contains("cups")
