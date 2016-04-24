@@ -1,11 +1,18 @@
 import qbs
+import qbs.TextFile
 import "QtUtils.js" as QtUtils
 
 Project {
     qbsSearchPaths: ["qbs"]
     minimumQbsVersion: "1.5.0"
 
-    readonly property string version: "5.6.0"
+    readonly property string version: {
+        var qmakeConfFile = new TextFile(qtbasePrefix + ".qmake.conf");
+        var qmakeConf = qmakeConfFile.readAll();
+        qmakeConfFile.close();
+        return qmakeConf.match(/^MODULE_VERSION = (\d\d?\.\d\d?\.\d\d?)$/m)[1];
+    }
+    readonly property var versionParts: version.split('.').map(function(part) { return parseInt(part); })
     readonly property string hostProfile: {
         if (hostMkspec !== targetMkspec || !qbs.architecture || !qbs.architecture.startsWith("x86"))
             print("You appear to be cross-compiling. Consider setting project.hostProfile to an appropriate profile for the host OS.");
