@@ -165,6 +165,9 @@ Project {
     readonly property bool gstreamer_0_10: config.contains("gstreamer_0_10")
     readonly property bool pulseaudio: config.contains("pulseaudio")
 
+    // QtDBus
+    readonly property stringList cFlagsDbusHost: []
+
     // Features system
     readonly property bool cursor: !disabledFeatures.contains("cursor")
 }

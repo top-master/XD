@@ -40,6 +40,7 @@ QtProject {
     lFlagsSqlite: [$$qtLFlagsSqlite]
     cFlagsTds: [$$qtCFlagsTds]
     lFlagsTds: [$$qtLFlagsTds]
+    cFlagsDbusHost: [$$qtCflagsDbusHost]
 
     references: sourcePrefix + \"qtbase/qtbase.qbs\"
 }

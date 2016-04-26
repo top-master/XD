@@ -60,7 +60,7 @@ Product {
     }
 
     cpp.includePaths: [
-        project.qtbasePrefix + "mkspecs/" + project.targetMkspec,
+        project.qtbasePrefix + "mkspecs/" + (hostBuild ? project.hostMkspec : project.targetMkspec),
         product.buildDirectory + "/.moc",
         product.buildDirectory + "/.uic",
         project.buildDirectory + "/include",

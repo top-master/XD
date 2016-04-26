@@ -78,6 +78,10 @@ defineReplace(setupProfile) {
     export(avx2Flags)
     neonFlags = $$join(QMAKE_CFLAGS_NEON, "\", \"", "\"", "\"")
     export(neonFlags)
+    equals(type, host) {
+        qtCflagsDbusHost = $$join(QT_HOST_CFLAGS_DBUS, "\", \"", "\"", "\"")
+        export(qtCflagsDbusHost)
+    }
 
     compiler = $$replace(QMAKE_CXX, \bg\+\+$, gcc)
     compiler = $$replace(compiler, clang\+\+$, clang)
