@@ -21,6 +21,6 @@ Project {
         "src/widgets/widgets.qbs",
         "src/plugins/plugins.qbs",
         "tests",
-        // remaining tools, winmain, examples
+        // TODO: winmain, examples
     ]
 }
