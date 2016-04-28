@@ -63,6 +63,7 @@ Product {
         project.qtbasePrefix + "mkspecs/" + (hostBuild ? project.hostMkspec : project.targetMkspec),
         product.buildDirectory + "/.moc",
         product.buildDirectory + "/.uic",
+        product.buildDirectory + "/GeneratedFiles", // TODO: Remove once QBS-977 is fixed
         project.buildDirectory + "/include",
     ]
 

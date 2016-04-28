@@ -1,5 +1,6 @@
 import qbs
 import "headers.qbs" as ModuleHeaders
+import "dbus.js" as DBus
 
 // TODO: dbus-linked
 QtModuleProject {
@@ -40,6 +41,36 @@ QtModuleProject {
             Depends { name: "cpp" }
             Depends { name: "Qt.core" }
             cpp.includePaths: root.publicIncludePaths
+                    .concat(importingProduct.buildDirectory + "/GeneratedFiles")
+
+            Rule {
+                inputs: ["qt.dbus.adaptor"]
+                Artifact {
+                    filePath: "GeneratedFiles/" + DBus.outputFileName(input, "_adaptor.h")
+                    fileTags: ["hpp"]
+                }
+                Artifact {
+                    filePath: "GeneratedFiles/" + DBus.outputFileName(input, "_adaptor.cpp")
+                    fileTags: ["cpp"]
+                }
+                prepare: {
+                    return DBus.createCommands(product, input, outputs, "-a");
+                }
+            }
+            Rule {
+                inputs: ["qt.dbus.interface"]
+                Artifact {
+                    filePath: "GeneratedFiles/" + DBus.outputFileName(input, "_interface.h")
+                    fileTags: ["hpp"]
+                }
+                Artifact {
+                    filePath: "GeneratedFiles/" + DBus.outputFileName(input, "_interface.cpp")
+                    fileTags: ["cpp"]
+                }
+                prepare: {
+                    return DBus.createCommands(product, input, outputs, "-p");
+                }
+            }
         }
 
         Depends { name: root.headersName }
