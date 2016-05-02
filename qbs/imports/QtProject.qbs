@@ -169,6 +169,14 @@ Project {
     // QtDBus
     readonly property stringList cFlagsDbusHost: []
 
+    // QtOpengl
+    readonly property stringList openglIncludeDirs: []
+    readonly property stringList opengles2IncludeDirs: []
+    readonly property stringList openglLibDirs: []
+    readonly property stringList opengles2LibDirs: []
+    readonly property stringList openglLibs: []
+    readonly property stringList opengles2Libs: []
+
     // Features system
     readonly property bool cursor: !disabledFeatures.contains("cursor")
 }

@@ -49,6 +49,19 @@ QtModuleProject {
         Export {
             Depends { name: "cpp" }
             Depends { name: "Qt.core" }
+
+            Properties {
+                condition: project.opengl && !project.opengles2
+                cpp.includePaths: base.concat(root.publicIncludePaths, project.openglIncludeDirs)
+                cpp.libraryPaths: base.concat(project.openglLibDirs)
+                cpp.dynamicLibraries: base.concat(project.openglLibs)
+            }
+            Properties {
+                condition: project.opengles2
+                cpp.includePaths: base.concat(root.publicIncludePaths, project.openglesIncludeDirs)
+                cpp.libraryPaths: base.concat(project.openglesLibDirs)
+                cpp.dynamicLibraries: base.concat(project.opengles2Libs)
+            }
             cpp.includePaths: root.publicIncludePaths
         }
 
@@ -130,6 +143,3 @@ QtModuleProject {
         }
     }
 }
-
-// contains(QT_CONFIG, opengl):CONFIG += opengl
-// contains(QT_CONFIG, opengles2):CONFIG += opengles2

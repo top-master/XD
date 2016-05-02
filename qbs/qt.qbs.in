@@ -1,4 +1,5 @@
 import \"$$sourcePrefix/qtbase/qbs/imports/QtProject.qbs\" as QtProject
+import \"$$sourcePrefix/qtbase/qbs/imports/QtUtils.js\" as QtUtils
 
 /* Warning: this file contains the Qt configuration as provided by qmake at
  * configure time. It will be overwritten by if configure is run again, and any
@@ -41,6 +42,12 @@ QtProject {
     cFlagsTds: [$$qtCFlagsTds]
     lFlagsTds: [$$qtLFlagsTds]
     cFlagsDbusHost: [$$qtCflagsDbusHost]
+    openglIncludeDirs: QtUtils.includePaths([$$qtOpenglIncludeDirs])
+    opengles2IncludeDirs: QtUtils.includePaths([$$qtOpenglesIncludeDirs])
+    openglLibDirs: QtUtils.libraryPaths([$$qtOpenGlLibDirs])
+    opengles2LibDirs: QtUtils.libraryPaths([$$qtOpenles2LibDirs])
+    openglLibs: QtUtils.dynamicLibraries([$$qtOpenglLibs])
+    opengles2Libs: QtUtils.dynamicLibraries([$$qtOpengles2Libs])
 
     references: sourcePrefix + \"qtbase/qtbase.qbs\"
 }
