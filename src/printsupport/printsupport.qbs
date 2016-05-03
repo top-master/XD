@@ -46,6 +46,7 @@ QtModuleProject {
 
         Export {
             Depends { name: "cpp" }
+            Depends { name: "Qt.widgets" }
             cpp.includePaths: root.publicIncludePaths
         }
 

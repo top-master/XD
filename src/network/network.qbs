@@ -43,6 +43,7 @@ QtModuleProject {
 
         Export {
             Depends { name: "cpp" }
+            Depends { name: "Qt.core" }
             cpp.defines: root.defines
             cpp.includePaths: root.publicIncludePaths
         }
