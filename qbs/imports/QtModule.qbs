@@ -168,6 +168,11 @@ QtProduct {
         }
     }
 
+    Export {
+        Depends { name: "cpp" }
+        cpp.defines: ["QT_" + product.simpleName.toUpperCase() + "_LIB"]
+    }
+
     Group {
         fileTagsFilter: "pri"
         qbs.install: true

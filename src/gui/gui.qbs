@@ -46,7 +46,7 @@ QtModuleProject {
 
         Export {
             Depends { name: "cpp" }
-            cpp.defines: root.defines
+            cpp.defines: base.concat(root.defines)
             cpp.includePaths: root.publicIncludePaths
             Depends { name: "glesv2"; condition: project.opengles2 }
             Depends { name: "Qt.core" }
