@@ -31,7 +31,6 @@ QtModuleProject {
             "qalgorithms.h": ["QtAlgorithms"],
             "qcontainerfwd.h": ["QtContainerFwd"],
             "qdebug.h": ["QtDebug"],
-            "qevent.h": ["QtEvents"],
             "qnamespace.h": ["Qt"],
             "qnumeric.h": ["QtNumeric"],
             "qvariant.h": ["QVariantHash", "QVariantList", "QVariantMap"],
