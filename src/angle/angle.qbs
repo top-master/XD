@@ -19,7 +19,7 @@ Project {
                 "GLSLANG/*.h",
                 "KHR/*.h",
             ]
-            qbs.install: true
+            qbs.install: project.angle
             qbs.installDir: "include/QtANGLE"
             qbs.installSourceBase: prefix
         }
