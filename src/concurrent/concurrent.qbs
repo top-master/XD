@@ -22,6 +22,11 @@ QtModuleProject {
     QtHeaders {
         name: root.headersName
         sync.module: root.name
+        sync.classNames: ({
+            "qtconcurrentfilter.h": ["QtConcurrentFilter"],
+            "qtconcurrentmap.h": ["QtConcurrentMap"],
+            "qtconcurrentrun.h": ["QtConcurrentRun"],
+        })
         Depends { name: "QtCoreHeaders" }
         ModuleHeaders { fileTags: ["hpp_syncable"] }
     }
