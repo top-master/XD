@@ -227,6 +227,7 @@ QtModuleProject {
     QtHeaders { // ### to be removed once QtXML dependencies are gone (see below)
         name: "QtXmlBootstrapHeaders"
         profiles: project.hostProfile
+        install: false
         sync.module: "QtXml"
         sync.prefix: "bootstrap"
         QtXmlHeaders { fileTags: "hpp_syncable" }
