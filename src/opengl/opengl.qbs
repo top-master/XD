@@ -23,6 +23,9 @@ QtModuleProject {
         name: root.headersName
         condition: project.widgets
         sync.module: root.name
+        sync.classNames: ({
+            "qgl.h": ["QGL"],
+        })
         Depends { name: "QtCoreHeaders" }
         Depends { name: "QtGuiHeaders" }
         Depends { name: "QtWidgetsHeaders" }

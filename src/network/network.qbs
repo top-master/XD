@@ -29,6 +29,9 @@ QtModuleProject {
     QtHeaders {
         name: root.headersName
         sync.module: root.name
+        sync.classNames: ({
+            "qssl.h": ["QSsl"],
+        })
         Depends { name: "QtCoreHeaders" }
         ModuleHeaders { fileTags: "hpp_syncable" }
     }
