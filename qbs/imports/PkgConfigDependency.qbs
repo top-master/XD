@@ -7,8 +7,10 @@ Product {
     profiles: project.targetProfiles
     builtByDefault: false
     condition: probe.found
+    version: found ? probe.modversion : undefined
     readonly property bool found: project.pkg_config && probe.found
     property bool runProbe: project.pkg_config
+    property string packageName: name
 
     // to make accessible to subclasses
     readonly property stringList includePaths: found ? QtUtils.includePaths(probe.cflags) : []
@@ -21,7 +23,7 @@ Product {
     Probes.PkgConfigProbe {
         id: probe
         condition: product.runProbe
-        name: product.name + (product.version ? ("-" + product.version) : "")
+        name: product.packageName
     }
 
     Export {

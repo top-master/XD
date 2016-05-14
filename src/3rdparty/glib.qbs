@@ -2,5 +2,5 @@ import qbs
 
 PkgConfigDependency {
     name: "glib"
-    version: "2.0"
+    packageName: "glib-2.0"
 }
