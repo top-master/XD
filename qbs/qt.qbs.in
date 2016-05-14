@@ -19,7 +19,6 @@ QtProject {
         ? targetArchitectures.map(function(arch) { return [targetProfile, arch].join(\'-\'); })
         : [targetProfile]
 
-    qmake: true
     configPath: \"$$configPath\"
     config: [$$qmakeConfig]
     disabledFeatures: [$$disabledFeatures]

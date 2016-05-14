@@ -4,7 +4,7 @@ import qbs.Process
 import qbs.TextFile
 
 QtProduct {
-    type: [project.staticBuild ? "staticlibrary" : "dynamiclibrary"].concat(["prl", "pri"])
+    type: [project.staticBuild ? "staticlibrary" : "dynamiclibrary"]
     version: project.version
     destinationDirectory: project.libDirectory
 
@@ -123,65 +123,8 @@ QtProduct {
         qbs.installSourceBase: FileInfo.joinPaths(project.buildDirectory, "lib")
     }
 
-    // The following files are for qmake compatibility, so use qmake to generate them.
-    Group {
-        condition: project.qmake
-        name: "qmake_project"
-        files: qmakeProject
-        fileTags: "module_pro"
-    }
-
-    Rule {
-        inputs: "module_pro"
-        outputArtifacts: {
-            var outputArtifacts = [
-                {
-                    filePath: product.qmakeProjectPrefix + product.parentName + ".version",
-                    fileTags: "version",
-                },
-                {
-                    filePath: project.configPath + '/lib/' + product.moduleProperty("cpp", "dynamicLibraryPrefix") + product.targetName + ".prl",
-                    fileTags: "prl",
-                },
-                {
-                    filePath: project.configPath + '/mkspecs/modules/qt_lib_' + product.simpleName + ".pri",
-                    fileTags: "pri",
-                },
-            ];
-            if (!product.simpleName.endsWith("_private")) {
-                outputArtifacts.push({
-                    filePath: project.configPath + '/mkspecs/modules/qt_lib_' + product.simpleName + "_private.pri",
-                    fileTags: "pri",
-                })
-            }
-            return outputArtifacts;
-        }
-        outputFileTags: ["version", "prl", "pri"]
-        prepare: {
-            var cmd = new Command(project.configPath + "/bin/qmake", [
-                "-prl", input.filePath,
-            ]);
-            cmd.workingDirectory = FileInfo.path(outputs.version[0].filePath);
-            cmd.description = "generating prl/pri files for " + product.name;
-            cmd.highlight = "codegen";
-            return cmd;
-        }
-    }
-
     Export {
         Depends { name: "cpp" }
         cpp.defines: ["QT_" + product.simpleName.toUpperCase() + "_LIB"]
-    }
-
-    Group {
-        fileTagsFilter: "pri"
-        qbs.install: true
-        qbs.installDir: "mkspecs/modules"
-    }
-
-    Group {
-        fileTagsFilter: "prl"
-        qbs.install: true
-        qbs.installDir: "lib"
     }
 }

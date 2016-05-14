@@ -27,9 +27,6 @@ Project {
     property string sourcePrefix: sourceDirectory + '/'
     property string qtbasePrefix: sourcePrefix + "qtbase/"
 
-    // Enables qmake-specific build rules
-    readonly property bool qmake: false
-
     // This property restricts certain build rules to one variant when we are building for multiple variants
     readonly property bool buildForVariant: debug_and_release ? qbs.buildVariant === "release" : true
 
