@@ -19,6 +19,7 @@ Module {
     }
 
     Rule {
+        multiplex: true
         inputs: ["hpp_syncable"] // TODO: Hack. Instead, we want Rules without inputs (and deprecate Transformers)
         Artifact {
             filePath: product.moduleProperty("sync", "module").toLowerCase() + "version.h"
