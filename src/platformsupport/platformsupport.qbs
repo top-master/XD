@@ -8,6 +8,21 @@ QtModuleProject {
     simpleName: "platformsupport"
     prefix: project.qtbasePrefix + "src/platformsupport/"
 
+    defines: {
+        var defines = [];
+        if (!project.evdev)
+            defines.push("QT_NO_EVDEV");
+        if (!project.libinput)
+            defines.push("QT_NO_LIBINPUT");
+        if (!project.mtdev)
+            defines.push("QT_NO_MTDEV");
+        if (!project.tslib)
+            defines.push("QT_NO_TSLIB");
+        if (!project.udev)
+            defines.push("QT_NO_UDEV");
+        return defines.concat(base);
+    }
+
     QtHeaders {
         name: root.headersName
         sync.module: root.name
@@ -25,7 +40,15 @@ QtModuleProject {
         type: ["staticlibrary", "prl", "pri"]
 
         Export {
+            Depends { name: "freetype2" }
+            Depends { name: "glib"; condition: project.glib }
+            Depends { name: "libinput"; condition: project.libinput }
+            Depends { name: "libudev"; condition: project.libudev }
+            Depends { name: "mtdev"; condition: project.mtdev }
+            Depends { name: "tslib"; condition: project.tslib }
+            Depends { name: "xkbcommon"; condition: project.xkbcommon_evdev }
             Depends { name: "cpp" }
+            Depends { name: "Qt.dbus"; condition: project.dbus }
             cpp.defines: root.defines
             cpp.includePaths: root.includePaths
 
@@ -40,6 +63,7 @@ QtModuleProject {
             }
         }
 
+        cpp.defines: root.defines
         cpp.useCxxPrecompiledHeader: project.precompiledHeaders
         cpp.includePaths: [path].concat(base).concat(root.includePaths)
 
@@ -47,6 +71,11 @@ QtModuleProject {
         Depends { name: "egl"; condition: project.egl }
         Depends { name: "freetype2" }
         Depends { name: "glib"; condition: project.glib }
+        Depends { name: "libinput"; condition: project.libinput }
+        Depends { name: "mtdev"; condition: project.mtdev }
+        Depends { name: "libudev"; condition: project.libudev }
+        Depends { name: "tslib"; condition: project.tslib }
+        Depends { name: "xkbcommon"; condition: project.xkbcommon_evdev }
         Depends { name: "Qt"; submodules: ["core", "core-private", "gui", "gui-private", "platformheaders"] }
         Depends { name: "Qt.dbus"; condition: project.dbus }
 
@@ -122,6 +151,21 @@ QtModuleProject {
         }
 
         Group {
+            name: "sources (device discovery)"
+            condition: qbs.targetOS.contains("linux")
+            prefix: root.prefix + "devicediscovery/"
+            files: [
+                "qdevicediscovery_dummy.cpp",
+                "qdevicediscovery_dummy_p.h",
+                "qdevicediscovery_p.h",
+                "qdevicediscovery_static.cpp",
+                "qdevicediscovery_static_p.h",
+                "qdevicediscovery_udev.cpp",
+                "qdevicediscovery_udev_p.h",
+            ]
+        }
+
+        Group {
             name: "sources_eglconvenience"
             condition: project.egl && project.opengl
             prefix: root.prefix + "eglconvenience/"
@@ -173,6 +217,111 @@ QtModuleProject {
                 "qcoretextfontdatabase_p.h",
                 "qfontengine_coretext.mm",
                 "qfontengine_coretext_p.h",
+            ]
+        }
+
+        Group {
+            name: "sources (fb convenience)"
+            condition: project.opengl
+            prefix: root.prefix + "fbconvenience/"
+            files: [
+                "qfbbackingstore.cpp",
+                "qfbbackingstore_p.h",
+                "qfbcursor.cpp",
+                "qfbcursor_p.h",
+                "qfbscreen.cpp",
+                "qfbscreen_p.h",
+                "qfbvthandler.cpp",
+                "qfbvthandler_p.h",
+                "qfbwindow.cpp",
+                "qfbwindow_p.h",
+            ]
+        }
+
+        Group {
+            name: "sources (evdev keyboard)"
+            condition: project.evdev
+            prefix: root.prefix + "input/evdevkeyboard/"
+            files: [
+                "qevdevkeyboard_defaultmap_p.h",
+                "qevdevkeyboardhandler.cpp",
+                "qevdevkeyboardhandler_p.h",
+                "qevdevkeyboardmanager.cpp",
+                "qevdevkeyboardmanager_p.h",
+            ]
+        }
+
+        Group {
+            name: "sources (evdev mouse)"
+            condition: project.evdev
+            prefix: root.prefix + "input/evdevmouse/"
+            files: [
+                "qevdevmousehandler.cpp",
+                "qevdevmousehandler_p.h",
+                "qevdevmousemanager.cpp",
+                "qevdevmousemanager_p.h",
+            ]
+        }
+
+        Group {
+            name: "sources (evdev tablet)"
+            condition: project.evdev
+            prefix: root.prefix + "input/evdevtablet/"
+            files: [
+                "qevdevtablethandler.cpp",
+                "qevdevtablethandler_p.h",
+                "qevdevtabletmanager.cpp",
+                "qevdevtabletmanager_p.h",
+            ]
+        }
+
+        Group {
+            name: "sources (evdev touch)"
+            condition: project.evdev
+            prefix: root.prefix + "input/evdevtouch/"
+            files: [
+                "qevdevtouchhandler.cpp",
+                "qevdevtouchhandler_p.h",
+                "qevdevtouchmanager.cpp",
+                "qevdevtouchmanager_p.h",
+            ]
+        }
+
+        Group {
+            name: "sources (evdev libinput)"
+            condition: project.libinput
+            prefix: root.prefix + "input/libinput/"
+            files: [
+                "qlibinputhandler.cpp",
+                "qlibinputhandler_p.h",
+                "qlibinputkeyboard.cpp",
+                "qlibinputkeyboard_p.h",
+                "qlibinputpointer.cpp",
+                "qlibinputpointer_p.h",
+                "qlibinputtouch.cpp",
+                "qlibinputtouch_p.h",
+            ]
+        }
+
+        Group {
+            name: "sources (tslib)"
+            condition: project.tslib
+            prefix: root.prefix + "input/tslib/"
+            files: [
+                "qtslib.cpp",
+                "qtslib_p.h",
+            ]
+        }
+
+        Group {
+            name: "sources (platform compositor)"
+            condition: project.opengl
+            prefix: root.prefix + "platformcompositor/"
+            files: [
+                "qopenglcompositorbackingstore.cpp",
+                "qopenglcompositorbackingstore_p.h",
+                "qopenglcompositor.cpp",
+                "qopenglcompositor_p.h",
             ]
         }
 
