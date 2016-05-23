@@ -15,7 +15,15 @@ Product {
     // to make accessible to subclasses
     readonly property stringList includePaths: found ? QtUtils.includePaths(probe.cflags) : []
     readonly property stringList libraryPaths: found ? QtUtils.libraryPaths(probe.libs) : []
-    readonly property stringList dynamicLibraries: found ? QtUtils.dynamicLibraries(probe.libs) : []
+    readonly property stringList dynamicLibraries: {
+        if (!found)
+            return [];
+        var libs = QtUtils.dynamicLibraries(probe.libs);
+        if (rawCFlags.contains("-pthread"))
+            libs.push("pthread");
+        return libs;
+    }
+    readonly property stringList rawCFlags: found && probe.cflags ? probe.cflags : []
 
     Depends { name: "cpp" }
     Depends { name: "osversions" }
@@ -32,5 +40,6 @@ Product {
         cpp.includePaths: product.includePaths
         cpp.libraryPaths: product.libraryPaths
         cpp.dynamicLibraries: product.dynamicLibraries
+        cpp.cxxFlags: product.rawCFlags.filter(function f(e) { return !e.startsWith("-I"); })
     }
 }

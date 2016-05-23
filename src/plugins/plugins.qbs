@@ -6,6 +6,7 @@ Project {
         "imageformats/imageformats.qbs",
         "platforminputcontexts/platforminputcontexts.qbs",
         "platforms/platforms.qbs",
+        "platformthemes/platformthemes.qbs",
         "sqldrivers/sqldrivers.qbs",
     ]
 }
