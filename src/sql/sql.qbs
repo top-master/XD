@@ -55,26 +55,44 @@ QtModuleProject {
             files: [project.corelibPrecompiledHeader]
         }
 
-        ModuleHeaders { }
-
         Group {
             name: "sources"
             prefix: root.prefix
             files: [
+                "kernel/qsql.h",
                 "kernel/qsqlcachedresult.cpp",
+                "kernel/qsqlcachedresult_p.h",
                 "kernel/qsqldatabase.cpp",
+                "kernel/qsqldatabase.h",
                 "kernel/qsqldriver.cpp",
+                "kernel/qsqldriver.h",
+                "kernel/qsqldriver_p.h",
                 "kernel/qsqldriverplugin.cpp",
+                "kernel/qsqldriverplugin.h",
                 "kernel/qsqlerror.cpp",
+                "kernel/qsqlerror.h",
                 "kernel/qsqlfield.cpp",
+                "kernel/qsqlfield.h",
                 "kernel/qsqlindex.cpp",
+                "kernel/qsqlindex.h",
+                "kernel/qsqlnulldriver_p.h",
                 "kernel/qsqlquery.cpp",
+                "kernel/qsqlquery.h",
                 "kernel/qsqlrecord.cpp",
+                "kernel/qsqlrecord.h",
                 "kernel/qsqlresult.cpp",
+                "kernel/qsqlresult_p.h",
+                "kernel/qsqlresult.h",
                 "models/qsqlquerymodel.cpp",
+                "models/qsqlquerymodel.h",
+                "models/qsqlquerymodel_p.h",
                 "models/qsqlrelationaldelegate.cpp",
+                "models/qsqlrelationaldelegate.h",
                 "models/qsqlrelationaltablemodel.cpp",
+                "models/qsqlrelationaltablemodel.h",
                 "models/qsqltablemodel.cpp",
+                "models/qsqltablemodel.h",
+                "models/qsqltablemodel_p.h",
             ]
         }
     }

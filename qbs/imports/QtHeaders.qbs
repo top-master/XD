@@ -1,4 +1,5 @@
 import qbs
+import qbs.FileInfo
 
 Product {
     type: ["hpp_private", "hpp_public", "hpp_forwarding", "hpp_module", "hpp_qpa", "hpp_depends"]
@@ -25,6 +26,7 @@ Product {
     Group {
         fileTagsFilter: "hpp_qpa"
         qbs.install: product.install
-        qbs.installDir: sync.prefix + "/QtGui/" + project.version + "/QtGui/qpa"
+        qbs.installDir: FileInfo.joinPaths(sync.prefix, sync.module, project.version, sync.module,
+                                           "qpa")
     }
 }

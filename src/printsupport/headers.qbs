@@ -20,6 +20,7 @@ Group {
             "kernel/qprint_p.h",
             "kernel/qprintdevice_p.h",
             "kernel/qprintengine.h",
+            "kernel/qprintengine_pdf_p.h",
             "kernel/qprinter.h",
             "kernel/qprinter_p.h",
             "kernel/qprinterinfo.h",
