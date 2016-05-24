@@ -2,6 +2,7 @@ import qbs
 
 QtPlugin {
     condition: project.xcb && project.egl && project.opengl
+    name: "qxcb-egl-integration"
     category: "xcbglintegrations"
 
     cpp.defines: [

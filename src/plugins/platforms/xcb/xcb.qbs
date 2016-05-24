@@ -2,8 +2,28 @@ import qbs
 
 Project {
     references: [
-        "gl_integrations/xcb_egl/xcb_egl.qbs",
+        "gl_integrations/gl_integrations.qbs",
     ]
+
+    PkgConfigDependency {
+        name: "xinput2"
+        packageName: "xi"
+
+        Export {
+            Depends { name: "cpp" }
+            cpp.defines: {
+                var defines = [];
+                var versionParts = (product.version || "").split('.');
+                if (versionParts[2])
+                    defines.push("LIBXI_PATCH=" + versionParts[2]);
+                if (versionParts[1])
+                    defines.push("LIBXI_MINOR=" + versionParts[1]);
+                if (versionParts[0])
+                    defines.push("LIBXI_MAJOR=" + versionParts[0]);
+                return defines;
+            }
+        }
+    }
 
     QtModule {
         name: "Qt.xcbqpa"
@@ -22,6 +42,7 @@ Project {
         Depends { name: "xcb-xfixes" }
         Depends { name: "xcb-xinerama" }
         Depends { name: "xcb-sync" }
+        Depends { name: "xinput2"; condition: project.xinput2 }
         Depends {
             name: "Qt"
             submodules: [
@@ -30,15 +51,34 @@ Project {
             ]
         }
 
-        cpp.defines: [
-            "QT_BUILD_XCB_PLUGIN",
-            "QT_NO_ACCESSIBILITY_ATSPI_BRIDGE", // ###fixme
-        ].concat(base)
+        cpp.defines: {
+            var defines = base.concat(["QT_BUILD_XCB_PLUGIN",
+                                       "QT_NO_ACCESSIBILITY_ATSPI_BRIDGE" /* FIXME */]);
+            if (project.xcb_xlib)
+                defines.push("XCB_USE_XLIB");
+            if (project.xinput2)
+                defines.push("XCB_USE_XINPUT2");
+            return defines;
+        }
 
         cpp.includePaths: [
             path,
             "gl_integrations",
         ].concat(base)
+
+        cpp.dynamicLibraries: {
+            var libs = base;
+            if (project.xcb_xlib) {
+                libs.push("X11", "X11-xcb");
+            }
+            return libs;
+        }
+
+        Group {
+            name: "xinput"
+            condition: project.xcb_xlib && project.xinput2
+            files: ["qxcbconnection_xi2.cpp"]
+        }
 
         Group {
             name: "sources"
