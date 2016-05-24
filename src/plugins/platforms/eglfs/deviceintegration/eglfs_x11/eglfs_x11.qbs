@@ -1,6 +1,7 @@
 import qbs
 
 QtPlugin {
+    name: "qeglfs-x11-integration"
     condition: project.eglfs_x11
     category: "egldeviceintegrations"
 

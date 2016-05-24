@@ -132,7 +132,7 @@ Project {
     readonly property bool eglfs_viv: config.contains("eglfs_viv")
     readonly property bool eglfs_brcm: config.contains("eglfs_brcm")
     readonly property bool eglfs_mali: config.contains("eglfs_mali")
-    readonly property bool eglfs_x11: config.contains("eglfs_x11")
+    readonly property bool eglfs_x11: config.contains("egl_x11")
     readonly property bool jpeg: config.contains("jpeg")
     readonly property bool kms: config.contains("kms")
     readonly property bool libinput: config.contains("libinput")

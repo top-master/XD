@@ -2,7 +2,7 @@ import qbs
 
 Project {
     references: [
-        "deviceintegration/eglfs_x11/eglfs_x11.qbs",
+        "deviceintegration/deviceintegration.qbs",
     ]
 
     QtModule {
