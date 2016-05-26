@@ -1,6 +1,7 @@
 import qbs
 
 Project {
+    condition: project.gui
     references: [
         "eglfs/eglfs.qbs",
         "linuxfb/linuxfb.qbs",
