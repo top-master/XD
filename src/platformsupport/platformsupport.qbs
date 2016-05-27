@@ -54,6 +54,7 @@ Project {
                 Depends { name: "xkbcommon"; condition: project.xkbcommon_evdev }
                 Depends { name: "cpp" }
                 Depends { name: "Qt.dbus"; condition: project.dbus }
+                Depends { name: "x11"; condition: project.egl && project.config.contains("xlib") }
                 cpp.defines: root.defines
                 cpp.includePaths: root.includePaths
 
@@ -81,6 +82,7 @@ Project {
             Depends { name: "libudev"; condition: project.libudev }
             Depends { name: "tslib"; condition: project.tslib }
             Depends { name: "xkbcommon"; condition: project.xkbcommon_evdev }
+            Depends { name: "x11"; condition: project.egl && project.config.contains("xlib") }
             Depends { name: "Qt"; submodules: ["core", "core-private", "gui", "gui-private", "platformheaders"] }
             Depends { name: "Qt.dbus"; condition: project.dbus }
 
@@ -184,7 +186,7 @@ Project {
 
             Group {
                 name: "sources_eglconvenience_x11"
-                condition: project.egl && project.x11
+                condition: project.egl && project.config.contains("xlib")
                 prefix: root.prefix + "eglconvenience/"
                 files: [
                     "qxlibeglintegration.cpp",
