@@ -45,6 +45,7 @@ Project {
             type: ["staticlibrary", "prl", "pri"]
 
             Export {
+                Depends { name: "fontconfig"; condition: project.config.contains("fontconfig") }
                 Depends { name: "freetype2" }
                 Depends { name: "glib"; condition: project.glib }
                 Depends { name: "libinput"; condition: project.libinput }
@@ -55,7 +56,14 @@ Project {
                 Depends { name: "cpp" }
                 Depends { name: "Qt.dbus"; condition: project.dbus }
                 Depends { name: "x11"; condition: project.egl && project.config.contains("xlib") }
-                cpp.defines: root.defines
+                cpp.defines: {
+                    var defines = root.defines;
+                    if (qbs.targetOS.contains("unix") && !qbs.targetOS.contains("darwin")
+                            && project.config.contains("fontconfig")) {
+                        defines.push("Q_FONTCONFIGDATABASE");
+                    }
+                    return defines;
+                }
                 cpp.includePaths: root.includePaths
 
                 Properties {
@@ -365,6 +373,17 @@ Project {
                 prefix: project.qtbasePrefix + "src/gui/text/"
                 files: [
                     "qfontengine_ft.cpp",
+                ]
+            }
+
+            Group {
+                name: "sources_fontconfig"
+                condition: qbs.targetOS.contains("unix") && !qbs.targetOS.contains("darwin")
+                           && project.config.contains("fontconfig")
+                prefix: "fontdatabases/fontconfig/"
+                files: [
+                    "qfontconfigdatabase.cpp",
+                    "qfontenginemultifontconfig.cpp",
                 ]
             }
         }

@@ -6,6 +6,7 @@ Project {
         "../angle/angle.qbs",
         "double-conversion",
         "egl.qbs",
+        "fontconfig.qbs",
         "freetype/freetype2.qbs",
         "forkfd/forkfd.qbs",
         "gbm.qbs",
