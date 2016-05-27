@@ -58,7 +58,7 @@ QtModuleProject {
         Depends { name: "freetype2" }
         Depends { name: "gl"; condition: project.opengl && !project.opengles2 && !qbs.targetOS.contains("windows") && !(qbs.targetOS.contains("darwin") && !qbs.targetOS.contains("osx")) }
         Depends { name: "glesv2"; condition: project.opengles2 }
-        Depends { name: "libjpeg" }
+        Depends { name: "libjpeg"; condition: project.jpeg }
         Depends { name: "libpng" }
         Depends { name: "zlib" }
 
@@ -133,7 +133,6 @@ QtModuleProject {
                 "image/qimagepixmapcleanuphooks.cpp",
                 "image/qimagereader.cpp",
                 "image/qimagewriter.cpp",
-                "image/qjpeghandler.cpp",
                 "image/qmovie.cpp",
                 "image/qnativeimage.cpp",
                 "image/qpaintengine_pic.cpp",
@@ -288,6 +287,14 @@ QtModuleProject {
                 "util/qgridlayoutengine.cpp",
                 "util/qlayoutpolicy.cpp",
                 "util/qvalidator.cpp",
+            ]
+        }
+
+        Group {
+            name: "sources_jpeg"
+            condition: project.jpeg
+            files: [
+                "image/qjpeghandler.cpp",
             ]
         }
 

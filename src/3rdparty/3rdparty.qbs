@@ -13,6 +13,7 @@ Project {
         "glesv2.qbs",
         "glib.qbs",
         "gl.qbs",
+        "gthread.qbs",
         "gtk+.qbs",
         "harfbuzz/harfbuzz.qbs",
         "ice.qbs",

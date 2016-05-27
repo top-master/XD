@@ -57,9 +57,14 @@ QtModuleProject {
 
         Depends { name: "double-conversion" }
         Depends { name: "harfbuzz" }
-        Depends { name: "pcre" }
+        Depends {
+            name: "pcre";
+            condition: project.config.contains("pcre")
+                       && !project.disabledFeatures.contains("regularexpression")
+        }
         Depends { name: "zlib" }
         Depends { name: "glib"; condition: project.glib }
+        Depends { name: "gthread"; condition: project.glib }
         Depends { name: "forkfd"; condition: qbs.targetOS.contains("unix") }
 
         cpp.useCxxPrecompiledHeader: project.precompiledHeaders
@@ -83,6 +88,8 @@ QtModuleProject {
             if (qbs.targetOS.contains("unix") && !qbs.targetOS.contains("android")) {
                 dynamicLibraries.push("pthread");
                 dynamicLibraries.push("dl");
+                if (!qbs.targetOS.contains("darwin"))
+                    dynamicLibraries.push("rt");
             }
             if (qbs.targetOS.contains("windows")) {
                 dynamicLibraries.push("shell32");
@@ -102,6 +109,9 @@ QtModuleProject {
                 dynamicLibraries.push("icuuc");
                 dynamicLibraries.push("icudata");
             }
+            if (!project.config.contains("pcre")
+                    && !project.disabledFeatures.contains("regularexpression"))
+                dynamicLibraries.push("pcre16");
             return dynamicLibraries;
         }
 
@@ -338,7 +348,6 @@ QtModuleProject {
                 "tools/qrect.cpp",
                 "tools/qrefcount.cpp",
                 "tools/qregexp.cpp",
-                "tools/qregularexpression.cpp",
                 "tools/qringbuffer.cpp",
                 "tools/qscopedpointer.cpp",
                 "tools/qscopedvaluerollback.cpp",
@@ -360,6 +369,14 @@ QtModuleProject {
                 "tools/qvsnprintf.cpp",
                 "xml/qxmlstream.cpp",
                 "xml/qxmlutils.cpp",
+            ]
+        }
+
+        Group {
+            name: "sources_regularexpression"
+            condition: !project.disabledFeatures.contains("regularexpression")
+            files: [
+                "tools/qregularexpression.cpp",
             ]
         }
 

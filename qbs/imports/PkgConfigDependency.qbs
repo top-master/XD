@@ -19,7 +19,7 @@ Product {
         if (!found)
             return [];
         var libs = QtUtils.dynamicLibraries(probe.libs);
-        if (rawCFlags.contains("-pthread"))
+        if (rawCFlags.contains("-pthread") || probe.libs.contains("-pthread"))
             libs.push("pthread");
         return libs;
     }
