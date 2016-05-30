@@ -510,7 +510,7 @@ void tst_QCommandLineParser::testVersionOption()
 
     QCoreApplication app(empty_argc, empty_argv);
     QProcess process;
-    process.start("testhelper/qcommandlineparser_test_helper", QStringList() << "0" << "--version");
+    process.start(app.applicationDirPath() + "/testhelper/qcommandlineparser_test_helper", QStringList() << "0" << "--version");
     QVERIFY(process.waitForFinished(5000));
     QCOMPARE(process.exitStatus(), QProcess::NormalExit);
     QString output = process.readAll();
@@ -581,6 +581,7 @@ void tst_QCommandLineParser::testHelpOption()
     QFETCH(QString, expectedHelpOutput);
     QCoreApplication app(empty_argc, empty_argv);
     QProcess process;
+    process.setWorkingDirectory(app.applicationDirPath());
     process.start("testhelper/qcommandlineparser_test_helper", QStringList() << QString::number(parsingMode) << "--help");
     QVERIFY(process.waitForFinished(5000));
     QCOMPARE(process.exitStatus(), QProcess::NormalExit);
@@ -625,7 +626,7 @@ void tst_QCommandLineParser::testQuoteEscaping()
 #else
     QCoreApplication app(empty_argc, empty_argv);
     QProcess process;
-    process.start("testhelper/qcommandlineparser_test_helper", QStringList() <<
+    process.start(app.applicationDirPath() + "/testhelper/qcommandlineparser_test_helper", QStringList() <<
             QString::number(QCommandLineParser::ParseAsCompactedShortOptions) <<
             "\\\\server\\path" <<
             "-DKEY1=\"VALUE1\""

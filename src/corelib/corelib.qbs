@@ -414,6 +414,7 @@ QtModuleProject {
             prefix: root.prefix
             files: [
                 "io/qsettings_mac.cpp",
+                "io/qstandardpaths_mac.mm",
                 "io/qstorageinfo_mac.cpp",
                 "io/qurl_mac.mm",
                 "kernel/qcoreapplication_mac.cpp",
@@ -421,8 +422,10 @@ QtModuleProject {
                 "kernel/qcore_mac_objc.mm",
                 "kernel/qcfsocketnotifier.cpp",
                 "kernel/qeventdispatcher_cf.mm",
+                "plugin/quuid_darwin.mm",
                 "tools/qelapsedtimer_mac.cpp",
                 "tools/qbytearray_mac.mm",
+                "tools/qdatetime_mac.mm",
                 "tools/qstring_mac.mm",
                 "tools/qtimezoneprivate_mac.mm"
             ]
@@ -501,7 +504,6 @@ QtModuleProject {
             condition: qbs.targetOS.contains("unix") && !qbs.targetOS.contains("android")
             prefix: root.prefix
             files: [
-                "io/qstandardpaths_unix.cpp",
                 "kernel/qsharedmemory_posix.cpp",
                 "kernel/qsharedmemory_systemv.cpp",
                 "kernel/qsharedmemory_unix.cpp",
@@ -535,6 +537,7 @@ QtModuleProject {
             condition: qbs.targetOS.contains("unix") && !qbs.targetOS.contains("android") && !qbs.targetOS.contains("darwin")
             prefix: root.prefix
             files: [
+                "io/qstandardpaths_unix.cpp",
                 "tools/qtimezoneprivate_tz.cpp"
             ]
         }

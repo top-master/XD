@@ -1,6 +1,7 @@
 import qbs
 
 QtProduct {
+    type: ["application"]
     name: "signalbug"
     condition: !qbs.targetOS.contains("winrt")
     consoleApplication: true

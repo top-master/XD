@@ -2087,6 +2087,8 @@ void tst_QTextCodec::toLocal8Bit()
 #ifdef QT_NO_PROCESS
     QSKIP("No qprocess support", SkipAll);
 #else
+    const QString testDataDir = QFileInfo(QFINDTESTDATA("echo")).absolutePath();
+    QVERIFY2(QDir::setCurrent(testDataDir), qPrintable("Could not chdir to " + testDataDir));
     QProcess process;
     process.start("echo/echo");
     QString string(QChar(0x410));

@@ -5,6 +5,7 @@ QtAutotestProject {
 
     references: [
         "corelib",
+        "other",
     ]
 }
 
