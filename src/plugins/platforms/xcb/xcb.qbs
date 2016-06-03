@@ -39,6 +39,7 @@ Project {
         Depends { name: "xcb-keysyms" }
         Depends { name: "xcb-xkb" }
         Depends { name: "xcb-randr" }
+        Depends { name: "xcb-shape" }
         Depends { name: "xcb-xfixes" }
         Depends { name: "xcb-xinerama" }
         Depends { name: "xcb-sync" }

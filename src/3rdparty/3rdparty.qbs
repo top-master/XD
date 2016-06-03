@@ -34,6 +34,7 @@ Project {
         "xcb/xcb-xkb.qbs",
         "xcb/xcb-keysyms.qbs",
         "xcb/xcb-randr.qbs",
+        "xcb/xcb-shape.qbs",
         "xcb/xcb-sync.qbs",
         "xcb/xcb-xfixes.qbs",
         "xcb/xcb-xinerama.qbs",
