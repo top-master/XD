@@ -115,6 +115,9 @@ Product {
             });
 
             var includes = product.moduleProperty("cpp", "includePaths");
+            var compilerIncludes = product.moduleProperty("cpp", "compilerIncludePaths");
+            if (compilerIncludes)
+                includes = includes.concat(compilerIncludes);
             includes.forEach(function(include) {
                 if (!include)
                     return;
