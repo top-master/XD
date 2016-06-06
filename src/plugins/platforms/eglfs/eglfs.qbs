@@ -7,7 +7,7 @@ Project {
 
     QtModule {
         name: "Qt.egldeviceintegration"
-        condition: project.egl && project.opengl
+        condition: project.config.contains("eglfs")
         simpleName: "egldeviceintegration"
         targetName: "Qt5EglDeviceIntegration"
 
