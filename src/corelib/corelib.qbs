@@ -51,6 +51,16 @@ QtModuleProject {
         Export {
             Depends { name: "cpp" }
             cpp.includePaths: root.publicIncludePaths
+
+            /*
+              TODO: Make this work in qbs 1.6
+            Depends {
+                name: "qtmain"
+                condition: qbs.targetOS.contains("windows")
+                           && !importingProduct.consoleApplication
+                           && importingProduct.type && importingProduct.type.contains("application")
+            }
+            */
         }
 
         Depends { name: root.headersName }
