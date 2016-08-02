@@ -6,6 +6,7 @@ Project {
         type: ["runtime_resource"]
         profiles: project.targetProfiles
         destinationDirectory: project.buildDirectory + "/qresourceengine_test"
+        Depends { name: "rcc"; profiles: [project.hostProfile] }
         Group {
             files: ["testqrc/test.qrc"]
             fileTags: ["custom_qrc"]
