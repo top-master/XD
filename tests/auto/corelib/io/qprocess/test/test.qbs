@@ -4,6 +4,7 @@ import qbs.TextFile
 QtAutotest {
     name: "tst_qprocess"
     condition: Qt.network.present
+    type: base.concat(["testdir"])
     destinationDirectory: project.buildDirectory + "/qprocess_test"
     Depends { name: "Qt.core-private" }
     Depends { name: "Qt.network"; required: false }
@@ -32,11 +33,12 @@ QtAutotest {
     Depends { name: "testSoftExit" }
     Depends { name: "testSpaceInName" }
 
-    Transformer {
+    Rule {
+        multiplex: true
         // The test code expects a directory "test" to exist next to the executable
         Artifact {
             filePath: project.buildDirectory + "/qprocess_test/test/dummy.txt"
-            fileTags: []
+            fileTags: ["testdir"]
         }
         prepare: {
             var cmd = new JavaScriptCommand();
