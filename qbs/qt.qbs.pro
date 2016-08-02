@@ -34,6 +34,19 @@ defineReplace(makeList) {
     return($$system_quote("$$jsList"))
 }
 
+defineReplace(filterMarch) {
+    flagList = $$1
+    marchPattern = -march=.*
+    marchMatch = $$find(flagList, $$marchPattern)
+    march =
+    !isEmpty(marchMatch) {
+        march = $$section(marchMatch, =, 1, 1)
+        flagList = $$replace(flagList, $$marchMatch, '')
+    }
+    export(march)
+    return($$flagList)
+}
+
 # TODO: calling qbs tools probably cannot be the real solution (it doesn't really work with
 #       Qt Creator, for instance). Put some thought into the concept of "anonymous profiles"
 #       or something along these lines.
@@ -103,8 +116,20 @@ defineReplace(setupProfile) {
         system(qbs-setup-toolchains $$compiler $$profileName)
     }
 
-    !isEmpty(QMAKE_CFLAGS): system(qbs-config profiles.$${profileName}.cpp.platformCFlags $$makeList($$QMAKE_CFLAGS))
-    !isEmpty(QMAKE_CXXFLAGS): system(qbs-config profiles.$${profileName}.cpp.platformCxxFlags $$makeList($$QMAKE_CXXFLAGS))
+    !isEmpty(QMAKE_CFLAGS) {
+        cFlags = $$filterMarch($$QMAKE_CFLAGS)
+        !isEmpty(march): system(qbs-config profiles.$${profileName}.cpp.machineType $$march)
+        !isEmpty(cFlags) {
+            system(qbs-config profiles.$${profileName}.cpp.platformCFlags $$makeList($$cFlags))
+        }
+    }
+    !isEmpty(QMAKE_CXXFLAGS) {
+        cxxFlags = $$filterMarch($$QMAKE_CXXFLAGS)
+        !isEmpty(march): system(qbs-config profiles.$${profileName}.cpp.machineType $$march)
+        !isEmpty(cxxFlags) {
+            system(qbs-config profiles.$${profileName}.cpp.platformCxxFlags $$makeList($$cxxFlags))
+        }
+    }
     !isEmpty(DEFINES): system(qbs-config profiles.$${profileName}.cpp.defines $$makeList($$DEFINES))
     !isEmpty(QMAKE_COMPILER_DEFINES): system(qbs-config profiles.$${profileName}.cpp.compilerDefines $$makeList($$QMAKE_COMPILER_DEFINES))
     lFlags = $$QMAKE_LFLAGS
