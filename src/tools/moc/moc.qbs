@@ -2,6 +2,9 @@ import qbs
 
 QtHostTool {
     useBootstrapLib: true
+
+    cpp.defines: base.concat(["QT_NO_COMPRESS"])
+
     Group {
         name: "source"
         files: [

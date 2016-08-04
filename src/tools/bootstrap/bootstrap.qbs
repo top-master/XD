@@ -13,7 +13,6 @@ QtModuleProject {
         "QT_BOOTSTRAPPED",
         "QT_LITE_UNICODE",
         "QT_NO_CODECS",
-        "QT_NO_COMPRESS",
         "QT_NO_DATASTREAM",
         "QT_NO_DEPRECATED",
         "QT_NO_LIBRARY",
@@ -247,6 +246,7 @@ QtModuleProject {
         Depends { name: root.headersName }
         Depends { name: "QtXmlBootstrapHeaders" }
         Depends { name: "cpp" }
+        Depends { name: "zlib"; profiles: [project.hostProfile] }
 
         cpp.includePaths: root.includePaths
 
@@ -393,6 +393,8 @@ QtModuleProject {
             cpp.defines: root.defines
             cpp.includePaths: root.includePaths
             cpp.cxxLanguageVersion: "c++11"
+
+            Depends { name: "zlib"; profiles: [project.hostProfile] }
 
             Properties {
                 condition: qbs.targetOS.contains("darwin")

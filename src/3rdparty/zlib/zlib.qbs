@@ -4,13 +4,12 @@ PkgConfigDependency {
     name: "zlib"
     type: project.zlib ? ["staticlibrary"] : []
     condition: true
-    profiles: project.targetProfiles
-    destinationDirectory: project.libDirectory
+    profiles: project.targetProfiles.concat(project.crossBuild ? [project.hostProfile] : [])
     runProbe: project.pkg_config && project.system_zlib
 
     Export {
         Depends { name: "cpp" }
-        cpp.includePaths: project.system_zlib ? includePaths : [
+        cpp.includePaths: project.system_zlib ? product.includePaths : [
             project.qtbasePrefix + "src/3rdparty/zlib",
             project.configPath + "src/corelib/global", // for qconfig.h
             project.buildDirectory + "/include",
@@ -24,7 +23,11 @@ PkgConfigDependency {
 
     Depends { name: "Android.ndk"; condition: qbs.targetOS.contains("android") }
     Depends { name: "cpp" }
-    Depends { name: "QtCoreHeaders"; condition: !project.system_zlib }
+    Depends {
+        name: "QtCoreHeaders"
+        profiles: project.targetProfiles
+        condition: !project.system_zlib
+    }
 
     Properties {
         condition: !project.system_zlib
