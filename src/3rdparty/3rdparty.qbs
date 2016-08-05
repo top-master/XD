@@ -4,6 +4,7 @@ Project {
     name: "3rdparty"
     references: [
         "../angle/angle.qbs",
+        "dbus-linked.qbs",
         "double-conversion",
         "egl.qbs",
         "fontconfig.qbs",

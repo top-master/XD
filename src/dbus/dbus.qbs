@@ -2,7 +2,6 @@ import qbs
 import "headers.qbs" as ModuleHeaders
 import "dbus.js" as DBus
 
-// TODO: dbus-linked
 QtModuleProject {
     id: root
     name: "QtDBus"
@@ -40,9 +39,11 @@ QtModuleProject {
         Export {
             Depends { name: "cpp" }
             Depends { name: "Qt.core" }
+            Depends { name: "dbus-linked"; condition: project.config.contains("dbus-linked") }
             cpp.includePaths: root.publicIncludePaths
                     .concat(importingProduct.buildDirectory + "/GeneratedFiles")
 
+            property stringList xml2CppHeaderFlags: []
             Rule {
                 inputs: ["qt.dbus.adaptor"]
                 Artifact {
@@ -75,6 +76,7 @@ QtModuleProject {
 
         Depends { name: root.headersName }
         Depends { name: "Qt"; submodules: ["core", "core-private"] }
+        Depends { name: "dbus-linked"; condition: project.config.contains("dbus-linked") }
 
         cpp.defines: [
             "QT_BUILD_DBUS_LIB",

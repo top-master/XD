@@ -46,6 +46,7 @@ function createCommands(product, input, outputs, option)
                                  "bin", "qdbusxml2cpp");
     var hppOutput = outputs["hpp"][0];
     var hppArgs = [option, hppOutput.fileName + ':', input.filePath];
+    hppArgs = hppArgs.concat(input.moduleProperty("Qt.dbus", "xml2CppHeaderFlags"));
     var hppCmd = new Command(exe, hppArgs)
     hppCmd.description = "qdbusxml2cpp " + input.fileName + " -> " + hppOutput.fileName;
     hppCmd.highlight = "codegen";

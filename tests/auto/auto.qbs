@@ -5,12 +5,13 @@ QtAutotestProject {
 
     references: [
         "corelib",
+        "dbus",
         "other",
     ]
 }
 
 // SUBDIRS += \
-//     dbus \
+//      \
 //     gui \
 //     network \
 //     opengl \
