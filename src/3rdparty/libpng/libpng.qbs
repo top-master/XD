@@ -8,7 +8,7 @@ PkgConfigDependency {
 
     Export {
         Depends { name: "cpp" }
-        cpp.includePaths: project.system_png ? includePaths : [
+        cpp.includePaths: project.system_png ? product.includePaths : [
             project.qtbasePrefix + "src/3rdparty/libpng",
         ]
     }

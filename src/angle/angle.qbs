@@ -42,7 +42,7 @@ Project {
                 "EGLAPI=",
                 "LIBEGL_IMPLEMENTATION",
             ];
-            return defines.concat(cpp.compilerDefines);
+            return defines.concat(cpp.compilerDefines || []);
         }
 
         cpp.linkerFlags: {
@@ -123,7 +123,7 @@ Project {
             if (!qbs.targetOS.contains("winrt")) {
                 defines.push("ANGLE_ENABLE_D3D9");
             }
-            return defines.concat(cpp.compilerDefines);
+            return defines.concat(cpp.compilerDefines || []);
         }
 
         cpp.includePaths: [
