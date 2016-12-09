@@ -59,8 +59,8 @@ QtModuleProject {
             }
             Properties {
                 condition: project.opengles2
-                cpp.includePaths: base.concat(root.publicIncludePaths, project.openglesIncludeDirs)
-                cpp.libraryPaths: base.concat(project.openglesLibDirs)
+                cpp.includePaths: base.concat(root.publicIncludePaths, project.opengles2IncludeDirs)
+                cpp.libraryPaths: base.concat(project.opengles2LibDirs)
                 cpp.dynamicLibraries: base.concat(project.opengles2Libs)
                 cpp.frameworks: base.concat(project.opengles2Frameworks)
             }
