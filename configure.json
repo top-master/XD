@@ -4,7 +4,12 @@
         "publicHeader": "src/corelib/global/qconfig.h",
         "privateHeader": "src/corelib/global/qconfig_p.h",
         "publicPro": "mkspecs/qconfig.pri",
-        "privatePro": "mkspecs/qmodule.pri"
+        "privatePro": "mkspecs/qmodule.pri",
+        "publicQbs": "qbs/modules/QtGlobalConfig/QtGlobalConfig.qbs",
+        "privateQbs": "qbs/modules/QtGlobalPrivateConfig/QtGlobalPrivateConfig.qbs",
+        "qbsMultiplexCfg": "qbs/imports/QtMultiplexConfig/multiplexconfig.js",
+        "qbsTargetProfile": "qbs/imports/QtTargetProfile.qbs",
+        "qbsMetaProject": "qt.qbs"
     },
 
     "subconfigs": [
@@ -437,7 +442,8 @@
 
     "features": {
         "prepare": {
-            "output": [ "prepareSpec", "prepareOptions", "preparePaths", "reloadSpec" ]
+            "output": [ "prepareSpec", "prepareOptions", "preparePaths", "reloadSpec",
+                        "qbsMetaProject" ]
         },
         "machineTuple": {
             "condition": "!config.linux || config.android || tests.machineTuple",
@@ -445,7 +451,7 @@
         },
         "commit": {
             "condition": "features.machineTuple",
-            "output": [ "commitOptions" ]
+            "output": [ "commitOptions", "qbsMultiplexCfg", "qbsTargetProfile" ]
         },
         "android-style-assets": {
             "label": "Android Style Assets",
@@ -585,7 +591,10 @@
             "label": "RPATH directory",
             "enable": "input.rpaths != ''",
             "autoDetect": false,
-            "output": [ { "type": "varAppend", "name": "EXTRA_RPATHS", "value": "input.rpaths" } ]
+            "output": [
+                { "type": "varAppend", "name": "EXTRA_RPATHS", "value": "input.rpaths" },
+                { "type": "qbsProp", "name": "rpaths", "propType": "stringList", "value": "input.rpaths" }
+            ]
         },
         "force_asserts": {
             "label": "Force assertions",
@@ -678,7 +687,8 @@
             "output": [
                 { "type": "varAppend", "name": "QMAKE_CFLAGS", "value": "'-pg'" },
                 { "type": "varAppend", "name": "QMAKE_CXXFLAGS", "value": "'-pg'" },
-                { "type": "varAppend", "name": "QMAKE_LFLAGS", "value": "'-pg'" }
+                { "type": "varAppend", "name": "QMAKE_LFLAGS", "value": "'-pg'" },
+                { "type": "qbsProp", "name": "enable_profiling", "propType": "bool", "value": "features.profile" }
             ]
         },
         "strip": {
@@ -959,10 +969,16 @@
             "label": "Qt D-Bus (Host)",
             "autoDetect": "!config.android",
             "condition": "libs.host_dbus",
-            "output": [ { "type": "varAppend", "name": "QT_HOST_CFLAGS_DBUS", "value": "libs.host_dbus.cflags", "eval": "true" } ]
+            "output": [
+                { "type": "varAssign", "name": "QT_HOST_CFLAGS_DBUS", "value": "libs.host_dbus.cflags", "eval": "true" },
+                { "type": "qbsProp", "name": "dbus_host_cflags", "propType": "stringList", "value": "libs.host_dbus.cflags" }
+            ]
         },
         "build_parts": {
-            "output": [ { "type": "varAppend", "name": "QT_BUILD_PARTS", "value": "tests.build_parts.value" } ]
+            "output": [
+                { "type": "varAssign", "name": "QT_BUILD_PARTS", "value": "tests.build_parts.value" },
+                { "type": "qbsProp", "name": "build_parts", "propType": "stringList", "value": "tests.build_parts.value" }
+            ]
         },
         "qreal": {
             "label": "Type for qreal",

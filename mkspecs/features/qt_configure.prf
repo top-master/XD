@@ -1,4 +1,3 @@
-
 QT_CONFIGURE_REPORT =
 QT_CONFIGURE_NOTES =
 QT_CONFIGURE_WARNINGS =
@@ -619,6 +618,23 @@ defineReplace(qtConfLibraryArgs) {
     return($$qmake_args)
 }
 
+defineReplace(jsList) {
+    out =
+    for (a, 1): \
+        out += '"$$replace(a, [\\\\\"], \\\\1)"'
+    return($$join(out, ', '))
+}
+
+defineReplace(jsLibList) {
+    isEmpty(1): return([])
+    out =
+    for (a, 1) {
+        contains(a, "-l.*"):a ~= s/^-l//
+        out += '"$$replace(a, [\\\\\"], \\\\1)"'
+    }
+    return([$$join(out, ', ')])
+}
+
 defineTest(qtConfExportLibrary) {
     lpfx = $${currentConfig}.libraries.$$1
     alias = $$eval($${lpfx}.alias)
@@ -655,15 +671,34 @@ defineTest(qtConfExportLibrary) {
         qtConfAddNote("Dropped compiler flags '$$ignored' when detecting library '$$name'.")
 
     NAME = $$upper($$name)
+    qbs_cont = \
+        "import qbs" \
+        "Module {" \
+        "    Depends { name: \"cpp\" }"
     # LIBS is emitted even if empty, as this allows the library to be "seen".
     qtConfOutputVar(assign, $$output, QMAKE_LIBS_$$NAME, $$libs)
+    ### the libraries are not resolved. this should be fixed also for the qmake build.
+    qbs_libs = $$libs
+    ### i have no clue what to do about that ...
     for (b, $${spfx}.builds._KEYS_): \
         qtConfOutputVar(assign, $$output, QMAKE_LIBS_$${NAME}_$$upper($$b), \
                                           $$eval($${spfx}.builds.$${b}))
-    !isEmpty(defines): qtConfOutputVar(assign, $$output, QMAKE_DEFINES_$$NAME, $$defines)
-    !isEmpty(includes): qtConfOutputVar(assign, $$output, QMAKE_INCDIR_$$NAME, $$includes)
+    qbs_cont += "    cpp.dynamicLibraries: $$jsLibList($$libs)"
+    !isEmpty(defines) {
+        qtConfOutputVar(assign, $$output, QMAKE_DEFINES_$$NAME, $$defines)
+        qbs_cont += "    cpp.defines: [$$jsList($$defines)]"
+    }
+    !isEmpty(includes) {
+        qtConfOutputVar(assign, $$output, QMAKE_INCDIR_$$NAME, $$includes)
+        qbs_cont += "    cpp.includePaths: [$$jsList($$includes)]"
+    }
     !isEmpty($${currentConfig}.module): \
         qtConfExtendVar($$output, "QT.$${currentModule}_private.libraries", $$name)
+    qbs_cont += "}"
+    ### this is probably a bit optimistic about the name.
+    qbs_module_name = $$title($$name)
+    fn = $$shadowed($$eval($${currentConfig}.dir))/qbs/modules/$$qbs_module_name/$${qbs_module_name}.qbs
+    write_file($$fn, qbs_cont)|error()
 }
 
 defineTest(qtConfHandleLibrary) {
@@ -1618,6 +1653,28 @@ defineTest(qtConfOutput_varRemove) {
     qtConfOutputVarHelper(remove, $$1, $$2)
 }
 
+defineTest(qtConfOutputSetQbsProp) {
+    $${currentConfig}.output.$${1}.$${2}.type = $${3}
+    $${currentConfig}.output.$${1}.$${2} = $${4}
+    $${currentConfig}.output.$${1}._KEYS_ *= $${2}
+    export($${currentConfig}.output.$${1}.$${2}.type)
+    export($${currentConfig}.output.$${1}.$${2})
+    export($${currentConfig}.output.$${1}._KEYS_)
+}
+
+defineTest(qtConfOutput_qbsProp) {
+    name = "$$eval($${1}.name)"
+    isEmpty(name): \
+        error("Output type 'qbsProp' used in feature '$$eval($${1}.feature)' without a 'name' entry.")
+    propType = "$$eval($${1}.propType)"
+    value = "$$qtConfEvaluate($$eval($${1}.value))"
+    equals(propType, string): \
+        value = \"$$value\"
+    else: equals(propType, stringList): \
+        value = [$$jsList($$eval($$list($$value)))]
+    qtConfOutputSetQbsProp(privateQbs, $$name, $$propType, $$value)
+}
+
 defineTest(qtConfOutputConfigVar) {
     pro = $$3
     var = $$4
@@ -1625,14 +1682,21 @@ defineTest(qtConfOutputConfigVar) {
 
     negative = $$eval($${1}.negative)
     isEmpty(negative): negative = false
-    equals(2, $$negative): return()
+    equals(2, $$negative): enabled = false
+    else: enabled = true
 
     val = $$eval($${1}.name)
+    qbs_name = $$val
     isEmpty(val) {
         val = $$eval($${1}.feature)
+        qbs_name = $$val
         $$negative: val = no-$$val
     }
+    qbs_name ~= s/[-+.]/_/
 
+    qtConfOutputSetQbsProp($$replace(pro, Pro, Qbs), $$qbs_name, bool, $$enabled)
+
+    !$$enabled: return()
     isEmpty($${currentConfig}.module)|!$$modular: \
         qtConfOutputVar(append, $$pro, $$var, $$val)
     else: \
@@ -1702,6 +1766,14 @@ defineTest(qtConfSetupModuleOutputs) {
     qtConfOutputVar(assign, "publicPro", "QT.$${currentModule}.disabled_features", )
     qtConfOutputVar(assign, "privatePro", "QT.$${currentModule}_private.enabled_features", )
     qtConfOutputVar(assign, "privatePro", "QT.$${currentModule}_private.disabled_features", )
+    qtConfOutputSetQbsProp("publicQbs", "enabled_features", "stringList", \
+                           "[$$jsList($$eval(QT.$${currentModule}.enabled_features))]")
+    qtConfOutputSetQbsProp("publicQbs", "disabled_features", "stringList", \
+                           "[$$jsList($$eval(QT.$${currentModule}.disabled_features))]")
+    qtConfOutputSetQbsProp("privateQbs", "enabled_features", "stringList", \
+                           "[$$jsList($$eval(QT.$${currentModule}_private.enabled_features))]")
+    qtConfOutputSetQbsProp("privateQbs", "disabled_features", "stringList", \
+                           "[$$jsList($$eval(QT.$${currentModule}_private.disabled_features))]")
     !isEmpty($${currentConfig}.module) {
         qtConfOutputVar(assign, "publicPro", "QT.$${currentModule}.QT_CONFIG", )
         qtConfOutputVar(assign, "publicPro", "QT.$${currentModule}.exports", )
@@ -1726,6 +1798,7 @@ defineTest(qtConfOutput_publicFeature) {
         export(QT.$${currentModule}.disabled_features)
         qtConfOutputSetDefine("publicHeader", "QT_FEATURE_$$feature", -1)
     }
+    qtConfOutputSetQbsProp("publicQbs", "$$feature", "bool", "$$2")
 }
 
 defineTest(qtConfOutput_privateFeature) {
@@ -1745,6 +1818,7 @@ defineTest(qtConfOutput_privateFeature) {
         export(QT.$${currentModule}_private.disabled_features)
         qtConfOutputSetDefine("privateHeader", "QT_FEATURE_$$feature", -1)
     }
+    qtConfOutputSetQbsProp("privateQbs", "$$feature", "bool", "$$2")
 }
 
 defineTest(qtConfProcessOneOutput) {
@@ -1780,9 +1854,13 @@ defineTest(qtConfProcessOutput) {
         isEmpty(module): \
             error("Neither module nor files section specified in configuration file.")
 
-        $${currentConfig}.files._KEYS_ = publicPro privatePro publicHeader privateHeader
+        $${currentConfig}.files._KEYS_ = publicPro privatePro publicQbs privateQbs publicHeader privateHeader
         $${currentConfig}.files.publicPro = qt$${module}-config.pri
         $${currentConfig}.files.privatePro = qt$${module}-config.pri  # sic!
+        qbs_config_module_pub = Qt$$title($$module)Config
+        $${currentConfig}.files.publicQbs = qbs/modules/$$qbs_config_module_pub/$${qbs_config_module_pub}.qbs
+        qbs_config_module_priv = Qt$$title($$module)PrivateConfig
+        $${currentConfig}.files.privateQbs = qbs/modules/$$qbs_config_module_priv/$${qbs_config_module_priv}.qbs
         $${currentConfig}.files.publicHeader = qt$${module}-config.h
         $${currentConfig}.files.privateHeader = qt$${module}-config_p.h
     }
@@ -1795,6 +1873,18 @@ defineTest(qtConfProcessOutput) {
                 $${currentConfig}.output.$$type += "$$k -= $$eval($${currentConfig}.output.$${type}.remove.$$k)"
             for (k, $${currentConfig}.output.$${type}.append._KEYS_): \
                 $${currentConfig}.output.$$type += "$$k += $$eval($${currentConfig}.output.$${type}.append.$$k)"
+        } else: contains(type, ".*Qbs") {
+            $${currentConfig}.output.$$type = "Module {"
+            for (prop, $${currentConfig}.output.$${type}._KEYS_) {
+                value = $$eval($${currentConfig}.output.$${type}.$${prop})
+                ptype = $$eval($${currentConfig}.output.$${type}.$${prop}.type)
+                equals(prop, static): prop = staticBuild  # "static" breaks the QML parser
+                isEmpty(ptype): \
+                    $${currentConfig}.output.$$type += "    $$prop: $$value"
+                else: \
+                    $${currentConfig}.output.$$type += "    property $$ptype $$prop: $$value"
+            }
+            $${currentConfig}.output.$$type += "}"
         } else: contains(type, ".*Header") {
             for (define, $${currentConfig}.output.$${type}._KEYS_) {
                 value = $$eval($${currentConfig}.output.$${type}.$${define})
@@ -2033,8 +2123,15 @@ for (currentConfig, allConfigs) {
     qtConfHaveModule($$currentModule) {
         # process all features
         qtConfProcessFeatures()
+        qtConfOutputSetQbsProp(privateQbs, enabled, bool, true)
     } else {
         qtConfOutputVar(assign, "privatePro", "QT.$${currentModule}.skip", "true")
+        qtConfOutputSetQbsProp(privateQbs, enabled, bool, false)
+    }
+
+    equals(currentModule, global) {
+        qtConfOutputSetQbsProp(privateQbs, targetMkspec, string, \"$$[QMAKE_XSPEC]\")
+        qtConfOutputSetQbsProp(privateQbs, hostMkspec, string, \"$$[QMAKE_SPEC]\")
     }
 
     # generate files and reports
