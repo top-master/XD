@@ -19,7 +19,7 @@ Project {
         // "testlib/testlib.qbs",
         "tools/tools.qbs",
         // "widgets/widgets.qbs",
-        // "winmain/winmain.qbs",
+        "winmain/winmain.qbs",
         // "xml/xml.qbs",
     ]
 }
