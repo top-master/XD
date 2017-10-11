@@ -72,10 +72,11 @@ Product {
         return base;
     }
 
+    property stringList commonCppDefines: []
     cpp.defines: {
-        var defines = [
+        var defines = commonCppDefines.concat([
             "_USE_MATH_DEFINES",
-        ];
+        ]);
         if (cpp.platformDefines)
             defines = defines.concat(cpp.platformDefines);
         return defines;
@@ -118,5 +119,10 @@ Product {
     FileTagger {
         patterns: "*.ui"
         fileTags: "uic"
+    }
+
+    Export {
+        Depends { name: "cpp" }
+        cpp.defines: product.commonCppDefines
     }
 }
