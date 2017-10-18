@@ -84,7 +84,7 @@ Group {
             "qwineventnotifier.h",
         ]
         Group {
-            name: "kernel/winrt"
+            name: parent.name + " (winrt)"
             condition: qbs.targetOS.contains("winrt")
             files: [
                 "qeventdispatcher_winrt.cpp",
@@ -95,7 +95,7 @@ Group {
             ]
         }
         Group {
-            name: "kernel/windows/non-winrt"
+            name: parent.name + " (win32)"
             condition: !qbs.targetOS.contains("winrt")
             files: [
                 "qeventdispatcher_win.cpp",

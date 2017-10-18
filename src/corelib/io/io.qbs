@@ -176,7 +176,7 @@ Group {
             "qlockfile_win.cpp",
         ]
         Group {
-            name: "I/O (windows/desktop)"
+            name: "I/O (win32)"
             condition: !qbs.targetOS.contains("winrt")
             files: [
                 "qsettings_win.cpp",
