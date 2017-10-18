@@ -203,13 +203,16 @@ QtModuleProject {
                            && !QtGlobalConfig.cross_compile && !QtGlobalConfig.staticBuild // TODO: :!*-armcc
             property string interpreter
             configure: {
-                return;
-                /*
-                   TODO:
-                      prog=$$quote(if (/program interpreter: (.*)]/) { print $1; })
-                      $$system(LC_ALL=C readelf -l /bin/ls | perl -n -e \'$$prog\'
-                      assign result to interpreter
-                */
+                var process = new Process();
+                process.setEnv("LC_ALL", "C");
+                process.start(cpp.binutilsPathPrefix + "readelf", ["-l", "/bin/ls"]);
+                if (!process.waitForFinished() || process.exitCode() !== 0)
+                    return;
+                var re = /program interpreter: (.*)]/;
+                var result = re.exec(process.readStdOut());
+                if (!result || result.length < 2)
+                    return;
+                interpreter = result[1];
                 found = true;
             }
         }

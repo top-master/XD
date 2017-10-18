@@ -7,7 +7,7 @@ Group {
     property string elfInterpreter
 
     cpp.defines: outer.concat(elfInterpreter
-                     ? ['ELF_INTERPRETER="' + elfInterpreterProbe.interpreter + '"']
+                     ? ['ELF_INTERPRETER="' + elfInterpreter + '"']
                      : [])
     cpp.includePaths: outer.concat([project.configPath])
     files: [
