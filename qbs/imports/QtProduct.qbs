@@ -15,6 +15,7 @@ Product {
 
     Depends { name: mkspecModule; condition: mkspecModule !== undefined } // TODO: Explicit comparison should not be needed, but is
 
+    property bool targetsUWP: mkspec.startsWith("winrt-")
     property string mkspec: hostBuild ? QtMultiplexConfig.hostMkspec
                                       : QtMultiplexConfig.targetMkspec
     property string mkspecModule: QtUtils.qmakeMkspecToQbsModule(mkspec)

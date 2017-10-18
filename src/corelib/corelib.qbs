@@ -140,7 +140,7 @@ QtModuleProject {
             if (qbs.targetOS.contains("windows")) {
                 dynamicLibraries.push("shell32");
                 dynamicLibraries.push("user32");
-                if (qbs.targetOS.contains("winrt")) {
+                if (product.targetsUWP) {
                     dynamicLibraries.push("runtimeobject");
                 } else {
                     dynamicLibraries.push("advapi32");

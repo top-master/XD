@@ -177,7 +177,7 @@ Group {
         ]
         Group {
             name: "I/O (win32)"
-            condition: !qbs.targetOS.contains("winrt")
+            condition: !product.targetsUWP
             files: [
                 "qsettings_win.cpp",
                 "qstandardpaths_win.cpp",
@@ -192,7 +192,7 @@ Group {
         }
         Group {
             name: "I/O (winrt)"
-            condition: qbs.targetOS.contains("winrt")
+            condition: product.targetsUWP
             files: [
                 "qsettings_winrt.cpp",
                 "qstandardpaths_winrt.cpp",
@@ -210,7 +210,7 @@ Group {
         ]
         Group {
             name: "qprocess/windows"
-            condition: qbs.targetOS.contains("windows") && !qbs.targetOS.contains("winrt")
+            condition: qbs.targetOS.contains("windows") && !product.targetsUWP
             files: "qprocess_win.cpp"
         }
         Group {

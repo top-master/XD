@@ -85,7 +85,7 @@ Group {
         ]
         Group {
             name: parent.name + " (winrt)"
-            condition: qbs.targetOS.contains("winrt")
+            condition: product.targetsUWP
             files: [
                 "qeventdispatcher_winrt.cpp",
                 "qeventdispatcher_winrt_p.h",
@@ -96,7 +96,7 @@ Group {
         }
         Group {
             name: parent.name + " (win32)"
-            condition: !qbs.targetOS.contains("winrt")
+            condition: !product.targetsUWP
             files: [
                 "qeventdispatcher_win.cpp",
                 "qeventdispatcher_win_p.h",
