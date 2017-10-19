@@ -41,7 +41,6 @@ Group {
         "qmetatype_p.h",
         "qmimedata.cpp",
         "qmimedata.h",
-        "qobjectdefs.h",
         "qobjectdefs_impl.h",
         "qobject.cpp",
         "qobject.h",
@@ -72,6 +71,14 @@ Group {
         "qvariant.h",
         "qvariant_p.h",
     ]
+    Group {
+        name: "kernel (unmocable headers)"
+        files: [
+            "qobjectdefs.h",
+        ]
+        fileTags: ["unmocable"]
+        overrideTags: false
+    }
     Group {
         name: "kernel/windows"
         condition: qbs.targetOS.contains("windows")
