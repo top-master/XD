@@ -126,6 +126,8 @@ QtModuleProject {
                 if (QtCorePrivateConfig.poll_pollts)
                     defines.push("QT_HAVE_POLL", "QT_HAVE_POLLTS");
             }
+            if (elfInterpreterProbe.found)
+                defines.push('ELF_INTERPRETER="' + elfInterpreterProbe.interpreter + '"');
             return defines.concat(base);
         }
         cpp.dynamicLibraries: {
@@ -219,9 +221,7 @@ QtModuleProject {
 
         SrcAnimation { }
         SrcCodecs { }
-        SrcGlobal {
-            elfInterpreter: elfInterpreterProbe.found ? elfInterpreterProbe.interpreter : undefined
-        }
+        SrcGlobal { }
         SrcIo { }
         SrcItemModels { }
         SrcJson { }

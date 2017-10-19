@@ -4,11 +4,6 @@ Group {
     name: "global"
     prefix: path + '/'
 
-    property string elfInterpreter
-
-    cpp.defines: outer.concat(elfInterpreter
-                     ? ['ELF_INTERPRETER="' + elfInterpreter + '"']
-                     : [])
     cpp.includePaths: outer.concat([project.configPath])
     files: [
         "archdetect.cpp",
