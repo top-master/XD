@@ -16,7 +16,7 @@ Project {
         // "plugins/plugins.qbs",
         // "printsupport/printsupport.qbs",
         // "sql/sql.qbs",
-        // "testlib/testlib.qbs",
+        "testlib/testlib.qbs",
         "tools/tools.qbs",
         // "widgets/widgets.qbs",
         "winmain/winmain.qbs",
