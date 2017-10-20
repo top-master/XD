@@ -115,7 +115,7 @@ QtModuleProject {
             return flags;
         }
         cpp.defines: {
-            var defines = ["QT_BUILD_CORE_LIB"];
+            var defines = [];
             if (QtCorePrivateConfig.icu)
                 defines.push("QT_USE_ICU");
             if (qbs.targetOS.contains("unix")) {

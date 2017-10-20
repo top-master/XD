@@ -9,6 +9,7 @@ QtProduct {
     //destinationDirectory: project.libDirectory
 
     property string simpleName
+    property string upperCaseSimpleName: simpleName.toUpperCase()
     targetName: "Qt" + (!bundle.isBundle ? "5" : "") + project.name.slice(2)
 
     // TODO: This implements the "skip" logic, but is quite weird (and probably does not cover the headers product anyway)
@@ -63,12 +64,11 @@ integrity:CONFIG(exceptions, exceptions|exceptions_off): \
 
 // TODO: Generate .pri file. Logic is in qt_module_pri.prf
 
-//     DEFINES += QT_BUILD_$${ucmodule}_LIB (and remove the equivalent from the concrete modules)
-
 // contains(QT_PRODUCT, OpenSource.*):DEFINES *= QT_OPENSOURCE
 
     cpp.defines: {
         var defines = base.concat([
+            "QT_BUILD_" + upperCaseSimpleName + "_LIB",
             "QT_BUILDING_QT",
             "QT_USE_QSTRINGBUILDER",
             "QT_DEPRECATED_WARNINGS",
@@ -211,6 +211,6 @@ equals(QT_ARCH, i386):contains(QT_CPU_FEATURES.$$QT_ARCH, sse2):compiler_support
 
     Export {
         Depends { name: "cpp" }
-        cpp.defines: ["QT_" + product.simpleName.toUpperCase() + "_LIB"]
+        cpp.defines: ["QT_" + product.upperCaseSimpleName + "_LIB"]
     }
 }
