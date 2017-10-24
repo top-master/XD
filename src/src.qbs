@@ -4,7 +4,7 @@ Project {
     references: [
         "3rdparty/3rdparty.qbs",
         // "android/android.qbs",
-        // "concurrent/concurrent.qbs",
+        "concurrent/concurrent.qbs",
         "corelib/corelib.qbs",
         // "dbus/dbus.qbs",
         // "gui/gui.qbs",
