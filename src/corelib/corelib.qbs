@@ -28,17 +28,6 @@ QtModuleProject {
         project.qtbaseShadowDir + "/src/corelib/qtcore-config_p.h",
     ]
 
-    Product {
-        name: project.privateName
-
-        Export {
-            Depends { name: project.moduleName }
-            Depends { name: "cpp" }
-            cpp.defines: project.defines
-            cpp.includePaths: project.includePaths
-        }
-    }
-
     QtHeaders {
         sync.classNames: ({
             "qglobal.h": ["QtGlobal"],
@@ -56,6 +45,8 @@ QtModuleProject {
         })
         files: base.concat(project.isShadowBuild ? project.generatedHeaders : [])
     }
+
+    QtPrivateModule {}
 
     QtModule {
         name: project.moduleName

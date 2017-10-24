@@ -3,27 +3,22 @@ import qbs
 QtModuleProject {
     name: "QtTest"
     simpleName: "testlib"
-
-    Product {
-        name: project.privateName
-        Export {
-            Depends { name: project.moduleName }
-            Depends { name: "cpp" }
-            cpp.defines: project.defines
-            cpp.includePaths: project.includePaths
-        }
-    }
+    conditionFunction: (function() { return QtGlobalPrivateConfig.testlib; })
 
     QtHeaders {
         sync.classNames: ({
             "qtest.h": ["QTest"],
         })
         Depends { name: "QtCoreHeaders" }
+        Depends { name: "QtGlobalPrivateConfig" }
+    }
+
+    QtPrivateModule {
+        Depends { name: "QtGlobalPrivateConfig" }
     }
 
     QtModule {
         name: project.moduleName
-        condition: QtGlobalPrivateConfig.testlib
         simpleName: project.simpleName
 
         Export {

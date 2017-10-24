@@ -7,15 +7,11 @@ QtProduct {
     type: [QtGlobalConfig.staticBuild ? "staticlibrary" : "dynamiclibrary"]
     version: project.version
     //destinationDirectory: project.libDirectory
+    condition: project.conditionFunction()
 
     property string simpleName
     property string upperCaseSimpleName: simpleName.toUpperCase()
     targetName: "Qt" + (!bundle.isBundle ? "5" : "") + project.name.slice(2)
-
-    // TODO: This implements the "skip" logic, but is quite weird (and probably does not cover the headers product anyway)
-    property string privConfigModule: "Qt" + simpleName[0].toUpperCase() + simpleName.slice(1) + "PrivateConfig"
-    Depends { name: privConfigModule; required: false }
-    condition: eval(privConfigModule)["enabled"] || !eval(privConfigModule)["present"]
 
     Depends { name: "qt_sse2"; condition: !hostBuild }
 

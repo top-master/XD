@@ -3,16 +3,9 @@ import qbs
 QtModuleProject {
     name: "QtConcurrent"
     simpleName: "concurrent"
-
-    Product {
-        name: project.privateName
-        Export {
-            Depends { name: project.moduleName }
-            Depends { name: "cpp" }
-            cpp.defines: project.defines
-            cpp.includePaths: project.includePaths
-        }
-    }
+    conditionFunction: (function() {
+        return QtGlobalConfig.concurrent;
+    })
 
     QtHeaders {
         sync.classNames: ({
@@ -21,11 +14,15 @@ QtModuleProject {
             "qtconcurrentrun.h": ["QtConcurrentRun"],
         })
         Depends { name: "QtCoreHeaders" }
+        Depends { name: "QtGlobalConfig" }
+    }
+
+    QtPrivateModule {
+        Depends { name: "QtGlobalConfig" }
     }
 
     QtModule {
         name: project.moduleName
-        condition: QtGlobalConfig.concurrent
         simpleName: project.simpleName
 
         Export {
