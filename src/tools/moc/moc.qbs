@@ -35,6 +35,7 @@ QtHostTool {
     }
 
     Export {
+        property stringList extraArguments: []
         Depends { name: "cpp" }
         cpp.includePaths: [importingProduct.buildDirectory + "/qt.headers"]
         Rule {

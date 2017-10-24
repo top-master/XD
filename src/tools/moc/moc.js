@@ -16,7 +16,7 @@ function args(product, input, outputFileName)
                 includePaths.map(function(item) { return '-I' + item; }),
                 frameworkPaths.map(function(item) { return '-F' + item; }),
 //                pluginMetaData.map(function(item) { return '-M' + item; }),
-//                product.Qt.core.mocFlags,
+                input.moc.extraArguments,
                 '-o', outputFileName,
                 input.filePath);
     return args;

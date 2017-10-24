@@ -8,7 +8,7 @@ Project {
         "corelib/corelib.qbs",
         // "dbus/dbus.qbs",
         // "gui/gui.qbs",
-        // "network/network.qbs",
+        "network/network.qbs",
         // "opengl/opengl.qbs",
         // "openglextensions/openglextensions.qbs",
         // "platformheaders/platformheaders.qbs",
