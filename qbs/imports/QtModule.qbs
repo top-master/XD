@@ -22,6 +22,7 @@ QtProduct {
 // TODO: Create pkgconfig files; see qt_module.prf and qmake
 // TODO: Create libtool files; see qt_module.prf and qmake source code
 
+    cpp.useCxxPrecompiledHeader: QtGlobalPrivateConfig.precompile_header
     Properties {
         condition: qbs.targetOS.contains("darwin") && !qbs.toolchain.contains("clang")
         cpp.commonCompilerFlags: ["-fconstant-cfstrings"]

@@ -96,7 +96,6 @@ QtModuleProject {
 
         Depends { name: "qt_doubleconversion"; condition: QtCorePrivateConfig.doubleconversion }
 
-        cpp.useCxxPrecompiledHeader: QtGlobalPrivateConfig.precompile_header
         cpp.cxxFlags: {
             var flags = base;
             if (qbs.targetOS.contains("integrity"))
