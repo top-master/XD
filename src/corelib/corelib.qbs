@@ -193,11 +193,12 @@ QtModuleProject {
             id: elfInterpreterProbe
             condition: (qbs.targetOS.contains("linux") || qbs.targetOS.contains("hurd"))
                            && !QtGlobalConfig.cross_compile && !QtGlobalConfig.staticBuild // TODO: :!*-armcc
+            property string binutilsPrefix: cpp.binutilsPathPrefix
             property string interpreter
             configure: {
                 var process = new Process();
                 process.setEnv("LC_ALL", "C");
-                process.start(cpp.binutilsPathPrefix + "readelf", ["-l", "/bin/ls"]);
+                process.start(binutilsPrefix + "readelf", ["-l", "/bin/ls"]);
                 if (!process.waitForFinished() || process.exitCode() !== 0)
                     return;
                 var re = /program interpreter: (.*)]/;
