@@ -59,6 +59,15 @@ QtModuleProject {
     QtModule {
         property var config: QtCoreConfig
         property var privateConfig: QtCorePrivateConfig
+        Properties {
+            condition: createPkgconfigFiles
+            Exporter.pkgconfig.transformFunction: (function (product, moduleName, propertyName, value) {
+                if (product.name === "moc")
+                    return undefined;
+                return value;
+            })
+        }
+
         Export {
             property var config: QtCoreConfig
             Depends { name: "cpp" }

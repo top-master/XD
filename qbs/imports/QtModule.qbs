@@ -19,7 +19,17 @@ QtProduct {
 
 // TODO: For Windows: qt_targets.prf
 
-// TODO: Create pkgconfig files; see qt_module.prf and qmake
+    property bool createPkgconfigFiles: qbs.targetOS.contains("unix")
+            && !qbs.targetOS.contains("darwin")
+    Depends {
+        name: "Exporter.pkgconfig"
+        condition: createPkgconfigFiles
+    }
+    Group {
+        fileTagsFilter: ["Exporter.pkgconfig.pc"]
+        qbs.install: true
+        qbs.installDir: "lib/pkgconfig"
+    }
 
     property bool createQbsModule: !aggregate || !multiplexConfigurationId
     Depends { name: "Exporter.qbs"; condition: createQbsModule }
@@ -263,8 +273,8 @@ equals(QT_ARCH, i386):contains(QT_CPU_FEATURES.$$QT_ARCH, sse2):compiler_support
         Depends { name: "cpp" }
         cpp.defines: base.concat("QT_" + product.upperCaseSimpleName + "_LIB")
         prefixMapping: base.concat([{
-             prefix: project.buildDirectory,
-             replacement: qbs.installPrefix
-         }])
+            prefix: project.buildDirectory,
+            replacement: qbs.installPrefix
+        }])
     }
 }

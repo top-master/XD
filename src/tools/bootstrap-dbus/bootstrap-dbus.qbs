@@ -15,6 +15,11 @@ QtModuleProject {
         }
         qbs.buildVariant: original
 
+        Properties {
+            condition: createPkgconfigFiles
+            Exporter.pkgconfig.excludedDependencies: ["Qt.core"]
+        }
+
         // Ignore debug_and_release for host tools.
         multiplexByQbsProperties: base.filter(function(name) { return name !== "buildVariants"; })
 
