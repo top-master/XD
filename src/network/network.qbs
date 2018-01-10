@@ -435,11 +435,34 @@ QtModuleProject {
 
             Group {
                 condition: QtNetworkPrivateConfig.openssl
+
                 files: [
+                    "ssl/qsslcertificate_openssl.cpp",
+                    "ssl/qsslcontext_openssl.cpp",
                     "ssl/qsslcontext_openssl_p.h",
+                    "ssl/qssldiffiehellmanparameters_openssl.cpp",
+                    "ssl/qsslellipticcurve_openssl.cpp",
+                    "ssl/qsslkey_openssl.cpp",
+                    "ssl/qsslsocket_openssl.cpp",
                     "ssl/qsslsocket_openssl_p.h",
+                    "ssl/qsslsocket_openssl_symbols.cpp",
                     "ssl/qsslsocket_openssl_symbols_p.h",
                 ]
+
+                Group {
+                    condition: qbs.targetOS.contains("darwin")
+                    files: [
+                        "ssl/qsslsocket_mac_shared.cpp"
+                    ]
+                }
+
+                /*
+        qtConfig(openssl-linked): \
+            QMAKE_USE_FOR_PRIVATE += openssl
+        else: \
+            QMAKE_USE_FOR_PRIVATE += openssl/nolink
+        win32: LIBS_PRIVATE += -lcrypt32
+                  */
             }
         }
     }
