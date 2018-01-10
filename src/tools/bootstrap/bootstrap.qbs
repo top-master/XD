@@ -7,14 +7,6 @@ QtModuleProject {
     name: "QtBootstrap"
     simpleName: "bootstrap"
     prefix: project.qtbaseDir + "/src/corelib/"
-    defines: [
-        "QT_BOOTSTRAPPED",
-        "QT_NO_CAST_TO_ASCII",
-        'QT_VERSION_STR="' + project.version + '"',
-        "QT_VERSION_MAJOR=" + project.versionParts[0],
-        "QT_VERSION_MINOR=" + project.versionParts[1],
-        "QT_VERSION_PATCH=" + project.versionParts[2],
-    ]
     includePaths: QtUtils.includesForModule("QtCore-private", project.buildDirectory + '/' + simpleName, project.version)
     .concat(QtUtils.includesForModule("QtXml-private", project.buildDirectory + '/' + simpleName, project.version))
     .concat(project.qtbaseShadowDir + "/include")
@@ -247,7 +239,15 @@ QtModuleProject {
         Depends { name: "qt_zlib" }
 
         cpp.includePaths: [project.qtbaseDir + "/mkspecs/" + QtGlobalPrivateConfig.hostMkspec].concat(project.includePaths)
-        cpp.defines: ["QT_NO_CAST_FROM_ASCII", "QT_NO_FOREACH"].concat(project.defines)
+        commonCppDefines: [
+            "QT_BOOTSTRAPPED",
+            "QT_NO_CAST_TO_ASCII",
+            'QT_VERSION_STR="' + project.version + '"',
+            "QT_VERSION_MAJOR=" + project.versionParts[0],
+            "QT_VERSION_MINOR=" + project.versionParts[1],
+            "QT_VERSION_PATCH=" + project.versionParts[2],
+        ]
+        cpp.defines: base.concat("QT_NO_CAST_FROM_ASCII", "QT_NO_FOREACH")
         qt_zlib.useBundledZlib: !QtGlobalPrivateConfig.system_zlib || QtGlobalConfig.cross_compile
         qt_zlib.useQtCore: false
 
@@ -379,7 +379,6 @@ QtModuleProject {
         Export {
             Depends { name: "cpp" }
             Depends { name: "QtGlobalPrivateConfig" }
-            cpp.defines: project.defines
             cpp.includePaths: [project.qtbaseDir + "/mkspecs/" + QtGlobalPrivateConfig.hostMkspec].concat(project.includePaths)
             cpp.cxxLanguageVersion: "c++11"
 
