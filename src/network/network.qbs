@@ -5,14 +5,6 @@ QtModuleProject {
     simpleName: "network"
     conditionFunction: (function() { return QtGlobalPrivateConfig.network; })
 
-    defines: {
-        var defines = base.concat([
-            "QT_NO_USING_NAMESPACE",
-            "QT_NO_FOREACH",
-        ]);
-        return defines;
-    }
-
     QtHeaders {
         sync.classNames: ({
             "qssl.h": ["QSsl"],
@@ -37,7 +29,6 @@ QtModuleProject {
         Export {
             Depends { name: "cpp" }
             Depends { name: "Qt.core" }
-            cpp.defines: base.concat(project.defines)
             cpp.includePaths: project.publicIncludePaths
         }
 
@@ -85,6 +76,7 @@ QtModuleProject {
             condition: qbs.targetOS.contains("windows") && !product.targetsUWP
             cpp.defines: outer.concat("WINVER=0x0600", "_WIN32_WINNT=0x0600")
         }
+        cpp.defines: base.concat(["QT_NO_USING_NAMESPACE", "QT_NO_FOREACH"])
 
         Depends { name: "moc" }
         Properties {
