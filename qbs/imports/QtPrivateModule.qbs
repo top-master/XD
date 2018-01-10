@@ -7,7 +7,6 @@ Product {
     Export {
         Depends { name: project.moduleName }
         Depends { name: "cpp" }
-        cpp.defines: project.defines
         cpp.includePaths: project.includePaths
     }
 }
