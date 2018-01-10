@@ -208,6 +208,6 @@ equals(QT_ARCH, i386):contains(QT_CPU_FEATURES.$$QT_ARCH, sse2):compiler_support
 
     Export {
         Depends { name: "cpp" }
-        cpp.defines: ["QT_" + product.upperCaseSimpleName + "_LIB"]
+        cpp.defines: base.concat("QT_" + product.upperCaseSimpleName + "_LIB")
     }
 }
