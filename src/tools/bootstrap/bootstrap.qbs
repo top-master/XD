@@ -383,6 +383,10 @@ QtModuleProject {
         Export {
             Depends { name: "cpp" }
             Depends { name: "QtGlobalPrivateConfig" }
+            prefixMapping: base.concat([{
+                prefix: project.qtbaseShadowDir,
+                replacement: qbs.installPrefix
+            }])
             cpp.includePaths: [project.qtbaseDir + "/mkspecs/" + QtGlobalPrivateConfig.hostMkspec].concat(project.includePaths)
             cpp.cxxLanguageVersion: "c++11"
 

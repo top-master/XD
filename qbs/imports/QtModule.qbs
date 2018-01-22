@@ -21,6 +21,27 @@ QtProduct {
 // TODO: For Windows: qt_targets.prf
 
 // TODO: Create pkgconfig files; see qt_module.prf and qmake
+
+    property bool createQbsModule: !aggregate || !multiplexConfigurationId
+    Depends { name: "Exporter.qbs"; condition: createQbsModule }
+    Properties {
+        condition: createQbsModule && !aggregate
+               && multiplexByQbsProperties.contains("buildVariants")
+                       && qbs.buildVariants && qbs.buildVariants.length > 1
+        Exporter.qbs.fileName: simpleName + "_" + qbs.buildVariant + ".qbs"
+        Exporter.qbs.additionalContent: "    condition: qbs.buildVariant === '"
+                                            + qbs.buildVariant + "'"
+    }
+    Properties {
+        condition: createQbsModule
+        Exporter.qbs.fileName: simpleName + ".qbs"
+    }
+    Group {
+        fileTagsFilter: ["Exporter.qbs.module"]
+        qbs.install: true
+        qbs.installDir: FileInfo.joinPaths("lib/qbs/modules/Qt", simpleName)
+    }
+
 // TODO: Create libtool files; see qt_module.prf and qmake source code
 
     cpp.useCxxPrecompiledHeader: QtGlobalPrivateConfig.precompile_header
@@ -210,5 +231,9 @@ equals(QT_ARCH, i386):contains(QT_CPU_FEATURES.$$QT_ARCH, sse2):compiler_support
     Export {
         Depends { name: "cpp" }
         cpp.defines: base.concat("QT_" + product.upperCaseSimpleName + "_LIB")
+        prefixMapping: base.concat([{
+             prefix: project.buildDirectory,
+             replacement: qbs.installPrefix
+         }])
     }
 }

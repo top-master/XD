@@ -1,4 +1,5 @@
 import qbs
+import qbs.FileInfo
 
 QtHostTool {
     toolFileTag: "qt.rcc-tool"
@@ -20,6 +21,14 @@ QtHostTool {
             "shell32",
             "ole32",
         ]
+    }
+
+    Depends { name: "Exporter.qbs" }
+    property string moduleInstallDir: FileInfo.joinPaths("lib", "qbs", "modules", name)
+    Group {
+        fileTagsFilter: ["Exporter.qbs.module"]
+        qbs.install: true
+        qbs.installDir: moduleInstallDir
     }
 
     Export {
