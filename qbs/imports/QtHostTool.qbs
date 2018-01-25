@@ -2,7 +2,6 @@ import qbs
 
 CppApplication {
     consoleApplication: true
-    destinationDirectory: project.binDirectory
     cpp.defines: ["QT_USE_QSTRINGBUILDER"]
     cpp.discardUnusedData: true
 

@@ -6,7 +6,6 @@ import qbs.TextFile
 QtProduct {
     type: [QtGlobalConfig.staticBuild ? "staticlibrary" : "dynamiclibrary"]
     version: project.version
-    //destinationDirectory: project.libDirectory
     condition: project.conditionFunction()
 
     property string simpleName
