@@ -63,10 +63,6 @@ Project {
     readonly property var versionParts: version.split('.').map(function(part) { return parseInt(part); })
     property string qtbaseDir: path
 
-    readonly property path binDirectory: buildDirectory + "/bin"
-    readonly property path libDirectory: buildDirectory + "/lib"
-    readonly property path jarDirectory: buildDirectory + "/jar"
-
     references: [
         // "examples/examples.qbs",
         "src/src.qbs",
