@@ -20,6 +20,6 @@ Project {
         "tools/tools.qbs",
         // "widgets/widgets.qbs",
         "winmain/winmain.qbs",
-        // "xml/xml.qbs",
+        "xml/xml.qbs",
     ]
 }
