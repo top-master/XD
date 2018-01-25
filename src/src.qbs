@@ -6,7 +6,7 @@ Project {
         // "android/android.qbs",
         "concurrent/concurrent.qbs",
         "corelib/corelib.qbs",
-        // "dbus/dbus.qbs",
+        "dbus/dbus.qbs",
         // "gui/gui.qbs",
         "network/network.qbs",
         // "opengl/opengl.qbs",
