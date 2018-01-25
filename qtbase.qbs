@@ -63,6 +63,17 @@ Project {
     readonly property var versionParts: version.split('.').map(function(part) { return parseInt(part); })
     property string qtbaseDir: path
 
+    Product {
+        name: "extra installs"
+        Group {
+            files: [
+                FileInfo.joinPaths(project.qtbaseShadowDir, "bin", "qmake"),
+            ]
+            qbs.install: true
+            qbs.installDir: "bin"
+        }
+    }
+
     references: [
         // "examples/examples.qbs",
         "src/src.qbs",
