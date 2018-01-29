@@ -18,7 +18,7 @@ Project {
         // "gl.qbs",
         // "gthread.qbs",
         // "gtk+.qbs",
-        // "harfbuzz/harfbuzz.qbs",
+        "harfbuzz.qbs",
         // "ice.qbs",
         // "libdrm.qbs",
         // "libjpeg/libjpeg.qbs",
