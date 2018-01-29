@@ -22,7 +22,7 @@ Project {
         // "ice.qbs",
         // "libdrm.qbs",
         // "libjpeg/libjpeg.qbs",
-        // "libpng/libpng.qbs",
+        "libpng/libpng.qbs",
         // "libinput.qbs",
         // "libudev.qbs",
         // "mtdev.qbs",
