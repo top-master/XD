@@ -11,7 +11,7 @@ Project {
         "network/network.qbs",
         // "opengl/opengl.qbs",
         // "openglextensions/openglextensions.qbs",
-        // "platformheaders/platformheaders.qbs",
+        "platformheaders/platformheaders.qbs",
         // "platformsupport/platformsupport.qbs",
         // "plugins/plugins.qbs",
         // "printsupport/printsupport.qbs",
