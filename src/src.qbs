@@ -13,7 +13,7 @@ Project {
         // "openglextensions/openglextensions.qbs",
         "platformheaders/platformheaders.qbs",
         "platformsupport/platformsupport.qbs",
-        // "plugins/plugins.qbs",
+        "plugins/plugins.qbs",
         // "printsupport/printsupport.qbs",
         // "sql/sql.qbs",
         "testlib/testlib.qbs",
