@@ -935,9 +935,13 @@ defineTest(qtConfOutput_qbsMultiplexCfg) {
     contents = \
         "var FileInfo = require('qbs.FileInfo');"\
         "function getPlatform(qmakePlatform) {" \
-        "    if (qmakePlatform.contains('win32')) "\
-        "        return ['windows']; "\
-        "    return qmakePlatform; "\
+        "    if (qmakePlatform.contains('win32')) " \
+        "        return 'windows'; " \
+        "    if (qmakePlatform.contains('android')) "\
+        "        return 'android'; "\
+        "    if (qmakePlatform.contains('linux')) "\
+        "        return 'linux'; "\
+        "    return qmakePlatform[0]; "\
         "}" \
         "function getToolchain(qmakeToolchain, qmakePlatform) {" \
         "    if (qmakePlatform.contains('mingw'))" \

@@ -31,7 +31,7 @@ Project {
     QtTargetProfile {
         name: "qt_targetProfile"
         qbs.toolchain: project.toolchain
-        qbs.targetOS: QtMultiplexConfig.platform
+        qbs.targetPlatform: QtMultiplexConfig.platform
         cpp.compilerName: QtMultiplexConfig.compilerName
         cpp.toolchainInstallPath: QtMultiplexConfig.toolchainInstallPath
     }
