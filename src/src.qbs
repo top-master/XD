@@ -12,7 +12,7 @@ Project {
         // "opengl/opengl.qbs",
         // "openglextensions/openglextensions.qbs",
         "platformheaders/platformheaders.qbs",
-        // "platformsupport/platformsupport.qbs",
+        "platformsupport/platformsupport.qbs",
         // "plugins/plugins.qbs",
         // "printsupport/printsupport.qbs",
         // "sql/sql.qbs",
