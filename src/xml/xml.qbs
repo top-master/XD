@@ -9,10 +9,10 @@ QtModuleProject {
     })
 
     QtHeaders {
-        files: base.concat([
+        shadowBuildFiles: [
             project.qtbaseShadowDir + "/src/xml/qtxml-config.h",
             project.qtbaseShadowDir + "/src/xml/qtxml-config_p.h",
-        ])
+        ]
         Depends { name: "QtGlobalPrivateConfig" }
     }
 

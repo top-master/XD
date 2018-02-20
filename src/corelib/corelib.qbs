@@ -43,7 +43,7 @@ QtModuleProject {
             "qbytearray.h": ["QByteArrayData"],
             "qbytearraylist.h": ["QByteArrayList"],
         })
-        files: base.concat(project.isShadowBuild ? project.generatedHeaders : [])
+        shadowBuildFiles: project.generatedHeaders
     }
 
     QtPrivateModule {}

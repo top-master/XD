@@ -9,10 +9,10 @@ QtModuleProject {
         sync.classNames: ({
             "qssl.h": ["QSsl"],
         })
-        files: base.concat([
+        shadowBuildFiles: [
             project.qtbaseShadowDir + "/src/network/qtnetwork-config.h",
             project.qtbaseShadowDir + "/src/network/qtnetwork-config_p.h",
-        ])
+        ]
         Depends { name: "QtCoreHeaders" }
         Depends { name: "QtGlobalPrivateConfig" }
     }

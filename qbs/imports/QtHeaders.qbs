@@ -32,6 +32,8 @@ Product {
     }
 
     property string baseDir: sourceDirectory
-    files: [baseDir + "/*.h", baseDir + "/**/*.h"]
+    property stringList shadowBuildFiles: []
+    files: [baseDir + "/*.h", baseDir + "/**/*.h"].concat(
+               project.isShadowBuild ? shadowBuildFiles : [])
     excludeFiles: [baseDir + "/doc/**"]
 }
