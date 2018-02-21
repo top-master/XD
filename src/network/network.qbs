@@ -263,17 +263,6 @@ QtModuleProject {
         }
 
         Group {
-            name: "sources_darwin"
-            condition: qbs.targetOS.contains("darwin")
-            files: [
-                "access/qnetworkreplynsurlconnectionimpl.mm",
-                "ssl/qsslkey_mac.cpp",
-                "ssl/qsslsocket_mac.cpp",
-                "ssl/qsslsocket_mac_shared.cpp"
-            ]
-        }
-
-        Group {
             name: "sources_macos"
             condition: qbs.targetOS.contains("macos")
             files: [
