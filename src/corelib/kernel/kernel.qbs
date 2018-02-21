@@ -144,7 +144,7 @@ Group {
         }
         Group {
             name: "kernel/non-darwin"
-            condition: !qbs.targetOS.contains("darwin") || true // TODO: nacl
+            condition: !qbs.targetOS.contains("darwin") // TODO: nacl
             files: "qelapsedtimer_unix.cpp"
         }
         Group {
