@@ -3,6 +3,7 @@ import qbs
 QtStaticLibrary {
     condition: qbs.targetOS.contains("windows")
     name: "winmain"
+    isInternal: false
     targetName: "qtmain"
 
     Depends { name: "Qt.core" }
