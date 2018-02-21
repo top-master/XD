@@ -945,10 +945,10 @@ defineTest(qtConfOutput_qbsMultiplexCfg) {
         "}" \
         "function getToolchain(qmakeToolchain, qmakePlatform) {" \
         "    if (qmakePlatform.contains('mingw'))" \
-        "        return ['mingw', 'gcc'];" \
-        "    if (qmakePlatform.contains('clang'))" \
-        "        return ['clang', 'llvm', 'gcc'];" \
-        "    return qmakeToolchain;" \
+        "        return 'mingw';" \
+        "    if (qmakeToolchain.contains('clang'))" \
+        "        return 'clang';" \
+        "    return qmakeToolchain[0];" \
         "}" \
         "function getToolchainInstallPath(qmakeTcInstallPath, qmakeTcPrefix) {" \
         "    if (FileInfo.isAbsolutePath(qmakeTcPrefix))" \

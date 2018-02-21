@@ -19,18 +19,17 @@ Project {
 
     property bool debugAndRelease: QtMultiplexConfig.debug_and_release
     property stringList targetArchitecture: QtMultiplexConfig.architecture
-    property stringList toolchain: QtMultiplexConfig.toolchain
 
     Profile {
         name: "qt_hostProfile"
-        qbs.toolchain: QtMultiplexConfig.hostToolchain
+        qbs.toolchainType: QtMultiplexConfig.hostToolchain
         cpp.compilerName: QtMultiplexConfig.hostCompilerName
         cpp.toolchainInstallPath: QtMultiplexConfig.hostToolchainInstallPath
     }
 
     QtTargetProfile {
         name: "qt_targetProfile"
-        qbs.toolchain: project.toolchain
+        qbs.toolchainType: QtMultiplexConfig.toolchain
         qbs.targetPlatform: QtMultiplexConfig.platform
         cpp.compilerName: QtMultiplexConfig.compilerName
         cpp.toolchainInstallPath: QtMultiplexConfig.toolchainInstallPath
