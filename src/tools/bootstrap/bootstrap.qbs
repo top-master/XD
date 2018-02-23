@@ -216,6 +216,10 @@ QtModuleProject {
         simpleName: parent.simpleName + "_private"
         type: ["staticlibrary", "prl", "pri"]
 
+        Properties {
+            condition: qbs.targetOS.contains("darwin")
+            bundle.isBundle: false
+        }
 
 /* TODO. Possibly move to more generic place
     QMAKE_CFLAGS += $$QMAKE_CFLAGS_SPLIT_SECTIONS

@@ -15,6 +15,7 @@ CppApplication {
     }
     qbs.buildVariant: original
 
+    multiplexByQbsProperties: ["profiles"]
     property string hostProfile: "qt_hostProfile"
     qbs.profiles: [hostProfile]
 

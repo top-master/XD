@@ -26,11 +26,17 @@ Product {
     aggregate: {
         if (!qbs.targetOS.contains("darwin"))
             return false;
-        var archs = qbs.architectures;
-        if (archs && archs.length > 1)
-            return true;
-        var variants = qbs.buildVariants;
-        return variants && variants.length > 1;
+        var multiplexProps = multiplexByQbsProperties;
+        if (multiplexProps.contains("architectures")) {
+            var archs = qbs.architectures;
+            if (archs && archs.length > 1)
+                return true;
+        }
+        if (multiplexProps.contains("buildVariants")) {
+            var variants = qbs.buildVariants;
+            return variants && variants.length > 1;
+        }
+        return false;
     }
 
     multiplexByQbsProperties: {
@@ -42,7 +48,7 @@ Product {
         return result;
     }
 
-    qbs.architectures: project.targetArchitecture
+    qbs.architectures: hostBuild ? original : project.targetArchitecture
     qbs.buildVariants: project.debugAndRelease ? ["debug", "release"] : []
 
     Properties {

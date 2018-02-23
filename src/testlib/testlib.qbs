@@ -37,7 +37,9 @@ QtModuleProject {
         cpp.frameworks: {
             var frameworks = base;
             if (qbs.targetOS.contains("darwin"))
-                frameworks.push("ApplicationServices", "Security");
+                frameworks.push("Security");
+            if (qbs.targetOS.contains("macos"))
+                frameworks.push("ApplicationServices", "IOKit", "Foundation");
             return frameworks;
         }
 
@@ -96,7 +98,7 @@ QtModuleProject {
         ]
 
         Group {
-            condition: qbs.targetOS.contains("darwin")
+            condition: qbs.targetOS.contains("macos")
             files: [
                 "qtestutil_macos.mm",
                 "qtestutil_macos_p.h",
