@@ -55,12 +55,14 @@ QtModuleProject {
 
         Export {
             Depends { name: "cpp" }
-            cpp.includePaths: project.publicIncludePaths
+            cpp.includePaths: project.publicIncludePaths.concat(generatedHeadersDir)
 
             Depends { name: "moc" }
             Depends { name: "rcc" }
 
             Depends { name: product.mkspecModule; condition: product.mkspecModule !== undefined }
+
+            property stringList generatedHeadersDir: importingProduct.buildDirectory + "/qt.headers"
 
             /*
               TODO: Make this work
