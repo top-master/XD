@@ -65,8 +65,8 @@ QtHostTool {
                 return [artifact];
             }
             prepare: {
-                var cmd = new Command(Moc.fullPath(project),
-                                      Moc.args(product, input, output.filePath));
+                var mocPath = explicitlyDependsOn["qt.moc-tool"][0].filePath;
+                var cmd = new Command(mocPath, Moc.args(product, input, output.filePath));
                 cmd.description = 'moc ' + input.fileName;
                 cmd.highlight = 'codegen';
                 return cmd;

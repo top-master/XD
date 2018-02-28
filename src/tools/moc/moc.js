@@ -21,8 +21,3 @@ function args(product, input, outputFileName)
                 input.filePath);
     return args;
 }
-
-function fullPath(project)
-{
-    return project.binDirectory + "/moc";
-}

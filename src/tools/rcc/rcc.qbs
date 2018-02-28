@@ -36,7 +36,8 @@ QtHostTool {
                 filePath: product.buildDirectory + "/.rcc/" + input.baseName + "_rcc.cpp"
             }
             prepare: {
-                var cmd = new Command(project.binDirectory  + "/rcc", [
+                var rccPath = explicitlyDependsOn["qt.rcc-tool"][0].filePath;
+                var cmd = new Command(rccPath, [
                     input.filePath,
                     "--name", input.baseName,
                     "-o", output.filePath,
