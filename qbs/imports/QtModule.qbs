@@ -4,8 +4,9 @@ import qbs.Process
 import qbs.TextFile
 
 QtProduct {
-    name: project.moduleName
-    type: [QtGlobalConfig.staticBuild ? "staticlibrary" : "dynamiclibrary"]
+    name: project.internal ? project.privateName : project.moduleName
+    type: [project.internal || QtGlobalConfig.staticBuild
+           ? "staticlibrary" : "dynamiclibrary"]
     version: project.version
     condition: project.conditionFunction()
 

@@ -1,5 +1,6 @@
 import qbs
 import qbs.FileInfo
+import "dbus.js" as DBus
 
 QtModuleProject {
     name: "QtDBus"
@@ -9,6 +10,7 @@ QtModuleProject {
     })
 
     QtHeaders {
+        Depends { name: "QtCoreHeaders" }
         Depends { name: "QtGlobalPrivateConfig" }
     }
 
@@ -18,9 +20,54 @@ QtModuleProject {
 
     QtModule {
         Export {
-            Depends { name: "cpp" }
             Depends { name: "Qt.core" }
+            Depends { name: "cpp" }
+            property bool _notInCycle: importingProduct.name !== "qdbusxml2cpp"
+                && importingProduct.name !== "Qt.dbus"
+            Depends { name: "qdbusxml2cpp"; condition: _notInCycle }
             cpp.includePaths: project.publicIncludePaths
+            property stringList xml2CppHeaderFlags: []
+            property stringList xml2CppSourceFlags: []
+
+            Rule {
+                condition: _notInCycle
+                inputs: ["qt.dbus.adaptor"]
+                explicitlyDependsOn: ["qt.qdbusxml2cpp-tool"]
+
+                Artifact {
+                    filePath: FileInfo.joinPaths(input.Qt.core.generatedHeadersDir,
+                                                 DBus.outputFileName(input, "_adaptor.h"))
+                    fileTags: ["hpp"]
+                }
+                Artifact {
+                    filePath: DBus.outputFileName(input, "_adaptor.cpp")
+                    fileTags: ["cpp"]
+                }
+
+                prepare: {
+                    return DBus.createCommands(product, input, outputs, "-a");
+                }
+            }
+
+            Rule {
+                condition: _notInCycle
+                inputs: ["qt.dbus.interface"]
+                explicitlyDependsOn: ["qt.qdbusxml2cpp-tool"]
+
+                Artifact {
+                    filePath: FileInfo.joinPaths(input.Qt.core.generatedHeadersDir,
+                                                 DBus.outputFileName(input, "_interface.h"))
+                    fileTags: ["hpp"]
+                }
+                Artifact {
+                    filePath: DBus.outputFileName(input, "_interface.cpp")
+                    fileTags: ["cpp"]
+                }
+
+                prepare: {
+                    return DBus.createCommands(product, input, outputs, "-p");
+                }
+            }
         }
 
         Depends { name: project.headersName }

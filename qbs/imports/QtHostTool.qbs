@@ -7,6 +7,11 @@ CppApplication {
     cpp.defines: ["QT_USE_QSTRINGBUILDER"]
     cpp.discardUnusedData: true
 
+    // ### Remove, when QBS-1310 is fixed.
+    qbsSearchPaths: [project.qtbaseShadowDir + "/src/corelib/qbs"]
+    Depends { name: "QtCoreConfig" }
+    // ### You can stop the removal right here.
+
     Depends { name: "QtGlobalConfig" }
 
     property bool useBootstrapLib: QtGlobalConfig.cross_compile
