@@ -36,4 +36,9 @@ Product {
     files: [baseDir + "/*.h", baseDir + "/**/*.h"].concat(
                project.isShadowBuild ? shadowBuildFiles : [])
     excludeFiles: [baseDir + "/doc/**"]
+
+    Export {
+        property stringList includePaths: project.includePaths
+        property stringList publicIncludePaths: project.publicIncludePaths
+    }
 }
