@@ -1,6 +1,8 @@
 import qbs
 
 CppApplication {
+    property string toolFileTag
+    type: toolFileTag ? base.concat(toolFileTag) : base
     consoleApplication: true
     cpp.defines: ["QT_USE_QSTRINGBUILDER"]
     cpp.discardUnusedData: true
@@ -31,6 +33,7 @@ CppApplication {
 
     Group {
         fileTagsFilter: "application"
+        fileTags: toolFileTag ? [toolFileTag] : undefined
         qbs.install: true
         qbs.installDir: "bin"
     }

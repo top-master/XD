@@ -2,7 +2,7 @@ import qbs
 import "moc.js" as Moc
 
 QtHostTool {
-    type: base.concat("qt.moc-tool")
+    toolFileTag: "qt.moc-tool"
     useBootstrapLib: true
 
     Depends { name: "QtCoreHeaders" }
@@ -27,11 +27,6 @@ QtHostTool {
             "shell32",
             "ole32",
         ]
-    }
-
-    Group {
-        fileTagsFilter: ["application"]
-        fileTags: ["qt.moc-tool"]
     }
 
     Export {

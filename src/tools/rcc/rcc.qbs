@@ -1,7 +1,7 @@
 import qbs
 
 QtHostTool {
-    type: base.concat("qt.rcc-tool")
+    toolFileTag: "qt.rcc-tool"
     useBootstrapLib: true
     cpp.includePaths: [path].concat(base)
 
@@ -20,11 +20,6 @@ QtHostTool {
             "shell32",
             "ole32",
         ]
-    }
-
-    Group {
-        fileTagsFilter: ["application"]
-        fileTags: ["qt.rcc-tool"]
     }
 
     Export {
