@@ -17,9 +17,6 @@ QtModuleProject {
     }
 
     QtModule {
-        name: project.moduleName
-        simpleName: project.simpleName
-
         Export {
             Depends { name: "cpp" }
             Depends { name: "Qt.core" }

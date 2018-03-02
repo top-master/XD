@@ -4,11 +4,12 @@ import qbs.Process
 import qbs.TextFile
 
 QtProduct {
+    name: project.moduleName
     type: [QtGlobalConfig.staticBuild ? "staticlibrary" : "dynamiclibrary"]
     version: project.version
     condition: project.conditionFunction()
 
-    property string simpleName
+    property string simpleName: project.simpleName
     property string upperCaseSimpleName: simpleName.toUpperCase()
     targetName: "Qt" + (!bundle.isBundle ? "5" : "") + project.name.slice(2)
 

@@ -22,8 +22,6 @@ QtModuleProject {
     }
 
     QtModule {
-        name: project.moduleName
-        simpleName: project.simpleName
         qbsSearchPaths: [project.qtbaseShadowDir + "/src/network/qbs"]
 
         Export {

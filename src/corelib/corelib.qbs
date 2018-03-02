@@ -49,8 +49,6 @@ QtModuleProject {
     QtPrivateModule {}
 
     QtModule {
-        name: project.moduleName
-        simpleName: project.simpleName
         qbsSearchPaths: [project.qtbaseShadowDir + "/src/corelib/qbs"]
 
         Export {
