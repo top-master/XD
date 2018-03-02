@@ -91,7 +91,6 @@ Product {
 
     cpp.includePaths: [
         project.qtbaseDir + "/mkspecs/" + mkspec,
-        product.buildDirectory + "/.uic", // TODO: Export from uic product
         project.buildDirectory + "/include",
     ]
 
@@ -104,23 +103,6 @@ Product {
     Properties {
         condition: qbs.toolchain.contains("gcc") && !hostBuild
         cpp.toolchainPrefix: QtMultiplexConfig.toolchainPrefix
-    }
-
-    Rule {
-        inputs: "uic"
-        Artifact {
-            fileTags: "hpp"
-            filePath: product.buildDirectory + "/.uic/ui_" + input.baseName + ".h"
-        }
-        prepare: {
-            var installRoot = product.moduleProperty("qbs", "installRoot");
-            var installPrefix = product.moduleProperty("qbs", "installPrefix");
-            var cmd = new Command(FileInfo.joinPaths(installRoot, installPrefix, "bin/uic"),
-                ["-o", output.filePath, input.filePath]);
-            cmd.description = "uic " + input.fileName;
-            cmd.highlight = "codegen";
-            return cmd;
-        }
     }
 
     FileTagger {

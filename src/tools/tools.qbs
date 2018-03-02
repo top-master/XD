@@ -11,6 +11,6 @@ Project {
         "qdbusxml2cpp/qdbusxml2cpp.qbs",
         // "qlalr/qlalr.qbs",
         "rcc/rcc.qbs",
-        // "uic/uic.qbs",
+        "uic/uic.qbs",
     ]
 }
