@@ -10,7 +10,7 @@ Project {
         // "dbus-linked.qbs",
         // "egl.qbs",
         // "fontconfig.qbs",
-        // "freetype/freetype2.qbs",
+        "freetype/freetype.qbs",
         // "forkfd/forkfd.qbs",
         // "gbm.qbs",
         // "glesv2.qbs",
