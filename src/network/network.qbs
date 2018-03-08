@@ -138,7 +138,6 @@ QtModuleProject {
             "access/qnetworkaccesscachebackend.cpp",
             "access/qnetworkaccesscachebackend_p.h",
             "access/qnetworkaccessdebugpipebackend.cpp",
-            "access/qnetworkaccessdebugpipebackend_p.h",
             "access/qnetworkaccessfilebackend.cpp",
             "access/qnetworkaccessfilebackend_p.h",
             "access/qnetworkaccessftpbackend.cpp",
@@ -235,6 +234,14 @@ QtModuleProject {
             "socket/qudpsocket.cpp",
             "socket/qudpsocket.h",
         ]
+
+        Group {
+            files: [
+                "access/qnetworkaccessdebugpipebackend_p.h",
+            ]
+            fileTags: QtGlobalPrivateConfig.private_tests ? [] : ["unmocable"]
+            overrideTags: false
+        }
 
         Group {
             name: "Qt.core precompiled header"
@@ -422,7 +429,6 @@ QtModuleProject {
 
             Group {
                 condition: QtNetworkPrivateConfig.openssl
-
                 files: [
                     "ssl/qsslcertificate_openssl.cpp",
                     "ssl/qsslcontext_openssl.cpp",
@@ -431,10 +437,17 @@ QtModuleProject {
                     "ssl/qsslellipticcurve_openssl.cpp",
                     "ssl/qsslkey_openssl.cpp",
                     "ssl/qsslsocket_openssl.cpp",
-                    "ssl/qsslsocket_openssl_p.h",
                     "ssl/qsslsocket_openssl_symbols.cpp",
                     "ssl/qsslsocket_openssl_symbols_p.h",
                 ]
+
+                Group {
+                    files: [
+                        "ssl/qsslsocket_openssl_p.h",
+                    ]
+                    fileTags: qbs.targetOS.contains("windows") ? [] : ["unmocable"]
+                    overrideTags: false
+                }
 
                 Group {
                     condition: qbs.targetOS.contains("darwin")
