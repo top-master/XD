@@ -41,7 +41,6 @@ Project {
         // "xcb/xcb-sync.qbs",
         // "xcb/xcb-xfixes.qbs",
         // "xcb/xcb-xinerama.qbs",
-        // "xkbcommon.qbs",
-        // "xkbcommon-x11.qbs",
+        "xkbcommon.qbs",
     ]
 }
