@@ -35,18 +35,9 @@ QtModuleProject {
         Depends { name: "QtGuiPrivateConfig" }
         Depends { name: "QtGlobalPrivateConfig" }
         Depends { name: "qt_zlib" }
+        Depends { name: "cpufeatures" }
         Depends { name: "opengl" }
         opengl.gles2: QtGuiConfig.opengles2
-
-        Depends { name: "cpufeatures" }
-        cpufeatures.x86_sse2: QtGlobalPrivateConfig.sse2
-        cpufeatures.x86_avx2: QtGlobalPrivateConfig.avx2
-        cpufeatures.mips_dspr2: QtGlobalPrivateConfig.mips_dspr2
-        cpufeatures.mips_dsp: QtGlobalPrivateConfig.mips_dsp
-        cpufeatures.arm_neon: QtGlobalPrivateConfig.neon
-        cpufeatures.x86_sse4_1: QtGlobalPrivateConfig.sse4_1
-        cpufeatures.x86_sse4_2: QtGlobalPrivateConfig.sse4_2
-        cpufeatures.x86_ssse3: QtGlobalPrivateConfig.ssse3
 
         cpp.enableExceptions: true
         cpp.includePaths: project.includePaths.concat(base)
@@ -759,61 +750,71 @@ QtModuleProject {
             }
         }
         Group {
-            condition: QtGlobalPrivateConfig.avx2
-            files: [
-                "image/qimage_avx2.cpp",
-                "painting/qdrawhelper_avx2.cpp",
-            ]
-        }
-        Group {
-            condition: QtGlobalPrivateConfig.mips_dspr2
-            files: [
-                "image/qimage_mips_dspr2.cpp",
-                "image/qimage_mips_dspr2_asm.S",
-                "painting/qdrawhelper_mips_dspr2_asm.S",
-            ]
-        }
-        Group {
-            condition: QtGlobalPrivateConfig.mips_dsp
-            files: [
-                "painting/qdrawhelper_mips_dsp.cpp",
-                "painting/qdrawhelper_mips_dsp_asm.S",
-                "painting/qdrawhelper_mips_dsp_p.h",
-                "painting/qt_mips_asm_dsp_p.h",
-            ]
-        }
-        Group {
-            condition: QtGlobalPrivateConfig.neon
-            files: [
-                "../3rdparty/pixman/pixman-arm-neon-asm.S",
-                "image/qimage_neon.cpp",
-                "painting/qdrawhelper_neon.cpp",
-                "painting/qdrawhelper_neon_asm.S",
-                "painting/qdrawhelper_neon_p.h",
-                "painting/qimagescale_neon.cpp",
-            ]
-        }
-        Group {
-            condition: QtGlobalPrivateConfig.sse2
-            files: [
-                "image/qimage_sse2.cpp",
-                "painting/qdrawhelper_sse2.cpp",
-            ]
-        }
-        Group {
-            condition: QtGlobalPrivateConfig.sse4_1
-            files: [
-                "image/qimage_sse4.cpp",
-                "painting/qdrawhelper_sse4.cpp",
-                "painting/qimagescale_sse4.cpp",
-            ]
-        }
-        Group {
-            condition: QtGlobalPrivateConfig.ssse3
-            files: [
-                "image/qimage_ssse3.cpp",
-                "painting/qdrawhelper_ssse3.cpp",
-            ]
+            cpp.useCxxPrecompiledHeader: false
+            Group {
+                condition: QtGlobalPrivateConfig.avx2
+                cpufeatures.x86_avx2: true
+                files: [
+                    "image/qimage_avx2.cpp",
+                    "painting/qdrawhelper_avx2.cpp",
+                ]
+            }
+            Group {
+                condition: QtGlobalPrivateConfig.mips_dspr2
+                cpufeatures.mips_dspr2: true
+                files: [
+                    "image/qimage_mips_dspr2.cpp",
+                    "image/qimage_mips_dspr2_asm.S",
+                    "painting/qdrawhelper_mips_dspr2_asm.S",
+                ]
+            }
+            Group {
+                condition: QtGlobalPrivateConfig.mips_dsp
+                cpufeatures.mips_dsp: true
+                files: [
+                    "painting/qdrawhelper_mips_dsp.cpp",
+                    "painting/qdrawhelper_mips_dsp_asm.S",
+                    "painting/qdrawhelper_mips_dsp_p.h",
+                    "painting/qt_mips_asm_dsp_p.h",
+                ]
+            }
+            Group {
+                condition: QtGlobalPrivateConfig.neon
+                cpufeatures.arm_neon: true
+                files: [
+                    "../3rdparty/pixman/pixman-arm-neon-asm.S",
+                    "image/qimage_neon.cpp",
+                    "painting/qdrawhelper_neon.cpp",
+                    "painting/qdrawhelper_neon_asm.S",
+                    "painting/qdrawhelper_neon_p.h",
+                    "painting/qimagescale_neon.cpp",
+                ]
+            }
+            Group {
+                condition: QtGlobalPrivateConfig.sse2
+                cpufeatures.x86_sse2: true
+                files: [
+                    "image/qimage_sse2.cpp",
+                    "painting/qdrawhelper_sse2.cpp",
+                ]
+            }
+            Group {
+                condition: QtGlobalPrivateConfig.sse4_1
+                cpufeatures.x86_sse4_1: true
+                files: [
+                    "image/qimage_sse4.cpp",
+                    "painting/qdrawhelper_sse4.cpp",
+                    "painting/qimagescale_sse4.cpp",
+                ]
+            }
+            Group {
+                condition: QtGlobalPrivateConfig.ssse3
+                cpufeatures.x86_ssse3: true
+                files: [
+                    "image/qimage_ssse3.cpp",
+                    "painting/qdrawhelper_ssse3.cpp",
+                ]
+            }
         }
     }
 }
