@@ -12,7 +12,7 @@ Project {
         // "integrity",
         // "ios",
         // "linuxfb",
-        // "minimal",
+        "minimal",
         // "minimalegl",
         // "mirclient",
         // "offscreen",
@@ -28,8 +28,6 @@ TEMPLATE = subdirs
 QT_FOR_CONFIG += gui-private
 
 android: SUBDIRS += android
-
-!android: SUBDIRS += minimal
 
 !android:qtConfig(freetype): SUBDIRS += offscreen
 
