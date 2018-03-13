@@ -11,7 +11,7 @@ Project {
         // "haiku",
         // "integrity",
         // "ios",
-        // "linuxfb",
+        "linuxfb",
         "minimal",
         "minimalegl",
         // "mirclient",
