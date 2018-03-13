@@ -34,6 +34,7 @@ Project {
                 result.push("builds/unix");
             return result;
         }
+        cpp.visibility: "hidden"
         cpp.warningLevel: "none"
         cpp.defines: [
             "FT2_BUILD_LIBRARY",
@@ -41,14 +42,21 @@ Project {
             "FT_CONFIG_OPTION_USE_PNG",
             "TT_CONFIG_OPTION_SUBPIXEL_HINTING",
         ]
+        Group {
+            name: ".c headers"
+            fileTags: "hpp"
+            files: [
+                "src/autofit/afangles.c",
+                "src/autofit/aflatin.c",
+                "src/autofit/afdummy.c",
+                "src/autofit/afglobal.c",
+                "src/autofit/afhints.c",
+                "src/autofit/afloader.c",
+                "src/autofit/afmodule.c",
+            ]
+        }
+
         files: [
-            "src/autofit/afangles.c",
-            "src/autofit/afdummy.c",
-            "src/autofit/afglobal.c",
-            "src/autofit/afhints.c",
-            "src/autofit/aflatin.c",
-            "src/autofit/afloader.c",
-            "src/autofit/afmodule.c",
             "src/autofit/autofit.c",
             "src/base/ftbase.c",
             "src/base/ftbbox.c",
