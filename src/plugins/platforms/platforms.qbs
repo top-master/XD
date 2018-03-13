@@ -13,7 +13,7 @@ Project {
         // "ios",
         // "linuxfb",
         "minimal",
-        // "minimalegl",
+        "minimalegl",
         // "mirclient",
         // "offscreen",
         // "qnx",
