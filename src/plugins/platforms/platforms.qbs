@@ -7,7 +7,7 @@ Project {
         // "cocoa",
         // "direct2d",
         // "directfb",
-        // "eglfs",
+        "eglfs/eglfs.qbs",
         // "haiku",
         // "integrity",
         // "ios",
@@ -43,11 +43,6 @@ qtConfig(direct2d) {
 
 qnx {
     SUBDIRS += qnx
-}
-
-qtConfig(eglfs) {
-    SUBDIRS += eglfs
-    SUBDIRS += minimalegl
 }
 
 qtConfig(directfb) {
