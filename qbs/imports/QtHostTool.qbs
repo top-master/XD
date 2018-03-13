@@ -31,7 +31,7 @@ CppApplication {
 
     Properties {
         condition: qbs.toolchain.contains("gcc") && QtGlobalConfig.rpath && !useBootstrapLib
-        cpp.rpaths: qbs.targetOS.contains("darwin") ? ["@loader_path/../lib"] : ["$ORIGIN/../lib"]
+        cpp.rpaths: cpp.rpathOrigin + "/../lib"
     }
 
     cpp.cxxLanguageVersion: "c++11"
