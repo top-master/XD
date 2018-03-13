@@ -19,6 +19,7 @@ QtModuleProject {
         Export {
             Depends { name: "cpp" }
             Depends { name: "Qt.core" }
+            Depends { name: "Drm" }
             cpp.includePaths: project.includePaths
         }
 
