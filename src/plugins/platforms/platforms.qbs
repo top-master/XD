@@ -15,7 +15,7 @@ Project {
         "minimal",
         "minimalegl",
         // "mirclient",
-        // "offscreen",
+        "offscreen",
         // "qnx",
         // "vnc",
         // "windows",
