@@ -7,8 +7,8 @@ QtModuleProject {
     conditionFunction: (function() {
         return (QtGuiPrivateConfig.freetype || qbs.targetOS.contains("windows")
                 || qbs.targetOS.contains("darwin"))
-            && (QtGlobalPrivateConfig.tslib || QtGlobalPrivateConfig.evdev
-                || QtGlobalPrivateConfig.libinput || QtGuiPrivateConfig.integrityhid);
+            && (QtGuiPrivateConfig.tslib || QtGuiPrivateConfig.evdev
+                || QtGuiPrivateConfig.libinput || QtGuiPrivateConfig.integrityhid);
     })
     qbsSearchPaths: [project.qtbaseShadowDir + "/src/gui/qbs"]
 
