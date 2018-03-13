@@ -17,7 +17,7 @@ Project {
         // "mirclient",
         "offscreen",
         // "qnx",
-        // "vnc",
+        "vnc",
         // "windows",
         // "winrt",
         "xcb",
@@ -50,8 +50,6 @@ qtConfig(directfb) {
 }
 
 qtConfig(linuxfb): SUBDIRS += linuxfb
-
-qtConfig(vnc): SUBDIRS += vnc
 
 freebsd {
     SUBDIRS += bsdfb
