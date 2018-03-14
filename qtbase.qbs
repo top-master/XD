@@ -65,9 +65,10 @@ Project {
 
     Product {
         name: "extra installs"
+        Depends { name: "cpp" }
         Group {
             files: [
-                FileInfo.joinPaths(project.qtbaseShadowDir, "bin", "qmake"),
+                FileInfo.joinPaths(project.qtbaseShadowDir, "bin", "qmake" + cpp.executableSuffix),
             ]
             qbs.install: true
             qbs.installDir: "bin"
