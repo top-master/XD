@@ -18,7 +18,7 @@ Project {
         "offscreen",
         // "qnx",
         "vnc",
-        // "windows",
+        "windows",
         // "winrt",
         "xcb",
         ]
@@ -33,7 +33,6 @@ android: SUBDIRS += android
 
 uikit:!watchos: SUBDIRS += ios
 
-win32:!winrt: SUBDIRS += windows
 winrt: SUBDIRS += winrt
 
 qtConfig(direct2d) {

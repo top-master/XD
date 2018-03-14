@@ -122,7 +122,9 @@ QtModuleProject {
             }
             if (elfInterpreterProbe.found)
                 defines.push('ELF_INTERPRETER="' + elfInterpreterProbe.interpreter + '"');
-            return defines.concat(base);
+            return defines.concat(base.filter(function(name) {
+                return name !== "QT_NO_CAST_TO_ASCII";
+            }));
         }
         cpp.dynamicLibraries: {
             var dynamicLibraries = base;

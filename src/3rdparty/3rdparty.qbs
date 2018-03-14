@@ -19,6 +19,7 @@ Project {
         // "gthread.qbs",
         // "gtk+.qbs",
         "harfbuzz.qbs",
+        "iaccessible2",
         // "ice.qbs",
         // "libdrm.qbs",
         // "libjpeg/libjpeg.qbs",
