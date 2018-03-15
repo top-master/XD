@@ -22,6 +22,11 @@ QtProduct {
         }
         return result;
     }
+    Properties {
+        condition: qbs.targetOS.contains("darwin")
+        bundle.isBundle: false
+    }
+    aggregate: false
     Group {
         fileTagsFilter: product.type
         qbs.install: !QtGlobalConfig.staticBuild

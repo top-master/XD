@@ -59,7 +59,9 @@ QtModuleProject {
             if (qbs.targetOS.contains("darwin")) {
                 result.push("CoreFoundation", "CoreGraphics", "CoreText", "Foundation");
                 if (qbs.targetOS.contains("macos"))
-                    result.push("AppKit", "UIKit");
+                    result.push("AppKit");
+                else
+                    result.push("UIKit");
             }
             return result;
         }
