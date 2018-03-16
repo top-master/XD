@@ -4,7 +4,7 @@ Project {
     references: [
         // "android",
         // "bsdfb",
-        // "cocoa",
+        "cocoa",
         // "direct2d",
         // "directfb",
         "eglfs/eglfs.qbs",
@@ -32,7 +32,6 @@ android: SUBDIRS += android
 !android:qtConfig(freetype): SUBDIRS += offscreen
 
 uikit:!watchos: SUBDIRS += ios
-osx: SUBDIRS += cocoa
 
 win32:!winrt: SUBDIRS += windows
 winrt: SUBDIRS += winrt
