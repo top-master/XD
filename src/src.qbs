@@ -8,6 +8,7 @@ Project {
         "gui",
         "network",
         "testlib",
+        "widgets",
     ]
     qbsSearchPaths: qtModuleNames.map(function(name) {
         return qtbaseShadowDir + "/src/" + name + "/qbs";
@@ -25,7 +26,6 @@ Project {
         // "printsupport/printsupport.qbs",
         // "sql/sql.qbs",
         "tools/tools.qbs",
-        // "widgets/widgets.qbs",
         "winmain/winmain.qbs",
         "xml/xml.qbs",
     ])
