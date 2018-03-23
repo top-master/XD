@@ -5,7 +5,7 @@ import qbs.TextFile
 
 QtProduct {
     name: project.internal ? project.privateName : project.moduleName
-    type: [project.internal || QtGlobalConfig.staticBuild
+    type: [project.internal || Qt.global.config.staticBuild
            ? "staticlibrary" : "dynamiclibrary"]
     version: project.version
     condition: project.conditionFunction()
@@ -44,7 +44,7 @@ QtProduct {
 
 // TODO: Create libtool files; see qt_module.prf and qmake source code
 
-    cpp.useCxxPrecompiledHeader: QtGlobalPrivateConfig.precompile_header
+    cpp.useCxxPrecompiledHeader: Qt.global.privateConfig.precompile_header
     Properties {
         condition: qbs.targetOS.contains("darwin") && !qbs.toolchain.contains("clang")
         cpp.commonCompilerFlags: ["-fconstant-cfstrings"]
@@ -54,16 +54,16 @@ QtProduct {
         cpp.commonCompilerFlags: ["-mminimal-toc"]
     }
     Properties {
-        condition: qbs.targetOS.contains("darwin") && QtGlobalConfig.rpath
+        condition: qbs.targetOS.contains("darwin") && Qt.global.config.rpath
         cpp.sonamePrefix: "@rpath"
     }
     Properties {
-        condition: qbs.targetOS.contains("darwin") && !QtGlobalConfig.rpath
+        condition: qbs.targetOS.contains("darwin") && !Qt.global.config.rpath
         // TODO:       CONFIG += absolute_library_soname
     }
 
     Depends { name: "bundle" }
-    bundle.isBundle: QtGlobalConfig.qt_framework // TODO: Further framework stuff in qt_module.prf
+    bundle.isBundle: Qt.global.config.qt_framework // TODO: Further framework stuff in qt_module.prf
 
 // TODO: Do we want/need something along the lines of relative_qt_rpath?
 // TODO: Concept of an "internal module" (platform support, platform plugin, bootstrap*, qtzlib)
@@ -131,7 +131,7 @@ equals(QT_ARCH, i386):contains(QT_CPU_FEATURES.$$QT_ARCH, sse2):compiler_support
 
     Rule {
         // TODO: Property useVersionScript; e.g.  some platform plugins turn this off
-        condition: !QtGlobalConfig.staticBuild && qbs.targetOS.contains("linux")
+        condition: !Qt.global.config.staticBuild && qbs.targetOS.contains("linux")
                    && !qbs.targetOS.contains("android")
         inputs: ["qt.private_header"]
         requiresInputs: false
@@ -217,7 +217,8 @@ equals(QT_ARCH, i386):contains(QT_CPU_FEATURES.$$QT_ARCH, sse2):compiler_support
     Group {
         fileTagsFilter: ["debuginfo_dll"]
         qbs.install: true
-        qbs.installDir: qbs.targetOS.contains("windows") && !QtGlobalConfig.staticBuild ? "bin" : "lib"
+        qbs.installDir: qbs.targetOS.contains("windows")
+            && !Qt.global.config.staticBuild ? "bin" : "lib"
         qbs.installSourceBase: product.buildDirectory
     }
 

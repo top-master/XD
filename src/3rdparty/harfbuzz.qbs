@@ -1,14 +1,13 @@
 import qbs
 import qbs.FileInfo
+import QtGuiPrivateConfig
 
 Project {
     qbsSearchPaths: [project.qtbaseShadowDir + "/src/gui/qbs"]
     Product {
         name: "qt_harfbuzz"
         condition: QtGuiPrivateConfig.harfbuzz
-        Depends { name: "QtGuiPrivateConfig" }
         Export {
-            Depends { name: "QtGuiPrivateConfig" }
             Depends {
                 condition: !QtGuiPrivateConfig.system_harfbuzz
                 name: "bundled_harfbuzz_ng"
@@ -31,7 +30,6 @@ Project {
             name: "Qt.core"
             cpp.link: false
         }
-        Depends { name: "QtGuiPrivateConfig" }
         Depends { name: "cpp" }
         cpp.includePaths: ["harfbuzz-ng"]
         cpp.defines: {

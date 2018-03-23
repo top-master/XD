@@ -1,4 +1,5 @@
 import qbs
+import QtGuiPrivateConfig
 
 QtModuleProject {
     name: "QtFontDatabaseSupport"
@@ -7,10 +8,8 @@ QtModuleProject {
     conditionFunction: (function() {
         return QtGuiPrivateConfig.freetype || qbs.targetOS.contains("windows") || qbs.targetOS.contains("darwin");
     })
-    qbsSearchPaths: [project.qtbaseShadowDir + "/src/gui/qbs"]
 
     QtHeaders {
-        Depends { name: "QtGuiPrivateConfig" }
     }
 
     QtModule {
@@ -23,7 +22,6 @@ QtModuleProject {
         Depends { name: project.headersName }
         Depends { name: "Qt.core-private" }
         Depends { name: "Qt.gui-private" }
-        Depends { name: "QtGuiPrivateConfig" }
         Depends { name: "qt_freetype" }
         Depends { name: "Fontconfig"; condition: QtGuiPrivateConfig.fontconfig }
 

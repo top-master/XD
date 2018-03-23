@@ -1,4 +1,5 @@
 import qbs
+import QtGlobalPrivateConfig
 
 Project {
     Product {
@@ -6,7 +7,6 @@ Project {
         Export {
             property bool useBundledPcre2: !QtGlobalPrivateConfig.system_pcre2
 
-            Depends { name: "QtGlobalPrivateConfig" }
             Depends { name: "bundled_pcre2"; condition: useBundledPcre2 }
             Depends { name: "system_pcre2"; condition: !useBundledPcre2 }
         }

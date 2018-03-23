@@ -1,4 +1,5 @@
 import qbs
+import QtGuiPrivateConfig
 
 QtModuleProject {
     name: "QtEglFSDeviceIntegration"
@@ -20,8 +21,6 @@ QtModuleProject {
         pluginType: "platforms"
         pluginClassName: "QEglFSIntegrationPlugin"
 
-        Depends { name: "QtGuiConfig" }
-        Depends { name: "QtGuiPrivateConfig" }
         Depends { name: "Qt.gui-private" }
         Depends { name: "Qt.eglfsdeviceintegration-private" }
 

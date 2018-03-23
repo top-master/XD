@@ -1,10 +1,12 @@
 import qbs
+import QtGuiConfig
+import QtGuiPrivateConfig
 
 QtModuleProject {
     name: "QtGui"
     simpleName: "gui"
     conditionFunction: (function() {
-        return QtGlobalPrivateConfig.gui;
+        return Qt.global.privateConfig.gui;
     })
 
     QtHeaders {
@@ -13,17 +15,17 @@ QtModuleProject {
             project.qtbaseShadowDir + "/src/gui/qtgui-config_p.h",
         ]
         Depends { name: "QtCoreHeaders" }
-        Depends { name: "QtGlobalPrivateConfig" }
     }
 
     QtPrivateModule {
-        Depends { name: "QtGlobalPrivateConfig" }
+        Export {
+            property var config: QtGuiPrivateConfig
+        }
     }
 
     QtModule {
-        qbsSearchPaths: [project.qtbaseShadowDir + "/src/gui/qbs"]
-
         Export {
+            property var config: QtGuiConfig
             Depends { name: "cpp" }
             Depends { name: "Qt.core" }
             cpp.includePaths: project.publicIncludePaths
@@ -31,9 +33,6 @@ QtModuleProject {
 
         Depends { name: project.headersName }
         Depends { name: "Qt"; submodules: ["core-private"] }
-        Depends { name: "QtGuiConfig" }
-        Depends { name: "QtGuiPrivateConfig" }
-        Depends { name: "QtGlobalPrivateConfig" }
         Depends { name: "qt_zlib" }
         Depends { name: "cpufeatures" }
         Depends { name: "opengl" }
@@ -752,7 +751,7 @@ QtModuleProject {
         Group {
             cpp.useCxxPrecompiledHeader: false
             Group {
-                condition: QtGlobalPrivateConfig.avx2
+                condition: Qt.global.privateConfig.avx2
                 cpufeatures.x86_avx2: true
                 files: [
                     "image/qimage_avx2.cpp",
@@ -760,7 +759,7 @@ QtModuleProject {
                 ]
             }
             Group {
-                condition: QtGlobalPrivateConfig.mips_dspr2
+                condition: Qt.global.privateConfig.mips_dspr2
                 cpufeatures.mips_dspr2: true
                 files: [
                     "image/qimage_mips_dspr2.cpp",
@@ -769,7 +768,7 @@ QtModuleProject {
                 ]
             }
             Group {
-                condition: QtGlobalPrivateConfig.mips_dsp
+                condition: Qt.global.privateConfig.mips_dsp
                 cpufeatures.mips_dsp: true
                 files: [
                     "painting/qdrawhelper_mips_dsp.cpp",
@@ -779,7 +778,7 @@ QtModuleProject {
                 ]
             }
             Group {
-                condition: QtGlobalPrivateConfig.neon
+                condition: Qt.global.privateConfig.neon
                 cpufeatures.arm_neon: true
                 files: [
                     "../3rdparty/pixman/pixman-arm-neon-asm.S",
@@ -791,7 +790,7 @@ QtModuleProject {
                 ]
             }
             Group {
-                condition: QtGlobalPrivateConfig.sse2
+                condition: Qt.global.privateConfig.sse2
                 cpufeatures.x86_sse2: true
                 files: [
                     "image/qimage_sse2.cpp",
@@ -799,7 +798,7 @@ QtModuleProject {
                 ]
             }
             Group {
-                condition: QtGlobalPrivateConfig.sse4_1
+                condition: Qt.global.privateConfig.sse4_1
                 cpufeatures.x86_sse4_1: true
                 files: [
                     "image/qimage_sse4.cpp",
@@ -808,7 +807,7 @@ QtModuleProject {
                 ]
             }
             Group {
-                condition: QtGlobalPrivateConfig.ssse3
+                condition: Qt.global.privateConfig.ssse3
                 cpufeatures.x86_ssse3: true
                 files: [
                     "image/qimage_ssse3.cpp",

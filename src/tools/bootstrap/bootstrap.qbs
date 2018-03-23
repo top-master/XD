@@ -228,7 +228,7 @@ QtModuleProject {
 
         // TODO: Move to more generic place? Also needed by bootstrap-dbus and potentially others.
         Properties {
-            condition: QtGlobalConfig.release_tools
+            condition: Qt.global.config.release_tools
             qbs.buildVariant: "release"
         }
         qbs.buildVariant: original
@@ -239,10 +239,10 @@ QtModuleProject {
         Depends { name: project.headersName }
         Depends { name: "QtXmlBootstrapHeaders" }
         Depends { name: "cpp" }
-        Depends { name: "QtGlobalConfig" }
         Depends { name: "qt_zlib" }
 
-        cpp.includePaths: [project.qtbaseDir + "/mkspecs/" + QtGlobalPrivateConfig.hostMkspec].concat(project.includePaths)
+        cpp.includePaths: project.includePaths.concat(
+            project.qtbaseDir + "/mkspecs/" + Qt.global.privateConfig.hostMkspec)
         commonCppDefines: [
             "QT_BOOTSTRAPPED",
             "QT_NO_CAST_TO_ASCII",
@@ -252,7 +252,8 @@ QtModuleProject {
             "QT_VERSION_PATCH=" + project.versionParts[2],
         ]
         cpp.defines: base.concat("QT_NO_CAST_FROM_ASCII", "QT_NO_FOREACH")
-        qt_zlib.useBundledZlib: !QtGlobalPrivateConfig.system_zlib || QtGlobalConfig.cross_compile
+        qt_zlib.useBundledZlib: !Qt.global.privateConfig.system_zlib
+            || Qt.global.config.cross_compile
         qt_zlib.useQtCore: false
 
         Properties {
@@ -382,17 +383,18 @@ QtModuleProject {
 
         Export {
             Depends { name: "cpp" }
-            Depends { name: "QtGlobalPrivateConfig" }
             prefixMapping: base.concat([{
                 prefix: project.qtbaseShadowDir,
                 replacement: qbs.installPrefix
             }])
-            cpp.includePaths: [project.qtbaseDir + "/mkspecs/" + QtGlobalPrivateConfig.hostMkspec].concat(project.includePaths)
+            cpp.includePaths: project.includePaths.concat(
+                project.qtbaseDir + "/mkspecs/" + Qt.global.privateConfig.hostMkspec)
             cpp.cxxLanguageVersion: "c++11"
 
-            Depends { name: "QtGlobalPrivateConfig" }
+            Depends { name: "Qt.global" }
             Depends { name: "qt_zlib" }
-            qt_zlib.useBundledZlib: !QtGlobalPrivateConfig.system_zlib || QtGlobalConfig.cross_compile
+            qt_zlib.useBundledZlib: !Qt.global.privateConfig.system_zlib
+                || Qt.global.config.cross_compile
             qt_zlib.useQtCore: false
 
             Properties {

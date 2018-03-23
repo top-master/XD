@@ -1,4 +1,5 @@
 import qbs
+import QtGuiPrivateConfig
 
 QtModuleProject {
     name: "Qt5XcbQpa"
@@ -6,7 +7,7 @@ QtModuleProject {
     internal: true
     qbsSearchPaths: [project.qtbaseShadowDir + "/src/gui/qbs"]
     conditionFunction: (function() {
-        return QtGlobalPrivateConfig.gui && QtGuiPrivateConfig.xcb;
+        return Qt.global.privateConfig.gui && QtGuiPrivateConfig.xcb;
     })
     references: [
         "xcb-static"
@@ -18,8 +19,6 @@ QtModuleProject {
         pluginType: "platforms"
         pluginClassName: "QXcbIntegrationPlugin"
 
-        Depends { name: "QtGlobalPrivateConfig" }
-        Depends { name: "QtGuiPrivateConfig"; condition: QtGlobalPrivateConfig.gui }
         Depends { name: project.moduleName }
         Depends { name: "Qt.gui-private" }
         files: [
@@ -34,9 +33,6 @@ QtModuleProject {
     QtModule {
         name: project.moduleName
         simpleName: project.simpleName
-
-        Depends { name: "QtGlobalPrivateConfig" }
-        Depends { name: "QtGuiPrivateConfig" }
 
         Depends { name: "Qt.core-private" }
         Depends { name: "Qt.gui-private" }

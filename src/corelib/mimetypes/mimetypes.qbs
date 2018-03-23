@@ -2,7 +2,7 @@ import qbs
 
 Group {
     name: "mimetypes"
-    condition: QtCoreConfig.mimetype
+    condition: config.mimetype
     prefix: path + '/'
     files: [
         "mimetypes.qrc",

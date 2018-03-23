@@ -7,6 +7,8 @@ Product {
     condition: project.conditionFunction()
     property bool install: true
 
+    Depends { name: "Qt.global" }
+
     Depends { name: "sync" }
     sync.module: project.name
 

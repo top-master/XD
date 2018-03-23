@@ -1,4 +1,5 @@
 import qbs
+import QtGuiPrivateConfig
 
 QtPlugin {
     qbsSearchPaths: [project.qtbaseShadowDir + "/src/gui/qbs"]
@@ -7,8 +8,6 @@ QtPlugin {
     pluginType: "platforms"
     pluginClassName: "QMinimalEglIntegrationPlugin"
 
-    Depends { name: "QtGuiConfig" }
-    Depends { name: "QtGuiPrivateConfig" }
     Depends { name: "Qt.core-private" }
     Depends { name: "Qt.gui-private" }
     Depends { name: "Qt.eventdispatcher_support-private" }
@@ -30,7 +29,7 @@ QtPlugin {
         "qminimaleglwindow.h",
     ]
     Group {
-        condition: QtGuiConfig.opengl
+        condition: Qt.gui.config.opengl
         files: [
             "qminimaleglbackingstore.cpp",
             "qminimaleglbackingstore.h",

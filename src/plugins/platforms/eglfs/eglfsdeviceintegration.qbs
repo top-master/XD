@@ -9,8 +9,6 @@ import qbs
 */
 
 QtModule {
-    Depends { name: "QtGuiConfig" }
-    Depends { name: "QtGuiPrivateConfig" }
     Depends { name: "Qt.core-private" }
     Depends { name: "Qt.gui-private" }
     Depends { name: "Qt.devicediscovery_support-private" }
@@ -56,7 +54,7 @@ QtModule {
         ]
 
         Group {
-            condition: QtGuiConfig.opengl
+            condition: Qt.gui.config.opengl
             files: [
                 "qeglfscontext.cpp",
                 "qeglfscontext_p.h",
@@ -66,7 +64,7 @@ QtModule {
         }
     }
     Group {
-        condition: QtGuiConfig.cursor
+        condition: Qt.gui.config.cursor
         files: [
             "cursor.qrc",
         ]

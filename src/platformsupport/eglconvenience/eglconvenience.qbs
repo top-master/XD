@@ -1,4 +1,5 @@
 import qbs
+import QtGuiPrivateConfig
 
 QtModuleProject {
     name: "QtEglSupport"
@@ -7,13 +8,8 @@ QtModuleProject {
     conditionFunction: (function() {
         return QtGuiPrivateConfig.egl;
     })
-    qbsSearchPaths: [
-        project.qtbaseShadowDir + "/src/corelib/qbs",
-        project.qtbaseShadowDir + "/src/gui/qbs"
-    ]
 
     QtHeaders {
-        Depends { name: "QtGuiPrivateConfig" }
     }
 
     QtModule {
@@ -26,11 +22,8 @@ QtModuleProject {
         Depends { name: project.headersName }
         Depends { name: "Qt.core-private" }
         Depends { name: "Qt.gui-private" }
-        Depends { name: "QtCorePrivateConfig" }
-        Depends { name: "QtGuiConfig" }
-        Depends { name: "QtGuiPrivateConfig" }
         //Depends { name: "Xlib"; condition: QtGuiPrivateConfig.xlib }    ### Xlib doesn't exist yet.
-        Depends { name: "Libdl"; condition: QtCorePrivateConfig.dlopen }
+        Depends { name: "Libdl"; condition: Qt["core-private"].config.dlopen }
 
         cpp.includePaths: project.includePaths.concat(base)
         cpp.defines: base.concat(
@@ -47,7 +40,7 @@ QtModuleProject {
             ]
         }
         Group {
-            condition: QtGuiConfig.opengl
+            condition: Qt.gui.config.opengl
             files: [
                 "qeglpbuffer.cpp",
                 "qeglpbuffer_p.h",

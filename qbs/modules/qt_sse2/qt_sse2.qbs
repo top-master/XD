@@ -1,9 +1,9 @@
 import qbs
+import QtGlobalPrivateConfig
 
 Module {
     Depends { name: "cpp" }
     Depends { name: "cpufeatures" }
-    Depends { name: "QtGlobalPrivateConfig" }
 
     Properties {
         condition: QtGlobalPrivateConfig.sse2

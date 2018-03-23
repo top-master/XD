@@ -2,6 +2,8 @@ import qbs
 import qbs.Process
 import qbs.TextFile
 
+import QtCoreConfig
+import QtCorePrivateConfig
 import "animation/animation.qbs" as SrcAnimation
 import "codecs/codecs.qbs" as SrcCodecs
 import "global/global.qbs" as SrcGlobal
@@ -46,12 +48,17 @@ QtModuleProject {
         shadowBuildFiles: project.generatedHeaders
     }
 
-    QtPrivateModule {}
+    QtPrivateModule {
+        Export {
+            property var config: QtCorePrivateConfig
+        }
+    }
 
     QtModule {
-        qbsSearchPaths: [project.qtbaseShadowDir + "/src/corelib/qbs"]
-
+        property var config: QtCoreConfig
+        property var privateConfig: QtCorePrivateConfig
         Export {
+            property var config: QtCoreConfig
             Depends { name: "cpp" }
             cpp.includePaths: project.publicIncludePaths.concat(generatedHeadersDir)
 
@@ -72,10 +79,6 @@ QtModuleProject {
             }
             */
         }
-
-        Depends { name: "QtGlobalConfig" }
-        Depends { name: "QtCoreConfig" }
-        Depends { name: "QtCorePrivateConfig" }
 
         Depends { name: project.headersName }
 
@@ -146,7 +149,7 @@ QtModuleProject {
             }
             if (QtCorePrivateConfig.icu) {
                 if (qbs.targetOS.contains("windows")) {
-                    if (QtGlobalConfig.staticBuild) {
+                    if (Qt.global.config.staticBuild) {
                         if (qbs.enableDebugCode) {
                             dynamicLibraries.push("sicuind", "sicuucd", "sicudtd");
                         } else {
@@ -192,7 +195,8 @@ QtModuleProject {
         Probe {
             id: elfInterpreterProbe
             condition: (qbs.targetOS.contains("linux") || qbs.targetOS.contains("hurd"))
-                           && !QtGlobalConfig.cross_compile && !QtGlobalConfig.staticBuild // TODO: :!*-armcc
+                && !Qt.global.config.cross_compile
+                && !Qt.global.config.staticBuild // TODO: :!*-armcc
             property string binutilsPrefix: cpp.binutilsPathPrefix
             property string interpreter
             configure: {

@@ -1,13 +1,12 @@
 import qbs
+import QtGuiPrivateConfig
 
 Project {
     qbsSearchPaths: [project.qtbaseShadowDir + "/src/gui/qbs"]
     Product {
         name: "qt_libpng"
         condition: QtGuiPrivateConfig.png
-        Depends { name: "QtGuiPrivateConfig" }
         Export {
-            Depends { name: "QtGuiPrivateConfig" }
             Depends {
                 condition: !QtGuiPrivateConfig.system_png
                 name: "bundled_libpng"
@@ -22,7 +21,6 @@ Project {
     QtStaticLibrary {
         name: "bundled_libpng"
         condition: QtGuiPrivateConfig.png && !QtGuiPrivateConfig.system_png
-        Depends { name: "QtGuiPrivateConfig" }
         Depends { name: "cpp" }
         Depends { name: "qt_zlib" }
         cpp.defines: ["PNG_ARM_NEON_OPT=0"]

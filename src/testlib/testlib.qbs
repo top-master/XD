@@ -3,18 +3,16 @@ import qbs
 QtModuleProject {
     name: "QtTest"
     simpleName: "testlib"
-    conditionFunction: (function() { return QtGlobalPrivateConfig.testlib; })
+    conditionFunction: (function() { return Qt.global.privateConfig.testlib; })
 
     QtHeaders {
         sync.classNames: ({
             "qtest.h": ["QTest"],
         })
         Depends { name: "QtCoreHeaders" }
-        Depends { name: "QtGlobalPrivateConfig" }
     }
 
     QtPrivateModule {
-        Depends { name: "QtGlobalPrivateConfig" }
     }
 
     QtModule {
@@ -26,7 +24,6 @@ QtModuleProject {
 
         Depends { name: project.headersName }
         Depends { name: "Qt.core-private" }
-        Depends { name: "QtGlobalPrivateConfig" }
 
         cpp.enableExceptions: true
         cpp.includePaths: project.includePaths.concat(base)

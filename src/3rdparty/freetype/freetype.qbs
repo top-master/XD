@@ -1,13 +1,11 @@
 import qbs
+import QtGuiPrivateConfig
 
 Project {
-    qbsSearchPaths: [project.qtbaseShadowDir + "/src/gui/qbs"]
     Product {
         name: "qt_freetype"
         condition: QtGuiPrivateConfig.freetype
-        Depends { name: "QtGuiPrivateConfig" }
         Export {
-            Depends { name: "QtGuiPrivateConfig" }
             Depends {
                 condition: !QtGuiPrivateConfig.system_freetype
                 name: "bundled_freetype"
@@ -22,7 +20,6 @@ Project {
         name: "bundled_freetype"
         targetName: "qtfreetype"
         condition: !QtGuiPrivateConfig.system_freetype
-        Depends { name: "QtGuiPrivateConfig" }
         Depends { name: "qt_libpng" }
         Depends { name: "qt_zlib" }
         Depends { name: "cpp" }

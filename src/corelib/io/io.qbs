@@ -202,7 +202,7 @@ Group {
     }
     Group {
         name: "qprocess"
-        condition: QtCoreConfig.processenvironment
+        condition: product.config.processenvironment
         files: [
             "qprocess.cpp",
             "qprocess.h",

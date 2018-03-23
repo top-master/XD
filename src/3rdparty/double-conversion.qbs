@@ -1,16 +1,14 @@
 import qbs
+import QtCorePrivateConfig
 
 Project {
-    qbsSearchPaths: [project.qtbaseShadowDir + "/src/corelib/qbs"]
     Product {
         name: "qt_doubleconversion"
         condition: QtCorePrivateConfig.doubleconversion
-        Depends { name: "QtCorePrivateConfig" }
 
         Export {
             property bool useBundledDoubleConversion: !QtCorePrivateConfig.system_doubleconversion
 
-            Depends { name: "QtCorePrivateConfig" }
             Depends { name: "Doubleconversion"; condition: !useBundledDoubleConversion }
             Depends { name: "cpp"; condition: useBundledDoubleConversion }
 

@@ -6,12 +6,10 @@ import QtUtils
 Product {
     property bool hostBuild: false
 
+    Depends { name: "Qt.global" }
     Depends { name: "cpp" }
     Depends { name: "osversions" }
     Depends { name: "Android.ndk"; condition: qbs.targetOS.contains("android") }
-
-    Depends { name: "QtGlobalConfig" }
-    Depends { name: "QtGlobalPrivateConfig" }
 
     Depends { name: mkspecModule; condition: mkspecModule !== undefined } // TODO: Explicit comparison should not be needed, but is
 
@@ -60,11 +58,11 @@ Product {
     cpp.cxxLanguageVersion: {
         if (hostBuild)
             return "c++11"; // TODO: What is the correct way to get this information?
-        if (QtGlobalConfig.c__1z)
+        if (Qt.global.config.c__1z)
             return "c++1z";
-        if (QtGlobalConfig.c__14)
+        if (Qt.global.config.c__14)
             return "c++14";
-        if (QtGlobalConfig.c__11)
+        if (Qt.global.config.c__11)
             return "c++11";
         return undefined;
     }

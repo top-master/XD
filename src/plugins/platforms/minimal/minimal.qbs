@@ -2,11 +2,10 @@ import qbs
 
 QtPlugin {
     name: "qminimal"
-    condition: !qbs.targetOS.contains("android") && QtGlobalPrivateConfig.gui
+    condition: !qbs.targetOS.contains("android") && Qt.global.privateConfig.gui
     pluginType: "platforms"
     pluginClassName: "QMinimalIntegrationPlugin"
 
-    Depends { name: "QtGlobalPrivateConfig" }
     Depends { name: "Qt.core-private" }
     Depends { name: "Qt.gui-private" }
     Depends { name: "Qt.eventdispatcher_support-private" }

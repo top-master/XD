@@ -1,4 +1,5 @@
 import qbs
+import QtGuiPrivateConfig
 
 QtModuleProject {
     name: "QtInputSupport"
@@ -10,11 +11,8 @@ QtModuleProject {
             && (QtGuiPrivateConfig.tslib || QtGuiPrivateConfig.evdev
                 || QtGuiPrivateConfig.libinput || QtGuiPrivateConfig.integrityhid);
     })
-    qbsSearchPaths: [project.qtbaseShadowDir + "/src/gui/qbs"]
 
     QtHeaders {
-        Depends { name: "QtGlobalPrivateConfig" }
-        Depends { name: "QtGuiPrivateConfig" }
     }
 
     QtModule {
@@ -28,11 +26,8 @@ QtModuleProject {
         Depends { name: "Qt.core-private" }
         Depends { name: "Qt.gui-private" }
         Depends { name: "Qt.devicediscovery_support-private" }
-        Depends { name: "QtGuiConfig" }
-        Depends { name: "QtGuiPrivateConfig" }
-        Depends { name: "QtGlobalPrivateConfig" }
-        Depends { name: "Libudev"; condition: QtGlobalPrivateConfig.libudev }
-        Depends { name: "Mtdev"; condition: QtGlobalPrivateConfig.mtdev }
+        Depends { name: "Libudev"; condition: Qt.global.privateConfig.libudev }
+        Depends { name: "Mtdev"; condition: Qt.global.privateConfig.mtdev }
         Depends { name: "Tslib"; condition: QtGuiPrivateConfig.tslib }
         Depends { name: "Integrityhid"; condition: QtGuiPrivateConfig.integrityhid }
         Depends { name: "Xkbcommon_evdev"; condition: QtGuiPrivateConfig.xkbcommon_evdev }
@@ -62,7 +57,7 @@ QtModuleProject {
                 "evdevtouch/qevdevtouchmanager_p.h",
             ]
             Group {
-                condition: QtGuiConfig.tabletevent
+                condition: Qt.gui.config.tabletevent
                 prefix: "evdevtablet/"
                 files: [
                     "qevdevtablethandler.cpp",
@@ -73,7 +68,7 @@ QtModuleProject {
             }
         }
         Group {
-            condition: QtGlobalPrivateConfig.tslib
+            condition: Qt.global.privateConfig.tslib
             prefix: "tslib/"
             files: [
                 "qtslib_p.h",
@@ -81,7 +76,7 @@ QtModuleProject {
             ]
         }
         Group {
-            condition: QtGlobalPrivateConfig.libinput
+            condition: Qt.global.privateConfig.libinput
             prefix: "libinput/"
             files: [
                 "qlibinputhandler.cpp",
@@ -95,7 +90,7 @@ QtModuleProject {
             ]
         }
         Group {
-            condition: QtGlobalPrivateConfig.evdev || QtGlobalPrivateConfig.libinput
+            condition: Qt.global.privateConfig.evdev || Qt.global.privateConfig.libinput
             prefix: "shared/"
             files: [
                 "qtouchoutputmapping_p.h",

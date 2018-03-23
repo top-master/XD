@@ -5,8 +5,8 @@
         "privateHeader": "src/corelib/global/qconfig_p.h",
         "publicPro": "mkspecs/qconfig.pri",
         "privatePro": "mkspecs/qmodule.pri",
-        "publicQbs": "qbs/modules/QtGlobalConfig/QtGlobalConfig.qbs",
-        "privateQbs": "qbs/modules/QtGlobalPrivateConfig/QtGlobalPrivateConfig.qbs",
+        "publicQbs": "qbs/imports/QtGlobalConfig/QtGlobalConfig.js",
+        "privateQbs": "qbs/imports/QtGlobalPrivateConfig/QtGlobalPrivateConfig.js",
         "qbsMultiplexCfg": "qbs/imports/QtMultiplexConfig/multiplexconfig.js",
         "qbsTargetProfile": "qbs/imports/QtTargetProfile.qbs",
         "qbsMetaProject": "qt.qbs"

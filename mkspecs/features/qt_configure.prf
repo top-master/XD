@@ -1654,8 +1654,7 @@ defineTest(qtConfOutput_varRemove) {
 }
 
 defineTest(qtConfOutputSetQbsProp) {
-    $${currentConfig}.output.$${1}.$${2}.type = $${3}
-    $${currentConfig}.output.$${1}.$${2} = $${4}
+    $${currentConfig}.output.$${1}.$${2} = $${3}
     $${currentConfig}.output.$${1}._KEYS_ *= $${2}
     export($${currentConfig}.output.$${1}.$${2}.type)
     export($${currentConfig}.output.$${1}.$${2})
@@ -1672,7 +1671,7 @@ defineTest(qtConfOutput_qbsProp) {
         value = \"$$value\"
     else: equals(propType, stringList): \
         value = [$$jsList($$eval($$list($$value)))]
-    qtConfOutputSetQbsProp(privateQbs, $$name, $$propType, $$value)
+    qtConfOutputSetQbsProp(privateQbs, $$name, $$value)
 }
 
 defineTest(qtConfOutputConfigVar) {
@@ -1694,7 +1693,7 @@ defineTest(qtConfOutputConfigVar) {
     }
     qbs_name ~= s/[-+.]/_/
 
-    qtConfOutputSetQbsProp($$replace(pro, Pro, Qbs), $$qbs_name, bool, $$enabled)
+    qtConfOutputSetQbsProp($$replace(pro, Pro, Qbs), $$qbs_name, $$enabled)
 
     !$$enabled: return()
     isEmpty($${currentConfig}.module)|!$$modular: \
@@ -1766,13 +1765,13 @@ defineTest(qtConfSetupModuleOutputs) {
     qtConfOutputVar(assign, "publicPro", "QT.$${currentModule}.disabled_features", )
     qtConfOutputVar(assign, "privatePro", "QT.$${currentModule}_private.enabled_features", )
     qtConfOutputVar(assign, "privatePro", "QT.$${currentModule}_private.disabled_features", )
-    qtConfOutputSetQbsProp("publicQbs", "enabled_features", "stringList", \
+    qtConfOutputSetQbsProp("publicQbs", "enabled_features", \
                            "[$$jsList($$eval(QT.$${currentModule}.enabled_features))]")
-    qtConfOutputSetQbsProp("publicQbs", "disabled_features", "stringList", \
+    qtConfOutputSetQbsProp("publicQbs", "disabled_features", \
                            "[$$jsList($$eval(QT.$${currentModule}.disabled_features))]")
-    qtConfOutputSetQbsProp("privateQbs", "enabled_features", "stringList", \
+    qtConfOutputSetQbsProp("privateQbs", "enabled_features", \
                            "[$$jsList($$eval(QT.$${currentModule}_private.enabled_features))]")
-    qtConfOutputSetQbsProp("privateQbs", "disabled_features", "stringList", \
+    qtConfOutputSetQbsProp("privateQbs", "disabled_features", \
                            "[$$jsList($$eval(QT.$${currentModule}_private.disabled_features))]")
     !isEmpty($${currentConfig}.module) {
         qtConfOutputVar(assign, "publicPro", "QT.$${currentModule}.QT_CONFIG", )
@@ -1798,7 +1797,7 @@ defineTest(qtConfOutput_publicFeature) {
         export(QT.$${currentModule}.disabled_features)
         qtConfOutputSetDefine("publicHeader", "QT_FEATURE_$$feature", -1)
     }
-    qtConfOutputSetQbsProp("publicQbs", "$$feature", "bool", "$$2")
+    qtConfOutputSetQbsProp("publicQbs", "$$feature", "$$2")
 }
 
 defineTest(qtConfOutput_privateFeature) {
@@ -1818,7 +1817,7 @@ defineTest(qtConfOutput_privateFeature) {
         export(QT.$${currentModule}_private.disabled_features)
         qtConfOutputSetDefine("privateHeader", "QT_FEATURE_$$feature", -1)
     }
-    qtConfOutputSetQbsProp("privateQbs", "$$feature", "bool", "$$2")
+    qtConfOutputSetQbsProp("privateQbs", "$$feature", "$$2")
 }
 
 defineTest(qtConfProcessOneOutput) {
@@ -1858,9 +1857,9 @@ defineTest(qtConfProcessOutput) {
         $${currentConfig}.files.publicPro = qt$${module}-config.pri
         $${currentConfig}.files.privatePro = qt$${module}-config.pri  # sic!
         qbs_config_module_pub = Qt$$title($$module)Config
-        $${currentConfig}.files.publicQbs = qbs/modules/$$qbs_config_module_pub/$${qbs_config_module_pub}.qbs
+        $${currentConfig}.files.publicQbs = qbs/imports/$$qbs_config_module_pub/$${qbs_config_module_pub}.js
         qbs_config_module_priv = Qt$$title($$module)PrivateConfig
-        $${currentConfig}.files.privateQbs = qbs/modules/$$qbs_config_module_priv/$${qbs_config_module_priv}.qbs
+        $${currentConfig}.files.privateQbs = qbs/imports/$$qbs_config_module_priv/$${qbs_config_module_priv}.js
         $${currentConfig}.files.publicHeader = qt$${module}-config.h
         $${currentConfig}.files.privateHeader = qt$${module}-config_p.h
     }
@@ -1874,17 +1873,11 @@ defineTest(qtConfProcessOutput) {
             for (k, $${currentConfig}.output.$${type}.append._KEYS_): \
                 $${currentConfig}.output.$$type += "$$k += $$eval($${currentConfig}.output.$${type}.append.$$k)"
         } else: contains(type, ".*Qbs") {
-            $${currentConfig}.output.$$type = "Module {"
             for (prop, $${currentConfig}.output.$${type}._KEYS_) {
                 value = $$eval($${currentConfig}.output.$${type}.$${prop})
-                ptype = $$eval($${currentConfig}.output.$${type}.$${prop}.type)
                 equals(prop, static): prop = staticBuild  # "static" breaks the QML parser
-                isEmpty(ptype): \
-                    $${currentConfig}.output.$$type += "    $$prop: $$value"
-                else: \
-                    $${currentConfig}.output.$$type += "    property $$ptype $$prop: $$value"
+                $${currentConfig}.output.$$type += "var $$prop = $$value;"
             }
-            $${currentConfig}.output.$$type += "}"
         } else: contains(type, ".*Header") {
             for (define, $${currentConfig}.output.$${type}._KEYS_) {
                 value = $$eval($${currentConfig}.output.$${type}.$${define})
@@ -2123,15 +2116,15 @@ for (currentConfig, allConfigs) {
     qtConfHaveModule($$currentModule) {
         # process all features
         qtConfProcessFeatures()
-        qtConfOutputSetQbsProp(privateQbs, enabled, bool, true)
+        qtConfOutputSetQbsProp(privateQbs, enabled, true)
     } else {
         qtConfOutputVar(assign, "privatePro", "QT.$${currentModule}.skip", "true")
-        qtConfOutputSetQbsProp(privateQbs, enabled, bool, false)
+        qtConfOutputSetQbsProp(privateQbs, enabled, false)
     }
 
     equals(currentModule, global) {
-        qtConfOutputSetQbsProp(privateQbs, targetMkspec, string, \"$$[QMAKE_XSPEC]\")
-        qtConfOutputSetQbsProp(privateQbs, hostMkspec, string, \"$$[QMAKE_SPEC]\")
+        qtConfOutputSetQbsProp(privateQbs, targetMkspec, \"$$[QMAKE_XSPEC]\")
+        qtConfOutputSetQbsProp(privateQbs, hostMkspec, \"$$[QMAKE_SPEC]\")
     }
 
     # generate files and reports

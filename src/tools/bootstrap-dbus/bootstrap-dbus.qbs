@@ -6,11 +6,11 @@ QtModuleProject {
     internal: true
 
     QtModule {
-        condition: QtGlobalPrivateConfig.dbus
-            && (QtGlobalConfig.cross_compile || QtGlobalPrivateConfig.private_tests)
+        condition: Qt.global.privateConfig.dbus
+            && (Qt.global.config.cross_compile || Qt.global.privateConfig.private_tests)
         hostBuild: true
         Properties {
-            condition: QtGlobalConfig.release_tools
+            condition: Qt.global.config.release_tools
             qbs.buildVariant: "release"
         }
         qbs.buildVariant: original
@@ -24,14 +24,12 @@ QtModuleProject {
             cpp.includePaths: project.includePaths.concat(QtDBusHeaders.includePaths)
         }
 
-        Depends { name: "QtGlobalConfig" }
-        Depends { name: "QtGlobalPrivateConfig" }
         Depends { name: "Qt.bootstrap-private" }
         Depends { name: "QtDBusHeaders" }
 
         cpp.includePaths: base.concat(project.includePaths, QtDBusHeaders.includePaths)
         cpp.defines: base.concat("QT_NO_FOREACH", "QT_NO_CAST_FROM_ASCII")
-        cpp.cxxFlags: base.concat(QtGlobalPrivateConfig.dbus_host_cflags)
+        cpp.cxxFlags: base.concat(Qt.global.privateConfig.dbus_host_cflags)
 
         Group {
             prefix: "../../dbus/"

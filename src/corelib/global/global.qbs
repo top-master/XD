@@ -52,7 +52,7 @@ Group {
     Group {
         name: "global/versiontagging"
         cpp.cxxFlags: outer.concat(qbs.toolchain.contains("gcc")
-                          && QtGlobalPrivateConfig.ltcg ? ["-fno-lto"] : [])
+                          && Qt.global.privateConfig.ltcg ? ["-fno-lto"] : [])
         files: "qversiontagging.cpp"
     }
 }

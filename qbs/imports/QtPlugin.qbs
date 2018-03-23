@@ -2,7 +2,7 @@ import qbs
 import qbs.FileInfo
 
 QtProduct {
-    type: [QtGlobalConfig.staticBuild ? "staticlibrary" : "dynamiclibrary"]
+    type: [Qt.global.config.staticBuild ? "staticlibrary" : "dynamiclibrary"]
     property string pluginType: {
         throw new Error("QtPlugin.pluginType needs to be defined.")
     }
@@ -16,7 +16,7 @@ QtProduct {
     property string installDir: FileInfo.joinPaths("plugins", pluginType)
     cpp.rpaths: {
         var result = [];
-        if (qbs.toolchain.contains("gcc") && QtGlobalConfig.rpath) {
+        if (qbs.toolchain.contains("gcc") && Qt.global.config.rpath) {
             var relativeLibPath = FileInfo.relativePath("/" + installDir, "/lib");
             result.push(cpp.rpathOrigin + "/" + relativeLibPath);
         }
@@ -29,7 +29,7 @@ QtProduct {
     aggregate: false
     Group {
         fileTagsFilter: product.type
-        qbs.install: !QtGlobalConfig.staticBuild
+        qbs.install: !Qt.global.config.staticBuild
         qbs.installDir: product.installDir
         qbs.installSourceBase: product.buildDirectory
     }

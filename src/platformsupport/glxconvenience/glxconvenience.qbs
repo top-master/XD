@@ -1,4 +1,6 @@
 import qbs
+import QtGuiConfig
+import QtGuiPrivateConfig
 
 QtModuleProject {
     name: "QtGlxSupport"
@@ -13,8 +15,6 @@ QtModuleProject {
     ]
 
     QtHeaders {
-        Depends { name: "QtGuiConfig" }
-        Depends { name: "QtGuiPrivateConfig" }
     }
 
     QtModule {
@@ -27,10 +27,7 @@ QtModuleProject {
         Depends { name: project.headersName }
         Depends { name: "Qt.core-private" }
         Depends { name: "Qt.gui-private" }
-        Depends { name: "QtCorePrivateConfig" }
-        Depends { name: "QtGuiConfig" }
-        Depends { name: "QtGuiPrivateConfig" }
-        Depends { name: "Libdl"; condition: QtCorePrivateConfig.dlopen }
+        Depends { name: "Libdl"; condition: Qt["core-private"].config.dlopen }
 
         cpp.includePaths: project.includePaths.concat(base)
         cpp.defines: base.concat("QT_NO_CAST_FROM_ASCII")

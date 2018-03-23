@@ -1,4 +1,5 @@
 import qbs
+import QtGlobalPrivateConfig
 
 Project {
     Product {
@@ -8,7 +9,6 @@ Project {
             property bool useBundledZlib: !QtGlobalPrivateConfig.system_zlib
             property bool useQtCore: useBundledZlib
 
-            Depends { name: "QtGlobalPrivateConfig" }
             Depends { name: "Zlib"; condition: !useBundledZlib }
             Depends { name: "Qt.core"; condition: useQtCore }
             Depends { name: "cpp"; condition: useBundledZlib }

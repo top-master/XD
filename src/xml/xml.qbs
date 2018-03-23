@@ -5,19 +5,18 @@ QtModuleProject {
     name: "QtXml"
     simpleName: "xml"
     conditionFunction: (function() {
-        return QtGlobalPrivateConfig.xml;
+        return Qt.global.privateConfig.xml;
     })
 
     QtHeaders {
+        Depends { name: "Qt.global" }
         shadowBuildFiles: [
             project.qtbaseShadowDir + "/src/xml/qtxml-config.h",
             project.qtbaseShadowDir + "/src/xml/qtxml-config_p.h",
         ]
-        Depends { name: "QtGlobalPrivateConfig" }
     }
 
     QtPrivateModule {
-        Depends { name: "QtGlobalPrivateConfig" }
     }
 
     QtModule {

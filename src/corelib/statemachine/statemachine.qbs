@@ -2,7 +2,7 @@ import qbs
 
 Group {
     name: "statemachine"
-    condition: QtCoreConfig.statemachine
+    condition: config.statemachine
     prefix: path + '/'
     files: [
         "qabstractstate.cpp",
@@ -31,7 +31,7 @@ Group {
 
     Group {
         name: "qeventtransition"
-        condition: QtCoreConfig.qeventtransition
+        condition: product.config.qeventtransition
         files: [
             "qeventtransition.cpp",
             "qeventtransition.h",

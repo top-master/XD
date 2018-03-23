@@ -1,4 +1,6 @@
 import qbs
+import QtGuiConfig
+import QtGuiPrivateConfig
 import "../../3rdparty/atspi2/atspi2.qbs" as SrcATSPI2
 
 QtModuleProject {
@@ -13,8 +15,6 @@ QtModuleProject {
     ]
 
     QtHeaders {
-        Depends { name: "QtGuiConfig" }
-        Depends { name: "QtGuiPrivateConfig" }
     }
 
     QtModule {
@@ -29,8 +29,6 @@ QtModuleProject {
         Depends { name: "Qt.gui-private" }
         Depends { name: "Qt.dbus" }
         Depends { name: "Qt.accessibility_support-private" }
-        Depends { name: "QtGuiConfig" }
-        Depends { name: "QtGuiPrivateConfig" }
 
         cpp.includePaths: project.includePaths.concat(base, "../../3rdparty/atspi2")
         cpp.defines: base.concat("QT_NO_CAST_FROM_ASCII")

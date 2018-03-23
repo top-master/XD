@@ -25,7 +25,7 @@ Group {
     }
     Group {
         name: "plugin/library"
-        condition: QtCoreConfig.library
+        condition: product.config.library
         files: [
             "qelfparser_p.cpp",
             "qelfparser_p.h",

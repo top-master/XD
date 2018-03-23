@@ -1,4 +1,5 @@
 import qbs
+import QtGuiConfig
 
 QtModuleProject {
     name: "QtAccessibilitySupport"
@@ -7,12 +8,8 @@ QtModuleProject {
     conditionFunction: (function() {
         return QtGuiConfig.accessibility;
     })
-    qbsSearchPaths: [
-        project.qtbaseShadowDir + "/src/gui/qbs"
-    ]
 
     QtHeaders {
-        Depends { name: "QtGuiConfig" }
     }
 
     QtModule {
@@ -25,7 +22,6 @@ QtModuleProject {
         Depends { name: project.headersName }
         Depends { name: "Qt.core-private" }
         Depends { name: "Qt.gui-private" }
-        Depends { name: "QtGuiConfig" }
 
         cpp.includePaths: project.includePaths.concat(base)
         cpp.defines: base.concat("QT_NO_CAST_FROM_ASCII")

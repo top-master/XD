@@ -18,11 +18,10 @@ QtModuleProject {
         Depends { name: project.headersName }
         Depends { name: "Qt.core-private" }
         Depends { name: "Qt.gui-private" }
-        Depends { name: "QtGlobalPrivateConfig" }
         Depends {
             name: "Qt.dbus"
             condition: qbs.targetOS.contains("unix") && !qbs.targetOS.contains("darwin")
-                && QtGlobalPrivateConfig.dbus
+                && Qt.global.privateConfig.dbus
         }
 
         cpp.includePaths: project.includePaths.concat(base)
@@ -41,7 +40,7 @@ QtModuleProject {
                 "qgenericunixthemes.cpp",
             ]
             Group {
-                condition: QtGlobalPrivateConfig.dbus
+                condition: Qt.global.privateConfig.dbus
                 name: "dbus"
                 prefix: "genericunix/dbusmenu/"
                 files: [
@@ -59,7 +58,7 @@ QtModuleProject {
                     "qdbusplatformmenu_p.h",
                 ]
                 Group {
-                    condition: QtGlobalPrivateConfig.systemtrayicon
+                    condition: Qt.global.privateConfig.systemtrayicon
                     name: "dbus system tray icon"
                     prefix: "genericunix/dbustray/"
                     files: [

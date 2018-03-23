@@ -1,9 +1,11 @@
 import qbs
+import QtNetworkConfig
+import QtNetworkPrivateConfig
 
 QtModuleProject {
     name: "QtNetwork"
     simpleName: "network"
-    conditionFunction: (function() { return QtGlobalPrivateConfig.network; })
+    conditionFunction: (function() { return Qt.global.privateConfig.network; })
 
     QtHeaders {
         sync.classNames: ({
@@ -14,11 +16,9 @@ QtModuleProject {
             project.qtbaseShadowDir + "/src/network/qtnetwork-config_p.h",
         ]
         Depends { name: "QtCoreHeaders" }
-        Depends { name: "QtGlobalPrivateConfig" }
     }
 
     QtPrivateModule {
-        Depends { name: "QtGlobalPrivateConfig" }
     }
 
     QtModule {
@@ -33,9 +33,6 @@ QtModuleProject {
         Depends { name: "Qt.core-private" }
         Depends { name: project.headersName }
         Depends { name: "qt_zlib" }
-        Depends { name: "QtNetworkConfig" }
-        Depends { name: "QtNetworkPrivateConfig" }
-
         cpp.includePaths: {
             var v = project.includePaths.concat(base);
             // TODO The following is only needed, because of wrong include directives:
@@ -239,7 +236,7 @@ QtModuleProject {
             files: [
                 "access/qnetworkaccessdebugpipebackend_p.h",
             ]
-            fileTags: QtGlobalPrivateConfig.private_tests ? [] : ["unmocable"]
+            fileTags: Qt.global.privateConfig.private_tests ? [] : ["unmocable"]
             overrideTags: false
         }
 

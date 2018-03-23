@@ -134,7 +134,7 @@ Group {
     }
     Group {
         name: "tool classes/icu"
-        condition: QtCorePrivateConfig.icu
+        condition: product.privateConfig.icu
         files: [
             "qcollator_icu.cpp",
             "qlocale_icu.cpp",
@@ -142,23 +142,24 @@ Group {
     }
     Group {
         name: "collator/non-icu/windows"
-        condition: qbs.targetOS.contains("windows") && !QtCorePrivateConfig.icu
+        condition: qbs.targetOS.contains("windows") && !product.privateConfig.icu
         files: ["qcollator_win.cpp"]
     }
     Group {
         name: "collator/non-icu/macos"
-        condition: qbs.targetOS.contains("macos") && !QtCorePrivateConfig.icu
+        condition: qbs.targetOS.contains("macos") && !product.privateConfig.icu
         files: ["qcollator_macx.cpp"]
     }
     Group {
         name: "collator/non-icu/unix"
-        condition: qbs.targetOS.contains("unix") && !qbs.targetOS.contains("macos") && !QtCorePrivateConfig.icu
+        condition: qbs.targetOS.contains("unix") && !qbs.targetOS.contains("macos")
+            && !product.privateConfig.icu
         files: ["qcollator_posix.cpp"]
     }
 
     Group {
         name: "regularexpression"
-        condition: QtCoreConfig.regularexpression
+        condition: product.config.regularexpression
         files: [
             "qregularexpression.cpp",
             "qregularexpression.h",
@@ -167,7 +168,7 @@ Group {
 
     Group {
         name: "commandlineparser"
-        condition: QtCoreConfig.commandlineparser
+        condition: product.config.commandlineparser
         files: [
             "qcommandlineoption.cpp",
             "qcommandlineoption.h",
@@ -178,7 +179,7 @@ Group {
 
     Group {
         name: "timezone"
-        condition: QtCoreConfig.timezone
+        condition: product.config.timezone
         files: [
             "qtimezoneprivate.cpp",
             "qtimezoneprivate_p.h",
@@ -209,7 +210,7 @@ Group {
         }
         Group {
             name: "timezone/icu"
-            condition: QtCorePrivateConfig.icu
+            condition: product.privateConfig.icu
             files: ["qtimezoneprivate_icu.cpp"]
         }
     }

@@ -20,7 +20,7 @@ Group {
     ]
     Group {
         name: "codecs/icu"
-        condition: QtCorePrivateConfig.icu
+        condition: product.privateConfig.icu
         files: [
             "qicucodec.cpp",
             "qicucodec_p.h",
@@ -28,7 +28,7 @@ Group {
     }
     Group {
         name: "codecs/non-icu"
-        condition: !QtCorePrivateConfig.icu
+        condition: !product.privateConfig.icu
         files: [
             "qbig5codec.cpp",
             "qbig5codec_p.h",
@@ -46,7 +46,7 @@ Group {
         ]
         Group {
             name: "codecs/iconv"
-            condition: QtCorePrivateConfig.iconv
+            condition: product.privateConfig.iconv
             files: [
                 "qiconvcodec.cpp",
                 "qiconvcodec_p.h",

@@ -1,20 +1,19 @@
 import qbs
+import QtGuiPrivateConfig
 
 QtPlugin {
     name: "qoffscreen"
-    condition: !qbs.targetOS.contains("android") && QtGlobalPrivateConfig.gui
+    condition: !qbs.targetOS.contains("android") && Qt.global.privateConfig.gui
                && QtGuiPrivateConfig.freetype
     pluginType: "platforms"
     pluginClassName: "QOffscreenIntegrationPlugin"
     qbsSearchPaths: [project.qtbaseShadowDir + "/src/gui/qbs"]
 
-    Depends { name: "QtGlobalPrivateConfig" }
     Depends { name: "Qt.core-private" }
     Depends { name: "Qt.gui-private" }
     Depends { name: "Qt.eventdispatcher_support-private" }
     Depends { name: "Qt.fontdatabase_support-private" }
     Depends { name: "Qt.glx_support-private"; required: false }
-    Depends { name: "QtGuiPrivateConfig" }
     cpp.defines: ["QT_NO_FOREACH"]
     files: [
         "main.cpp",

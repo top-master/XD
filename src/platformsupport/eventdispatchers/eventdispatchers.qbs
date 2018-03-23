@@ -20,8 +20,7 @@ QtModuleProject {
         Depends { name: project.headersName }
         Depends { name: "Qt.core-private" }
         Depends { name: "Qt.gui-private" }
-        Depends { name: "QtCorePrivateConfig" }
-        Depends { name: "Glib"; condition: QtCorePrivateConfig.glib }
+        Depends { name: "Glib"; condition: Qt["core-private"].config.glib }
 
         cpp.includePaths: project.includePaths.concat(base)
         cpp.defines: base.concat("QT_NO_CAST_FROM_ASCII")
@@ -43,7 +42,7 @@ QtModuleProject {
             ]
         }
         Group {
-            condition: QtCorePrivateConfig.glib
+            condition: Qt["core-private"].config.glib
             files: [
                 "qeventdispatcher_glib.cpp",
                 "qeventdispatcher_glib_p.h",

@@ -4,7 +4,7 @@ QtModuleProject {
     name: "QtConcurrent"
     simpleName: "concurrent"
     conditionFunction: (function() {
-        return QtGlobalConfig.concurrent;
+        return Qt.global.config.concurrent;
     })
 
     QtHeaders {
@@ -14,11 +14,9 @@ QtModuleProject {
             "qtconcurrentrun.h": ["QtConcurrentRun"],
         })
         Depends { name: "QtCoreHeaders" }
-        Depends { name: "QtGlobalConfig" }
     }
 
     QtPrivateModule {
-        Depends { name: "QtGlobalConfig" }
     }
 
     QtModule {

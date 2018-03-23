@@ -1,14 +1,13 @@
 import qbs
 import qbs.FileInfo
+import QtGuiPrivateConfig
 
 Project {
     qbsSearchPaths: [project.qtbaseShadowDir + "/src/gui/qbs"]
     Product {
         name: "qt_xkbcommon"
         condition: QtGuiPrivateConfig.xcb      // Yes, xcb. Not xkb.
-        Depends { name: "QtGuiPrivateConfig" }
         Export {
-            Depends { name: "QtGuiPrivateConfig" }
             Depends {
                 condition: !QtGuiPrivateConfig.xkbcommon_system
                 name: "bundled_xkbcommon"
@@ -22,7 +21,6 @@ Project {
     QtStaticLibrary {
         name: "bundled_xkbcommon"
         condition: QtGuiPrivateConfig.xcb && !QtGuiPrivateConfig.system_xkbcommon
-        Depends { name: "QtGuiPrivateConfig" }
         Depends { name: "cpp" }
         cpp.includePaths: [
             "xkbcommon",

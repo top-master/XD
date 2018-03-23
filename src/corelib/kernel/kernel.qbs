@@ -177,7 +177,7 @@ Group {
         }
         Group {
             name: "kernel/qnx_pps"
-            condition: qbs.targetOS.contains("qnx") && QtCorePrivateConfig.qqnx_pps
+            condition: qbs.targetOS.contains("qnx") && product.privateConfig.qqnx_pps
             files: [
                 "qppsattribute.cpp",
                 "qppsattribute_p.h",
@@ -203,12 +203,12 @@ Group {
     }
     Group {
         name: "kernel/poll_select"
-        condition: QtCorePrivateConfig.poll_select
+        condition: product.privateConfig.poll_select
         files: "qpoll.cpp"
     }
     Group {
         name: "kernel/glib"
-        condition: QtCorePrivateConfig.glib
+        condition: product.privateConfig.glib
         files: [
             "qeventdispatcher_glib.cpp",
             "qeventdispatcher_glib_p.h",

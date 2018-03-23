@@ -1,14 +1,13 @@
 import qbs
 import qbs.FileInfo
 import qbs.ModUtils
+import QtCoreConfig
 
 QtHostTool {
     toolFileTag: "qt.uic-tool"
-    condition: QtGlobalPrivateConfig.gui && QtGlobalPrivateConfig.widgets
+    condition: Qt.global.privateConfig.gui && Qt.global.privateConfig.widgets
     qbsSearchPaths: [project.qtbaseShadowDir + "/src/corelib/qbs"]
 
-    Depends { name: "QtGlobalPrivateConfig" }
-    Depends { name: "QtCoreConfig" }
     useBootstrapLib: base || !QtCoreConfig.commandlineparser || !QtCoreConfig.textcodec
         || !QtCoreConfig.xmlstreamreader || !QtCoreConfig.xmlstreamwriter
     Depends { name: "Qt.bootstrap-private"; condition: useBootstrapLib }

@@ -1,4 +1,5 @@
 import qbs
+import QtGuiPrivateConfig
 
 /*
  * Statically compile in code for
@@ -8,7 +9,6 @@ import qbs
  */
 QtStaticLibrary {
     condition: project.conditionFunction() && !QtGuiPrivateConfig.system_xcb
-    Depends { name: "QtGuiPrivateConfig" }
     property string xcbDir: project.qtbaseDir + "/src/3rdparty/xcb/"
     Export {
         Depends { name: "cpp" }

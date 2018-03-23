@@ -6,16 +6,14 @@ QtModuleProject {
     name: "QtDBus"
     simpleName: "dbus"
     conditionFunction: (function() {
-        return QtGlobalPrivateConfig.dbus;
+        return Qt.global.privateConfig.dbus;
     })
 
     QtHeaders {
         Depends { name: "QtCoreHeaders" }
-        Depends { name: "QtGlobalPrivateConfig" }
     }
 
     QtPrivateModule {
-        Depends { name: "QtGlobalPrivateConfig" }
     }
 
     QtModule {
@@ -80,7 +78,7 @@ QtModuleProject {
             "DBUS_API_SUBJECT_TO_CHANGE",
             "QT_NO_FOREACH",
             ]);
-            if (QtGlobalPrivateConfig.dbus_linked)
+            if (Qt.global.privateConfig.dbus_linked)
                 defines.push("QT_LINKED_DBUS");
             return defines;
         }

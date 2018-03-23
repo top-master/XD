@@ -1,4 +1,5 @@
 import qbs
+import QtGuiPrivateConfig
 
 QtModuleProject {
     name: "QtKmsSupport"
@@ -7,12 +8,8 @@ QtModuleProject {
     conditionFunction: (function() {
         return QtGuiPrivateConfig.kms;
     })
-    qbsSearchPaths: [
-        project.qtbaseShadowDir + "/src/gui/qbs"
-    ]
 
     QtHeaders {
-        Depends { name: "QtGuiPrivateConfig" }
     }
 
     QtModule {
@@ -26,8 +23,6 @@ QtModuleProject {
         Depends { name: project.headersName }
         Depends { name: "Qt.core-private" }
         Depends { name: "Qt.gui-private" }
-        Depends { name: "QtGuiConfig" }
-        Depends { name: "QtGuiPrivateConfig" }
         Depends { name: "Drm" }
 
         cpp.includePaths: project.includePaths.concat(base)

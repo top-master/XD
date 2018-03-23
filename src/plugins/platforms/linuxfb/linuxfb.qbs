@@ -1,15 +1,14 @@
 import qbs
+import QtGuiPrivateConfig
 
 QtPlugin {
     name: "qlinuxfb"
-    condition: !qbs.targetOS.contains("android") && QtGlobalPrivateConfig.gui
+    condition: !qbs.targetOS.contains("android") && Qt.global.privateConfig.gui
                && QtGuiPrivateConfig.linuxfb
     pluginType: "platforms"
     pluginClassName: "QLinuxFbIntegrationPlugin"
     qbsSearchPaths: [project.qtbaseShadowDir + "/src/gui/qbs"]
 
-    Depends { name: "QtGlobalPrivateConfig" }
-    Depends { name: "QtGuiPrivateConfig" }
     Depends { name: "Qt.core" }
     Depends { name: "Qt.core-private" }
     Depends { name: "Qt.gui-private" }
