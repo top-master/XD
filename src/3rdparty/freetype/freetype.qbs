@@ -53,6 +53,7 @@ Project {
                 "src/autofit/afhints.c",
                 "src/autofit/afloader.c",
                 "src/autofit/afmodule.c",
+                "src/otvalid/otvmod.c",
             ]
         }
 
@@ -82,7 +83,6 @@ Project {
             "src/otvalid/otvgpos.c",
             "src/otvalid/otvgsub.c",
             "src/otvalid/otvjstf.c",
-            "src/otvalid/otvmod.c",
             "src/pcf/pcf.c",
             "src/pfr/pfr.c",
             "src/psaux/psaux.c",
