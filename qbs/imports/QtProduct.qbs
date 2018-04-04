@@ -99,11 +99,6 @@ Product {
         cpp.toolchainPrefix: QtMultiplexConfig.toolchainPrefix
     }
 
-    FileTagger {
-        patterns: "*.ui"
-        fileTags: "uic"
-    }
-
     Export {
         Depends { name: "cpp" }
         cpp.defines: product.commonCppDefines

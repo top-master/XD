@@ -21,6 +21,11 @@ QtHostTool {
     cpp.includePaths: base.concat(".", "cpp")
 
     Export {
+        FileTagger {
+            patterns: "*.ui"
+            fileTags: "uic"
+        }
+
         Rule {
             inputs: "uic"
             explicitlyDependsOn: ["qt.uic-tool"]
