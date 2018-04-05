@@ -6,6 +6,7 @@ import QtUtils
 QtModuleProject {
     name: "QtBootstrap"
     simpleName: "bootstrap"
+    internal: true
     prefix: project.qtbaseDir + "/src/corelib/"
     includePaths: QtUtils.includesForModule("QtCore-private", project.buildDirectory + '/' + simpleName, project.version)
     .concat(QtUtils.includesForModule("QtXml-private", project.buildDirectory + '/' + simpleName, project.version))
@@ -211,10 +212,9 @@ QtModuleProject {
     }
 
     QtModule {
-        name: project.privateName
         hostBuild: true
         simpleName: parent.simpleName + "_private"
-        type: ["staticlibrary", "prl", "pri"]
+        type: base.concat("prl", "pri")
 
         Properties {
             condition: qbs.targetOS.contains("darwin")
