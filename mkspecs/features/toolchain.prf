@@ -1,7 +1,4 @@
 
-# In early configure setup; nothing useful to be done here.
-isEmpty(QMAKE_CXX): return()
-
 defineReplace(qtMakeExpand) {
     out = "$$1"
     for(ever) {
@@ -10,6 +7,22 @@ defineReplace(qtMakeExpand) {
             return($$out)
         out = $$replace(out, "\\$\\(EXPORT_$$m\\)", $$eval($$m))
     }
+}
+
+defineTest(qtCompilerErrror) {
+    !cross_compile: \
+        what =
+    else: host_build: \
+        what = " host"
+    else: \
+        what = " target"
+    msg = \
+        "Cannot run$$what compiler '$$1'. Output:" \
+        "===================" \
+        $$2 \
+        "===================" \
+        "Maybe you forgot to setup the environment?"
+    error($$join(msg, $$escape_expand(\\n)))
 }
 
 cross_compile:host_build: \
@@ -22,13 +35,11 @@ isEmpty($${target_prefix}.INCDIRS) {
     # Get default include and library paths from compiler
     #
     gcc {
-        !equals(QMAKE_HOST.os, Windows) {
-            cmd_prefix = "LC_ALL=C"
-            cmd_suffix = "</dev/null >/dev/null"
-        } else {
+        cmd_suffix = "<$$QMAKE_SYSTEM_NULL_DEVICE >$$QMAKE_SYSTEM_NULL_DEVICE"
+        equals(QMAKE_HOST.os, Windows): \
             cmd_prefix = "set LC_ALL=C&"
-            cmd_suffix = "<NUL >NUL"
-        }
+        else: \
+            cmd_prefix = "LC_ALL=C"
 
         cxx_flags = $$QMAKE_CXXFLAGS
 
@@ -38,26 +49,98 @@ isEmpty($${target_prefix}.INCDIRS) {
         # While technically incorrect but without any likely practical effect,
         # UIKit simulator platforms will see the device SDK's sysroot in
         # QMAKE_DEFAULT_*DIRS, because they're handled in a single build pass.
-        darwin: cxx_flags += -isysroot $$QMAKE_MAC_SDK_PATH
+        darwin {
+            uikit:macx-xcode: \
+                cxx_flags += -isysroot $$sdk_path_device.value
+            else: \
+                cxx_flags += -isysroot $$QMAKE_MAC_SDK_PATH
+        }
 
-        output = $$system("$$cmd_prefix $$QMAKE_CXX $$qtMakeExpand($$cxx_flags) -xc++ -E -v - 2>&1 $$cmd_suffix", lines)
-        add_includes = false
-        for (line, output) {
-            line ~= s/^ *//  # remove leading spaces
-            contains(line, "LIBRARY_PATH=.*") {
-                line ~= s/^LIBRARY_PATH=//  # remove leading LIBRARY_PATH=
-                paths = $$split(line, $$QMAKE_DIRLIST_SEP)
-                for (path, paths): \
-                    QMAKE_DEFAULT_LIBDIRS += $$clean_path($$path)
-            } else: contains(line, "$${LITERAL_HASH}include <.*") {  # #include <...> search starts here:
-                add_includes = true
-            } else: contains(line, "End of search.*") {
-                add_includes = false
-            } else: $$add_includes {
-                !contains(line, ".* \\(framework directory\\)"): \
-                    QMAKE_DEFAULT_INCDIRS += $$clean_path($$line)
+        rim_qcc: \
+            # Need the cc1plus and ld command lines to pick up the paths
+            cxx_flags += $$QMAKE_LFLAGS_SHLIB -o $$QMAKE_SYSTEM_NULL_DEVICE -v
+        else: darwin:clang: \
+            # Need to link to pick up library paths
+            cxx_flags += $$QMAKE_LFLAGS_SHLIB -o /dev/null -v -Wl,-v
+        else: \
+            # Just preprocess, might not pick up library paths
+            cxx_flags += -E -v
+
+        output = $$system("$$cmd_prefix $$QMAKE_CXX $$qtMakeExpand($$cxx_flags) -xc++ - 2>&1 $$cmd_suffix", lines, ec)
+        !equals(ec, 0): qtCompilerErrror($$QMAKE_CXX, $$output)
+
+        rim_qcc {
+            for (line, output) {
+                contains(line, "^[^ ]*cc1plus .*") {
+                    take_next = false
+                    for (parameter, $$list($$line)) {
+                        $$take_next {
+                            QMAKE_DEFAULT_INCDIRS += $$clean_path($$parameter)
+                            take_next = false
+                        } else: equals(parameter, "-isystem") {
+                            take_next = true
+                        }
+                    }
+                } else: contains(line, "^[^ ]*-ld .*") {
+                    for (parameter, $$list($$line)) {
+                        contains(parameter, "^-L.*") {
+                            parameter ~= s/^-L//
+                            QMAKE_DEFAULT_LIBDIRS += $$clean_path($$parameter)
+                        }
+                    }
+                }
+            }
+        } else {
+            add_includes = false
+            add_libraries = false
+            for (line, output) {
+                line ~= s/^[ \\t]*//  # remove leading spaces
+                contains(line, "LIBRARY_PATH=.*") {
+                    line ~= s/^LIBRARY_PATH=//  # remove leading LIBRARY_PATH=
+                    paths = $$split(line, $$QMAKE_DIRLIST_SEP)
+                    for (path, paths): \
+                        QMAKE_DEFAULT_LIBDIRS += $$clean_path($$path)
+                } else: contains(line, "Library search paths:") {
+                    add_libraries = true
+                } else: contains(line, "$${LITERAL_HASH}include <.*") {  # #include <...> search starts here:
+                    add_includes = true
+                } else: contains(line, "End of search.*") {
+                    add_includes = false
+                } else: $$add_libraries {
+                    # We assume all library search paths are absolute
+                    !contains(line, "^/.*") {
+                        add_libraries = false
+                        next()
+                    }
+                    QMAKE_DEFAULT_LIBDIRS += $$clean_path($$line)
+                } else: $$add_includes {
+                    !contains(line, ".* \\(framework directory\\)"): \
+                        QMAKE_DEFAULT_INCDIRS += $$clean_path($$line)
+                }
             }
         }
+        if(!darwin:clang)|intel_icc {
+            # Clang on a non-Apple system (that is, a system without ld64 -- say, with GNU ld
+            # or gold under Linux) will not print any library search path. Need to use another
+            # invocation with different options (which in turn doesn't print include search
+            # paths, so it can't just be used in place of the above code).
+            # What's more, -print-search-dirs can't be used on clang on Apple because it
+            # won't print all the library paths (only the clang-internal ones).
+            output = $$system("$$cmd_prefix $$QMAKE_CXX -print-search-dirs", lines, ec)
+            !equals(ec, 0): qtCompilerErrror($$QMAKE_CXX, $$output)
+
+            for (line, output) {
+                contains(line, "^libraries: .*") {
+                    line ~= s,^libraries: ,,
+                    paths = $$split(line, $$QMAKE_DIRLIST_SEP)
+                    for (path, paths): \
+                        QMAKE_DEFAULT_LIBDIRS += $$clean_path($$replace(path, ^=, $$[SYSROOT]))
+                }
+            }
+        }
+        isEmpty(QMAKE_DEFAULT_LIBDIRS)|isEmpty(QMAKE_DEFAULT_INCDIRS): \
+            !integrity: \
+                error("failed to parse default search paths from compiler output")
         QMAKE_DEFAULT_LIBDIRS = $$unique(QMAKE_DEFAULT_LIBDIRS)
     } else: msvc {
         # This doesn't differentiate between host and target,
@@ -85,13 +168,16 @@ isEmpty($${target_prefix}.INCDIRS) {
 #
 
 defineReplace(qtVariablesFromMSVC) {
-    return($$system("$$1 -nologo -E $$2 $$system_quote($$PWD/data/macros.cpp) <NUL 2>NUL", lines))
+    ret = $$system("$$1 -nologo -E $$2 $$system_quote($$PWD/data/macros.cpp) <NUL 2>NUL", lines, ec)
+    !equals(ec, 0): qtCompilerErrror($$1, $$ret)
+    return($$ret)
 }
 
 defineReplace(qtVariablesFromGCC) {
-    null_device = /dev/null
-    equals(QMAKE_HOST.os, Windows): null_device = NUL
-    return($$system("$$1 -E $$system_quote($$PWD/data/macros.cpp) <$$null_device 2>$$null_device", lines))
+    ret = $$system("$$1 -E $$system_quote($$PWD/data/macros.cpp) \
+        <$$QMAKE_SYSTEM_NULL_DEVICE 2>$$QMAKE_SYSTEM_NULL_DEVICE", lines, ec)
+    !equals(ec, 0): qtCompilerErrror($$1, $$ret)
+    return($$ret)
 }
 
 isEmpty($${target_prefix}.COMPILER_MACROS) {
@@ -117,7 +203,7 @@ isEmpty($${target_prefix}.COMPILER_MACROS) {
         vars = $$qtVariablesFromGCC($$QMAKE_CXX)
     }
     for (v, vars) {
-        isEmpty(v)|contains(v, $${LITERAL_HASH}.*): next()
+        contains(v, $${LITERAL_HASH}.*)|contains(v, " *"): next()
         # Set both <varname> for the outer scope ...
         eval($$v)
         v ~= s/ .*//
@@ -138,35 +224,27 @@ unset(target_prefix)
 # Populate QMAKE_COMPILER_DEFINES and some compatibility variables.
 # The $$format_number() calls strip leading zeros to avoid misinterpretation as octal.
 QMAKE_COMPILER_DEFINES += __cplusplus=$$QT_COMPILER_STDCXX
-!isEmpty(QMAKE_MSC_VER) {
+!isEmpty(QMAKE_MSC_VER): \
     QMAKE_COMPILER_DEFINES += _MSC_VER=$$QMAKE_MSC_VER _MSC_FULL_VER=$$QMAKE_MSC_FULL_VER
-    QT_MSVC_MAJOR_VERSION = $$replace(QMAKE_MSC_FULL_VER, "(..)(..)(.*)", "\\1")
-    QT_MSVC_MINOR_VERSION = $$format_number($$replace(QMAKE_MSC_FULL_VER, "(..)(..)(.*)", "\\2"))
-    QT_MSVC_PATCH_VERSION = $$replace(QMAKE_MSC_FULL_VER, "(..)(..)(.*)", "\\3"))
-}
-!isEmpty(QMAKE_ICC_VER) {
+!isEmpty(QMAKE_ICC_VER): \
     QMAKE_COMPILER_DEFINES += __INTEL_COMPILER=$$QMAKE_ICC_VER __INTEL_COMPILER_UPDATE=$$QMAKE_ICC_UPDATE_VER
-    QT_ICC_MAJOR_VERSION = $$replace(QMAKE_ICC_VER, "(..)(..)", "\\1")
-    QT_ICC_MINOR_VERSION = $$format_number($$replace(QMAKE_ICC_VER, "(..)(..)", "\\2"))
-    QT_ICC_PATCH_VERSION = $$QMAKE_ICC_UPDATE_VER
-}
 !isEmpty(QMAKE_APPLE_CC): \
     QMAKE_COMPILER_DEFINES += __APPLE_CC__=$$QMAKE_APPLE_CC
-!isEmpty(QT_APPLE_CLANG_MAJOR_VERSION): \
+!isEmpty(QMAKE_APPLE_CLANG_MAJOR_VERSION): \
     QMAKE_COMPILER_DEFINES += __clang__ \
-        __clang_major__=$$QT_APPLE_CLANG_MAJOR_VERSION \
-        __clang_minor__=$$QT_APPLE_CLANG_MINOR_VERSION \
-        __clang_patchlevel__=$$QT_APPLE_CLANG_PATCH_VERSION
-!isEmpty(QT_CLANG_MAJOR_VERSION): \
+        __clang_major__=$$QMAKE_APPLE_CLANG_MAJOR_VERSION \
+        __clang_minor__=$$QMAKE_APPLE_CLANG_MINOR_VERSION \
+        __clang_patchlevel__=$$QMAKE_APPLE_CLANG_PATCH_VERSION
+!isEmpty(QMAKE_CLANG_MAJOR_VERSION): \
     QMAKE_COMPILER_DEFINES += __clang__ \
-        __clang_major__=$$QT_CLANG_MAJOR_VERSION \
-        __clang_minor__=$$QT_CLANG_MINOR_VERSION \
-        __clang_patchlevel__=$$QT_CLANG_PATCH_VERSION
-!isEmpty(QT_GCC_MAJOR_VERSION): \
+        __clang_major__=$$QMAKE_CLANG_MAJOR_VERSION \
+        __clang_minor__=$$QMAKE_CLANG_MINOR_VERSION \
+        __clang_patchlevel__=$$QMAKE_CLANG_PATCH_VERSION
+!isEmpty(QMAKE_GCC_MAJOR_VERSION): \
     QMAKE_COMPILER_DEFINES += \
-        __GNUC__=$$QT_GCC_MAJOR_VERSION \
-        __GNUC_MINOR__=$$QT_GCC_MINOR_VERSION \
-        __GNUC_PATCHLEVEL__=$$QT_GCC_PATCH_VERSION
+        __GNUC__=$$QMAKE_GCC_MAJOR_VERSION \
+        __GNUC_MINOR__=$$QMAKE_GCC_MINOR_VERSION \
+        __GNUC_PATCHLEVEL__=$$QMAKE_GCC_PATCH_VERSION
 
 QMAKE_CFLAGS += $$QMAKE_CFLAGS_MSVC_COMPAT
 QMAKE_CXXFLAGS += $$QMAKE_CFLAGS_MSVC_COMPAT

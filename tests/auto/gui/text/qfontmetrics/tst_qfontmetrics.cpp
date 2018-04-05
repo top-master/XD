@@ -47,7 +47,11 @@ private slots:
     void elidedText();
     void veryNarrowElidedText();
     void averageCharWidth();
+
+#if QT_DEPRECATED_SINCE(5, 11) && QT_VERSION < QT_VERSION_CHECK(6, 0, 0)
     void bypassShaping();
+#endif
+
     void elidedMultiLength();
     void elidedMultiLengthF();
     void inFontUcs4();
@@ -163,7 +167,7 @@ void tst_QFontMetrics::elidedText()
     QFETCH(QFont, font);
     QFETCH(QString, text);
     QFontMetrics fm(font);
-    int w = fm.width(text);
+    int w = fm.horizontalAdvance(text);
     QString newtext = fm.elidedText(text,Qt::ElideRight,w+1, 0);
     QCOMPARE(text,newtext); // should not elide
     newtext = fm.elidedText(text,Qt::ElideRight,w-1, 0);
@@ -187,6 +191,7 @@ void tst_QFontMetrics::averageCharWidth()
     QVERIFY(fmf.averageCharWidth() != 0);
 }
 
+#if QT_DEPRECATED_SINCE(5, 11) && QT_VERSION < QT_VERSION_CHECK(6, 0, 0)
 void tst_QFontMetrics::bypassShaping()
 {
     QFont f;
@@ -197,10 +202,11 @@ void tst_QFontMetrics::bypassShaping()
     QVERIFY(textWidth != 0);
     int charsWidth = 0;
     for (int i = 0; i < text.size(); ++i)
-        charsWidth += fm.width(text[i]);
+        charsWidth += fm.horizontalAdvance(text[i]);
     // This assertion is needed in Qt WebKit's WebCore::Font::offsetForPositionForSimpleText
     QCOMPARE(textWidth, charsWidth);
 }
+#endif
 
 template<class FontMetrics, typename PrimitiveType> void elidedMultiLength_helper()
 {
@@ -220,7 +226,7 @@ template<class FontMetrics, typename PrimitiveType> void elidedMultiLength_helpe
     // Not even wide enough for "small" - should use ellipsis
     QChar ellipsisChar(0x2026);
     QString text1_el = QString::fromLatin1("s") + ellipsisChar;
-    PrimitiveType width_small = fm.width(text1_el);
+    PrimitiveType width_small = fm.horizontalAdvance(text1_el);
     QCOMPARE(fm.elidedText(text1,Qt::ElideRight, width_small + 1), text1_el);
 }
 

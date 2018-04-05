@@ -59,6 +59,9 @@ public:
 
     bool usePlatformNativeDialog(DialogType type) const override;
     QPlatformDialogHelper *createPlatformDialogHelper(DialogType type) const override;
+#if QT_CONFIG(systemtrayicon)
+    QPlatformSystemTrayIcon *createPlatformSystemTrayIcon() const override;
+#endif
     QVariant themeHint(ThemeHint) const override;
     const QPalette *palette(Palette type = SystemPalette) const override
         { return m_palettes[type]; }
@@ -73,6 +76,13 @@ public:
     void displayChanged() { refreshIconPixmapSizes(); }
 
     QList<QSize> availableFileIconSizes() const { return m_fileIconSizes; }
+
+    QPlatformMenuItem *createPlatformMenuItem() const override;
+    QPlatformMenu *createPlatformMenu() const override;
+    QPlatformMenuBar *createPlatformMenuBar() const override;
+    void showPlatformMenuBar() override;
+
+    static bool useNativeMenus();
 
     static const char *name;
 

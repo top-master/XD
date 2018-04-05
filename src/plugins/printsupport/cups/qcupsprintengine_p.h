@@ -68,12 +68,12 @@ class QCupsPrintEngine : public QPdfPrintEngine
 {
     Q_DECLARE_PRIVATE(QCupsPrintEngine)
 public:
-    QCupsPrintEngine(QPrinter::PrinterMode m);
+    QCupsPrintEngine(QPrinter::PrinterMode m, const QString &deviceId);
     virtual ~QCupsPrintEngine();
 
     // reimplementations QPdfPrintEngine
-    void setProperty(PrintEnginePropertyKey key, const QVariant &value) Q_DECL_OVERRIDE;
-    QVariant property(PrintEnginePropertyKey key) const Q_DECL_OVERRIDE;
+    void setProperty(PrintEnginePropertyKey key, const QVariant &value) override;
+    QVariant property(PrintEnginePropertyKey key) const override;
     // end reimplementations QPdfPrintEngine
 
 private:
@@ -87,19 +87,19 @@ public:
     QCupsPrintEnginePrivate(QPrinter::PrinterMode m);
     ~QCupsPrintEnginePrivate();
 
-    bool openPrintDevice() Q_DECL_OVERRIDE;
-    void closePrintDevice() Q_DECL_OVERRIDE;
+    bool openPrintDevice() override;
+    void closePrintDevice() override;
 
 private:
     Q_DISABLE_COPY(QCupsPrintEnginePrivate)
 
-    void setupDefaultPrinter();
     void changePrinter(const QString &newPrinter);
     void setPageSize(const QPageSize &pageSize);
 
     QPrintDevice m_printDevice;
     QStringList cupsOptions;
     QString cupsTempFile;
+    QPrint::DuplexMode duplex;
 };
 
 QT_END_NAMESPACE

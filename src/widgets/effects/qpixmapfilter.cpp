@@ -54,7 +54,6 @@
 #include "private/qmemrotate_p.h"
 #include "private/qdrawhelper_p.h"
 
-#ifndef QT_NO_GRAPHICSEFFECT
 QT_BEGIN_NAMESPACE
 
 class QPixmapFilterPrivate : public QObjectPrivate
@@ -926,7 +925,6 @@ void QPixmapBlurFilter::draw(QPainter *painter, const QPointF &p, const QPixmap 
         scaledRadius /= scale;
 
     QImage srcImage;
-    QImage destImage;
 
     if (srcRect == src.rect()) {
         srcImage = src.toImage();
@@ -1353,5 +1351,3 @@ void QPixmapDropShadowFilter::draw(QPainter *p,
 QT_END_NAMESPACE
 
 #include "moc_qpixmapfilter_p.cpp"
-
-#endif //QT_NO_GRAPHICSEFFECT

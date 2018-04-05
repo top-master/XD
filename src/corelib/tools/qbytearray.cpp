@@ -268,7 +268,7 @@ char *qstrcpy(char *dst, const char *src)
 {
     if (!src)
         return 0;
-#if defined(_MSC_VER) && _MSC_VER >= 1400
+#ifdef Q_CC_MSVC
     const int len = int(strlen(src));
     // This is actually not secure!!! It will be fixed
     // properly in a later release!
@@ -304,7 +304,7 @@ char *qstrncpy(char *dst, const char *src, uint len)
     if (!src || !dst)
         return 0;
     if (len > 0) {
-#if defined(_MSC_VER) && _MSC_VER >= 1400
+#ifdef Q_CC_MSVC
         strncpy_s(dst, len, src, len - 1);
 #else
         strncpy(dst, src, len);
@@ -686,14 +686,6 @@ QByteArray qCompress(const uchar* data, int nbytes, int compressionLevel)
     \sa qCompress()
 */
 
-/*! \relates QByteArray
-
-    \overload
-
-    Uncompresses the first \a nbytes of \a data and returns a new byte
-    array with the uncompressed data.
-*/
-
 #ifndef QT_NO_COMPRESS
 namespace {
 struct QByteArrayDataDeleter
@@ -709,6 +701,13 @@ static QByteArray invalidCompressedData()
     return QByteArray();
 }
 
+/*! \relates QByteArray
+
+    \overload
+
+    Uncompresses the first \a nbytes of \a data and returns a new byte
+    array with the uncompressed data.
+*/
 QByteArray qUncompress(const uchar* data, int nbytes)
 {
     if (!data) {
@@ -959,7 +958,7 @@ static inline char qToLower(char c)
     $LC_CTYPE is set, most Unix systems do "the right thing".)
     Functions that this affects include contains(), indexOf(),
     lastIndexOf(), operator<(), operator<=(), operator>(),
-    operator>=(), toLower() and toUpper().
+    operator>=(), isLower(), isUpper(), toLower() and toUpper().
 
     This issue does not apply to \l{QString}s since they represent
     characters using Unicode.
@@ -1132,6 +1131,13 @@ static inline char qToLower(char c)
     \overload
 
     Same as prepend(\a ch).
+*/
+
+/*! \fn void QByteArray::shrink_to_fit()
+    \since 5.10
+
+    This function is provided for STL compatibility. It is equivalent to
+    squeeze().
 */
 
 /*! \fn QByteArray::QByteArray(const QByteArray &other)
@@ -1446,6 +1452,66 @@ QByteArray &QByteArray::operator=(const char *str)
     \overload
 */
 
+/*!
+    \fn char QByteArray::front() const
+    \since 5.10
+
+    Returns the first character in the byte array.
+    Same as \c{at(0)}.
+
+    This function is provided for STL compatibility.
+
+    \warning Calling this function on an empty byte array constitutes
+    undefined behavior.
+
+    \sa back(), at(), operator[]()
+*/
+
+/*!
+    \fn char QByteArray::back() const
+    \since 5.10
+
+    Returns the last character in the byte array.
+    Same as \c{at(size() - 1)}.
+
+    This function is provided for STL compatibility.
+
+    \warning Calling this function on an empty byte array constitutes
+    undefined behavior.
+
+    \sa front(), at(), operator[]()
+*/
+
+/*!
+    \fn QByteRef QByteArray::front()
+    \since 5.10
+
+    Returns a reference to the first character in the byte array.
+    Same as \c{operator[](0)}.
+
+    This function is provided for STL compatibility.
+
+    \warning Calling this function on an empty byte array constitutes
+    undefined behavior.
+
+    \sa back(), at(), operator[]()
+*/
+
+/*!
+    \fn QByteRef QByteArray::back()
+    \since 5.10
+
+    Returns a reference to the last character in the byte array.
+    Same as \c{operator[](size() - 1)}.
+
+    This function is provided for STL compatibility.
+
+    \warning Calling this function on an empty byte array constitutes
+    undefined behavior.
+
+    \sa front(), at(), operator[]()
+*/
+
 /*! \fn bool QByteArray::contains(const QByteArray &ba) const
 
     Returns \c true if the byte array contains an occurrence of the byte
@@ -1516,13 +1582,13 @@ void QByteArray::chop(int n)
     \snippet code/src_corelib_tools_qbytearray.cpp 12
 
     Note: QByteArray is an \l{implicitly shared} class. Consequently,
-    if \e this is an empty QByteArray, then \e this will just share
-    the data held in \a ba. In this case, no copying of data is done,
+    if you append to an empty byte array, then the byte array will just
+    share the data held in \a ba. In this case, no copying of data is done,
     taking \l{constant time}. If a shared instance is modified, it will
     be copied (copy-on-write), taking \l{linear time}.
 
-    If \e this is not an empty QByteArray, a deep copy of the data is
-    performed, taking \l{linear time}.
+    If the byte array being appended to is not empty, a deep copy of the
+    data is performed, taking \l{linear time}.
 
     This operation typically does not suffer from allocation overhead,
     because QByteArray preallocates extra space at the end of the data
@@ -1781,13 +1847,13 @@ QByteArray QByteArray::nulTerminated() const
     This is the same as insert(0, \a ba).
 
     Note: QByteArray is an \l{implicitly shared} class. Consequently,
-    if \e this is an empty QByteArray, then \e this will just share
-    the data held in \a ba. In this case, no copying of data is done,
+    if you prepend to an empty byte array, then the byte array will just
+    share the data held in \a ba. In this case, no copying of data is done,
     taking \l{constant time}. If a shared instance is modified, it will
     be copied (copy-on-write), taking \l{linear time}.
 
-    If \e this is not an empty QByteArray, a deep copy of the data is
-    performed, taking \l{linear time}.
+    If the byte array being prepended to is not empty, a deep copy of the
+    data is performed, taking \l{linear time}.
 
     \sa append(), insert()
 */
@@ -1869,13 +1935,13 @@ QByteArray &QByteArray::prepend(char ch)
     This is the same as insert(size(), \a ba).
 
     Note: QByteArray is an \l{implicitly shared} class. Consequently,
-    if \e this is an empty QByteArray, then \e this will just share
-    the data held in \a ba. In this case, no copying of data is done,
+    if you append to an empty byte array, then the byte array will just
+    share the data held in \a ba. In this case, no copying of data is done,
     taking \l{constant time}. If a shared instance is modified, it will
     be copied (copy-on-write), taking \l{linear time}.
 
-    If \e this is not an empty QByteArray, a deep copy of the data is
-    performed, taking \l{linear time}.
+    If the byte array being appended to is not empty, a deep copy of the
+    data is performed, taking \l{linear time}.
 
     This operation typically does not suffer from allocation overhead,
     because QByteArray preallocates extra space at the end of the data
@@ -2883,6 +2949,78 @@ bool QByteArray::endsWith(const char *str) const
     return qstrncmp(d->data() + d->size - len, str, len) == 0;
 }
 
+/*!
+    Returns true if \a c is an uppercase Latin1 letter.
+    \note The multiplication sign 0xD7 and the sz ligature 0xDF are not
+    treated as uppercase Latin1.
+ */
+static inline bool isUpperCaseLatin1(char c)
+{
+    if (c >= 'A' && c <= 'Z')
+        return true;
+
+    return (uchar(c) >= 0xC0 && uchar(c) <= 0xDE && uchar(c) != 0xD7);
+}
+
+/*!
+    Returns \c true if this byte array contains only uppercase letters,
+    otherwise returns \c false. The byte array is interpreted as a Latin-1
+    encoded string.
+    \since 5.12
+
+    \sa isLower(), toUpper()
+*/
+bool QByteArray::isUpper() const
+{
+    if (isEmpty())
+        return false;
+
+    const char *d = data();
+
+    for (int i = 0, max = size(); i < max; ++i) {
+        if (!isUpperCaseLatin1(d[i]))
+            return false;
+    }
+
+    return true;
+}
+
+/*!
+    Returns true if \a c is an lowercase Latin1 letter.
+    \note The division sign 0xF7 is not treated as lowercase Latin1,
+    but the small y dieresis 0xFF is.
+ */
+static inline bool isLowerCaseLatin1(char c)
+{
+    if (c >= 'a' && c <= 'z')
+        return true;
+
+    return (uchar(c) >= 0xD0 && uchar(c) != 0xF7);
+}
+
+/*!
+    Returns \c true if this byte array contains only lowercase letters,
+    otherwise returns \c false. The byte array is interpreted as a Latin-1
+    encoded string.
+    \since 5.12
+
+    \sa isUpper(), toLower()
+ */
+bool QByteArray::isLower() const
+{
+    if (isEmpty())
+        return false;
+
+    const char *d = data();
+
+    for (int i = 0, max = size(); i < max; ++i) {
+        if (!isLowerCaseLatin1(d[i]))
+            return false;
+    }
+
+    return true;
+}
+
 /*! \overload
 
     Returns \c true if this byte array ends with character \a ch;
@@ -2905,7 +3043,7 @@ bool QByteArray::endsWith(char ch) const
     Example:
     \snippet code/src_corelib_tools_qbytearray.cpp 27
 
-    \sa right(), mid(), startsWith(), truncate()
+    \sa startsWith(), right(), mid(), chopped(), chop(), truncate()
 */
 
 QByteArray QByteArray::left(int len)  const
@@ -2927,7 +3065,7 @@ QByteArray QByteArray::left(int len)  const
     Example:
     \snippet code/src_corelib_tools_qbytearray.cpp 28
 
-    \sa endsWith(), left(), mid()
+    \sa endsWith(), left(), mid(), chopped(), chop(), truncate()
 */
 
 QByteArray QByteArray::right(int len) const
@@ -2950,7 +3088,7 @@ QByteArray QByteArray::right(int len) const
     Example:
     \snippet code/src_corelib_tools_qbytearray.cpp 29
 
-    \sa left(), right()
+    \sa left(), right(), chopped(), chop(), truncate()
 */
 
 QByteArray QByteArray::mid(int pos, int len) const
@@ -2974,6 +3112,18 @@ QByteArray QByteArray::mid(int pos, int len) const
 }
 
 /*!
+    \fn QByteArray::chopped(int len) const
+    \since 5.10
+
+    Returns a byte array that contains the leftmost size() - \a len bytes of
+    this byte array.
+
+    \note The behavior is undefined if \a len is negative or greater than size().
+
+    \sa endsWith(), left(), right(), mid(), chop(), truncate()
+*/
+
+/*!
     \fn QByteArray QByteArray::toLower() const
 
     Returns a lowercase copy of the byte array. The bytearray is
@@ -2982,7 +3132,7 @@ QByteArray QByteArray::mid(int pos, int len) const
     Example:
     \snippet code/src_corelib_tools_qbytearray.cpp 30
 
-    \sa toUpper(), {8-bit Character Comparisons}
+    \sa isLower(), toUpper(), {8-bit Character Comparisons}
 */
 
 // prevent the compiler from inlining the function in each of
@@ -3036,7 +3186,7 @@ QByteArray QByteArray::toLower_helper(QByteArray &a)
     Example:
     \snippet code/src_corelib_tools_qbytearray.cpp 31
 
-    \sa toLower(), {8-bit Character Comparisons}
+    \sa isUpper(), toLower(), {8-bit Character Comparisons}
 */
 
 QByteArray QByteArray::toUpper_helper(const QByteArray &a)
@@ -4259,7 +4409,6 @@ QByteArray &QByteArray::setRawData(const char *data, uint size)
         } else {
             d->offset = sizeof(QByteArrayData);
             d->size = 0;
-            *d->data() = 0;
         }
     }
     return *this;
@@ -4483,6 +4632,10 @@ void q_fromPercentEncoding(QByteArray *ba)
         QByteArray text = QByteArray::fromPercentEncoding("Qt%20is%20great%33");
         text.data();            // returns "Qt is great!"
     \endcode
+
+    \note Given invalid input (such as a string containing the sequence "%G5",
+    which is not a valid hexadecimal number) the output will be invalid as
+    well. As an example: the sequence "%G5" could be decoded to 'W'.
 
     \sa toPercentEncoding(), QUrl::fromPercentEncoding()
 */
@@ -4710,6 +4863,28 @@ QByteArray QByteArray::toPercentEncoding(const QByteArray &exclude, const QByteA
 /*!
     \typedef QByteArray::DataPtr
     \internal
+*/
+
+/*!
+    \macro QByteArrayLiteral(ba)
+    \relates QByteArray
+
+    The macro generates the data for a QByteArray out of the string literal
+    \a ba at compile time. Creating a QByteArray from it is free in this case, and
+    the generated byte array data is stored in the read-only segment of the
+    compiled object file.
+
+    For instance:
+
+    \code
+    QByteArray ba = QByteArrayLiteral("byte array contents");
+    \endcode
+
+    Using QByteArrayLiteral instead of a double quoted plain C++ string literal
+    can significantly speed up creation of QByteArray instances from data known
+    at compile time.
+
+    \sa QStringLiteral
 */
 
 QT_END_NAMESPACE

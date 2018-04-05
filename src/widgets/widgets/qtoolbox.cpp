@@ -39,8 +39,6 @@
 
 #include "qtoolbox.h"
 
-#ifndef QT_NO_TOOLBOX
-
 #include <qapplication.h>
 #include <qeventloop.h>
 #include <qlayout.h>
@@ -71,12 +69,12 @@ public:
     inline void setSelected(bool b) { selected = b; update(); }
     inline void setIndex(int newIndex) { indexInPage = newIndex; }
 
-    QSize sizeHint() const Q_DECL_OVERRIDE;
-    QSize minimumSizeHint() const Q_DECL_OVERRIDE;
+    QSize sizeHint() const override;
+    QSize minimumSizeHint() const override;
 
 protected:
     void initStyleOption(QStyleOptionToolBox *opt) const;
-    void paintEvent(QPaintEvent *) Q_DECL_OVERRIDE;
+    void paintEvent(QPaintEvent *) override;
 
 private:
     bool selected;
@@ -734,5 +732,3 @@ QT_END_NAMESPACE
 
 #include "moc_qtoolbox.cpp"
 #include "qtoolbox.moc"
-
-#endif //QT_NO_TOOLBOX

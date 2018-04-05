@@ -40,9 +40,7 @@ relpath=`(cd "$relpath"; /bin/pwd)`
 # the current directory is the "build tree" or "object tree"
 outpath=`/bin/pwd`
 
-# where to find which..
-unixtests="$relpath/config.tests/unix"
-WHICH="$unixtests/which.test"
+WHICH="which"
 
 PERL=`$WHICH perl 2>/dev/null`
 
@@ -234,7 +232,7 @@ macSDKify()
 
     sdk=$(getSingleQMakeVariable "QMAKE_MAC_SDK" "$1")
     if [ -z "$sdk" ]; then echo "QMAKE_MAC_SDK must be set when building on Mac" >&2; exit 1; fi
-    sysroot=$(/usr/bin/xcodebuild -sdk $sdk -version Path 2>/dev/null)
+    sysroot=$(/usr/bin/xcrun --sdk $sdk --show-sdk-path 2>/dev/null)
     if [ -z "$sysroot" ]; then echo "Failed to resolve SDK path for '$sdk'" >&2; exit 1; fi
 
     case "$sdk" in
@@ -322,18 +320,23 @@ fi
 if [ "$BUILD_ON_MAC" = "yes" ]; then
     if ! /usr/bin/xcode-select --print-path >/dev/null 2>&1; then
         echo >&2
-        echo "   No Xcode is selected. Use xcode-select -switch to choose an Xcode" >&2
-        echo "   version. See the xcode-select man page for more information." >&2
+        echo "   No Xcode selected. Please install Xcode via the App Store, " >&2
+        echo "   or the command line developer tools via xcode-select --install, " >&2
+        echo "   and use xcode-select --switch to choose the right installation. " >&2
+        echo "   See the xcode-select man page for more information." >&2
         echo >&2
         exit 2
     fi
 
-    if ! /usr/bin/xcrun -find xcodebuild >/dev/null 2>&1; then
-        echo >&2
-        echo "   Xcode not set up properly. You may need to confirm the license" >&2
-        echo "   agreement by running /usr/bin/xcodebuild without arguments." >&2
-        echo >&2
-        exit 2
+    # In the else case we are probably using a Command Line Tools installation
+    if /usr/bin/xcrun -find xcodebuild >/dev/null 2>&1; then
+        if ! /usr/bin/xcrun xcodebuild -license check 2>/dev/null; then
+            echo >&2
+            echo "   Xcode setup not complete. You need to confirm the license" >&2
+            echo "   agreement by running 'sudo xcrun xcodebuild -license accept'." >&2
+            echo >&2
+            exit 2
+        fi
     fi
 fi
 
@@ -728,10 +731,6 @@ setBootstrapVariable()
         echo "########################################################################" >> "$mkfile"
         EXTRA_CXXFLAGS="\$(QMAKE_CXXFLAGS) \$(QMAKE_CXXFLAGS_CXX11) \$(QMAKE_CXXFLAGS_SPLIT_SECTIONS)"
         EXTRA_LFLAGS="\$(QMAKE_LFLAGS) \$(QMAKE_LFLAGS_GCSECTIONS)"
-
-        if [ "$PLATFORM" = "irix-cc" ] || [ "$PLATFORM" = "irix-cc-64" ]; then
-	    EXTRA_LFLAGS="$EXTRA_LFLAGS -lm"
-        fi
 
         [ "$CFG_SILENT" = "yes" ] && CC_TRANSFORM='s,^,\@,' || CC_TRANSFORM=
         setBootstrapVariable QMAKE_CC CC "$CC_TRANSFORM"

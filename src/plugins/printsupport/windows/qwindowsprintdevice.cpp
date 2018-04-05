@@ -87,13 +87,13 @@ static LPDEVMODE getDevmode(HANDLE hPrinter, const QString &printerId)
     // Allocate the required DEVMODE buffer
     LONG dmSize = DocumentProperties(NULL, hPrinter, printerIdUtf16, NULL, NULL, 0);
     if (dmSize <= 0)
-        return Q_NULLPTR;
+        return nullptr;
     LPDEVMODE pDevMode = reinterpret_cast<LPDEVMODE>(malloc(dmSize));
      // Get the default DevMode
     LONG result = DocumentProperties(NULL, hPrinter, printerIdUtf16, pDevMode, NULL, DM_OUT_BUFFER);
     if (result != IDOK) {
         free(pDevMode);
-        pDevMode = Q_NULLPTR;
+        pDevMode = nullptr;
     }
     return pDevMode;
 }
@@ -449,7 +449,9 @@ QStringList QWindowsPrintDevice::availablePrintDeviceIds()
 QString QWindowsPrintDevice::defaultPrintDeviceId()
 {
     DWORD size = 0;
-    GetDefaultPrinter(NULL, &size);
+    if (GetDefaultPrinter(NULL, &size) == ERROR_FILE_NOT_FOUND)
+       return QString();
+
     QScopedArrayPointer<wchar_t> name(new wchar_t[size]);
     GetDefaultPrinter(name.data(), &size);
     return QString::fromWCharArray(name.data());

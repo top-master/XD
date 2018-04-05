@@ -39,8 +39,6 @@
 
 #include "qdial.h"
 
-#ifndef QT_NO_DIAL
-
 #include <qapplication.h>
 #include <qbitmap.h>
 #include <qcolor.h>
@@ -81,7 +79,7 @@ public:
     int valueFromPoint(const QPoint &) const;
     double angle(const QPoint &, const QPoint &) const;
     void init();
-    virtual int bound(int val) const Q_DECL_OVERRIDE;
+    virtual int bound(int val) const override;
 };
 
 void QDialPrivate::init()
@@ -179,6 +177,8 @@ int QDialPrivate::valueFromPoint(const QPoint &p) const
     \ingroup basicwidgets
     \inmodule QtWidgets
 
+    \image windows-dial.png
+
     QDial is used when the user needs to control a value within a
     program-definable range, and the range either wraps around
     (for example, with angles measured from 0 to 359 degrees) or the
@@ -225,16 +225,6 @@ int QDialPrivate::valueFromPoint(const QPoint &p) const
     \l{QApplication::wheelScrollLines()} {wheelScrollLines} multipled
     by \l {QAbstractSlider::singleStep} {singleStep}, and
     \l {QAbstractSlider::pageStep} {pageStep}.
-
-    \table
-    \row \li \inlineimage fusion-dial.png Screenshot of a dial in the Fusion widget style
-    \li \inlineimage windowsvista-dial.png Screenshot of a dial in the Windows Vista widget style
-    \li \inlineimage macintosh-dial.png Screenshot of a dial in the Macintosh widget style
-    \row \li {3,1} Dials shown in various widget styles (from left to right):
-         \l{Fusion Style Widget Gallery}{Fusion},
-         \l{Windows Vista Style Widget Gallery}{Windows Vista},
-         \l{Macintosh Style Widget Gallery}{Macintosh}.
-    \endtable
 
     \sa QScrollBar, QSpinBox, QSlider, {fowler}{GUI Design Handbook: Slider}, {Sliders Example}
 */
@@ -488,5 +478,3 @@ bool QDial::event(QEvent *e)
 QT_END_NAMESPACE
 
 #include "moc_qdial.cpp"
-
-#endif // QT_NO_DIAL

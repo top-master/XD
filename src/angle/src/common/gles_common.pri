@@ -1,4 +1,4 @@
-CONFIG += simd no_batch
+CONFIG += simd no_batch object_parallel_to_source
 include(common.pri)
 
 INCLUDEPATH += $$OUT_PWD/.. $$ANGLE_DIR/src/libANGLE
@@ -23,6 +23,11 @@ for(libname, STATICLIBS) {
 DEFINES += LIBANGLE_IMPLEMENTATION LIBGLESV2_IMPLEMENTATION GL_APICALL= GL_GLEXT_PROTOTYPES= EGLAPI=
 !winrt: DEFINES += ANGLE_ENABLE_D3D9 ANGLE_SKIP_DXGI_1_2_CHECK
 
+QT_FOR_CONFIG += gui-private
+include($$OUT_PWD/../../../gui/qtgui-config.pri)
+
+qtConfig(angle_d3d11_qdtd): DEFINES += ANGLE_D3D11_QDTD_AVAILABLE
+
 HEADERS += \
     $$ANGLE_DIR/src/common/mathutil.h \
     $$ANGLE_DIR/src/common/blocklayout.h \
@@ -43,6 +48,7 @@ HEADERS += \
     $$ANGLE_DIR/src/libANGLE/Constants.h \
     $$ANGLE_DIR/src/libANGLE/Context.h \
     $$ANGLE_DIR/src/libANGLE/Data.h \
+    $$ANGLE_DIR/src/libANGLE/Debug.h \
     $$ANGLE_DIR/src/libANGLE/Device.h \
     $$ANGLE_DIR/src/libANGLE/Display.h \
     $$ANGLE_DIR/src/libANGLE/Error.h \
@@ -164,6 +170,7 @@ SOURCES += \
     $$ANGLE_DIR/src/libANGLE/Config.cpp \
     $$ANGLE_DIR/src/libANGLE/Context.cpp \
     $$ANGLE_DIR/src/libANGLE/Data.cpp \
+    $$ANGLE_DIR/src/libANGLE/Debug.cpp \
     $$ANGLE_DIR/src/libANGLE/Device.cpp \
     $$ANGLE_DIR/src/libANGLE/Display.cpp \
     $$ANGLE_DIR/src/libANGLE/Error.cpp \
@@ -235,14 +242,6 @@ SOURCES += \
     $$ANGLE_DIR/src/libGLESv2/libGLESv2.cpp
 
 SSE2_SOURCES += $$ANGLE_DIR/src/libANGLE/renderer/d3d/loadimageSSE2.cpp
-
-DEBUG_SOURCE = $$ANGLE_DIR/src/libANGLE/Debug.cpp
-debug_copy.input = DEBUG_SOURCE
-debug_copy.output = $$ANGLE_DIR/src/libANGLE/Debug2.cpp
-debug_copy.commands = $$QMAKE_COPY ${QMAKE_FILE_IN} ${QMAKE_FILE_OUT}
-debug_copy.variable_out = GENERATED_SOURCES
-debug_copy.CONFIG = target_predeps
-QMAKE_EXTRA_COMPILERS += debug_copy
 
 angle_d3d11 {
     HEADERS += \
@@ -580,7 +579,7 @@ angle_d3d11: SHADERS = VS_Passthrough2D \
 for (SHADER, SHADERS) {
     INPUT = $$eval($${SHADER}.input)
     OUT_DIR = $$OUT_PWD/libANGLE/$$relative_path($$dirname($$INPUT), $$ANGLE_DIR/src/libANGLE)/compiled
-    fxc_$${SHADER}.commands = $$FXC /nologo /E $${SHADER} /T $$eval($${SHADER}.type) /Fh ${QMAKE_FILE_OUT} ${QMAKE_FILE_NAME}
+    fxc_$${SHADER}.commands = $$FXC -nologo -E $${SHADER} -T $$eval($${SHADER}.type) -Fh ${QMAKE_FILE_OUT} ${QMAKE_FILE_NAME}
     fxc_$${SHADER}.output = $$OUT_DIR/$$eval($${SHADER}.output)
     fxc_$${SHADER}.input = $$INPUT
     fxc_$${SHADER}.dependency_type = TYPE_C

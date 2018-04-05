@@ -134,8 +134,6 @@ struct QTzType {
     int tz_gmtoff;  // UTC offset in seconds
     bool   tz_isdst;   // Is DST
     quint8 tz_abbrind; // abbreviation list index
-    bool   tz_ttisgmt; // Is in UTC time
-    bool   tz_ttisstd; // Is in Standard time
 };
 Q_DECLARE_TYPEINFO(QTzType, Q_PRIMITIVE_TYPE);
 
@@ -234,9 +232,6 @@ static QVector<QTzType> parseTzTypes(QDataStream &ds, int tzh_typecnt)
         // Parse Abbreviation Array Index, 1 byte
         if (ds.status() == QDataStream::Ok)
             ds >> type.tz_abbrind;
-        // Set defaults in case not populated later
-        type.tz_ttisgmt = false;
-        type.tz_ttisstd = false;
         if (ds.status() != QDataStream::Ok)
             types.resize(i);
     }
@@ -277,8 +272,9 @@ static void parseTzLeapSeconds(QDataStream &ds, int tzh_leapcnt, bool longTran)
 {
     // Parse tzh_leapcnt x pairs of leap seconds
     // We don't use leap seconds, so only read and don't store
-    qint64 val;
+    qint32 val;
     if (longTran) {
+        // v2 file format, each entry is 12 bytes long
         qint64 time;
         for (int i = 0; i < tzh_leapcnt && ds.status() == QDataStream::Ok; ++i) {
             // Parse Leap Occurrence Time, 8 bytes
@@ -288,6 +284,7 @@ static void parseTzLeapSeconds(QDataStream &ds, int tzh_leapcnt, bool longTran)
                 ds >> val;
         }
     } else {
+        // v0 file format, each entry is 8 bytes long
         for (int i = 0; i < tzh_leapcnt && ds.status() == QDataStream::Ok; ++i) {
             // Parse Leap Occurrence Time, 4 bytes
             ds >> val;
@@ -302,20 +299,24 @@ static QVector<QTzType> parseTzIndicators(QDataStream &ds, const QVector<QTzType
 {
     QVector<QTzType> result = types;
     bool temp;
+    /*
+      Scan and discard indicators.
 
-    // Parse tzh_ttisstdcnt x 1-byte standard/wall indicators
-    for (int i = 0; i < tzh_ttisstdcnt && ds.status() == QDataStream::Ok; ++i) {
-        ds >> temp;
-        if (ds.status() == QDataStream::Ok)
-            result[i].tz_ttisstd = temp;
-    }
+      These indicators are only of use (by the date program) when "handling
+      POSIX-style time zone environment variables".  The flags here say whether
+      the *specification* of the zone gave the time in UTC, local standard time
+      or local wall time; but whatever was specified has been digested for us,
+      already, by the zone-info compiler (zic), so that the tz_time values read
+      from the file (by parseTzTransitions) are all in UTC.
+     */
 
-    // Parse tzh_ttisgmtcnt x 1-byte UTC/local indicators
-    for (int i = 0; i < tzh_ttisgmtcnt && ds.status() == QDataStream::Ok; ++i) {
+    // Scan tzh_ttisstdcnt x 1-byte standard/wall indicators
+    for (int i = 0; i < tzh_ttisstdcnt && ds.status() == QDataStream::Ok; ++i)
         ds >> temp;
-        if (ds.status() == QDataStream::Ok)
-            result[i].tz_ttisgmt = temp;
-    }
+
+    // Scan tzh_ttisgmtcnt x 1-byte UTC/local indicators
+    for (int i = 0; i < tzh_ttisgmtcnt && ds.status() == QDataStream::Ok; ++i)
+        ds >> temp;
 
     return result;
 }
@@ -790,14 +791,7 @@ void QTzTimeZonePrivate::init(const QByteArray &ianaId)
             tran.ruleIndex = ruleIndex;
         }
 
-        // TODO convert to UTC if not in UTC
-        if (tz_type.tz_ttisgmt)
-            tran.atMSecsSinceEpoch = tz_tran.tz_time * 1000;
-        else if (tz_type.tz_ttisstd)
-            tran.atMSecsSinceEpoch = tz_tran.tz_time * 1000;
-        else
-            tran.atMSecsSinceEpoch = tz_tran.tz_time * 1000;
-
+        tran.atMSecsSinceEpoch = tz_tran.tz_time * 1000;
         m_tranTimes.append(tran);
     }
 
@@ -1056,7 +1050,18 @@ QByteArray QTzTimeZonePrivate::systemTimeZoneId() const
     if (ianaId == "/etc/localtime")
         ianaId.clear();
 
-    // On Debian Etch and later /etc/localtime is real file with name held in /etc/timezone
+    // On most distros /etc/localtime is a symlink to a real file so extract name from the path
+    if (ianaId.isEmpty()) {
+        const QString path = QFile::symLinkTarget(QStringLiteral("/etc/localtime"));
+        if (!path.isEmpty()) {
+            // /etc/localtime is a symlink to the current TZ file, so extract from path
+            int index = path.indexOf(QLatin1String("/zoneinfo/"));
+            if (index != -1)
+                ianaId = path.mid(index + 10).toUtf8();
+        }
+    }
+
+    // On Debian Etch up to Jessie, /etc/localtime is a regular file while the actual name is in /etc/timezone
     if (ianaId.isEmpty()) {
         QFile tzif(QStringLiteral("/etc/timezone"));
         if (tzif.open(QIODevice::ReadOnly)) {
@@ -1064,16 +1069,6 @@ QByteArray QTzTimeZonePrivate::systemTimeZoneId() const
             QTextStream ts(&tzif);
             if (!ts.atEnd())
                 ianaId = ts.readLine().toUtf8();
-        }
-    }
-
-    // On other distros /etc/localtime is symlink to real file so can extract name from the path
-    if (ianaId.isEmpty()) {
-        const QString path = QFile::symLinkTarget(QStringLiteral("/etc/localtime"));
-        if (!path.isEmpty()) {
-            // /etc/localtime is a symlink to the current TZ file, so extract from path
-            int index = path.indexOf(QLatin1String("/zoneinfo/")) + 10;
-            ianaId = path.mid(index).toUtf8();
         }
     }
 

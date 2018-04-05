@@ -41,6 +41,7 @@
 #include <qpa/qwindowsysteminterface.h>
 #include <qpa/qplatformintegration.h>
 #include <private/qguiapplication_p.h>
+#include <private/qwindow_p.h>
 #ifndef QT_NO_OPENGL
 # include <QtGui/private/qopenglcontext_p.h>
 # include <QtGui/QOpenGLContext>
@@ -99,7 +100,6 @@ void QEglFSWindow::create()
 
     if (window()->type() == Qt::Desktop) {
         QRect fullscreenRect(QPoint(), screen()->availableGeometry().size());
-        QPlatformWindow::setGeometry(fullscreenRect);
         QWindowSystemInterface::handleGeometryChange(window(), fullscreenRect);
         return;
     }
@@ -117,7 +117,7 @@ void QEglFSWindow::create()
     QOpenGLCompositor *compositor = QOpenGLCompositor::instance();
     if (screen->primarySurface() != EGL_NO_SURFACE) {
         if (Q_UNLIKELY(!isRaster() || !compositor->targetWindow())) {
-#if !defined(Q_OS_ANDROID)
+#if !defined(Q_OS_ANDROID) || defined(Q_OS_ANDROID_EMBEDDED)
             // We can have either a single OpenGL window or multiple raster windows.
             // Other combinations cannot work.
             qFatal("EGLFS: OpenGL windows cannot be mixed with others.");
@@ -235,21 +235,16 @@ void QEglFSWindow::setVisible(bool visible)
 
 void QEglFSWindow::setGeometry(const QRect &r)
 {
-    QRect rect;
-    bool forceFullscreen = m_flags.testFlag(HasNativeWindow);
-    if (forceFullscreen)
+    QRect rect = r;
+    if (m_flags.testFlag(HasNativeWindow))
         rect = screen()->availableGeometry();
-    else
-        rect = r;
 
-    const bool changed = rect != QPlatformWindow::geometry();
     QPlatformWindow::setGeometry(rect);
 
-    // if we corrected the size, trigger a resize event
-    if (rect != r)
-        QWindowSystemInterface::handleGeometryChange(window(), rect, r);
+    QWindowSystemInterface::handleGeometryChange(window(), rect);
 
-    if (changed)
+    const QRect lastReportedGeometry = qt_window_private(window())->geometry;
+    if (rect != lastReportedGeometry)
         QWindowSystemInterface::handleExposeEvent(window(), QRect(QPoint(0, 0), rect.size()));
 }
 

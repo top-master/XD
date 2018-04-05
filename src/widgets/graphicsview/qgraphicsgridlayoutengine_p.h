@@ -54,12 +54,12 @@
 #include <QtWidgets/private/qtwidgetsglobal_p.h>
 #include <QtGui/private/qgridlayoutengine_p.h>
 
-#ifndef QT_NO_GRAPHICSVIEW
-
 #include <QtWidgets/qsizepolicy.h>
 #include <QtWidgets/qstyle.h>
 #include <QtWidgets/qstyleoption.h>
 #include "qgraphicslayoutitem.h"
+
+QT_REQUIRE_CONFIG(graphicsview);
 
 QT_BEGIN_NAMESPACE
 
@@ -71,35 +71,35 @@ public:
                             Qt::Alignment alignment = 0)
         : QGridLayoutItem(row, columns, rowSpan, columnSpan, alignment), q_layoutItem(item) {}
 
-    virtual QLayoutPolicy::Policy sizePolicy(Qt::Orientation orientation) const Q_DECL_OVERRIDE
+    virtual QLayoutPolicy::Policy sizePolicy(Qt::Orientation orientation) const override
     {
         QSizePolicy sizePolicy(q_layoutItem->sizePolicy());
         return (QLayoutPolicy::Policy)((orientation == Qt::Horizontal) ? sizePolicy.horizontalPolicy()
                                                : sizePolicy.verticalPolicy());
     }
 
-    virtual QLayoutPolicy::ControlTypes controlTypes(LayoutSide) const Q_DECL_OVERRIDE
+    virtual QLayoutPolicy::ControlTypes controlTypes(LayoutSide) const override
     {
         const QSizePolicy::ControlType ct = q_layoutItem->sizePolicy().controlType();
         return (QLayoutPolicy::ControlTypes)ct;
     }
 
-    virtual QSizeF sizeHint(Qt::SizeHint which, const QSizeF &constraint) const Q_DECL_OVERRIDE
+    virtual QSizeF sizeHint(Qt::SizeHint which, const QSizeF &constraint) const override
     {
         return q_layoutItem->effectiveSizeHint(which, constraint);
     }
 
     bool isHidden() const;
 
-    virtual bool isIgnored() const Q_DECL_OVERRIDE;
+    virtual bool isIgnored() const override;
 
-    virtual void setGeometry(const QRectF &rect) Q_DECL_OVERRIDE
+    virtual void setGeometry(const QRectF &rect) override
     {
          q_layoutItem->setGeometry(rect);
     }
 
-    virtual bool hasDynamicConstraint() const Q_DECL_OVERRIDE;
-    virtual Qt::Orientation dynamicConstraintOrientation() const Q_DECL_OVERRIDE;
+    virtual bool hasDynamicConstraint() const override;
+    virtual Qt::Orientation dynamicConstraintOrientation() const override;
 
     QGraphicsLayoutItem *layoutItem() const { return q_layoutItem; }
 
@@ -137,7 +137,5 @@ public:
 };
 
 QT_END_NAMESPACE
-
-#endif // QT_NO_GRAPHICSVIEW
 
 #endif // QGRAPHICSGRIDLAYOUTENGINE_P_H

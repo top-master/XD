@@ -76,48 +76,56 @@ public:
         VersionUnknown = -1,
         Version6 = 6,
         Version7 = 7,
-        Version71 = 8,
-        Version73 = 9,
-        Version74 = 10,
+        Version7_1 = 8,
+        Version7_3 = 9,
+        Version7_4 = 10,
         Version8 = 11,
-        Version81 = 12,
-        Version82 = 13,
-        Version83 = 14,
-        Version84 = 15,
-        Version9 = 16
+        Version8_1 = 12,
+        Version8_2 = 13,
+        Version8_3 = 14,
+        Version8_4 = 15,
+        Version9 = 16,
+        Version9_1 = 17,
+        Version9_2 = 18,
+        Version9_3 = 19,
+        Version9_4 = 20,
+        Version9_5 = 21,
+        Version9_6 = 22,
+        Version10 = 23,
+        UnknownLaterVersion = 100000
     };
 
     explicit QPSQLDriver(QObject *parent=0);
     explicit QPSQLDriver(PGconn *conn, QObject *parent=0);
     ~QPSQLDriver();
-    bool hasFeature(DriverFeature f) const Q_DECL_OVERRIDE;
+    bool hasFeature(DriverFeature f) const override;
     bool open(const QString & db,
               const QString & user,
               const QString & password,
               const QString & host,
               int port,
-              const QString& connOpts) Q_DECL_OVERRIDE;
-    bool isOpen() const Q_DECL_OVERRIDE;
-    void close() Q_DECL_OVERRIDE;
-    QSqlResult *createResult() const Q_DECL_OVERRIDE;
-    QStringList tables(QSql::TableType) const Q_DECL_OVERRIDE;
-    QSqlIndex primaryIndex(const QString& tablename) const Q_DECL_OVERRIDE;
-    QSqlRecord record(const QString& tablename) const Q_DECL_OVERRIDE;
+              const QString& connOpts) override;
+    bool isOpen() const override;
+    void close() override;
+    QSqlResult *createResult() const override;
+    QStringList tables(QSql::TableType) const override;
+    QSqlIndex primaryIndex(const QString& tablename) const override;
+    QSqlRecord record(const QString& tablename) const override;
 
     Protocol protocol() const;
-    QVariant handle() const Q_DECL_OVERRIDE;
+    QVariant handle() const override;
 
-    QString escapeIdentifier(const QString &identifier, IdentifierType type) const Q_DECL_OVERRIDE;
-    QString formatValue(const QSqlField &field, bool trimStrings) const Q_DECL_OVERRIDE;
+    QString escapeIdentifier(const QString &identifier, IdentifierType type) const override;
+    QString formatValue(const QSqlField &field, bool trimStrings) const override;
 
-    bool subscribeToNotification(const QString &name) Q_DECL_OVERRIDE;
-    bool unsubscribeFromNotification(const QString &name) Q_DECL_OVERRIDE;
-    QStringList subscribedToNotifications() const Q_DECL_OVERRIDE;
+    bool subscribeToNotification(const QString &name) override;
+    bool unsubscribeFromNotification(const QString &name) override;
+    QStringList subscribedToNotifications() const override;
 
 protected:
-    bool beginTransaction() Q_DECL_OVERRIDE;
-    bool commitTransaction() Q_DECL_OVERRIDE;
-    bool rollbackTransaction() Q_DECL_OVERRIDE;
+    bool beginTransaction() override;
+    bool commitTransaction() override;
+    bool rollbackTransaction() override;
 
 private Q_SLOTS:
     void _q_handleNotification(int);

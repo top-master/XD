@@ -101,14 +101,14 @@ enum { LanguageCount = sizeof(languageForWritingSystem) / sizeof(const char *) }
 #ifdef Q_OS_OSX
 static NSInteger languageMapSort(id obj1, id obj2, void *context)
 {
-    NSArray *map1 = (NSArray *) obj1;
-    NSArray *map2 = (NSArray *) obj2;
-    NSArray *languages = (NSArray *) context;
+    NSArray<NSString *> *map1 = reinterpret_cast<NSArray<NSString *> *>(obj1);
+    NSArray<NSString *> *map2 = reinterpret_cast<NSArray<NSString *> *>(obj2);
+    NSArray<NSString *> *languages = reinterpret_cast<NSArray<NSString *> *>(context);
 
-    NSString *lang1 = [map1 objectAtIndex: 0];
-    NSString *lang2 = [map2 objectAtIndex: 0];
+    NSString *lang1 = [map1 objectAtIndex:0];
+    NSString *lang2 = [map2 objectAtIndex:0];
 
-    return [languages indexOfObject: lang1] - [languages indexOfObject: lang2];
+    return [languages indexOfObject:lang1] - [languages indexOfObject:lang2];
 }
 #endif
 
@@ -184,23 +184,9 @@ QCoreTextFontDatabase::~QCoreTextFontDatabase()
         CFRelease(ref);
 }
 
-static CFArrayRef availableFamilyNames()
-{
-#if QT_DARWIN_PLATFORM_SDK_EQUAL_OR_ABOVE(1060, 100000, 100000, 30000)
-    if (&CTFontManagerCopyAvailableFontFamilyNames)
-        return CTFontManagerCopyAvailableFontFamilyNames();
-#endif
-#if defined(QT_PLATFORM_UIKIT)
-    CFMutableArrayRef familyNames = CFArrayCreateMutableCopy(kCFAllocatorDefault, 0, (CFArrayRef)[UIFont familyNames]);
-    CFArrayAppendValue(familyNames, CFSTR(".PhoneFallback"));
-    return familyNames;
-#endif
-    Q_UNREACHABLE();
-}
-
 void QCoreTextFontDatabase::populateFontDatabase()
 {
-    QCFType<CFArrayRef> familyNames = availableFamilyNames();
+    QCFType<CFArrayRef> familyNames = CTFontManagerCopyAvailableFontFamilyNames();
     for (NSString *familyName in familyNames.as<const NSArray *>())
         QPlatformFontDatabase::registerFontFamily(QString::fromNSString(familyName));
 
@@ -220,7 +206,7 @@ bool QCoreTextFontDatabase::populateFamilyAliases()
     if (m_hasPopulatedAliases)
         return false;
 
-    QCFType<CFArrayRef> familyNames = availableFamilyNames();
+    QCFType<CFArrayRef> familyNames = CTFontManagerCopyAvailableFontFamilyNames();
     for (NSString *familyName in familyNames.as<const NSArray *>()) {
         NSFontManager *fontManager = [NSFontManager sharedFontManager];
         NSString *localizedFamilyName = [fontManager localizedNameForFamily:familyName face:nil];
@@ -416,7 +402,19 @@ extern CGAffineTransform qt_transform_from_fontdef(const QFontDef &fontDef);
 template <>
 QFontEngine *QCoreTextFontDatabaseEngineFactory<QCoreTextFontEngine>::fontEngine(const QFontDef &fontDef, void *usrPtr)
 {
-    CTFontDescriptorRef descriptor = static_cast<CTFontDescriptorRef>(usrPtr);
+    QCFType<CTFontDescriptorRef> descriptor = QCFType<CTFontDescriptorRef>::constructFromGet(
+        static_cast<CTFontDescriptorRef>(usrPtr));
+
+    // CoreText will sometimes invalidate information in font descriptors that refer
+    // to system fonts in certain function calls or application states. While the descriptor
+    // looks the same from the outside, some internal plumbing is different, causing the results
+    // of creating CTFonts from those descriptors unreliable. The work-around for this
+    // is to copy the attributes of those descriptors each time we make a new CTFont
+    // from them instead of referring to the original, as that may trigger the CoreText bug.
+    if (m_systemFontDescriptors.contains(descriptor)) {
+        QCFType<CFDictionaryRef> attributes = CTFontDescriptorCopyAttributes(descriptor);
+        descriptor = CTFontDescriptorCreateWithAttributes(attributes);
+    }
 
     // Since we do not pass in the destination DPI to CoreText when making
     // the font, we need to pass in a point size which is scaled to include
@@ -427,14 +425,10 @@ QFontEngine *QCoreTextFontDatabaseEngineFactory<QCoreTextFontEngine>::fontEngine
     qreal scaledPointSize = fontDef.pixelSize;
 
     CGAffineTransform matrix = qt_transform_from_fontdef(fontDef);
-    CTFontRef font = CTFontCreateWithFontDescriptor(descriptor, scaledPointSize, &matrix);
-    if (font) {
-        QFontEngine *engine = new QCoreTextFontEngine(font, fontDef);
-        CFRelease(font);
-        return engine;
-    }
+    if (QCFType<CTFontRef> font = CTFontCreateWithFontDescriptor(descriptor, scaledPointSize, &matrix))
+        return new QCoreTextFontEngine(font, fontDef);
 
-    return NULL;
+    return nullptr;
 }
 
 #ifndef QT_NO_FREETYPE
@@ -499,6 +493,25 @@ static QString familyNameFromPostScriptName(NSString *psName)
 }
 #endif
 
+static void addExtraFallbacks(QStringList *fallbackList)
+{
+#if defined(Q_OS_MACOS)
+    // Since we are only returning a list of default fonts for the current language, we do not
+    // cover all unicode completely. This was especially an issue for some of the common script
+    // symbols such as mathematical symbols, currency or geometric shapes. To minimize the risk
+    // of missing glyphs, we add Arial Unicode MS as a final fail safe, since this covers most
+    // of Unicode 2.1.
+    if (!fallbackList->contains(QStringLiteral("Arial Unicode MS")))
+        fallbackList->append(QStringLiteral("Arial Unicode MS"));
+    // Since some symbols (specifically Braille) are not in Arial Unicode MS, we
+    // add Apple Symbols to cover those too.
+    if (!fallbackList->contains(QStringLiteral("Apple Symbols")))
+        fallbackList->append(QStringLiteral("Apple Symbols"));
+#else
+    Q_UNUSED(fallbackList)
+#endif
+}
+
 QStringList QCoreTextFontDatabase::fallbacksForFamily(const QString &family, QFont::Style style, QFont::StyleHint styleHint, QChar::Script script) const
 {
     Q_UNUSED(style);
@@ -526,15 +539,9 @@ QStringList QCoreTextFontDatabase::fallbacksForFamily(const QString &family, QFo
                         fallbackList.append(QString::fromCFString(fallbackFamilyName));
                     }
 
-#if defined(Q_OS_OSX)
-                    // Since we are only returning a list of default fonts for the current language, we do not
-                    // cover all unicode completely. This was especially an issue for some of the common script
-                    // symbols such as mathematical symbols, currency or geometric shapes. To minimize the risk
-                    // of missing glyphs, we add Arial Unicode MS as a final fail safe, since this covers most
-                    // of Unicode 2.1.
-                    if (!fallbackList.contains(QStringLiteral("Arial Unicode MS")))
-                        fallbackList.append(QStringLiteral("Arial Unicode MS"));
-#endif
+                    addExtraFallbacks(&fallbackList);
+                    extern QStringList qt_sort_families_by_writing_system(QChar::Script, const QStringList &);
+                    fallbackList = qt_sort_families_by_writing_system(script, fallbackList);
 
                     return fallbackList;
                 }
@@ -551,21 +558,21 @@ QStringList QCoreTextFontDatabase::fallbacksForFamily(const QString &family, QFo
     if (!didPopulateStyleFallbacks) {
 #if defined(Q_OS_MACX)
         NSUserDefaults *defaults = [NSUserDefaults standardUserDefaults];
-        NSArray *languages = [defaults stringArrayForKey: @"AppleLanguages"];
+        NSArray<NSString *> *languages = [defaults stringArrayForKey:@"AppleLanguages"];
 
-        NSDictionary *fallbackDict = [NSDictionary dictionaryWithContentsOfFile: @"/System/Library/Frameworks/ApplicationServices.framework/Frameworks/CoreText.framework/Resources/DefaultFontFallbacks.plist"];
+        NSDictionary<NSString *, id> *fallbackDict = [NSDictionary<NSString *, id> dictionaryWithContentsOfFile:@"/System/Library/Frameworks/ApplicationServices.framework/Frameworks/CoreText.framework/Resources/DefaultFontFallbacks.plist"];
 
         for (NSString *style in [fallbackDict allKeys]) {
-            NSArray *list = [fallbackDict valueForKey: style];
+            NSArray *list = [fallbackDict valueForKey:style];
             QFont::StyleHint fallbackStyleHint = styleHintFromNSString(style);
             QStringList fallbackList;
             for (id item in list) {
                 // sort the array based on system language preferences
-                if ([item isKindOfClass: [NSArray class]]) {
-                    NSArray *langs = [(NSArray *) item sortedArrayUsingFunction: languageMapSort
-                                                                        context: languages];
-                    for (NSArray *map in langs)
-                        fallbackList.append(familyNameFromPostScriptName([map objectAtIndex: 1]));
+                if ([item isKindOfClass:[NSArray class]]) {
+                    NSArray *langs = [reinterpret_cast<NSArray *>(item)
+                        sortedArrayUsingFunction:languageMapSort context:languages];
+                    for (NSArray<NSString *> *map in langs)
+                        fallbackList.append(familyNameFromPostScriptName([map objectAtIndex:1]));
                 }
                 else if ([item isKindOfClass: [NSString class]])
                     fallbackList.append(familyNameFromPostScriptName(item));
@@ -573,14 +580,7 @@ QStringList QCoreTextFontDatabase::fallbacksForFamily(const QString &family, QFo
 
             fallbackList.append(QLatin1String("Apple Color Emoji"));
 
-            // Since we are only returning a list of default fonts for the current language, we do not
-            // cover all unicode completely. This was especially an issue for some of the common script
-            // symbols such as mathematical symbols, currency or geometric shapes. To minimize the risk
-            // of missing glyphs, we add Arial Unicode MS as a final fail safe, since this covers most
-            // of Unicode 2.1.
-            if (!fallbackList.contains(QStringLiteral("Arial Unicode MS")))
-                fallbackList.append(QStringLiteral("Arial Unicode MS"));
-
+            addExtraFallbacks(&fallbackList);
             fallbackLists[styleLookupKey.arg(fallbackStyleHint)] = fallbackList;
         }
 #else
@@ -666,7 +666,7 @@ static CTFontUIFontType fontTypeFromTheme(QPlatformTheme::Font f)
         return kCTFontUIFontSystem;
 
     case QPlatformTheme::TipLabelFont:
-        return kCTFontToolTipFontType;
+        return kCTFontUIFontToolTip;
 
     case QPlatformTheme::StatusBarFont:
         return kCTFontUIFontSystem;
@@ -675,8 +675,10 @@ static CTFontUIFontType fontTypeFromTheme(QPlatformTheme::Font f)
         return kCTFontUIFontWindowTitle;
 
     case QPlatformTheme::MdiSubWindowTitleFont:
-    case QPlatformTheme::DockWidgetTitleFont:
         return kCTFontUIFontSystem;
+
+    case QPlatformTheme::DockWidgetTitleFont:
+        return kCTFontUIFontSmallSystem;
 
     case QPlatformTheme::PushButtonFont:
         return kCTFontUIFontPushButton;

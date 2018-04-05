@@ -108,7 +108,7 @@ QT_BEGIN_NAMESPACE
     in many real-world situations.
 
     The accuracy also depends on the \l{Qt::TimerType}{timer type}. For
-    Qt::PreciseTimer, QTimer will try to keep the accurance at 1 millisecond.
+    Qt::PreciseTimer, QTimer will try to keep the accuracy at 1 millisecond.
     Precise timers will also never time out earlier than expected.
 
     For Qt::CoarseTimer and Qt::VeryCoarseTimer types, QTimer may wake up
@@ -271,7 +271,7 @@ public:
 Q_SIGNALS:
     void timeout();
 protected:
-    void timerEvent(QTimerEvent *) Q_DECL_OVERRIDE;
+    void timerEvent(QTimerEvent *) override;
 };
 
 QSingleShotTimer::QSingleShotTimer(int msec, Qt::TimerType timerType, const QObject *r, const char *member)
@@ -410,7 +410,7 @@ void QTimer::singleShot(int msec, Qt::TimerType timerType, const QObject *receiv
     }
 }
 
-/*!\fn void QTimer::singleShot(int msec, const QObject *receiver, PointerToMemberFunction method)
+/*! \fn template<typename PointerToMemberFunction> void QTimer::singleShot(int msec, const QObject *receiver, PointerToMemberFunction method)
 
     \since 5.4
 
@@ -432,7 +432,7 @@ void QTimer::singleShot(int msec, Qt::TimerType timerType, const QObject *receiv
     \sa start()
 */
 
-/*!\fn void QTimer::singleShot(int msec, Qt::TimerType timerType, const QObject *receiver, PointerToMemberFunction method)
+/*! \fn template<typename PointerToMemberFunction> void QTimer::singleShot(int msec, Qt::TimerType timerType, const QObject *receiver, PointerToMemberFunction method)
 
     \since 5.4
 
@@ -455,7 +455,7 @@ void QTimer::singleShot(int msec, Qt::TimerType timerType, const QObject *receiv
     \sa start()
 */
 
-/*!\fn void QTimer::singleShot(int msec, Functor functor)
+/*! \fn template<typename Functor> void QTimer::singleShot(int msec, Functor functor)
 
     \since 5.4
 
@@ -472,7 +472,7 @@ void QTimer::singleShot(int msec, Qt::TimerType timerType, const QObject *receiv
     \sa start()
 */
 
-/*!\fn void QTimer::singleShot(int msec, Qt::TimerType timerType, Functor functor)
+/*! \fn template<typename Functor> void QTimer::singleShot(int msec, Qt::TimerType timerType, Functor functor)
 
     \since 5.4
 
@@ -490,7 +490,7 @@ void QTimer::singleShot(int msec, Qt::TimerType timerType, const QObject *receiv
     \sa start()
 */
 
-/*!\fn void QTimer::singleShot(int msec, const QObject *context, Functor functor)
+/*! \fn template<typename Functor> void QTimer::singleShot(int msec, const QObject *context, Functor functor)
 
     \since 5.4
 
@@ -511,7 +511,7 @@ void QTimer::singleShot(int msec, Qt::TimerType timerType, const QObject *receiv
     \sa start()
 */
 
-/*!\fn void QTimer::singleShot(int msec, Qt::TimerType timerType, const QObject *context, Functor functor)
+/*! \fn template<typename Functor> void QTimer::singleShot(int msec, Qt::TimerType timerType, const QObject *context, Functor functor)
 
     \since 5.4
 
@@ -568,6 +568,48 @@ void QTimer::singleShot(int msec, Qt::TimerType timerType, const QObject *receiv
     accuracy of the timer.
 
     \sa start()
+*/
+
+/*!
+    \fn template<typename Functor> QMetaObject::Connection connectTo(Functor functor, Qt::ConnectionType connectionType = Qt::AutoConnection)
+    \since 5.12
+    \overload
+
+    Creates a connection from the timeout() signal to \a functor, and returns a
+    handle to the connection.
+
+    This method is provided for convenience.
+    It's equivalent to calling \c {QObject::connect(timer, &QTimer::timeout, timer, functor, connectionType)}.
+
+    \sa QObject::connect(), timeout()
+*/
+
+/*!
+    \fn template<typename Functor> QMetaObject::Connection connectTo(QObject *context, Functor functor, Qt::ConnectionType connectionType = Qt::AutoConnection)
+    \since 5.12
+    \overload connectTo()
+
+    Creates a connection from the timeout() signal to \a functor to be placed in a specific
+    event loop of \a context, and returns a handle to the connection.
+
+    This method is provided for convenience. It's equivalent to calling
+    \c {QObject::connect(timer, &QTimer::timeout, context, functor, connectionType)}.
+
+    \sa QObject::connect(), timeout()
+*/
+
+/*!
+    \fn template<typename PointerToMemberFunction> QMetaObject::Connection connectTo(QObject *receiver, PointerToMemberFunction method, Qt::ConnectionType connectionType = Qt::AutoConnection)
+    \since 5.12
+    \overload connectTo()
+
+    Creates a connection from the timeout() signal to the \a method in the \a receiver object. Returns
+    a handle to the connection.
+
+    This method is provided for convenience. It's equivalent to calling
+    \c {QObject::connect(timer, &QTimer::timeout, receiver, method, connectionType)}.
+
+    \sa QObject::connect(), timeout()
 */
 
 /*!

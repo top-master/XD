@@ -149,15 +149,11 @@ public:
     {
     }
 
-    int exec(int argc, char **argv)
+    int exec()
     {
-        args.reserve(argc);
-        for (int i = 0; i < argc; ++i)
-            args.append(argv[i]);
-
         mainThread = CreateThread(NULL, 0, [](void *param) -> DWORD {
             AppContainer *app = reinterpret_cast<AppContainer *>(param);
-            int argc = app->args.count();
+            int argc = app->args.count() - 1;
             char **argv = app->args.data();
             const int res = main(argc, argv);
             if (app->pidFile != INVALID_HANDLE_VALUE) {
@@ -229,12 +225,12 @@ private:
         return S_OK;
     }
 
-    HRESULT __stdcall OnActivated(IActivatedEventArgs *args) Q_DECL_OVERRIDE
+    HRESULT __stdcall OnActivated(IActivatedEventArgs *args) override
     {
         return activatedLaunch(args);
     }
 
-    HRESULT __stdcall OnLaunched(ILaunchActivatedEventArgs *launchArgs) Q_DECL_OVERRIDE
+    HRESULT __stdcall OnLaunched(ILaunchActivatedEventArgs *launchArgs) override
     {
         ComPtr<IPrelaunchActivatedEventArgs> preArgs;
         HRESULT hr = launchArgs->QueryInterface(preArgs.GetAddressOf());
@@ -295,12 +291,18 @@ private:
 
         bool develMode = false;
         bool debugWait = false;
-        for (const char *arg : args) {
-            if (strcmp(arg, "-qdevel") == 0)
+        for (int i = args.count() - 1; i >= 0; --i) {
+            const char *arg = args.at(i);
+            if (strcmp(arg, "-qdevel") == 0) {
                 develMode = true;
-            if (strcmp(arg, "-qdebug") == 0)
+                args.remove(i);
+            } else if (strcmp(arg, "-qdebug") == 0) {
                 debugWait = true;
+                args.remove(i);
+            }
         }
+        args.append(nullptr);
+
         if (develMode) {
             // Write a PID file to help runner
             const QString pidFileName = QDir(QStandardPaths::writableLocation(QStandardPaths::DataLocation))
@@ -324,41 +326,41 @@ private:
         return S_OK;
     }
 
-    HRESULT __stdcall OnFileActivated(IFileActivatedEventArgs *args) Q_DECL_OVERRIDE
+    HRESULT __stdcall OnFileActivated(IFileActivatedEventArgs *args) override
     {
         return activatedLaunch(args);
     }
 
-    HRESULT __stdcall OnSearchActivated(ISearchActivatedEventArgs *args) Q_DECL_OVERRIDE
+    HRESULT __stdcall OnSearchActivated(ISearchActivatedEventArgs *args) override
     {
         Q_UNUSED(args);
         return S_OK;
     }
 
-    HRESULT __stdcall OnShareTargetActivated(IShareTargetActivatedEventArgs *args) Q_DECL_OVERRIDE
+    HRESULT __stdcall OnShareTargetActivated(IShareTargetActivatedEventArgs *args) override
     {
         return activatedLaunch(args);
     }
 
-    HRESULT __stdcall OnFileOpenPickerActivated(IFileOpenPickerActivatedEventArgs *args) Q_DECL_OVERRIDE
+    HRESULT __stdcall OnFileOpenPickerActivated(IFileOpenPickerActivatedEventArgs *args) override
     {
         Q_UNUSED(args);
         return S_OK;
     }
 
-    HRESULT __stdcall OnFileSavePickerActivated(IFileSavePickerActivatedEventArgs *args) Q_DECL_OVERRIDE
+    HRESULT __stdcall OnFileSavePickerActivated(IFileSavePickerActivatedEventArgs *args) override
     {
         Q_UNUSED(args);
         return S_OK;
     }
 
-    HRESULT __stdcall OnCachedFileUpdaterActivated(ICachedFileUpdaterActivatedEventArgs *args) Q_DECL_OVERRIDE
+    HRESULT __stdcall OnCachedFileUpdaterActivated(ICachedFileUpdaterActivatedEventArgs *args) override
     {
         Q_UNUSED(args);
         return S_OK;
     }
 
-    HRESULT __stdcall OnWindowCreated(Xaml::IWindowCreatedEventArgs *args) Q_DECL_OVERRIDE
+    HRESULT __stdcall OnWindowCreated(Xaml::IWindowCreatedEventArgs *args) override
     {
         Q_UNUSED(args);
         return S_OK;
@@ -375,18 +377,9 @@ private:
 // Main entry point for Appx containers
 int __stdcall WinMain(HINSTANCE, HINSTANCE, LPSTR, int)
 {
-    int argc = 0;
-    char **argv = 0, **env = 0;
-    for (int i = 0; env && env[i]; ++i) {
-        QByteArray var(env[i]);
-        int split = var.indexOf('=');
-        if (split > 0)
-            qputenv(var.mid(0, split), var.mid(split + 1));
-    }
-
     if (FAILED(RoInitialize(RO_INIT_MULTITHREADED)))
         return 1;
 
     ComPtr<AppContainer> app = Make<AppContainer>();
-    return app->exec(argc, argv);
+    return app->exec();
 }

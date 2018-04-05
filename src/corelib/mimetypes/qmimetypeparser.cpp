@@ -49,7 +49,6 @@
 #include <QtCore/QCoreApplication>
 #include <QtCore/QDebug>
 #include <QtCore/QDir>
-#include <QtCore/QPair>
 #include <QtCore/QXmlStreamReader>
 #include <QtCore/QXmlStreamWriter>
 #include <QtCore/QStack>
@@ -202,6 +201,7 @@ bool QMimeTypeParserBase::parse(QIODevice *dev, const QString &fileName, QString
     return false;
 #else
     QMimeTypePrivate data;
+    data.loaded = true;
     int priority = 50;
     QStack<QMimeMagicRule *> currentRules; // stack for the nesting of rules
     QList<QMimeMagicRule> rules; // toplevel rules

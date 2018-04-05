@@ -9,9 +9,6 @@ Group {
         "qabstractfileengine_p.h",
         "qbuffer.cpp",
         "qbuffer.h",
-        "qdatastream.cpp",
-        "qdatastream.h",
-        "qdatastream_p.h",
         "qdataurl.cpp",
         "qdataurl_p.h",
         "qdebug.cpp",
@@ -81,9 +78,6 @@ Group {
         "qtemporaryfile.cpp",
         "qtemporaryfile.h",
         "qtemporaryfile_p.h",
-        "qtextstream.cpp",
-        "qtextstream.h",
-        "qtextstream_p.h",
         "qtldurl.cpp",
         "qtldurl_p.h",
         "qurl.cpp",
@@ -140,7 +134,7 @@ Group {
         }
         Group {
             name: "I/O (android)"
-            condition: qbs.targetOS.contains("android")
+            condition: qbs.targetOS.contains("android") && !qbs.targetOS.contains("android-embedded")
             files: "qstandardpaths_android.cpp"
         }
         Group {
@@ -169,7 +163,6 @@ Group {
         condition: qbs.targetOS.contains("windows")
         files: [
             "qfilesystemengine_win.cpp",
-            "qfilesystemiterator_win.cpp",
             "qfilesystemwatcher_win.cpp",
             "qfilesystemwatcher_win_p.h",
             "qfsfileengine_win.cpp",

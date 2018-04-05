@@ -59,6 +59,8 @@
 
 #ifndef QT_NO_GESTURES
 
+#include <functional>
+
 QT_BEGIN_NAMESPACE
 
 class QBasicTimer;
@@ -75,9 +77,9 @@ public:
 
     bool filterEvent(QWidget *receiver, QEvent *event);
     bool filterEvent(QObject *receiver, QEvent *event);
-#ifndef QT_NO_GRAPHICSVIEW
+#if QT_CONFIG(graphicsview)
     bool filterEvent(QGraphicsObject *receiver, QEvent *event);
-#endif //QT_NO_GRAPHICSVIEW
+#endif // QT_CONFIG(graphicsview)
 
     static QGestureManager* instance(); // declared in qapplication.cpp
     static bool gesturePending(QObject *o);
@@ -112,7 +114,7 @@ private:
         ObjectGesture(QObject *o, const Qt::GestureType &g) : object(o), gesture(g) { }
         inline bool operator<(const ObjectGesture &rhs) const
         {
-            if (object < rhs.object)
+            if (std::less<QObject *>{}(object, rhs.object))
                 return true;
             if (object == rhs.object)
                 return gesture < rhs.gesture;

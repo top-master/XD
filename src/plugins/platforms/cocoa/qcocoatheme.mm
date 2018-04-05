@@ -44,9 +44,6 @@
 
 #include <QtCore/QVariant>
 
-#include "qcocoacolordialoghelper.h"
-#include "qcocoafiledialoghelper.h"
-#include "qcocoafontdialoghelper.h"
 #include "qcocoasystemsettings.h"
 #include "qcocoasystemtrayicon.h"
 #include "qcocoamenuitem.h"
@@ -58,35 +55,48 @@
 #include <QtGui/private/qguiapplication_p.h>
 #include <QtGui/private/qcoregraphics_p.h>
 #include <QtGui/qpainter.h>
+#include <QtGui/qtextformat.h>
 #include <QtFontDatabaseSupport/private/qcoretextfontdatabase_p.h>
 #include <QtThemeSupport/private/qabstractfileiconengine_p.h>
+#include <qpa/qplatformdialoghelper.h>
 #include <qpa/qplatformintegration.h>
 #include <qpa/qplatformnativeinterface.h>
 
+#ifdef QT_WIDGETS_LIB
+#include <QtWidgets/qtwidgetsglobal.h>
+#if QT_CONFIG(colordialog)
+#include "qcocoacolordialoghelper.h"
+#endif
+#if QT_CONFIG(filedialog)
+#include "qcocoafiledialoghelper.h"
+#endif
+#if QT_CONFIG(fontdialog)
+#include "qcocoafontdialoghelper.h"
+#endif
+#endif
+
 #include <Carbon/Carbon.h>
 
-@interface QT_MANGLE_NAMESPACE(QCocoaThemeNotificationReceiver) : NSObject {
-QCocoaTheme *mPrivate;
-}
-- (id)initWithPrivate:(QCocoaTheme *)priv;
-- (void)systemColorsDidChange:(NSNotification *)notification;
+@interface QT_MANGLE_NAMESPACE(QCocoaThemeNotificationReceiver) : NSObject
 @end
 
 QT_NAMESPACE_ALIAS_OBJC_CLASS(QCocoaThemeNotificationReceiver);
 
-@implementation QCocoaThemeNotificationReceiver
-- (id)initWithPrivate:(QCocoaTheme *)priv
+@implementation QCocoaThemeNotificationReceiver {
+    QCocoaTheme *mPrivate;
+}
+
+- (instancetype)initWithPrivate:(QCocoaTheme *)priv
 {
-    self = [super init];
-    mPrivate = priv;
+    if ((self = [self init]))
+        mPrivate = priv;
     return self;
 }
 
-- (void)systemColorsDidChange:(NSNotification *)notification
+- (void)systemColorsDidChange:(NSNotification *)__unused notification
 {
-    Q_UNUSED(notification);
     mPrivate->reset();
-    QWindowSystemInterface::handleThemeChange(Q_NULLPTR);
+    QWindowSystemInterface::handleThemeChange(nullptr);
 }
 @end
 
@@ -115,7 +125,7 @@ QCocoaTheme::~QCocoaTheme()
 void QCocoaTheme::reset()
 {
     delete m_systemPalette;
-    m_systemPalette = Q_NULLPTR;
+    m_systemPalette = nullptr;
     qDeleteAll(m_palettes);
     m_palettes.clear();
 }
@@ -124,11 +134,11 @@ bool QCocoaTheme::usePlatformNativeDialog(DialogType dialogType) const
 {
     if (dialogType == QPlatformTheme::FileDialog)
         return true;
-#ifndef QT_NO_COLORDIALOG
+#if defined(QT_WIDGETS_LIB) && QT_CONFIG(colordialog)
     if (dialogType == QPlatformTheme::ColorDialog)
         return true;
 #endif
-#ifndef QT_NO_FONTDIALOG
+#if defined(QT_WIDGETS_LIB) && QT_CONFIG(fontdialog)
     if (dialogType == QPlatformTheme::FontDialog)
         return true;
 #endif
@@ -138,15 +148,15 @@ bool QCocoaTheme::usePlatformNativeDialog(DialogType dialogType) const
 QPlatformDialogHelper * QCocoaTheme::createPlatformDialogHelper(DialogType dialogType) const
 {
     switch (dialogType) {
-#ifndef QT_NO_FILEDIALOG
+#if defined(QT_WIDGETS_LIB) && QT_CONFIG(filedialog)
     case QPlatformTheme::FileDialog:
         return new QCocoaFileDialogHelper();
 #endif
-#ifndef QT_NO_COLORDIALOG
+#if defined(QT_WIDGETS_LIB) && QT_CONFIG(colordialog)
     case QPlatformTheme::ColorDialog:
         return new QCocoaColorDialogHelper();
 #endif
-#ifndef QT_NO_FONTDIALOG
+#if defined(QT_WIDGETS_LIB) && QT_CONFIG(fontdialog)
     case QPlatformTheme::FontDialog:
         return new QCocoaFontDialogHelper();
 #endif
@@ -263,7 +273,7 @@ QPixmap QCocoaTheme::standardPixmap(StandardPixmap sp, const QSizeF &size) const
     }
     if (iconType != 0) {
         QPixmap pixmap;
-        IconRef icon = Q_NULLPTR;
+        IconRef icon = nullptr;
         GetIconRef(kOnSystemDisk, kSystemIconsCreator, iconType, &icon);
 
         if (icon) {
@@ -330,9 +340,13 @@ QVariant QCocoaTheme::themeHint(ThemeHint hint) const
     case IconPixmapSizes:
         return QVariant::fromValue(QCocoaFileIconEngine::availableIconSizes());
     case QPlatformTheme::PasswordMaskCharacter:
-        return QVariant(QChar(kBulletUnicode));
+        return QVariant(QChar(0x2022));
     case QPlatformTheme::UiEffects:
         return QVariant(int(HoverEffect));
+    case QPlatformTheme::SpellCheckUnderlineStyle:
+        return QVariant(int(QTextCharFormat::DotLine));
+    case QPlatformTheme::UseFullScreenForPopupMenu:
+        return QVariant(bool([[NSApplication sharedApplication] presentationOptions] & NSApplicationPresentationFullScreen));
     default:
         break;
     }

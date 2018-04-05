@@ -1,6 +1,7 @@
 import qbs
 
 CppApplication {
+    property string description     // TODO: Generate a Windows resource, and set this description.
     property string toolFileTag
     type: toolFileTag ? base.concat(toolFileTag) : base
     consoleApplication: true

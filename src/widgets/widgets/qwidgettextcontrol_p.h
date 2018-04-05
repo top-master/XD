@@ -56,8 +56,12 @@
 #include <QtGui/qtextoption.h>
 #include <QtGui/qtextcursor.h>
 #include <QtGui/qtextformat.h>
+#if QT_CONFIG(textedit)
 #include <QtWidgets/qtextedit.h>
+#endif
+#if QT_CONFIG(menu)
 #include <QtWidgets/qmenu.h>
+#endif
 #include <QtCore/qrect.h>
 #include <QtGui/qabstracttextdocumentlayout.h>
 #include <QtGui/qtextdocumentfragment.h>
@@ -148,7 +152,7 @@ public:
     bool acceptRichText() const;
     void setAcceptRichText(bool accept);
 
-#ifndef QT_NO_TEXTEDIT
+#if QT_CONFIG(textedit)
     void setExtraSelections(const QList<QTextEdit::ExtraSelection> &selections);
     QList<QTextEdit::ExtraSelection> extraSelections() const;
 #endif
@@ -254,9 +258,9 @@ public:
     bool findNextPrevAnchor(const QTextCursor& from, bool next, QTextCursor& newAnchor);
 
 protected:
-    virtual void timerEvent(QTimerEvent *e) Q_DECL_OVERRIDE;
+    virtual void timerEvent(QTimerEvent *e) override;
 
-    virtual bool event(QEvent *e) Q_DECL_OVERRIDE;
+    virtual bool event(QEvent *e) override;
 
 private:
     Q_DISABLE_COPY(QWidgetTextControl)
@@ -292,9 +296,9 @@ class QTextEditMimeData : public QMimeData
 public:
     inline QTextEditMimeData(const QTextDocumentFragment &aFragment) : fragment(aFragment) {}
 
-    virtual QStringList formats() const Q_DECL_OVERRIDE;
+    virtual QStringList formats() const override;
 protected:
-    virtual QVariant retrieveData(const QString &mimeType, QVariant::Type type) const Q_DECL_OVERRIDE;
+    virtual QVariant retrieveData(const QString &mimeType, QVariant::Type type) const override;
 private:
     void setup() const;
 

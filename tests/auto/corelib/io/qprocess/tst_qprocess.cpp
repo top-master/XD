@@ -94,6 +94,7 @@ private slots:
     void setEnvironment();
     void setProcessEnvironment_data();
     void setProcessEnvironment();
+    void environmentIsSorted();
     void spaceInName();
     void setStandardInputFile();
     void setStandardOutputFile_data();
@@ -126,7 +127,8 @@ private slots:
     void systemEnvironment();
     void lockupsInStartDetached();
     void waitForReadyReadForNonexistantProcess();
-    void detachedWorkingDirectoryAndPid();
+    void detachedProcessParameters_data();
+    void detachedProcessParameters();
     void startFinishStartFinish();
     void invalidProgramString_data();
     void invalidProgramString();
@@ -283,7 +285,7 @@ void tst_QProcess::startWithOldOpen()
     class OverriddenOpen : public QProcess
     {
     public:
-        virtual bool open(OpenMode mode) Q_DECL_OVERRIDE
+        virtual bool open(OpenMode mode) override
         { return QIODevice::open(mode); }
     };
 
@@ -706,7 +708,7 @@ void tst_QProcess::restartProcessDeadlock()
     QCOMPARE(process.write("", 1), qlonglong(1));
     QVERIFY(process.waitForFinished(5000));
 
-    QObject::disconnect(&process, static_cast<QProcessFinishedSignal1>(&QProcess::finished), Q_NULLPTR, Q_NULLPTR);
+    QObject::disconnect(&process, static_cast<QProcessFinishedSignal1>(&QProcess::finished), nullptr, nullptr);
 
     QCOMPARE(process.write("", 1), qlonglong(1));
     QVERIFY(process.waitForFinished(5000));
@@ -845,7 +847,7 @@ void tst_QProcess::emitReadyReadOnlyWhenNewDataArrives()
     QVERIFY(QTestEventLoop::instance().timeout());
     QVERIFY(!proc.waitForReadyRead(250));
 
-    QObject::disconnect(&proc, &QIODevice::readyRead, Q_NULLPTR, Q_NULLPTR);
+    QObject::disconnect(&proc, &QIODevice::readyRead, nullptr, nullptr);
     proc.write("B");
     QVERIFY(proc.waitForReadyRead(5000));
 
@@ -1733,6 +1735,47 @@ void tst_QProcess::setProcessEnvironment()
     }
 }
 
+void tst_QProcess::environmentIsSorted()
+{
+    QProcessEnvironment env;
+    env.insert(QLatin1String("a"), QLatin1String("foo_a"));
+    env.insert(QLatin1String("B"), QLatin1String("foo_B"));
+    env.insert(QLatin1String("c"), QLatin1String("foo_c"));
+    env.insert(QLatin1String("D"), QLatin1String("foo_D"));
+    env.insert(QLatin1String("e"), QLatin1String("foo_e"));
+    env.insert(QLatin1String("F"), QLatin1String("foo_F"));
+    env.insert(QLatin1String("Path"), QLatin1String("foo_Path"));
+    env.insert(QLatin1String("SystemRoot"), QLatin1String("foo_SystemRoot"));
+
+    const QStringList envlist = env.toStringList();
+
+#ifdef Q_OS_WIN32
+    // The environment block passed to CreateProcess "[Requires that] All strings in the
+    // environment block must be sorted alphabetically by name. The sort is case-insensitive,
+    // Unicode order, without regard to locale."
+    // https://msdn.microsoft.com/en-us/library/windows/desktop/ms682009(v=vs.85).aspx
+    // So on Windows we sort that way.
+    const QStringList expected = { QLatin1String("a=foo_a"),
+                                   QLatin1String("B=foo_B"),
+                                   QLatin1String("c=foo_c"),
+                                   QLatin1String("D=foo_D"),
+                                   QLatin1String("e=foo_e"),
+                                   QLatin1String("F=foo_F"),
+                                   QLatin1String("Path=foo_Path"),
+                                   QLatin1String("SystemRoot=foo_SystemRoot") };
+#else
+    const QStringList expected = { QLatin1String("B=foo_B"),
+                                   QLatin1String("D=foo_D"),
+                                   QLatin1String("F=foo_F"),
+                                   QLatin1String("Path=foo_Path"),
+                                   QLatin1String("SystemRoot=foo_SystemRoot"),
+                                   QLatin1String("a=foo_a"),
+                                   QLatin1String("c=foo_c"),
+                                   QLatin1String("e=foo_e") };
+#endif
+    QCOMPARE(envlist, expected);
+}
+
 void tst_QProcess::systemEnvironment()
 {
     QVERIFY(!QProcess::systemEnvironment().isEmpty());
@@ -2030,21 +2073,54 @@ void tst_QProcess::fileWriterProcess()
     } while (stopWatch.elapsed() < 3000);
 }
 
-void tst_QProcess::detachedWorkingDirectoryAndPid()
+void tst_QProcess::detachedProcessParameters_data()
 {
+    QTest::addColumn<QString>("outChannel");
+    QTest::newRow("none") << QString();
+    QTest::newRow("stdout") << QString("stdout");
+    QTest::newRow("stderr") << QString("stderr");
+}
+
+void tst_QProcess::detachedProcessParameters()
+{
+    QFETCH(QString, outChannel);
     qint64 pid;
 
     QFile infoFile(m_temporaryDir.path() + QLatin1String("/detachedinfo.txt"));
     if (infoFile.exists())
         QVERIFY(infoFile.remove());
+    QFile channelFile(m_temporaryDir.path() + QLatin1String("detachedinfo2.txt"));
+    if (channelFile.exists())
+        QVERIFY(channelFile.remove());
 
     QString workingDir = QDir::currentPath() + "/testDetached";
 
     QVERIFY(QFile::exists(workingDir));
 
-    QStringList args;
-    args << infoFile.fileName();
-    QVERIFY(QProcess::startDetached(QDir::currentPath() + QLatin1String("/testDetached/testDetached"), args, workingDir, &pid));
+    QVERIFY(qgetenv("tst_QProcess").isEmpty());
+    QByteArray envVarValue("foobarbaz");
+    QProcessEnvironment environment = QProcessEnvironment::systemEnvironment();
+    environment.insert(QStringLiteral("tst_QProcess"), QString::fromUtf8(envVarValue));
+
+    QProcess process;
+    process.setProgram(QDir::currentPath() + QLatin1String("/testDetached/testDetached"));
+#ifdef Q_OS_WIN
+    int modifierCalls = 0;
+    process.setCreateProcessArgumentsModifier(
+        [&modifierCalls] (QProcess::CreateProcessArguments *) { modifierCalls++; });
+#endif
+    QStringList args(infoFile.fileName());
+    if (!outChannel.isEmpty()) {
+        args << QStringLiteral("--out-channel=") + outChannel;
+        if (outChannel == "stdout")
+            process.setStandardOutputFile(channelFile.fileName());
+        else if (outChannel == "stderr")
+            process.setStandardErrorFile(channelFile.fileName());
+    }
+    process.setArguments(args);
+    process.setWorkingDirectory(workingDir);
+    process.setProcessEnvironment(environment);
+    QVERIFY(process.startDetached(&pid));
 
     QFileInfo fi(infoFile);
     fi.setCaching(false);
@@ -2055,12 +2131,24 @@ void tst_QProcess::detachedWorkingDirectoryAndPid()
     }
 
     QVERIFY(infoFile.open(QIODevice::ReadOnly | QIODevice::Text));
-    QString actualWorkingDir = QString::fromUtf8(infoFile.readLine());
-    actualWorkingDir.chop(1); // strip off newline
-    QByteArray processIdString = infoFile.readLine();
-    processIdString.chop(1);
+    QString actualWorkingDir = QString::fromUtf8(infoFile.readLine()).trimmed();
+    QByteArray processIdString = infoFile.readLine().trimmed();
+    QByteArray actualEnvVarValue = infoFile.readLine().trimmed();
+    QByteArray infoFileContent;
+    if (!outChannel.isEmpty()) {
+        infoFile.seek(0);
+        infoFileContent = infoFile.readAll();
+    }
     infoFile.close();
     infoFile.remove();
+
+    if (!outChannel.isEmpty()) {
+        QVERIFY(channelFile.open(QIODevice::ReadOnly | QIODevice::Text));
+        QByteArray channelContent = channelFile.readAll();
+        channelFile.close();
+        channelFile.remove();
+        QCOMPARE(channelContent, infoFileContent);
+    }
 
     bool ok = false;
     qint64 actualPid = processIdString.toLongLong(&ok);
@@ -2068,6 +2156,10 @@ void tst_QProcess::detachedWorkingDirectoryAndPid()
 
     QCOMPARE(actualWorkingDir, workingDir);
     QCOMPARE(actualPid, pid);
+    QCOMPARE(actualEnvVarValue, envVarValue);
+#ifdef Q_OS_WIN
+    QCOMPARE(modifierCalls, 1);
+#endif
 }
 
 void tst_QProcess::switchReadChannels()

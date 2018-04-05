@@ -58,6 +58,10 @@
 #include "private/qobject_p.h"
 #endif
 
+#ifdef Q_OS_MACOS
+#include "private/qcore_mac_p.h"
+#endif
+
 QT_BEGIN_NAMESPACE
 
 typedef QList<QTranslator*> QTranslatorList;
@@ -134,7 +138,7 @@ public:
 
 #ifndef QT_NO_TRANSLATION
     QTranslatorList translators;
-
+    QReadWriteLock translateMutex;
     static bool isTranslatorInstalled(QTranslator *translator);
 #endif
 

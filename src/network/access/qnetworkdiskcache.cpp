@@ -60,8 +60,6 @@
 
 #define MAX_COMPRESSION_SIZE (1024 * 1024 * 3)
 
-#ifndef QT_NO_NETWORKDISKCACHE
-
 QT_BEGIN_NAMESPACE
 
 /*!
@@ -539,7 +537,9 @@ qint64 QNetworkDiskCache::expire()
         QFileInfo info = it.fileInfo();
         QString fileName = info.fileName();
         if (fileName.endsWith(CACHE_POSTFIX)) {
-            cacheItems.insert(info.created(), path);
+            const QDateTime birthTime = info.fileTime(QFile::FileBirthTime);
+            cacheItems.insert(birthTime.isValid() ? birthTime
+                              : info.fileTime(QFile::FileMetadataChangeTime), path);
             totalSize += info.size();
         }
     }
@@ -737,5 +737,3 @@ bool QCacheItem::read(QFile *device, bool readData)
 }
 
 QT_END_NAMESPACE
-
-#endif // QT_NO_NETWORKDISKCACHE

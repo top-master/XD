@@ -45,6 +45,7 @@
 #ifndef QT_NO_OPENGL
 #include <qpa/qplatformopenglcontext.h>
 #include "qopenglcontext.h"
+#include "qopenglcontext_p.h"
 #endif
 #include "qscreen.h"
 
@@ -54,6 +55,7 @@
 #  include "qaccessible.h"
 #endif
 #include "qhighdpiscaling_p.h"
+#include "qshapedpixmapdndwindow_p.h"
 
 #include <private/qevent_p.h>
 
@@ -111,12 +113,13 @@ QT_BEGIN_NAMESPACE
     physical area of the screen. On windowing systems that have exposure
     notifications, the isExposed() accessor describes whether the window should
     be treated as directly visible on screen. The exposeEvent() function is
-    called whenever the windows exposure in the windowing system changes.  On
-    windowing systems that do not make this information visible to the
-    application, isExposed() will simply return the same value as isVisible().
+    called whenever an area of the window is invalidated, for example due to the
+    exposure in the windowing system changing. On windowing systems that do not
+    make this information visible to the application, isExposed() will simply
+    return the same value as isVisible().
 
     QWindow::Visibility queried through visibility() is a convenience API
-    combining the functions of visible() and windowState().
+    combining the functions of visible() and windowStates().
 
     \section1 Rendering
 
@@ -317,33 +320,103 @@ void QWindow::setVisibility(Visibility v)
     }
 }
 
+/*
+    Subclasses may override this function to run custom setVisible
+    logic. Subclasses that do so must call the base class implementation
+    at some point to make the native window visible, and must not
+    call QWindow::setVisble() since that will recurse back here.
+*/
+void QWindowPrivate::setVisible(bool visible)
+{
+    Q_Q(QWindow);
+
+    if (this->visible != visible) {
+        this->visible = visible;
+        emit q->visibleChanged(visible);
+        updateVisibility();
+    } else if (platformWindow) {
+        // Visibility hasn't changed, and the platform window is in sync
+        return;
+    }
+
+    if (!platformWindow) {
+        // If we have a parent window, but the parent hasn't been created yet, we
+        // can defer creation until the parent is created or we're re-parented.
+        if (parentWindow && !parentWindow->handle())
+            return;
+
+        // We only need to create the window if it's being shown
+        if (visible)
+            q->create();
+    }
+
+    if (visible) {
+        // remove posted quit events when showing a new window
+        QCoreApplication::removePostedEvents(qApp, QEvent::Quit);
+
+        if (q->type() == Qt::Window) {
+            QGuiApplicationPrivate *app_priv = QGuiApplicationPrivate::instance();
+            QString &firstWindowTitle = app_priv->firstWindowTitle;
+            if (!firstWindowTitle.isEmpty()) {
+                q->setTitle(firstWindowTitle);
+                firstWindowTitle = QString();
+            }
+            if (!app_priv->forcedWindowIcon.isNull())
+                q->setIcon(app_priv->forcedWindowIcon);
+
+            // Handling of the -qwindowgeometry, -geometry command line arguments
+            static bool geometryApplied = false;
+            if (!geometryApplied) {
+                geometryApplied = true;
+                QGuiApplicationPrivate::applyWindowGeometrySpecificationTo(q);
+            }
+        }
+
+        QShowEvent showEvent;
+        QGuiApplication::sendEvent(q, &showEvent);
+    }
+
+    if (q->isModal()) {
+        if (visible)
+            QGuiApplicationPrivate::showModalWindow(q);
+        else
+            QGuiApplicationPrivate::hideModalWindow(q);
+    // QShapedPixmapWindow is used on some platforms for showing a drag pixmap, so don't block
+    // input to this window as it is performing a drag - QTBUG-63846
+    } else if (visible && QGuiApplication::modalWindow() && !qobject_cast<QShapedPixmapWindow *>(q)) {
+        QGuiApplicationPrivate::updateBlockedStatus(q);
+    }
+
+#ifndef QT_NO_CURSOR
+    if (visible && (hasCursor || QGuiApplication::overrideCursor()))
+        applyCursor();
+#endif
+
+    if (platformWindow)
+        platformWindow->setVisible(visible);
+
+    if (!visible) {
+        QHideEvent hideEvent;
+        QGuiApplication::sendEvent(q, &hideEvent);
+    }
+}
+
 void QWindowPrivate::updateVisibility()
 {
     Q_Q(QWindow);
 
     QWindow::Visibility old = visibility;
 
-    if (visible) {
-        switch (windowState) {
-        case Qt::WindowMinimized:
-            visibility = QWindow::Minimized;
-            break;
-        case Qt::WindowMaximized:
-            visibility = QWindow::Maximized;
-            break;
-        case Qt::WindowFullScreen:
-            visibility = QWindow::FullScreen;
-            break;
-        case Qt::WindowNoState:
-            visibility = QWindow::Windowed;
-            break;
-        default:
-            Q_ASSERT(false);
-            break;
-        }
-    } else {
+    if (!visible)
         visibility = QWindow::Hidden;
-    }
+    else if (windowState & Qt::WindowMinimized)
+        visibility = QWindow::Minimized;
+    else if (windowState & Qt::WindowFullScreen)
+        visibility = QWindow::FullScreen;
+    else if (windowState & Qt::WindowMaximized)
+        visibility = QWindow::Maximized;
+    else
+        visibility = QWindow::Windowed;
 
     if (visibility != old)
         emit q->visibilityChanged(visibility);
@@ -443,6 +516,8 @@ void QWindowPrivate::create(bool recursive, WId nativeHandle)
         return;
     }
 
+    platformWindow->initialize();
+
     QObjectList childObjects = q->children();
     for (int i = 0; i < childObjects.size(); i ++) {
         QObject *object = childObjects.at(i);
@@ -525,71 +600,7 @@ void QWindow::setVisible(bool visible)
 {
     Q_D(QWindow);
 
-    if (d->visible != visible) {
-        d->visible = visible;
-        emit visibleChanged(visible);
-        d->updateVisibility();
-    } else if (d->platformWindow) {
-        // Visibility hasn't changed, and the platform window is in sync
-        return;
-    }
-
-    if (!d->platformWindow) {
-        // If we have a parent window, but the parent hasn't been created yet, we
-        // can defer creation until the parent is created or we're re-parented.
-        if (parent() && !parent()->handle())
-            return;
-
-        // We only need to create the window if it's being shown
-        if (visible)
-            create();
-    }
-
-    if (visible) {
-        // remove posted quit events when showing a new window
-        QCoreApplication::removePostedEvents(qApp, QEvent::Quit);
-
-        if (type() == Qt::Window) {
-            QGuiApplicationPrivate *app_priv = QGuiApplicationPrivate::instance();
-            QString &firstWindowTitle = app_priv->firstWindowTitle;
-            if (!firstWindowTitle.isEmpty()) {
-                setTitle(firstWindowTitle);
-                firstWindowTitle = QString();
-            }
-            if (!app_priv->forcedWindowIcon.isNull())
-                setIcon(app_priv->forcedWindowIcon);
-
-            // Handling of the -qwindowgeometry, -geometry command line arguments
-            static bool geometryApplied = false;
-            if (!geometryApplied) {
-                geometryApplied = true;
-                QGuiApplicationPrivate::applyWindowGeometrySpecificationTo(this);
-            }
-        }
-
-        QShowEvent showEvent;
-        QGuiApplication::sendEvent(this, &showEvent);
-    }
-
-    if (isModal()) {
-        if (visible)
-            QGuiApplicationPrivate::showModalWindow(this);
-        else
-            QGuiApplicationPrivate::hideModalWindow(this);
-    }
-
-#ifndef QT_NO_CURSOR
-    if (visible && (d->hasCursor || QGuiApplication::overrideCursor()))
-        d->applyCursor();
-#endif
-
-    if (d->platformWindow)
-        d->platformWindow->setVisible(visible);
-
-    if (!visible) {
-        QHideEvent hideEvent;
-        QGuiApplication::sendEvent(this, &hideEvent);
-    }
+    d->setVisible(visible);
 }
 
 bool QWindow::isVisible() const
@@ -965,6 +976,11 @@ QString QWindow::filePath() const
 
     The window icon might be used by the windowing system for example to
     decorate the window, and/or in the task switcher.
+
+    \note On \macos, the window title bar icon is meant for windows representing
+    documents, and will only show up if a file path is also set.
+
+    \sa setFilePath()
 */
 void QWindow::setIcon(const QIcon &icon)
 {
@@ -977,7 +993,7 @@ void QWindow::setIcon(const QIcon &icon)
 }
 
 /*!
-    \brief Sets the window's icon in the windowing system
+    \brief Returns the window's icon in the windowing system
 
     \sa setIcon()
 */
@@ -1060,15 +1076,12 @@ qreal QWindow::opacity() const
     The window manager may or may not choose to display any areas of the window
     not included in the mask, thus it is the application's responsibility to
     clear to transparent the areas that are not part of the mask.
-
-    Setting the mask before the window has been created has no effect.
 */
 void QWindow::setMask(const QRegion &region)
 {
     Q_D(QWindow);
-    if (!d->platformWindow)
-        return;
-    d->platformWindow->setMask(QHighDpi::toNativeLocalRegion(region, this));
+    if (d->platformWindow)
+        d->platformWindow->setMask(QHighDpi::toNativeLocalRegion(region, this));
     d->mask = region;
 }
 
@@ -1215,6 +1228,17 @@ qreal QWindow::devicePixelRatio() const
     return d->platformWindow->devicePixelRatio() * QHighDpiScaling::factor(this);
 }
 
+Qt::WindowState QWindowPrivate::effectiveState(Qt::WindowStates state)
+{
+    if (state & Qt::WindowMinimized)
+        return Qt::WindowMinimized;
+    else if (state & Qt::WindowFullScreen)
+        return Qt::WindowFullScreen;
+    else if (state & Qt::WindowMaximized)
+        return Qt::WindowMaximized;
+    return Qt::WindowNoState;
+}
+
 /*!
     \brief set the screen-occupation state of the window
 
@@ -1223,29 +1247,67 @@ qreal QWindow::devicePixelRatio() const
 
     The enum value Qt::WindowActive is not an accepted parameter.
 
-    \sa showNormal(), showFullScreen(), showMinimized(), showMaximized()
+    \sa showNormal(), showFullScreen(), showMinimized(), showMaximized(), setWindowStates()
 */
 void QWindow::setWindowState(Qt::WindowState state)
 {
-    if (state == Qt::WindowActive) {
-        qWarning("QWindow::setWindowState does not accept Qt::WindowActive");
-        return;
+    setWindowStates(state);
+}
+
+/*!
+    \brief set the screen-occupation state of the window
+    \since 5.10
+
+    The window \a state represents whether the window appears in the
+    windowing system as maximized, minimized and/or fullscreen.
+
+    The window can be in a combination of several states. For example, if
+    the window is both minimized and maximized, the window will appear
+    minimized, but clicking on the task bar entry will restore it to the
+    maximized state.
+
+    The enum value Qt::WindowActive should not be set.
+
+    \sa showNormal(), showFullScreen(), showMinimized(), showMaximized()
+ */
+void QWindow::setWindowStates(Qt::WindowStates state)
+{
+    Q_D(QWindow);
+    if (state & Qt::WindowActive) {
+        qWarning("QWindow::setWindowStates does not accept Qt::WindowActive");
+        state &= ~Qt::WindowActive;
     }
 
-    Q_D(QWindow);
     if (d->platformWindow)
         d->platformWindow->setWindowState(state);
     d->windowState = state;
-    emit windowStateChanged(d->windowState);
+    emit windowStateChanged(QWindowPrivate::effectiveState(d->windowState));
     d->updateVisibility();
 }
 
 /*!
     \brief the screen-occupation state of the window
 
-    \sa setWindowState()
+    \sa setWindowState(), windowStates()
 */
 Qt::WindowState QWindow::windowState() const
+{
+    Q_D(const QWindow);
+    return QWindowPrivate::effectiveState(d->windowState);
+}
+
+/*!
+    \brief the screen-occupation state of the window
+    \since 5.10
+
+    The window can be in a combination of several states. For example, if
+    the window is both minimized and maximized, the window will appear
+    minimized, but clicking on the task bar entry will restore it to
+    the maximized state.
+
+    \sa setWindowStates()
+*/
+Qt::WindowStates QWindow::windowStates() const
 {
     Q_D(const QWindow);
     return d->windowState;
@@ -1255,7 +1317,7 @@ Qt::WindowState QWindow::windowState() const
     \fn QWindow::windowStateChanged(Qt::WindowState windowState)
 
     This signal is emitted when the \a windowState changes, either
-    by being set explicitly with setWindowState(), or automatically when
+    by being set explicitly with setWindowStates(), or automatically when
     the user clicks one of the titlebar buttons or by other means.
 */
 
@@ -1757,6 +1819,7 @@ void QWindow::resize(int w, int h)
 void QWindow::resize(const QSize &newSize)
 {
     Q_D(QWindow);
+    d->positionPolicy = QWindowPrivate::WindowFrameExclusive;
     if (d->platformWindow) {
         d->platformWindow->setGeometry(QHighDpi::toNativePixels(QRect(position(), newSize), this));
     } else {
@@ -1829,11 +1892,16 @@ void QWindowPrivate::destroy()
     QPlatformSurfaceEvent e(QPlatformSurfaceEvent::SurfaceAboutToBeDestroyed);
     QGuiApplication::sendEvent(q, &e);
 
-    delete platformWindow;
+    // Unset platformWindow before deleting, so that the destructor of the
+    // platform window does not recurse back into the platform window via
+    // this window during destruction (e.g. as a result of platform events).
+    QPlatformWindow *pw = platformWindow;
+    platformWindow = nullptr;
+    delete pw;
+
     resizeEventPending = true;
     receivedExpose = false;
     exposed = false;
-    platformWindow = 0;
 
     if (wasVisible)
         maybeQuitOnLastWindowClosed();
@@ -2000,42 +2068,42 @@ void QWindow::hide()
 /*!
     Shows the window as minimized.
 
-    Equivalent to calling setWindowState(Qt::WindowMinimized) and then
+    Equivalent to calling setWindowStates(Qt::WindowMinimized) and then
     setVisible(true).
 
-    \sa setWindowState(), setVisible()
+    \sa setWindowStates(), setVisible()
 */
 void QWindow::showMinimized()
 {
-    setWindowState(Qt::WindowMinimized);
+    setWindowStates(Qt::WindowMinimized);
     setVisible(true);
 }
 
 /*!
     Shows the window as maximized.
 
-    Equivalent to calling setWindowState(Qt::WindowMaximized) and then
+    Equivalent to calling setWindowStates(Qt::WindowMaximized) and then
     setVisible(true).
 
-    \sa setWindowState(), setVisible()
+    \sa setWindowStates(), setVisible()
 */
 void QWindow::showMaximized()
 {
-    setWindowState(Qt::WindowMaximized);
+    setWindowStates(Qt::WindowMaximized);
     setVisible(true);
 }
 
 /*!
     Shows the window as fullscreen.
 
-    Equivalent to calling setWindowState(Qt::WindowFullScreen) and then
+    Equivalent to calling setWindowStates(Qt::WindowFullScreen) and then
     setVisible(true).
 
-    \sa setWindowState(), setVisible()
+    \sa setWindowStates(), setVisible()
 */
 void QWindow::showFullScreen()
 {
-    setWindowState(Qt::WindowFullScreen);
+    setWindowStates(Qt::WindowFullScreen);
     setVisible(true);
 #if !defined Q_OS_QNX // On QNX this window will be activated anyway from libscreen
                       // activating it here before libscreen activates it causes problems
@@ -2046,14 +2114,14 @@ void QWindow::showFullScreen()
 /*!
     Shows the window as normal, i.e. neither maximized, minimized, nor fullscreen.
 
-    Equivalent to calling setWindowState(Qt::WindowNoState) and then
+    Equivalent to calling setWindowStates(Qt::WindowNoState) and then
     setVisible(true).
 
-    \sa setWindowState(), setVisible()
+    \sa setWindowStates(), setVisible()
 */
 void QWindow::showNormal()
 {
-    setWindowState(Qt::WindowNoState);
+    setWindowStates(Qt::WindowNoState);
     setVisible(true);
 }
 
@@ -2077,15 +2145,13 @@ bool QWindow::close()
     if (!d->platformWindow)
         return true;
 
-    bool accepted = false;
-    QWindowSystemInterface::handleCloseEvent(this, &accepted);
-    QWindowSystemInterface::flushWindowSystemEvents();
-    return accepted;
+    return d->platformWindow->close();
 }
 
 /*!
-    The expose event (\a ev) is sent by the window system whenever the window's
-    exposure on screen changes.
+    The expose event (\a ev) is sent by the window system whenever an area of
+    the window is invalidated, for example due to the exposure in the windowing
+    system changing.
 
     The application can start rendering into the window with QBackingStore
     and QOpenGLContext as soon as it gets an exposeEvent() such that
@@ -2220,7 +2286,7 @@ bool QWindow::event(QEvent *ev)
 #endif
         break; }
 
-#ifndef QT_NO_WHEELEVENT
+#if QT_CONFIG(wheelevent)
     case QEvent::Wheel:
         wheelEvent(static_cast<QWheelEvent*>(ev));
         break;
@@ -2249,12 +2315,12 @@ bool QWindow::event(QEvent *ev)
 
     case QEvent::WindowStateChange: {
         Q_D(QWindow);
-        emit windowStateChanged(d->windowState);
+        emit windowStateChanged(QWindowPrivate::effectiveState(d->windowState));
         d->updateVisibility();
         break;
     }
 
-#ifndef QT_NO_TABLETEVENT
+#if QT_CONFIG(tabletevent)
     case QEvent::TabletPress:
     case QEvent::TabletMove:
     case QEvent::TabletRelease:
@@ -2267,7 +2333,8 @@ bool QWindow::event(QEvent *ev)
         if (static_cast<QTimerEvent *>(ev)->timerId() == d->updateTimer) {
             killTimer(d->updateTimer);
             d->updateTimer = 0;
-            d->deliverUpdateRequest();
+            if (d->platformWindow)
+                d->platformWindow->deliverUpdateRequest();
         } else {
             QObject::event(ev);
         }
@@ -2293,10 +2360,8 @@ bool QWindow::event(QEvent *ev)
 
 void QWindowPrivate::deliverUpdateRequest()
 {
-    Q_Q(QWindow);
-    updateRequestPending = false;
-    QEvent request(QEvent::UpdateRequest);
-    QCoreApplication::sendEvent(q, &request);
+    if (platformWindow)
+        platformWindow->deliverUpdateRequest();
 }
 
 /*!
@@ -2418,7 +2483,7 @@ void QWindow::mouseMoveEvent(QMouseEvent *ev)
     ev->ignore();
 }
 
-#ifndef QT_NO_WHEELEVENT
+#if QT_CONFIG(wheelevent)
 /*!
     Override this to handle mouse wheel or other wheel events (\a ev).
 */
@@ -2426,7 +2491,7 @@ void QWindow::wheelEvent(QWheelEvent *ev)
 {
     ev->ignore();
 }
-#endif //QT_NO_WHEELEVENT
+#endif // QT_CONFIG(wheelevent)
 
 /*!
     Override this to handle touch events (\a ev).
@@ -2436,7 +2501,7 @@ void QWindow::touchEvent(QTouchEvent *ev)
     ev->ignore();
 }
 
-#ifndef QT_NO_TABLETEVENT
+#if QT_CONFIG(tabletevent)
 /*!
     Override this to handle tablet press, move, and release events (\a ev).
 
@@ -2511,7 +2576,7 @@ QPoint QWindowPrivate::globalPosition() const
     QPoint offset = q->position();
     for (const QWindow *p = q->parent(); p; p = p->parent()) {
         QPlatformWindow *pw = p->handle();
-        if (pw && pw->isForeignWindow()) {
+        if (pw && (pw->isForeignWindow() || pw->isEmbedded())) {
             // Use mapToGlobal() for foreign windows
             offset += p->mapToGlobal(QPoint(0, 0));
             break;
@@ -2569,6 +2634,13 @@ QWindow *QWindowPrivate::topLevelWindow() const
 
     return window;
 }
+
+#if QT_CONFIG(opengl)
+QOpenGLContext *QWindowPrivate::shareContext() const
+{
+    return qt_gl_global_share_context();
+};
+#endif
 
 /*!
     Creates a local representation of a window created by another process or by
@@ -2716,6 +2788,8 @@ bool QWindowPrivate::applyCursor()
             if (!platformWindow)
                 return true;
             QCursor *c = QGuiApplication::overrideCursor();
+            if (c != nullptr && platformCursor->capabilities().testFlag(QPlatformCursor::OverrideCursor))
+                return true;
             if (!c && hasCursor)
                 c = &cursor;
             platformCursor->changeCursor(c, q);
@@ -2764,6 +2838,30 @@ QDebug operator<<(QDebug debug, const QWindow *window)
     return debug;
 }
 #endif // !QT_NO_DEBUG_STREAM
+
+#if QT_CONFIG(vulkan) || defined(Q_CLANG_QDOC)
+
+/*!
+    Associates this window with the specified Vulkan \a instance.
+
+    \a instance must stay valid as long as this QWindow instance exists.
+ */
+void QWindow::setVulkanInstance(QVulkanInstance *instance)
+{
+    Q_D(QWindow);
+    d->vulkanInstance = instance;
+}
+
+/*!
+    \return the associrated Vulkan instance or \c null if there is none.
+ */
+QVulkanInstance *QWindow::vulkanInstance() const
+{
+    Q_D(const QWindow);
+    return d->vulkanInstance;
+}
+
+#endif // QT_CONFIG(vulkan)
 
 QT_END_NAMESPACE
 

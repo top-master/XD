@@ -131,6 +131,8 @@ private slots:
     void setOffsetFromUtc();
     void toOffsetFromUtc();
 
+    void zoneAtTime_data();
+    void zoneAtTime();
     void timeZoneAbbreviation();
 
     void getDate();
@@ -1261,9 +1263,6 @@ void tst_QDateTime::addSecs()
     QFETCH(QDateTime, dt);
     QFETCH(int, nsecs);
     QFETCH(QDateTime, result);
-#ifdef Q_OS_IRIX
-    QEXPECT_FAIL("cet4", "IRIX databases say 1970 had DST", Abort);
-#endif
     QDateTime test = dt.addSecs(nsecs);
     QCOMPARE(test, result);
     QCOMPARE(test.timeSpec(), dt.timeSpec());
@@ -1283,9 +1282,6 @@ void tst_QDateTime::addMSecs()
     QFETCH(int, nsecs);
     QFETCH(QDateTime, result);
 
-#ifdef Q_OS_IRIX
-    QEXPECT_FAIL("cet4", "IRIX databases say 1970 had DST", Abort);
-#endif
     QDateTime test = dt.addMSecs(qint64(nsecs) * 1000);
     QCOMPARE(test, result);
     QCOMPARE(test.timeSpec(), dt.timeSpec());
@@ -1371,18 +1367,17 @@ void tst_QDateTime::toTimeSpec()
         QCOMPARE(localToLocal.time(), fromLocal.time());
         QCOMPARE(localToLocal.timeSpec(), Qt::LocalTime);
 
-#ifdef Q_OS_IRIX
-        QEXPECT_FAIL("summer2", "IRIX databases say 1970 had DST", Abort);
-#endif
         QCOMPARE(utcToLocal, fromLocal);
         QCOMPARE(utcToLocal.date(), fromLocal.date());
         QCOMPARE(utcToLocal.time(), fromLocal.time());
         QCOMPARE(utcToLocal.timeSpec(), Qt::LocalTime);
+        QCOMPARE(utcToLocal.toTimeSpec(Qt::UTC), fromUtc);
 
         QCOMPARE(localToUtc, fromUtc);
         QCOMPARE(localToUtc.date(), fromUtc.date());
         QCOMPARE(localToUtc.time(), fromUtc.time());
         QCOMPARE(localToUtc.timeSpec(), Qt::UTC);
+        QCOMPARE(localToUtc.toTimeSpec(Qt::LocalTime), fromLocal);
 
         QCOMPARE(utcToUtc, localToUtc);
         QCOMPARE(utcToUtc.date(), localToUtc.date());
@@ -1399,11 +1394,13 @@ void tst_QDateTime::toTimeSpec()
         QCOMPARE(utcToOffset.date(), fromUtc.date());
         QCOMPARE(utcToOffset.time(), fromUtc.time());
         QCOMPARE(utcToOffset.timeSpec(), Qt::UTC);
+        QCOMPARE(utcToOffset.toTimeSpec(Qt::UTC), fromUtc);
 
         QCOMPARE(localToOffset, fromUtc);
         QCOMPARE(localToOffset.date(), fromUtc.date());
         QCOMPARE(localToOffset.time(), fromUtc.time());
         QCOMPARE(localToOffset.timeSpec(), Qt::UTC);
+        QCOMPARE(localToOffset.toTimeSpec(Qt::LocalTime), fromLocal);
     } else {
         QSKIP("Not tested with timezone other than Central European (CET/CEST)");
     }
@@ -1421,9 +1418,6 @@ void tst_QDateTime::toLocalTime()
         QFETCH(QDateTime, fromLocal);
 
         QCOMPARE(fromLocal.toLocalTime(), fromLocal);
-#ifdef Q_OS_IRIX
-        QEXPECT_FAIL("summer2", "IRIX databases say 1970 had DST", Abort);
-#endif
         QCOMPARE(fromUtc.toLocalTime(), fromLocal);
         QCOMPARE(fromUtc.toLocalTime(), fromLocal.toLocalTime());
     } else {
@@ -1443,9 +1437,6 @@ void tst_QDateTime::toUTC()
         QFETCH(QDateTime, fromLocal);
 
         QCOMPARE(fromUtc.toUTC(), fromUtc);
-#ifdef Q_OS_IRIX
-        QEXPECT_FAIL("summer2", "IRIX databases say 1970 had DST", Abort);
-#endif
         QCOMPARE(fromLocal.toUTC(), fromUtc);
         QCOMPARE(fromUtc.toUTC(), fromLocal.toUTC());
     } else {
@@ -1506,9 +1497,6 @@ void tst_QDateTime::secsTo()
     QFETCH(QDateTime, result);
 
     if (dt.isValid()) {
-    #ifdef Q_OS_IRIX
-        QEXPECT_FAIL("cet4", "IRIX databases say 1970 had DST", Abort);
-    #endif
         QCOMPARE(dt.secsTo(result), (qint64)nsecs);
         QCOMPARE(result.secsTo(dt), (qint64)-nsecs);
         QVERIFY((dt == result) == (0 == nsecs));
@@ -1535,9 +1523,6 @@ void tst_QDateTime::msecsTo()
     QFETCH(QDateTime, result);
 
     if (dt.isValid()) {
-    #ifdef Q_OS_IRIX
-        QEXPECT_FAIL("cet4", "IRIX databases say 1970 had DST", Abort);
-    #endif
         QCOMPARE(dt.msecsTo(result), qint64(nsecs) * 1000);
         QCOMPARE(result.msecsTo(dt), -qint64(nsecs) * 1000);
         QVERIFY((dt == result) == (0 == (qint64(nsecs) * 1000)));
@@ -1906,7 +1891,7 @@ void tst_QDateTime::operator_eqeq_data()
     QDateTime dateTime1a = dateTime1.addMSecs(1);
     QDateTime dateTime2(QDate(2012, 20, 6), QTime(14, 33, 2, 500));
     QDateTime dateTime2a = dateTime2.addMSecs(-1);
-    QDateTime dateTime3(QDate(1970, 1, 1), QTime(0, 0, 0, 0), Qt::UTC);
+    QDateTime dateTime3(QDate(1970, 1, 1), QTime(0, 0, 0, 0), Qt::UTC); // UTC epoch
     QDateTime dateTime3a = dateTime3.addDays(1);
     QDateTime dateTime3b = dateTime3.addDays(-1);
     // Ensure that different times may be equal when considering timezone.
@@ -1914,8 +1899,7 @@ void tst_QDateTime::operator_eqeq_data()
     dateTime3c.setOffsetFromUtc(3600);
     QDateTime dateTime3d(dateTime3.addSecs(-3600));
     dateTime3d.setOffsetFromUtc(-3600);
-    // Convert from UTC to local.
-    QDateTime dateTime3e(dateTime3.date(), dateTime3.time());
+    QDateTime dateTime3e(dateTime3.date(), dateTime3.time()); // Local time's epoch
 
     QTest::newRow("data0") << dateTime1 << dateTime1 << true << false;
     QTest::newRow("data1") << dateTime2 << dateTime2 << true << false;
@@ -1930,8 +1914,11 @@ void tst_QDateTime::operator_eqeq_data()
     QTest::newRow("data10") << dateTime3 << dateTime3c << true << false;
     QTest::newRow("data11") << dateTime3 << dateTime3d << true << false;
     QTest::newRow("data12") << dateTime3c << dateTime3d << true << false;
-    QTest::newRow("data13") << dateTime3 << dateTime3e
-                            << (localTimeType == LocalTimeIsUtc) << false;
+    if (localTimeType == LocalTimeIsUtc)
+        QTest::newRow("data13") << dateTime3 << dateTime3e << true << false;
+    // ... but a zone (sometimes) ahead of or behind UTC (e.g. Europe/London)
+    // might agree with UTC about the epoch, all the same.
+
     QTest::newRow("invalid == invalid") << invalidDateTime() << invalidDateTime() << true << false;
     QTest::newRow("invalid == valid #1") << invalidDateTime() << dateTime1 << false << false;
 
@@ -2277,6 +2264,10 @@ void tst_QDateTime::fromStringDateFormat_data()
     QTest::newRow("ISO .99999 of a minute (comma)") << QString::fromLatin1("2012-01-01T08:00,99999")
         << Qt::ISODate << QDateTime(QDate(2012, 1, 1), QTime(8, 0, 59, 999), Qt::LocalTime);
     QTest::newRow("ISO empty") << QString::fromLatin1("") << Qt::ISODate << invalidDateTime();
+    QTest::newRow("ISO short") << QString::fromLatin1("2017-07-01T") << Qt::ISODate << invalidDateTime();
+    QTest::newRow("ISO zoned date") << QString::fromLatin1("2017-07-01Z") << Qt::ISODate << invalidDateTime();
+    QTest::newRow("ISO zoned empty time") << QString::fromLatin1("2017-07-01TZ") << Qt::ISODate << invalidDateTime();
+    QTest::newRow("ISO mis-punctuated") << QString::fromLatin1("2018/01/30 ") << Qt::ISODate << invalidDateTime();
 
     // Test Qt::RFC2822Date format (RFC 2822).
     QTest::newRow("RFC 2822 +0100") << QString::fromLatin1("13 Feb 1987 13:24:51 +0100")
@@ -2387,8 +2378,11 @@ void tst_QDateTime::fromStringStringFormat_data()
     QTest::newRow("data14") << QString("32.01.2004") << QString("dd.MM.yyyy") << invalidDateTime();
     QTest::newRow("data15") << QString("Thu January 2004") << QString("ddd MMMM yyyy") << QDateTime(QDate(2004, 1, 1), QTime());
     QTest::newRow("data16") << QString("2005-06-28T07:57:30.001Z")
-                            << QString("yyyy-MM-ddThh:mm:ss.zZ")
-                            << QDateTime(QDate(2005, 06, 28), QTime(07, 57, 30, 1));
+                            << QString("yyyy-MM-ddThh:mm:ss.zt")
+                            << QDateTime(QDate(2005, 06, 28), QTime(07, 57, 30, 1), Qt::UTC);
+    QTest::newRow("late") << QString("9999-12-31T23:59:59.999Z")
+                          << QString("yyyy-MM-ddThh:mm:ss.zZ")
+                          << QDateTime(QDate(9999, 12, 31), QTime(23, 59, 59, 999));
 }
 
 void tst_QDateTime::fromStringStringFormat()
@@ -2476,21 +2470,19 @@ void tst_QDateTime::fromStringToStringLocale()
 
     QLocale def;
     QLocale::setDefault(QLocale(QLocale::French, QLocale::France));
+#define ROUNDTRIP(format) \
+    QCOMPARE(QDateTime::fromString(dateTime.toString(format), format), dateTime)
 
-    QCOMPARE(QDateTime::fromString(dateTime.toString(Qt::DefaultLocaleShortDate), Qt::DefaultLocaleShortDate), dateTime);
-    QCOMPARE(QDateTime::fromString(dateTime.toString(Qt::SystemLocaleShortDate), Qt::SystemLocaleShortDate), dateTime);
+    ROUNDTRIP(Qt::DefaultLocaleShortDate);
+    ROUNDTRIP(Qt::SystemLocaleShortDate);
 
     // obsolete
-    QCOMPARE(QDateTime::fromString(dateTime.toString(Qt::SystemLocaleDate), Qt::SystemLocaleDate), dateTime);
-    QCOMPARE(QDateTime::fromString(dateTime.toString(Qt::LocaleDate), Qt::LocaleDate), dateTime);
+    ROUNDTRIP(Qt::SystemLocaleDate);
+    ROUNDTRIP(Qt::LocaleDate);
 
-    QEXPECT_FAIL("data0", "This format is apparently failing because of a bug in the datetime parser. (QTBUG-22833)", Continue);
-    QCOMPARE(QDateTime::fromString(dateTime.toString(Qt::DefaultLocaleLongDate), Qt::DefaultLocaleLongDate), dateTime);
-#ifndef Q_OS_WIN
-    QEXPECT_FAIL("data0", "This format is apparently failing because of a bug in the datetime parser. (QTBUG-22833)", Continue);
-#endif
-    QCOMPARE(QDateTime::fromString(dateTime.toString(Qt::SystemLocaleLongDate), Qt::SystemLocaleLongDate), dateTime);
-
+    ROUNDTRIP(Qt::DefaultLocaleLongDate);
+    ROUNDTRIP(Qt::SystemLocaleLongDate);
+#undef ROUNDTRIP
     QLocale::setDefault(def);
 }
 
@@ -2623,6 +2615,71 @@ void tst_QDateTime::toOffsetFromUtc()
     QCOMPARE(dt2.timeSpec(), Qt::UTC);
     QCOMPARE(dt2.date(), QDate(2013, 1, 1));
     QCOMPARE(dt2.time(), QTime(0, 0, 0));
+}
+
+void tst_QDateTime::zoneAtTime_data()
+{
+    QTest::addColumn<QByteArray>("ianaID");
+    QTest::addColumn<QDate>("date");
+    QTest::addColumn<int>("offset");
+#define ADDROW(name, zone, date, offset) \
+    QTest::newRow(name) << QByteArray(zone) << (date) << (offset)
+
+    // Check DST handling around epoch:
+    {
+        QDate epoch(1970, 1, 1);
+        ADDROW("epoch:UTC", "UTC", epoch, 0);
+        // Paris and Berlin skipped DST around 1970; but Rome used it.
+        ADDROW("epoch:CET", "Europe/Rome", epoch, 3600);
+        ADDROW("epoch:PST", "America/Vancouver", epoch, -8 * 3600);
+        ADDROW("epoch:EST", "America/New_York", epoch, -5 * 3600);
+    }
+    {
+        // QDateTime deliberately ignores DST before the epoch.
+        QDate summer69(1969, 8, 15); // Woodstock started
+        ADDROW("summer69:UTC", "UTC", summer69, 0);
+        ADDROW("summer69:CET", "Europe/Rome", summer69, 3600);
+        ADDROW("summer69:PST", "America/Vancouver", summer69, -8 * 3600);
+        ADDROW("summer69:EST", "America/New_York", summer69, -5 * 3600);
+    }
+    {
+        // ... but takes it into account after:
+        QDate summer70(1970, 8, 26); // Isle of Wight festival
+        ADDROW("summer70:UTC", "UTC", summer70, 0);
+        ADDROW("summer70:CET", "Europe/Rome", summer70, 2 * 3600);
+        ADDROW("summer70:PST", "America/Vancouver", summer70, -7 * 3600);
+        ADDROW("summer70:EST", "America/New_York", summer70, -4 * 3600);
+    }
+
+#ifndef Q_OS_WIN
+    // Bracket a few noteworthy transitions:
+    ADDROW("before:ACWST", "Australia/Eucla", QDate(1974, 10, 26), 31500); // 8:45
+    ADDROW("after:ACWST", "Australia/Eucla", QDate(1974, 10, 27), 35100); // 9:45
+    ADDROW("before:NPT", "Asia/Kathmandu", QDate(1985, 12, 31), 19800); // 5:30
+    ADDROW("after:NPT", "Asia/Kathmandu", QDate(1986, 1, 1), 20700); // 5:45
+    // The two that have skipped a day (each):
+    ADDROW("before:LINT", "Pacific/Kiritimati", QDate(1994, 12, 31), -36000);
+    ADDROW("after:LINT", "Pacific/Kiritimati", QDate(1995, 2, 1), 14 * 3600);
+    ADDROW("after:WST", "Pacific/Apia", QDate(2011, 12, 31), 14 * 3600);
+#endif // MS lacks ACWST, NPT; doesn't grok date-line crossings; and Windows 7 lacks LINT.
+    ADDROW("before:WST", "Pacific/Apia", QDate(2011, 12, 29), -36000);
+#undef ADDROW
+}
+
+void tst_QDateTime::zoneAtTime()
+{
+    QFETCH(QByteArray, ianaID);
+    QFETCH(QDate, date);
+    QFETCH(int, offset);
+    const QTime noon(12, 0);
+
+    QTimeZone zone(ianaID);
+    QVERIFY(zone.isValid());
+    QCOMPARE(QDateTime(date, noon, zone).offsetFromUtc(), offset);
+    if (date.year() < 1970)
+        QCOMPARE(zone.standardTimeOffset(QDateTime(date, noon, zone)), offset);
+    else // zone.offsetFromUtc *does* include DST, even before epoch
+        QCOMPARE(zone.offsetFromUtc(QDateTime(date, noon, zone)), offset);
 }
 
 void tst_QDateTime::timeZoneAbbreviation()

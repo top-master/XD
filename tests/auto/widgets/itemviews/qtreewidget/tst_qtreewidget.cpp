@@ -159,6 +159,7 @@ private slots:
     void taskQTBUG_34717_collapseAtBottom();
     void task20345_sortChildren();
     void getMimeDataWithInvalidItem();
+    void testVisualItemRect();
 
 public slots:
     void itemSelectionChanged();
@@ -332,9 +333,18 @@ void tst_QTreeWidget::addTopLevelItem()
         for (int i = 0; i < 10; ++i)
             tops << new TreeItem();
         int count = tree.topLevelItemCount();
-        tree.insertTopLevelItems(100000, tops);
-        // ### fixme
+        tree.insertTopLevelItems(count, tops);
         QCOMPARE(tree.topLevelItemCount(), count + 10);
+    }
+
+    // invalid insert
+    {
+        tops.clear();
+        for (int i = 0; i < 10; ++i)
+            tops << new TreeItem();
+        int count = tree.topLevelItemCount();
+        tree.insertTopLevelItems(100000, tops); // should be a no-op
+        QCOMPARE(tree.topLevelItemCount(), count);
     }
 }
 
@@ -1560,10 +1570,9 @@ void tst_QTreeWidget::scrollToItem()
 {
     // Check if all parent nodes of the item found are expanded.
     // Reported in task #78761
-    QTreeWidgetItem *bar;
-    QTreeWidgetItem *search;
+    QTreeWidgetItem *search = nullptr;
     for (int i=0; i<2; ++i) {
-        bar = new QTreeWidgetItem(testWidget);
+        QTreeWidgetItem *bar = new QTreeWidgetItem(testWidget);
         bar->setText(0, QString::number(i));
 
         for (int j=0; j<2; ++j) {
@@ -1571,9 +1580,8 @@ void tst_QTreeWidget::scrollToItem()
             foo->setText(0, bar->text(0) + QString::number(j));
 
             for (int k=0; k<2; ++k) {
-                QTreeWidgetItem *yo = new QTreeWidgetItem(foo);
-                yo->setText(0, foo->text(0) + QString::number(k));
-                search = yo;
+                search = new QTreeWidgetItem(foo);
+                search->setText(0, foo->text(0) + QString::number(k));
             }
         }
     }
@@ -1582,10 +1590,10 @@ void tst_QTreeWidget::scrollToItem()
     testWidget->scrollToItem(search);
     QCOMPARE(search->text(0), QLatin1String("111"));
 
-    bar = search->parent();
-    QVERIFY(testWidget->isItemExpanded(bar));
-    bar = bar->parent();
-    QVERIFY(testWidget->isItemExpanded(bar));
+    QTreeWidgetItem *par = search->parent();
+    QVERIFY(testWidget->isItemExpanded(par));
+    par = par->parent();
+    QVERIFY(testWidget->isItemExpanded(par));
 }
 
 // From task #85413
@@ -1930,23 +1938,38 @@ void tst_QTreeWidget::setData()
     }
 }
 
+class QTreeWidgetDataChanged : public QTreeWidget
+{
+    Q_OBJECT
+public:
+    using QTreeWidget::QTreeWidget;
+
+    void dataChanged(const QModelIndex &topLeft, const QModelIndex &bottomRight, const QVector<int> &roles) override
+    {
+        QTreeWidget::dataChanged(topLeft, bottomRight, roles);
+        currentRoles = roles;
+    }
+    QVector<int> currentRoles;
+};
+
 void tst_QTreeWidget::itemData()
 {
-    QTreeWidget widget;
+    QTreeWidgetDataChanged widget;
     QTreeWidgetItem item(&widget);
     widget.setColumnCount(2);
     item.setFlags(item.flags() | Qt::ItemIsEditable);
     item.setData(0, Qt::DisplayRole,  QString("0"));
+    QCOMPARE(widget.currentRoles, QVector<int>({Qt::DisplayRole, Qt::EditRole}));
     item.setData(0, Qt::CheckStateRole, Qt::PartiallyChecked);
-    item.setData(0, Qt::UserRole + 0, QString("1"));
-    item.setData(0, Qt::UserRole + 1, QString("2"));
-    item.setData(0, Qt::UserRole + 2, QString("3"));
-    item.setData(0, Qt::UserRole + 3, QString("4"));
-
+    QCOMPARE(widget.currentRoles, {Qt::CheckStateRole});
+    for (int i = 0; i < 4; ++i) {
+        item.setData(0, Qt::UserRole + i, QString::number(i + 1));
+        QCOMPARE(widget.currentRoles, {Qt::UserRole + i});
+    }
     QMap<int, QVariant> flags = widget.model()->itemData(widget.model()->index(0, 0));
     QCOMPARE(flags.count(), 6);
-    QCOMPARE(flags[Qt::UserRole + 0].toString(), QString("1"));
-
+    for (int i = 0; i < 4; ++i)
+        QCOMPARE(flags[Qt::UserRole + i].toString(), QString::number(i + 1));
     flags = widget.model()->itemData(widget.model()->index(0, 1));
     QCOMPARE(flags.count(), 0);
 }
@@ -2663,7 +2686,7 @@ void tst_QTreeWidget::expandAndCallapse()
 {
     QTreeWidget tw;
     QTreeWidgetItem *top = new QTreeWidgetItem(&tw, QStringList() << "top");
-    QTreeWidgetItem *p;
+    QTreeWidgetItem *p = nullptr;
     for (int i = 0; i < 10; ++i) {
         p = new QTreeWidgetItem(top, QStringList(QString::number(i)));
         for (int j = 0; j < 10; ++j)
@@ -3271,7 +3294,7 @@ void tst_QTreeWidget::task239150_editorWidth()
         QVERIFY(tree.itemWidget(&item, 0) == 0);
         tree.editItem(&item);
         QVERIFY(tree.itemWidget(&item, 0));
-        QVERIFY(tree.itemWidget(&item, 0)->width() >= minWidth + tree.fontMetrics().width(item.text(0)));
+        QVERIFY(tree.itemWidget(&item, 0)->width() >= minWidth + tree.fontMetrics().horizontalAdvance(item.text(0)));
     }
 }
 
@@ -3451,8 +3474,37 @@ void tst_QTreeWidget::getMimeDataWithInvalidItem()
 {
     CustomTreeWidget w;
     QTest::ignoreMessage(QtWarningMsg, "QTreeWidget::mimeData: Null-item passed");
-    QMimeData *md = w.mimeData(QList<QTreeWidgetItem*>() << Q_NULLPTR);
+    QMimeData *md = w.mimeData(QList<QTreeWidgetItem*>() << nullptr);
     QVERIFY(!md);
+}
+
+// visualItemRect returned a wrong rect when the columns were moved
+// (-> logical index != visual index). see QTBUG-28733
+void tst_QTreeWidget::testVisualItemRect()
+{
+    QTreeWidget tw;
+    tw.setColumnCount(2);
+    QTreeWidgetItem *item = new QTreeWidgetItem(&tw);
+    item->setText(0, "text 0");
+    item->setText(1, "text 1");
+
+    static const int sectionSize = 30;
+    tw.header()->setStretchLastSection(false);
+    tw.header()->setMinimumSectionSize(sectionSize);
+    tw.header()->resizeSection(0, sectionSize);
+    tw.header()->resizeSection(1, sectionSize);
+    tw.setRootIsDecorated(false);
+    tw.show();
+    QVERIFY(QTest::qWaitForWindowExposed(&tw));
+
+    QRect r = tw.visualItemRect(item);
+    QCOMPARE(r.width(), sectionSize * 2);   // 2 columns
+    tw.header()->moveSection(1, 0);
+    r = tw.visualItemRect(item);
+    QCOMPARE(r.width(), sectionSize * 2);   // 2 columns
+    tw.hideColumn(0);
+    r = tw.visualItemRect(item);
+    QCOMPARE(r.width(), sectionSize);
 }
 
 QTEST_MAIN(tst_QTreeWidget)

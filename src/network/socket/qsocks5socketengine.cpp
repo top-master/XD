@@ -39,8 +39,6 @@
 
 #include "qsocks5socketengine_p.h"
 
-#ifndef QT_NO_SOCKS5
-
 #include "qtcpsocket.h"
 #include "qudpsocket.h"
 #include "qtcpserver.h"
@@ -322,7 +320,7 @@ public:
     QSocks5BindData *retrieve(qintptr socketDescriptor);
 
 protected:
-    void timerEvent(QTimerEvent * event) Q_DECL_OVERRIDE;
+    void timerEvent(QTimerEvent * event) override;
 
     QMutex mutex;
     int sweepTimerId;
@@ -1937,7 +1935,5 @@ QAbstractSocketEngine *QSocks5SocketEngineHandler::createSocketEngine(qintptr so
     }
     return 0;
 }
-
-#endif // QT_NO_SOCKS5
 
 QT_END_NAMESPACE

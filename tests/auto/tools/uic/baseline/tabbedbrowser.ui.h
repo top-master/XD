@@ -40,14 +40,12 @@
 #define TABBEDBROWSER_H
 
 #include <QtCore/QVariant>
-#include <QtWidgets/QAction>
+#include <QtGui/QIcon>
 #include <QtWidgets/QApplication>
-#include <QtWidgets/QButtonGroup>
 #include <QtWidgets/QCheckBox>
 #include <QtWidgets/QFrame>
 #include <QtWidgets/QGridLayout>
 #include <QtWidgets/QHBoxLayout>
-#include <QtWidgets/QHeaderView>
 #include <QtWidgets/QLabel>
 #include <QtWidgets/QLineEdit>
 #include <QtWidgets/QSpacerItem>
@@ -183,14 +181,14 @@ public:
 
     void retranslateUi(QWidget *TabbedBrowser)
     {
-        TabbedBrowser->setWindowTitle(QApplication::translate("TabbedBrowser", "TabbedBrowser", Q_NULLPTR));
-        tab->setTabText(tab->indexOf(frontpage), QApplication::translate("TabbedBrowser", "Untitled", Q_NULLPTR));
+        TabbedBrowser->setWindowTitle(QApplication::translate("TabbedBrowser", "TabbedBrowser", nullptr));
+        tab->setTabText(tab->indexOf(frontpage), QApplication::translate("TabbedBrowser", "Untitled", nullptr));
         toolClose->setText(QString());
-        toolPrevious->setText(QApplication::translate("TabbedBrowser", "Previous", Q_NULLPTR));
-        toolNext->setText(QApplication::translate("TabbedBrowser", "Next", Q_NULLPTR));
-        checkCase->setText(QApplication::translate("TabbedBrowser", "Case Sensitive", Q_NULLPTR));
-        checkWholeWords->setText(QApplication::translate("TabbedBrowser", "Whole words", Q_NULLPTR));
-        labelWrapped->setText(QApplication::translate("TabbedBrowser", "<img src=\":/qt-project.org/assistant/images/wrap.png\">&nbsp;Search wrapped", Q_NULLPTR));
+        toolPrevious->setText(QApplication::translate("TabbedBrowser", "Previous", nullptr));
+        toolNext->setText(QApplication::translate("TabbedBrowser", "Next", nullptr));
+        checkCase->setText(QApplication::translate("TabbedBrowser", "Case Sensitive", nullptr));
+        checkWholeWords->setText(QApplication::translate("TabbedBrowser", "Whole words", nullptr));
+        labelWrapped->setText(QApplication::translate("TabbedBrowser", "<img src=\":/qt-project.org/assistant/images/wrap.png\">&nbsp;Search wrapped", nullptr));
     } // retranslateUi
 
 };

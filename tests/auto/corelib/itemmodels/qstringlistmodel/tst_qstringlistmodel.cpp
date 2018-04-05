@@ -80,6 +80,8 @@ private slots:
 
     void setData_emits_both_roles_data();
     void setData_emits_both_roles();
+
+    void supportedDragDropActions();
 };
 
 void tst_QStringListModel::rowsAboutToBeRemoved_rowsRemoved_data()
@@ -109,12 +111,6 @@ void tst_QStringListModel::rowsAboutToBeRemoved_rowsRemoved_data()
     QStringList aboutto3;   aboutto3    << "One" << "Two" << "Three" << "Four" << "Five";
     QStringList res3;
     QTest::newRow( "data3" )   << strings3 << 0 << 5 << aboutto3 << res3;
-
-    /* Not sure if this is a valid test */
-    QStringList strings4;   strings4    << "One" << "Two" << "Three" << "Four" << "Five";
-    QStringList aboutto4;   aboutto4    << "Five" << "";
-    QStringList res4;       res4        << "One" << "Two" << "Three" << "Four";
-    QTest::newRow( "data4" )   << strings4 << 4 << 2 << aboutto4 << res4;
 
     /*
      * Keep this, template to add more data
@@ -248,6 +244,13 @@ void tst_QStringListModel::setData_emits_both_roles()
     QCOMPARE(spy.size(), 1);
     QCOMPARE(sorted(spy.at(0).at(2).value<QVector<int> >()),
              expected);
+}
+
+void tst_QStringListModel::supportedDragDropActions()
+{
+    QStringListModel model;
+    QCOMPARE(model.supportedDragActions(), Qt::CopyAction | Qt::MoveAction);
+    QCOMPARE(model.supportedDropActions(), Qt::CopyAction | Qt::MoveAction);
 }
 
 QTEST_MAIN(tst_QStringListModel)

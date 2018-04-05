@@ -33,13 +33,8 @@ QtModuleProject {
         Depends { name: "Qt.core-private" }
         Depends { name: project.headersName }
         Depends { name: "qt_zlib" }
-        cpp.includePaths: {
-            var v = project.includePaths.concat(base);
-            // TODO The following is only needed, because of wrong include directives:
-            // FIX #include "http2/..." directives in qhttp2protocolhandler_p.h and friends
-            v.push(product.sourceDirectory + "/access");
-            return v;
-        }
+
+        cpp.includePaths: project.includePaths.concat(base)
         cpp.dynamicLibraries: {
             var dynamicLibraries = [];
             if (qbs.targetOS.contains("windows") && !product.targetsUWP) {
@@ -77,55 +72,20 @@ QtModuleProject {
         Properties {
             condition: qbs.toolchain.contains("msvc")
             moc.extraArguments: ["-D_WINSOCK_DEPRECATED_NO_WARNINGS"]
+        }
+        Properties {
+            condition: qbs.toolchain.contains("msvc") && qbs.architecture === "x86"
             cpp.linkerFlags: base.concat("/BASE:0x64000000")
         }
 
         files: [
-            "access/http2/bitstreams.cpp",
-            "access/http2/bitstreams_p.h",
-            "access/http2/hpack.cpp",
-            "access/http2/hpack_p.h",
-            "access/http2/hpacktable.cpp",
-            "access/http2/hpacktable_p.h",
-            "access/http2/http2.pri",
-            "access/http2/http2frames.cpp",
-            "access/http2/http2frames_p.h",
-            "access/http2/http2protocol.cpp",
-            "access/http2/http2protocol_p.h",
-            "access/http2/http2streams.cpp",
-            "access/http2/http2streams_p.h",
-            "access/http2/huffman.cpp",
-            "access/http2/huffman_p.h",
             "access/qabstractnetworkcache.cpp",
             "access/qabstractnetworkcache.h",
             "access/qabstractnetworkcache_p.h",
-            "access/qabstractprotocolhandler.cpp",
-            "access/qabstractprotocolhandler_p.h",
-            "access/qftp.cpp",
-            "access/qftp_p.h",
             "access/qhsts.cpp",
             "access/qhsts_p.h",
             "access/qhstspolicy.cpp",
             "access/qhstspolicy.h",
-            "access/qhttp2protocolhandler.cpp",
-            "access/qhttp2protocolhandler_p.h",
-            "access/qhttpmultipart.cpp",
-            "access/qhttpmultipart.h",
-            "access/qhttpmultipart_p.h",
-            "access/qhttpnetworkconnection.cpp",
-            "access/qhttpnetworkconnection_p.h",
-            "access/qhttpnetworkconnectionchannel.cpp",
-            "access/qhttpnetworkconnectionchannel_p.h",
-            "access/qhttpnetworkheader.cpp",
-            "access/qhttpnetworkheader_p.h",
-            "access/qhttpnetworkreply.cpp",
-            "access/qhttpnetworkreply_p.h",
-            "access/qhttpnetworkrequest.cpp",
-            "access/qhttpnetworkrequest_p.h",
-            "access/qhttpprotocolhandler.cpp",
-            "access/qhttpprotocolhandler_p.h",
-            "access/qhttpthreaddelegate.cpp",
-            "access/qhttpthreaddelegate_p.h",
             "access/qnetworkaccessauthenticationmanager.cpp",
             "access/qnetworkaccessauthenticationmanager_p.h",
             "access/qnetworkaccessbackend.cpp",
@@ -137,8 +97,6 @@ QtModuleProject {
             "access/qnetworkaccessdebugpipebackend.cpp",
             "access/qnetworkaccessfilebackend.cpp",
             "access/qnetworkaccessfilebackend_p.h",
-            "access/qnetworkaccessftpbackend.cpp",
-            "access/qnetworkaccessftpbackend_p.h",
             "access/qnetworkaccessmanager.cpp",
             "access/qnetworkaccessmanager.h",
             "access/qnetworkaccessmanager_p.h",
@@ -148,9 +106,6 @@ QtModuleProject {
             "access/qnetworkcookiejar.cpp",
             "access/qnetworkcookiejar.h",
             "access/qnetworkcookiejar_p.h",
-            "access/qnetworkdiskcache.cpp",
-            "access/qnetworkdiskcache.h",
-            "access/qnetworkdiskcache_p.h",
             "access/qnetworkfile.cpp",
             "access/qnetworkfile_p.h",
             "access/qnetworkreply.cpp",
@@ -160,15 +115,11 @@ QtModuleProject {
             "access/qnetworkreplydataimpl_p.h",
             "access/qnetworkreplyfileimpl.cpp",
             "access/qnetworkreplyfileimpl_p.h",
-            "access/qnetworkreplyhttpimpl.cpp",
-            "access/qnetworkreplyhttpimpl_p.h",
             "access/qnetworkreplyimpl.cpp",
             "access/qnetworkreplyimpl_p.h",
             "access/qnetworkrequest.cpp",
             "access/qnetworkrequest.h",
             "access/qnetworkrequest_p.h",
-            "access/qspdyprotocolhandler.cpp",
-            "access/qspdyprotocolhandler_p.h",
             "bearer/qbearerengine.cpp",
             "bearer/qbearerengine_p.h",
             "bearer/qbearerplugin.cpp",
@@ -231,6 +182,71 @@ QtModuleProject {
             "socket/qudpsocket.cpp",
             "socket/qudpsocket.h",
         ]
+
+        Group {
+            condition: QtNetworkConfig.ftp
+            files: [
+                "access/qftp.cpp",
+                "access/qftp_p.h",
+                "access/qnetworkaccessftpbackend.cpp",
+                "access/qnetworkaccessftpbackend_p.h",
+            ]
+        }
+
+        Group {
+            condition: QtNetworkConfig.http
+            files: [
+                "access/http2/bitstreams.cpp",
+                "access/http2/bitstreams_p.h",
+                "access/http2/hpack.cpp",
+                "access/http2/hpack_p.h",
+                "access/http2/hpacktable.cpp",
+                "access/http2/hpacktable_p.h",
+                "access/http2/http2.pri",
+                "access/http2/http2frames.cpp",
+                "access/http2/http2frames_p.h",
+                "access/http2/http2protocol.cpp",
+                "access/http2/http2protocol_p.h",
+                "access/http2/http2streams.cpp",
+                "access/http2/http2streams_p.h",
+                "access/http2/huffman.cpp",
+                "access/http2/huffman_p.h",
+                "access/qabstractprotocolhandler.cpp",
+                "access/qabstractprotocolhandler_p.h",
+                "access/qhttp2protocolhandler.cpp",
+                "access/qhttp2protocolhandler_p.h",
+                "access/qhttpmultipart.cpp",
+                "access/qhttpmultipart.h",
+                "access/qhttpmultipart_p.h",
+                "access/qhttpnetworkconnection.cpp",
+                "access/qhttpnetworkconnection_p.h",
+                "access/qhttpnetworkconnectionchannel.cpp",
+                "access/qhttpnetworkconnectionchannel_p.h",
+                "access/qhttpnetworkheader.cpp",
+                "access/qhttpnetworkheader_p.h",
+                "access/qhttpnetworkreply.cpp",
+                "access/qhttpnetworkreply_p.h",
+                "access/qhttpnetworkrequest.cpp",
+                "access/qhttpnetworkrequest_p.h",
+                "access/qhttpprotocolhandler.cpp",
+                "access/qhttpprotocolhandler_p.h",
+                "access/qhttpthreaddelegate.cpp",
+                "access/qhttpthreaddelegate_p.h",
+                "access/qnetworkreplyhttpimpl.cpp",
+                "access/qnetworkreplyhttpimpl_p.h",
+                "access/qspdyprotocolhandler.cpp",
+                "access/qspdyprotocolhandler_p.h",
+            ]
+        }
+
+        Group {
+            condition: QtNetworkConfig.networkdiskcache
+            files: [
+                "access/qnetworkdiskcache.cpp",
+                "access/qnetworkdiskcache.h",
+                "access/qnetworkdiskcache_p.h",
+            ]
+        }
 
         Group {
             files: [
@@ -467,8 +483,6 @@ QtModuleProject {
 /*
 qtConfig(bearermanagement) {
     ANDROID_BUNDLED_JAR_DEPENDENCIES = \
-        jar/QtAndroidBearer-bundled.jar
-    ANDROID_JAR_DEPENDENCIES = \
         jar/QtAndroidBearer.jar
     ANDROID_LIB_DEPENDENCIES = \
         plugins/bearer/libqandroidbearer.so

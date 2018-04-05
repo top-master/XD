@@ -61,6 +61,10 @@
 
 #include "tst_qgraphicsview.h"
 
+#include <QtTest/private/qtesthelpers_p.h>
+
+using namespace QTestPrivate;
+
 Q_DECLARE_METATYPE(ExpectedValueDescription)
 Q_DECLARE_METATYPE(QList<int>)
 Q_DECLARE_METATYPE(QList<QRectF>)
@@ -130,14 +134,6 @@ class FriendlyGraphicsScene : public QGraphicsScene
 };
 #endif
 
-static inline void setFrameless(QWidget *w)
-{
-    Qt::WindowFlags flags = w->windowFlags();
-    flags |= Qt::FramelessWindowHint;
-    flags &= ~(Qt::WindowTitleHint | Qt::WindowSystemMenuHint | Qt::WindowMinMaxButtonsHint | Qt::WindowCloseButtonHint);
-    w->setWindowFlags(flags);
-}
-
 class tst_QGraphicsView : public QObject
 {
     Q_OBJECT
@@ -199,7 +195,7 @@ private slots:
     void mapFromScenePoly();
     void mapFromScenePath();
     void sendEvent();
-#ifndef QT_NO_WHEELEVENT
+#if QT_CONFIG(wheelevent)
     void wheelEvent();
 #endif
 #ifndef QT_NO_CURSOR
@@ -435,6 +431,7 @@ void tst_QGraphicsView::interactive()
     QCOMPARE(item->events.size(), 0);
     view.show();
     view.activateWindow();
+    QVERIFY(QTest::qWaitForWindowExposed(&view));
     QVERIFY(QTest::qWaitForWindowActive(&view));
 
     QTRY_COMPARE(item->events.size(), 1); // activate
@@ -688,7 +685,7 @@ void tst_QGraphicsView::openGLViewport()
     view.setViewport(glw);
 
     view.show();
-    QTest::qWaitForWindowExposed(&view);
+    QVERIFY(QTest::qWaitForWindowExposed(&view));
     QTRY_VERIFY(spy1.count() > 0);
     QTRY_VERIFY(spy2.count() >= spy1.count());
     spy1.clear();
@@ -1659,6 +1656,7 @@ void tst_QGraphicsView::itemsInRect_cosmeticAdjust()
     view.setFrameStyle(0);
     view.resize(300, 300);
     view.showNormal();
+    QVERIFY(QTest::qWaitForWindowExposed(&view));
     QVERIFY(QTest::qWaitForWindowActive(&view));
     QTRY_VERIFY(rect->numPaints > 0);
 
@@ -2153,6 +2151,7 @@ void tst_QGraphicsView::sendEvent()
     QGraphicsView view(&scene);
     view.show();
     QApplication::setActiveWindow(&view);
+    QVERIFY(QTest::qWaitForWindowExposed(&view));
     QVERIFY(QTest::qWaitForWindowActive(&view));
     QCOMPARE(QApplication::activeWindow(), static_cast<QWidget *>(&view));
 
@@ -2188,7 +2187,7 @@ void tst_QGraphicsView::sendEvent()
     QCOMPARE(item->events.last(), QEvent::KeyPress);
 }
 
-#ifndef QT_NO_WHEELEVENT
+#if QT_CONFIG(wheelevent)
 class MouseWheelScene : public QGraphicsScene
 {
 public:
@@ -2220,6 +2219,7 @@ void tst_QGraphicsView::wheelEvent()
     QGraphicsView view(&scene);
     view.show();
     QApplication::setActiveWindow(&view);
+    QVERIFY(QTest::qWaitForWindowExposed(&view));
     QVERIFY(QTest::qWaitForWindowActive(&view));
     QCOMPARE(QApplication::activeWindow(), static_cast<QWidget *>(&view));
 
@@ -2245,7 +2245,7 @@ void tst_QGraphicsView::wheelEvent()
     QCOMPARE(spy.count(), 2);
     QVERIFY(widget->hasFocus());
 }
-#endif // !QT_NO_WHEELEVENT
+#endif // QT_CONFIG(wheelevent)
 
 #ifndef QT_NO_CURSOR
 void tst_QGraphicsView::cursor()
@@ -2456,6 +2456,7 @@ void tst_QGraphicsView::viewportUpdateMode()
     // Show the view, and initialize our test.
     view.show();
     qApp->setActiveWindow(&view);
+    QVERIFY(QTest::qWaitForWindowExposed(&view));
     QVERIFY(QTest::qWaitForWindowActive(&view));
     QTRY_VERIFY(!view.lastUpdateRegions.isEmpty());
     view.lastUpdateRegions.clear();
@@ -2468,9 +2469,9 @@ void tst_QGraphicsView::viewportUpdateMode()
     // The view gets two updates for the update scene updates.
     QTRY_VERIFY(!view.lastUpdateRegions.isEmpty());
 #ifndef Q_OS_MAC //cocoa doesn't support drawing regions
-    QCOMPARE(view.lastUpdateRegions.last().rects().size(), 2);
-    QCOMPARE(view.lastUpdateRegions.last().rects().at(0).size(), QSize(14, 14));
-    QCOMPARE(view.lastUpdateRegions.last().rects().at(1).size(), QSize(14, 14));
+    QCOMPARE(view.lastUpdateRegions.last().rectCount(), 2);
+    QCOMPARE(view.lastUpdateRegions.last().begin()[0].size(), QSize(14, 14));
+    QCOMPARE(view.lastUpdateRegions.last().begin()[1].size(), QSize(14, 14));
 #endif
 
     // Set full update mode.
@@ -2485,8 +2486,8 @@ void tst_QGraphicsView::viewportUpdateMode()
     qApp->processEvents();
 
     // The view gets one full viewport update for the update scene updates.
-    QCOMPARE(view.lastUpdateRegions.last().rects().size(), 1);
-    QCOMPARE(view.lastUpdateRegions.last().rects().at(0).size(), view.viewport()->size());
+    QCOMPARE(view.lastUpdateRegions.last().rectCount(), 1);
+    QCOMPARE(view.lastUpdateRegions.last().begin()[0].size(), view.viewport()->size());
     view.lastUpdateRegions.clear();
 
     // Set smart update mode
@@ -2503,8 +2504,8 @@ void tst_QGraphicsView::viewportUpdateMode()
     qApp->processEvents();
 
     // The view gets one bounding rect update.
-    QCOMPARE(view.lastUpdateRegions.last().rects().size(), 1);
-    QCOMPARE(view.lastUpdateRegions.last().rects().at(0).size(), QSize(32, 32));
+    QCOMPARE(view.lastUpdateRegions.last().rectCount(), 1);
+    QCOMPARE(view.lastUpdateRegions.last().begin()[0].size(), QSize(32, 32));
 
     // Set no update mode
     view.setViewportUpdateMode(QGraphicsView::NoViewportUpdate);
@@ -2540,6 +2541,7 @@ void tst_QGraphicsView::viewportUpdateMode2()
     view.resize(200 + left + right, 200 + top + bottom);
     toplevel.show();
     qApp->setActiveWindow(&toplevel);
+    QVERIFY(QTest::qWaitForWindowExposed(&toplevel));
     QVERIFY(QTest::qWaitForWindowActive(&toplevel));
     QTRY_VERIFY(view.painted);
     const QRect viewportRect = view.viewport()->rect();
@@ -2903,7 +2905,7 @@ void tst_QGraphicsView::scrollBarRanges()
     QFETCH(ExpectedValueDescription, vmax);
     QFETCH(bool, useStyledPanel);
 
-    if (useStyledPanel && style == "Macintosh" && platformName == QStringLiteral("cocoa"))
+    if (useStyledPanel && style == "macintosh" && platformName == QStringLiteral("cocoa"))
         QSKIP("Insignificant on OSX");
 
     QScopedPointer<QStyle> stylePtr;
@@ -2990,19 +2992,14 @@ void tst_QGraphicsView::acceptMousePressEvent()
     view.show();
     QVERIFY(QTest::qWaitForWindowExposed(&view));
 
-    QMouseEvent event(QEvent::MouseButtonPress,
-                      view.viewport()->rect().center(),
-                      view.viewport()->mapToGlobal(view.viewport()->rect().center()),
-                      Qt::LeftButton, 0, 0);
-    event.setAccepted(false);
-    QApplication::sendEvent(view.viewport(), &event);
+    QTest::mouseClick(view.viewport(), Qt::LeftButton);
     QVERIFY(!view.pressAccepted);
 
+    QSignalSpy spy(&scene, &QGraphicsScene::changed);
     scene.addRect(0, 0, 2000, 2000)->setFlag(QGraphicsItem::ItemIsMovable);
+    QVERIFY(spy.wait());
 
-    qApp->processEvents(); // ensure scene rect is updated
-
-    QApplication::sendEvent(view.viewport(), &event);
+    QTest::mouseClick(view.viewport(), Qt::LeftButton);
     QVERIFY(view.pressAccepted);
 }
 
@@ -3014,19 +3011,14 @@ void tst_QGraphicsView::acceptMouseDoubleClickEvent()
     view.show();
     QVERIFY(QTest::qWaitForWindowExposed(&view));
 
-    QMouseEvent event(QEvent::MouseButtonDblClick,
-                      view.viewport()->rect().center(),
-                      view.viewport()->mapToGlobal(view.viewport()->rect().center()),
-                      Qt::LeftButton, 0, 0);
-    event.setAccepted(false);
-    QApplication::sendEvent(view.viewport(), &event);
+    QTest::mouseDClick(view.viewport(), Qt::LeftButton);
     QVERIFY(!view.doubleClickAccepted);
 
+    QSignalSpy spy(&scene, &QGraphicsScene::changed);
     scene.addRect(0, 0, 2000, 2000)->setFlag(QGraphicsItem::ItemIsMovable);
+    QVERIFY(spy.wait());
 
-    qApp->processEvents(); // ensure scene rect is updated
-
-    QApplication::sendEvent(view.viewport(), &event);
+    QTest::mouseDClick(view.viewport(), Qt::LeftButton);
     QVERIFY(view.doubleClickAccepted);
 }
 
@@ -3196,6 +3188,7 @@ void tst_QGraphicsView::task172231_untransformableItems()
     view.scale(2, 1);
     view.show();
     QApplication::setActiveWindow(&view);
+    QVERIFY(QTest::qWaitForWindowExposed(&view));
     QVERIFY(QTest::qWaitForWindowActive(&view));
     QCOMPARE(QApplication::activeWindow(), static_cast<QWidget *>(&view));
 
@@ -3998,6 +3991,7 @@ void tst_QGraphicsView::exposeRegion()
     view.setScene(&scene);
     view.show();
     qApp->setActiveWindow(&view);
+    QVERIFY(QTest::qWaitForWindowExposed(&view));
     QVERIFY(QTest::qWaitForWindowActive(&view));
 
     QTRY_VERIFY(item->paints > 0);
@@ -4152,6 +4146,7 @@ void tst_QGraphicsView::update2()
     view.resize(200, 200);
     view.show();
     qApp->setActiveWindow(&view);
+    QVERIFY(QTest::qWaitForWindowExposed(&view));
     QVERIFY(QTest::qWaitForWindowActive(&view));
     QTRY_VERIFY(rect->numPaints > 0);
 
@@ -4221,6 +4216,7 @@ void tst_QGraphicsView::update_ancestorClipsChildrenToShape()
     CustomView view(&scene);
     view.show();
     qApp->setActiveWindow(&view);
+    QVERIFY(QTest::qWaitForWindowExposed(&view));
     QVERIFY(QTest::qWaitForWindowActive(&view));
     QTRY_VERIFY(view.painted);
 
@@ -4274,6 +4270,7 @@ void tst_QGraphicsView::update_ancestorClipsChildrenToShape2()
     CustomView view(&scene);
     view.show();
     qApp->setActiveWindow(&view);
+    QVERIFY(QTest::qWaitForWindowExposed(&view));
     QVERIFY(QTest::qWaitForWindowActive(&view));
     QTRY_VERIFY(view.painted);
 
@@ -4336,6 +4333,7 @@ void tst_QGraphicsView::inputMethodSensitivity()
     QGraphicsView view(&scene);
     view.show();
     QApplication::setActiveWindow(&view);
+    QVERIFY(QTest::qWaitForWindowExposed(&view));
     QVERIFY(QTest::qWaitForWindowActive(&view));
     QCOMPARE(QApplication::activeWindow(), static_cast<QWidget *>(&view));
 
@@ -4430,6 +4428,7 @@ void tst_QGraphicsView::inputContextReset()
 
     view.show();
     QApplication::setActiveWindow(&view);
+    QVERIFY(QTest::qWaitForWindowExposed(&view));
     QVERIFY(QTest::qWaitForWindowActive(&view));
     QCOMPARE(QApplication::activeWindow(), static_cast<QWidget *>(&view));
 
@@ -4577,6 +4576,7 @@ void tst_QGraphicsView::task255529_transformationAnchorMouseAndViewportMargins()
     view.setWindowFlags(Qt::X11BypassWindowManagerHint);
     view.show();
     qApp->setActiveWindow(&view);
+    QVERIFY(QTest::qWaitForWindowExposed(&view));
     QVERIFY(QTest::qWaitForWindowActive(&view));
     // This is highly unstable (observed to pass on Windows and some Linux configurations).
 #ifndef Q_OS_MAC
@@ -4704,6 +4704,7 @@ void tst_QGraphicsView::QTBUG_4151_clipAndIgnore()
     view.resize(75, 75);
     view.show();
     view.activateWindow();
+    QVERIFY(QTest::qWaitForWindowExposed(&view));
     QVERIFY(QTest::qWaitForWindowActive(&view));
     QCOMPARE(QApplication::activeWindow(), (QWidget *)&view);
 
@@ -4741,6 +4742,7 @@ void tst_QGraphicsView::QTBUG_5859_exposedRect()
     view.scale(4.15, 4.15);
     view.showNormal();
     qApp->setActiveWindow(&view);
+    QVERIFY(QTest::qWaitForWindowExposed(&view));
     QVERIFY(QTest::qWaitForWindowActive(&view));
 
     view.viewport()->repaint(10,10,20,20);
@@ -4777,8 +4779,6 @@ class GraphicsItemWithHover : public QGraphicsRectItem
 {
 public:
     GraphicsItemWithHover()
-        : receivedEnterEvent(false), receivedLeaveEvent(false),
-          enterWidget(0), leaveWidget(0)
     {
         setRect(0, 0, 100, 100);
         setAcceptHoverEvents(true);
@@ -4786,6 +4786,9 @@ public:
 
     bool sceneEvent(QEvent *event)
     {
+        if (!checkEvents) // ensures that we don't look at stray events before we are ready
+            return QGraphicsRectItem::sceneEvent(event);
+
         if (event->type() == QEvent::GraphicsSceneHoverEnter) {
             receivedEnterEvent = true;
             enterWidget = static_cast<QGraphicsSceneHoverEvent *>(event)->widget();
@@ -4796,50 +4799,39 @@ public:
         return QGraphicsRectItem::sceneEvent(event);
     }
 
-    bool receivedEnterEvent;
-    bool receivedLeaveEvent;
-    QWidget *enterWidget;
-    QWidget *leaveWidget;
+    bool receivedEnterEvent = false;
+    bool receivedLeaveEvent = false;
+    QWidget *enterWidget = nullptr;
+    QWidget *leaveWidget = nullptr;
+    bool checkEvents = false;
 };
 
 void tst_QGraphicsView::hoverLeave()
 {
-    if (platformName == QStringLiteral("cocoa")) {
-        QSKIP("Insignificant on OSX");
-    } else if (platformName == QStringLiteral("minimal")
-        || (platformName == QStringLiteral("offscreen"))) {
-        QSKIP("Fails in minimal/offscreen platforms if forwardMouseDoubleClick has been run");
-    }
-    const QRect availableGeometry = QGuiApplication::primaryScreen()->availableGeometry();
     QGraphicsScene scene;
     QGraphicsView view(&scene);
     view.resize(160, 160);
-    view.move(availableGeometry.center() - QPoint(80, 80));
     GraphicsItemWithHover *item = new GraphicsItemWithHover;
     scene.addItem(item);
 
-    // move the cursor out of the way
-    const QPoint outOfWindow = view.geometry().topRight() + QPoint(50, 0);
-    QCursor::setPos(outOfWindow);
-
     view.showNormal();
     qApp->setActiveWindow(&view);
-    QVERIFY(QTest::qWaitForWindowActive(&view));
+    QVERIFY(QTest::qWaitForWindowExposed(&view));
 
-    QPoint pos = view.viewport()->mapToGlobal(view.mapFromScene(item->mapToScene(10, 10)));
-    QCursor::setPos(pos);
+    QWindow *viewWindow = view.window()->windowHandle();
+    QPoint posOutsideItem = view.mapFromScene(item->mapToScene(0, 0)) - QPoint(5, 0);
+    QPoint posOutsideItemGlobal = view.mapToGlobal(posOutsideItem);
+    QPoint posOutsideItemInWindow = viewWindow->mapFromGlobal(posOutsideItemGlobal);
+    QTest::mouseMove(viewWindow, posOutsideItemInWindow);
 
-#if defined(Q_OS_QNX)
-    QEXPECT_FAIL("", "QCursor does not set native cursor on QNX", Abort);
-#endif
-
+    item->checkEvents = true;
+    QPoint posInItemGlobal = view.mapToGlobal(view.mapFromScene(item->mapToScene(10, 10)));
+    QTest::mouseMove(viewWindow, viewWindow->mapFromGlobal(posInItemGlobal));
     QTRY_VERIFY(item->receivedEnterEvent);
     QCOMPARE(item->enterWidget, view.viewport());
 
-    QCursor::setPos(outOfWindow);
-#ifdef Q_OS_MAC
-    QEXPECT_FAIL("", "QTBUG-26274 - behaviour regression", Abort);
-#endif
+    QTest::mouseMove(viewWindow, posOutsideItemInWindow);
+
     QTRY_VERIFY(item->receivedLeaveEvent);
     QCOMPARE(item->leaveWidget, view.viewport());
 }
@@ -4875,6 +4867,7 @@ void tst_QGraphicsView::QTBUG_16063_microFocusRect()
 
     view.setFixedSize(40, 40);
     view.show();
+    QVERIFY(QTest::qWaitForWindowExposed(&view));
     QVERIFY(QTest::qWaitForWindowActive(&view));
 
     scene.setFocusItem(item);

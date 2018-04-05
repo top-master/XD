@@ -41,8 +41,10 @@
 #import <AppKit/AppKit.h>
 
 #include "qmenu.h"
+#if QT_CONFIG(menubar)
 #include "qmenubar.h"
 #include "qmenubar_p.h"
+#endif
 #include "qmacnativewidget_mac.h"
 
 #include <QtCore/QDebug>
@@ -52,7 +54,7 @@
 
 QT_BEGIN_NAMESPACE
 
-#ifndef QT_NO_MENU
+#if QT_CONFIG(menu)
 
 namespace {
 // TODO use QtMacExtras copy of this function when available.
@@ -133,13 +135,18 @@ void QMenuPrivate::moveWidgetToPlatformItem(QWidget *widget, QPlatformMenuItem* 
     containerWindow->setFlags(wf | Qt::SubWindow);
     [(NSView *)widget->winId() setAutoresizingMask:NSViewWidthSizable];
 
+    if (QPlatformNativeInterface::NativeResourceForIntegrationFunction function = resolvePlatformFunction("setEmbeddedInForeignView")) {
+        typedef void (*SetEmbeddedInForeignViewFunction)(QPlatformWindow *window, bool embedded);
+        reinterpret_cast<SetEmbeddedInForeignViewFunction>(function)(containerWindow->handle(), true);
+    }
+
     item->setNativeContents((WId)containerView);
     container->show();
 }
 
-#endif //QT_NO_MENU
+#endif // QT_CONFIG(menu)
 
-#ifndef QT_NO_MENUBAR
+#if QT_CONFIG(menubar)
 
 /*!
     \since 5.2
@@ -159,7 +166,7 @@ NSMenu *QMenuBar::toNSMenu()
     }
     return nil;
 }
-#endif //QT_NO_MENUBAR
+#endif // QT_CONFIG(menubar)
 
 QT_END_NAMESPACE
 

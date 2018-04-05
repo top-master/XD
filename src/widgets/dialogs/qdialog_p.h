@@ -78,7 +78,7 @@ public:
           mainDef(0),
 #endif
           orientation(Qt::Horizontal),extension(0), doShowExtension(false),
-#ifndef QT_NO_SIZEGRIP
+#if QT_CONFIG(sizegrip)
           resizer(0),
           sizeGripEnabled(false),
 #endif
@@ -99,7 +99,7 @@ public:
     QWidget *extension;
     bool doShowExtension;
     QSize size, min, max;
-#ifndef QT_NO_SIZEGRIP
+#if QT_CONFIG(sizegrip)
     QSizeGrip *resizer;
     bool sizeGripEnabled;
 #endif
@@ -143,7 +143,7 @@ public:
     T *operator->() const Q_DECL_NOTHROW { return get(); }
     T *get() const Q_DECL_NOTHROW { return o; }
     T &operator*() const { return *get(); }
-    operator RestrictedBool() const Q_DECL_NOTHROW { return o ? &internal::func : Q_NULLPTR; }
+    operator RestrictedBool() const Q_DECL_NOTHROW { return o ? &internal::func : nullptr; }
     bool operator!() const Q_DECL_NOTHROW { return !o; }
 private:
     Q_DISABLE_COPY(QAutoPointer);

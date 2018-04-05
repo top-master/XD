@@ -279,7 +279,28 @@ int QHostInfo::lookupHost(const QString &name, QObject *receiver,
 }
 
 /*!
-    \fn int QHostInfo::lookupHost(const QString &name, const QObject *receiver, PointerToMemberFunction function)
+    \fn QHostInfo &QHostInfo::operator=(QHostInfo &&other)
+
+    Move-assigns \a other to this QHostInfo instance.
+
+    \note The moved-from object \a other is placed in a
+    partially-formed state, in which the only valid operations are
+    destruction and assignment of a new value.
+
+    \since 5.10
+*/
+
+/*!
+    \fn void QHostInfo::swap(QHostInfo &other)
+
+    Swaps host-info \a other with this host-info. This operation is
+    very fast and never fails.
+
+    \since 5.10
+*/
+
+/*!
+    \fn template<typename PointerToMemberFunction> int QHostInfo::lookupHost(const QString &name, const QObject *receiver, PointerToMemberFunction function)
 
     \since 5.9
 
@@ -298,7 +319,7 @@ int QHostInfo::lookupHost(const QString &name, QObject *receiver,
 */
 
 /*!
-    \fn int QHostInfo::lookupHost(const QString &name, Functor functor)
+    \fn template<typename Functor> int QHostInfo::lookupHost(const QString &name, Functor functor)
 
     \since 5.9
 
@@ -316,7 +337,7 @@ int QHostInfo::lookupHost(const QString &name, QObject *receiver,
 */
 
 /*!
-    \fn int QHostInfo::lookupHost(const QString &name, const QObject *context, Functor functor)
+    \fn template<typename Functor> int QHostInfo::lookupHost(const QString &name, const QObject *context, Functor functor)
 
     \since 5.9
 

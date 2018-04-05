@@ -89,7 +89,7 @@ tst_QFileSystemWatcher::tst_QFileSystemWatcher()
     m_tempDirPattern += QStringLiteral("tst_qfilesystemwatcherXXXXXX");
 #endif // QT_NO_FILESYSTEMWATCHER
 
-#if defined(Q_OS_ANDROID)
+#if defined(Q_OS_ANDROID) && !defined(Q_OS_ANDROID_EMBEDDED)
     QDir::setCurrent(QStandardPaths::writableLocation(QStandardPaths::CacheLocation));
 #endif
 }
@@ -567,6 +567,10 @@ void tst_QFileSystemWatcher::watchFileAndItsDirectory()
     eventLoop.exec();
     QCOMPARE(fileChangedSpy.count(), 0);
     QCOMPARE(dirChangedSpy.count(), 1);
+
+    // QTBUG-61792, removal should succeed (bug on Windows which uses one change
+    // notification per directory).
+    QVERIFY(watcher.removePath(testDir.absolutePath()));
 
     QVERIFY(temporaryDir.rmdir(testDirName));
 }

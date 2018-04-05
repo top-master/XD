@@ -41,8 +41,6 @@
 #include "qlocalsocket_p.h"
 #include "qnet_unix_p.h"
 
-#ifndef QT_NO_LOCALSOCKET
-
 #include <sys/types.h>
 #include <sys/socket.h>
 #include <sys/un.h>
@@ -88,6 +86,11 @@ void QLocalSocketPrivate::init()
                q, SLOT(_q_error(QAbstractSocket::SocketError)));
     q->connect(&unixSocket, SIGNAL(readChannelFinished()), q, SIGNAL(readChannelFinished()));
     unixSocket.setParent(q);
+}
+
+qint64 QLocalSocketPrivate::skip(qint64 maxSize)
+{
+    return unixSocket.skip(maxSize);
 }
 
 void QLocalSocketPrivate::_q_error(QAbstractSocket::SocketError socketError)
@@ -555,5 +558,3 @@ bool QLocalSocket::waitForReadyRead(int msecs)
 }
 
 QT_END_NAMESPACE
-
-#endif

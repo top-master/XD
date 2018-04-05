@@ -1,6 +1,6 @@
 /****************************************************************************
 **
-** Copyright (C) 2016 The Qt Company Ltd.
+** Copyright (C) 2017 The Qt Company Ltd.
 ** Copyright (C) 2016 Intel Corporation.
 ** Contact: https://www.qt.io/licensing/
 **
@@ -40,7 +40,9 @@
 
 #include "qplatformdefs.h"
 #include "private/qdatetime_p.h"
+#if QT_CONFIG(datetimeparser)
 #include "private/qdatetimeparser_p.h"
+#endif
 
 #include "qdatastream.h"
 #include "qset.h"
@@ -160,8 +162,7 @@ static ParsedDate getDateFromJulianDay(qint64 julianDay)
     if (year <= 0)
         --year ;
 
-    const ParsedDate result = { year, month, day };
-    return result;
+    return { year, month, day };
 }
 
 /*****************************************************************************
@@ -194,7 +195,7 @@ static int fromShortMonthName(const QStringRef &monthName)
         return month;
     // If English names can't be found, search the localized ones
     for (int i = 1; i <= 12; ++i) {
-        if (monthName == QDate::shortMonthName(i))
+        if (monthName == QLocale::system().monthName(i, QLocale::ShortFormat))
             return i;
     }
     return -1;
@@ -212,7 +213,7 @@ static ParsedRfcDateTime rfcDateImpl(const QString &s)
 {
     ParsedRfcDateTime result;
 
-    // Matches "Wdy, DD Mon YYYY HH:mm:ss ±hhmm" (Wdy, being optional)
+    // Matches "Wdy, dd Mon yyyy HH:mm:ss ±hhmm" (Wdy, being optional)
     QRegExp rex(QStringLiteral("^(?:[A-Z][a-z]+,)?[ \\t]*(\\d{1,2})[ \\t]+([A-Z][a-z]+)[ \\t]+(\\d\\d\\d\\d)(?:[ \\t]+(\\d\\d):(\\d\\d)(?::(\\d\\d))?)?[ \\t]*(?:([+-])(\\d\\d)(\\d\\d))?"));
     if (s.indexOf(rex) == 0) {
         const QStringList cap = rex.capturedTexts();
@@ -224,7 +225,7 @@ static ParsedRfcDateTime rfcDateImpl(const QString &s)
         const int minOffset = cap[9].toInt();
         result.utcOffset = ((hourOffset * 60 + minOffset) * (positiveOffset ? 60 : -60));
     } else {
-        // Matches "Wdy Mon DD HH:mm:ss YYYY"
+        // Matches "Wdy Mon dd HH:mm:ss yyyy"
         QRegExp rex(QStringLiteral("^[A-Z][a-z]+[ \\t]+([A-Z][a-z]+)[ \\t]+(\\d\\d)(?:[ \\t]+(\\d\\d):(\\d\\d):(\\d\\d))?[ \\t]+(\\d\\d\\d\\d)[ \\t]*(?:([+-])(\\d\\d)(\\d\\d))?"));
         if (s.indexOf(rex) == 0) {
             const QStringList cap = rex.capturedTexts();
@@ -356,7 +357,7 @@ static int fromOffsetString(const QStringRef &offsetString, bool *valid) Q_DECL_
     there are in this date's month and year, respectively. The
     isLeapYear() function indicates whether a date is in a leap year.
 
-    \section1
+    \section1 Remarks
 
     \section2 No Year 0
 
@@ -612,9 +613,10 @@ int QDate::weekNumber(int *yearNumber) const
     return week;
 }
 
-#ifndef QT_NO_TEXTDATE
+#if QT_DEPRECATED_SINCE(5, 11) && !defined(QT_NO_TEXTDATE)
 /*!
     \since 4.5
+    \deprecated
 
     Returns the short name of the \a month for the representation specified
     by \a type.
@@ -646,19 +648,18 @@ int QDate::weekNumber(int *yearNumber) const
 
 QString QDate::shortMonthName(int month, QDate::MonthNameType type)
 {
-    if (month >= 1 || month <= 12) {
-        switch (type) {
-        case QDate::DateFormat:
-            return QLocale::system().monthName(month, QLocale::ShortFormat);
-        case QDate::StandaloneFormat:
-            return QLocale::system().standaloneMonthName(month, QLocale::ShortFormat);
-        }
+    switch (type) {
+    case QDate::DateFormat:
+        return QLocale::system().monthName(month, QLocale::ShortFormat);
+    case QDate::StandaloneFormat:
+        return QLocale::system().standaloneMonthName(month, QLocale::ShortFormat);
     }
     return QString();
 }
 
 /*!
     \since 4.5
+    \deprecated
 
     Returns the long name of the \a month for the representation specified
     by \a type.
@@ -690,19 +691,18 @@ QString QDate::shortMonthName(int month, QDate::MonthNameType type)
 
 QString QDate::longMonthName(int month, MonthNameType type)
 {
-    if (month >= 1 && month <= 12) {
-        switch (type) {
-        case QDate::DateFormat:
-            return QLocale::system().monthName(month, QLocale::LongFormat);
-        case QDate::StandaloneFormat:
-            return QLocale::system().standaloneMonthName(month, QLocale::LongFormat);
-        }
+    switch (type) {
+    case QDate::DateFormat:
+        return QLocale::system().monthName(month, QLocale::LongFormat);
+    case QDate::StandaloneFormat:
+        return QLocale::system().standaloneMonthName(month, QLocale::LongFormat);
     }
     return QString();
 }
 
 /*!
     \since 4.5
+    \deprecated
 
     Returns the short name of the \a weekday for the representation specified
     by \a type.
@@ -729,19 +729,18 @@ QString QDate::longMonthName(int month, MonthNameType type)
 
 QString QDate::shortDayName(int weekday, MonthNameType type)
 {
-    if (weekday >= 1 && weekday <= 7) {
-        switch (type) {
-        case QDate::DateFormat:
-            return QLocale::system().dayName(weekday, QLocale::ShortFormat);
-        case QDate::StandaloneFormat:
-            return QLocale::system().standaloneDayName(weekday, QLocale::ShortFormat);
-        }
+    switch (type) {
+    case QDate::DateFormat:
+        return QLocale::system().dayName(weekday, QLocale::ShortFormat);
+    case QDate::StandaloneFormat:
+        return QLocale::system().standaloneDayName(weekday, QLocale::ShortFormat);
     }
     return QString();
 }
 
 /*!
     \since 4.5
+    \deprecated
 
     Returns the long name of the \a weekday for the representation specified
     by \a type.
@@ -768,17 +767,15 @@ QString QDate::shortDayName(int weekday, MonthNameType type)
 
 QString QDate::longDayName(int weekday, MonthNameType type)
 {
-    if (weekday >= 1 && weekday <= 7) {
-        switch (type) {
-        case QDate::DateFormat:
-            return QLocale::system().dayName(weekday, QLocale::LongFormat);
-        case QDate::StandaloneFormat:
-            return QLocale::system().standaloneDayName(weekday, QLocale::LongFormat);
-        }
+    switch (type) {
+    case QDate::DateFormat:
+        return QLocale::system().dayName(weekday, QLocale::LongFormat);
+    case QDate::StandaloneFormat:
+        return QLocale::system().standaloneDayName(weekday, QLocale::LongFormat);
     }
     return QString();
 }
-#endif //QT_NO_TEXTDATE
+#endif // QT_NO_TEXTDATE && deprecated
 
 #ifndef QT_NO_DATESTRING
 
@@ -787,8 +784,8 @@ static QString toStringTextDate(QDate date)
 {
     const ParsedDate pd = getDateFromJulianDay(date.toJulianDay());
     static const QLatin1Char sp(' ');
-    return date.shortDayName(date.dayOfWeek()) + sp
-         + date.shortMonthName(pd.month) + sp
+    return QLocale::system().dayName(date.dayOfWeek(), QLocale::ShortFormat) + sp
+         + QLocale::system().monthName(pd.month, QLocale::ShortFormat) + sp
          + QString::number(pd.day) + sp
          + QString::number(pd.year);
 }
@@ -819,8 +816,8 @@ static QString toStringIsoDate(qint64 jd)
 
     If the \a format is Qt::ISODate, the string format corresponds
     to the ISO 8601 extended specification for representations of
-    dates and times, taking the form YYYY-MM-DD, where YYYY is the
-    year, MM is the month of the year (between 01 and 12), and DD is
+    dates and times, taking the form yyyy-MM-dd, where yyyy is the
+    year, MM is the month of the year (between 01 and 12), and dd is
     the day of the month between 01 and 31.
 
     If the \a format is Qt::SystemLocaleShortDate or
@@ -866,7 +863,7 @@ QString QDate::toString(Qt::DateFormat format) const
     case Qt::DefaultLocaleLongDate:
         return QLocale().toString(*this, QLocale::LongFormat);
     case Qt::RFC2822Date:
-        return QLocale::c().toString(*this, QStringLiteral("dd MMM yyyy"));
+        return QLocale::c().toString(*this, QStringViewLiteral("dd MMM yyyy"));
     default:
 #ifndef QT_NO_TEXTDATE
     case Qt::TextDate:
@@ -879,6 +876,9 @@ QString QDate::toString(Qt::DateFormat format) const
 }
 
 /*!
+    \fn QString QDate::toString(const QString &format) const
+    \fn QString QDate::toString(QStringView format) const
+
     Returns the date as a string. The \a format parameter determines
     the format of the result string.
 
@@ -927,10 +927,18 @@ QString QDate::toString(Qt::DateFormat format) const
     \sa fromString(), QDateTime::toString(), QTime::toString(), QLocale::toString()
 
 */
-QString QDate::toString(const QString& format) const
+QString QDate::toString(QStringView format) const
 {
     return QLocale::system().toString(*this, format); // QLocale::c() ### Qt6
 }
+
+#if QT_STRINGVIEW_LEVEL < 2
+QString QDate::toString(const QString &format) const
+{
+    return toString(qToStringViewIgnoringNull(format));
+}
+#endif
+
 #endif //QT_NO_DATESTRING
 
 /*!
@@ -1264,7 +1272,7 @@ QDate QDate::fromString(const QString& string, Qt::DateFormat format)
 }
 
 /*!
-    \fn QDate::fromString(const QString &string, const QString &format)
+    \fn QDate QDate::fromString(const QString &string, const QString &format)
 
     Returns the QDate represented by the \a string, using the \a
     format given, or an invalid date if the string cannot be parsed.
@@ -1331,7 +1339,7 @@ QDate QDate::fromString(const QString& string, Qt::DateFormat format)
 QDate QDate::fromString(const QString &string, const QString &format)
 {
     QDate date;
-#if QT_CONFIG(timezone)
+#if QT_CONFIG(datetimeparser)
     QDateTimeParser dt(QVariant::Date, QDateTimeParser::FromString);
     // dt.setDefaultLocale(QLocale::c()); ### Qt 6
     if (dt.parseFormat(format))
@@ -1625,6 +1633,9 @@ QString QTime::toString(Qt::DateFormat format) const
 }
 
 /*!
+    \fn QString QTime::toString(const QString &format) const
+    \fn QString QTime::toString(QStringView format) const
+
     Returns the time as a string. The \a format parameter determines
     the format of the result string.
 
@@ -1642,10 +1653,14 @@ QString QTime::toString(Qt::DateFormat format) const
          \li the hour with a leading zero (00 to 23, even with AM/PM display)
     \row \li m \li the minute without a leading zero (0 to 59)
     \row \li mm \li the minute with a leading zero (00 to 59)
-    \row \li s \li the second without a leading zero (0 to 59)
-    \row \li ss \li the second with a leading zero (00 to 59)
-    \row \li z \li the milliseconds without leading zeroes (0 to 999)
-    \row \li zzz \li the milliseconds with leading zeroes (000 to 999)
+    \row \li s \li the whole second, without any leading zero (0 to 59)
+    \row \li ss \li the whole second, with a leading zero where applicable (00 to 59)
+    \row \li z \li the fractional part of the second, to go after a decimal
+                point, without trailing zeroes (0 to 999).  Thus "\c{s.z}"
+                reports the seconds to full available (millisecond) precision
+                without trailing zeroes.
+    \row \li zzz \li the fractional part of the second, to millisecond
+                precision, including trailing zeroes where applicable (000 to 999).
     \row \li AP or A
          \li use AM/PM display. \e A/AP will be replaced by either
              QLocale::amText() or QLocale::pmText().
@@ -1675,11 +1690,20 @@ QString QTime::toString(Qt::DateFormat format) const
 
     \sa fromString(), QDate::toString(), QDateTime::toString(), QLocale::toString()
 */
-QString QTime::toString(const QString& format) const
+QString QTime::toString(QStringView format) const
 {
     return QLocale::system().toString(*this, format); // QLocale::c() ### Qt6
 }
+
+#if QT_STRINGVIEW_VERSION < 2
+QString QTime::toString(const QString &format) const
+{
+    return toString(qToStringViewIgnoringNull(format));
+}
+#endif
+
 #endif //QT_NO_DATESTRING
+
 /*!
     Sets the time to hour \a h, minute \a m, seconds \a s and
     milliseconds \a ms.
@@ -1976,7 +2000,7 @@ QTime QTime::fromString(const QString& string, Qt::DateFormat format)
 }
 
 /*!
-    \fn QTime::fromString(const QString &string, const QString &format)
+    \fn QTime QTime::fromString(const QString &string, const QString &format)
 
     Returns the QTime represented by the \a string, using the \a
     format given, or an invalid time if the string cannot be parsed.
@@ -1991,10 +2015,14 @@ QTime QTime::fromString(const QString& string, Qt::DateFormat format)
          \li the hour with a leading zero (00 to 23 or 01 to 12 if AM/PM display)
     \row \li m \li the minute without a leading zero (0 to 59)
     \row \li mm \li the minute with a leading zero (00 to 59)
-    \row \li s \li the second without a leading zero (0 to 59)
-    \row \li ss \li the second with a leading zero (00 to 59)
-    \row \li z \li the milliseconds without leading zeroes (0 to 999)
-    \row \li zzz \li the milliseconds with leading zeroes (000 to 999)
+    \row \li s \li the whole second, without any leading zero (0 to 59)
+    \row \li ss \li the whole second, with a leading zero where applicable (00 to 59)
+    \row \li z \li the fractional part of the second, to go after a decimal
+                point, without trailing zeroes (0 to 999).  Thus "\c{s.z}"
+                reports the seconds to full available (millisecond) precision
+                without trailing zeroes.
+    \row \li zzz \li the fractional part of the second, to millisecond
+                precision, including trailing zeroes where applicable (000 to 999).
     \row \li AP
          \li interpret as an AM/PM time. \e AP must be either "AM" or "PM".
     \row \li ap
@@ -2029,7 +2057,7 @@ QTime QTime::fromString(const QString& string, Qt::DateFormat format)
 QTime QTime::fromString(const QString &string, const QString &format)
 {
     QTime time;
-#if QT_CONFIG(timezone)
+#if QT_CONFIG(datetimeparser)
     QDateTimeParser dt(QVariant::Time, QDateTimeParser::FromString);
     // dt.setDefaultLocale(QLocale::c()); ### Qt 6
     if (dt.parseFormat(format))
@@ -2188,7 +2216,7 @@ static int qt_timezone()
 static QString qt_tzname(QDateTimePrivate::DaylightStatus daylightStatus)
 {
     int isDst = (daylightStatus == QDateTimePrivate::DaylightTime) ? 1 : 0;
-#if defined(_MSC_VER) && _MSC_VER >= 1400
+#if defined(Q_CC_MSVC)
     size_t s = 0;
     char name[512];
     if (_get_tzname(&s, name, 512, isDst))
@@ -2198,6 +2226,26 @@ static QString qt_tzname(QDateTimePrivate::DaylightStatus daylightStatus)
     return QString::fromLocal8Bit(tzname[isDst]);
 #endif // Q_OS_WIN
 }
+
+#if QT_CONFIG(datetimeparser) && QT_CONFIG(timezone)
+/*
+  \internal
+  Implemented here to share qt_tzname()
+*/
+int QDateTimeParser::startsWithLocalTimeZone(const QStringRef name)
+{
+    QDateTimePrivate::DaylightStatus zones[2] = {
+        QDateTimePrivate::StandardTime,
+        QDateTimePrivate::DaylightTime
+    };
+    for (const auto z : zones) {
+        QString zone(qt_tzname(z));
+        if (name.startsWith(zone))
+            return zone.size();
+    }
+    return 0;
+}
+#endif // datetimeparser && timezone
 
 // Calls the platform variant of mktime for the given date, time and daylightStatus,
 // and updates the date, time, daylightStatus and abbreviation with the returned values
@@ -2298,7 +2346,7 @@ static bool qt_localtime(qint64 msecsSinceEpoch, QDate *localDate, QTime *localT
     res = localtime_r(&secsSinceEpoch, &local);
     if (res)
         valid = true;
-#elif defined(_MSC_VER) && _MSC_VER >= 1400
+#elif defined(Q_CC_MSVC)
     if (!_localtime64_s(&local, &secsSinceEpoch))
         valid = true;
 #else
@@ -2999,7 +3047,7 @@ inline qint64 QDateTimePrivate::zoneMSecsToEpochMSecs(qint64 zoneMSecs, const QT
 
     \note QDateTime does not account for leap seconds.
 
-    \section1
+    \section1 Remarks
 
     \section2 No Year 0
 
@@ -3017,8 +3065,7 @@ inline qint64 QDateTimePrivate::zoneMSecsToEpochMSecs(qint64 zoneMSecs, const QT
     extreme values that you do not overflow the storage.  The exact range of
     supported values varies depending on the Qt::TimeSpec and time zone.
 
-    \section2
-    Use of System Timezone
+    \section2 Use of System Timezone
 
     QDateTime uses the system's time zone information to determine the
     offset of local time from UTC. If the system is not configured
@@ -3743,13 +3790,13 @@ void QDateTime::setTime_t(uint secsSince1Jan1970UTC)
 
     If the \a format is Qt::ISODate, the string format corresponds
     to the ISO 8601 extended specification for representations of
-    dates and times, taking the form YYYY-MM-DDTHH:mm:ss[Z|[+|-]HH:mm],
+    dates and times, taking the form yyyy-MM-ddTHH:mm:ss[Z|[+|-]HH:mm],
     depending on the timeSpec() of the QDateTime. If the timeSpec()
     is Qt::UTC, Z will be appended to the string; if the timeSpec() is
     Qt::OffsetFromUTC, the offset in hours and minutes from UTC will
     be appended to the string. To include milliseconds in the ISO 8601
     date, use the \a format Qt::ISODateWithMs, which corresponds to
-    YYYY-MM-DDTHH:mm:ss.zzz[Z|[+|-]HH:mm].
+    yyyy-MM-ddTHH:mm:ss.zzz[Z|[+|-]HH:mm].
 
     If the \a format is Qt::SystemLocaleShortDate or
     Qt::SystemLocaleLongDate, the string format depends on the locale
@@ -3796,7 +3843,7 @@ QString QDateTime::toString(Qt::DateFormat format) const
     case Qt::DefaultLocaleLongDate:
         return QLocale().toString(*this, QLocale::LongFormat);
     case Qt::RFC2822Date: {
-        buf = QLocale::c().toString(*this, QStringLiteral("dd MMM yyyy hh:mm:ss "));
+        buf = QLocale::c().toString(*this, QStringViewLiteral("dd MMM yyyy hh:mm:ss "));
         buf += toOffsetString(Qt::TextDate, offsetFromUtc());
         return buf;
     }
@@ -3854,6 +3901,9 @@ QString QDateTime::toString(Qt::DateFormat format) const
 }
 
 /*!
+    \fn QString QDateTime::toString(const QString &format) const
+    \fn QString QDateTime::toString(QStringView format) const
+
     Returns the datetime as a string. The \a format parameter
     determines the format of the result string.
 
@@ -3895,10 +3945,14 @@ QString QDateTime::toString(Qt::DateFormat format) const
          \li the hour with a leading zero (00 to 23, even with AM/PM display)
     \row \li m \li the minute without a leading zero (0 to 59)
     \row \li mm \li the minute with a leading zero (00 to 59)
-    \row \li s \li the second without a leading zero (0 to 59)
-    \row \li ss \li the second with a leading zero (00 to 59)
-    \row \li z \li the milliseconds without leading zeroes (0 to 999)
-    \row \li zzz \li the milliseconds with leading zeroes (000 to 999)
+    \row \li s \li the whole second without a leading zero (0 to 59)
+    \row \li ss \li the whole second with a leading zero where applicable (00 to 59)
+    \row \li z \li the fractional part of the second, to go after a decimal
+                point, without trailing zeroes (0 to 999).  Thus "\c{s.z}"
+                reports the seconds to full available (millisecond) precision
+                without trailing zeroes.
+    \row \li zzz \li the fractional part of the second, to millisecond
+                precision, including trailing zeroes where applicable (000 to 999).
     \row \li AP or A
          \li use AM/PM display. \e A/AP will be replaced by either "AM" or "PM".
     \row \li ap or a
@@ -3912,13 +3966,14 @@ QString QDateTime::toString(Qt::DateFormat format) const
     in the output. Formats without separators (e.g. "HHmm") are currently not supported.
 
     Example format strings (assumed that the QDateTime is 21 May 2001
-    14:13:09):
+    14:13:09.120):
 
     \table
     \header \li Format       \li Result
     \row \li dd.MM.yyyy      \li 21.05.2001
     \row \li ddd MMMM d yy   \li Tue May 21 01
-    \row \li hh:mm:ss.zzz    \li 14:13:09.042
+    \row \li hh:mm:ss.zzz    \li 14:13:09.120
+    \row \li hh:mm:ss.z      \li 14:13:09.12
     \row \li h:m:s ap        \li 2:13:9 pm
     \endtable
 
@@ -3926,10 +3981,18 @@ QString QDateTime::toString(Qt::DateFormat format) const
 
     \sa fromString(), QDate::toString(), QTime::toString(), QLocale::toString()
 */
-QString QDateTime::toString(const QString& format) const
+QString QDateTime::toString(QStringView format) const
 {
     return QLocale::system().toString(*this, format); // QLocale::c() ### Qt6
 }
+
+#if QT_STRINGVIEW_LEVEL < 2
+QString QDateTime::toString(const QString &format) const
+{
+    return toString(qToStringViewIgnoringNull(format));
+}
+#endif
+
 #endif //QT_NO_DATESTRING
 
 static inline void massageAdjustedDateTime(const QDateTimeData &d, QDate *date, QTime *time)
@@ -4705,25 +4768,35 @@ QDateTime QDateTime::fromString(const QString& string, Qt::DateFormat format)
         if (size < 10)
             return QDateTime();
 
-        QStringRef isoString(&string);
-        Qt::TimeSpec spec = Qt::LocalTime;
-
         QDate date = QDate::fromString(string.left(10), Qt::ISODate);
         if (!date.isValid())
             return QDateTime();
         if (size == 10)
             return QDateTime(date);
 
-        isoString = isoString.right(isoString.length() - 11);
+        Qt::TimeSpec spec = Qt::LocalTime;
+        QStringRef isoString(&string);
+        isoString = isoString.mid(10); // trim "yyyy-MM-dd"
+
+        // Must be left with T and at least one digit for the hour:
+        if (isoString.size() < 2
+            || !(isoString.startsWith(QLatin1Char('T'))
+                 // FIXME: QSql relies on QVariant::toDateTime() accepting a space here:
+                 || isoString.startsWith(QLatin1Char(' ')))) {
+            return QDateTime();
+        }
+        isoString = isoString.mid(1); // trim 'T' (or space)
+
         int offset = 0;
         // Check end of string for Time Zone definition, either Z for UTC or [+-]HH:mm for Offset
         if (isoString.endsWith(QLatin1Char('Z'))) {
             spec = Qt::UTC;
-            isoString = isoString.left(isoString.size() - 1);
+            isoString.chop(1); // trim 'Z'
         } else {
             // the loop below is faster but functionally equal to:
             // const int signIndex = isoString.indexOf(QRegExp(QStringLiteral("[+-]")));
             int signIndex = isoString.size() - 1;
+            Q_ASSERT(signIndex >= 0);
             bool found = false;
             {
                 const QChar plus = QLatin1Char('+');
@@ -4731,8 +4804,7 @@ QDateTime QDateTime::fromString(const QString& string, Qt::DateFormat format)
                 do {
                     QChar character(isoString.at(signIndex));
                     found = character == plus || character == minus;
-                } while (--signIndex >= 0 && !found);
-                ++signIndex;
+                } while (!found && --signIndex >= 0);
             }
 
             if (found) {
@@ -4871,7 +4943,7 @@ QDateTime QDateTime::fromString(const QString& string, Qt::DateFormat format)
 }
 
 /*!
-    \fn QDateTime::fromString(const QString &string, const QString &format)
+    \fn QDateTime QDateTime::fromString(const QString &string, const QString &format)
 
     Returns the QDateTime represented by the \a string, using the \a
     format given, or an invalid datetime if the string cannot be parsed.
@@ -4918,10 +4990,14 @@ QDateTime QDateTime::fromString(const QString& string, Qt::DateFormat format)
             \li the hour with a leading zero (00 to 23, even with AM/PM display)
     \row \li m \li the minute without a leading zero (0 to 59)
     \row \li mm \li the minute with a leading zero (00 to 59)
-    \row \li s \li the second without a leading zero (0 to 59)
-    \row \li ss \li the second with a leading zero (00 to 59)
-    \row \li z \li the milliseconds without leading zeroes (0 to 999)
-    \row \li zzz \li the milliseconds with leading zeroes (000 to 999)
+    \row \li s \li the whole second without a leading zero (0 to 59)
+    \row \li ss \li the whole second with a leading zero where applicable (00 to 59)
+    \row \li z \li the fractional part of the second, to go after a decimal
+                point, without trailing zeroes (0 to 999).  Thus "\c{s.z}"
+                reports the seconds to full available (millisecond) precision
+                without trailing zeroes.
+    \row \li zzz \li the fractional part of the second, to millisecond
+                precision, including trailing zeroes where applicable (000 to 999).
     \row \li AP or A
          \li interpret as an AM/PM time. \e AP must be either "AM" or "PM".
     \row \li ap or a
@@ -4980,7 +5056,7 @@ QDateTime QDateTime::fromString(const QString& string, Qt::DateFormat format)
 
 QDateTime QDateTime::fromString(const QString &string, const QString &format)
 {
-#if QT_CONFIG(timezone)
+#if QT_CONFIG(datetimeparser)
     QTime time;
     QDate date;
 
@@ -5258,39 +5334,53 @@ QDataStream &operator>>(QDataStream &in, QDateTime &dateTime)
 QDebug operator<<(QDebug dbg, const QDate &date)
 {
     QDebugStateSaver saver(dbg);
-    dbg.nospace() << "QDate(" << date.toString(Qt::ISODate) << ')';
+    dbg.nospace() << "QDate(";
+    if (date.isValid())
+        dbg.nospace() << date.toString(Qt::ISODate);
+    else
+        dbg.nospace() << "Invalid";
+    dbg.nospace() << ')';
     return dbg;
 }
 
 QDebug operator<<(QDebug dbg, const QTime &time)
 {
     QDebugStateSaver saver(dbg);
-    dbg.nospace() << "QTime(" << time.toString(QStringLiteral("HH:mm:ss.zzz")) << ')';
+    dbg.nospace() << "QTime(";
+    if (time.isValid())
+        dbg.nospace() << time.toString(QStringViewLiteral("HH:mm:ss.zzz"));
+    else
+        dbg.nospace() << "Invalid";
+    dbg.nospace() << ')';
     return dbg;
 }
 
 QDebug operator<<(QDebug dbg, const QDateTime &date)
 {
     QDebugStateSaver saver(dbg);
-    const Qt::TimeSpec ts = date.timeSpec();
     dbg.nospace() << "QDateTime(";
-    dbg.noquote() << date.toString(QStringLiteral("yyyy-MM-dd HH:mm:ss.zzz t"))
-                  << ' ' << ts;
-    switch (ts) {
-    case Qt::UTC:
-        break;
-    case Qt::OffsetFromUTC:
-        dbg << ' ' << date.offsetFromUtc() << 's';
-        break;
-    case Qt::TimeZone:
+    if (date.isValid()) {
+        const Qt::TimeSpec ts = date.timeSpec();
+        dbg.noquote() << date.toString(QStringViewLiteral("yyyy-MM-dd HH:mm:ss.zzz t"))
+                      << ' ' << ts;
+        switch (ts) {
+        case Qt::UTC:
+            break;
+        case Qt::OffsetFromUTC:
+            dbg.space() << date.offsetFromUtc() << 's';
+            break;
+        case Qt::TimeZone:
 #if QT_CONFIG(timezone)
-        dbg << ' ' << date.timeZone().id();
+            dbg.space() << date.timeZone().id();
 #endif // timezone
-        break;
-    case Qt::LocalTime:
-        break;
+            break;
+        case Qt::LocalTime:
+            break;
+        }
+    } else {
+        dbg.nospace() << "Invalid";
     }
-    return dbg << ')';
+    return dbg.nospace() << ')';
 }
 #endif
 

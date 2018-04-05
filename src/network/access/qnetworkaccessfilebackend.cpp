@@ -39,11 +39,14 @@
 
 #include "qnetworkaccessfilebackend_p.h"
 #include "qfileinfo.h"
+#if QT_CONFIG(ftp)
 #include "qurlinfo_p.h"
+#endif
 #include "qdir.h"
 #include "private/qnoncontiguousbytedevice_p.h"
 
 #include <QtCore/QCoreApplication>
+#include <QtCore/QDateTime>
 
 QT_BEGIN_NAMESPACE
 

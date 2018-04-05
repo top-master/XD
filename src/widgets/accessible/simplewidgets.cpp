@@ -48,28 +48,41 @@
 #if QT_CONFIG(pushbutton)
 #include <qpushbutton.h>
 #endif
+#if QT_CONFIG(progressbar)
 #include <qprogressbar.h>
+#endif
+#if QT_CONFIG(statusbar)
 #include <qstatusbar.h>
+#endif
 #if QT_CONFIG(radiobutton)
 #include <qradiobutton.h>
 #endif
+#if QT_CONFIG(toolbutton)
 #include <qtoolbutton.h>
+#endif
+#if QT_CONFIG(menu)
 #include <qmenu.h>
+#endif
 #if QT_CONFIG(label)
 #include <qlabel.h>
 #endif
+#if QT_CONFIG(groupbox)
 #include <qgroupbox.h>
+#endif
 #if QT_CONFIG(lcdnumber)
 #include <qlcdnumber.h>
 #endif
+#if QT_CONFIG(lineedit)
 #include <qlineedit.h>
 #include <private/qlineedit_p.h>
+#endif
 #include <qstyle.h>
 #include <qstyleoption.h>
 #include <qtextdocument.h>
 #include <qwindow.h>
 #include <private/qwindowcontainer_p.h>
 #include <QtCore/qvarlengtharray.h>
+#include <QtGui/qvalidator.h>
 
 #ifdef Q_OS_MAC
 #include <qfocusframe.h>
@@ -157,7 +170,7 @@ QAccessible::State QAccessibleButton::state() const
     if (b->isChecked())
         state.checked = true;
 #if QT_CONFIG(checkbox)
-    else if (cb && cb->checkState() == Qt::PartiallyChecked)
+    if (cb && cb->checkState() == Qt::PartiallyChecked)
         state.checkStateMixed = true;
 #endif
     if (b->isDown())
@@ -167,7 +180,7 @@ QAccessible::State QAccessibleButton::state() const
     if (pb) {
         if (pb->isDefault())
             state.defaultButton = true;
-#ifndef QT_NO_MENU
+#if QT_CONFIG(menu)
         if (pb->menu())
             state.hasPopup = true;
 #endif
@@ -206,7 +219,7 @@ QAccessible::Role QAccessibleButton::role() const
 {
     QAbstractButton *ab = button();
 
-#ifndef QT_NO_MENU
+#if QT_CONFIG(menu)
     if (QPushButton *pb = qobject_cast<QPushButton*>(ab)) {
         if (pb->menu())
             return QAccessible::ButtonMenu;
@@ -249,7 +262,7 @@ void QAccessibleButton::doAction(const QString &actionName)
         return;
     if (actionName == pressAction() ||
         actionName == showMenuAction()) {
-#ifndef QT_NO_MENU
+#if QT_CONFIG(menu)
         QPushButton *pb = qobject_cast<QPushButton*>(object());
         if (pb && pb->menu())
             pb->showMenu();
@@ -274,7 +287,7 @@ QStringList QAccessibleButton::keyBindingsForAction(const QString &actionName) c
 }
 #endif // QT_CONFIG(abstractbutton)
 
-#ifndef QT_NO_TOOLBUTTON
+#if QT_CONFIG(toolbutton)
 /*!
   \class QAccessibleToolButton
   \brief The QAccessibleToolButton class implements the QAccessibleInterface for tool buttons.
@@ -303,7 +316,7 @@ QToolButton *QAccessibleToolButton::toolButton() const
 */
 bool QAccessibleToolButton::isSplitButton() const
 {
-#ifndef QT_NO_MENU
+#if QT_CONFIG(menu)
     return toolButton()->menu() && toolButton()->popupMode() == QToolButton::MenuButtonPopup;
 #else
     return false;
@@ -315,7 +328,7 @@ QAccessible::State QAccessibleToolButton::state() const
     QAccessible::State st = QAccessibleButton::state();
     if (toolButton()->autoRaise())
         st.hotTracked = true;
-#ifndef QT_NO_MENU
+#if QT_CONFIG(menu)
     if (toolButton()->menu())
         st.hasPopup = true;
 #endif
@@ -329,7 +342,7 @@ int QAccessibleToolButton::childCount() const
 
 QAccessible::Role QAccessibleToolButton::role() const
 {
-#ifndef QT_NO_MENU
+#if QT_CONFIG(menu)
     QAbstractButton *ab = button();
     QToolButton *tb = qobject_cast<QToolButton*>(ab);
     if (!tb->menu())
@@ -343,7 +356,7 @@ QAccessible::Role QAccessibleToolButton::role() const
 
 QAccessibleInterface *QAccessibleToolButton::child(int index) const
 {
-#ifndef QT_NO_MENU
+#if QT_CONFIG(menu)
     if (index == 0 && toolButton()->menu())
     {
         return QAccessible::queryAccessibleInterface(toolButton()->menu());
@@ -394,7 +407,7 @@ void QAccessibleToolButton::doAction(const QString &actionName)
 
 }
 
-#endif // QT_NO_TOOLBUTTON
+#endif // QT_CONFIG(toolbutton)
 
 /*!
   \class QAccessibleDisplay
@@ -428,11 +441,11 @@ QAccessible::Role QAccessibleDisplay::role() const
         if (l->movie())
             return QAccessible::Animation;
 #endif
-#ifndef QT_NO_PROGRESSBAR
+#if QT_CONFIG(progressbar)
     } else if (qobject_cast<QProgressBar*>(object())) {
         return QAccessible::ProgressBar;
 #endif
-#ifndef QT_NO_STATUSBAR
+#if QT_CONFIG(statusbar)
     } else if (qobject_cast<QStatusBar*>(object())) {
         return QAccessible::StatusBar;
 #endif
@@ -474,7 +487,7 @@ QString QAccessibleDisplay::text(QAccessible::Text t) const
                 else
                     str = QString::number(l->intValue());
 #endif
-#ifndef QT_NO_STATUSBAR
+#if QT_CONFIG(statusbar)
             } else if (qobject_cast<QStatusBar*>(object())) {
                 return qobject_cast<QStatusBar*>(object())->currentMessage();
 #endif
@@ -482,7 +495,7 @@ QString QAccessibleDisplay::text(QAccessible::Text t) const
         }
         break;
     case QAccessible::Value:
-#ifndef QT_NO_PROGRESSBAR
+#if QT_CONFIG(progressbar)
         if (qobject_cast<QProgressBar*>(object()))
             str = QString::number(qobject_cast<QProgressBar*>(object())->value());
 #endif
@@ -562,7 +575,7 @@ QPoint QAccessibleDisplay::imagePosition() const
 #endif
 }
 
-#ifndef QT_NO_GROUPBOX
+#if QT_CONFIG(groupbox)
 QAccessibleGroupBox::QAccessibleGroupBox(QWidget *w)
 : QAccessibleWidget(w)
 {
@@ -650,7 +663,7 @@ QStringList QAccessibleGroupBox::keyBindingsForAction(const QString &) const
 
 #endif
 
-#ifndef QT_NO_LINEEDIT
+#if QT_CONFIG(lineedit)
 /*!
   \class QAccessibleLineEdit
   \brief The QAccessibleLineEdit class implements the QAccessibleInterface for widgets with editable text
@@ -691,6 +704,8 @@ QString QAccessibleLineEdit::text(QAccessible::Text t) const
     }
     if (str.isEmpty())
         str = QAccessibleWidget::text(t);
+    if (str.isEmpty() && t == QAccessible::Description)
+        str = lineEdit()->placeholderText();
     return str;
 }
 
@@ -764,7 +779,7 @@ QRect QAccessibleLineEdit::characterRect(int offset) const
     const QString ch = text(offset, offset + 1);
     if (ch.isEmpty())
         return QRect();
-    int w = fm.width(ch);
+    int w = fm.horizontalAdvance(ch);
     int h = fm.height();
     QRect r(x, y, w, h);
     r.moveTo(lineEdit()->mapToGlobal(r.topLeft()));
@@ -887,9 +902,9 @@ void QAccessibleLineEdit::replaceText(int startOffset, int endOffset, const QStr
     lineEdit()->setText(lineEdit()->text().replace(startOffset, endOffset - startOffset, text));
 }
 
-#endif // QT_NO_LINEEDIT
+#endif // QT_CONFIG(lineedit)
 
-#ifndef QT_NO_PROGRESSBAR
+#if QT_CONFIG(progressbar)
 QAccessibleProgressBar::QAccessibleProgressBar(QWidget *o)
     : QAccessibleDisplay(o)
 {
@@ -940,7 +955,7 @@ QAccessibleWindowContainer::QAccessibleWindowContainer(QWidget *w)
 
 int QAccessibleWindowContainer::childCount() const
 {
-    if (container()->containedWindow())
+    if (container()->containedWindow() && QAccessible::queryAccessibleInterface(container()->containedWindow()))
         return 1;
     return 0;
 }

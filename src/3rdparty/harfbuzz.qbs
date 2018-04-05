@@ -57,7 +57,6 @@ Project {
                 result.push("HAVE_FALLBACK");
             return result;
         }
-        readonly property bool hasUiKit: qbs.targetOS.containsAny(["ios", "tvos", "watchos"])
         Properties {
             condition: hasUiKit
             // On iOS/tvOS/watchOS CoreText and CoreGraphics are stand-alone frameworks

@@ -43,14 +43,14 @@
 #include <private/qmath_p.h>
 #include <private/qstyle_p.h>
 #include <qmath.h>
+#if QT_CONFIG(scrollbar)
 #include <qscrollbar.h>
+#endif
 #include <qabstractscrollarea.h>
 #include <qwindow.h>
 
 #include "qstylehelper_p.h"
 #include <qstringbuilder.h>
-#include <qdatastream.h>
-#include <qcryptographichash.h>
 
 QT_BEGIN_NAMESPACE
 
@@ -64,35 +64,18 @@ QString uniqueName(const QString &key, const QStyleOption *option, const QSize &
     QString tmp = key % HexString<uint>(option->state)
                       % HexString<uint>(option->direction)
                       % HexString<uint>(complexOption ? uint(complexOption->activeSubControls) : 0u)
+                      % HexString<quint64>(option->palette.cacheKey())
                       % HexString<uint>(size.width())
                       % HexString<uint>(size.height());
 
-#ifndef QT_NO_SPINBOX
+#if QT_CONFIG(spinbox)
     if (const QStyleOptionSpinBox *spinBox = qstyleoption_cast<const QStyleOptionSpinBox *>(option)) {
         tmp = tmp % HexString<uint>(spinBox->buttonSymbols)
                   % HexString<uint>(spinBox->stepEnabled)
                   % QLatin1Char(spinBox->frame ? '1' : '0'); ;
     }
-#endif // QT_NO_SPINBOX
+#endif // QT_CONFIG(spinbox)
 
-    // QTBUG-56743, try to create a palette cache key reflecting the value,
-    // as leaks may occur in conjunction with QStyleSheetStyle/QRenderRule modifying
-    // palettes when using QPalette::cacheKey()
-    if (option->palette != QGuiApplication::palette()) {
-        tmp.append(QLatin1Char('P'));
-#ifndef QT_NO_DATASTREAM
-        QByteArray key;
-        key.reserve(5120); // Observed 5040B for a serialized palette on 64bit
-        {
-            QDataStream str(&key, QIODevice::WriteOnly);
-            str << option->palette;
-        }
-        const QByteArray sha1 = QCryptographicHash::hash(key, QCryptographicHash::Sha1).toHex();
-        tmp.append(QString::fromLatin1(sha1));
-#else // QT_NO_DATASTREAM
-        tmp.append(QString::number(option->palette.cacheKey(), 16));
-#endif // !QT_NO_DATASTREAM
-    }
     return tmp;
 }
 
@@ -131,7 +114,7 @@ bool hasAncestor(QObject *obj, QAccessible::Role role)
 #endif // QT_NO_ACCESSIBILITY
 
 
-#ifndef QT_NO_DIAL
+#if QT_CONFIG(dial)
 
 int calcBigLineSize(int radius)
 {
@@ -276,7 +259,6 @@ void drawDial(const QStyleOptionSlider *option, QPainter *painter)
     buttonColor.setHsv(buttonColor .hue(),
                        qMin(140, buttonColor .saturation()),
                        qMax(180, buttonColor.value()));
-    QColor shadowColor(0, 0, 0, 20);
 
     if (enabled) {
         // Drop shadow
@@ -350,7 +332,7 @@ void drawDial(const QStyleOptionSlider *option, QPainter *painter)
     painter->drawEllipse(dialRect);
     painter->restore();
 }
-#endif //QT_NO_DIAL
+#endif //QT_CONFIG(dial)
 
 void drawBorderPixmap(const QPixmap &pixmap, QPainter *painter, const QRect &rect,
                      int left, int top, int right,
@@ -427,6 +409,27 @@ QWindow *styleObjectWindow(QObject *so)
         return so->property("_q_styleObjectWindow").value<QWindow *>();
 
     return 0;
+}
+
+WidgetSizePolicy widgetSizePolicy(const QWidget *widget, const QStyleOption *opt)
+{
+    while (widget) {
+        if (widget->testAttribute(Qt::WA_MacMiniSize)) {
+            return SizeMini;
+        } else if (widget->testAttribute(Qt::WA_MacSmallSize)) {
+            return SizeSmall;
+        } else if (widget->testAttribute(Qt::WA_MacNormalSize)) {
+            return SizeLarge;
+        }
+        widget = widget->parentWidget();
+    }
+
+    if (opt && opt->state & QStyle::State_Mini)
+        return SizeMini;
+    else if (opt && opt->state & QStyle::State_Small)
+        return SizeSmall;
+
+    return SizeDefault;
 }
 
 }

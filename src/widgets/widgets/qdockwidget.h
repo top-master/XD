@@ -43,10 +43,9 @@
 #include <QtWidgets/qtwidgetsglobal.h>
 #include <QtWidgets/qwidget.h>
 
+QT_REQUIRE_CONFIG(dockwidget);
+
 QT_BEGIN_NAMESPACE
-
-
-#ifndef QT_NO_DOCKWIDGET
 
 class QDockAreaLayout;
 class QDockWidgetPrivate;
@@ -64,9 +63,9 @@ class Q_WIDGETS_EXPORT QDockWidget : public QWidget
     Q_PROPERTY(QString windowTitle READ windowTitle WRITE setWindowTitle DESIGNABLE true)
 
 public:
-    explicit QDockWidget(const QString &title, QWidget *parent = Q_NULLPTR,
+    explicit QDockWidget(const QString &title, QWidget *parent = nullptr,
                          Qt::WindowFlags flags = Qt::WindowFlags());
-    explicit QDockWidget(QWidget *parent = Q_NULLPTR, Qt::WindowFlags flags = Qt::WindowFlags());
+    explicit QDockWidget(QWidget *parent = nullptr, Qt::WindowFlags flags = Qt::WindowFlags());
     ~QDockWidget();
 
     QWidget *widget() const;
@@ -114,10 +113,10 @@ Q_SIGNALS:
     void dockLocationChanged(Qt::DockWidgetArea area);
 
 protected:
-    void changeEvent(QEvent *event) Q_DECL_OVERRIDE;
-    void closeEvent(QCloseEvent *event) Q_DECL_OVERRIDE;
-    void paintEvent(QPaintEvent *event) Q_DECL_OVERRIDE;
-    bool event(QEvent *event) Q_DECL_OVERRIDE;
+    void changeEvent(QEvent *event) override;
+    void closeEvent(QCloseEvent *event) override;
+    void paintEvent(QPaintEvent *event) override;
+    bool event(QEvent *event) override;
     void initStyleOption(QStyleOptionDockWidget *option) const;
 
 private:
@@ -133,8 +132,6 @@ private:
 };
 
 Q_DECLARE_OPERATORS_FOR_FLAGS(QDockWidget::DockWidgetFeatures)
-
-#endif // QT_NO_DOCKWIDGET
 
 QT_END_NAMESPACE
 

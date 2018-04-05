@@ -39,8 +39,11 @@
 
 #define QT_NO_URL_CAST_FROM_STRING 1
 
-#define _WIN32_WINNT 0x0600
+#ifndef _WIN32_WINNT
+#define _WIN32_WINNT 0x0601
+#endif
 
+#include "qwindowscombase.h"
 #include "qwindowsdialoghelpers.h"
 
 #include "qwindowscontext.h"
@@ -52,7 +55,7 @@
 #include <QtGui/QColor>
 
 #include <QtCore/QDebug>
-#include <QtCore/QRegExp>
+#include <QtCore/QRegularExpression>
 #include <QtCore/QTimer>
 #include <QtCore/QDir>
 #include <QtCore/QScopedArrayPointer>
@@ -65,7 +68,6 @@
 #include <QtCore/QMutex>
 #include <QtCore/QMutexLocker>
 #include <QtCore/QUuid>
-#include <QtCore/QRegularExpression>
 #include <QtCore/QTemporaryFile>
 #include <QtCore/private/qsystemlibrary_p.h>
 
@@ -504,32 +506,10 @@ inline void QWindowsFileDialogSharedData::fromOptions(const QSharedPointer<QFile
 
 class QWindowsNativeFileDialogBase;
 
-class QWindowsNativeFileDialogEventHandler : public IFileDialogEvents
+class QWindowsNativeFileDialogEventHandler : public QWindowsComBase<IFileDialogEvents>
 {
 public:
     static IFileDialogEvents *create(QWindowsNativeFileDialogBase *nativeFileDialog);
-
-    // IUnknown methods
-    IFACEMETHODIMP QueryInterface(REFIID riid, void** ppv)
-    {
-        if (riid != IID_IUnknown && riid != IID_IFileDialogEvents) {
-            *ppv = NULL;
-            return ResultFromScode(E_NOINTERFACE);
-        }
-        *ppv = this;
-        AddRef();
-        return NOERROR;
-    }
-
-    IFACEMETHODIMP_(ULONG) AddRef() { return InterlockedIncrement(&m_ref); }
-
-    IFACEMETHODIMP_(ULONG) Release()
-    {
-        const long ref = InterlockedDecrement(&m_ref);
-        if (!ref)
-            delete this;
-        return ref;
-    }
 
     // IFileDialogEvents methods
     IFACEMETHODIMP OnFileOk(IFileDialog *);
@@ -546,7 +526,6 @@ public:
     virtual ~QWindowsNativeFileDialogEventHandler() {}
 
 private:
-    long m_ref = 1;
     QWindowsNativeFileDialogBase *m_nativeFileDialog;
 };
 
@@ -621,8 +600,8 @@ QString QWindowsShellItem::path() const
 {
     if (isFileSystem())
         return QDir::cleanPath(QWindowsShellItem::displayName(m_item, SIGDN_FILESYSPATH));
-    // Check for a "Library" item (Windows 7)
-    if (QSysInfo::windowsVersion() >= QSysInfo::WV_WINDOWS7 && isDir())
+    // Check for a "Library" item
+    if (isDir())
         return QWindowsShellItem::libraryItemDefaultSaveFolder(m_item);
     return QString();
 }
@@ -733,7 +712,7 @@ QString QWindowsShellItem::libraryItemDefaultSaveFolder(IShellItem *item)
 {
     QString result;
     if (IShellLibrary *library = sHLoadLibraryFromItem(item, STGM_READ | STGM_SHARE_DENY_WRITE)) {
-        IShellItem *item = Q_NULLPTR;
+        IShellItem *item = nullptr;
         if (SUCCEEDED(library->GetDefaultSaveFolder(DSFT_DETECT, IID_IShellItem, reinterpret_cast<void **>(&item)))) {
             result = QDir::cleanPath(QWindowsShellItem::displayName(item, SIGDN_FILESYSPATH));
             item->Release();
@@ -915,7 +894,7 @@ void QWindowsNativeFileDialogBase::setWindowTitle(const QString &title)
 IShellItem *QWindowsNativeFileDialogBase::shellItem(const QUrl &url)
 {
     if (url.isLocalFile()) {
-        IShellItem *result = Q_NULLPTR;
+        IShellItem *result = nullptr;
         const QString native = QDir::toNativeSeparators(url.toLocalFile());
         const HRESULT hr =
                 SHCreateItemFromParsingName(reinterpret_cast<const wchar_t *>(native.utf16()),
@@ -923,30 +902,30 @@ IShellItem *QWindowsNativeFileDialogBase::shellItem(const QUrl &url)
                                             reinterpret_cast<void **>(&result));
         if (FAILED(hr)) {
             qErrnoWarning("%s: SHCreateItemFromParsingName(%s)) failed", __FUNCTION__, qPrintable(url.toString()));
-            return Q_NULLPTR;
+            return nullptr;
         }
         return result;
     } else if (url.scheme() == QLatin1String("clsid")) {
         // Support for virtual folders via GUID
         // (see https://msdn.microsoft.com/en-us/library/windows/desktop/dd378457(v=vs.85).aspx)
         // specified as "clsid:<GUID>" (without '{', '}').
-        IShellItem *result = Q_NULLPTR;
-        const QUuid uuid(url.path());
+        IShellItem *result = nullptr;
+        const auto uuid = QUuid::fromString(url.path());
         if (uuid.isNull()) {
             qWarning() << __FUNCTION__ << ": Invalid CLSID: " << url.path();
-            return Q_NULLPTR;
+            return nullptr;
         }
         PIDLIST_ABSOLUTE idList;
         HRESULT hr = SHGetKnownFolderIDList(uuid, 0, 0, &idList);
         if (FAILED(hr)) {
             qErrnoWarning("%s: SHGetKnownFolderIDList(%s)) failed", __FUNCTION__, qPrintable(url.toString()));
-            return Q_NULLPTR;
+            return nullptr;
         }
         hr = SHCreateItemFromIDList(idList, IID_IShellItem, reinterpret_cast<void **>(&result));
         CoTaskMemFree(idList);
         if (FAILED(hr)) {
             qErrnoWarning("%s: SHCreateItemFromIDList(%s)) failed", __FUNCTION__, qPrintable(url.toString()));
-            return Q_NULLPTR;
+            return nullptr;
         }
         return result;
     } else {
@@ -995,7 +974,9 @@ void QWindowsNativeFileDialogBase::setMode(QFileDialogOptions::FileMode mode,
                                            QFileDialogOptions::AcceptMode acceptMode,
                                            QFileDialogOptions::FileDialogOptions options)
 {
-    DWORD flags = FOS_PATHMUSTEXIST | FOS_FORCESHOWHIDDEN;
+    DWORD flags = FOS_PATHMUSTEXIST;
+    if (QWindowsContext::readAdvancedExplorerSettings(L"Hidden", 1) == 1) // 1:show, 2:hidden
+        flags |= FOS_FORCESHOWHIDDEN;
     if (options & QFileDialogOptions::DontResolveSymlinks)
         flags |= FOS_NODEREFERENCELINKS;
     switch (mode) {
@@ -1010,7 +991,9 @@ void QWindowsNativeFileDialogBase::setMode(QFileDialogOptions::FileMode mode,
         break;
     case QFileDialogOptions::Directory:
     case QFileDialogOptions::DirectoryOnly:
-        flags |= FOS_PICKFOLDERS | FOS_FILEMUSTEXIST;
+        // QTBUG-63645: Restrict to file system items, as Qt cannot deal with
+        // places like 'Network', etc.
+        flags |= FOS_PICKFOLDERS | FOS_FILEMUSTEXIST | FOS_FORCEFILESYSTEM;
         break;
     case QFileDialogOptions::ExistingFiles:
         flags |= FOS_FILEMUSTEXIST | FOS_ALLOWMULTISELECT;
@@ -1039,7 +1022,7 @@ static QList<FilterSpec> filterSpecs(const QStringList &filters,
     result.reserve(filters.size());
     *totalStringLength = 0;
 
-    const QRegExp filterSeparatorRE(QStringLiteral("[;\\s]+"));
+    const QRegularExpression filterSeparatorRE(QStringLiteral("[;\\s]+"));
     const QString separator = QStringLiteral(";");
     Q_ASSERT(filterSeparatorRE.isValid());
     // Split filter specification as 'Texts (*.txt[;] *.doc)', '*.txt[;] *.doc'
@@ -1151,12 +1134,32 @@ void QWindowsNativeFileDialogBase::setLabelText(QFileDialogOptions::DialogLabel 
     }
 }
 
+static bool isHexRange(const QString& s, int start, int end)
+{
+    for (;start < end; ++start) {
+        QChar ch = s.at(start);
+        if (!(ch.isDigit()
+              || (ch >= QLatin1Char('a') && ch <= QLatin1Char('f'))
+              || (ch >= QLatin1Char('A') && ch <= QLatin1Char('F'))))
+            return false;
+    }
+    return true;
+}
+
 static inline bool isClsid(const QString &s)
 {
     // detect "374DE290-123F-4565-9164-39C4925E467B".
-   static const QRegularExpression pattern(QLatin1String("\\A[0-9A-Fa-f]{8}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{12}\\z"));
-   Q_ASSERT(pattern.isValid());
-   return pattern.match(s).hasMatch();
+    const QChar dash(QLatin1Char('-'));
+    return s.size() == 36
+            && isHexRange(s, 0, 8)
+            && s.at(8) == dash
+            && isHexRange(s, 9, 13)
+            && s.at(13) == dash
+            && isHexRange(s, 14, 18)
+            && s.at(18) == dash
+            && isHexRange(s, 19, 23)
+            && s.at(23) == dash
+            && isHexRange(s, 24, 36);
 }
 
 void QWindowsNativeFileDialogBase::selectFile(const QString &fileName) const
@@ -1219,6 +1222,8 @@ void QWindowsNativeFileDialogBase::onSelectionChange()
 {
     const QList<QUrl> current = selectedFiles();
     m_data.setSelectedFiles(current);
+    qCDebug(lcQpaDialogs) << __FUNCTION__ << current << current.size();
+
     if (current.size() == 1)
         emit currentChanged(current.front());
 }
@@ -1415,7 +1420,7 @@ QList<QUrl> QWindowsNativeOpenFileDialog::dialogResult() const
         for (IShellItem *item : QWindowsShellItem::itemsFromItemArray(items)) {
             QWindowsShellItem qItem(item);
             const QString path = qItem.path();
-            if (path.isEmpty()) {
+            if (path.isEmpty() && !qItem.isDir()) {
                 const QString temporaryCopy = createTemporaryItemCopy(qItem);
                 if (temporaryCopy.isEmpty())
                     qWarning() << "Unable to create a local copy of" << qItem;
@@ -2061,7 +2066,7 @@ bool useHelper(QPlatformTheme::DialogType type)
         return false;
     switch (type) {
     case QPlatformTheme::FileDialog:
-        return QSysInfo::windowsVersion() >= QSysInfo::WV_XP;
+        return true;
     case QPlatformTheme::ColorDialog:
 #ifdef USE_NATIVE_COLOR_DIALOG
         return true;
@@ -2082,13 +2087,10 @@ QPlatformDialogHelper *createHelper(QPlatformTheme::DialogType type)
     if (QWindowsIntegration::instance()->options() & QWindowsIntegration::NoNativeDialogs)
         return 0;
     switch (type) {
-    case QPlatformTheme::FileDialog: // Note: "Windows XP Professional x64 Edition has version number WV_5_2 (WV_2003).
-        if (QWindowsIntegration::instance()->options() & QWindowsIntegration::XpNativeDialogs
-            || QSysInfo::windowsVersion() <= QSysInfo::WV_2003) {
+    case QPlatformTheme::FileDialog:
+        if (QWindowsIntegration::instance()->options() & QWindowsIntegration::XpNativeDialogs)
             return new QWindowsXpFileDialogHelper();
-        }
-        if (QSysInfo::windowsVersion() > QSysInfo::WV_2003)
-            return new QWindowsFileDialogHelper();
+        return new QWindowsFileDialogHelper;
     case QPlatformTheme::ColorDialog:
 #ifdef USE_NATIVE_COLOR_DIALOG
         return new QWindowsColorDialogHelper();

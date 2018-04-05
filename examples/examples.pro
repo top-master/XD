@@ -14,7 +14,11 @@ qtHaveModule(concurrent): SUBDIRS += qtconcurrent
 qtHaveModule(sql): SUBDIRS += sql
 qtHaveModule(widgets): SUBDIRS += widgets
 qtHaveModule(xml): SUBDIRS += xml
-qtHaveModule(gui): SUBDIRS += gui opengl
+qtHaveModule(gui) {
+    SUBDIRS += gui
+    qtConfig(opengl): SUBDIRS += opengl
+    qtConfig(vulkan): SUBDIRS += vulkan
+}
 
 aggregate.files = aggregate/examples.pro
 aggregate.path = $$[QT_INSTALL_EXAMPLES]

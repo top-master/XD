@@ -42,11 +42,17 @@
 
 #include <QtSql/qtsqlglobal.h>
 
+QT_REQUIRE_CONFIG(sqlmodel);
+
 #ifdef QT_WIDGETS_LIB
 
 #include <QtWidgets/qitemdelegate.h>
+#if QT_CONFIG(listview)
 #include <QtWidgets/qlistview.h>
+#endif
+#if QT_CONFIG(combobox)
 #include <QtWidgets/qcombobox.h>
+#endif
 #include <QtSql/qsqldriver.h>
 #include <QtSql/qsqlrelationaltablemodel.h>
 

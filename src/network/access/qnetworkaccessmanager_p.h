@@ -56,6 +56,7 @@
 #include "qnetworkaccesscache_p.h"
 #include "qnetworkaccessbackend_p.h"
 #include "qnetworkrequest.h"
+#include "qhstsstore_p.h"
 #include "qhsts_p.h"
 #include "private/qobject_p.h"
 #include "QtNetwork/qnetworkproxy.h"
@@ -163,7 +164,9 @@ public:
 
 #endif
 
+#if QT_CONFIG(http)
     QNetworkRequest prepareMultipart(const QNetworkRequest &request, QHttpMultiPart *multiPart);
+#endif
 
     // this is the cache for storing downloaded files
     QAbstractNetworkCache *networkCache;
@@ -211,6 +214,7 @@ public:
     Q_AUTOTEST_EXPORT static void clearConnectionCache(QNetworkAccessManager *manager);
 
     QHstsCache stsCache;
+    QScopedPointer<QHstsStore> stsStore;
     bool stsEnabled = false;
 
 #ifndef QT_NO_BEARERMANAGEMENT

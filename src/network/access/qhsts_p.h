@@ -51,6 +51,8 @@
 // We mean it.
 //
 
+#include <QtNetwork/private/qtnetworkglobal_p.h>
+
 #include <QtNetwork/qhstspolicy.h>
 
 #include <QtCore/qbytearray.h>
@@ -59,12 +61,15 @@
 #include <QtCore/qglobal.h>
 #include <QtCore/qpair.h>
 #include <QtCore/qurl.h>
-#include <QtCore/qmap.h>
+
+#include <map>
 
 QT_BEGIN_NAMESPACE
 
 template<typename T> class QList;
 template <typename T> class QVector;
+
+class QHstsStore;
 
 class Q_AUTOTEST_EXPORT QHstsCache
 {
@@ -79,6 +84,8 @@ public:
     void clear();
 
     QVector<QHstsPolicy> policies() const;
+
+    void setStore(QHstsStore *store);
 
 private:
 
@@ -111,7 +118,8 @@ private:
         QStringRef fragment;
     };
 
-    mutable QMap<HostName, QHstsPolicy> knownHosts;
+    mutable std::map<HostName, QHstsPolicy> knownHosts;
+    QHstsStore *hstsStore = nullptr;
 };
 
 class Q_AUTOTEST_EXPORT QHstsHeaderParser

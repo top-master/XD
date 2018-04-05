@@ -46,7 +46,6 @@
 #include <QtCore/qfile.h>
 #include <QtCore/qvarlengtharray.h>
 #include <QtCore/qvector.h>
-#include <QtCore/qregularexpression.h>
 #include <QtCore/qloggingcategory.h>
 #include <QtCore/qcryptographichash.h>
 #include <QtCore/qcoreapplication.h>
@@ -497,6 +496,13 @@ static const char redefineHighp[] =
     "#endif\n";
 #endif
 
+// Boiler-plate header to have the layout attributes available we need later
+static const char blendEquationAdvancedHeader[] =
+    "#ifdef GL_KHR_blend_equation_advanced\n"
+    "#extension GL_ARB_fragment_coord_conventions : enable\n"
+    "#extension GL_KHR_blend_equation_advanced : enable\n"
+    "#endif\n";
+
 struct QVersionDirectivePosition
 {
     Q_DECL_CONSTEXPR QVersionDirectivePosition(int position = 0, int line = -1)
@@ -562,7 +568,7 @@ static QVersionDirectivePosition findVersionDirectivePosition(const char *source
                 break;
             }
             state = Normal;
-            // fall through
+            Q_FALLTHROUGH();
         case Normal:
             if (*c == '/')
                 state = CommentStarting;
@@ -636,6 +642,10 @@ bool QOpenGLShader::compileSourceCode(const char *source)
                     sourceChunkLengths.append(GLint(sizeof(version110)) - 1);
                 }
             }
+        }
+        if (d->shaderType == Fragment) {
+            sourceChunks.append(blendEquationAdvancedHeader);
+            sourceChunkLengths.append(GLint(sizeof(blendEquationAdvancedHeader) - 1));
         }
 
         // The precision qualifiers are useful on OpenGL/ES systems,
@@ -3824,13 +3834,7 @@ bool QOpenGLShaderProgramPrivate::linkBinary()
     bool needsCompile = true;
     if (binCache.load(cacheKey, q->programId())) {
         qCDebug(DBG_SHADER_CACHE, "Program binary received from cache");
-        linkBinaryRecursion = true;
-        bool ok = q->link();
-        linkBinaryRecursion = false;
-        if (ok)
-            needsCompile = false;
-        else
-            qCDebug(DBG_SHADER_CACHE, "Link failed after glProgramBinary");
+        needsCompile = false;
     }
 
     bool needsSave = false;

@@ -108,20 +108,6 @@ bool QFSFileEnginePrivate::nativeOpen(QIODevice::OpenMode openMode)
 {
     Q_Q(QFSFileEngine);
 
-    // Check if the file name is valid:
-    // https://msdn.microsoft.com/en-us/library/windows/desktop/aa365247(v=vs.85).aspx#naming_conventions
-    const QString fileName = fileEntry.fileName();
-    for (QString::const_iterator it = fileName.constBegin(), end = fileName.constEnd();
-         it != end; ++it) {
-        const QChar c = *it;
-        if (c == QLatin1Char('<') || c == QLatin1Char('>') || c == QLatin1Char(':') ||
-            c == QLatin1Char('\"') || c == QLatin1Char('/') || c == QLatin1Char('\\') ||
-            c == QLatin1Char('|') || c == QLatin1Char('?') || c == QLatin1Char('*')) {
-            q->setError(QFile::OpenError, QStringLiteral("Invalid file name"));
-            return false;
-        }
-    }
-
     // All files are opened in share mode (both read and write).
     DWORD shareMode = FILE_SHARE_READ | FILE_SHARE_WRITE;
 
@@ -131,9 +117,12 @@ bool QFSFileEnginePrivate::nativeOpen(QIODevice::OpenMode openMode)
     if (openMode & QIODevice::WriteOnly)
         accessRights |= GENERIC_WRITE;
 
-
     // WriteOnly can create files, ReadOnly cannot.
-    DWORD creationDisp = (openMode & QIODevice::WriteOnly) ? OPEN_ALWAYS : OPEN_EXISTING;
+    DWORD creationDisp = (openMode & QIODevice::NewOnly)
+                            ? CREATE_NEW
+                            : openModeCanCreate(openMode)
+                                ? OPEN_ALWAYS
+                                : OPEN_EXISTING;
     // Create the file handle.
 #ifndef Q_OS_WINRT
     SECURITY_ATTRIBUTES securityAtts = { sizeof(SECURITY_ATTRIBUTES), NULL, FALSE };
@@ -252,7 +241,7 @@ qint64 QFSFileEnginePrivate::nativeSize() const
         filled = doStat(QFileSystemMetaData::SizeAttribute);
 
     if (!filled) {
-        thatQ->setError(QFile::UnspecifiedError, qt_error_string(errno));
+        thatQ->setError(QFile::UnspecifiedError, QSystemError::stdString());
         return 0;
     }
     return metaData.size();
@@ -319,7 +308,7 @@ qint64 QFSFileEnginePrivate::nativeRead(char *data, qint64 maxlen)
     if (fh || fd != -1) {
         // stdio / stdlib mode.
         if (fh && nativeIsSequential() && feof(fh)) {
-            q->setError(QFile::ReadError, qt_error_string(int(errno)));
+            q->setError(QFile::ReadError, QSystemError::stdString());
             return -1;
         }
 
@@ -488,11 +477,10 @@ bool QFSFileEngine::rename(const QString &newName)
 bool QFSFileEngine::renameOverwrite(const QString &newName)
 {
     Q_D(QFSFileEngine);
-    bool ret = ::MoveFileEx((wchar_t*)d->fileEntry.nativeFilePath().utf16(),
-                            (wchar_t*)QFileSystemEntry(newName).nativeFilePath().utf16(),
-                            MOVEFILE_REPLACE_EXISTING) != 0;
+    QSystemError error;
+    bool ret = QFileSystemEngine::renameOverwriteFile(d->fileEntry, QFileSystemEntry(newName), error);
     if (!ret)
-        setError(QFile::RenameError, QSystemError(::GetLastError(), QSystemError::NativeError).toString());
+        setError(QFile::RenameError, error.toString());
     return ret;
 }
 
@@ -708,6 +696,8 @@ QAbstractFileEngine::FileFlags QFSFileEngine::fileFlags(QAbstractFileEngine::Fil
     }
     if (type & FlagsMask) {
         if (d->metaData.exists()) {
+            // if we succeeded in querying, then the file exists: a file on
+            // Windows cannot be deleted if we have an open handle to it
             ret |= ExistsFlag;
             if (d->fileEntry.isRoot())
                 ret |= RootFlag;
@@ -716,6 +706,24 @@ QAbstractFileEngine::FileFlags QFSFileEngine::fileFlags(QAbstractFileEngine::Fil
         }
     }
     return ret;
+}
+
+QByteArray QFSFileEngine::id() const
+{
+    Q_D(const QFSFileEngine);
+    HANDLE h = d->fileHandle;
+    if (h == INVALID_HANDLE_VALUE) {
+        int localFd = d->fd;
+        if (d->fh && d->fileEntry.isEmpty())
+            localFd = QT_FILENO(d->fh);
+        if (localFd != -1)
+            h = HANDLE(_get_osfhandle(localFd));
+    }
+    if (h != INVALID_HANDLE_VALUE)
+        return QFileSystemEngine::id(h);
+
+    // file is not open, try by path
+    return QFileSystemEngine::id(d->fileEntry);
 }
 
 QString QFSFileEngine::fileName(FileName file) const
@@ -850,15 +858,41 @@ bool QFSFileEngine::setSize(qint64 size)
     return false;
 }
 
-
-QDateTime QFSFileEngine::fileTime(FileTime time) const
+bool QFSFileEngine::setFileTime(const QDateTime &newDate, FileTime time)
 {
-    Q_D(const QFSFileEngine);
+    Q_D(QFSFileEngine);
 
-    if (d->doStat(QFileSystemMetaData::Times))
-        return d->metaData.fileTime(time);
+    if (d->openMode == QFile::NotOpen) {
+        setError(QFile::PermissionsError, qt_error_string(ERROR_ACCESS_DENIED));
+        return false;
+    }
 
-    return QDateTime();
+    if (!newDate.isValid() || time == QAbstractFileEngine::MetadataChangeTime) {
+        setError(QFile::UnspecifiedError, qt_error_string(ERROR_INVALID_PARAMETER));
+        return false;
+    }
+
+    HANDLE handle = d->fileHandle;
+    if (handle == INVALID_HANDLE_VALUE) {
+        if (d->fh)
+            handle = reinterpret_cast<HANDLE>(::_get_osfhandle(QT_FILENO(d->fh)));
+        else if (d->fd != -1)
+            handle = reinterpret_cast<HANDLE>(::_get_osfhandle(d->fd));
+    }
+
+    if (handle == INVALID_HANDLE_VALUE) {
+        setError(QFile::PermissionsError, qt_error_string(ERROR_ACCESS_DENIED));
+        return false;
+    }
+
+    QSystemError error;
+    if (!QFileSystemEngine::setFileTime(handle, newDate, time, error)) {
+        setError(QFile::PermissionsError, error.toString());
+        return false;
+    }
+
+    d->metaData.clearFlags(QFileSystemMetaData::Times);
+    return true;
 }
 
 uchar *QFSFileEnginePrivate::map(qint64 offset, qint64 size,
@@ -996,6 +1030,17 @@ bool QFSFileEnginePrivate::unmap(uchar *ptr)
     }
 
     return true;
+}
+
+/*!
+    \reimp
+*/
+bool QFSFileEngine::cloneTo(QAbstractFileEngine *target)
+{
+    // There's some Windows Server 2016 API, but we won't
+    // bother with it.
+    Q_UNUSED(target);
+    return false;
 }
 
 QT_END_NAMESPACE

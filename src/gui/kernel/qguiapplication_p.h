@@ -85,13 +85,13 @@ public:
     void init();
 
     void createPlatformIntegration();
-    void createEventDispatcher() Q_DECL_OVERRIDE;
-    void eventDispatcherReady() Q_DECL_OVERRIDE;
+    void createEventDispatcher() override;
+    void eventDispatcherReady() override;
 
     virtual void notifyLayoutDirectionChange();
     virtual void notifyActiveWindowChange(QWindow *previous);
 
-    virtual bool shouldQuit() Q_DECL_OVERRIDE;
+    virtual bool shouldQuit() override;
 
     bool shouldQuitInternal(const QWindowList &processedWindows);
     virtual bool tryCloseAllWindows();
@@ -132,6 +132,8 @@ public:
     static void processActivatedEvent(QWindowSystemInterfacePrivate::ActivatedWindowEvent *e);
     static void processWindowStateChangedEvent(QWindowSystemInterfacePrivate::WindowStateChangedEvent *e);
     static void processWindowScreenChangedEvent(QWindowSystemInterfacePrivate::WindowScreenChangedEvent *e);
+
+    static void processSafeAreaMarginsChangedEvent(QWindowSystemInterfacePrivate::SafeAreaMarginsChangedEvent *e);
 
     static void processWindowSystemEvent(QWindowSystemInterfacePrivate::WindowSystemEvent *e);
 
@@ -201,7 +203,6 @@ public:
     virtual bool isWindowBlocked(QWindow *window, QWindow **blockingWindow = 0) const;
     virtual bool popupActive() { return false; }
 
-    static Qt::MouseButtons buttons;
     static ulong mousePressTime;
     static Qt::MouseButton mousePressButton;
     static int mousePressX;
@@ -214,7 +215,7 @@ public:
     static bool highDpiScalingUpdated;
 
     struct TabletPointData {
-        TabletPointData(qint64 devId = 0) : deviceId(devId), state(Qt::NoButton), target(Q_NULLPTR) {}
+        TabletPointData(qint64 devId = 0) : deviceId(devId), state(Qt::NoButton), target(nullptr) {}
         qint64 deviceId;
         Qt::MouseButtons state;
         QWindow *target;

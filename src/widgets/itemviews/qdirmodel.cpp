@@ -39,7 +39,6 @@
 
 #include "qdirmodel.h"
 
-#ifndef QT_NO_DIRMODEL
 #include <qfile.h>
 #include <qfilesystemmodel.h>
 #include <qurl.h>
@@ -52,6 +51,7 @@
 #include <qstyle.h>
 #include <qapplication.h>
 #include <private/qabstractitemmodel_p.h>
+#include <private/qfilesystementry_p.h>
 #include <qdebug.h>
 
 #include <stack>
@@ -1104,8 +1104,9 @@ QString QDirModel::fileName(const QModelIndex &index) const
     if (!d->indexValid(index))
         return QString();
     QFileInfo info = fileInfo(index);
-    if (info.isRoot())
-        return info.absoluteFilePath();
+    const QString &path = info.absoluteFilePath();
+    if (QFileSystemEntry::isRootPath(path))
+        return path;
     if (d->resolveSymlinks && info.isSymLink())
         info = d->resolvedInfo(info);
     return info.fileName();
@@ -1280,8 +1281,8 @@ QString QDirModelPrivate::name(const QModelIndex &index) const
 {
     const QDirNode *n = node(index);
     const QFileInfo info = n->info;
-    if (info.isRoot()) {
-        QString name = info.absoluteFilePath();
+    QString name = info.absoluteFilePath();
+    if (QFileSystemEntry::isRootPath(name)) {
 #if defined(Q_OS_WIN)
         if (name.startsWith(QLatin1Char('/'))) // UNC host
             return info.fileName();
@@ -1308,22 +1309,7 @@ QString QDirModelPrivate::size(const QModelIndex &index) const
     // Nautilus  - "9 items" (the number of children)
     }
 
-    // According to the Si standard KB is 1000 bytes, KiB is 1024
-    // but on windows sizes are calulated by dividing by 1024 so we do what they do.
-    const quint64 kb = 1024;
-    const quint64 mb = 1024 * kb;
-    const quint64 gb = 1024 * mb;
-    const quint64 tb = 1024 * gb;
-    quint64 bytes = n->info.size();
-    if (bytes >= tb)
-        return QFileSystemModel::tr("%1 TB").arg(QLocale().toString(qreal(bytes) / tb, 'f', 3));
-    if (bytes >= gb)
-        return QFileSystemModel::tr("%1 GB").arg(QLocale().toString(qreal(bytes) / gb, 'f', 2));
-    if (bytes >= mb)
-        return QFileSystemModel::tr("%1 MB").arg(QLocale().toString(qreal(bytes) / mb, 'f', 1));
-    if (bytes >= kb)
-        return QFileSystemModel::tr("%1 KB").arg(QLocale().toString(bytes / kb));
-    return QFileSystemModel::tr("%1 byte(s)").arg(QLocale().toString(bytes));
+    return QLocale::system().formattedDataSize(n->info.size());
 }
 
 QString QDirModelPrivate::type(const QModelIndex &index) const
@@ -1387,5 +1373,3 @@ QFileInfo QDirModelPrivate::resolvedInfo(QFileInfo info)
 QT_END_NAMESPACE
 
 #include "moc_qdirmodel.cpp"
-
-#endif // QT_NO_DIRMODEL

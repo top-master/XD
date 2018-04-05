@@ -89,6 +89,7 @@ Group {
             "qsystemsemaphore_win.cpp",
             "qwineventnotifier.cpp",
             "qwineventnotifier.h",
+            "qwineventnotifier_p.h",
         ]
         Group {
             name: parent.name + " (winrt)"

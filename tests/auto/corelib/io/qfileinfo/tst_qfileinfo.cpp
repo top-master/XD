@@ -35,6 +35,7 @@
 #include <qtemporarydir.h>
 #include <qdir.h>
 #include <qfileinfo.h>
+#include <qstorageinfo.h>
 #ifdef Q_OS_UNIX
 #include <errno.h>
 #include <fcntl.h>
@@ -47,7 +48,6 @@
 #endif
 #ifdef Q_OS_WIN
 #include <qt_windows.h>
-#include <qlibrary.h>
 #if !defined(Q_OS_WINRT)
 #include <lm.h>
 #endif
@@ -64,84 +64,47 @@
 #define Q_NO_SYMLINKS
 #endif
 
+#if defined(Q_OS_WIN)
+QT_BEGIN_NAMESPACE
+extern Q_CORE_EXPORT int qt_ntfs_permission_lookup;
+QT_END_NAMESPACE
+#  ifndef Q_OS_WINRT
+bool IsUserAdmin();
+#  endif
+#endif
 
-#if defined(Q_OS_UNIX) && !defined(Q_OS_VXWORKS)
-inline bool qt_isEvilFsTypeName(const char *name)
+inline bool qIsLikelyToBeFat(const QString &path)
 {
+    QByteArray name = QStorageInfo(path).fileSystemType().toLower();
+    return name.contains("fat") || name.contains("msdos");
+}
+
+inline bool qIsLikelyToBeNfs(const QString &path)
+{
+#ifdef Q_OS_WIN
+    Q_UNUSED(path);
+    return false;
+#else
+    QByteArray type = QStorageInfo(path).fileSystemType();
+    const char *name = type.constData();
+
     return (qstrncmp(name, "nfs", 3) == 0
             || qstrncmp(name, "autofs", 6) == 0
+            || qstrncmp(name, "autofsng", 8) == 0
             || qstrncmp(name, "cachefs", 7) == 0);
-}
-
-#if defined(Q_OS_BSD4) && !defined(Q_OS_NETBSD)
-# include <sys/param.h>
-# include <sys/mount.h>
-
-bool qIsLikelyToBeNfs(int handle)
-{
-    struct statfs buf;
-    if (fstatfs(handle, &buf) != 0)
-        return false;
-    return qt_isEvilFsTypeName(buf.f_fstypename);
-}
-
-#elif defined(Q_OS_LINUX) || defined(Q_OS_HURD)
-
-# include <sys/vfs.h>
-# ifdef QT_LINUXBASE
-   // LSB 3.2 has fstatfs in sys/statfs.h, sys/vfs.h is just an empty dummy header
-#  include <sys/statfs.h>
-# endif
-
-# ifndef NFS_SUPER_MAGIC
-#  define NFS_SUPER_MAGIC       0x00006969
-# endif
-# ifndef AUTOFS_SUPER_MAGIC
-#  define AUTOFS_SUPER_MAGIC    0x00000187
-# endif
-# ifndef AUTOFSNG_SUPER_MAGIC
-#  define AUTOFSNG_SUPER_MAGIC  0x7d92b1a0
-# endif
-
-bool qIsLikelyToBeNfs(int handle)
-{
-    struct statfs buf;
-    if (fstatfs(handle, &buf) != 0)
-        return false;
-    return buf.f_type == NFS_SUPER_MAGIC
-           || buf.f_type == AUTOFS_SUPER_MAGIC
-           || buf.f_type == AUTOFSNG_SUPER_MAGIC;
-}
-
-#elif defined(Q_OS_SOLARIS) || defined(Q_OS_IRIX) || defined(Q_OS_AIX) || defined(Q_OS_HPUX) \
-      || defined(Q_OS_OSF) || defined(Q_OS_QNX) || defined(Q_OS_SCO) \
-      || defined(Q_OS_UNIXWARE) || defined(Q_OS_RELIANT) || defined(Q_OS_NETBSD)
-
-# include <sys/statvfs.h>
-
-bool qIsLikelyToBeNfs(int handle)
-{
-    struct statvfs buf;
-    if (fstatvfs(handle, &buf) != 0)
-        return false;
-#if defined(Q_OS_NETBSD)
-    return qt_isEvilFsTypeName(buf.f_fstypename);
-#else
-    return qt_isEvilFsTypeName(buf.f_basetype);
 #endif
 }
-#else
-inline bool qIsLikelyToBeNfs(int /* handle */)
-{
-    return false;
-}
-#endif
-#endif
 
 static QString seedAndTemplate()
 {
-    qsrand(QDateTime::currentSecsSinceEpoch());
-    return QDir::tempPath() + "/tst_qfileinfo-XXXXXX";
+    QString base;
+#if defined(Q_OS_UNIX) && !defined(Q_OS_ANDROID)
+    // use XDG_RUNTIME_DIR as it's a fully-capable FS
+    base = QStandardPaths::writableLocation(QStandardPaths::RuntimeLocation);
+#endif
+    if (base.isEmpty())
+        base = QDir::tempPath();
+    return base + "/tst_qfileinfo-XXXXXX";
 }
 
 static QByteArray msgDoesNotExist(const QString &name)
@@ -277,8 +240,9 @@ private slots:
 #endif
     void group();
 
+    void invalidState_data();
     void invalidState();
-    void nonExistingFileDates();
+    void nonExistingFile();
 
 private:
     const QString m_currentDir;
@@ -728,18 +692,12 @@ void tst_QFileInfo::canonicalFilePath()
 #endif
 
 #if defined(Q_OS_WIN) && !defined(Q_OS_WINRT)
-    typedef BOOL (WINAPI *PtrCreateSymbolicLink)(LPTSTR, LPTSTR, DWORD);
-    PtrCreateSymbolicLink ptrCreateSymbolicLink =
-            (PtrCreateSymbolicLink)QLibrary::resolve(QLatin1String("kernel32"), "CreateSymbolicLinkW");
-
-    if (!ptrCreateSymbolicLink) {
-        QSKIP("Symbolic links aren't supported by FS");
-    } else {
+    {
         // CreateSymbolicLink can return TRUE & still fail to create the link,
         // the error code in that case is ERROR_PRIVILEGE_NOT_HELD (1314)
         SetLastError(0);
         const QString linkTarget = QStringLiteral("res");
-        BOOL ret = ptrCreateSymbolicLink((wchar_t*)linkTarget.utf16(), (wchar_t*)m_resourcesDir.utf16(), 1);
+        BOOL ret = CreateSymbolicLink((wchar_t*)linkTarget.utf16(), (wchar_t*)m_resourcesDir.utf16(), 1);
         DWORD dwErr = GetLastError();
         if (!ret)
             QSKIP("Symbolic links aren't supported by FS");
@@ -1034,6 +992,11 @@ void tst_QFileInfo::systemFiles()
     QVERIFY2(fi.exists(), msgDoesNotExist(fi.absoluteFilePath()).constData());
     QVERIFY(fi.size() > 0);
     QVERIFY(fi.lastModified().isValid());
+    QVERIFY(fi.metadataChangeTime().isValid());
+    QCOMPARE(fi.metadataChangeTime(), fi.lastModified());   // On Windows, they're the same
+    QVERIFY(fi.birthTime().isValid());
+    QVERIFY(fi.birthTime() <= fi.lastModified());
+    QCOMPARE(fi.created(), fi.birthTime());                 // On Windows, they're the same
 }
 
 void tst_QFileInfo::compare_data()
@@ -1124,43 +1087,92 @@ void tst_QFileInfo::fileTimes_data()
 
 void tst_QFileInfo::fileTimes()
 {
-    int sleepTime = 2000;
+    auto datePairString = [](const QDateTime &actual, const QDateTime &before) {
+        return (actual.toString(Qt::ISODateWithMs) + " (should be >) " + before.toString(Qt::ISODateWithMs))
+                .toLatin1();
+    };
+
     QFETCH(QString, fileName);
+    int sleepTime = 100;
+
+    // on Linux and Windows, the filesystem timestamps may be slightly out of
+    // sync with the system clock (maybe they're using CLOCK_REALTIME_COARSE),
+    // so add a margin of error to our comparisons
+    int fsClockSkew = 10;
+#ifdef Q_OS_WIN
+    fsClockSkew = 500;
+#endif
+
+    // NFS clocks may be WAY out of sync
+    if (qIsLikelyToBeNfs(fileName))
+        QSKIP("This test doesn't work on NFS");
+
+    bool noAccessTime = false;
+    {
+        // try to guess if file times on this filesystem round to the second
+        QFileInfo cwd(".");
+        if (cwd.lastModified().toMSecsSinceEpoch() % 1000 == 0
+                && cwd.lastRead().toMSecsSinceEpoch() % 1000 == 0) {
+            fsClockSkew = sleepTime = 1000;
+
+            noAccessTime = qIsLikelyToBeFat(fileName);
+            if (noAccessTime) {
+                // FAT filesystems (but maybe not exFAT) store timestamps with 2-second
+                // granularity and access time with 1-day granularity
+                fsClockSkew = sleepTime = 2000;
+            }
+        }
+    }
+
     if (QFile::exists(fileName)) {
         QVERIFY(QFile::remove(fileName));
     }
-    QTest::qSleep(sleepTime);
+
+    QDateTime beforeBirth, beforeWrite, beforeMetadataChange, beforeRead;
+    QDateTime birthTime, writeTime, metadataChangeTime, readTime;
+
+    // --- Create file and write to it
+    beforeBirth = QDateTime::currentDateTime().addMSecs(-fsClockSkew);
     {
         QFile file(fileName);
         QVERIFY(file.open(QFile::WriteOnly | QFile::Text));
-#if defined(Q_OS_UNIX) && !defined(Q_OS_VXWORKS)
-        if (qIsLikelyToBeNfs(file.handle()))
-            QSKIP("This Test doesn't work on NFS");
-#endif
+        QFileInfo fileInfo(fileName);
+        birthTime = fileInfo.birthTime();
+        QVERIFY2(!birthTime.isValid() || birthTime > beforeBirth,
+                 datePairString(birthTime, beforeBirth));
+
+        QTest::qSleep(sleepTime);
+        beforeWrite = QDateTime::currentDateTime().addMSecs(-fsClockSkew);
         QTextStream ts(&file);
         ts << fileName << endl;
     }
-    QTest::qSleep(sleepTime);
-    QDateTime beforeWrite = QDateTime::currentDateTime();
-    QTest::qSleep(sleepTime);
     {
         QFileInfo fileInfo(fileName);
-        QVERIFY(fileInfo.created() < beforeWrite);
+        writeTime = fileInfo.lastModified();
+        QVERIFY2(writeTime > beforeWrite, datePairString(writeTime, beforeWrite));
+        QCOMPARE(fileInfo.birthTime(), birthTime); // mustn't have changed
+    }
+
+    // --- Change the file's metadata
+    QTest::qSleep(sleepTime);
+    beforeMetadataChange = QDateTime::currentDateTime().addMSecs(-fsClockSkew);
+    {
         QFile file(fileName);
-        QVERIFY(file.open(QFile::ReadWrite | QFile::Text));
-        QTextStream ts(&file);
-        ts << fileName << endl;
+        file.setPermissions(file.permissions());
     }
-    QTest::qSleep(sleepTime);
-    QDateTime beforeRead = QDateTime::currentDateTime();
-    QTest::qSleep(sleepTime);
     {
         QFileInfo fileInfo(fileName);
-// On unix created() returns the same as lastModified().
-#if !defined(Q_OS_UNIX)
-        QVERIFY(fileInfo.created() < beforeWrite);
-#endif
-        QVERIFY(fileInfo.lastModified() > beforeWrite);
+        metadataChangeTime = fileInfo.metadataChangeTime();
+        QVERIFY2(metadataChangeTime > beforeMetadataChange,
+                 datePairString(metadataChangeTime, beforeMetadataChange));
+        QVERIFY(metadataChangeTime >= writeTime); // not all filesystems can store both times
+        QCOMPARE(fileInfo.birthTime(), birthTime); // mustn't have changed
+    }
+
+    // --- Read the file
+    QTest::qSleep(sleepTime);
+    beforeRead = QDateTime::currentDateTime().addMSecs(-fsClockSkew);
+    {
         QFile file(fileName);
         QVERIFY(file.open(QFile::ReadOnly | QFile::Text));
         QTextStream ts(&file);
@@ -1169,13 +1181,17 @@ void tst_QFileInfo::fileTimes()
     }
 
     QFileInfo fileInfo(fileName);
-#if !defined(Q_OS_UNIX)
-    QVERIFY(fileInfo.created() < beforeWrite);
-#endif
+    readTime = fileInfo.lastRead();
+    QCOMPARE(fileInfo.lastModified(), writeTime); // mustn't have changed
+    QCOMPARE(fileInfo.birthTime(), birthTime); // mustn't have changed
+    QVERIFY(readTime.isValid());
+
+#if defined(Q_OS_WINRT) || defined(Q_OS_QNX) || (defined(Q_OS_ANDROID) && !defined(Q_OS_ANDROID_EMBEDDED))
+    noAccessTime = true;
+#elif defined(Q_OS_WIN)
     //In Vista the last-access timestamp is not updated when the file is accessed/touched (by default).
     //To enable this the HKLM\SYSTEM\CurrentControlSet\Control\FileSystem\NtfsDisableLastAccessUpdate
     //is set to 0, in the test machine.
-#if defined(Q_OS_WIN) && !defined(Q_OS_WINRT)
     HKEY key;
     if (ERROR_SUCCESS == RegOpenKeyEx(HKEY_LOCAL_MACHINE, L"SYSTEM\\CurrentControlSet\\Control\\FileSystem",
         0, KEY_READ, &key)) {
@@ -1184,75 +1200,43 @@ void tst_QFileInfo::fileTimes()
             LONG error = RegQueryValueEx(key, L"NtfsDisableLastAccessUpdate"
                 , NULL, NULL, (LPBYTE)&disabledAccessTimes, &size);
             if (ERROR_SUCCESS == error && disabledAccessTimes)
-                QEXPECT_FAIL("", "File access times are disabled in windows registry (this is the default setting)", Continue);
+                noAccessTime = true;
             RegCloseKey(key);
     }
 #endif
-#if defined(Q_OS_WINRT)
-    QEXPECT_FAIL("", "WinRT does not allow timestamp handling change in the filesystem due to sandboxing", Continue);
-#elif defined(Q_OS_QNX)
-    QEXPECT_FAIL("", "QNX uses the noatime filesystem option", Continue);
-#elif defined(Q_OS_ANDROID)
-    if (fileInfo.lastRead() <= beforeRead)
-        QEXPECT_FAIL("", "Android may use relatime or noatime on mounts", Continue);
-#endif
 
-    QVERIFY(fileInfo.lastRead() > beforeRead);
-    QVERIFY(fileInfo.lastModified() > beforeWrite);
-    QVERIFY(fileInfo.lastModified() < beforeRead);
+    if (noAccessTime)
+        return;
+
+    QVERIFY2(readTime > beforeRead, datePairString(readTime, beforeRead));
+    QVERIFY(writeTime < beforeRead);
 }
 
 void tst_QFileInfo::fileTimes_oldFile()
 {
-    // This is not supported on WinRT
-#if defined(Q_OS_WIN) && !defined(Q_OS_WINRT)
-    // All files are opened in share mode (both read and write).
-    DWORD shareMode = FILE_SHARE_READ | FILE_SHARE_WRITE;
+    // This is 2^{31} seconds before 1970-01-01 15:14:8,
+    // i.e. shortly after the start of time_t, in any time-zone:
+    const QDateTime early(QDate(1901, 12, 14), QTime(12, 0));
+    QFile file("ancientfile.txt");
+    file.open(QIODevice::WriteOnly);
+    file.write("\n", 1);
+    file.close();
 
-    // All files on Windows can be read; there's no such thing as an
-    // unreadable file. Add GENERIC_WRITE if WriteOnly is passed.
-    int accessRights = GENERIC_READ | GENERIC_WRITE;
+    /*
+      QFile's setFileTime calls QFSFileEngine::setFileTime() which fails unless
+      the file is open at the time.  Of course, when writing, close() changes
+      modification time, so need to re-open for read in order to setFileTime().
+     */
+    file.open(QIODevice::ReadOnly);
+    bool ok = file.setFileTime(early, QFileDevice::FileModificationTime);
+    file.close();
 
-    SECURITY_ATTRIBUTES securityAtts = { sizeof(SECURITY_ATTRIBUTES), NULL, TRUE };
-
-    // Regular file mode. In Unbuffered mode, pass the no-buffering flag.
-    DWORD flagsAndAtts = FILE_ATTRIBUTE_NORMAL;
-
-    // WriteOnly can create files, ReadOnly cannot.
-    DWORD creationDisp = OPEN_ALWAYS;
-
-    // Create the file handle.
-    HANDLE fileHandle = CreateFile(L"oldfile.txt",
-        accessRights,
-        shareMode,
-        &securityAtts,
-        creationDisp,
-        flagsAndAtts,
-        NULL);
-
-    // Set file times back to 1601.
-    SYSTEMTIME stime;
-    stime.wYear = 1601;
-    stime.wMonth = 1;
-    stime.wDayOfWeek = 1;
-    stime.wDay = 1;
-    stime.wHour = 1;
-    stime.wMinute = 0;
-    stime.wSecond = 0;
-    stime.wMilliseconds = 0;
-
-    FILETIME ctime;
-    QVERIFY(SystemTimeToFileTime(&stime, &ctime));
-    FILETIME atime = ctime;
-    FILETIME mtime = atime;
-    QVERIFY(fileHandle);
-    QVERIFY(SetFileTime(fileHandle, &ctime, &atime, &mtime) != 0);
-
-    CloseHandle(fileHandle);
-
-    QFileInfo info("oldfile.txt");
-    QCOMPARE(info.lastModified(), QDateTime(QDate(1601, 1, 1), QTime(1, 0), Qt::UTC).toLocalTime());
-#endif
+    if (ok) {
+        QFileInfo info(file.fileName());
+        QCOMPARE(info.lastModified(), early);
+    } else {
+        QSKIP("Unable to set file metadata to ancient values");
+    }
 }
 
 void tst_QFileInfo::isSymLink_data()
@@ -1261,6 +1245,7 @@ void tst_QFileInfo::isSymLink_data()
     QFile::remove("link.lnk");
     QFile::remove("brokenlink.lnk");
     QFile::remove("dummyfile");
+    QFile::remove("relative/link.lnk");
 
     QFile file1(m_sourceFile);
     QVERIFY(file1.link("link.lnk"));
@@ -1277,6 +1262,12 @@ void tst_QFileInfo::isSymLink_data()
     QTest::newRow("existent file") << m_sourceFile << false << "";
     QTest::newRow("link") << "link.lnk" << true << QFileInfo(m_sourceFile).absoluteFilePath();
     QTest::newRow("broken link") << "brokenlink.lnk" << true << QFileInfo("dummyfile").absoluteFilePath();
+
+#ifndef Q_OS_WIN
+    QDir::current().mkdir("relative");
+    QFile::link("../dummyfile", "relative/link.lnk");
+    QTest::newRow("relative link") << "relative/link.lnk" << true << QFileInfo("dummyfile").absoluteFilePath();
+#endif
 #endif
 }
 
@@ -1385,7 +1376,7 @@ void tst_QFileInfo::isNativePath_data()
     QTest::addColumn<bool>("isNativePath");
 
     QTest::newRow("default-constructed") << QString() << false;
-    QTest::newRow("empty") << QString("") << true;
+    QTest::newRow("empty") << QString("") << false;
 
     QTest::newRow("local root") << QString::fromLatin1("/") << true;
     QTest::newRow("local non-existent file") << QString::fromLatin1("/abrakadabra.boo") << true;
@@ -1454,16 +1445,6 @@ void tst_QFileInfo::ntfsJunctionPointsAndSymlinks_data()
     QDir pwd;
     pwd.mkdir("target");
 
-    QLibrary kernel32("kernel32");
-    typedef BOOLEAN (WINAPI *PtrCreateSymbolicLink)(LPCWSTR, LPCWSTR, DWORD);
-    PtrCreateSymbolicLink createSymbolicLinkW = 0;
-    createSymbolicLinkW = (PtrCreateSymbolicLink) kernel32.resolve("CreateSymbolicLinkW");
-    if (!createSymbolicLinkW) {
-        //we need at least one data set for the test not to fail when skipping _data function
-        QDir target("target");
-        QTest::newRow("dummy") << target.path() << false << "" << target.canonicalPath();
-        QSKIP("symbolic links not supported by operating system");
-    }
     {
         //Directory symlinks
         QDir target("target");
@@ -1483,10 +1464,10 @@ void tst_QFileInfo::ntfsJunctionPointsAndSymlinks_data()
 
         DWORD err = ERROR_SUCCESS ;
         if (!pwd.exists("abs_symlink"))
-            if (!createSymbolicLinkW((wchar_t*)absSymlink.utf16(),(wchar_t*)absTarget.utf16(),0x1))
+            if (!CreateSymbolicLink((wchar_t*)absSymlink.utf16(),(wchar_t*)absTarget.utf16(),0x1))
                 err = GetLastError();
         if (err == ERROR_SUCCESS && !pwd.exists(relSymlink))
-            if (!createSymbolicLinkW((wchar_t*)relSymlink.utf16(),(wchar_t*)relTarget.utf16(),0x1))
+            if (!CreateSymbolicLink((wchar_t*)relSymlink.utf16(),(wchar_t*)relTarget.utf16(),0x1))
                 err = GetLastError();
         if (err != ERROR_SUCCESS) {
             wchar_t errstr[0x100];
@@ -1502,21 +1483,26 @@ void tst_QFileInfo::ntfsJunctionPointsAndSymlinks_data()
         QVERIFY2(file.exists(), msgDoesNotExist(file.fileName()).constData());
 
         QTest::newRow("absolute dir symlink") << absSymlink << true << QDir::fromNativeSeparators(absTarget) << target.canonicalPath();
-        QTest::newRow("relative dir symlink") << relSymlink << true << QDir::fromNativeSeparators(relTarget) << target.canonicalPath();
+        QTest::newRow("relative dir symlink") << relSymlink << true << QDir::fromNativeSeparators(absTarget) << target.canonicalPath();
         QTest::newRow("file in symlink dir") << fileInSymlink << false << "" << target.canonicalPath().append("/file");
     }
     {
         //File symlinks
+        pwd.mkdir("relative");
+        QDir relativeDir("relative");
         QFileInfo target(m_sourceFile);
         QString absTarget = QDir::toNativeSeparators(target.absoluteFilePath());
         QString absSymlink = QDir::toNativeSeparators(pwd.absolutePath()).append("\\abs_symlink.cpp");
         QString relTarget = QDir::toNativeSeparators(pwd.relativeFilePath(target.absoluteFilePath()));
         QString relSymlink = "rel_symlink.cpp";
-        QVERIFY(pwd.exists("abs_symlink.cpp") || createSymbolicLinkW((wchar_t*)absSymlink.utf16(),(wchar_t*)absTarget.utf16(),0x0));
-        QVERIFY(pwd.exists(relSymlink) || createSymbolicLinkW((wchar_t*)relSymlink.utf16(),(wchar_t*)relTarget.utf16(),0x0));
-
+        QString relToRelTarget = QDir::toNativeSeparators(relativeDir.relativeFilePath(target.absoluteFilePath()));
+        QString relToRelSymlink = "relative/rel_symlink";
+        QVERIFY(pwd.exists("abs_symlink.cpp") || CreateSymbolicLink((wchar_t*)absSymlink.utf16(),(wchar_t*)absTarget.utf16(),0x0));
+        QVERIFY(pwd.exists(relSymlink) || CreateSymbolicLink((wchar_t*)relSymlink.utf16(),(wchar_t*)relTarget.utf16(),0x0));
+        QVERIFY(pwd.exists(relToRelSymlink) || CreateSymbolicLink((wchar_t*)relToRelSymlink.utf16(), (wchar_t*)relToRelTarget.utf16(),0x0));
         QTest::newRow("absolute file symlink") << absSymlink << true << QDir::fromNativeSeparators(absTarget) << target.canonicalFilePath();
-        QTest::newRow("relative file symlink") << relSymlink << true << QDir::fromNativeSeparators(relTarget) << target.canonicalFilePath();
+        QTest::newRow("relative file symlink") << relSymlink << true << QDir::fromNativeSeparators(absTarget) << target.canonicalFilePath();
+        QTest::newRow("relative to relative file symlink") << relToRelSymlink << true << QDir::fromNativeSeparators(absTarget) << target.canonicalFilePath();
     }
 
     //Junctions
@@ -1540,20 +1526,14 @@ void tst_QFileInfo::ntfsJunctionPointsAndSymlinks_data()
     QTest::newRow("junction_root") << junction << false << QString() << QString();
 
     //Mountpoint
-    typedef BOOLEAN (WINAPI *PtrGetVolumeNameForVolumeMountPointW)(LPCWSTR, LPWSTR, DWORD);
-    PtrGetVolumeNameForVolumeMountPointW getVolumeNameForVolumeMountPointW = 0;
-    getVolumeNameForVolumeMountPointW = (PtrGetVolumeNameForVolumeMountPointW) kernel32.resolve("GetVolumeNameForVolumeMountPointW");
-    if(getVolumeNameForVolumeMountPointW)
-    {
-        wchar_t buffer[MAX_PATH];
-        QString rootPath = QDir::toNativeSeparators(QDir::rootPath());
-        QVERIFY(getVolumeNameForVolumeMountPointW((wchar_t*)rootPath.utf16(), buffer, MAX_PATH));
-        QString rootVolume = QString::fromWCharArray(buffer);
-        junction = "mountpoint";
-        rootVolume.replace("\\\\?\\","\\??\\");
-        FileSystem::createNtfsJunction(rootVolume, junction);
-        QTest::newRow("mountpoint") << junction << false << QString() << QString();
-    }
+    wchar_t buffer[MAX_PATH];
+    QString rootPath = QDir::toNativeSeparators(QDir::rootPath());
+    QVERIFY(GetVolumeNameForVolumeMountPoint((wchar_t*)rootPath.utf16(), buffer, MAX_PATH));
+    QString rootVolume = QString::fromWCharArray(buffer);
+    junction = "mountpoint";
+    rootVolume.replace("\\\\?\\","\\??\\");
+    FileSystem::createNtfsJunction(rootVolume, junction);
+    QTest::newRow("mountpoint") << junction << false << QString() << QString();
 }
 
 void tst_QFileInfo::ntfsJunctionPointsAndSymlinks()
@@ -1621,6 +1601,15 @@ void tst_QFileInfo::isWritable()
     QVERIFY2(fi.exists(), msgDoesNotExist(fi.absoluteFilePath()).constData());
     QVERIFY(!fi.isWritable());
 #endif
+
+#if defined (Q_OS_WIN) && !defined(Q_OS_WINRT)
+    QScopedValueRollback<int> ntfsMode(qt_ntfs_permission_lookup);
+    qt_ntfs_permission_lookup = 1;
+    QFileInfo fi2(QFile::decodeName(qgetenv("SystemRoot") + "/system.ini"));
+    QVERIFY(fi2.exists());
+    QCOMPARE(fi2.isWritable(), IsUserAdmin());
+#endif
+
 #if defined (Q_OS_QNX) // On QNX /etc is usually on a read-only filesystem
     QVERIFY(!QFileInfo("/etc/passwd").isWritable());
 #elif defined (Q_OS_UNIX) && !defined(Q_OS_VXWORKS) // VxWorks does not have users/groups
@@ -1634,7 +1623,7 @@ void tst_QFileInfo::isWritable()
 void tst_QFileInfo::isExecutable()
 {
     QString appPath = QCoreApplication::applicationDirPath();
-#if defined(Q_OS_ANDROID)
+#if defined(Q_OS_ANDROID) && !defined(Q_OS_ANDROID_EMBEDDED)
     appPath += "/libtst_qfileinfo.so";
 #else
     appPath += "/tst_qfileinfo";
@@ -1794,7 +1783,7 @@ void tst_QFileInfo::detachingOperations()
 }
 
 #if defined(Q_OS_WIN) && !defined(Q_OS_WINRT)
-BOOL IsUserAdmin()
+bool IsUserAdmin()
 {
     BOOL b;
     SID_IDENTIFIER_AUTHORITY NtAuthority = SECURITY_NT_AUTHORITY;
@@ -1812,12 +1801,8 @@ BOOL IsUserAdmin()
         FreeSid(AdministratorsGroup);
     }
 
-    return(b);
+    return b != FALSE;
 }
-
-QT_BEGIN_NAMESPACE
-extern Q_CORE_EXPORT int qt_ntfs_permission_lookup;
-QT_END_NAMESPACE
 
 #endif // Q_OS_WIN && !Q_OS_WINRT
 
@@ -1915,56 +1900,96 @@ void tst_QFileInfo::group()
     QCOMPARE(fi.group(), expected);
 }
 
-void tst_QFileInfo::invalidState()
+static void stateCheck(const QFileInfo &info, const QString &dirname, const QString &filename)
 {
-    // Shouldn't crash;
-
-    {
-        QFileInfo info;
-        QCOMPARE(info.size(), qint64(0));
-        QVERIFY(!info.exists());
-
-        info.setCaching(false);
-
-        info.created();
-        info.lastRead();
-        info.lastModified();
-    }
-
-    {
-        QFileInfo info("");
-        QCOMPARE(info.size(), qint64(0));
-        QVERIFY(!info.exists());
-
-        info.setCaching(false);
-
-        info.created();
-        info.lastRead();
-        info.lastModified();
-    }
-
-    {
-        QFileInfo info("file-doesn't-really-exist.txt");
-        QCOMPARE(info.size(), qint64(0));
-        QVERIFY(!info.exists());
-
-        info.setCaching(false);
-
-        info.created();
-        info.lastRead();
-        info.lastModified();
-    }
-
-    QVERIFY(true);
-}
-
-void tst_QFileInfo::nonExistingFileDates()
-{
-    QFileInfo info("non-existing-file.foobar");
+    QCOMPARE(info.size(), qint64(0));
     QVERIFY(!info.exists());
+
+    QString path;
+    QString abspath;
+    if (!dirname.isEmpty()) {
+        path = ".";
+        abspath = dirname + '/' + filename;
+    }
+
+    QCOMPARE(info.filePath(), filename);
+    QCOMPARE(info.absoluteFilePath(), abspath);
+    QCOMPARE(info.canonicalFilePath(), QString());
+    QCOMPARE(info.fileName(), filename);
+    QCOMPARE(info.baseName(), filename);
+    QCOMPARE(info.completeBaseName(), filename);
+    QCOMPARE(info.suffix(), QString());
+    QCOMPARE(info.bundleName(), QString());
+    QCOMPARE(info.completeSuffix(), QString());
+
+    QVERIFY(info.isRelative());
+    QCOMPARE(info.path(), path);
+    QCOMPARE(info.absolutePath(), dirname);
+    QCOMPARE(info.dir().path(), ".");
+
+    // these don't look right
+    QCOMPARE(info.canonicalPath(), path);
+    QCOMPARE(info.absoluteDir().path(), dirname.isEmpty() ? "." : dirname);
+
+    QVERIFY(!info.isReadable());
+    QVERIFY(!info.isWritable());
+    QVERIFY(!info.isExecutable());
+    QVERIFY(!info.isHidden());
+    QVERIFY(!info.isFile());
+    QVERIFY(!info.isDir());
+    QVERIFY(!info.isSymLink());
+    QVERIFY(!info.isBundle());
+    QVERIFY(!info.isRoot());
+    QCOMPARE(info.isNativePath(), !filename.isEmpty());
+
+    QCOMPARE(info.readLink(), QString());
+    QCOMPARE(info.ownerId(), uint(-2));
+    QCOMPARE(info.groupId(), uint(-2));
+    QCOMPARE(info.owner(), QString());
+    QCOMPARE(info.group(), QString());
+
+    QCOMPARE(info.permissions(), QFile::Permissions());
+
     QVERIFY(!info.created().isValid());
+    QVERIFY(!info.birthTime().isValid());
+    QVERIFY(!info.metadataChangeTime().isValid());
     QVERIFY(!info.lastRead().isValid());
     QVERIFY(!info.lastModified().isValid());
+};
+
+void tst_QFileInfo::invalidState_data()
+{
+    QTest::addColumn<int>("mode");
+    QTest::newRow("default") << 0;
+    QTest::newRow("empty") << 1;
+    QTest::newRow("copy-of-default") << 2;
+    QTest::newRow("copy-of-empty") << 3;
+}
+
+void tst_QFileInfo::invalidState()
+{
+    // Shouldn't crash or produce warnings
+    QFETCH(int, mode);
+    const QFileInfo &info = (mode & 1 ? QFileInfo("") : QFileInfo());
+
+    if (mode & 2) {
+        QFileInfo copy(info);
+        stateCheck(copy, QString(), QString());
+    } else {
+        stateCheck(info, QString(), QString());
+    }
+}
+
+void tst_QFileInfo::nonExistingFile()
+{
+    QString dirname = QDir::currentPath();
+    QString cdirname = QFileInfo(dirname).canonicalFilePath();
+    if (dirname != cdirname)
+        QDir::setCurrent(cdirname); // chdir() to our canonical path
+
+    QString filename = "non-existing-file-foobar";
+    QFileInfo info(filename);
+    stateCheck(info, dirname, filename);
 }
 
 QTEST_MAIN(tst_QFileInfo)

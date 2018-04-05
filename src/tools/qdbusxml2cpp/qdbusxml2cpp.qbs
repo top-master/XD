@@ -2,6 +2,7 @@ import qbs
 import QtCoreConfig
 
 QtHostTool {
+    description: "Qt D-Bus XML to C++ Compiler"
     condition: Qt.global.privateConfig.dbus
     toolFileTag: "qt.qdbusxml2cpp-tool"
     qbsSearchPaths: [project.qtbaseShadowDir + "/src/corelib/qbs"]

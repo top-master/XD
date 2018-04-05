@@ -45,6 +45,9 @@
 #include "qstyle.h"
 #include "qstyleoption.h"
 #include "qevent.h"
+#ifndef QT_NO_ACCESSIBILITY
+#include "qaccessible.h"
+#endif
 
 #include "private/qabstractbutton_p.h"
 
@@ -72,6 +75,8 @@ public:
 
     \ingroup basicwidgets
     \inmodule QtWidgets
+
+    \image windows-checkbox.png
 
     A QCheckBox is an option button that can be switched on (checked) or off
     (unchecked). Checkboxes are typically used to represent features in an
@@ -117,18 +122,6 @@ public:
     setAutoRepeat(), toggle(), pressed(), released(), clicked(), toggled(),
     checkState(), and stateChanged().
 
-    \table 100%
-    \row
-        \li \inlineimage macintosh-checkbox.png Screenshot of a Macintosh style checkbox
-        \li A checkbox shown in the \l{Macintosh Style Widget Gallery}{Macintosh widget style}.
-    \row
-        \li \inlineimage windowsvista-checkbox.png Screenshot of a Windows Vista style checkbox
-        \li A checkbox shown in the \l{Windows Vista Style Widget Gallery}{Windows Vista widget style}.
-    \row
-        \li \inlineimage fusion-checkbox.png Screenshot of a Fusion style checkbox
-        \li A checkbox shown in the \l{Fusion Style Widget Gallery}{Fusion widget style}.
-    \endtable
-
     \sa QAbstractButton, QRadioButton, {fowler}{GUI Design Handbook: Check Box}
 */
 
@@ -154,6 +147,7 @@ void QCheckBoxPrivate::init()
     q->setCheckable(true);
     q->setMouseTracking(true);
     q->setForegroundRole(QPalette::WindowText);
+    q->setAttribute(Qt::WA_MacShowFocusRect);
     setLayoutItemMargins(QStyle::SE_CheckBoxLayoutItem);
 }
 
@@ -253,6 +247,9 @@ Qt::CheckState QCheckBox::checkState() const
 void QCheckBox::setCheckState(Qt::CheckState state)
 {
     Q_D(QCheckBox);
+#ifndef QT_NO_ACCESSIBILITY
+    bool noChange = d->noChange;
+#endif
     if (state == Qt::PartiallyChecked) {
         d->tristate = true;
         d->noChange = true;
@@ -267,6 +264,15 @@ void QCheckBox::setCheckState(Qt::CheckState state)
         d->publishedState = state;
         emit stateChanged(state);
     }
+
+#ifndef QT_NO_ACCESSIBILITY
+    if (noChange != d->noChange) {
+        QAccessible::State s;
+        s.checkStateMixed = true;
+        QAccessibleStateChangeEvent event(this, s);
+        QAccessible::updateAccessibility(&event);
+    }
+#endif
 }
 
 

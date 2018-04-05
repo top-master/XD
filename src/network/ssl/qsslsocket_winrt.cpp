@@ -47,6 +47,7 @@
 #include <QtCore/QSysInfo>
 #include <QtCore/qfunctions_winrt.h>
 #include <private/qnativesocketengine_winrt_p.h>
+#include <private/qeventdispatcher_winrt_p.h>
 
 #include <windows.networking.h>
 #include <windows.networking.sockets.h>
@@ -237,7 +238,6 @@ void QSslSocketBackendPrivate::startClientEncryption()
     case QSsl::SslV3:
         protectionLevel = SocketProtectionLevel_Ssl; // Only use this value if weak cipher support is required
         break;
-    case QSsl::SecureProtocols:
     case QSsl::TlsV1SslV3:
     case QSsl::TlsV1_0:
         protectionLevel = SocketProtectionLevel_Tls10;
@@ -256,6 +256,11 @@ void QSslSocketBackendPrivate::startClientEncryption()
         setErrorAndEmit(QAbstractSocket::SslInvalidUserDataError,
                         QStringLiteral("unsupported protocol"));
         return;
+    case QSsl::SecureProtocols:
+        // SocketProtectionLevel_Tls12 actually means "use TLS1.0, 1.1 or 1.2"
+        // https://docs.microsoft.com/en-us/uwp/api/windows.networking.sockets.socketprotectionlevel
+        protectionLevel = SocketProtectionLevel_Tls12;
+        break;
     default:
         protectionLevel = SocketProtectionLevel_Tls12; // default to highest
         protocol = QSsl::TlsV1_2;
@@ -443,8 +448,11 @@ void QSslSocketBackendPrivate::continueHandshake()
         return;
     }
 
-    hr = op->put_Completed(Callback<IAsyncActionCompletedHandler>(
-                               this, &QSslSocketBackendPrivate::onSslUpgrade).Get());
+    hr = QEventDispatcherWinRT::runOnXamlThread([this, op]() {
+        HRESULT hr = op->put_Completed(Callback<IAsyncActionCompletedHandler>(
+            this, &QSslSocketBackendPrivate::onSslUpgrade).Get());
+        return hr;
+    });
     Q_ASSERT_SUCCEEDED(hr);
 }
 
@@ -518,7 +526,7 @@ HRESULT QSslSocketBackendPrivate::onSslUpgrade(IAsyncAction *action, AsyncStatus
     QList<QSslCertificate> peerCertificateChain;
     if (certificate) {
         ComPtr<IAsyncOperation<CertificateChain *>> op;
-        hr = certificate->BuildChainAsync(Q_NULLPTR, &op);
+        hr = certificate->BuildChainAsync(nullptr, &op);
         Q_ASSERT_SUCCEEDED(hr);
         ComPtr<ICertificateChain> certificateChain;
         hr = QWinRTFunctions::await(op, certificateChain.GetAddressOf());

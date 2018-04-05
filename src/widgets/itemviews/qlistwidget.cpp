@@ -39,7 +39,6 @@
 
 #include "qlistwidget.h"
 
-#ifndef QT_NO_LISTWIDGET
 #include <qitemdelegate.h>
 #include <private/qlistview_p.h>
 #include <private/qwidgetitemdata_p.h>
@@ -48,9 +47,6 @@
 #include <algorithm>
 
 QT_BEGIN_NAMESPACE
-
-// workaround for VC++ 6.0 linker bug (?)
-typedef bool(*LessThan)(const QPair<QListWidgetItem*,int>&,const QPair<QListWidgetItem*,int>&);
 
 class QListWidgetMimeData : public QMimeData
 {
@@ -190,8 +186,9 @@ int QListModel::rowCount(const QModelIndex &parent) const
     return parent.isValid() ? 0 : items.count();
 }
 
-QModelIndex QListModel::index(QListWidgetItem *item) const
+QModelIndex QListModel::index(const QListWidgetItem *item_) const
 {
+    QListWidgetItem *item = const_cast<QListWidgetItem *>(item_);
     if (!item || !item->view || static_cast<const QListModel *>(item->view->model()) != this
         || items.isEmpty())
         return QModelIndex();
@@ -301,7 +298,7 @@ void QListModel::sort(int column, Qt::SortOrder order)
         sorting[i].second = i;
     }
 
-    LessThan compare = (order == Qt::AscendingOrder ? &itemLessThan : &itemGreaterThan);
+    const auto compare = (order == Qt::AscendingOrder ? &itemLessThan : &itemGreaterThan);
     std::sort(sorting.begin(), sorting.end(), compare);
     QModelIndexList fromIndexes;
     QModelIndexList toIndexes;
@@ -338,7 +335,7 @@ void QListModel::ensureSorted(int column, Qt::SortOrder order, int start, int en
         sorting[i].second = start + i;
     }
 
-    LessThan compare = (order == Qt::AscendingOrder ? &itemLessThan : &itemGreaterThan);
+    const auto compare = (order == Qt::AscendingOrder ? &itemLessThan : &itemGreaterThan);
     std::sort(sorting.begin(), sorting.end(), compare);
 
     QModelIndexList oldPersistentIndexes = persistentIndexList();
@@ -412,10 +409,10 @@ QList<QListWidgetItem*>::iterator QListModel::sortedInsertionIterator(
     return std::lower_bound(begin, end, item, QListModelGreaterThan());
 }
 
-void QListModel::itemChanged(QListWidgetItem *item)
+void QListModel::itemChanged(QListWidgetItem *item, const QVector<int> &roles)
 {
-    QModelIndex idx = index(item);
-    emit dataChanged(idx, idx);
+    const QModelIndex idx = index(item);
+    emit dataChanged(idx, idx, roles);
 }
 
 QStringList QListModel::mimeTypes() const
@@ -691,6 +688,9 @@ QListWidgetItem *QListWidgetItem::clone() const
     Sets the data for a given \a role to the given \a value. Reimplement this
     function if you need extra roles or special behavior for certain roles.
 
+    \note The default implementation treats Qt::EditRole and Qt::DisplayRole as
+    referring to the same data.
+
     \sa Qt::ItemDataRole, data()
 */
 void QListWidgetItem::setData(int role, const QVariant &value)
@@ -708,8 +708,12 @@ void QListWidgetItem::setData(int role, const QVariant &value)
     }
     if (!found)
         d->values.append(QWidgetItemData(role, value));
-    if (QListModel *model = (view ? qobject_cast<QListModel*>(view->model()) : 0))
-        model->itemChanged(this);
+    if (QListModel *model = (view ? qobject_cast<QListModel*>(view->model()) : nullptr)) {
+        const QVector<int> roles((role == Qt::DisplayRole) ?
+                                    QVector<int>({Qt::DisplayRole, Qt::EditRole}) :
+                                    QVector<int>({role}));
+        model->itemChanged(this, roles);
+    }
 }
 
 /*!
@@ -951,7 +955,8 @@ QDataStream &operator>>(QDataStream &in, QListWidgetItem &item)
 
     \sa Qt::ItemFlags
 */
-void QListWidgetItem::setFlags(Qt::ItemFlags aflags) {
+void QListWidgetItem::setFlags(Qt::ItemFlags aflags)
+{
     itemFlags = aflags;
     if (QListModel *model = (view ? qobject_cast<QListModel*>(view->model()) : 0))
         model->itemChanged(this);
@@ -1149,6 +1154,8 @@ void QListWidgetPrivate::_q_dataChanged(const QModelIndex &topLeft,
     \ingroup model-view
     \inmodule QtWidgets
 
+    \image windows-listview.png
+
     QListWidget is a convenience class that provides a list view similar to the
     one supplied by QListView, but with a classic item-based interface for
     adding and removing items. QListWidget uses an internal model to manage
@@ -1191,17 +1198,8 @@ void QListWidgetPrivate::_q_dataChanged(const QModelIndex &topLeft,
     current item changes, the currentItemChanged() signal is emitted with the
     new current item and the item that was previously current.
 
-    \table 100%
-    \row \li \inlineimage windowsvista-listview.png Screenshot of a Windows Vista style list widget
-         \li \inlineimage macintosh-listview.png Screenshot of a Macintosh style table widget
-         \li \inlineimage fusion-listview.png Screenshot of a Fusion style table widget
-    \row \li A \l{Windows Vista Style Widget Gallery}{Windows Vista style} list widget.
-         \li A \l{Macintosh Style Widget Gallery}{Macintosh style} list widget.
-         \li A \l{Fusion Style Widget Gallery}{Fusion style} list widget.
-    \endtable
-
     \sa QListWidgetItem, QListView, QTreeView, {Model/View Programming},
-        {Config Dialog Example}
+        {Tab Dialog Example}
 */
 
 /*!
@@ -1624,7 +1622,7 @@ void QListWidget::editItem(QListWidgetItem *item)
     Opens an editor for the given \a item. The editor remains open after
     editing.
 
-    \sa closePersistentEditor()
+    \sa closePersistentEditor(), isPersistentEditorOpen()
 */
 void QListWidget::openPersistentEditor(QListWidgetItem *item)
 {
@@ -1636,13 +1634,27 @@ void QListWidget::openPersistentEditor(QListWidgetItem *item)
 /*!
     Closes the persistent editor for the given \a item.
 
-    \sa openPersistentEditor()
+    \sa openPersistentEditor(), isPersistentEditorOpen()
 */
 void QListWidget::closePersistentEditor(QListWidgetItem *item)
 {
     Q_D(QListWidget);
     QModelIndex index = d->listModel()->index(item);
     QAbstractItemView::closePersistentEditor(index);
+}
+
+/*!
+    \since 5.10
+
+    Returns whether a persistent editor is open for item \a item.
+
+    \sa openPersistentEditor(), closePersistentEditor()
+*/
+bool QListWidget::isPersistentEditorOpen(QListWidgetItem *item) const
+{
+    Q_D(const QListWidget);
+    const QModelIndex index = d->listModel()->index(item);
+    return QAbstractItemView::isPersistentEditorOpen(index);
 }
 
 /*!
@@ -1936,13 +1948,27 @@ QList<QListWidgetItem*> QListWidget::items(const QMimeData *data) const
 
 /*!
     Returns the QModelIndex associated with the given \a item.
+
+    \note In Qt versions prior to 5.10, this function took a non-\c{const} \a item.
 */
 
-QModelIndex QListWidget::indexFromItem(QListWidgetItem *item) const
+QModelIndex QListWidget::indexFromItem(const QListWidgetItem *item) const
 {
     Q_D(const QListWidget);
     return d->listModel()->index(item);
 }
+
+#if QT_VERSION < QT_VERSION_CHECK(6, 0, 0)
+/*!
+    \internal
+    \obsolete
+    \overload
+*/
+QModelIndex QListWidget::indexFromItem(QListWidgetItem *item) const
+{
+    return indexFromItem(const_cast<const QListWidgetItem *>(item));
+}
+#endif
 
 /*!
     Returns a pointer to the QListWidgetItem associated with the given \a index.
@@ -1976,5 +2002,3 @@ QT_END_NAMESPACE
 
 #include "moc_qlistwidget.cpp"
 #include "moc_qlistwidget_p.cpp"
-
-#endif // QT_NO_LISTWIDGET

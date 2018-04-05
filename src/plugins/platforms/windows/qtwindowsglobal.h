@@ -101,6 +101,8 @@ enum WindowsEventType // Simplify event types
     FocusOutEvent = WindowEventFlag + 18,
     WhatsThisEvent = WindowEventFlag + 19,
     DpiChangedEvent = WindowEventFlag + 21,
+    EnterSizeMoveEvent = WindowEventFlag + 22,
+    ExitSizeMoveEvent = WindowEventFlag + 23,
     MouseEvent = MouseEventFlag + 1,
     MouseWheelEvent = MouseEventFlag + 2,
     CursorEvent = MouseEventFlag + 3,
@@ -121,6 +123,9 @@ enum WindowsEventType // Simplify event types
     EndSessionApplicationEvent = ApplicationEventFlag + 5,
     AppCommandEvent = ApplicationEventFlag + 6,
     DeviceChangeEvent = ApplicationEventFlag + 7,
+    MenuAboutToShowEvent = ApplicationEventFlag + 8,
+    AcceleratorCommandEvent = ApplicationEventFlag + 9,
+    MenuCommandEvent = ApplicationEventFlag + 10,
     InputMethodStartCompositionEvent = InputMethodEventFlag + 1,
     InputMethodCompositionEvent = InputMethodEventFlag + 2,
     InputMethodEndCompositionEvent = InputMethodEventFlag + 3,
@@ -232,6 +237,7 @@ inline QtWindows::WindowsEventType windowsEventType(UINT message, WPARAM wParamI
          default:
              break;
          }
+         break;
     case WM_GETOBJECT:
         return QtWindows::AccessibleObjectFromWindowRequest;
     case WM_SETFOCUS:
@@ -260,12 +266,10 @@ inline QtWindows::WindowsEventType windowsEventType(UINT message, WPARAM wParamI
         if ((wParamIn & 0xfff0) == SC_CONTEXTHELP)
             return QtWindows::WhatsThisEvent;
         break;
-#if !defined(QT_NO_SESSIONMANAGER)
     case WM_QUERYENDSESSION:
         return QtWindows::QueryEndSessionApplicationEvent;
     case WM_ENDSESSION:
         return QtWindows::EndSessionApplicationEvent;
-#endif
 #if defined(WM_APPCOMMAND)
     case WM_APPCOMMAND:
         return QtWindows::AppCommandEvent;
@@ -274,8 +278,17 @@ inline QtWindows::WindowsEventType windowsEventType(UINT message, WPARAM wParamI
         return QtWindows::GestureEvent;
     case WM_DEVICECHANGE:
         return QtWindows::DeviceChangeEvent;
+    case WM_INITMENU:
+    case WM_INITMENUPOPUP:
+        return QtWindows::MenuAboutToShowEvent;
+    case WM_COMMAND:
+        return HIWORD(wParamIn) ? QtWindows::AcceleratorCommandEvent : QtWindows::MenuCommandEvent;
     case WM_DPICHANGED:
         return QtWindows::DpiChangedEvent;
+    case WM_ENTERSIZEMOVE:
+        return QtWindows::EnterSizeMoveEvent;
+    case WM_EXITSIZEMOVE:
+        return QtWindows::ExitSizeMoveEvent;
     default:
         break;
     }

@@ -2,7 +2,7 @@ TARGET = QtEglFsKmsSupport
 CONFIG += no_module_headers internal_module
 load(qt_module)
 
-QT += core-private gui-private eglfsdeviceintegration-private kms_support-private
+QT += core-private gui-private eglfsdeviceintegration-private kms_support-private edid_support-private
 
 INCLUDEPATH += $$PWD/../../api
 
@@ -19,4 +19,5 @@ SOURCES += $$PWD/qeglfskmsintegration.cpp \
 
 HEADERS += $$PWD/qeglfskmsintegration.h \
            $$PWD/qeglfskmsdevice.h \
-           $$PWD/qeglfskmsscreen.h
+           $$PWD/qeglfskmsscreen.h \
+           $$PWD/qeglfskmshelpers.h

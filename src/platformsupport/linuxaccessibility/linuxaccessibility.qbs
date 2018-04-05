@@ -1,7 +1,6 @@
 import qbs
 import QtGuiConfig
 import QtGuiPrivateConfig
-import "../../3rdparty/atspi2/atspi2.qbs" as SrcATSPI2
 
 QtModuleProject {
     name: "QtLinuxAccessibilitySupport"
@@ -50,7 +49,24 @@ QtModuleProject {
                 "struct_marshallers_p.h",
             ]
         }
-        SrcATSPI2 {}
+        Group {
+            prefix: "dbusxml/"
+            files: [
+                "Cache.xml",
+                "DeviceEventController.xml",
+            ]
+            fileTags: ["qt.dbus.adaptor"]
+            Qt.dbus.xml2CppHeaderFlags: ["-i", "struct_marshallers_p.h"]
+        }
+        Group {
+            prefix: "dbusxml/"
+            files: [
+                "Socket.xml",
+                "Bus.xml",
+            ]
+            fileTags: ["qt.dbus.interface"]
+            Qt.dbus.xml2CppHeaderFlags: ["-i", "struct_marshallers_p.h"]
+        }
         Group {
             name: "Qt.core precompiled header"
             files: ["../../corelib/global/qt_pch.h"]

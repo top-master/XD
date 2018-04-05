@@ -21,7 +21,7 @@ Project {
             Group {
                 name: "zlib sources"
                 condition: qt_zlib.useBundledZlib && !qt_zlib.useQtCore
-                prefix: "zlib/"
+                prefix: "zlib/src/"
                 files: [
                     "adler32.c",
                     "compress.c",

@@ -54,14 +54,14 @@
 #include <QtWidgets/private/qtwidgetsglobal_p.h>
 #include "qgraphicsview.h"
 
-#if !defined(QT_NO_GRAPHICSVIEW)
-
 #include <QtGui/qevent.h>
 #include <QtCore/qcoreapplication.h>
 #include "qgraphicssceneevent.h"
 #include <QtWidgets/qstyleoption.h>
 #include <private/qabstractscrollarea_p.h>
 #include <private/qapplication_p.h>
+
+QT_REQUIRE_CONFIG(graphicsview);
 
 QT_BEGIN_NAMESPACE
 
@@ -136,7 +136,7 @@ public:
     QGraphicsView::OptimizationFlags optimizationFlags;
 
     QPointer<QGraphicsScene> scene;
-#ifndef QT_NO_RUBBERBAND
+#if QT_CONFIG(rubberband)
     QRect rubberBandRect;
     QRegion rubberBandRegion(const QWidget *widget, const QRect &rect) const;
     void updateRubberBand(const QMouseEvent *event);
@@ -230,7 +230,5 @@ public:
 };
 
 QT_END_NAMESPACE
-
-#endif // QT_NO_GRAPHICSVIEW
 
 #endif

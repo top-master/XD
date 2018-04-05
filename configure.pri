@@ -137,7 +137,7 @@ defineReplace(qtConfFunc_licenseCheck) {
             export(config.input.qt_edition)
         } else {
             equals(QMAKE_HOST.os, Linux) {
-                equals(QMAKE_HOST.arch, x86): \
+                !equals(QMAKE_HOST.arch, x86_64): \
                     Licheck = licheck32
                 else: \
                     Licheck = licheck64
@@ -150,10 +150,10 @@ defineReplace(qtConfFunc_licenseCheck) {
             }
 
             !qtRunLoggedCommand("$$system_quote($$QT_SOURCE_TREE/bin/$$Licheck) \
-                                    $$eval(config.input.confirm-license) \
+                                    $$system_quote($$eval(config.input.confirm-license)) \
                                     $$system_quote($$QT_SOURCE_TREE) $$system_quote($$QT_BUILD_TREE) \
                                     $$[QMAKE_SPEC] $$[QMAKE_XSPEC]", \
-                                LicheckOutput): \
+                                LicheckOutput, false): \
                 return(false)
             logn()
             for (o, LicheckOutput) {
@@ -252,7 +252,7 @@ defineTest(qtConfTest_architecture) {
         error("Could not determine $$eval($${1}.label). See config.log for details.")
 
     test = $$eval($${1}.test)
-    test_out_dir = $$shadowed($$QMAKE_CONFIG_TESTS_DIR/$$test)
+    test_out_dir = $$OUT_PWD/$$basename(QMAKE_CONFIG_TESTS_DIR)/$$test
     unix:exists($$test_out_dir/arch): \
         content = $$cat($$test_out_dir/arch, blob)
     else: win32:exists($$test_out_dir/arch.exe): \
@@ -366,12 +366,6 @@ defineTest(qtConfTest_detectPkgConfig) {
     return(true)
 }
 
-defineTest(qtConfTest_subarch) {
-    subarch = $$eval($${1}.subarch)
-    contains($${currentConfig}.tests.architecture.subarch, $${subarch}): return(true)
-    return(false)
-}
-
 defineTest(qtConfTest_buildParts) {
     parts = $$config.input.make
     isEmpty(parts) {
@@ -393,6 +387,29 @@ defineTest(qtConfTest_buildParts) {
     $${1}.cache = -
     export($${1}.cache)
     return(true)
+}
+
+defineTest(qtConfTest_x86Simd) {
+    simd = $$section(1, ".", -1)    # last component
+    $${1}.args = CONFIG+=add_cflags DEFINES+=NO_ATTRIBUTE SIMD=$$simd
+    $${1}.test = x86_simd
+    qtConfTest_compile($${1})
+}
+
+defineTest(qtConfTest_x86SimdAlways) {
+    configs =
+    fpfx = $${currentConfig}.features
+    tpfx = $${currentConfig}.tests
+
+    # Make a list of all passing features whose tests have type=x86Simd
+    for (f, $${tpfx}._KEYS_) {
+        !equals($${tpfx}.$${f}.type, "x86Simd"): \
+            next()
+        qtConfCheckFeature($$f)
+        equals($${fpfx}.$${f}.available, true): configs += $$f
+    }
+    $${1}.literal_args = $$system_quote(SIMD=$$join(configs, " "))
+    qtConfTest_compile($${1})
 }
 
 # custom outputs
@@ -557,7 +574,7 @@ defineTest(qtConfOutput_prepareOptions) {
                 else: \
                     qtConfFatalError("Cannot detect the Android host." \
                                      "Please use -android-ndk-host option to specify one.")
-                qtConfAddNotice("Available Android host does not match host architecture.")
+                qtConfAddNote("Available Android host does not match host architecture.")
             }
         } else {
             !exists($$ndk_tc_pfx/$$ndk_host/*): \
@@ -1029,8 +1046,22 @@ defineTest(qtConfOutput_qbsTargetProfile) {
     export($${currentConfig}.output.qbsTargetProfile)
 }
 
+defineTest(qtConfOutput_sanitizer) {
+    !$${2}: return()
+
+    # Export this here, so that WebEngine can access it at configure time.
+    CONFIG += sanitizer
+    $$qtConfEvaluate("features.sanitize_address"): CONFIG += sanitize_address
+    $$qtConfEvaluate("features.sanitize_thread"): CONFIG += sanitize_thread
+    $$qtConfEvaluate("features.sanitize_memory"): CONFIG += sanitize_memory
+    $$qtConfEvaluate("features.sanitize_undefined"): CONFIG += sanitize_undefined
+
+    export(CONFIG)
+}
+
 defineTest(qtConfOutput_architecture) {
     arch = $$qtConfEvaluate("tests.architecture.arch")
+    subarch = $$qtConfEvaluate('tests.architecture.subarch')
     buildabi = $$qtConfEvaluate("tests.architecture.buildabi")
 
     $$qtConfEvaluate("features.cross_compile") {
@@ -1041,7 +1072,7 @@ defineTest(qtConfOutput_architecture) {
             "host_build {" \
             "    QT_CPU_FEATURES.$$host_arch = $$qtConfEvaluate('tests.host_architecture.subarch')" \
             "} else {" \
-            "    QT_CPU_FEATURES.$$arch = $$qtConfEvaluate('tests.architecture.subarch')" \
+            "    QT_CPU_FEATURES.$$arch = $$subarch" \
             "}"
         publicPro = \
             "host_build {" \
@@ -1056,7 +1087,7 @@ defineTest(qtConfOutput_architecture) {
 
     } else {
         privatePro = \
-            "QT_CPU_FEATURES.$$arch = $$qtConfEvaluate('tests.architecture.subarch')"
+            "QT_CPU_FEATURES.$$arch = $$subarch"
         publicPro = \
             "QT_ARCH = $$arch" \
             "QT_BUILDABI = $$buildabi"
@@ -1067,9 +1098,11 @@ defineTest(qtConfOutput_architecture) {
     $${currentConfig}.output.privatePro += $$privatePro
     export($${currentConfig}.output.privatePro)
 
-    # setup QT_ARCH variable used by qtConfEvaluate
+    # setup QT_ARCH and QT_CPU_FEATURES variables used by qtConfEvaluate
     QT_ARCH = $$arch
     export(QT_ARCH)
+    QT_CPU_FEATURES.$$arch = $$subarch
+    export(QT_CPU_FEATURES.$$arch)
 }
 
 defineTest(qtConfOutput_qreal) {
@@ -1194,7 +1227,7 @@ defineTest(qtConfOutput_gccSysroot) {
 defineTest(qtConfOutput_qmakeArgs) {
     !$${2}: return()
 
-    $${currentConfig}.output.privatePro = "!host_build|!cross_compile {"
+    $${currentConfig}.output.privatePro += "!host_build|!cross_compile {"
     for (a, config.input.qmakeArgs) {
         $${currentConfig}.output.privatePro += "    $$a"
         EXTRA_QMAKE_ARGS += $$system_quote($$a)
@@ -1216,6 +1249,37 @@ defineReplace(qtConfOutputPostProcess_publicPro) {
     #libinfix and namespace
     !isEmpty(config.input.qt_libinfix): output += "QT_LIBINFIX = $$config.input.qt_libinfix"
     !isEmpty(config.input.qt_namespace): output += "QT_NAMESPACE = $$config.input.qt_namespace"
+
+    !isEmpty(QMAKE_GCC_MAJOR_VERSION) {
+        output += \
+            "QT_GCC_MAJOR_VERSION = $$QMAKE_GCC_MAJOR_VERSION" \
+            "QT_GCC_MINOR_VERSION = $$QMAKE_GCC_MINOR_VERSION" \
+            "QT_GCC_PATCH_VERSION = $$QMAKE_GCC_PATCH_VERSION"
+    }
+    !isEmpty(QMAKE_CLANG_MAJOR_VERSION) {
+        output += \
+            "QT_CLANG_MAJOR_VERSION = $$QMAKE_CLANG_MAJOR_VERSION" \
+            "QT_CLANG_MINOR_VERSION = $$QMAKE_CLANG_MINOR_VERSION" \
+            "QT_CLANG_PATCH_VERSION = $$QMAKE_CLANG_PATCH_VERSION"
+    }
+    !isEmpty(QMAKE_APPLE_CLANG_MAJOR_VERSION) {
+        output += \
+            "QT_APPLE_CLANG_MAJOR_VERSION = $$QMAKE_APPLE_CLANG_MAJOR_VERSION" \
+            "QT_APPLE_CLANG_MINOR_VERSION = $$QMAKE_APPLE_CLANG_MINOR_VERSION" \
+            "QT_APPLE_CLANG_PATCH_VERSION = $$QMAKE_APPLE_CLANG_PATCH_VERSION"
+    }
+    !isEmpty(QMAKE_MSC_VER) {
+        output += \
+            "QT_MSVC_MAJOR_VERSION = $$replace(QMAKE_MSC_FULL_VER, "(..)(..)(.*)", "\\1")" \
+            "QT_MSVC_MINOR_VERSION = $$format_number($$replace(QMAKE_MSC_FULL_VER, "(..)(..)(.*)", "\\2"))" \
+            "QT_MSVC_PATCH_VERSION = $$replace(QMAKE_MSC_FULL_VER, "(..)(..)(.*)", "\\3")"
+    }
+    !isEmpty(QMAKE_ICC_VER) {
+        output += \
+            "QT_ICC_MAJOR_VERSION = $$replace(QMAKE_ICC_VER, "(..)(..)", "\\1")" \
+            "QT_ICC_MINOR_VERSION = $$format_number($$replace(QMAKE_ICC_VER, "(..)(..)", "\\2"))" \
+            "QT_ICC_PATCH_VERSION = $$QMAKE_ICC_UPDATE_VER"
+    }
 
     output += "QT_EDITION = $$config.input.qt_edition"
     !contains(config.input.qt_edition, "(OpenSource|Preview)") {

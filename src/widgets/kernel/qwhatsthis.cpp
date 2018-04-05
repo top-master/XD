@@ -38,11 +38,11 @@
 ****************************************************************************/
 
 #include "qwhatsthis.h"
-#ifndef QT_NO_WHATSTHIS
 #include "qpointer.h"
 #include "qapplication.h"
 #include <private/qguiapplication_p.h>
 #include "qdesktopwidget.h"
+#include <private/qdesktopwidget_p.h>
 #include "qevent.h"
 #include "qpixmap.h"
 #include "qscreen.h"
@@ -54,7 +54,6 @@
 #include "qtextdocument.h"
 #include <qpa/qplatformtheme.h>
 #include "private/qtextdocumentlayout_p.h"
-#include "qtoolbutton.h"
 #include "qdebug.h"
 #ifndef QT_NO_ACCESSIBILITY
 #include "qaccessible.h"
@@ -146,12 +145,12 @@ public:
     static QWhatsThat *instance;
 
 protected:
-    void showEvent(QShowEvent *e) Q_DECL_OVERRIDE;
-    void mousePressEvent(QMouseEvent*) Q_DECL_OVERRIDE;
-    void mouseReleaseEvent(QMouseEvent*) Q_DECL_OVERRIDE;
-    void mouseMoveEvent(QMouseEvent*) Q_DECL_OVERRIDE;
-    void keyPressEvent(QKeyEvent*) Q_DECL_OVERRIDE;
-    void paintEvent(QPaintEvent*) Q_DECL_OVERRIDE;
+    void showEvent(QShowEvent *e) override;
+    void mousePressEvent(QMouseEvent*) override;
+    void mouseReleaseEvent(QMouseEvent*) override;
+    void mouseMoveEvent(QMouseEvent*) override;
+    void keyPressEvent(QKeyEvent*) override;
+    void paintEvent(QPaintEvent*) override;
 
 private:
     QPointer<QWidget>widget;
@@ -211,7 +210,7 @@ QWhatsThat::QWhatsThat(const QString& txt, QWidget* parent, QWidget *showTextFor
     }
     else
     {
-        int sw = QApplication::desktop()->width() / 3;
+        int sw = QDesktopWidgetPrivate::width() / 3;
         if (sw < 200)
             sw = 200;
         else if (sw > 300)
@@ -366,7 +365,7 @@ class QWhatsThisPrivate : public QObject
     QWhatsThisPrivate();
     ~QWhatsThisPrivate();
     static QWhatsThisPrivate *instance;
-    bool eventFilter(QObject *, QEvent *) Q_DECL_OVERRIDE;
+    bool eventFilter(QObject *, QEvent *) override;
     QPointer<QAction> action;
     static void say(QWidget *, const QString &, int x = 0, int y = 0);
     static void notifyToplevels(QEvent *e);
@@ -584,14 +583,14 @@ void QWhatsThisPrivate::say(QWidget * widget, const QString &text, int x, int y)
     // okay, now to find a suitable location
 
     int scr = (widget ?
-                QApplication::desktop()->screenNumber(widget) :
+                QDesktopWidgetPrivate::screenNumber(widget) :
 #if 0 /* Used to be included in Qt4 for Q_WS_X11 */ && !defined(QT_NO_CURSOR)
                 QCursor::x11Screen()
 #else
-                QApplication::desktop()->screenNumber(QPoint(x,y))
+                QDesktopWidgetPrivate::screenNumber(QPoint(x,y))
 #endif
                );
-    QRect screen = QApplication::desktop()->screenGeometry(scr);
+    QRect screen = QDesktopWidgetPrivate::screenGeometry(scr);
 
     int w = whatsThat->width();
     int h = whatsThat->height();
@@ -681,5 +680,3 @@ QAction *QWhatsThis::createAction(QObject *parent)
 QT_END_NAMESPACE
 
 #include "qwhatsthis.moc"
-
-#endif // QT_NO_WHATSTHIS

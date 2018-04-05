@@ -49,6 +49,7 @@
 #include "qcocoaapplication.h" // for custom application category
 #include "qcocoamenuloader.h"
 #include <QtGui/private/qcoregraphics_p.h>
+#include <QtCore/qregularexpression.h>
 
 #include <QtCore/QDebug>
 
@@ -95,7 +96,6 @@ QCocoaMenuItem::QCocoaMenuItem() :
     m_itemView(nil),
     m_menu(NULL),
     m_role(NoRole),
-    m_tag(0),
     m_iconSize(16),
     m_textSynced(false),
     m_isVisible(true),
@@ -150,10 +150,6 @@ void QCocoaMenuItem::setMenu(QPlatformMenu *menu)
     QMacAutoReleasePool pool;
     m_menu = static_cast<QCocoaMenu *>(menu);
     if (m_menu) {
-        if (m_native) {
-            // Skip automatic menu item validation
-            m_native.action = nil;
-        }
         m_menu->setMenuParent(this);
         m_menu->propagateEnabledState(isEnabled());
     } else {
@@ -266,7 +262,8 @@ NSMenuItem *QCocoaMenuItem::sync()
             m_detectedRole = detectMenuRole(m_text);
             switch (m_detectedRole) {
             case QPlatformMenuItem::AboutRole:
-                if (m_text.indexOf(QRegExp(QString::fromLatin1("qt$"), Qt::CaseInsensitive)) == -1)
+                if (m_text.indexOf(QRegularExpression(QString::fromLatin1("qt$"),
+                                                      QRegularExpression::CaseInsensitiveOption)) == -1)
                     mergeItem = [loader aboutMenuItem];
                 else
                     mergeItem = [loader aboutQtMenuItem];
@@ -334,12 +331,9 @@ NSMenuItem *QCocoaMenuItem::sync()
         NSFont *customMenuFont = [NSFont fontWithName:m_font.family().toNSString()
                                   size:m_font.pointSize()];
         if (customMenuFont) {
-            NSArray *keys = [NSArray arrayWithObjects:NSFontAttributeName, nil];
-            NSArray *objects = [NSArray arrayWithObjects:customMenuFont, nil];
-            NSDictionary *attributes = [NSDictionary dictionaryWithObjects:objects forKeys:keys];
             NSAttributedString *str = [[[NSAttributedString alloc] initWithString:finalString.toNSString()
-                                     attributes:attributes] autorelease];
-            [m_native setAttributedTitle: str];
+                                     attributes:@{NSFontAttributeName: customMenuFont}] autorelease];
+            [m_native setAttributedTitle:str];
             useAttributedTitle = true;
         }
     }
@@ -370,24 +364,20 @@ NSMenuItem *QCocoaMenuItem::sync()
     return m_native;
 }
 
-QT_BEGIN_NAMESPACE
-extern QString qt_mac_applicationmenu_string(int type);
-QT_END_NAMESPACE
-
 QString QCocoaMenuItem::mergeText()
 {
     QCocoaMenuLoader *loader = [QCocoaMenuLoader sharedMenuLoader];
     if (m_native == [loader aboutMenuItem]) {
-        return qt_mac_applicationmenu_string(6).arg(qt_mac_applicationName());
+        return qt_mac_applicationmenu_string(AboutAppMenuItem).arg(qt_mac_applicationName());
     } else if (m_native== [loader aboutQtMenuItem]) {
         if (m_text == QString("About Qt"))
             return msgAboutQt();
         else
             return m_text;
     } else if (m_native == [loader preferencesMenuItem]) {
-        return qt_mac_applicationmenu_string(4);
+        return qt_mac_applicationmenu_string(PreferencesAppMenuItem);
     } else if (m_native == [loader quitMenuItem]) {
-        return qt_mac_applicationmenu_string(5).arg(qt_mac_applicationName());
+        return qt_mac_applicationmenu_string(QuitAppMenuItem).arg(qt_mac_applicationName());
     } else if (m_text.contains('\t')) {
         return m_text.left(m_text.indexOf('\t'));
     }

@@ -40,6 +40,8 @@
 #ifndef QANDROIDPLATFORMINTERATION_H
 #define QANDROIDPLATFORMINTERATION_H
 
+#include <QtGui/qtguiglobal.h>
+
 #include <qpa/qplatformintegration.h>
 #include <qpa/qplatformmenu.h>
 #include <qpa/qplatformnativeinterface.h>
@@ -64,6 +66,7 @@ class QAndroidPlatformNativeInterface: public QPlatformNativeInterface
 {
 public:
     void *nativeResourceForIntegration(const QByteArray &resource) override;
+    void *nativeResourceForWindow(const QByteArray &resource, QWindow *window) override;
     std::shared_ptr<AndroidStyle> m_androidStyle;
 
 protected:
@@ -125,6 +128,12 @@ public:
 
     QTouchDevice *touchDevice() const { return m_touchDevice; }
     void setTouchDevice(QTouchDevice *touchDevice) { m_touchDevice = touchDevice; }
+
+    void flushPendingUpdates();
+
+#if QT_CONFIG(vulkan)
+    QPlatformVulkanInstance *createPlatformVulkanInstance(QVulkanInstance *instance) const override;
+#endif
 
 private:
     EGLDisplay m_eglDisplay;

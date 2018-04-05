@@ -54,19 +54,7 @@ public:
     QIOSBackingStore(QWindow *window);
     ~QIOSBackingStore();
 
-    QPaintDevice *paintDevice() Q_DECL_OVERRIDE;
-
-    void beginPaint(const QRegion &) Q_DECL_OVERRIDE;
-    void endPaint() Q_DECL_OVERRIDE;
-
-    void flush(QWindow *window, const QRegion &region, const QPoint &offset) Q_DECL_OVERRIDE;
-    void resize(const QSize &size, const QRegion &staticContents) Q_DECL_OVERRIDE;
-
-    void makeCurrent();
-
-private:
-    QOpenGLContext *m_context;
-    QOpenGLPaintDevice *m_glDevice;
+    void flush(QWindow *window, const QRegion &region, const QPoint &offset) override;
 };
 
 QT_END_NAMESPACE

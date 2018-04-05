@@ -370,7 +370,7 @@ double asciiToDouble(const char *num, int numLen, bool &ok, int &processed,
                 // if a digit before any 'e' is not 0, then a non-zero number was intended.
                 ok = false;
                 return 0.0;
-            } else if (num[i] == 'e') {
+            } else if (num[i] == 'e' || num[i] == 'E') {
                 break;
             }
         }
@@ -454,11 +454,6 @@ QString qulltoa(qulonglong l, int base, const QChar _zero)
     }
 
     return QString(reinterpret_cast<QChar *>(p), 65 - (p - buff));
-}
-
-QString qlltoa(qlonglong l, int base, const QChar zero)
-{
-    return qulltoa(l < 0 ? -l : l, base, zero);
 }
 
 QString &decimalForm(QChar zero, QChar decimal, QChar group,

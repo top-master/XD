@@ -10,7 +10,6 @@
         "options": {
             "gtk": { "type": "boolean", "name": "gtk3" },
             "style-windows": "boolean",
-            "style-windowsxp": "boolean",
             "style-windowsvista": "boolean",
             "style-fusion": "boolean",
             "style-mac": "boolean",
@@ -55,14 +54,9 @@
             "label": "Windows",
             "output": [ "privateFeature", "styles" ]
         },
-        "style-windowsxp": {
-            "label": "WindowsXP",
-            "condition": "features.style-windows && config.win32 && !config.winrt && tests.uxtheme",
-            "output": [ "privateFeature", "styles" ]
-        },
         "style-windowsvista": {
             "label": "WindowsVista",
-            "condition": "features.style-windowsxp",
+            "condition": "features.style-windows && config.win32 && !config.winrt && tests.uxtheme",
             "output": [ "privateFeature", "styles" ]
         },
         "style-android": {
@@ -80,7 +74,8 @@
         "effects": {
             "label": "Effects",
             "purpose": "Provides special widget effects (e.g. fading and scrolling).",
-            "section": "Kernel"
+            "section": "Kernel",
+            "output": [ "privateFeature" ]
         },
         "filesystemmodel": {
             "label": "QFileSystemModel",
@@ -134,7 +129,7 @@
             "label": "QDateTimeEdit",
             "purpose": "Supports editing dates and times.",
             "section": "Widgets",
-            "condition": "features.calendarwidget && features.datestring && features.textdate",
+            "condition": "features.calendarwidget && features.datestring && features.textdate && features.datetimeparser",
             "output": [ "publicFeature", "feature" ]
         },
         "stackedwidget": {
@@ -432,13 +427,6 @@
             "section": "Widgets",
             "output": [ "publicFeature", "feature" ]
         },
-        "whatsthis": {
-            "label": "QWhatsThis",
-            "purpose": "Supports displaying \"What's this\" help.",
-            "section": "Widgets",
-            "condition": "features.toolbutton",
-            "output": [ "publicFeature", "feature" ]
-        },
         "sizegrip": {
             "label": "QSizeGrip",
             "purpose": "Provides corner-grips for resizing top-level windows.",
@@ -698,7 +686,7 @@
                 {
                     "message": "Styles",
                     "type": "featureList",
-                    "args": "style-fusion style-mac style-windows style-windowsxp style-windowsvista style-android"
+                    "args": "style-fusion style-mac style-windows style-windowsvista style-android"
                 }
             ]
         }

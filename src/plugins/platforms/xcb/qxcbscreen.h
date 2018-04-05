@@ -53,6 +53,8 @@
 
 #include <private/qfontengine_p.h>
 
+#include <QtEdidSupport/private/qedidparser_p.h>
+
 QT_BEGIN_NAMESPACE
 
 class QXcbConnection;
@@ -91,8 +93,27 @@ public:
     void handleXFixesSelectionNotify(xcb_xfixes_selection_notify_event_t *notify_event);
     void subscribeToXFixesSelectionNotify();
 
+    int forcedDpi() const { return m_forcedDpi; }
+    QFontEngine::HintStyle hintStyle() const { return m_hintStyle; }
+    QFontEngine::SubpixelAntialiasingType subpixelType() const { return m_subpixelType; }
+    int antialiasingEnabled() const { return m_antialiasingEnabled; }
+
+    QString windowManagerName() const { return m_windowManagerName; }
+    bool syncRequestSupported() const { return m_syncRequestSupported; }
+
+    QSurfaceFormat surfaceFormatFor(const QSurfaceFormat &format) const;
+
+    const xcb_visualtype_t *visualForFormat(const QSurfaceFormat &format) const;
+    const xcb_visualtype_t *visualForId(xcb_visualid_t) const;
+    quint8 depthOfVisual(xcb_visualid_t) const;
+
 private:
     QRect getWorkArea() const;
+
+    static bool xResource(const QByteArray &identifier,
+                          const QByteArray &expectedIdentifier,
+                          QByteArray &stringValue);
+    void readXResources();
 
     xcb_screen_t *m_screen;
     const int m_number;
@@ -103,6 +124,15 @@ private:
     bool m_compositingActive = false;
 
     QRect m_workArea;
+
+    int m_forcedDpi = -1;
+    QFontEngine::HintStyle m_hintStyle = QFontEngine::HintStyle(-1);
+    QFontEngine::SubpixelAntialiasingType m_subpixelType = QFontEngine::SubpixelAntialiasingType(-1);
+    int m_antialiasingEnabled = -1;
+    QString m_windowManagerName;
+    bool m_syncRequestSupported = false;
+    QMap<xcb_visualid_t, xcb_visualtype_t> m_visuals;
+    QMap<xcb_visualid_t, quint8> m_visualDepths;
 };
 
 class Q_XCB_EXPORT QXcbScreen : public QXcbObject, public QPlatformScreen
@@ -110,7 +140,7 @@ class Q_XCB_EXPORT QXcbScreen : public QXcbObject, public QPlatformScreen
 public:
     QXcbScreen(QXcbConnection *connection, QXcbVirtualDesktop *virtualDesktop,
                xcb_randr_output_t outputId, xcb_randr_get_output_info_reply_t *outputInfo,
-               const xcb_xinerama_screen_info_t *xineramaScreenInfo = Q_NULLPTR, int xineramaScreenIdx = -1);
+               const xcb_xinerama_screen_info_t *xineramaScreenInfo = nullptr, int xineramaScreenIdx = -1);
     ~QXcbScreen();
 
     QString getOutputName(xcb_randr_get_output_info_reply_t *outputInfo);
@@ -119,8 +149,12 @@ public:
 
     QWindow *topLevelAt(const QPoint &point) const override;
 
+    QString manufacturer() const override;
+    QString model() const override;
+    QString serialNumber() const override;
+
     QRect geometry() const override { return m_geometry; }
-    QRect availableGeometry() const override {return m_availableGeometry;}
+    QRect availableGeometry() const override;
     int depth() const override { return screen()->root_depth; }
     QImage::Format format() const override;
     QSizeF physicalSize() const override { return m_sizeMillimeters; }
@@ -152,36 +186,34 @@ public:
     void setCrtc(xcb_randr_crtc_t crtc) { m_crtc = crtc; }
 
     void windowShown(QXcbWindow *window);
-    QString windowManagerName() const { return m_windowManagerName; }
-    bool syncRequestSupported() const { return m_syncRequestSupported; }
+    QString windowManagerName() const { return m_virtualDesktop->windowManagerName(); }
+    bool syncRequestSupported() const { return m_virtualDesktop->syncRequestSupported(); }
 
     QSurfaceFormat surfaceFormatFor(const QSurfaceFormat &format) const;
 
-    const xcb_visualtype_t *visualForFormat(const QSurfaceFormat &format) const;
-    const xcb_visualtype_t *visualForId(xcb_visualid_t) const;
-    quint8 depthOfVisual(xcb_visualid_t) const;
+    const xcb_visualtype_t *visualForFormat(const QSurfaceFormat &format) const { return m_virtualDesktop->visualForFormat(format); }
+    const xcb_visualtype_t *visualForId(xcb_visualid_t visualid) const;
+    quint8 depthOfVisual(xcb_visualid_t visualid) const { return m_virtualDesktop->depthOfVisual(visualid); }
 
     QString name() const override { return m_outputName; }
 
     void handleScreenChange(xcb_randr_screen_change_notify_event_t *change_event);
-    void updateGeometry(const QRect &geom, uint8_t rotation);
+    void updateGeometry(const QRect &geometry, uint8_t rotation);
     void updateGeometry(xcb_timestamp_t timestamp = XCB_TIME_CURRENT_TIME);
     void updateAvailableGeometry();
     void updateRefreshRate(xcb_randr_mode_t mode);
 
-    void readXResources();
-
-    QFontEngine::HintStyle hintStyle() const { return m_hintStyle; }
-    QFontEngine::SubpixelAntialiasingType subpixelType() const { return m_subpixelType; }
-    int antialiasingEnabled() const { return m_antialiasingEnabled; }
+    QFontEngine::HintStyle hintStyle() const { return m_virtualDesktop->hintStyle(); }
+    QFontEngine::SubpixelAntialiasingType subpixelType() const { return m_virtualDesktop->subpixelType(); }
+    int antialiasingEnabled() const { return m_virtualDesktop->antialiasingEnabled(); }
 
     QXcbXSettings *xSettings() const;
 
 private:
-    static bool xResource(const QByteArray &identifier,
-                          const QByteArray &expectedIdentifier,
-                          QByteArray &stringValue);
     void sendStartupMessage(const QByteArray &message) const;
+
+    QByteArray getOutputProperty(xcb_atom_t atom) const;
+    QByteArray getEdid() const;
 
     QXcbVirtualDesktop *m_virtualDesktop;
     xcb_randr_output_t m_output;
@@ -198,17 +230,10 @@ private:
     QSize m_virtualSize;
     QSizeF m_virtualSizeMillimeters;
     Qt::ScreenOrientation m_orientation = Qt::PrimaryOrientation;
-    QString m_windowManagerName;
-    bool m_syncRequestSupported = false;
-    QMap<xcb_visualid_t, xcb_visualtype_t> m_visuals;
-    QMap<xcb_visualid_t, quint8> m_visualDepths;
     QXcbCursor *m_cursor;
     int m_refreshRate = 60;
-    int m_forcedDpi = -1;
     int m_pixelDensity = 1;
-    QFontEngine::HintStyle m_hintStyle = QFontEngine::HintStyle(-1);
-    QFontEngine::SubpixelAntialiasingType m_subpixelType = QFontEngine::SubpixelAntialiasingType(-1);
-    int m_antialiasingEnabled = -1;
+    QEdidParser m_edid;
 };
 
 #ifndef QT_NO_DEBUG_STREAM

@@ -40,8 +40,6 @@
 #include "qwindowdefs.h"
 #include "qfontdialog.h"
 
-#if QT_CONFIG(fontdialog)
-
 #include "qfontdialog_p.h"
 
 #include <qapplication.h>
@@ -86,7 +84,7 @@ public:
         int row = QListView::currentIndex().row();
         return row < 0 ? QString() : model()->stringList().at(row);
     }
-    void currentChanged(const QModelIndex &current, const QModelIndex &previous) Q_DECL_OVERRIDE {
+    void currentChanged(const QModelIndex &current, const QModelIndex &previous) override {
         QListView::currentChanged(current, previous);
         if (current.isValid())
             emit highlighted(current.row());
@@ -1049,5 +1047,3 @@ QT_END_NAMESPACE
 
 #include "qfontdialog.moc"
 #include "moc_qfontdialog.cpp"
-
-#endif // QT_CONFIG(fontdialog)

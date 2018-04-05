@@ -42,6 +42,7 @@
 #include <qapplication.h>
 #include <qdatetimeedit.h>
 #include <qdesktopwidget.h>
+#include <private/qdesktopwidget_p.h>
 #include <qdebug.h>
 #include <qevent.h>
 #include <qlineedit.h>
@@ -53,8 +54,6 @@
 #include <qstyle.h>
 
 #include <algorithm>
-
-#ifndef QT_NO_DATETIMEEDIT
 
 //#define QDATETIMEEDIT_QDTEDEBUG
 #ifdef QDATETIMEEDIT_QDTEDEBUG
@@ -75,6 +74,8 @@ QT_BEGIN_NAMESPACE
 
   \ingroup basicwidgets
   \inmodule QtWidgets
+
+  \image windows-datetimeedit.png
 
   QDateTimeEdit allows the user to edit dates by using the keyboard or
   the arrow keys to increase and decrease date and time values. The
@@ -102,15 +103,6 @@ QT_BEGIN_NAMESPACE
   Additionally, you can supply a custom calendar widget for use as the
   calendar pop-up by calling the setCalendarWidget() function. The existing
   calendar widget can be retrieved with calendarWidget().
-
-  \table 100%
-  \row \li \inlineimage windowsvista-datetimeedit.png Screenshot of a Windows Vista style date time editing widget
-       \li A date time editing widget shown in the \l{Windows Vista Style Widget Gallery}{Windows Vista widget style}.
-  \row \li \inlineimage macintosh-datetimeedit.png Screenshot of a Macintosh style date time editing widget
-       \li A date time editing widget shown in the \l{Macintosh Style Widget Gallery}{Macintosh widget style}.
-  \row \li \inlineimage fusion-datetimeedit.png Screenshot of a Fusion style date time editing widget
-       \li A date time editing widget shown in the \l{Fusion Style Widget Gallery}{Fusion widget style}.
-  \endtable
 
   \sa QDateEdit, QTimeEdit, QDate, QTime
 */
@@ -371,7 +363,7 @@ void QDateTimeEdit::setMinimumDateTime(const QDateTime &dt)
   clearMaximumDateTime().
 
   By default, this property contains a date that refers to 31 December,
-  7999 and a time of 23:59:59 and 999 milliseconds.
+  9999 and a time of 23:59:59 and 999 milliseconds.
 
   \sa minimumDateTime(), minimumTime(), maximumTime(), minimumDate(),
   maximumDate(), setDateTimeRange(), setDateRange(), setTimeRange(),
@@ -474,7 +466,7 @@ void QDateTimeEdit::clearMinimumDate()
   necessary to ensure that the range remains valid. If the date is
   not a valid QDate object, this function does nothing.
 
-  By default, this property contains a date that refers to December 31, 7999.
+  By default, this property contains a date that refers to December 31, 9999.
 
   \sa minimumDate, minimumTime, maximumTime, setDateRange()
 */
@@ -974,12 +966,12 @@ QSize QDateTimeEdit::sizeHint() const
         int w = 0;
         QString s;
         s = d->textFromValue(d->minimum) + QLatin1Char(' ');
-        w = qMax<int>(w, fm.width(s));
+        w = qMax<int>(w, fm.horizontalAdvance(s));
         s = d->textFromValue(d->maximum) + QLatin1Char(' ');
-        w = qMax<int>(w, fm.width(s));
+        w = qMax<int>(w, fm.horizontalAdvance(s));
         if (d->specialValueText.size()) {
             s = d->specialValueText;
-            w = qMax<int>(w, fm.width(s));
+            w = qMax<int>(w, fm.horizontalAdvance(s));
         }
         w += 2; // cursor blinking space
 
@@ -1082,7 +1074,7 @@ void QDateTimeEdit::keyPressEvent(QKeyEvent *event)
 
                 //hide cursor
                 d->edit->d_func()->setCursorVisible(false);
-                d->edit->d_func()->control->setCursorBlinkPeriod(0);
+                d->edit->d_func()->control->setBlinkingCursorEnabled(false);
                 d->setSelected(0);
             }
         }
@@ -1103,7 +1095,7 @@ void QDateTimeEdit::keyPressEvent(QKeyEvent *event)
 
             //hide cursor
             d->edit->d_func()->setCursorVisible(false);
-            d->edit->d_func()->control->setCursorBlinkPeriod(0);
+            d->edit->d_func()->control->setBlinkingCursorEnabled(false);
             d->setSelected(0);
             oldCurrent = 0;
         }
@@ -1137,7 +1129,7 @@ void QDateTimeEdit::keyPressEvent(QKeyEvent *event)
             }
 #endif
         }
-        // else fall through
+        Q_FALLTHROUGH();
     case Qt::Key_Backtab:
     case Qt::Key_Tab: {
         event->accept();
@@ -1201,7 +1193,7 @@ void QDateTimeEdit::keyPressEvent(QKeyEvent *event)
   \reimp
 */
 
-#ifndef QT_NO_WHEELEVENT
+#if QT_CONFIG(wheelevent)
 void QDateTimeEdit::wheelEvent(QWheelEvent *event)
 {
     QAbstractSpinBox::wheelEvent(event);
@@ -1505,6 +1497,8 @@ void QDateTimeEdit::mousePressEvent(QMouseEvent *event)
   \ingroup basicwidgets
   \inmodule QtWidgets
 
+  \image windows-timeedit.png
+
   Many of the properties and functions provided by QTimeEdit are implemented in
   QDateTimeEdit. These are the relevant properties of this class:
 
@@ -1517,15 +1511,6 @@ void QDateTimeEdit::mousePressEvent(QMouseEvent *event)
   \li \l{QDateTimeEdit::displayFormat}{displayFormat} contains a string that is used
      to format the time displayed in the widget.
   \endlist
-
-  \table 100%
-  \row \li \inlineimage windowsvista-timeedit.png Screenshot of a Windows Vista style time editing widget
-       \li A time editing widget shown in the \l{Windows Vista Style Widget Gallery}{Windows Vista widget style}.
-  \row \li \inlineimage macintosh-timeedit.png Screenshot of a Macintosh style time editing widget
-       \li A time editing widget shown in the \l{Macintosh Style Widget Gallery}{Macintosh widget style}.
-  \row \li \inlineimage fusion-timeedit.png Screenshot of a Fusion style time editing widget
-       \li A time editing widget shown in the \l{Fusion Style Widget Gallery}{Fusion widget style}.
-  \endtable
 
   \sa QDateEdit, QDateTimeEdit
 */
@@ -1582,6 +1567,8 @@ QTimeEdit::~QTimeEdit()
   \ingroup basicwidgets
   \inmodule QtWidgets
 
+  \image windows-dateedit.png
+
   Many of the properties and functions provided by QDateEdit are implemented in
   QDateTimeEdit. These are the relevant properties of this class:
 
@@ -1594,15 +1581,6 @@ QTimeEdit::~QTimeEdit()
   \li \l{QDateTimeEdit::displayFormat}{displayFormat} contains a string that is used
      to format the date displayed in the widget.
   \endlist
-
-  \table 100%
-  \row \li \inlineimage windowsvista-dateedit.png Screenshot of a Windows Vista style date editing widget
-       \li A date editing widget shown in the \l{Windows Vista Style Widget Gallery}{Windows Vista widget style}.
-  \row \li \inlineimage macintosh-dateedit.png Screenshot of a Macintosh style date editing widget
-       \li A date editing widget shown in the \l{Macintosh Style Widget Gallery}{Macintosh widget style}.
-  \row \li \inlineimage fusion-dateedit.png Screenshot of a Fusion style date editing widget
-       \li A date editing widget shown in the \l{Fusion Style Widget Gallery}{Fusion widget style}.
-  \endtable
 
   \sa QTimeEdit, QDateTimeEdit
 */
@@ -1944,6 +1922,7 @@ QDateTime QDateTimeEditPrivate::validateAndInterpret(QString &input, int &positi
     }
     StateNode tmp = parse(input, position, value.toDateTime(), fixup);
     input = tmp.input;
+    position += tmp.padded;
     state = QValidator::State(int(tmp.state));
     if (state == QValidator::Acceptable) {
         if (tmp.conflicts && conflictGuard != tmp.value) {
@@ -2538,7 +2517,7 @@ void QDateTimeEditPrivate::positionCalendarPopup()
     pos = q->mapToGlobal(pos);
     pos2 = q->mapToGlobal(pos2);
     QSize size = monthCalendar->sizeHint();
-    QRect screen = QApplication::desktop()->availableGeometry(pos);
+    QRect screen = QDesktopWidgetPrivate::availableGeometry(pos);
     //handle popup falling "off screen"
     if (q->layoutDirection() == Qt::RightToLeft) {
         pos.setX(pos.x()-size.width());
@@ -2695,5 +2674,3 @@ void QCalendarPopup::hideEvent(QHideEvent *)
 QT_END_NAMESPACE
 #include "moc_qdatetimeedit.cpp"
 #include "moc_qdatetimeedit_p.cpp"
-
-#endif // QT_NO_DATETIMEEDIT

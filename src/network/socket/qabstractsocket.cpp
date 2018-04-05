@@ -387,6 +387,11 @@
     (see \l{QAbstractSocket::}{setReadBufferSize()}).
     This enum value has been introduced in Qt 5.3.
 
+    \value PathMtuSocketOption Retrieves the Path Maximum Transmission Unit
+    (PMTU) value currently known by the IP stack, if any. Some IP stacks also
+    allow setting the MTU for transmission.
+    This enum value was introduced in Qt 5.11.
+
     Possible values for \e{TypeOfServiceOption} are:
 
     \table
@@ -565,7 +570,6 @@ QAbstractSocketPrivate::QAbstractSocketPrivate()
       isBuffered(false),
       hasPendingData(false),
       connectTimer(0),
-      disconnectTimer(0),
       hostLookupId(-1),
       socketType(QAbstractSocket::UnknownSocketType),
       state(QAbstractSocket::UnconnectedState),
@@ -604,8 +608,6 @@ void QAbstractSocketPrivate::resetSocketLayer()
     }
     if (connectTimer)
         connectTimer->stop();
-    if (disconnectTimer)
-        disconnectTimer->stop();
 }
 
 /*! \internal
@@ -943,7 +945,9 @@ void QAbstractSocketPrivate::resolveProxy(const QString &hostname, quint16 port)
     // DefaultProxy here will raise an error
     proxyInUse = QNetworkProxy();
 }
+#endif // !QT_NO_NETWORKPROXY
 
+#if !defined(QT_NO_NETWORKPROXY) || defined(Q_OS_WINRT)
 /*!
     \internal
 
@@ -965,12 +969,16 @@ void QAbstractSocketPrivate::startConnectingByName(const QString &host)
     emit q->stateChanged(state);
 
     if (cachedSocketDescriptor != -1 || initSocketLayer(QAbstractSocket::UnknownNetworkLayerProtocol)) {
-        if (socketEngine->connectToHostByName(host, port) ||
-            socketEngine->state() == QAbstractSocket::ConnectingState) {
-            cachedSocketDescriptor = socketEngine->socketDescriptor();
-
+        // Try to connect to the host. If it succeeds immediately
+        // (e.g. QSocks5SocketEngine in UDPASSOCIATE mode), emit
+        // connected() and return.
+        if (socketEngine->connectToHostByName(host, port)) {
+            fetchConnectionParameters();
             return;
         }
+
+        if (socketEngine->state() == QAbstractSocket::ConnectingState)
+            return;
 
         // failed to connect
         setError(socketEngine->error(), socketEngine->errorString());
@@ -981,7 +989,7 @@ void QAbstractSocketPrivate::startConnectingByName(const QString &host)
     emit q->stateChanged(state);
 }
 
-#endif
+#endif // !QT_NO_NETWORKPROXY || Q_OS_WINRT
 
 /*! \internal
 
@@ -1113,10 +1121,6 @@ void QAbstractSocketPrivate::_q_connectToNextAddress()
         // (localhost address on BSD or any UDP connect), emit
         // connected() and return.
         if (
-#if defined(Q_OS_WINRT) && _MSC_VER >= 1900
-            !qEnvironmentVariableIsEmpty("QT_WINRT_USE_THREAD_NETWORK_CONTEXT") ?
-                socketEngine->connectToHostByName(hostName, port) :
-#endif
             socketEngine->connectToHost(host, port)) {
                 //_q_testConnection();
                 fetchConnectionParameters();
@@ -1219,15 +1223,6 @@ void QAbstractSocketPrivate::_q_abortConnectionAttempt()
         emit q->error(socketError);
     } else {
         _q_connectToNextAddress();
-    }
-}
-
-void QAbstractSocketPrivate::_q_forceDisconnect()
-{
-    Q_Q(QAbstractSocket);
-    if (socketEngine && socketEngine->isValid() && state == QAbstractSocket::ClosingState) {
-        socketEngine->close();
-        q->disconnectFromHost();
     }
 }
 
@@ -1364,15 +1359,29 @@ void QAbstractSocketPrivate::fetchConnectionParameters()
     }
 
     state = QAbstractSocket::ConnectedState;
-    emit q->stateChanged(state);
-    emit q->connected();
-
 #if defined(QABSTRACTSOCKET_DEBUG)
     qDebug("QAbstractSocketPrivate::fetchConnectionParameters() connection to %s:%i established",
            host.toString().toLatin1().constData(), port);
 #endif
+    emit q->stateChanged(state);
+    emit q->connected();
 }
 
+/*! \internal
+*/
+qint64 QAbstractSocketPrivate::skip(qint64 maxSize)
+{
+    // if we're not connected, return -1 indicating EOF
+    if (!socketEngine || !socketEngine->isValid() || state != QAbstractSocket::ConnectedState)
+        return -1;
+
+    // Caller, QIODevice::skip(), has ensured buffer is empty. So, wait
+    // for more data in buffered mode.
+    if (isBuffered)
+        return 0;
+
+    return QIODevicePrivate::skip(maxSize);
+}
 
 void QAbstractSocketPrivate::pauseSocketNotifiers(QAbstractSocket *socket)
 {
@@ -1704,6 +1713,8 @@ void QAbstractSocket::connectToHost(const QString &hostName, quint16 port,
     }
 #endif
 
+    // Sync up with error string, which open() shall clear.
+    d->socketError = UnknownSocketError;
     if (openMode & QIODevice::Unbuffered)
         d->isBuffered = false;
     else if (!d_func()->isBuffered)
@@ -1712,6 +1723,7 @@ void QAbstractSocket::connectToHost(const QString &hostName, quint16 port,
     QIODevice::open(openMode);
     d->readChannelCount = d->writeChannelCount = 0;
 
+#ifndef Q_OS_WINRT
     d->state = HostLookupState;
     emit stateChanged(d->state);
 
@@ -1748,6 +1760,10 @@ void QAbstractSocket::connectToHost(const QString &hostName, quint16 port,
            (d->state == ConnectedState) ? "true" : "false",
            (d->state == ConnectingState || d->state == HostLookupState)
            ? " (connection in progress)" : "");
+#endif
+#else // !Q_OS_WINRT
+    // On WinRT we should always connect by name. Lookup and proxy handling are done by the API.
+    d->startConnectingByName(hostName);
 #endif
 }
 
@@ -1934,6 +1950,8 @@ bool QAbstractSocket::setSocketDescriptor(qintptr socketDescriptor, SocketState 
         return false;
     }
 
+    // Sync up with error string, which open() shall clear.
+    d->socketError = UnknownSocketError;
     if (d->threadData->hasEventDispatcher())
         d->socketEngine->setReceiver(d);
 
@@ -2014,6 +2032,10 @@ void QAbstractSocket::setSocketOption(QAbstractSocket::SocketOption option, cons
         case ReceiveBufferSizeSocketOption:
             d_func()->socketEngine->setOption(QAbstractSocketEngine::ReceiveBufferSocketOption, value.toInt());
             break;
+
+        case PathMtuSocketOption:
+            d_func()->socketEngine->setOption(QAbstractSocketEngine::PathMtuInformation, value.toInt());
+            break;
     }
 }
 
@@ -2055,6 +2077,10 @@ QVariant QAbstractSocket::socketOption(QAbstractSocket::SocketOption option)
 
         case ReceiveBufferSizeSocketOption:
                 ret = d_func()->socketEngine->option(QAbstractSocketEngine::ReceiveBufferSocketOption);
+                break;
+
+        case PathMtuSocketOption:
+                ret = d_func()->socketEngine->option(QAbstractSocketEngine::PathMtuInformation);
                 break;
     }
     if (ret == -1)
@@ -2753,20 +2779,6 @@ void QAbstractSocket::disconnectFromHost()
         // Wait for pending data to be written.
         if (d->socketEngine && d->socketEngine->isValid() && (!d->allWriteBuffersEmpty()
             || d->socketEngine->bytesToWrite() > 0)) {
-            // hack: when we are waiting for the socket engine to write bytes (only
-            // possible when using Socks5 or HTTP socket engine), then close
-            // anyway after 2 seconds. This is to prevent a timeout on Mac, where we
-            // sometimes just did not get the write notifier from the underlying
-            // CFSocket and no progress was made.
-            if (d->allWriteBuffersEmpty() && d->socketEngine->bytesToWrite() > 0) {
-                if (!d->disconnectTimer) {
-                    d->disconnectTimer = new QTimer(this);
-                    connect(d->disconnectTimer, SIGNAL(timeout()), this,
-                            SLOT(_q_forceDisconnect()), Qt::DirectConnection);
-                }
-                if (!d->disconnectTimer->isActive())
-                    d->disconnectTimer->start(2000);
-            }
             d->socketEngine->setWriteNotificationEnabled(true);
 
 #if defined(QABSTRACTSOCKET_DEBUG)

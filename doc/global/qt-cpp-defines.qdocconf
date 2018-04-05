@@ -13,7 +13,6 @@ defines                 += Q_QDOC \
                           QT_DEPRECATED \
                           QT_DEPRECATED_* \
                           Q_NO_USING_KEYWORD \
-                          __cplusplus \
                           Q_OS_.* \
                           Q_STDLIB_UNICODE_STRINGS \
                           Q_COMPILER_INITIALIZER_LISTS \
@@ -21,8 +20,7 @@ defines                 += Q_QDOC \
                           Q_COMPILER_UNIFORM_INIT \
                           Q_COMPILER_RVALUE_REFS
 
-clangdefines            += __cplusplus \
-                           Q_QDOC \
+clangdefines            += Q_QDOC \
                            Q_CLANG_QDOC \
                            QT_COMPAT \
                            QT3_SUPPORT \
@@ -113,7 +111,6 @@ Cpp.ignoretokens        += \
                           Q_GUI_EXPORT_STYLE_POCKETPC \
                           Q_GUI_EXPORT_STYLE_SGI \
                           Q_GUI_EXPORT_STYLE_WINDOWS \
-                          Q_GUI_EXPORT_STYLE_WINDOWSXP \
                           Q_INLINE_TEMPLATE \
                           Q_INTERNAL_WIN_NO_THROW \
                           Q_INVOKABLE \
@@ -240,5 +237,4 @@ excludefiles += \
                 "*_unix.cpp" \
                 "*_udev.cpp" \
                 "*_vxworks.cpp" \
-                "*_darwin.cpp" \
-                "*_x11.cpp"
+                "*_darwin.cpp"

@@ -52,10 +52,13 @@
 #include <QMap>
 #include <QApplication>
 #include <QAbstractScrollArea>
+#if QT_CONFIG(graphicsview)
 #include <QGraphicsObject>
 #include <QGraphicsScene>
 #include <QGraphicsView>
+#endif
 #include <QDesktopWidget>
+#include <private/qdesktopwidget_p.h>
 #include <QVector2D>
 #include <QtCore/qmath.h>
 #include <QtGui/qevent.h>
@@ -196,7 +199,7 @@ public:
         : QAbstractAnimation(_d), d(_d), ignoreUpdate(false), skip(0)
     { }
 
-    int duration() const Q_DECL_OVERRIDE
+    int duration() const override
     {
         return -1;
     }
@@ -212,7 +215,7 @@ public:
     }
 
 protected:
-    void updateCurrentTime(int /*currentTime*/) Q_DECL_OVERRIDE
+    void updateCurrentTime(int /*currentTime*/) override
    {
         if (!ignoreUpdate) {
             if (++skip >= d->frameRateSkip()) {
@@ -278,10 +281,9 @@ private:
 */
 
 typedef QMap<QObject *, QScroller *> ScrollerHash;
-typedef QSet<QScroller *> ScrollerSet;
 
 Q_GLOBAL_STATIC(ScrollerHash, qt_allScrollers)
-Q_GLOBAL_STATIC(ScrollerSet, qt_activeScrollers)
+Q_GLOBAL_STATIC(QList<QScroller *>, qt_activeScrollers)
 
 /*!
     Returns \c true if a QScroller object was already created for \a target; \c false otherwise.
@@ -332,7 +334,7 @@ const QScroller *QScroller::scroller(const QObject *target)
 */
 QList<QScroller *> QScroller::activeScrollers()
 {
-    return qt_activeScrollers()->toList();
+    return *qt_activeScrollers();
 }
 
 /*!
@@ -346,7 +348,7 @@ QObject *QScroller::target() const
 }
 
 /*!
-    \fn QScroller::scrollerPropertiesChanged(const QScrollerProperties &newProperties);
+    \fn void QScroller::scrollerPropertiesChanged(const QScrollerProperties &newProperties);
 
     QScroller emits this signal whenever its scroller properties change.
     \a newProperties are the new scroller properties.
@@ -429,12 +431,12 @@ Qt::GestureType QScroller::grabGesture(QObject *target, ScrollerGestureType scro
         widget->grabGesture(sp->recognizerType);
         if (scrollGestureType == TouchGesture)
             widget->setAttribute(Qt::WA_AcceptTouchEvents);
-#ifndef QT_NO_GRAPHICSVIEW
+#if QT_CONFIG(graphicsview)
     } else if (QGraphicsObject *go = qobject_cast<QGraphicsObject*>(target)) {
         if (scrollGestureType == TouchGesture)
             go->setAcceptTouchEvents(true);
         go->grabGesture(sp->recognizerType);
-#endif // QT_NO_GRAPHICSVIEW
+#endif // QT_CONFIG(graphicsview)
     }
     return sp->recognizerType;
 }
@@ -473,7 +475,7 @@ void QScroller::ungrabGesture(QObject *target)
     if (target->isWidgetType()) {
         QWidget *widget = static_cast<QWidget *>(target);
         widget->ungrabGesture(sp->recognizerType);
-#ifndef QT_NO_GRAPHICSVIEW
+#if QT_CONFIG(graphicsview)
     } else if (QGraphicsObject *go = qobject_cast<QGraphicsObject*>(target)) {
         go->ungrabGesture(sp->recognizerType);
 #endif
@@ -509,14 +511,14 @@ QScroller::~QScroller()
     d->recognizer = 0;
 #endif
     qt_allScrollers()->remove(d->target);
-    qt_activeScrollers()->remove(this);
+    qt_activeScrollers()->removeOne(this);
 
     delete d_ptr;
 }
 
 
 /*!
-    \fn QScroller::stateChanged(QScroller::State newState);
+    \fn void QScroller::stateChanged(QScroller::State newState);
 
     QScroller emits this signal whenever the state changes. \a newState is the new State.
 
@@ -571,7 +573,7 @@ QPointF QScroller::pixelPerMeter() const
     Q_D(const QScroller);
     QPointF ppm = d->pixelPerMeter;
 
-#ifndef QT_NO_GRAPHICSVIEW
+#if QT_CONFIG(graphicsview)
     if (QGraphicsObject *go = qobject_cast<QGraphicsObject *>(d->target)) {
         QTransform viewtr;
         //TODO: the first view isn't really correct - maybe use an additional field in the prepare event?
@@ -589,7 +591,7 @@ QPointF QScroller::pixelPerMeter() const
             ppm.ry() /= QLineF(p0, py).length();
         }
     }
-#endif // QT_NO_GRAPHICSVIEW
+#endif // QT_CONFIG(graphicsview)
     return ppm;
 }
 
@@ -1011,40 +1013,6 @@ bool QScroller::handleInput(Input input, const QPointF &position, qint64 timesta
     return false;
 }
 
-#if 1 // Used to be excluded in Qt4 for Q_WS_MAC
-// the Mac version is implemented in qscroller_mac.mm
-
-QPointF QScrollerPrivate::realDpi(int screen) const
-{
-#  if 0 /* Used to be included in Qt4 for Q_WS_X11 */ && !defined(QT_NO_XRANDR)
-    if (X11 && X11->use_xrandr && X11->ptrXRRSizes && X11->ptrXRRRootToScreen) {
-        int nsizes = 0;
-        // QDesktopWidget is based on Xinerama screens, which do not always
-        // correspond to RandR screens: NVidia's TwinView e.g.  will show up
-        // as 2 screens in QDesktopWidget, but libXRandR will only see 1 screen.
-        // (although with the combined size of the Xinerama screens).
-        // Additionally, libXrandr will simply crash when calling XRRSizes
-        // for (the non-existent) screen 1 in this scenario.
-        Window root =  RootWindow(X11->display, screen == -1 ? X11->defaultScreen : screen);
-        int randrscreen = (root != XNone) ? X11->ptrXRRRootToScreen(X11->display, root) : -1;
-
-        XRRScreenSize *sizes = X11->ptrXRRSizes(X11->display, randrscreen == -1 ? 0 : randrscreen, &nsizes);
-        if (nsizes > 0 && sizes && sizes->width && sizes->height && sizes->mwidth && sizes->mheight) {
-            qScrollerDebug() << "XRandR DPI:" << QPointF(qreal(25.4) * qreal(sizes->width) / qreal(sizes->mwidth),
-                                                         qreal(25.4) * qreal(sizes->height) / qreal(sizes->mheight));
-            return QPointF(qreal(25.4) * qreal(sizes->width) / qreal(sizes->mwidth),
-                           qreal(25.4) * qreal(sizes->height) / qreal(sizes->mheight));
-        }
-    }
-#  endif
-
-    QWidget *w = QApplication::desktop()->screen(screen);
-    return QPointF(w->physicalDpiX(), w->physicalDpiY());
-}
-
-#endif
-
-
 /*! \internal
     Returns the resolution of the used screen.
 */
@@ -1069,8 +1037,8 @@ void QScrollerPrivate::setDpi(const QPointF &dpi)
 */
 void QScrollerPrivate::setDpiFromWidget(QWidget *widget)
 {
-    QDesktopWidget *dw = QApplication::desktop();
-    setDpi(realDpi(widget ? dw->screenNumber(widget) : dw->primaryScreen()));
+    const QScreen *screen = QGuiApplication::screens().at(QApplication::desktop()->screenNumber(widget));
+    setDpi(QPointF(screen->physicalDotsPerInchX(), screen->physicalDotsPerInchY()));
 }
 
 /*! \internal
@@ -1466,7 +1434,7 @@ bool QScrollerPrivate::prepareScrolling(const QPointF &position)
 
         if (QWidget *w = qobject_cast<QWidget *>(target))
             setDpiFromWidget(w);
-#ifndef QT_NO_GRAPHICSVIEW
+#if QT_CONFIG(graphicsview)
         if (QGraphicsObject *go = qobject_cast<QGraphicsObject *>(target)) {
             //TODO: the first view isn't really correct - maybe use an additional field in the prepare event?
             if (const auto *scene = go->scene()) {
@@ -1765,9 +1733,9 @@ void QScrollerPrivate::setState(QScroller::State newstate)
         firstScroll = true;
     }
     if (state == QScroller::Dragging || state == QScroller::Scrolling)
-        qt_activeScrollers()->insert(q);
+        qt_activeScrollers()->push_back(q);
     else
-        qt_activeScrollers()->remove(q);
+        qt_activeScrollers()->removeOne(q);
     emit q->stateChanged(state);
 }
 

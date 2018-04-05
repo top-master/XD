@@ -46,10 +46,9 @@
 #include <QtGui/qpixmap.h>
 #include <QtCore/qvariant.h>
 
+QT_REQUIRE_CONFIG(itemviews);
+
 QT_BEGIN_NAMESPACE
-
-
-#ifndef QT_NO_ITEMVIEWS
 
 class QItemDelegatePrivate;
 class QItemEditorFactory;
@@ -60,7 +59,7 @@ class Q_WIDGETS_EXPORT QItemDelegate : public QAbstractItemDelegate
     Q_PROPERTY(bool clipping READ hasClipping WRITE setClipping)
 
 public:
-    explicit QItemDelegate(QObject *parent = Q_NULLPTR);
+    explicit QItemDelegate(QObject *parent = nullptr);
     ~QItemDelegate();
 
     bool hasClipping() const;
@@ -69,21 +68,21 @@ public:
     // painting
     void paint(QPainter *painter,
                const QStyleOptionViewItem &option,
-               const QModelIndex &index) const Q_DECL_OVERRIDE;
+               const QModelIndex &index) const override;
     QSize sizeHint(const QStyleOptionViewItem &option,
-                   const QModelIndex &index) const Q_DECL_OVERRIDE;
+                   const QModelIndex &index) const override;
 
     // editing
     QWidget *createEditor(QWidget *parent,
                           const QStyleOptionViewItem &option,
-                          const QModelIndex &index) const Q_DECL_OVERRIDE;
+                          const QModelIndex &index) const override;
 
-    void setEditorData(QWidget *editor, const QModelIndex &index) const Q_DECL_OVERRIDE;
-    void setModelData(QWidget *editor, QAbstractItemModel *model, const QModelIndex &index) const Q_DECL_OVERRIDE;
+    void setEditorData(QWidget *editor, const QModelIndex &index) const override;
+    void setModelData(QWidget *editor, QAbstractItemModel *model, const QModelIndex &index) const override;
 
     void updateEditorGeometry(QWidget *editor,
                               const QStyleOptionViewItem &option,
-                              const QModelIndex &index) const Q_DECL_OVERRIDE;
+                              const QModelIndex &index) const override;
 
     // editor factory
     QItemEditorFactory *itemEditorFactory() const;
@@ -106,9 +105,9 @@ protected:
 
     QRect rect(const QStyleOptionViewItem &option, const QModelIndex &index, int role) const;
 
-    bool eventFilter(QObject *object, QEvent *event) Q_DECL_OVERRIDE;
+    bool eventFilter(QObject *object, QEvent *event) override;
     bool editorEvent(QEvent *event, QAbstractItemModel *model,
-                     const QStyleOptionViewItem &option, const QModelIndex &index) Q_DECL_OVERRIDE;
+                     const QStyleOptionViewItem &option, const QModelIndex &index) override;
 
     QStyleOptionViewItem setOptions(const QModelIndex &index,
                                     const QStyleOptionViewItem &option) const;
@@ -125,8 +124,6 @@ private:
     Q_DECLARE_PRIVATE(QItemDelegate)
     Q_DISABLE_COPY(QItemDelegate)
 };
-
-#endif // QT_NO_ITEMVIEWS
 
 QT_END_NAMESPACE
 

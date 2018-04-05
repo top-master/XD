@@ -153,7 +153,8 @@ static QDebug operator<<(QDebug dbg, const QWindowsScreenData &d)
         << d.availableGeometry.width() << 'x' << d.availableGeometry.height() << '+' << d.availableGeometry.x() << '+' << d.availableGeometry.y()
         << " physical: " << d.physicalSizeMM.width() << 'x' << d.physicalSizeMM.height()
         << " DPI: " << d.dpi.first << 'x' << d.dpi.second << " Depth: " << d.depth
-        << " Format: " << d.format;
+        << " Format: " << d.format
+        << " hMonitor: " << d.hMonitor;
     if (d.flags & QWindowsScreenData::PrimaryScreen)
         dbg << " primary";
     if (d.flags & QWindowsScreenData::VirtualDesktop)
@@ -290,6 +291,13 @@ void QWindowsScreen::handleChanges(const QWindowsScreenData &newData)
 {
     m_data.physicalSizeMM = newData.physicalSizeMM;
 
+    if (m_data.hMonitor != newData.hMonitor) {
+        qCDebug(lcQpaWindows) << "Monitor" << m_data.name
+            << "has had its hMonitor handle changed from"
+            << m_data.hMonitor << "to" << newData.hMonitor;
+        m_data.hMonitor = newData.hMonitor;
+    }
+
     if (m_data.geometry != newData.geometry || m_data.availableGeometry != newData.availableGeometry) {
         m_data.geometry = newData.geometry;
         m_data.availableGeometry = newData.availableGeometry;
@@ -308,6 +316,15 @@ void QWindowsScreen::handleChanges(const QWindowsScreenData &newData)
         QWindowSystemInterface::handleScreenOrientationChange(screen(),
                                                               newData.orientation);
     }
+}
+
+QRect QWindowsScreen::virtualGeometry(const QPlatformScreen *screen) // cf QScreen::virtualGeometry()
+{
+    QRect result;
+    const auto siblings = screen->virtualSiblings();
+    for (const QPlatformScreen *sibling : siblings)
+        result |= sibling->geometry();
+    return result;
 }
 
 enum OrientationPreference // matching Win32 API ORIENTATION_PREFERENCE
@@ -379,9 +396,6 @@ Qt::ScreenOrientation QWindowsScreen::orientationPreference()
 */
 QPlatformScreen::SubpixelAntialiasingType QWindowsScreen::subpixelAntialiasingTypeHint() const
 {
-#if !defined(FT_LCD_FILTER_H) || !defined(FT_CONFIG_OPTION_SUBPIXEL_RENDERING)
-    return QPlatformScreen::Subpixel_None;
-#else
     QPlatformScreen::SubpixelAntialiasingType type = QPlatformScreen::subpixelAntialiasingTypeHint();
     if (type == QPlatformScreen::Subpixel_None) {
         QSettings settings(QLatin1String("HKEY_LOCAL_MACHINE\\SOFTWARE\\Microsoft\\Avalon.Graphics\\DISPLAY1"), QSettings::NativeFormat);
@@ -402,7 +416,6 @@ QPlatformScreen::SubpixelAntialiasingType QWindowsScreen::subpixelAntialiasingTy
         }
     }
     return type;
-#endif
 }
 
 /*!
@@ -555,7 +568,22 @@ const QWindowsScreen *QWindowsScreenManager::screenAtDp(const QPoint &p) const
         if (scr->geometry().contains(p))
             return scr;
     }
-    return Q_NULLPTR;
+    return nullptr;
+}
+
+const QWindowsScreen *QWindowsScreenManager::screenForHwnd(HWND hwnd) const
+{
+    HMONITOR hMonitor = MonitorFromWindow(hwnd, MONITOR_DEFAULTTONULL);
+    if (hMonitor == NULL)
+        return nullptr;
+    const auto it =
+        std::find_if(m_screens.cbegin(), m_screens.cend(),
+                     [hMonitor](const QWindowsScreen *s)
+                     {
+                         return s->data().hMonitor == hMonitor
+                             && (s->data().flags & QWindowsScreenData::VirtualDesktop) != 0;
+                     });
+    return it != m_screens.cend() ? *it : nullptr;
 }
 
 QT_END_NAMESPACE

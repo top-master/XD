@@ -43,23 +43,35 @@
 #include "qpixmapstyle_p_p.h"
 
 #include <QDebug>
+#if QT_CONFIG(textedit)
 #include <QTextEdit>
+#endif
 #include <QStringBuilder>
 #include <QPainter>
 #include <QPixmapCache>
 #include <QStyleOption>
 #include <QString>
+#if QT_CONFIG(progressbar)
 #include <QProgressBar>
+#endif
+#if QT_CONFIG(slider)
 #include <QSlider>
+#endif
 #include <QEvent>
+#if QT_CONFIG(combobox)
 #include <QComboBox>
+#endif
+#if QT_CONFIG(itemviews)
 #include <QAbstractItemView>
-#include <QListView>
-#include <QTreeView>
 #include <QStyledItemDelegate>
+#endif
+#if QT_CONFIG(listview)
+#include <QListView>
+#endif
 #include <QAbstractScrollArea>
+#if QT_CONFIG(scrollbar)
 #include <QScrollBar>
-
+#endif
 #if QT_CONFIG(scroller)
 #include <qscroller.h>
 #endif

@@ -48,17 +48,23 @@
 #include <qdebug.h>
 #include <qdrag.h>
 #include <qclipboard.h>
+#if QT_CONFIG(menu)
 #include <qmenu.h>
+#endif
 #include <qstyle.h>
 #include <qtimer.h>
 #include "private/qtextdocumentlayout_p.h"
 #include "private/qabstracttextdocumentlayout_p.h"
+#if QT_CONFIG(textedit)
 #include "private/qtextedit_p.h"
+#endif
 #include "qtextdocument.h"
 #include "private/qtextdocument_p.h"
 #include "qtextlist.h"
 #include "private/qwidgettextcontrol_p.h"
+#if QT_CONFIG(graphicsview)
 #include "qgraphicssceneevent.h"
+#endif
 #include "qpagedpaintdevice.h"
 #include "private/qpagedpaintdevice_p.h"
 #include "qtextdocumentwriter.h"
@@ -77,7 +83,9 @@
 #include <qinputmethod.h>
 #include <qtooltip.h>
 #include <qstyleoption.h>
+#if QT_CONFIG(lineedit)
 #include <QtWidgets/qlineedit.h>
+#endif
 #include <QtGui/qaccessible.h>
 #include <QtCore/qmetaobject.h>
 
@@ -85,7 +93,9 @@
 #include "private/qapplication_p.h"
 #include "private/qshortcutmap_p.h"
 #include <qkeysequence.h>
-#define ACCEL_KEY(k) (!qApp->d_func()->shortcutMap.hasShortcutForKeySequence(k) ? \
+#define ACCEL_KEY(k) ((!QCoreApplication::testAttribute(Qt::AA_DontShowShortcutsInContextMenus) \
+                       && QGuiApplication::styleHints()->showShortcutsInContextMenus()) \
+                      && !qApp->d_func()->shortcutMap.hasShortcutForKeySequence(k) ? \
                       QLatin1Char('\t') + QKeySequence(k).toString(QKeySequence::NativeText) : QString())
 
 #else
@@ -983,7 +993,7 @@ void QWidgetTextControl::processEvent(QEvent *e, const QMatrix &matrix, QWidget 
 
     if (!d->contextWidget) {
         switch (e->type()) {
-#ifndef QT_NO_GRAPHICSVIEW
+#if QT_CONFIG(graphicsview)
             case QEvent::GraphicsSceneMouseMove:
             case QEvent::GraphicsSceneMousePress:
             case QEvent::GraphicsSceneMouseRelease:
@@ -1001,7 +1011,7 @@ void QWidgetTextControl::processEvent(QEvent *e, const QMatrix &matrix, QWidget 
                 d->contextWidget = ev->widget();
                 break;
             }
-#endif // QT_NO_GRAPHICSVIEW
+#endif // QT_CONFIG(graphicsview)
             default: break;
         };
     }
@@ -1080,7 +1090,7 @@ void QWidgetTextControl::processEvent(QEvent *e, const QMatrix &matrix, QWidget 
         }
 #endif
 
-#ifndef QT_NO_GRAPHICSVIEW
+#if QT_CONFIG(graphicsview)
         case QEvent::GraphicsSceneMousePress: {
             QGraphicsSceneMouseEvent *ev = static_cast<QGraphicsSceneMouseEvent *>(e);
             d->mousePressEvent(ev, ev->button(), matrix.map(ev->pos()), ev->modifiers(), ev->buttons(),
@@ -1130,7 +1140,7 @@ void QWidgetTextControl::processEvent(QEvent *e, const QMatrix &matrix, QWidget 
             if (d->dropEvent(ev->mimeData(), matrix.map(ev->pos()), ev->dropAction(), ev->source()))
                 ev->accept();
             break; }
-#endif // QT_NO_GRAPHICSVIEW
+#endif // QT_CONFIG(graphicsview)
 #ifdef QT_KEYPAD_NAVIGATION
         case QEvent::EnterEditFocus:
         case QEvent::LeaveEditFocus:
@@ -1345,7 +1355,7 @@ process:
 
 QVariant QWidgetTextControl::loadResource(int type, const QUrl &name)
 {
-#ifdef QT_NO_TEXTEDIT
+#if !QT_CONFIG(textedit)
     Q_UNUSED(type);
     Q_UNUSED(name);
 #else
@@ -1403,7 +1413,7 @@ QRectF QWidgetTextControlPrivate::rectForPosition(int position) const
             if (relativePos < line.textLength() - line.textStart())
                 w = line.cursorToX(relativePos + 1) - x;
             else
-                w = QFontMetrics(block.layout()->font()).width(QLatin1Char(' ')); // in sync with QTextLine::draw()
+                w = QFontMetrics(block.layout()->font()).horizontalAdvance(QLatin1Char(' ')); // in sync with QTextLine::draw()
         }
         r = QRectF(layoutPos.x() + x, layoutPos.y() + line.y(),
                    cursorWidth + w, line.height());
@@ -1416,10 +1426,6 @@ QRectF QWidgetTextControlPrivate::rectForPosition(int position) const
 
 namespace {
 struct QTextFrameComparator {
-#if defined(Q_CC_MSVC) && _MSC_VER < 1600
-//The STL implementation of MSVC 2008 requires the definition
-    bool operator()(QTextFrame *frame1, QTextFrame *frame2) { return frame1->firstPosition() < frame2->firstPosition(); }
-#endif
     bool operator()(QTextFrame *frame, int position) { return frame->firstPosition() < position; }
     bool operator()(int position, QTextFrame *frame) { return position < frame->firstPosition(); }
 };
@@ -1876,8 +1882,6 @@ void QWidgetTextControlPrivate::contextMenuEvent(const QPoint &screenPos, const 
     Q_UNUSED(contextWidget);
 #else
     Q_Q(QWidgetTextControl);
-    if (!hasFocus)
-        return;
     QMenu *menu = q->createStandardContextMenu(docPos, contextWidget);
     if (!menu)
         return;
@@ -2406,7 +2410,7 @@ void QWidgetTextControl::setAcceptRichText(bool accept)
     d->acceptRichText = accept;
 }
 
-#ifndef QT_NO_TEXTEDIT
+#if QT_CONFIG(textedit)
 
 void QWidgetTextControl::setExtraSelections(const QList<QTextEdit::ExtraSelection> &selections)
 {
@@ -2470,7 +2474,7 @@ QList<QTextEdit::ExtraSelection> QWidgetTextControl::extraSelections() const
     return selections;
 }
 
-#endif // QT_NO_TEXTEDIT
+#endif // QT_CONFIG(textedit)
 
 void QWidgetTextControl::setTextWidth(qreal width)
 {
@@ -3291,7 +3295,7 @@ void QUnicodeControlCharacterMenu::menuActionTriggered()
     QChar c(qt_controlCharacters[idx].character);
     QString str(c);
 
-#ifndef QT_NO_TEXTEDIT
+#if QT_CONFIG(textedit)
     if (QTextEdit *edit = qobject_cast<QTextEdit *>(editWidget)) {
         edit->insertPlainText(str);
         return;
@@ -3300,7 +3304,7 @@ void QUnicodeControlCharacterMenu::menuActionTriggered()
     if (QWidgetTextControl *control = qobject_cast<QWidgetTextControl *>(editWidget)) {
         control->insertPlainText(str);
     }
-#ifndef QT_NO_LINEEDIT
+#if QT_CONFIG(lineedit)
     if (QLineEdit *edit = qobject_cast<QLineEdit *>(editWidget)) {
         edit->insert(str);
         return;

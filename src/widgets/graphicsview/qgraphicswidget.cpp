@@ -39,8 +39,6 @@
 
 #include "qglobal.h"
 
-#ifndef QT_NO_GRAPHICSVIEW
-
 #include "qgraphicswidget.h"
 #include "qgraphicswidget_p.h"
 #include "qgraphicslayout.h"
@@ -278,7 +276,7 @@ QGraphicsWidget::~QGraphicsWidget()
     // Unset the parent here, when we're still a QGraphicsWidget.
     // It is otherwise done in ~QGraphicsItem() where we'd be
     // calling QGraphicsWidget members on an ex-QGraphicsWidget object
-    setParentItem(Q_NULLPTR);
+    setParentItem(nullptr);
 }
 
 /*!
@@ -2230,6 +2228,14 @@ bool QGraphicsWidget::testAttribute(Qt::WidgetAttribute attribute) const
 }
 
 /*!
+  \enum QGraphicsWidget::anonymous
+
+  The value returned by the virtual type() function.
+
+  \value Type A graphics widget item
+*/
+
+/*!
     \reimp
 */
 int QGraphicsWidget::type() const
@@ -2425,5 +2431,3 @@ void QGraphicsWidget::dumpFocusChain()
 QT_END_NAMESPACE
 
 #include "moc_qgraphicswidget.cpp"
-
-#endif //QT_NO_GRAPHICSVIEW

@@ -55,6 +55,7 @@
 #include <math.h>
 
 #include <QKeyEvent>
+#include <QRandomGenerator>
 
 //! [0]
 GraphWidget::GraphWidget(QWidget *parent)
@@ -173,7 +174,7 @@ void GraphWidget::timerEvent(QTimerEvent *event)
 
     bool itemsMoved = false;
     foreach (Node *node, nodes) {
-        if (node->advance())
+        if (node->advanceNext())
             itemsMoved = true;
     }
 
@@ -184,7 +185,7 @@ void GraphWidget::timerEvent(QTimerEvent *event)
 }
 //! [4]
 
-#ifndef QT_NO_WHEELEVENT
+#if QT_CONFIG(wheelevent)
 //! [5]
 void GraphWidget::wheelEvent(QWheelEvent *event)
 {
@@ -247,7 +248,7 @@ void GraphWidget::shuffle()
 {
     foreach (QGraphicsItem *item, scene()->items()) {
         if (qgraphicsitem_cast<Node *>(item))
-            item->setPos(-150 + qrand() % 300, -150 + qrand() % 300);
+            item->setPos(-150 + QRandomGenerator::global()->bounded(300), -150 + QRandomGenerator::global()->bounded(300));
     }
 }
 

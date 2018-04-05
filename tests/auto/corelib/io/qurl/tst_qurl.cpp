@@ -1384,18 +1384,6 @@ void tst_QUrl::compat_constructor_01_data()
 
 void tst_QUrl::compat_constructor_01()
 {
-    /* The following should work as expected:
-     *
-     * QUrlOperator op;
-     * op.copy( QString( "Makefile" ),
-     *          QString("ftp://rms:grmpf12@nibbler/home/rms/tmp"),
-     *          false );
-     *
-     * as well as the following:
-     *
-     * QUrlOperator op;
-     * op.copy(QString("ftp://ftp.qt-project.org/qt/INSTALL"), ".");
-     */
     QFETCH( QString, urlStr );
 
     {
@@ -1425,11 +1413,6 @@ void tst_QUrl::compat_constructor_02_data()
 
 void tst_QUrl::compat_constructor_02()
 {
-    /* The following should work as expected:
-     *
-     * QUrlOperator op( "ftp://ftp.qt-project.org/qt" );
-     * op.copy(QString("INSTALL"), ".");
-     */
     QFETCH( QString, urlStr );
     QFETCH( QString, fileName );
 
@@ -2075,11 +2058,31 @@ void tst_QUrl::isValid()
     }
 
     {
+        QUrl url("http:");
+        url.setPath("//example.com");
+        QVERIFY(!url.isValid());
+        QVERIFY(url.toString().isEmpty());
+        QVERIFY(url.errorString().contains("Path component starts with '//' and authority is absent"));
+
+        // should disappear if we set a port
+        url.setPort(80);
+        QVERIFY(url.isValid());
+        QCOMPARE(url.toString(), QString("http://:80//example.com"));
+    }
+
+    {
         QUrl url;
         url.setPath("http://example.com");
         QVERIFY(!url.isValid());
         QVERIFY(url.toString().isEmpty());
         QVERIFY(url.errorString().contains("':' before any '/'"));
+
+        // this specific error disappears if we set anything in the authority,
+        // but then we run into another error
+        url.setPort(80);
+        QVERIFY(!url.isValid());
+        QVERIFY(url.toString().isEmpty());
+        QVERIFY(url.errorString().contains("Path component is relative and authority is present"));
     }
 
     {
@@ -2819,6 +2822,29 @@ void tst_QUrl::setPort()
         QCOMPARE(url.port(), -1);
         QVERIFY(url.errorString().contains("out of range"));
     }
+
+    {
+        QUrl reference("//:80");
+        QUrl piecewise;
+        piecewise.setPort(80);
+        QCOMPARE(piecewise, reference);
+    }
+
+    {
+        // setAuthority must clear the port
+        QUrl url("http://example.com:80");
+        url.setAuthority("example.org");
+        QCOMPARE(url.port(), -1);
+        QCOMPARE(url.toString(), QString("http://example.org"));
+    }
+
+    {
+        // setAuthority must clear the port
+        QUrl url("http://example.com:80");
+        url.setAuthority(QString());
+        QCOMPARE(url.port(), -1);
+        QCOMPARE(url.toString(), QString("http:"));
+    }
 }
 
 void tst_QUrl::port_data()
@@ -3078,11 +3104,7 @@ void tst_QUrl::fromUserInputWithCwd_data()
 
     // "."
     {
-        const QUrl url = QUrl::fromLocalFile(base
-#ifdef Q_OS_WINRT
-                                      + QLatin1Char('/')
-#endif
-                                      ); // fromUserInput cleans the path
+        const QUrl url = QUrl::fromLocalFile(base); // fromUserInput cleans the path
         QTest::newRow("dot-in-path") << "." << base << url << url;
         QTest::newRow("dot-in-dot") << "." << QStringLiteral(".") << url << url;
     }
@@ -3653,12 +3675,12 @@ void tst_QUrl::setComponents_data()
     QTest::newRow("path-%3A-before-slash") << QUrl()
                                            << int(Path) << "c%3A/" << Tolerant << true
                                            << PrettyDecoded << "c%3A/" << "c%3A/";
-    QTest::newRow("path-doubleslash") << QUrl("trash:/")
+    QTest::newRow("path-doubleslash") << QUrl("http://example.com")
                                       << int(Path) << "//path" << Tolerant << true
-                                      << PrettyDecoded << "/path" << "trash:/path";
+                                      << PrettyDecoded << "//path" << "http://example.com//path";
     QTest::newRow("path-withdotdot") << QUrl("file:///tmp")
                                       << int(Path) << "//tmp/..///root/." << Tolerant << true
-                                      << PrettyDecoded << "/tmp/..///root/." << "file:///tmp/..///root/.";
+                                      << PrettyDecoded << "//tmp/..///root/." << "file:////tmp/..///root/.";
 
     // the other fields can be present and be empty
     // that is, their delimiters would be present, but there would be nothing to one side
@@ -3781,6 +3803,9 @@ void tst_QUrl::setComponents_data()
     QTest::newRow("invalid-path-2") << QUrl("http://example.com")
                                     << int(Path) << "relative" << Strict << false
                                     << PrettyDecoded << "relative" << "";
+    QTest::newRow("invalid-path-3") << QUrl("trash:/")
+                                    << int(Path) << "//path" << Tolerant << false
+                                    << PrettyDecoded << "//path" << "";
 
     // -- test bad percent encoding --
     // unnecessary to test the scheme, since percent-decoding is not performed in it;

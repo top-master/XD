@@ -216,12 +216,11 @@ void tst_QEventLoop::processEvents()
     awakeSpy.clear();
     QVERIFY(eventLoop.processEvents(QEventLoop::WaitForMoreEvents));
 
-    // Verify that the eventloop has blocked and woken up. Some eventloops
-    // may block and wake up multiple times.
-    QVERIFY(aboutToBlockSpy.count() > 0);
-    QVERIFY(awakeSpy.count() > 0);
     // We should get one awake for each aboutToBlock, plus one awake when
-    // processEvents is entered.
+    // processEvents is entered. There is no guarantee that that the
+    // processEvents call actually blocked, since the OS may introduce
+    // native events at any time.
+    QVERIFY(awakeSpy.count() > 0);
     QVERIFY(awakeSpy.count() >= aboutToBlockSpy.count());
 
     killTimer(timerId);
@@ -638,11 +637,6 @@ void tst_QEventLoop::testQuitLock()
 {
     QEventLoop eventLoop;
 
-    QTimer timer;
-    timer.setInterval(100);
-    QSignalSpy timerSpy(&timer, &QTimer::timeout);
-    timer.start();
-
     QEventLoopPrivate* privateClass = static_cast<QEventLoopPrivate*>(QObjectPrivate::get(&eventLoop));
 
     QCOMPARE(privateClass->quitLockRef.load(), 0);
@@ -656,9 +650,6 @@ void tst_QEventLoop::testQuitLock()
 
     QCOMPARE(privateClass->quitLockRef.load(), 0);
 
-    // The job takes long enough that the timer times out several times.
-    QVERIFY(timerSpy.count() > 3);
-    timerSpy.clear();
 
     job1 = new JobObject(&eventLoop, this);
     job1->start(200);
@@ -671,11 +662,6 @@ void tst_QEventLoop::testQuitLock()
     }
 
     eventLoop.exec();
-
-    qDebug() << timerSpy.count();
-    // The timer times out more if it has more subjobs to do.
-    // We run 10 jobs in sequence here of about 200ms each.
-    QVERIFY(timerSpy.count() > 17);
 }
 
 QTEST_MAIN(tst_QEventLoop)

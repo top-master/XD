@@ -53,12 +53,11 @@
 
 #include <QtWidgets/qgraphicseffect.h>
 
-#ifndef QT_NO_GRAPHICSEFFECT
-
 #include <QtOpenGL/qtopenglglobal.h>
 
-QT_BEGIN_NAMESPACE
+QT_REQUIRE_CONFIG(graphicseffect);
 
+QT_BEGIN_NAMESPACE
 
 class QGLShaderProgram;
 class QGLCustomShaderEffectStage;
@@ -75,7 +74,7 @@ public:
     void setPixelShaderFragment(const QByteArray& code);
 
 protected:
-    void draw(QPainter *painter) Q_DECL_OVERRIDE;
+    void draw(QPainter *painter) override;
     void setUniformsDirty();
     virtual void setUniforms(QGLShaderProgram *program);
 
@@ -87,7 +86,5 @@ private:
 };
 
 QT_END_NAMESPACE
-
-#endif // QT_NO_GRAPHICSEFFECT
 
 #endif // QGRAPHICSSHADEREFFECT_P_H

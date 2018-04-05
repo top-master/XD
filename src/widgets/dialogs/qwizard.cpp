@@ -40,18 +40,21 @@
 #include "qwizard.h"
 #include <QtWidgets/private/qtwidgetsglobal_p.h>
 
-#ifndef QT_NO_WIZARD
-
+#if QT_CONFIG(spinbox)
 #include "qabstractspinbox.h"
+#endif
 #include "qalgorithms.h"
 #include "qapplication.h"
 #include "qboxlayout.h"
 #include "qlayoutitem.h"
 #include "qdesktopwidget.h"
+#include <private/qdesktopwidget_p.h>
 #include "qevent.h"
 #include "qframe.h"
 #include "qlabel.h"
+#if QT_CONFIG(lineedit)
 #include "qlineedit.h"
+#endif
 #include "qpainter.h"
 #include "qwindow.h"
 #include "qpushbutton.h"
@@ -295,7 +298,7 @@ public:
                Qt::TextFormat titleFormat, Qt::TextFormat subTitleFormat);
 
 protected:
-    void paintEvent(QPaintEvent *event) Q_DECL_OVERRIDE;
+    void paintEvent(QPaintEvent *event) override;
 #if QT_CONFIG(style_windowsvista)
 private:
     bool vistaDisabled() const;
@@ -398,7 +401,7 @@ void QWizardHeader::setup(const QWizardLayoutInfo &info, const QString &title,
         /*
             There is no widthForHeight() function, so we simulate it with a loop.
         */
-        int candidateSubTitleWidth = qMin(512, 2 * QApplication::desktop()->width() / 3);
+        int candidateSubTitleWidth = qMin(512, 2 * QDesktopWidgetPrivate::width() / 3);
         int delta = candidateSubTitleWidth >> 1;
         while (delta > 0) {
             if (subTitleLabel->heightForWidth(candidateSubTitleWidth - delta)
@@ -451,8 +454,8 @@ public:
             m_layout->addWidget(m_sideWidget);
     }
 
-    QSize minimumSizeHint() const Q_DECL_OVERRIDE {
-        if (!pixmap() && !pixmap()->isNull())
+    QSize minimumSizeHint() const override {
+        if (pixmap() && !pixmap()->isNull())
             return pixmap()->size();
         return QFrame::minimumSizeHint();
     }
@@ -498,6 +501,7 @@ public:
     mutable TriState completeState;
     bool explicitlyFinal;
     bool commit;
+    bool initialized = false;
     QMap<int, QString> buttonCustomTexts;
 };
 
@@ -575,7 +579,7 @@ public:
         , bottomRuler(0)
 #if QT_CONFIG(style_windowsvista)
         , vistaHelper(0)
-        , vistaInitPending(false)
+        , vistaInitPending(true)
         , vistaState(QVistaHelper::Dirty)
         , vistaStateChanged(false)
         , inHandleAeroStyleChange(false)
@@ -586,12 +590,6 @@ public:
         , maximumHeight(QWIDGETSIZE_MAX)
     {
         std::fill(btns, btns + QWizard::NButtons, static_cast<QAbstractButton *>(0));
-
-#if QT_CONFIG(style_windowsvista)
-        if (QSysInfo::WindowsVersion >= QSysInfo::WV_VISTA
-            && (QSysInfo::WindowsVersion & QSysInfo::WV_NT_based))
-            vistaInitPending = true;
-#endif
     }
 
     void init();
@@ -633,7 +631,6 @@ public:
     QMap<QString, int> fieldIndexMap;
     QVector<QWizardDefaultProperty> defaultPropertyTable;
     QList<int> history;
-    QSet<int> initialized; // ### remove and move bit to QWizardPage?
     int start;
     bool startSetByUser;
     int current;
@@ -772,7 +769,8 @@ void QWizardPrivate::reset()
         for (int i = history.count() - 1; i >= 0; --i)
             q->cleanupPage(history.at(i));
         history.clear();
-        initialized.clear();
+        for (QWizardPage *page : pageMap)
+            page->d_func()->initialized = false;
 
         current = -1;
         emit q->currentIdChanged(-1);
@@ -783,14 +781,12 @@ void QWizardPrivate::cleanupPagesNotInHistory()
 {
     Q_Q(QWizard);
 
-    const QSet<int> original = initialized;
-    QSet<int>::const_iterator i = original.constBegin();
-    QSet<int>::const_iterator end = original.constEnd();
-
-    for (; i != end; ++i) {
-        if (!history.contains(*i)) {
-            q->cleanupPage(*i);
-            initialized.remove(*i);
+    for (auto it = pageMap.begin(), end = pageMap.end(); it != end; ++it) {
+        const auto idx = it.key();
+        const auto page = it.value()->d_func();
+        if (page->initialized && !history.contains(idx)) {
+            q->cleanupPage(idx);
+            page->initialized = false;
         }
     }
 }
@@ -845,7 +841,7 @@ void QWizardPrivate::switchToPage(int newId, Direction direction)
         if (direction == Backward) {
             if (!(opts & QWizard::IndependentPages)) {
                 q->cleanupPage(oldId);
-                initialized.remove(oldId);
+                oldPage->d_func()->initialized = false;
             }
             Q_ASSERT(history.constLast() == oldId);
             history.removeLast();
@@ -858,8 +854,8 @@ void QWizardPrivate::switchToPage(int newId, Direction direction)
     QWizardPage *newPage = q->currentPage();
     if (newPage) {
         if (direction == Forward) {
-            if (!initialized.contains(current)) {
-                initialized.insert(current);
+            if (!newPage->d_func()->initialized) {
+                newPage->d_func()->initialized = true;
                 q->initializePage(current);
             }
             history.append(current);
@@ -1466,8 +1462,8 @@ void QWizardPrivate::updateButtonTexts()
     // even in RTL mode, so do the same, even if it might be counter-intuitive.
     // The shortcut for 'back' is set in class QVistaBackButton.
 #if QT_CONFIG(shortcut)
-    if (btns[QWizard::NextButton])
-        btns[QWizard::NextButton]->setShortcut(isVistaThemeEnabled() ? QKeySequence(Qt::ALT | Qt::Key_Right) : QKeySequence());
+    if (btns[QWizard::NextButton] && isVistaThemeEnabled())
+        btns[QWizard::NextButton]->setShortcut(QKeySequence(Qt::ALT | Qt::Key_Right));
 #endif
 }
 
@@ -2359,9 +2355,9 @@ void QWizard::removePage(int id)
     }
 
     if (removedPage) {
-        if (d->initialized.contains(id)) {
+        if (removedPage->d_func()->initialized) {
             cleanupPage(id);
-            d->initialized.remove(id);
+            removedPage->d_func()->initialized = false;
         }
 
         d->pageVBoxLayout->removeWidget(removedPage);
@@ -3682,13 +3678,13 @@ bool QWizardPage::isComplete() const
             if (value == field.initialValue)
                 return false;
 
-#ifndef QT_NO_LINEEDIT
+#if QT_CONFIG(lineedit)
             if (QLineEdit *lineEdit = qobject_cast<QLineEdit *>(field.object)) {
                 if (!lineEdit->hasAcceptableInput())
                     return false;
             }
 #endif
-#ifndef QT_NO_SPINBOX
+#if QT_CONFIG(spinbox)
             if (QAbstractSpinBox *spinBox = qobject_cast<QAbstractSpinBox *>(field.object)) {
                 if (!spinBox->hasAcceptableInput())
                     return false;
@@ -3987,5 +3983,3 @@ QWizard *QWizardPage::wizard() const
 QT_END_NAMESPACE
 
 #include "moc_qwizard.cpp"
-
-#endif // QT_NO_WIZARD

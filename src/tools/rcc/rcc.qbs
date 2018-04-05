@@ -2,6 +2,7 @@ import qbs
 import qbs.FileInfo
 
 QtHostTool {
+    description: "Qt Resource Compiler"
     toolFileTag: "qt.rcc-tool"
     useBootstrapLib: true
     cpp.includePaths: [path].concat(base)

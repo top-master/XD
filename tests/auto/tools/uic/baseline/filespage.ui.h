@@ -10,11 +10,8 @@
 #define FILESPAGE_H
 
 #include <QtCore/QVariant>
-#include <QtWidgets/QAction>
 #include <QtWidgets/QApplication>
-#include <QtWidgets/QButtonGroup>
 #include <QtWidgets/QGridLayout>
-#include <QtWidgets/QHeaderView>
 #include <QtWidgets/QLabel>
 #include <QtWidgets/QListWidget>
 #include <QtWidgets/QPushButton>
@@ -83,10 +80,10 @@ public:
 
     void retranslateUi(QWidget *FilesPage)
     {
-        FilesPage->setWindowTitle(QApplication::translate("FilesPage", "Form", Q_NULLPTR));
-        fileLabel->setText(QApplication::translate("FilesPage", "Files:", Q_NULLPTR));
-        removeButton->setText(QApplication::translate("FilesPage", "Remove", Q_NULLPTR));
-        removeAllButton->setText(QApplication::translate("FilesPage", "Remove All", Q_NULLPTR));
+        FilesPage->setWindowTitle(QApplication::translate("FilesPage", "Form", nullptr));
+        fileLabel->setText(QApplication::translate("FilesPage", "Files:", nullptr));
+        removeButton->setText(QApplication::translate("FilesPage", "Remove", nullptr));
+        removeAllButton->setText(QApplication::translate("FilesPage", "Remove All", nullptr));
     } // retranslateUi
 
 };

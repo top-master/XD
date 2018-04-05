@@ -1,6 +1,6 @@
 /****************************************************************************
 **
-** Copyright (C) 2016 The Qt Company Ltd.
+** Copyright (C) 2017 The Qt Company Ltd.
 ** Contact: https://www.qt.io/licensing/
 **
 ** This file is part of the QtNetwork module of the Qt Toolkit.
@@ -98,8 +98,8 @@
 #include <openssl/crypto.h>
 #include <openssl/tls1.h>
 
-#if OPENSSL_VERSION_NUMBER >= 0x10000000L
-typedef _STACK STACK;
+#if QT_CONFIG(opensslv11)
+#include <openssl/dh.h>
 #endif
 
 QT_BEGIN_NAMESPACE
@@ -132,26 +132,26 @@ public:
 #endif
 
     // Platform specific functions
-    void startClientEncryption() Q_DECL_OVERRIDE;
-    void startServerEncryption() Q_DECL_OVERRIDE;
-    void transmit() Q_DECL_OVERRIDE;
+    void startClientEncryption() override;
+    void startServerEncryption() override;
+    void transmit() override;
     bool startHandshake();
-    void disconnectFromHost() Q_DECL_OVERRIDE;
-    void disconnected() Q_DECL_OVERRIDE;
-    QSslCipher sessionCipher() const Q_DECL_OVERRIDE;
-    QSsl::SslProtocol sessionProtocol() const Q_DECL_OVERRIDE;
-    void continueHandshake() Q_DECL_OVERRIDE;
+    void disconnectFromHost() override;
+    void disconnected() override;
+    QSslCipher sessionCipher() const override;
+    QSsl::SslProtocol sessionProtocol() const override;
+    void continueHandshake() override;
     bool checkSslErrors();
     void storePeerCertificates();
     unsigned int tlsPskClientCallback(const char *hint, char *identity, unsigned int max_identity_len, unsigned char *psk, unsigned int max_psk_len);
     unsigned int tlsPskServerCallback(const char *identity, unsigned char *psk, unsigned int max_psk_len);
 #ifdef Q_OS_WIN
     void fetchCaRootForCert(const QSslCertificate &cert);
-    void _q_caRootLoaded(QSslCertificate,QSslCertificate) Q_DECL_OVERRIDE;
+    void _q_caRootLoaded(QSslCertificate,QSslCertificate) override;
 #endif
 
     Q_AUTOTEST_EXPORT static long setupOpenSslOptions(QSsl::SslProtocol protocol, QSsl::SslOptions sslOptions);
-    static QSslCipher QSslCipher_from_SSL_CIPHER(SSL_CIPHER *cipher);
+    static QSslCipher QSslCipher_from_SSL_CIPHER(const SSL_CIPHER *cipher);
     static QList<QSslCertificate> STACKOFX509_to_QSslCertificates(STACK_OF(X509) *x509);
     static QList<QSslError> verify(const QList<QSslCertificate> &certificateChain, const QString &hostName);
     static QString getErrorsFromOpenSsl();
@@ -160,23 +160,6 @@ public:
                              QList<QSslCertificate> *caCertificates,
                              const QByteArray &passPhrase);
 };
-
-#ifdef Q_OS_WIN
-class QWindowsCaRootFetcher : public QObject
-{
-    Q_OBJECT;
-public:
-    QWindowsCaRootFetcher(const QSslCertificate &certificate, QSslSocket::SslMode sslMode);
-    ~QWindowsCaRootFetcher();
-public slots:
-    void start();
-signals:
-    void finished(QSslCertificate brokenChain, QSslCertificate caroot);
-private:
-    QSslCertificate cert;
-    QSslSocket::SslMode mode;
-};
-#endif
 
 QT_END_NAMESPACE
 

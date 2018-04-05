@@ -111,8 +111,8 @@ const char _slnExtSections[]    = "\n\tGlobalSection(ExtensibilityGlobals) = pos
 VcprojGenerator::VcprojGenerator()
     : Win32MakefileGenerator(),
       is64Bit(false),
-      projectWriter(0),
-      customBuildToolFilterFileSuffix(QStringLiteral(".cbt"))
+      customBuildToolFilterFileSuffix(QStringLiteral(".cbt")),
+      projectWriter(0)
 {
 }
 
@@ -223,7 +223,7 @@ QUuid VcprojGenerator::getProjectUUID(const QString &filename)
     bool validUUID = true;
 
     // Read GUID from variable-space
-    QUuid uuid = project->first("GUID").toQString();
+    auto uuid = QUuid::fromString(project->first("GUID").toQStringView());
 
     // If none, create one based on the MD5 of absolute project path
     if(uuid.isNull() || !filename.isEmpty()) {
@@ -629,6 +629,7 @@ void VcprojGenerator::writeSubDirs(QTextStream &t)
     for(QList<VcsolutionDepend*>::Iterator it = solution_cleanup.begin(); it != solution_cleanup.end(); ++it) {
         QString platform = is64Bit ? "x64" : "Win32";
         QString xplatform = platform;
+        const bool isWinRT = project->isActiveConfig("winrt");
         if (!project->isEmpty("VCPROJ_ARCH")) {
             xplatform = project->first("VCPROJ_ARCH").toQString();
         }
@@ -636,11 +637,11 @@ void VcprojGenerator::writeSubDirs(QTextStream &t)
             platform = xplatform;
         t << "\n\t\t" << (*it)->uuid << QString(_slnProjDbgConfTag1).arg(xplatform) << platform;
         t << "\n\t\t" << (*it)->uuid << QString(_slnProjDbgConfTag2).arg(xplatform) << platform;
-        if (!project->isEmpty("CE_SDK") && !project->isEmpty("CE_ARCH"))
+        if (isWinRT)
             t << "\n\t\t" << (*it)->uuid << QString(_slnProjDbgConfTag3).arg(xplatform) << platform;
         t << "\n\t\t" << (*it)->uuid << QString(_slnProjRelConfTag1).arg(xplatform) << platform;
         t << "\n\t\t" << (*it)->uuid << QString(_slnProjRelConfTag2).arg(xplatform) << platform;
-        if (!project->isEmpty("CE_SDK") && !project->isEmpty("CE_ARCH"))
+        if (isWinRT)
             t << "\n\t\t" << (*it)->uuid << QString(_slnProjRelConfTag3).arg(xplatform) << platform;
     }
     t << _slnProjConfEnd;
@@ -1016,7 +1017,7 @@ void VcprojGenerator::initConfiguration()
     initCustomBuildTool();
     initPreBuildEventTools();
     initPostBuildEventTools();
-    // Only deploy for CE and WinRT projects
+    // Only deploy for crosscompiled projects
     if (!project->isHostBuild() || conf.WinRT)
         initDeploymentTool();
     initWinDeployQtTool();

@@ -55,7 +55,7 @@
 #include "QtCore/qobject.h"
 #include "QtCore/qpoint.h"
 
-#ifndef QT_NO_RESIZEHANDLER
+QT_REQUIRE_CONFIG(resizehandler);
 
 QT_BEGIN_NAMESPACE
 
@@ -95,7 +95,7 @@ Q_SIGNALS:
     void activate();
 
 protected:
-    bool eventFilter(QObject *o, QEvent *e) Q_DECL_OVERRIDE;
+    bool eventFilter(QObject *o, QEvent *e) override;
     void mouseMoveEvent(QMouseEvent *e);
     void keyPressEvent(QKeyEvent *e);
 
@@ -134,7 +134,5 @@ private:
 };
 
 QT_END_NAMESPACE
-
-#endif // QT_NO_RESIZEHANDLER
 
 #endif // QWIDGETRESIZEHANDLER_P_H

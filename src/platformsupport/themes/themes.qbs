@@ -33,7 +33,8 @@ QtModuleProject {
         ]
 
         Group {
-            condition: qbs.targetOS.contains("unix") && !qbs.targetOS.contains("darwin")
+            condition: (qbs.targetOS.contains("unix") && !qbs.targetOS.contains("darwin"))
+                || QtGuiPrivateConfig.xcb
             prefix: "genericunix/"
             files: [
                 "qgenericunixthemes_p.h",

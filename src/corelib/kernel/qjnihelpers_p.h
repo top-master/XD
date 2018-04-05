@@ -52,8 +52,10 @@
 //
 
 #include <jni.h>
-#include <QtCore/private/qglobal_p.h>
 #include <functional>
+#include <QtCore/private/qglobal_p.h>
+#include <QHash>
+#include <QMetaType>
 
 QT_BEGIN_NAMESPACE
 
@@ -98,6 +100,13 @@ namespace QtAndroidPrivate
         virtual bool handleKeyEvent(jobject event) = 0;
     };
 
+    class Q_CORE_EXPORT OnBindListener
+    {
+    public:
+        virtual ~OnBindListener() {}
+        virtual jobject onBind(jobject intent) = 0;
+    };
+
     enum class PermissionsResult {
         Granted,
         Denied
@@ -117,7 +126,7 @@ namespace QtAndroidPrivate
     Q_CORE_EXPORT void runOnAndroidThreadSync(const Runnable &runnable, JNIEnv *env, int timeoutMs = INT_MAX);
     Q_CORE_EXPORT void runOnUiThread(QRunnable *runnable, JNIEnv *env);
     Q_CORE_EXPORT void requestPermissions(JNIEnv *env, const QStringList &permissions, const PermissionsResultFunc &callbackFunc, bool directCall = false);
-    Q_CORE_EXPORT QHash<QString, PermissionsResult> requestPermissionsSync(JNIEnv *env, const QStringList &permissions, int timeoutMs = INT_MAX);
+    Q_CORE_EXPORT PermissionsHash requestPermissionsSync(JNIEnv *env, const QStringList &permissions, int timeoutMs = INT_MAX);
     Q_CORE_EXPORT PermissionsResult checkPermission(const QString &permission);
     Q_CORE_EXPORT bool shouldShowRequestPermissionRationale(const QString &permission);
 
@@ -140,9 +149,18 @@ namespace QtAndroidPrivate
     Q_CORE_EXPORT void registerKeyEventListener(KeyEventListener *listener);
     Q_CORE_EXPORT void unregisterKeyEventListener(KeyEventListener *listener);
 
-    Q_CORE_EXPORT void hideSplashScreen(JNIEnv *env);
+    Q_CORE_EXPORT void hideSplashScreen(JNIEnv *env, int duration = 0);
+
+
+    Q_CORE_EXPORT void waitForServiceSetup();
+    Q_CORE_EXPORT int acuqireServiceSetup(int flags);
+    Q_CORE_EXPORT void setOnBindListener(OnBindListener *listener);
+    Q_CORE_EXPORT jobject callOnBindListener(jobject intent);
+
 }
 
 QT_END_NAMESPACE
+
+Q_DECLARE_METATYPE(QtAndroidPrivate::PermissionsHash)
 
 #endif // QJNIHELPERS_H

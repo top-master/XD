@@ -73,7 +73,6 @@
 
 
 #import "qcocoaapplicationdelegate.h"
-#import "qnswindowdelegate.h"
 #import "qcocoamenuloader.h"
 #include "qcocoaintegration.h"
 #include <qevent.h>
@@ -86,18 +85,28 @@
 
 QT_USE_NAMESPACE
 
-QT_BEGIN_NAMESPACE
-static QCocoaApplicationDelegate *sharedCocoaApplicationDelegate = nil;
-
-static void cleanupCocoaApplicationDelegate()
-{
-    [sharedCocoaApplicationDelegate release];
+@implementation QCocoaApplicationDelegate {
+    bool startedQuit;
+    NSMenu *dockMenu;
+    NSObject <NSApplicationDelegate> *reflectionDelegate;
+    bool inLaunch;
 }
-QT_END_NAMESPACE
 
-@implementation QCocoaApplicationDelegate
++ (instancetype)sharedDelegate
+{
+    static QCocoaApplicationDelegate *shared = nil;
+    static dispatch_once_t onceToken;
+    dispatch_once(&onceToken, ^{
+        shared = [[self alloc] init];
+        atexit_b(^{
+            [shared release];
+            shared = nil;
+        });
+    });
+    return shared;
+}
 
-- (id)init
+- (instancetype)init
 {
     self = [super init];
     if (self) {
@@ -120,7 +129,6 @@ QT_END_NAMESPACE
 
 - (void)dealloc
 {
-    sharedCocoaApplicationDelegate = nil;
     [dockMenu release];
     if (reflectionDelegate) {
         [[NSApplication sharedApplication] setDelegate:reflectionDelegate];
@@ -129,27 +137,6 @@ QT_END_NAMESPACE
     [[NSNotificationCenter defaultCenter] removeObserver:self];
 
     [super dealloc];
-}
-
-+ (id)allocWithZone:(NSZone *)zone
-{
-    @synchronized(self) {
-        if (sharedCocoaApplicationDelegate == nil) {
-            sharedCocoaApplicationDelegate = [super allocWithZone:zone];
-            qAddPostRoutine(cleanupCocoaApplicationDelegate);
-            return sharedCocoaApplicationDelegate;
-        }
-    }
-    return nil;
-}
-
-+ (QCocoaApplicationDelegate *)sharedDelegate
-{
-    @synchronized(self) {
-        if (sharedCocoaApplicationDelegate == nil)
-            [[self alloc] init];
-    }
-    return [[sharedCocoaApplicationDelegate retain] autorelease];
 }
 
 - (void)setDockMenu:(NSMenu*)newMenu
@@ -168,7 +155,7 @@ QT_END_NAMESPACE
     return [[dockMenu retain] autorelease];
 }
 
-- (BOOL) canQuit
+- (BOOL)canQuit
 {
     [[NSApp mainMenu] cancelTracking];
 
@@ -236,7 +223,7 @@ QT_END_NAMESPACE
     return NSTerminateCancel;
 }
 
-- (void) applicationWillFinishLaunching:(NSNotification *)notification
+- (void)applicationWillFinishLaunching:(NSNotification *)notification
 {
     Q_UNUSED(notification);
 
@@ -266,14 +253,14 @@ QT_END_NAMESPACE
 }
 
 // called by QCocoaIntegration's destructor before resetting the application delegate to nil
-- (void) removeAppleEventHandlers
+- (void)removeAppleEventHandlers
 {
     NSAppleEventManager *eventManager = [NSAppleEventManager sharedAppleEventManager];
     [eventManager removeEventHandlerForEventClass:kCoreEventClass andEventID:kAEQuitApplication];
     [eventManager removeEventHandlerForEventClass:kInternetEventClass andEventID:kAEGetURL];
 }
 
-- (bool) inLaunch
+- (bool)inLaunch
 {
     return inLaunch;
 }
@@ -284,7 +271,7 @@ QT_END_NAMESPACE
     inLaunch = false;
 
     if (qEnvironmentVariableIsEmpty("QT_MAC_DISABLE_FOREGROUND_APPLICATION_TRANSFORM")) {
-        if (QSysInfo::macVersion() >= QSysInfo::MV_10_12) {
+        if (__builtin_available(macOS 10.12, *)) {
             // Move the application window to front to avoid launching behind the terminal.
             // Ignoring other apps is necessary (we must ignore the terminal), but makes
             // Qt apps play slightly less nice with other apps when lanching from Finder
@@ -328,6 +315,24 @@ QT_END_NAMESPACE
     return NO; // Someday qApp->quitOnLastWindowClosed(); when QApp and NSApp work closer together.
 }
 
+- (void)applicationWillHide:(NSNotification *)notification
+{
+    if (reflectionDelegate
+        && [reflectionDelegate respondsToSelector:@selector(applicationWillHide:)]) {
+        [reflectionDelegate applicationWillHide:notification];
+    }
+
+    // When the application is hidden Qt will hide the popup windows associated with
+    // it when it has lost the activation for the application. However, when it gets
+    // to this point it believes the popup windows to be hidden already due to the
+    // fact that the application itself is hidden, which will cause a problem when
+    // the application is made visible again.
+    const QWindowList topLevelWindows = QGuiApplication::topLevelWindows();
+    for (QWindow *topLevelWindow : qAsConst(topLevelWindows)) {
+        if ((topLevelWindow->type() & Qt::Popup) == Qt::Popup && topLevelWindow->isVisible())
+            topLevelWindow->hide();
+    }
+}
 
 - (void)applicationDidBecomeActive:(NSNotification *)notification
 {

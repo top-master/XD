@@ -37,7 +37,7 @@ QtModuleProject {
         cpp.includePaths: project.includePaths.concat(base)
 
         Properties {
-            condition: qbs.targetOS.contains("windows") && qbs.toolchain.contains("msvc")
+            condition: qbs.toolchain.contains("msvc") && qbs.architecture === "x86"
             cpp.linkerFlags: base.concat("/BASE:0x66000000")
         }
 

@@ -54,6 +54,8 @@
 #include "qjsonobject.h"
 #include "qjsonarray.h"
 
+#include <qtcore_tracepoints_p.h>
+
 QT_BEGIN_NAMESPACE
 
 class QFactoryLoaderPrivate : public QObjectPrivate
@@ -115,33 +117,29 @@ void QFactoryLoader::update()
                     QDir::Files);
         QLibraryPrivate *library = 0;
 
-#ifdef Q_OS_MAC
-        // Loading both the debug and release version of the cocoa plugins causes the objective-c runtime
-        // to print "duplicate class definitions" warnings. Detect if QFactoryLoader is about to load both,
-        // skip one of them (below).
-        //
-        // ### FIXME find a proper solution
-        //
-        const bool isLoadingDebugAndReleaseCocoa = plugins.contains(QStringLiteral("libqcocoa_debug.dylib"))
-                && plugins.contains(QStringLiteral("libqcocoa.dylib"));
-#endif
         for (int j = 0; j < plugins.count(); ++j) {
             QString fileName = QDir::cleanPath(path + QLatin1Char('/') + plugins.at(j));
 
 #ifdef Q_OS_MAC
-            if (isLoadingDebugAndReleaseCocoa) {
-#ifdef QT_DEBUG
-               if (fileName.contains(QStringLiteral("libqcocoa.dylib")))
-                   continue;    // Skip release plugin in debug mode
-#else
-               if (fileName.contains(QStringLiteral("libqcocoa_debug.dylib")))
-                   continue;    // Skip debug plugin in release mode
-#endif
-            }
+            const bool isDebugPlugin = fileName.endsWith(QLatin1String("_debug.dylib"));
+            const bool isDebugLibrary =
+                #ifdef QT_DEBUG
+                    true;
+                #else
+                    false;
+                #endif
+
+            // Skip mismatching plugins so that we don't end up loading both debug and release
+            // versions of the same Qt libraries (due to the plugin's dependencies).
+            if (isDebugPlugin != isDebugLibrary)
+                continue;
 #endif
             if (qt_debug_component()) {
                 qDebug() << "QFactoryLoader::QFactoryLoader() looking at" << fileName;
             }
+
+            Q_TRACE(qfactoryloader_update, fileName);
+
             library = QLibraryPrivate::findOrCreate(QFileInfo(fileName).canonicalFilePath());
             if (!library->isPlugin()) {
                 if (qt_debug_component()) {

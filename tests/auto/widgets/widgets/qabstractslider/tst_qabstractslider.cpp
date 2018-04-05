@@ -36,16 +36,12 @@
 #include <QTime>
 #include <QDebug>
 
+#include <QtTest/private/qtesthelpers_p.h>
+
+using namespace QTestPrivate;
+
 // defined to be 120 by the wheel mouse vendors according to the docs
 #define WHEEL_DELTA 120
-
-static inline void setFrameless(QWidget *w)
-{
-    Qt::WindowFlags flags = w->windowFlags();
-    flags |= Qt::FramelessWindowHint;
-    flags &= ~(Qt::WindowTitleHint | Qt::WindowSystemMenuHint | Qt::WindowMinMaxButtonsHint | Qt::WindowCloseButtonHint);
-    w->setWindowFlags(flags);
-}
 
 class Slider : public QAbstractSlider
 {
@@ -74,7 +70,7 @@ private slots:
     void minimum_maximum();
     void keyPressed_data();
     void keyPressed();
-#ifndef QT_NO_WHEELEVENT
+#if QT_CONFIG(wheelevent)
     void wheelEvent_data();
     void wheelEvent();
     void fineGrainedWheelEvent_data();
@@ -690,7 +686,7 @@ void tst_QAbstractSlider::keyPressed()
     QCOMPARE(slider->sliderPosition(), expectedSliderPositionVerticalInverted);
 }
 
-#ifndef QT_NO_WHEELEVENT
+#if QT_CONFIG(wheelevent)
 void tst_QAbstractSlider::wheelEvent_data()
 {
     QTest::addColumn<int>("initialSliderPosition");
@@ -941,7 +937,7 @@ void tst_QAbstractSlider::fineGrainedWheelEvent()
     QCOMPARE(slider->sliderPosition(), 1);
 }
 
-#endif // !QT_NO_WHEELEVENT
+#endif // QT_CONFIG(wheelevent)
 
 void tst_QAbstractSlider::sliderPressedReleased_data()
 {

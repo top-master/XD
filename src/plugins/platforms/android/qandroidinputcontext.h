@@ -44,6 +44,7 @@
 #include <qpa/qplatforminputcontext.h>
 #include <jni.h>
 #include <qevent.h>
+#include <QTimer>
 
 QT_BEGIN_NAMESPACE
 
@@ -58,6 +59,14 @@ class QAndroidInputContext: public QPlatformInputContext
     };
 
 public:
+    enum HandleMode {
+        Hidden        = 0,
+        ShowCursor    = 1,
+        ShowSelection = 2,
+        ShowEditPopup = 0x100
+    };
+    Q_DECLARE_FLAGS(HandleModes, HandleMode)
+
     struct ExtractedText
     {
         ExtractedText() { clear(); }
@@ -124,6 +133,7 @@ public slots:
     void touchDown(int x, int y);
     void longPress(int x, int y);
     void keyDown();
+    void hideSelectionHandles();
 
 private slots:
     void showInputPanelLater(Qt::ApplicationState);
@@ -145,17 +155,12 @@ private:
     int m_composingCursor;
     QMetaObject::Connection m_updateCursorPosConnection;
     bool m_blockUpdateSelection;
-    enum CursorHandleShowMode {
-        CursorHandleNotShown,
-        CursorHandleShowNormal = 1,
-        CursorHandleShowSelection = 2,
-        CursorHandleShowPopup = 3
-    };
-    CursorHandleShowMode m_cursorHandleShown;
+    HandleModes m_handleMode;
     QAtomicInt m_batchEditNestingLevel;
     QObject *m_focusObject;
+    QTimer m_hideCursorHandleTimer;
 };
-
+Q_DECLARE_OPERATORS_FOR_FLAGS(QAndroidInputContext::HandleModes)
 QT_END_NAMESPACE
 
 #endif // ANDROIDINPUTCONTEXT_H

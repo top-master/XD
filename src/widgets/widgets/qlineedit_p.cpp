@@ -40,10 +40,10 @@
 #include "qlineedit.h"
 #include "qlineedit_p.h"
 
-#ifndef QT_NO_LINEEDIT
-
 #include "qvariant.h"
+#if QT_CONFIG(itemviews)
 #include "qabstractitemview.h"
+#endif
 #include "qdrag.h"
 #include "qwidgetaction.h"
 #include "qclipboard.h"
@@ -54,7 +54,10 @@
 #include "qinputmethod.h"
 #include "qlist.h"
 #endif
+#include <qpainter.h>
 #include <qpropertyanimation.h>
+#include <qstylehints.h>
+#include <qvalidator.h>
 
 QT_BEGIN_NAMESPACE
 
@@ -87,7 +90,7 @@ QRect QLineEditPrivate::cursorRect() const
     return adjustedControlRect(control->cursorRect());
 }
 
-#ifndef QT_NO_COMPLETER
+#if QT_CONFIG(completer)
 
 void QLineEditPrivate::_q_completionHighlighted(const QString &newText)
 {
@@ -108,7 +111,7 @@ void QLineEditPrivate::_q_completionHighlighted(const QString &newText)
     }
 }
 
-#endif // QT_NO_COMPLETER
+#endif // QT_CONFIG(completer)
 
 void QLineEditPrivate::_q_handleWindowActivate()
 {
@@ -121,7 +124,7 @@ void QLineEditPrivate::_q_textEdited(const QString &text)
 {
     Q_Q(QLineEdit);
     emit q->textEdited(text);
-#ifndef QT_NO_COMPLETER
+#if QT_CONFIG(completer)
     if (control->completer()
         && control->completer()->completionMode() != QCompleter::InlineCompletion)
         control->complete(-1); // update the popup on cut/paste/del
@@ -230,6 +233,13 @@ void QLineEditPrivate::init(const QString& txt)
     q->setAcceptDrops(true);
 
     q->setAttribute(Qt::WA_MacShowFocusRect);
+
+    initMouseYThreshold();
+}
+
+void QLineEditPrivate::initMouseYThreshold()
+{
+    mouseYThreshold = QGuiApplication::styleHints()->mouseQuickSelectionThreshold();
 }
 
 QRect QLineEditPrivate::adjustedContentsRect() const
@@ -328,20 +338,18 @@ QLineEditIconButton::QLineEditIconButton(QWidget *parent)
 QLineEditPrivate *QLineEditIconButton::lineEditPrivate() const
 {
     QLineEdit *le = qobject_cast<QLineEdit *>(parentWidget());
-    return le ? static_cast<QLineEditPrivate *>(qt_widget_private(le)) : Q_NULLPTR;
+    return le ? static_cast<QLineEditPrivate *>(qt_widget_private(le)) : nullptr;
 }
 
 void QLineEditIconButton::paintEvent(QPaintEvent *)
 {
     QPainter painter(this);
-    QWindow *window = Q_NULLPTR;
+    QWindow *window = nullptr;
     if (const QWidget *nativeParent = nativeParentWidget())
         window = nativeParent->windowHandle();
-    // Note isDown should really use the active state but in most styles
-    // this has no proper feedback
     QIcon::Mode state = QIcon::Disabled;
     if (isEnabled())
-        state = isDown() ? QIcon::Selected : QIcon::Normal;
+        state = isDown() ? QIcon::Active : QIcon::Normal;
     const QLineEditPrivate *lep = lineEditPrivate();
     const int iconWidth = lep ? lep->sideWidgetParameters().iconSize : 16;
     const QSize iconSize(iconWidth, iconWidth);
@@ -621,5 +629,3 @@ int QLineEditPrivate::effectiveRightTextMargin() const
 QT_END_NAMESPACE
 
 #include "moc_qlineedit_p.cpp"
-
-#endif

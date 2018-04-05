@@ -161,6 +161,7 @@ class Q_CORE_EXPORT QEventDispatcherWin32Private : public QAbstractEventDispatch
 public:
     QEventDispatcherWin32Private();
     ~QEventDispatcherWin32Private();
+    static QEventDispatcherWin32Private *get(QEventDispatcherWin32 *q) { return q->d_func(); }
 
     DWORD threadId;
 
@@ -192,7 +193,9 @@ public:
     void postActivateSocketNotifiers();
     void doWsaAsyncSelect(int socket, long event);
 
+    HANDLE winEventNotifierActivatedEvent;
     QList<QWinEventNotifier *> winEventNotifierList;
+    bool winEventNotifierListModified = false;
     void activateEventNotifier(QWinEventNotifier * wen);
 
     QList<MSG> queuedUserInputEvents;

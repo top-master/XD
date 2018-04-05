@@ -40,7 +40,10 @@
 #include <QtCore/qstatemachine.h>
 #include <private/qstatemachine_p.h>
 #include <QtGui/qevent.h>
+#include <QtWidgets/qtwidgetsglobal.h>
+#if QT_CONFIG(graphicsview)
 #include <QtWidgets/qgraphicssceneevent.h>
+#endif
 
 QT_BEGIN_NAMESPACE
 
@@ -100,10 +103,10 @@ static QEvent *cloneEvent(QEvent *e)
         return new QEvent(*e);
     case QEvent::HideToParent:
         return new QEvent(*e);
-#ifndef QT_NO_WHEELEVENT
+#if QT_CONFIG(wheelevent)
     case QEvent::Wheel:
         return new QWheelEvent(*static_cast<QWheelEvent*>(e));
-#endif //QT_NO_WHEELEVENT
+#endif // QT_CONFIG(wheelevent)
     case QEvent::WindowTitleChange:
         return new QEvent(*e);
     case QEvent::WindowIconChange:
@@ -183,12 +186,12 @@ static QEvent *cloneEvent(QEvent *e)
         return new QEvent(*e);
     case QEvent::Style:
         return new QEvent(*e);
-#ifndef QT_NO_TABLETEVENT
+#if QT_CONFIG(tabletevent)
     case QEvent::TabletMove:
     case QEvent::TabletPress:
     case QEvent::TabletRelease:
         return new QTabletEvent(*static_cast<QTabletEvent*>(e));
-#endif //QT_NO_TABLETEVENT
+#endif // QT_CONFIG(tabletevent)
     case QEvent::OkRequest:
         return new QEvent(*e);
     case QEvent::HelpRequest:
@@ -223,10 +226,10 @@ static QEvent *cloneEvent(QEvent *e)
         return new QHelpEvent(*static_cast<QHelpEvent*>(e));
     case QEvent::WhatsThis:
         return new QHelpEvent(*static_cast<QHelpEvent*>(e));
-#ifndef QT_NO_STATUSTIP
+#if QT_CONFIG(statustip)
     case QEvent::StatusTip:
         return new QStatusTipEvent(*static_cast<QStatusTipEvent*>(e));
-#endif //QT_NO_STATUSTIP
+#endif // QT_CONFIG(statustip)
 #ifndef QT_NO_ACTION
     case QEvent::ActionChanged:
     case QEvent::ActionAdded:
@@ -243,10 +246,10 @@ static QEvent *cloneEvent(QEvent *e)
     case QEvent::ShortcutOverride:
         return new QKeyEvent(*static_cast<QKeyEvent*>(e));
 
-#ifndef QT_NO_WHATSTHIS
+#if QT_CONFIG(whatsthis)
     case QEvent::WhatsThisClicked:
         return new QWhatsThisClickedEvent(*static_cast<QWhatsThisClickedEvent*>(e));
-#endif //QT_NO_WHATSTHIS
+#endif // QT_CONFIG(whatsthis)
 
 #ifndef QT_NO_TOOLBAR
     case QEvent::ToolBarChange:
@@ -285,7 +288,7 @@ static QEvent *cloneEvent(QEvent *e)
     case QEvent::ZeroTimerEvent:
         Q_ASSERT_X(false, "cloneEvent()", "not implemented");
         break;
-#ifndef QT_NO_GRAPHICSVIEW
+#if QT_CONFIG(graphicsview)
     case QEvent::GraphicsSceneMouseMove:
     case QEvent::GraphicsSceneMousePress:
     case QEvent::GraphicsSceneMouseRelease:
@@ -372,11 +375,11 @@ static QEvent *cloneEvent(QEvent *e)
     case QEvent::DynamicPropertyChange:
         return new QDynamicPropertyChangeEvent(*static_cast<QDynamicPropertyChangeEvent*>(e));
 
-#ifndef QT_NO_TABLETEVENT
+#if QT_CONFIG(tabletevent)
     case QEvent::TabletEnterProximity:
     case QEvent::TabletLeaveProximity:
         return new QTabletEvent(*static_cast<QTabletEvent*>(e));
-#endif //QT_NO_TABLETEVENT
+#endif // QT_CONFIG(tabletevent)
 
     case QEvent::NonClientAreaMouseMove:
     case QEvent::NonClientAreaMouseButtonPress:
@@ -396,7 +399,7 @@ static QEvent *cloneEvent(QEvent *e)
     case QEvent::FutureCallOut:
         Q_ASSERT_X(false, "cloneEvent()", "not implemented");
         break;
-#ifndef QT_NO_GRAPHICSVIEW
+#if QT_CONFIG(graphicsview)
     case QEvent::GraphicsSceneResize: {
         QGraphicsSceneResizeEvent *re = static_cast<QGraphicsSceneResizeEvent*>(e);
         QGraphicsSceneResizeEvent *re2 = new QGraphicsSceneResizeEvent();

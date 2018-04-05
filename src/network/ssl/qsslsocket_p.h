@@ -170,7 +170,7 @@ public:
     static void checkSettingSslContext(QSslSocket*, QSharedPointer<QSslContext>);
     static QSharedPointer<QSslContext> sslContext(QSslSocket *socket);
     bool isPaused() const;
-    bool bind(const QHostAddress &address, quint16, QAbstractSocket::BindMode) Q_DECL_OVERRIDE;
+    bool bind(const QHostAddress &address, quint16, QAbstractSocket::BindMode) override;
     void _q_connectedSlot();
     void _q_hostFoundSlot();
     void _q_disconnectedSlot();
@@ -180,6 +180,7 @@ public:
     void _q_channelReadyReadSlot(int);
     void _q_bytesWrittenSlot(qint64);
     void _q_channelBytesWrittenSlot(int, qint64);
+    void _q_readChannelFinishedSlot();
     void _q_flushWriteBuffer();
     void _q_flushReadBuffer();
     void _q_resumeImplementation();
@@ -189,9 +190,10 @@ public:
 
     static QList<QByteArray> unixRootCertDirectories(); // used also by QSslContext
 
-    virtual qint64 peek(char *data, qint64 maxSize) Q_DECL_OVERRIDE;
-    virtual QByteArray peek(qint64 maxSize) Q_DECL_OVERRIDE;
-    bool flush() Q_DECL_OVERRIDE;
+    virtual qint64 peek(char *data, qint64 maxSize) override;
+    virtual QByteArray peek(qint64 maxSize) override;
+    qint64 skip(qint64 maxSize) override;
+    bool flush() override;
 
     // Platform specific functions
     virtual void startClientEncryption() = 0;
@@ -208,7 +210,7 @@ public:
 private:
     static bool ensureLibraryLoaded();
     static void ensureCiphersAndCertsLoaded();
-#if defined(Q_OS_ANDROID)
+#if defined(Q_OS_ANDROID) && !defined(Q_OS_ANDROID_EMBEDDED)
     static QList<QByteArray> fetchSslCertificateData();
 #endif
 
@@ -217,6 +219,7 @@ private:
 protected:
     bool verifyErrorsHaveBeenIgnored();
     bool paused;
+    bool flushTriggered;
 };
 
 QT_END_NAMESPACE

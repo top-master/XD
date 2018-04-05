@@ -14,3 +14,4 @@ Project {
         "uic/uic.qbs",
     ]
 }
+// TODO: tracegen, qfloat16_tables, qvkgen

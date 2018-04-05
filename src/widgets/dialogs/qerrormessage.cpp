@@ -39,13 +39,13 @@
 
 #include "qerrormessage.h"
 
-#ifndef QT_NO_ERRORMESSAGE
-
 #include "qapplication.h"
 #include "qcheckbox.h"
 #include "qlabel.h"
 #include "qlayout.h"
+#if QT_CONFIG(messagebox)
 #include "qmessagebox.h"
+#endif
 #include "qpushbutton.h"
 #include "qstringlist.h"
 #include "qtextedit.h"
@@ -95,8 +95,8 @@ public:
     QErrorMessageTextView(QWidget *parent)
         : QTextEdit(parent) { setReadOnly(true); }
 
-    virtual QSize minimumSizeHint() const Q_DECL_OVERRIDE;
-    virtual QSize sizeHint() const Q_DECL_OVERRIDE;
+    virtual QSize minimumSizeHint() const override;
+    virtual QSize sizeHint() const override;
 };
 } // unnamed namespace
 
@@ -234,7 +234,7 @@ QErrorMessage::QErrorMessage(QWidget * parent)
     grid->setColumnStretch(1, 42);
     grid->setRowStretch(0, 42);
 
-#ifndef QT_NO_MESSAGEBOX
+#if QT_CONFIG(messagebox)
     d->icon->setPixmap(QMessageBox::standardIcon(QMessageBox::Information));
     d->icon->setAlignment(Qt::AlignHCenter | Qt::AlignTop);
 #endif
@@ -390,5 +390,3 @@ void QErrorMessagePrivate::retranslateStrings()
 QT_END_NAMESPACE
 
 #include "moc_qerrormessage.cpp"
-
-#endif // QT_NO_ERRORMESSAGE

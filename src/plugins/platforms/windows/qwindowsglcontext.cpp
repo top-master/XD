@@ -145,6 +145,10 @@
 #define RESET_NOTIFICATION_STRATEGY_ARB 0x8256
 #define LOSE_CONTEXT_ON_RESET_ARB 0x8252
 
+#ifndef WGL_FRAMEBUFFER_SRGB_CAPABLE_EXT
+#define WGL_FRAMEBUFFER_SRGB_CAPABLE_EXT 0x20A9
+#endif
+
 QT_BEGIN_NAMESPACE
 
 QWindowsOpengl32DLL QOpenGLStaticContext::opengl32;
@@ -375,9 +379,7 @@ static PIXELFORMATDESCRIPTOR
     initPixelFormatDescriptor(&pfd);
     pfd.iPixelType = PFD_TYPE_RGBA;
     pfd.iLayerType  = PFD_MAIN_PLANE;
-    pfd.dwFlags = PFD_SUPPORT_OPENGL;
-    if (QSysInfo::windowsVersion() >= QSysInfo::WV_VISTA)
-        pfd.dwFlags = PFD_SUPPORT_COMPOSITION;
+    pfd.dwFlags = PFD_SUPPORT_OPENGL | PFD_SUPPORT_COMPOSITION;
     const bool isPixmap = (additional.formatFlags & QWindowsGLRenderToPixmap) != 0;
     pfd.dwFlags |= isPixmap ? PFD_DRAW_TO_BITMAP : PFD_DRAW_TO_WINDOW;
     if (!(additional.formatFlags & QWindowsGLDirectRendering))
@@ -389,6 +391,15 @@ static PIXELFORMATDESCRIPTOR
         pfd.dwFlags |= PFD_DOUBLEBUFFER;
     pfd.cDepthBits =
         format.depthBufferSize() >= 0 ? format.depthBufferSize() : 32;
+    const int redBufferSize = format.redBufferSize();
+    if (redBufferSize != -1)
+        pfd.cRedBits = BYTE(redBufferSize);
+    const int greenBufferSize = format.greenBufferSize();
+    if (greenBufferSize != -1)
+        pfd.cGreenBits = BYTE(greenBufferSize);
+    const int blueBufferSize = format.blueBufferSize();
+    if (blueBufferSize != -1)
+        pfd.cBlueBits = BYTE(blueBufferSize);
     pfd.cAlphaBits = format.alphaBufferSize() > 0 ? format.alphaBufferSize() : 8;
     pfd.cStencilBits = format.stencilBufferSize() > 0 ? format.stencilBufferSize() : 8;
     if (additional.formatFlags & QWindowsGLAccumBuffer)
@@ -489,7 +500,7 @@ static int choosePixelFormat(HDC hdc,
                              const QWindowsOpenGLAdditionalFormat &additional,
                              PIXELFORMATDESCRIPTOR *obtainedPfd)
 {
-    enum { attribSize =40 };
+    enum { attribSize = 42 };
     if ((additional.formatFlags & QWindowsGLRenderToPixmap) || !staticContext.hasExtensions())
         return 0;
 
@@ -570,7 +581,15 @@ static int choosePixelFormat(HDC hdc,
         iAttributes[i++] = WGL_SAMPLE_BUFFERS_ARB;
         iAttributes[i++] = FALSE;
     }
-    // If sample buffer request cannot be satisfied, reduce request.
+    // must be the last
+    bool srgbRequested = format.colorSpace() == QSurfaceFormat::sRGBColorSpace;
+    int srgbValuePosition = 0;
+    if (srgbRequested) {
+        srgbValuePosition = i;
+        iAttributes[i++] = WGL_FRAMEBUFFER_SRGB_CAPABLE_EXT;
+        iAttributes[i++] = TRUE;
+    }
+    // If sample or sRGB request cannot be satisfied, reduce request.
     int pixelFormat = 0;
     uint numFormats = 0;
     while (true) {
@@ -578,20 +597,25 @@ static int choosePixelFormat(HDC hdc,
             staticContext.wglChoosePixelFormatARB(hdc, iAttributes, 0, 1,
                                                &pixelFormat, &numFormats)
                 && numFormats >= 1;
-        if (valid || !sampleBuffersRequested)
+        if (valid || (!sampleBuffersRequested && !srgbRequested))
             break;
-        if (iAttributes[samplesValuePosition] > 1) {
-            iAttributes[samplesValuePosition] /= 2;
-        } else if (iAttributes[samplesValuePosition] == 1) {
-            // Fallback in case it is unable to initialize with any
-            // samples to avoid falling back to the GDI path
-            // NB: The sample attributes needs to be at the end for this
-            // to work correctly
-            iAttributes[samplesValuePosition - 1] = FALSE;
-            iAttributes[samplesValuePosition] = 0;
-            iAttributes[samplesValuePosition + 1] = 0;
-        } else {
-            break;
+        if (srgbRequested) {
+            iAttributes[srgbValuePosition] = 0;
+            srgbRequested = false;
+        } else if (sampleBuffersRequested) {
+            if (iAttributes[samplesValuePosition] > 1) {
+                iAttributes[samplesValuePosition] /= 2;
+            } else if (iAttributes[samplesValuePosition] == 1) {
+                // Fallback in case it is unable to initialize with any
+                // samples to avoid falling back to the GDI path
+                // NB: The sample attributes needs to be at the end for this
+                // to work correctly
+                iAttributes[samplesValuePosition - 1] = FALSE;
+                iAttributes[samplesValuePosition] = 0;
+                iAttributes[samplesValuePosition + 1] = 0;
+            } else {
+                break;
+            }
         }
     }
     // Verify if format is acceptable. Note that the returned
@@ -628,7 +652,7 @@ static QSurfaceFormat
                           HDC hdc, int pixelFormat,
                           QWindowsOpenGLAdditionalFormat *additionalIn = 0)
 {
-    enum { attribSize =40 };
+    enum { attribSize = 42 };
 
     QSurfaceFormat result;
     result.setRenderableType(QSurfaceFormat::OpenGL);
@@ -641,6 +665,7 @@ static QSurfaceFormat
 
     int i = 0;
     const bool hasSampleBuffers = testFlag(staticContext.extensions, QOpenGLStaticContext::SampleBuffers);
+    const bool hasSrgbSupport = testFlag(staticContext.extensions, QOpenGLStaticContext::sRGBCapableFramebuffer);
 
     iAttributes[i++] = WGL_DOUBLE_BUFFER_ARB; // 0
     iAttributes[i++] = WGL_DEPTH_BITS_ARB; // 1
@@ -658,6 +683,9 @@ static QSurfaceFormat
         iAttributes[i++] = WGL_SAMPLE_BUFFERS_ARB; // 12
         iAttributes[i++] = WGL_SAMPLES_ARB; // 13
     }
+    if (hasSrgbSupport)
+        iAttributes[i++] = WGL_FRAMEBUFFER_SRGB_CAPABLE_EXT; // 12 or 14
+
     if (!staticContext.wglGetPixelFormatAttribIVARB(hdc, pixelFormat, 0, i,
                                         iAttributes, iValues)) {
         qErrnoWarning("%s: wglGetPixelFormatAttribIVARB() failed for basic parameters.", __FUNCTION__);
@@ -673,8 +701,14 @@ static QSurfaceFormat
     if (iValues[9])
         result.setOption(QSurfaceFormat::StereoBuffers);
 
-    if (hasSampleBuffers)
+    if (hasSampleBuffers) {
         result.setSamples(iValues[13]);
+        if (hasSrgbSupport && iValues[14])
+            result.setColorSpace(QSurfaceFormat::sRGBColorSpace);
+    } else {
+        if (hasSrgbSupport && iValues[12])
+            result.setColorSpace(QSurfaceFormat::sRGBColorSpace);
+    }
     if (additionalIn) {
         if (iValues[7])
             additionalIn->formatFlags |= QWindowsGLAccumBuffer;
@@ -947,7 +981,8 @@ QOpenGLStaticContext::QOpenGLStaticContext() :
     wglChoosePixelFormatARB((WglChoosePixelFormatARB)QOpenGLStaticContext::opengl32.wglGetProcAddress("wglChoosePixelFormatARB")),
     wglCreateContextAttribsARB((WglCreateContextAttribsARB)QOpenGLStaticContext::opengl32.wglGetProcAddress("wglCreateContextAttribsARB")),
     wglSwapInternalExt((WglSwapInternalExt)QOpenGLStaticContext::opengl32.wglGetProcAddress("wglSwapIntervalEXT")),
-    wglGetSwapInternalExt((WglGetSwapInternalExt)QOpenGLStaticContext::opengl32.wglGetProcAddress("wglGetSwapIntervalEXT"))
+    wglGetSwapInternalExt((WglGetSwapInternalExt)QOpenGLStaticContext::opengl32.wglGetProcAddress("wglGetSwapIntervalEXT")),
+    wglGetExtensionsStringARB((WglGetExtensionsStringARB)QOpenGLStaticContext::opengl32.wglGetProcAddress("wglGetExtensionsStringARB"))
 {
     if (extensionNames.startsWith(SAMPLE_BUFFER_EXTENSION " ")
             || extensionNames.indexOf(" " SAMPLE_BUFFER_EXTENSION " ") != -1)
@@ -1091,6 +1126,14 @@ QWindowsGLContext::QWindowsGLContext(QOpenGLStaticContext *staticContext,
                 && !(QWindowsIntegration::instance()->options() & QWindowsIntegration::DisableArb);
         QWindowsOpenGLAdditionalFormat obtainedAdditional;
         if (tryExtensions) {
+            if (m_staticContext->wglGetExtensionsStringARB) {
+                const char *exts = m_staticContext->wglGetExtensionsStringARB(hdc);
+                if (exts) {
+                    qCDebug(lcQpaGl) << __FUNCTION__ << "WGL extensions:" << exts;
+                    if (strstr(exts, "WGL_EXT_framebuffer_sRGB"))
+                        m_staticContext->extensions |= QOpenGLStaticContext::sRGBCapableFramebuffer;
+                }
+            }
             m_pixelFormat =
                 ARB::choosePixelFormat(hdc, *m_staticContext, format,
                                        requestedAdditional, &m_obtainedPixelFormatDescriptor);

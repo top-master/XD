@@ -54,17 +54,21 @@
 #include <QtWidgets/private/qtwidgetsglobal_p.h>
 #include "private/qabstractscrollarea_p.h"
 #include "QtGui/qtextdocumentfragment.h"
+#if QT_CONFIG(scrollbar)
 #include "QtWidgets/qscrollbar.h"
+#endif
 #include "QtGui/qtextcursor.h"
 #include "QtGui/qtextformat.h"
+#if QT_CONFIG(menu)
 #include "QtWidgets/qmenu.h"
+#endif
 #include "QtGui/qabstracttextdocumentlayout.h"
 #include "QtCore/qbasictimer.h"
 #include "qplaintextedit.h"
 
-#ifndef QT_NO_TEXTEDIT
-
 #include "private/qwidgettextcontrol_p.h"
+
+QT_REQUIRE_CONFIG(textedit);
 
 QT_BEGIN_NAMESPACE
 
@@ -80,19 +84,19 @@ public:
     QPlainTextEditControl(QPlainTextEdit *parent);
 
 
-    QMimeData *createMimeDataFromSelection() const Q_DECL_OVERRIDE;
-    bool canInsertFromMimeData(const QMimeData *source) const Q_DECL_OVERRIDE;
-    void insertFromMimeData(const QMimeData *source) Q_DECL_OVERRIDE;
-    int hitTest(const QPointF &point, Qt::HitTestAccuracy = Qt::FuzzyHit) const Q_DECL_OVERRIDE;
-    QRectF blockBoundingRect(const QTextBlock &block) const Q_DECL_OVERRIDE;
-    QString anchorAt(const QPointF &pos) const Q_DECL_OVERRIDE;
+    QMimeData *createMimeDataFromSelection() const override;
+    bool canInsertFromMimeData(const QMimeData *source) const override;
+    void insertFromMimeData(const QMimeData *source) override;
+    int hitTest(const QPointF &point, Qt::HitTestAccuracy = Qt::FuzzyHit) const override;
+    QRectF blockBoundingRect(const QTextBlock &block) const override;
+    QString anchorAt(const QPointF &pos) const override;
     inline QRectF cursorRect(const QTextCursor &cursor) const {
         QRectF r = QWidgetTextControl::cursorRect(cursor);
         r.setLeft(qMax(r.left(), (qreal) 0.));
         return r;
     }
     inline QRectF cursorRect() { return cursorRect(textCursor()); }
-    void ensureCursorVisible() Q_DECL_OVERRIDE {
+    void ensureCursorVisible() override {
         textEdit->ensureCursorVisible();
         emit microFocusChanged();
     }
@@ -102,7 +106,7 @@ public:
     int topBlock;
     QTextBlock firstVisibleBlock() const;
 
-    QVariant loadResource(int type, const QUrl &name) Q_DECL_OVERRIDE {
+    QVariant loadResource(int type, const QUrl &name) override {
         return textEdit->loadResource(type, name);
     }
 
@@ -117,6 +121,7 @@ public:
 
     void init(const QString &txt = QString());
     void _q_repaintContents(const QRectF &contentsRect);
+    void _q_textChanged();
 
     inline QPoint mapToContents(const QPoint &point) const
         { return QPoint(point.x() + horizontalOffset(), point.y() + verticalOffset()); }
@@ -153,6 +158,7 @@ public:
     uint centerOnScroll : 1;
     uint inDrag : 1;
     uint clickCausedFocus : 1;
+    uint placeholderVisible : 1;
 
     int topLine;
     qreal topLineFracture; // for non-int sized fonts
@@ -184,7 +190,5 @@ public:
 };
 
 QT_END_NAMESPACE
-
-#endif // QT_NO_TEXTEDIT
 
 #endif // QPLAINTEXTEDIT_P_H

@@ -1413,7 +1413,7 @@ void tst_QOpenGL::glxContextWrap()
     window->setSurfaceType(QWindow::OpenGLSurface);
     window->setGeometry(0, 0, 10, 10);
     window->show();
-    QTest::qWaitForWindowExposed(window);
+    QVERIFY(QTest::qWaitForWindowExposed(window));
 
     QPlatformNativeInterface *nativeIf = QGuiApplicationPrivate::instance()->platformIntegration()->nativeInterface();
     QVERIFY(nativeIf);
@@ -1457,7 +1457,7 @@ void tst_QOpenGL::wglContextWrap()
     window->setSurfaceType(QWindow::OpenGLSurface);
     window->setGeometry(0, 0, 256, 256);
     window->show();
-    QTest::qWaitForWindowExposed(window.data());
+    QVERIFY(QTest::qWaitForWindowExposed(window.data()));
 
     QVariant v = ctx->nativeHandle();
     QVERIFY(!v.isNull());
@@ -1593,7 +1593,7 @@ void tst_QOpenGL::defaultQGLCurrentBuffer()
     ctx->makeCurrent(surface.data());
 
     // Bind default FBO on the current context, and record what's the current QGL FBO. It should
-    // be Q_NULLPTR because the default platform OpenGL FBO is not backed by a
+    // be nullptr because the default platform OpenGL FBO is not backed by a
     // QOpenGLFramebufferObject.
     QOpenGLFramebufferObject::bindDefault();
     QOpenGLFramebufferObject *defaultQFBO = QOpenGLContextPrivate::get(ctx.data())->qgl_current_fbo;

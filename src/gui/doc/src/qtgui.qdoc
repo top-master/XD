@@ -35,11 +35,11 @@
     applications written with Qt.
 
     The Qt GUI module provides classes for windowing system
-    integration, event handling, OpenGL and OpenGL ES integration, 2D
-    graphics, imaging, fonts and typography. These classes are used
-    internally by Qt's user interface technologies and can also be
-    used directly, for instance to write applications using low-level
-    OpenGL ES graphics APIs.
+    integration, event handling, OpenGL and OpenGL ES integration,
+    Vulkan integration, 2D graphics, imaging, fonts and typography.
+    These classes are used internally by Qt's user interface technologies
+    and can also be used directly, for instance to write applications using
+    low-level OpenGL ES graphics APIs.
 
     To include the definitions of the module's classes, use the
     following directive:
@@ -170,6 +170,31 @@
 
 
 
+    \section1 Vulkan Integration
+
+    Qt 5.10 added support for \l {Vulkan}. This requires
+    the presence of the \l{LunarG Vulkan SDK}.
+
+    On Windows, the SDK sets the environment variable \c {VULKAN_SDK},
+    which will be detected by the \c {configure} script.
+
+    On Android, Vulkan headers were added in API level 24 of the NDK.
+
+    Relevant classes:
+
+    \list
+    \li QVulkanDeviceFunctions
+    \li QVulkanExtension
+    \li QVulkanFunctions
+    \li QVulkanInfoVector
+    \li QVulkanInstance
+    \li QVulkanWindow
+    \li QVulkanWindowRenderer
+    \endlist
+
+    For more information, see the \l{Hello Vulkan Widget Example}
+    and the \l {Hello Vulkan Window Example}.
+
     \section1 Qt GUI Prior to Qt 5.0
 
     Prior to Qt 5.0, the Qt GUI module was the monolithic container
@@ -190,12 +215,13 @@
     \section1 Licenses and Attributions
 
     Qt GUI is available under commercial licenses from \l{The Qt Company}.
-    In addition, it is available under the
+    In addition, it is available under free software licenses. Since Qt 5.4,
+    these free software licenses are
     \l{GNU Lesser General Public License, version 3}, or
     the \l{GNU General Public License, version 2}.
     See \l{Qt Licensing} for further details.
 
-    Furthermore Qt GUI potentially contains third party
+    Furthermore, Qt GUI in Qt \QtVersion may contain third-party
     modules under following permissive licenses:
 
     \generatelist{groupsbymodule attributions-qtgui}

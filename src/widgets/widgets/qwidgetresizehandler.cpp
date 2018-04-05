@@ -39,12 +39,14 @@
 
 #include "qwidgetresizehandler_p.h"
 
-#ifndef QT_NO_RESIZEHANDLER
 #include "qframe.h"
 #include "qapplication.h"
 #include "qdesktopwidget.h"
+#include <private/qdesktopwidget_p.h>
 #include "qcursor.h"
+#if QT_CONFIG(sizegrip)
 #include "qsizegrip.h"
+#endif
 #include "qevent.h"
 #include "qdebug.h"
 #include "private/qlayoutengine_p.h"
@@ -117,7 +119,9 @@ bool QWidgetResizeHandler::eventFilter(QObject *o, QEvent *ee)
         QMouseEvent *e = static_cast<QMouseEvent *>(ee);
         if (w->isMaximized())
             break;
-        if (!widget->rect().contains(widget->mapFromGlobal(e->globalPos())))
+        const QRect widgetRect = widget->rect().marginsAdded(QMargins(range, range, range, range));
+        const QPoint cursorPoint = widget->mapFromGlobal(e->globalPos());
+        if (!widgetRect.contains(cursorPoint) || mode == Nowhere)
             return false;
         if (e->button() == Qt::LeftButton) {
 #if 0 // Used to be included in Qt4 for Q_WS_X11
@@ -258,7 +262,7 @@ void QWidgetResizeHandler::mouseMoveEvent(QMouseEvent *e)
 
     // Workaround for window managers which refuse to move a tool window partially offscreen.
     if (QGuiApplication::platformName() == QLatin1String("xcb")) {
-        const QRect desktop = QApplication::desktop()->availableGeometry(widget);
+        const QRect desktop = QDesktopWidgetPrivate::availableGeometry(widget);
         pp.rx() = qMax(pp.x(), desktop.left());
         pp.ry() = qMax(pp.y(), desktop.top());
         p.rx() = qMin(p.x(), desktop.right());
@@ -379,7 +383,7 @@ void QWidgetResizeHandler::keyPressEvent(QKeyEvent * e)
     switch (e->key()) {
     case Qt::Key_Left:
         pos.rx() -= delta;
-        if (pos.x() <= QApplication::desktop()->geometry().left()) {
+        if (pos.x() <= QDesktopWidgetPrivate::geometry().left()) {
             if (mode == TopLeft || mode == BottomLeft) {
                 moveOffset.rx() += delta;
                 invertedMoveOffset.rx() += delta;
@@ -404,7 +408,7 @@ void QWidgetResizeHandler::keyPressEvent(QKeyEvent * e)
         break;
     case Qt::Key_Right:
         pos.rx() += delta;
-        if (pos.x() >= QApplication::desktop()->geometry().right()) {
+        if (pos.x() >= QDesktopWidgetPrivate::geometry().right()) {
             if (mode == TopRight || mode == BottomRight) {
                 moveOffset.rx() += delta;
                 invertedMoveOffset.rx() += delta;
@@ -429,7 +433,7 @@ void QWidgetResizeHandler::keyPressEvent(QKeyEvent * e)
         break;
     case Qt::Key_Up:
         pos.ry() -= delta;
-        if (pos.y() <= QApplication::desktop()->geometry().top()) {
+        if (pos.y() <= QDesktopWidgetPrivate::geometry().top()) {
             if (mode == TopLeft || mode == TopRight) {
                 moveOffset.ry() += delta;
                 invertedMoveOffset.ry() += delta;
@@ -454,7 +458,7 @@ void QWidgetResizeHandler::keyPressEvent(QKeyEvent * e)
         break;
     case Qt::Key_Down:
         pos.ry() += delta;
-        if (pos.y() >= QApplication::desktop()->geometry().bottom()) {
+        if (pos.y() >= QDesktopWidgetPrivate::geometry().bottom()) {
             if (mode == BottomLeft || mode == BottomRight) {
                 moveOffset.ry() += delta;
                 invertedMoveOffset.ry() += delta;
@@ -543,5 +547,3 @@ void QWidgetResizeHandler::doMove()
 QT_END_NAMESPACE
 
 #include "moc_qwidgetresizehandler_p.cpp"
-
-#endif //QT_NO_RESIZEHANDLER

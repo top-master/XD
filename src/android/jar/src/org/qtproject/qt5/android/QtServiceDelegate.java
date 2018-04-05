@@ -53,6 +53,7 @@ import android.net.LocalSocket;
 import android.os.Build;
 import android.os.Bundle;
 import android.os.Handler;
+import android.os.IBinder;
 import android.os.ResultReceiver;
 import android.text.method.MetaKeyKeyListener;
 import android.util.Base64;
@@ -186,5 +187,16 @@ public class QtServiceDelegate
     public void onDestroy()
     {
         QtNative.quitQtCoreApplication();
+        QtNative.terminateQt();
+        QtNative.setService(null, null);
+        QtNative.m_qtThread.exit();
+        System.exit(0);
+    }
+
+    public IBinder onBind(Intent intent)
+    {
+        synchronized (this) {
+            return QtNative.onBind(intent);
+        }
     }
 }

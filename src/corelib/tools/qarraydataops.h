@@ -49,6 +49,11 @@ QT_BEGIN_NAMESPACE
 
 namespace QtPrivate {
 
+QT_WARNING_PUSH
+#if defined(Q_CC_GNU) && Q_CC_GNU >= 700
+QT_WARNING_DISABLE_GCC("-Wstringop-overflow")
+#endif
+
 template <class T>
 struct QPodArrayOps
     : QTypedArrayData<T>
@@ -71,7 +76,8 @@ struct QPodArrayOps
         Q_ASSERT(b < e);
         Q_ASSERT(size_t(e - b) <= this->alloc - uint(this->size));
 
-        ::memcpy(this->end(), b, (e - b) * sizeof(T));
+        ::memcpy(static_cast<void *>(this->end()), static_cast<const void *>(b),
+                 (e - b) * sizeof(T));
         this->size += e - b;
     }
 
@@ -131,6 +137,7 @@ struct QPodArrayOps
         this->size -= (e - b);
     }
 };
+QT_WARNING_POP
 
 template <class T>
 struct QGenericArrayOps

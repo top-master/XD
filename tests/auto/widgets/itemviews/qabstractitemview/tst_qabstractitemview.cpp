@@ -28,6 +28,7 @@
 
 
 #include <QtTest/QtTest>
+#include <QtTest/private/qtesthelpers_p.h>
 
 #include <qabstractitemview.h>
 #include <qstandarditemmodel.h>
@@ -55,19 +56,9 @@
 #include <qproxystyle.h>
 #include <qdialog.h>
 
-static inline void setFrameless(QWidget *w)
-{
-    Qt::WindowFlags flags = w->windowFlags();
-    flags |= Qt::FramelessWindowHint;
-    flags &= ~(Qt::WindowTitleHint | Qt::WindowSystemMenuHint | Qt::WindowMinMaxButtonsHint | Qt::WindowCloseButtonHint);
-    w->setWindowFlags(flags);
-}
+Q_DECLARE_METATYPE(Qt::ItemFlags);
 
-static inline void centerOnScreen(QWidget *w)
-{
-    const QPoint offset = QPoint(w->width() / 2, w->height() / 2);
-    w->move(QGuiApplication::primaryScreen()->availableGeometry().center() - offset);
-}
+using namespace QTestPrivate;
 
 // Move cursor out of widget area to avoid undesired interaction on Mac.
 static inline void moveCursorAway(const QWidget *topLevel)
@@ -86,7 +77,7 @@ public:
     GeometriesTestView() : QTableView(), updateGeometriesCalled(false) {}
     bool updateGeometriesCalled;
 protected slots:
-    void updateGeometries() Q_DECL_OVERRIDE { updateGeometriesCalled = true; QTableView::updateGeometries(); }
+    void updateGeometries() override { updateGeometriesCalled = true; QTableView::updateGeometries(); }
 };
 
 class tst_QAbstractItemView : public QObject
@@ -153,6 +144,13 @@ private slots:
     void testClickToSelect();
     void testDialogAsEditor();
     void QTBUG46785_mouseout_hover_state();
+    void testClearModelInClickedSignal();
+    void inputMethodEnabled_data();
+    void inputMethodEnabled();
+    void currentFollowsIndexWidget_data();
+    void currentFollowsIndexWidget();
+    void checkFocusAfterActivationChanges_data();
+    void checkFocusAfterActivationChanges();
 };
 
 class MyAbstractItemDelegate : public QAbstractItemDelegate
@@ -626,7 +624,9 @@ void tst_QAbstractItemView::rowDelegate()
     QVERIFY(QTest::qWaitForWindowExposed(&view));
 
     QModelIndex index = model.index(3, 0);
+    QVERIFY(!view.isPersistentEditorOpen(index));
     view.openPersistentEditor(index);
+    QVERIFY(view.isPersistentEditorOpen(index));
     QWidget *w = view.indexWidget(index);
     QVERIFY(w);
     QCOMPARE(w->metaObject()->className(), "QWidget");
@@ -646,7 +646,9 @@ void tst_QAbstractItemView::columnDelegate()
     QVERIFY(QTest::qWaitForWindowExposed(&view));
 
     QModelIndex index = model.index(0, 3);
+    QVERIFY(!view.isPersistentEditorOpen(index));
     view.openPersistentEditor(index);
+    QVERIFY(view.isPersistentEditorOpen(index));
     QWidget *w = view.indexWidget(index);
     QVERIFY(w);
     QCOMPARE(w->metaObject()->className(), "QWidget");
@@ -1234,8 +1236,8 @@ void tst_QAbstractItemView::task200665_itemEntered()
     moveCursorAway(&view);
     view.show();
     QVERIFY(QTest::qWaitForWindowExposed(&view));
-    QCursor::setPos( view.geometry().center() );
-    QCoreApplication::processEvents();
+    QCursor::setPos(view.geometry().center());
+    QTRY_COMPARE(QCursor::pos(), view.geometry().center());
     QSignalSpy spy(&view, SIGNAL(entered(QModelIndex)));
     view.verticalScrollBar()->setValue(view.verticalScrollBar()->maximum());
 
@@ -1557,7 +1559,7 @@ public:
     QItemDelegate(parent)
   {}
 
-  void setEditorData(QWidget *editor, const QModelIndex &index) const Q_DECL_OVERRIDE {
+  void setEditorData(QWidget *editor, const QModelIndex &index) const override {
       Q_UNUSED(index);
       static bool w = true;
       editor->setEnabled(w);
@@ -1806,7 +1808,7 @@ void tst_QAbstractItemView::shiftSelectionAfterChangingModelContents()
     view.setModel(&proxyModel);
     view.setSelectionMode(QAbstractItemView::ExtendedSelection);
     view.show();
-    QTest::qWaitForWindowExposed(&view);
+    QVERIFY(QTest::qWaitForWindowExposed(&view));
 
     // Click "C"
     QTest::mouseClick(view.viewport(), Qt::LeftButton, Qt::NoModifier, view.visualRect(indexC).center());
@@ -1920,7 +1922,7 @@ void tst_QAbstractItemView::QTBUG48968_reentrant_updateEditorGeometries()
     tree.setRootIsDecorated(false);
     QObject::connect(&tree, SIGNAL(doubleClicked(QModelIndex)), &tree, SLOT(setRootIndex(QModelIndex)));
     tree.show();
-    QTest::qWaitForWindowActive(&tree);
+    QVERIFY(QTest::qWaitForWindowActive(&tree));
 
     // Trigger editing idx
     QModelIndex idx = m->index(1, 0);
@@ -2001,7 +2003,7 @@ void tst_QAbstractItemView::QTBUG50535_update_on_new_selection_model()
         {
         }
 
-        void setSelectionModel(QItemSelectionModel *model) Q_DECL_OVERRIDE
+        void setSelectionModel(QItemSelectionModel *model) override
         {
             m_deselectedMustBeEmpty = !selectionModel() || !model || selectionModel()->model() != model->model();
             QListView::setSelectionModel(model);
@@ -2011,7 +2013,7 @@ void tst_QAbstractItemView::QTBUG50535_update_on_new_selection_model()
         bool selectionChangedOk() const { return m_selectionChangedOk; }
 
     protected:
-        bool viewportEvent(QEvent *event) Q_DECL_OVERRIDE
+        bool viewportEvent(QEvent *event) override
         {
             if (event->type() == QEvent::Paint)
                 ++m_paintEventsCount;
@@ -2019,7 +2021,7 @@ void tst_QAbstractItemView::QTBUG50535_update_on_new_selection_model()
         }
 
         void selectionChanged(const QItemSelection &selected,
-                              const QItemSelection &deselected) Q_DECL_OVERRIDE
+                              const QItemSelection &deselected) override
         {
             if (m_deselectedMustBeEmpty && !deselected.isEmpty())
                 m_selectionChangedOk = false;
@@ -2142,7 +2144,7 @@ signals:
     void setSelectionCalled(const QRect &rect);
 
 protected:
-    void setSelection(const QRect &rect, QItemSelectionModel::SelectionFlags flags) Q_DECL_OVERRIDE
+    void setSelection(const QRect &rect, QItemSelectionModel::SelectionFlags flags) override
     {
         emit setSelectionCalled(rect);
         QListView::setSelection(rect, flags);
@@ -2162,7 +2164,7 @@ void tst_QAbstractItemView::testClickToSelect()
     SetSelectionTestView view;
     view.setModel(&model);
     view.show();
-    QTest::qWaitForWindowExposed(&view);
+    QVERIFY(QTest::qWaitForWindowExposed(&view));
 
     QSignalSpy spy(&view, &SetSelectionTestView::setSelectionCalled);
 
@@ -2264,6 +2266,259 @@ void tst_QAbstractItemView::QTBUG46785_mouseout_hover_state()
     QTest::mouseMove(table.viewport(), QPoint(-50, 0));
 
     QTRY_VERIFY(delegate.m_paintedWithoutHover);
+}
+
+void tst_QAbstractItemView::testClearModelInClickedSignal()
+{
+    QStringList list{"A", "B"};
+    QStringListModel model(list);
+
+    QListView view;
+    view.setModel(&model);
+    view.show();
+
+    QWidget::connect(&view, &QListView::clicked, [&view](const QModelIndex &index)
+    {
+        view.setModel(nullptr);
+        QCOMPARE(index.data().toString(), QStringLiteral("B"));
+    });
+
+    QModelIndex index = view.model()->index(1, 0);
+    QVERIFY(index.isValid());
+    QPoint p = view.visualRect(index).center();
+
+    QTest::mouseClick(view.viewport(), Qt::LeftButton, Qt::NoModifier, p);
+
+    QCOMPARE(view.model(), nullptr);
+}
+
+void tst_QAbstractItemView::inputMethodEnabled_data()
+{
+    QTest::addColumn<QByteArray>("viewType");
+    QTest::addColumn<Qt::ItemFlags>("itemFlags");
+    QTest::addColumn<bool>("result");
+
+    QList<QByteArray> widgets;
+    widgets << "QListView" << "QTreeView" << "QTableView";
+
+    for (const QByteArray &widget : qAsConst(widgets)) {
+        QTest::newRow(widget + ": no flags") << widget << Qt::ItemFlags(Qt::NoItemFlags) << false;
+        QTest::newRow(widget + ": checkable") << widget << Qt::ItemFlags(Qt::ItemIsUserCheckable) << false;
+        QTest::newRow(widget + ": selectable") << widget << Qt::ItemFlags(Qt::ItemIsSelectable) << false;
+        QTest::newRow(widget + ": enabled") << widget << Qt::ItemFlags(Qt::ItemIsEnabled) << false;
+        QTest::newRow(widget + ": selectable|enabled")
+            << widget << Qt::ItemFlags(Qt::ItemIsSelectable | Qt::ItemIsEnabled) << false;
+        QTest::newRow(widget + ": editable|enabled")
+            << widget << Qt::ItemFlags(Qt::ItemIsEditable | Qt::ItemIsEnabled) << true;
+        QTest::newRow(widget + ": editable|enabled|selectable")
+            << widget << Qt::ItemFlags(Qt::ItemIsEditable | Qt::ItemIsEnabled | Qt::ItemIsSelectable) << true;
+    }
+}
+
+void tst_QAbstractItemView::inputMethodEnabled()
+{
+    QFETCH(QByteArray, viewType);
+    QFETCH(Qt::ItemFlags, itemFlags);
+    QFETCH(bool, result);
+
+    QScopedPointer<QAbstractItemView> view;
+    if (viewType == "QListView")
+        view.reset(new QListView());
+    else if (viewType == "QTableView")
+        view.reset(new QTableView());
+    else if (viewType == "QTreeView")
+        view.reset(new QTreeView());
+    else
+        QVERIFY(0);
+
+    centerOnScreen(view.data());
+    view->show();
+    QVERIFY(QTest::qWaitForWindowExposed(view.data()));
+
+    QStandardItemModel *model = new QStandardItemModel(view.data());
+    QStandardItem *item = new QStandardItem("first item");
+    item->setFlags(Qt::ItemIsSelectable | Qt::ItemIsEnabled);
+    model->appendRow(item);
+
+    QStandardItem *secondItem = new QStandardItem("test item");
+    secondItem->setFlags(Qt::ItemFlags(itemFlags));
+    model->appendRow(secondItem);
+
+    view->setModel(model);
+
+    // Check current changed
+    view->setCurrentIndex(model->index(0, 0));
+    QVERIFY(!view->testAttribute(Qt::WA_InputMethodEnabled));
+    view->setCurrentIndex(model->index(1, 0));
+    QCOMPARE(view->testAttribute(Qt::WA_InputMethodEnabled), result);
+    view->setCurrentIndex(model->index(0, 0));
+    QVERIFY(!view->testAttribute(Qt::WA_InputMethodEnabled));
+
+    // Check focus by switching the activation of the window to force a focus in
+    view->setCurrentIndex(model->index(1, 0));
+    QApplication::setActiveWindow(0);
+    QApplication::setActiveWindow(view.data());
+    QVERIFY(QTest::qWaitForWindowActive(view.data()));
+    QCOMPARE(view->testAttribute(Qt::WA_InputMethodEnabled), result);
+
+    view->setCurrentIndex(QModelIndex());
+    QVERIFY(!view->testAttribute(Qt::WA_InputMethodEnabled));
+    QApplication::setActiveWindow(0);
+    QApplication::setActiveWindow(view.data());
+    QVERIFY(QTest::qWaitForWindowActive(view.data()));
+    QModelIndex index = model->index(1, 0);
+    QPoint p = view->visualRect(index).center();
+    QTest::mouseClick(view->viewport(), Qt::LeftButton, Qt::NoModifier, p);
+    if (itemFlags & Qt::ItemIsEnabled)
+        QCOMPARE(view->currentIndex(), index);
+    QCOMPARE(view->testAttribute(Qt::WA_InputMethodEnabled), result);
+
+    index = model->index(0, 0);
+    QApplication::setActiveWindow(0);
+    QApplication::setActiveWindow(view.data());
+    QVERIFY(QTest::qWaitForWindowActive(view.data()));
+    p = view->visualRect(index).center();
+    QTest::mouseClick(view->viewport(), Qt::LeftButton, Qt::NoModifier, p);
+    QCOMPARE(view->currentIndex(), index);
+    QVERIFY(!view->testAttribute(Qt::WA_InputMethodEnabled));
+
+    // There is a case when it goes to the first visible item so we
+    // make the flags of the first item match the ones we are testing
+    // to check the attribute correctly
+    QApplication::setActiveWindow(0);
+    view->setCurrentIndex(QModelIndex());
+    view->reset();
+    item->setFlags(Qt::ItemFlags(itemFlags));
+    QApplication::setActiveWindow(view.data());
+    QVERIFY(QTest::qWaitForWindowActive(view.data()));
+    QCOMPARE(view->testAttribute(Qt::WA_InputMethodEnabled), result);
+}
+
+void tst_QAbstractItemView::currentFollowsIndexWidget_data()
+{
+    QTest::addColumn<QByteArray>("viewType");
+
+    QList<QByteArray> widgets;
+    widgets << "QListView" << "QTreeView" << "QTableView";
+    for (const QByteArray &widget : qAsConst(widgets))
+        QTest::newRow(widget) << widget;
+}
+
+void tst_QAbstractItemView::currentFollowsIndexWidget()
+{
+    QFETCH(QByteArray, viewType);
+
+    QScopedPointer<QAbstractItemView> view;
+    if (viewType == "QListView")
+        view.reset(new QListView());
+    else if (viewType == "QTableView")
+        view.reset(new QTableView());
+    else if (viewType == "QTreeView")
+        view.reset(new QTreeView());
+    else
+        QVERIFY(0);
+
+    centerOnScreen(view.data());
+    view->show();
+    QVERIFY(QTest::qWaitForWindowExposed(view.data()));
+
+    QStandardItemModel *model = new QStandardItemModel(view.data());
+    QStandardItem *item1 = new QStandardItem("first item");
+    item1->setFlags(Qt::ItemIsSelectable | Qt::ItemIsEnabled);
+    model->appendRow(item1);
+
+    QStandardItem *item2 = new QStandardItem("test item");
+    item2->setFlags(Qt::ItemIsSelectable | Qt::ItemIsEnabled);
+    model->appendRow(item2);
+
+    view->setModel(model);
+    QLineEdit *lineEdit1 = new QLineEdit;
+    QLineEdit *lineEdit2 = new QLineEdit;
+    view->setIndexWidget(item1->index(), lineEdit1);
+    view->setIndexWidget(item2->index(), lineEdit2);
+
+    lineEdit2->setFocus();
+    QTRY_VERIFY(lineEdit2->hasFocus());
+    QCOMPARE(view->currentIndex(), item2->index());
+    lineEdit1->setFocus();
+    QTRY_VERIFY(lineEdit1->hasFocus());
+    QCOMPARE(view->currentIndex(), item1->index());
+}
+
+class EditorItemDelegate : public QItemDelegate
+{
+public:
+    EditorItemDelegate() : QItemDelegate(), openedEditor(nullptr) { }
+    QWidget *createEditor(QWidget *parent, const QStyleOptionViewItem &,
+                          const QModelIndex &) const override
+    {
+        openedEditor = new QLineEdit(parent);
+        return openedEditor;
+    }
+    mutable QPointer<QWidget> openedEditor;
+};
+
+// Testing the case reported in QTBUG-62253.
+// When an itemview with an editor that has focus loses focus
+// due to a change in the active window then we need to check
+// that the itemview gets focus once the activation is back
+// on the original window.
+void tst_QAbstractItemView::checkFocusAfterActivationChanges_data()
+{
+    QTest::addColumn<QString>("viewType");
+
+    QTest::newRow("QListView") << "QListView";
+    QTest::newRow("QTableView") << "QTableView";
+    QTest::newRow("QTreeView") << "QTreeView";
+}
+
+void tst_QAbstractItemView::checkFocusAfterActivationChanges()
+{
+    QFETCH(QString, viewType);
+
+    const QRect availableGeo = qApp->primaryScreen()->availableGeometry();
+    const int halfWidth = availableGeo.width() / 2;
+    QWidget otherTopLevel;
+    otherTopLevel.setGeometry(availableGeo.x(), availableGeo.y(),
+                              halfWidth, availableGeo.height());
+    otherTopLevel.show();
+
+    QWidget w;
+    w.setGeometry(availableGeo.x() + halfWidth, availableGeo.y(),
+                              halfWidth, availableGeo.height());
+    QLineEdit *le = new QLineEdit(&w);
+    QAbstractItemView *view = 0;
+    if (viewType == "QListView")
+        view = new QListView(&w);
+    else if (viewType == "QTableView")
+        view = new QTableView(&w);
+    else if (viewType == "QTreeView")
+        view = new QTreeView(&w);
+
+    QStandardItemModel model(5, 5);
+    view->setModel(&model);
+    view->move(0, 50);
+    EditorItemDelegate delegate;
+    view->setItemDelegate(&delegate);
+    w.show();
+
+    QVERIFY(QTest::qWaitForWindowActive(&w));
+    QVERIFY(le->hasFocus());
+
+    view->setFocus();
+    QVERIFY(view->hasFocus());
+
+    view->edit(model.index(0,0));
+    QVERIFY(QTest::qWaitForWindowExposed(delegate.openedEditor));
+    QVERIFY(delegate.openedEditor->hasFocus());
+
+    QApplication::setActiveWindow(&otherTopLevel);
+    otherTopLevel.setFocus();
+    QTRY_VERIFY(!delegate.openedEditor);
+
+    QApplication::setActiveWindow(&w);
+    QVERIFY(QTest::qWaitForWindowActive(&w));
+    QVERIFY(view->hasFocus());
 }
 
 QTEST_MAIN(tst_QAbstractItemView)

@@ -25,7 +25,7 @@
         "corewlan": {
             "label": "CoreWLan",
             "export": "",
-            "test": "mac/corewlan",
+            "test": "corewlan",
             "sources": [
                 "-framework CoreWLAN -framework Foundation"
             ]
@@ -38,7 +38,14 @@
         },
         "libproxy": {
             "label": "libproxy",
-            "test": "common/libproxy",
+            "test": {
+                "include": [ "proxy.h" ],
+                "main": [
+                    "pxProxyFactory *factory = px_proxy_factory_new();",
+                    "px_proxy_factory_get_proxies(factory, \"http://qt-project.org\");",
+                    "px_proxy_factory_free(factory);"
+                ]
+            },
             "sources": [
                 "-lproxy"
             ]
@@ -46,7 +53,7 @@
         "openssl_headers": {
             "label": "OpenSSL Headers",
             "export": "openssl",
-            "test": "unix/openssl",
+            "test": "openssl",
             "sources": [
                 {
                     "comment": "placeholder for OPENSSL_PATH",
@@ -56,25 +63,21 @@
         },
         "openssl": {
             "label": "OpenSSL",
-            "test": "unix/openssl",
+            "test": "openssl",
             "sources": [
                 { "type": "openssl" },
                 {
                     "comment": "placeholder for OPENSSL_{PATH,LIBS{,_{DEBUG,RELEASE}}}",
                     "libs": "",
-                    "builds": {
-                        "debug": "",
-                        "release": ""
-                    },
                     "condition": "config.win32 && !features.shared"
                 },
                 {
                     "libs": "-lssleay32 -llibeay32",
-                    "builds": {
-                        "debug": "",
-                        "release": ""
-                    },
                     "condition": "config.win32 && features.shared"
+                },
+                {
+                    "libs": "-llibssl -llibcrypto",
+                    "condition": "config.win32"
                 },
                 { "libs": "-lssl -lcrypto", "condition": "!config.win32" }
             ]
@@ -82,29 +85,70 @@
     },
 
     "tests": {
-        "getaddrinfo": {
-            "label": "getaddrinfo()",
-            "type": "compile",
-            "test": "unix/getaddrinfo",
-            "use": "network"
-        },
         "getifaddrs": {
             "label": "getifaddrs()",
             "type": "compile",
-            "test": "unix/getifaddrs",
+            "test": {
+                "include": [ "sys/types.h", "sys/socket.h", "net/if.h", "ifaddrs.h" ],
+                "main": [
+                    "ifaddrs *list;",
+                    "getifaddrs(&list);",
+                    "freeifaddrs(list);"
+                ]
+            },
             "use": "network"
         },
         "ipv6ifname": {
             "label": "IPv6 ifname",
             "type": "compile",
-            "test": "unix/ipv6ifname",
+            "test": {
+                "include": [ "sys/types.h", "sys/socket.h", "net/if.h" ],
+                "main": [
+                    "char buf[IFNAMSIZ];",
+                    "if_nametoindex(\"eth0\");",
+                    "if_indextoname(1, buf);",
+                    "if_freenameindex(if_nameindex());"
+                ]
+            },
             "use": "network"
+        },
+        "linux-netlink": {
+            "label": "Linux AF_NETLINK sockets",
+            "type": "compile",
+            "test": {
+                "include": [ "asm/types.h", "linux/netlink.h", "linux/rtnetlink.h", "sys/socket.h" ],
+                "main": [
+                    "struct rtattr rta = { };",
+                    "struct ifinfomsg ifi = {};",
+                    "struct ifaddrmsg ifa = {};",
+                    "struct ifa_cacheinfo ci;",
+                    "ci.ifa_prefered = ci.ifa_valid = 0;",
+                    "(void)RTM_NEWLINK; (void)RTM_NEWADDR;",
+                    "(void)IFLA_ADDRESS; (void)IFLA_IFNAME;",
+                    "(void)IFA_ADDRESS; (void)IFA_LABEL; (void)IFA_CACHEINFO;",
+                    "(void)(IFA_F_SECONDARY | IFA_F_DEPRECATED | IFA_F_PERMANENT | IFA_F_MANAGETEMPADDR);"
+                ]
+            }
         },
         "sctp": {
             "label": "SCTP support",
             "type": "compile",
-            "test": "unix/sctp",
+            "test": {
+                "include": [ "sys/types.h", "sys/socket.h", "netinet/in.h", "netinet/sctp.h" ],
+                "main": [
+                    "sctp_initmsg sctpInitMsg;",
+                    "socklen_t sctpInitMsgSize = sizeof(sctpInitMsg);",
+                    "(void) socket(PF_INET, SOCK_STREAM, IPPROTO_SCTP);",
+                    "(void) getsockopt(-1, SOL_SCTP, SCTP_INITMSG, &sctpInitMsg, &sctpInitMsgSize);"
+                ]
+            },
             "use": "network"
+        },
+        "openssl11": {
+            "label": "OpenSSL 1.1 support",
+            "type": "compile",
+            "test": "unix/openssl11",
+            "use": "openssl"
         }
     },
 
@@ -114,11 +158,6 @@
             "condition": "libs.corewlan",
             "emitIf": "config.darwin",
             "output": [ "feature", "privateFeature" ]
-        },
-        "getaddrinfo": {
-            "label": "getaddrinfo()",
-            "condition": "tests.getaddrinfo",
-            "output": [ "feature" ]
         },
         "getifaddrs": {
             "label": "getifaddrs()",
@@ -134,6 +173,11 @@
             "label": "libproxy",
             "autoDetect": false,
             "condition": "libs.libproxy",
+            "output": [ "privateFeature" ]
+        },
+        "linux-netlink": {
+            "label": "Linux AF_NETLINK",
+            "condition": "config.linux && tests.linux-netlink",
             "output": [ "privateFeature" ]
         },
         "openssl": {
@@ -172,6 +216,11 @@
             "condition": "config.winrt || features.securetransport || features.openssl",
             "output": [ "publicFeature", "feature" ]
         },
+        "opensslv11": {
+            "label": "OpenSSL 1.1",
+            "condition": "features.openssl && tests.openssl11",
+            "output": [ "publicFeature" ]
+        },
         "sctp": {
             "label": "SCTP",
             "autoDetect": false,
@@ -205,14 +254,13 @@
             "label": "QNetworkProxy",
             "purpose": "Provides network proxy support.",
             "section": "Networking",
-            "condition": "!config.winrt",
             "output": [ "publicFeature", "feature" ]
         },
         "socks5": {
             "label": "SOCKS5",
             "purpose": "Provides SOCKS5 support in QNetworkProxy.",
             "section": "Networking",
-            "condition": "!config.winrt && features.networkproxy",
+            "condition": "features.networkproxy",
             "output": [ "publicFeature", "feature" ]
         },
         "networkinterface": {
@@ -241,6 +289,12 @@
             "section": "Networking",
             "condition": "features.temporaryfile",
             "output": [ "publicFeature", "feature" ]
+        },
+        "dnslookup": {
+            "label": "QDnsLookup",
+            "purpose": "Provides API for DNS lookups.",
+            "section": "Networking",
+            "output": [ "publicFeature" ]
         }
     },
 
@@ -278,7 +332,12 @@ For example:
                     "args": "corewlan",
                     "condition": "config.darwin"
                 },
-                "getaddrinfo", "getifaddrs", "ipv6ifname", "libproxy",
+                "getifaddrs", "ipv6ifname", "libproxy",
+                {
+                    "type": "feature",
+                    "args": "linux-netlink",
+                    "condition": "config.linux"
+                },
                 {
                     "type": "feature",
                     "args": "securetransport",
@@ -286,6 +345,7 @@ For example:
                 },
                 "openssl",
                 "openssl-linked",
+                "opensslv11",
                 "sctp",
                 "system-proxies"
             ]

@@ -43,10 +43,9 @@
 #include <QtWidgets/qtwidgetsglobal.h>
 #include <QtCore/qobject.h>
 
-#if !defined(QT_NO_GRAPHICSVIEW)
+QT_REQUIRE_CONFIG(graphicsview);
 
 QT_BEGIN_NAMESPACE
-
 
 class QGraphicsItem;
 class QMatrix;
@@ -59,7 +58,7 @@ class Q_WIDGETS_EXPORT QGraphicsItemAnimation : public QObject
 {
     Q_OBJECT
 public:
-    QGraphicsItemAnimation(QObject *parent = Q_NULLPTR);
+    QGraphicsItemAnimation(QObject *parent = nullptr);
     virtual ~QGraphicsItemAnimation();
 
     QGraphicsItem *item() const;
@@ -110,5 +109,4 @@ private:
 
 QT_END_NAMESPACE
 
-#endif // QT_NO_GRAPHICSVIEW
 #endif

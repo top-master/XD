@@ -71,6 +71,17 @@ QPlatformWindow::~QPlatformWindow()
 }
 
 /*!
+    Called as part of QWindow::create(), after constructing
+    the window. Platforms should prefer to do initialization
+    here instead of in the constructor, as the platform window
+    object will be fully constructed, and associated to the
+    corresponding QWindow, allowing synchronous event delivery.
+*/
+void QPlatformWindow::initialize()
+{
+}
+
+/*!
     Returns the window which belongs to the QPlatformWindow
 */
 QWindow *QPlatformWindow::window() const
@@ -93,7 +104,7 @@ QPlatformWindow *QPlatformWindow::parent() const
 QPlatformScreen *QPlatformWindow::screen() const
 {
     QScreen *scr = window()->screen();
-    return scr ? scr->handle() : Q_NULLPTR;
+    return scr ? scr->handle() : nullptr;
 }
 
 /*!
@@ -105,10 +116,18 @@ QSurfaceFormat QPlatformWindow::format() const
 }
 
 /*!
-    This function is called by Qt whenever a window is moved or the window is resized. The resize
-    can happen programatically(from ie. user application) or by the window manager. This means that
-    there is no need to call this function specifically from the window manager callback, instead
-    call QWindowSystemInterface::handleGeometryChange(QWindow *w, const QRect &newRect);
+    This function is called by Qt whenever a window is moved or resized using the QWindow API.
+
+    Unless you also override QPlatformWindow::geometry(), you need to call the baseclass
+    implementation of this function in any override of QPlatformWindow::setGeometry(), as
+    QWindow::geometry() is expected to report back the set geometry until a confirmation
+    (or rejection) of the new geometry comes back from the window manager and is reported
+    via QWindowSystemInterface::handleGeometryChange().
+
+    Window move/resizes can also be triggered spontaneously by the window manager, or as a
+    response to an earlier requested move/resize via the Qt APIs. There is no need to call
+    this function from the window manager callback, instead call
+    QWindowSystemInterface::handleGeometryChange().
 
     The position(x, y) part of the rect might be inclusive or exclusive of the window frame
     as returned by frameMargins(). You can detect this in the plugin by checking
@@ -142,6 +161,16 @@ QRect QPlatformWindow::normalGeometry() const
 }
 
 QMargins QPlatformWindow::frameMargins() const
+{
+    return QMargins();
+}
+
+/*!
+    The safe area margins of a window represent the area that is safe to
+    place content within, without intersecting areas of the screen where
+    system UI is placed, or where a screen bezel may cover the content.
+*/
+QMargins QPlatformWindow::safeAreaMargins() const
 {
     return QMargins();
 }
@@ -261,7 +290,7 @@ QPoint QPlatformWindow::mapFromGlobal(const QPoint &pos) const
 
     Qt::WindowActive can be ignored.
 */
-void QPlatformWindow::setWindowState(Qt::WindowState)
+void QPlatformWindow::setWindowState(Qt::WindowStates)
 {
 }
 
@@ -309,6 +338,20 @@ void QPlatformWindow::setWindowFilePath(const QString &filePath) { Q_UNUSED(file
   Reimplement to set the window icon to \a icon
 */
 void QPlatformWindow::setWindowIcon(const QIcon &icon) { Q_UNUSED(icon); }
+
+/*!
+  Reimplement to let the platform handle non-spontaneous window close.
+
+  When reimplementing make sure to call the base class implementation
+  or QWindowSystemInterface::handleCloseEvent(), which will prompt the
+  user to accept the window close (if needed) and then close the QWindow.
+*/
+bool QPlatformWindow::close()
+{
+    bool accepted = false;
+    QWindowSystemInterface::handleCloseEvent<QWindowSystemInterface::SynchronousDelivery>(window(), &accepted);
+    return accepted;
+}
 
 /*!
   Reimplement to be able to let Qt raise windows to the top of the desktop
@@ -442,6 +485,25 @@ bool QPlatformWindow::startSystemResize(const QPoint &pos, Qt::Corner corner)
 {
     Q_UNUSED(pos)
     Q_UNUSED(corner)
+    return false;
+}
+
+/*!
+    Reimplement this method to start a system move operation if
+    the system supports it and return true to indicate success.
+
+    The \a pos is a position of MouseButtonPress event or TouchBegin
+    event from a sequence of mouse events that triggered the movement.
+    It must be specified in window coordinates.
+
+    The default implementation is empty and does nothing with \a pos.
+
+    \since 5.11
+*/
+
+bool QPlatformWindow::startSystemMove(const QPoint &pos)
+{
+    Q_UNUSED(pos)
     return false;
 }
 
@@ -662,7 +724,7 @@ QRect QPlatformWindow::initialGeometry(const QWindow *w,
 
     QPlatformWindow subclasses can re-implement this function to
     provide display refresh synchronized updates. The event
-    should be delivered using QWindowPrivate::deliverUpdateRequest()
+    should be delivered using QPlatformWindow::deliverUpdateRequest()
     to not get out of sync with the the internal state of QWindow.
 
     The default implementation posts an UpdateRequest event to the
@@ -681,9 +743,25 @@ void QPlatformWindow::requestUpdate()
     }
 
     QWindow *w = window();
-    QWindowPrivate *wp = (QWindowPrivate *) QObjectPrivate::get(w);
+    QWindowPrivate *wp = qt_window_private(w);
     Q_ASSERT(wp->updateTimer == 0);
     wp->updateTimer = w->startTimer(timeout, Qt::PreciseTimer);
+}
+
+/*!
+    Delivers an QEvent::UpdateRequest event to the window.
+
+    QPlatformWindow subclasses can re-implement this function to
+    provide e.g. logging or tracing of the delivery, but should
+    always call the base class function.
+*/
+void QPlatformWindow::deliverUpdateRequest()
+{
+    QWindow *w = window();
+    QWindowPrivate *wp = qt_window_private(w);
+    wp->updateRequestPending = false;
+    QEvent request(QEvent::UpdateRequest);
+    QCoreApplication::sendEvent(w, &request);
 }
 
 /*!

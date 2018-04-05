@@ -40,16 +40,22 @@
 #include "itemviews_p.h"
 
 #include <qheaderview.h>
+#if QT_CONFIG(tableview)
 #include <qtableview.h>
+#endif
+#if QT_CONFIG(listview)
 #include <qlistview.h>
+#endif
+#if QT_CONFIG(treeview)
 #include <qtreeview.h>
-#include <private/qtreewidget_p.h>
+#include <private/qtreeview_p.h>
+#endif
+#include <private/qwidget_p.h>
 
 #ifndef QT_NO_ACCESSIBILITY
 
 QT_BEGIN_NAMESPACE
 
-#ifndef QT_NO_ITEMVIEWS
 /*
 Implementation of the IAccessible2 table2 interface. Much simpler than
 the other table interfaces since there is only the main table and cells:
@@ -81,17 +87,17 @@ QAccessibleTable::QAccessibleTable(QWidget *w)
 {
     Q_ASSERT(view());
 
-#ifndef QT_NO_TABLEVIEW
+#if QT_CONFIG(tableview)
     if (qobject_cast<const QTableView*>(view())) {
         m_role = QAccessible::Table;
     } else
 #endif
-#ifndef QT_NO_TREEVIEW
+#if QT_CONFIG(treeview)
     if (qobject_cast<const QTreeView*>(view())) {
         m_role = QAccessible::Tree;
     } else
 #endif
-#ifndef QT_NO_LISTVIEW
+#if QT_CONFIG(listview)
     if (qobject_cast<const QListView*>(view())) {
         m_role = QAccessible::List;
     } else
@@ -117,11 +123,11 @@ QHeaderView *QAccessibleTable::horizontalHeader() const
 {
     QHeaderView *header = 0;
     if (false) {
-#ifndef QT_NO_TABLEVIEW
+#if QT_CONFIG(tableview)
     } else if (const QTableView *tv = qobject_cast<const QTableView*>(view())) {
         header = tv->horizontalHeader();
 #endif
-#ifndef QT_NO_TREEVIEW
+#if QT_CONFIG(treeview)
     } else if (const QTreeView *tv = qobject_cast<const QTreeView*>(view())) {
         header = tv->header();
 #endif
@@ -133,7 +139,7 @@ QHeaderView *QAccessibleTable::verticalHeader() const
 {
     QHeaderView *header = 0;
     if (false) {
-#ifndef QT_NO_TABLEVIEW
+#if QT_CONFIG(tableview)
     } else if (const QTableView *tv = qobject_cast<const QTableView*>(view())) {
         header = tv->verticalHeader();
 #endif
@@ -645,7 +651,7 @@ void QAccessibleTable::modelChange(QAccessibleTableModelChangeEvent *event)
     }
 }
 
-#ifndef QT_NO_TREEVIEW
+#if QT_CONFIG(treeview)
 
 // TREE VIEW
 
@@ -818,7 +824,7 @@ bool QAccessibleTree::selectRow(int row)
     return true;
 }
 
-#endif // QT_NO_TREEVIEW
+#endif // QT_CONFIG(treeview)
 
 // TABLE CELL
 
@@ -866,11 +872,11 @@ QHeaderView *QAccessibleTableCell::horizontalHeader() const
     QHeaderView *header = 0;
 
     if (false) {
-#ifndef QT_NO_TABLEVIEW
+#if QT_CONFIG(tableview)
     } else if (const QTableView *tv = qobject_cast<const QTableView*>(view)) {
         header = tv->horizontalHeader();
 #endif
-#ifndef QT_NO_TREEVIEW
+#if QT_CONFIG(treeview)
     } else if (const QTreeView *tv = qobject_cast<const QTreeView*>(view)) {
         header = tv->header();
 #endif
@@ -882,7 +888,7 @@ QHeaderView *QAccessibleTableCell::horizontalHeader() const
 QHeaderView *QAccessibleTableCell::verticalHeader() const
 {
     QHeaderView *header = 0;
-#ifndef QT_NO_TABLEVIEW
+#if QT_CONFIG(tableview)
     if (const QTableView *tv = qobject_cast<const QTableView*>(view))
         header = tv->verticalHeader();
 #endif
@@ -896,7 +902,7 @@ int QAccessibleTableCell::columnIndex() const
 
 int QAccessibleTableCell::rowIndex() const
 {
-#ifndef QT_NO_TREEVIEW
+#if QT_CONFIG(treeview)
     if (role() == QAccessible::TreeItem) {
        const QTreeView *treeView = qobject_cast<const QTreeView*>(view);
        Q_ASSERT(treeView);
@@ -1032,7 +1038,7 @@ QAccessible::State QAccessibleTableCell::state() const
         if (view->selectionMode() == QAbstractItemView::ExtendedSelection)
             st.extSelectable = true;
     }
-#ifndef QT_NO_TREEVIEW
+#if QT_CONFIG(treeview)
     if (m_role == QAccessible::TreeItem) {
         const QTreeView *treeView = qobject_cast<const QTreeView*>(view);
         if (treeView->model()->hasChildren(m_index))
@@ -1125,7 +1131,7 @@ QRect QAccessibleTableHeaderCell::rect() const
 {
     QHeaderView *header = 0;
     if (false) {
-#ifndef QT_NO_TABLEVIEW
+#if QT_CONFIG(tableview)
     } else if (const QTableView *tv = qobject_cast<const QTableView*>(view)) {
         if (orientation == Qt::Horizontal) {
             header = tv->horizontalHeader();
@@ -1133,7 +1139,7 @@ QRect QAccessibleTableHeaderCell::rect() const
             header = tv->verticalHeader();
         }
 #endif
-#ifndef QT_NO_TREEVIEW
+#if QT_CONFIG(treeview)
     } else if (const QTreeView *tv = qobject_cast<const QTreeView*>(view)) {
         header = tv->header();
 #endif
@@ -1192,7 +1198,7 @@ QHeaderView *QAccessibleTableHeaderCell::headerView() const
 {
     QHeaderView *header = 0;
     if (false) {
-#ifndef QT_NO_TABLEVIEW
+#if QT_CONFIG(tableview)
     } else if (const QTableView *tv = qobject_cast<const QTableView*>(view)) {
         if (orientation == Qt::Horizontal) {
             header = tv->horizontalHeader();
@@ -1200,15 +1206,13 @@ QHeaderView *QAccessibleTableHeaderCell::headerView() const
             header = tv->verticalHeader();
         }
 #endif
-#ifndef QT_NO_TREEVIEW
+#if QT_CONFIG(treeview)
     } else if (const QTreeView *tv = qobject_cast<const QTreeView*>(view)) {
         header = tv->header();
 #endif
     }
     return header;
 }
-
-#endif // QT_NO_ITEMVIEWS
 
 QT_END_NAMESPACE
 

@@ -44,8 +44,6 @@
 #include <algorithm>
 #include <functional>
 
-#ifndef QT_NO_ITEMVIEWS
-
 QT_BEGIN_NAMESPACE
 
 /*!
@@ -220,13 +218,15 @@ QT_BEGIN_NAMESPACE
 */
 bool QItemSelectionRange::intersects(const QItemSelectionRange &other) const
 {
-    return (isValid() && other.isValid()
-            && parent() == other.parent()
-            && model() == other.model()
+    // isValid() and parent() last since they are more expensive
+    return (model() == other.model()
             && ((top() <= other.top() && bottom() >= other.top())
                 || (top() >= other.top() && top() <= other.bottom()))
             && ((left() <= other.left() && right() >= other.left())
-                || (left() >= other.left() && left() <= other.right())));
+                || (left() >= other.left() && left() <= other.right()))
+            && parent() == other.parent()
+            && isValid() && other.isValid()
+            );
 }
 
 /*!
@@ -1917,5 +1917,3 @@ QDebug operator<<(QDebug dbg, const QItemSelectionRange &range)
 QT_END_NAMESPACE
 
 #include "moc_qitemselectionmodel.cpp"
-
-#endif // QT_NO_ITEMVIEWS

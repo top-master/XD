@@ -268,27 +268,93 @@
 */
 
 /*!
-    \variable QGraphicsItem::Type
+  \enum QGraphicsItem::anonymous
 
-    The type value returned by the virtual type() function in standard
-    graphics item classes in Qt. All such standard graphics item
-    classes in Qt are associated with a unique value for Type,
-    e.g. the value returned by QGraphicsPathItem::type() is 2.
+  The value returned by the virtual type() function in standard
+  graphics item classes in Qt. All such standard graphics item classes
+  in Qt are associated with a unique value for Type, e.g. the value
+  returned by QGraphicsPathItem::type() is 2.
+
+  \value Type
 
     \snippet code/src_gui_graphicsview_qgraphicsitem.cpp 18
+
+  \value UserType The lowest value returned by the virtual type()
+  function for custom subclasses of QGraphicsItem.
+
+    \snippet code/src_gui_graphicsview_qgraphicsitem.cpp 1
 */
 
 /*!
-    \variable QGraphicsItem::UserType
+  \enum QGraphicsPathItem::anonymous
 
-    The lowest permitted type value for custom items (subclasses
-    of QGraphicsItem or any of the standard items). This value is
-    used in conjunction with a reimplementation of QGraphicsItem::type()
-    and declaring a Type enum value. Example:
+  The value returned by the virtual type() function.
 
-    \snippet code/src_gui_graphicsview_qgraphicsitem.cpp 1
+  \value Type A graphics path item
+*/
 
-    \note UserType = 65536
+/*!
+  \enum QGraphicsRectItem::anonymous
+
+  The value returned by the virtual type() function.
+
+  \value Type A graphics rect item
+*/
+
+/*!
+  \enum QGraphicsEllipseItem::anonymous
+
+  The value returned by the virtual type() function.
+
+  \value Type A graphics ellipse item
+*/
+
+/*!
+  \enum QGraphicsPolygonItem::anonymous
+
+  The value returned by the virtual type() function.
+
+  \value Type A graphics polygon item
+*/
+
+/*!
+  \enum QGraphicsPixmapItem::anonymous
+
+  The value returned by the virtual type() function.
+
+  \value Type A graphics pixmap item
+*/
+
+/*!
+  \enum QGraphicsTextItem::anonymous
+
+  The value returned by the virtual type() function.
+
+  \value Type A graphics text item
+*/
+
+/*!
+  \enum QGraphicsSimpleTextItem::anonymous
+
+  The value returned by the virtual type() function.
+
+  \value Type A graphics simple text item
+*/
+
+/*!
+  \enum QGraphicsItemGroup::anonymous
+
+  The value returned by the virtual type() function.
+
+  \value Type A graphics item group
+*/
+
+/*!
+  \enum QGraphicsLineItem::anonymous
+
+  The value returned by the virtual type() function.
+
+  \value Type A graphics line item
 */
 
 /*!
@@ -732,8 +798,6 @@
 
 #include "qgraphicsitem.h"
 
-#ifndef QT_NO_GRAPHICSVIEW
-
 #include "qgraphicsscene.h"
 #include "qgraphicsscene_p.h"
 #include "qgraphicssceneevent.h"
@@ -756,7 +820,9 @@
 #include <QtWidgets/qstyleoption.h>
 #include <QtGui/qevent.h>
 #include <QtGui/qinputmethod.h>
+#if QT_CONFIG(graphicseffect)
 #include <QtWidgets/qgraphicseffect.h>
+#endif
 
 #include <private/qgraphicsitem_p.h>
 #include <private/qgraphicswidget_p.h>
@@ -1068,19 +1134,26 @@ void QGraphicsItemPrivate::remapItemPos(QEvent *event, QGraphicsItem *item)
     is untransformable, this function will correctly map \a pos from the scene using the
     view's transformation.
 */
-QPointF QGraphicsItemPrivate::genericMapFromScene(const QPointF &pos,
-                                                  const QWidget *viewport) const
+
+QTransform QGraphicsItemPrivate::genericMapFromSceneTransform(const QWidget *viewport) const
 {
     Q_Q(const QGraphicsItem);
     if (!itemIsUntransformable())
-        return q->mapFromScene(pos);
-    QGraphicsView *view = 0;
-    if (viewport)
-        view = qobject_cast<QGraphicsView *>(viewport->parentWidget());
-    if (!view)
-        return q->mapFromScene(pos);
+       return sceneTransform.inverted();
+    const QGraphicsView *view = viewport
+        ? qobject_cast<QGraphicsView *>(viewport->parentWidget())
+        : nullptr;
+    if (view == nullptr)
+        return sceneTransform.inverted();
     // ### More ping pong than needed.
-    return q->deviceTransform(view->viewportTransform()).inverted().map(view->mapFromScene(pos));
+    const QTransform viewportTransform = view->viewportTransform();
+    return viewportTransform * q->deviceTransform(viewportTransform).inverted();
+}
+
+QPointF QGraphicsItemPrivate::genericMapFromScene(const QPointF &pos,
+                                                  const QWidget *viewport) const
+{
+    return genericMapFromSceneTransform(viewport).map(pos);
 }
 
 /*!
@@ -1558,9 +1631,9 @@ QGraphicsItem::~QGraphicsItem()
         setParentItem(0);
     }
 
-#ifndef QT_NO_GRAPHICSEFFECT
+#if QT_CONFIG(graphicseffect)
     delete d_ptr->graphicsEffect;
-#endif //QT_NO_GRAPHICSEFFECT
+#endif // QT_CONFIG(graphicseffect)
     if (d_ptr->transformData) {
         for(int i = 0; i < d_ptr->transformData->graphicsTransforms.size(); ++i) {
             QGraphicsTransform *t = d_ptr->transformData->graphicsTransforms.at(i);
@@ -2383,9 +2456,9 @@ void QGraphicsItemPrivate::setVisibleHelper(bool newVisible, bool explicitly,
         if (c)
             c->purge();
         if (scene) {
-#ifndef QT_NO_GRAPHICSEFFECT
+#if QT_CONFIG(graphicseffect)
             invalidateParentGraphicsEffectsRecursively();
-#endif //QT_NO_GRAPHICSEFFECT
+#endif // QT_CONFIG(graphicseffect)
             scene->d_func()->markDirty(q_ptr, QRectF(), /*invalidateChildren=*/false, /*force=*/true);
         }
     }
@@ -2832,11 +2905,11 @@ void QGraphicsItem::setOpacity(qreal opacity)
 
     // Update.
     if (d_ptr->scene) {
-#ifndef QT_NO_GRAPHICSEFFECT
+#if QT_CONFIG(graphicseffect)
         d_ptr->invalidateParentGraphicsEffectsRecursively();
         if (!(d_ptr->flags & ItemDoesntPropagateOpacityToChildren))
             d_ptr->invalidateChildGraphicsEffectsRecursively(QGraphicsItemPrivate::OpacityChanged);
-#endif //QT_NO_GRAPHICSEFFECT
+#endif // QT_CONFIG(graphicseffect)
         d_ptr->scene->d_func()->markDirty(this, QRectF(),
                                           /*invalidateChildren=*/true,
                                           /*force=*/false,
@@ -2854,7 +2927,7 @@ void QGraphicsItem::setOpacity(qreal opacity)
 
     \since 4.6
 */
-#ifndef QT_NO_GRAPHICSEFFECT
+#if QT_CONFIG(graphicseffect)
 QGraphicsEffect *QGraphicsItem::graphicsEffect() const
 {
     return d_ptr->graphicsEffect;
@@ -2896,11 +2969,11 @@ void QGraphicsItem::setGraphicsEffect(QGraphicsEffect *effect)
         prepareGeometryChange();
     }
 }
-#endif //QT_NO_GRAPHICSEFFECT
+#endif // QT_CONFIG(graphicseffect)
 
 void QGraphicsItemPrivate::updateChildWithGraphicsEffectFlagRecursively()
 {
-#ifndef QT_NO_GRAPHICSEFFECT
+#if QT_CONFIG(graphicseffect)
     QGraphicsItemPrivate *itemPrivate = this;
     do {
         // parent chain already notified?
@@ -2923,7 +2996,7 @@ void QGraphicsItemPrivate::updateChildWithGraphicsEffectFlagRecursively()
 */
 QRectF QGraphicsItemPrivate::effectiveBoundingRect(const QRectF &rect) const
 {
-#ifndef QT_NO_GRAPHICSEFFECT
+#if QT_CONFIG(graphicseffect)
     Q_Q(const QGraphicsItem);
     QGraphicsEffect *effect = graphicsEffect;
     if (scene && effect && effect->isEnabled()) {
@@ -2939,7 +3012,7 @@ QRectF QGraphicsItemPrivate::effectiveBoundingRect(const QRectF &rect) const
         }
         return q->mapRectFromScene(sceneEffectRect);
     }
-#endif //QT_NO_GRAPHICSEFFECT
+#endif // QT_CONFIG(graphicseffect)
     return rect;
 }
 
@@ -2955,7 +3028,7 @@ QRectF QGraphicsItemPrivate::effectiveBoundingRect(const QRectF &rect) const
 */
 QRectF QGraphicsItemPrivate::effectiveBoundingRect(QGraphicsItem *topMostEffectItem) const
 {
-#ifndef QT_NO_GRAPHICSEFFECT
+#if QT_CONFIG(graphicseffect)
     Q_Q(const QGraphicsItem);
     QRectF brect = effectiveBoundingRect(q_ptr->boundingRect());
     if (ancestorFlags & QGraphicsItemPrivate::AncestorClipsChildren
@@ -2980,10 +3053,10 @@ QRectF QGraphicsItemPrivate::effectiveBoundingRect(QGraphicsItem *topMostEffectI
     }
 
     return brect;
-#else //QT_NO_GRAPHICSEFFECT
+#else //QT_CONFIG(graphicseffect)
     Q_UNUSED(topMostEffectItem);
     return q_ptr->boundingRect();
-#endif //QT_NO_GRAPHICSEFFECT
+#endif // QT_CONFIG(graphicseffect)
 
 }
 
@@ -5485,7 +5558,7 @@ int QGraphicsItemPrivate::depth() const
 /*!
     \internal
 */
-#ifndef QT_NO_GRAPHICSEFFECT
+#if QT_CONFIG(graphicseffect)
 void QGraphicsItemPrivate::invalidateParentGraphicsEffectsRecursively()
 {
     QGraphicsItemPrivate *itemPrivate = this;
@@ -5516,7 +5589,7 @@ void QGraphicsItemPrivate::invalidateChildGraphicsEffectsRecursively(QGraphicsIt
         childPrivate->invalidateChildGraphicsEffectsRecursively(reason);
     }
 }
-#endif //QT_NO_GRAPHICSEFFECT
+#endif // QT_CONFIG(graphicseffect)
 
 /*!
     \internal
@@ -5798,9 +5871,9 @@ void QGraphicsItem::update(const QRectF &rect)
         return;
 
     // Make sure we notify effects about invalidated source.
-#ifndef QT_NO_GRAPHICSEFFECT
+#if QT_CONFIG(graphicseffect)
     d_ptr->invalidateParentGraphicsEffectsRecursively();
-#endif //QT_NO_GRAPHICSEFFECT
+#endif // QT_CONFIG(graphicseffect)
 
     if (CacheMode(d_ptr->cacheMode) != NoCache) {
         // Invalidate cache.
@@ -10574,7 +10647,7 @@ bool QGraphicsTextItemPrivate::_q_mouseOnEdge(QGraphicsSceneMouseEvent *event)
 }
 
 /*!
-    \fn QGraphicsTextItem::linkActivated(const QString &link)
+    \fn void QGraphicsTextItem::linkActivated(const QString &link)
 
     This signal is emitted when the user clicks on a link on a text item
     that enables Qt::LinksAccessibleByMouse or Qt::LinksAccessibleByKeyboard.
@@ -10584,7 +10657,7 @@ bool QGraphicsTextItemPrivate::_q_mouseOnEdge(QGraphicsSceneMouseEvent *event)
 */
 
 /*!
-    \fn QGraphicsTextItem::linkHovered(const QString &link)
+    \fn void QGraphicsTextItem::linkHovered(const QString &link)
 
     This signal is emitted when the user hovers over a link on a text item
     that enables Qt::LinksAccessibleByMouse. \a link is
@@ -11225,7 +11298,7 @@ int QGraphicsItemGroup::type() const
     return Type;
 }
 
-#ifndef QT_NO_GRAPHICSEFFECT
+#if QT_CONFIG(graphicseffect)
 QRectF QGraphicsItemEffectSourcePrivate::boundingRect(Qt::CoordinateSystem system) const
 {
     const bool deviceCoordinates = (system == Qt::DeviceCoordinates);
@@ -11366,7 +11439,7 @@ QPixmap QGraphicsItemEffectSourcePrivate::pixmap(Qt::CoordinateSystem system, QP
 
     return pixmap;
 }
-#endif //QT_NO_GRAPHICSEFFECT
+#endif // QT_CONFIG(graphicseffect)
 
 #ifndef QT_NO_DEBUG_STREAM
 static void formatGraphicsItemHelper(QDebug debug, const QGraphicsItem *item)
@@ -11633,5 +11706,3 @@ QDebug operator<<(QDebug debug, QGraphicsItem::GraphicsItemFlags flags)
 QT_END_NAMESPACE
 
 #include "moc_qgraphicsitem.cpp"
-
-#endif // QT_NO_GRAPHICSVIEW

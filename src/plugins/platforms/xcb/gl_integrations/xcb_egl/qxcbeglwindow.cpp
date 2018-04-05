@@ -49,7 +49,7 @@ QT_BEGIN_NAMESPACE
 QXcbEglWindow::QXcbEglWindow(QWindow *window, QXcbEglIntegration *glIntegration)
     : QXcbWindow(window)
     , m_glIntegration(glIntegration)
-    , m_config(Q_NULLPTR)
+    , m_config(nullptr)
     , m_surface(EGL_NO_SURFACE)
 {
 }
@@ -65,7 +65,7 @@ void QXcbEglWindow::resolveFormat(const QSurfaceFormat &format)
     m_format = q_glFormatFromConfig(m_glIntegration->eglDisplay(), m_config, format);
 }
 
-#ifdef XCB_USE_XLIB
+#if QT_CONFIG(xcb_xlib)
 const xcb_visualtype_t *QXcbEglWindow::createVisual()
 {
     QXcbScreen *scr = xcbScreen();

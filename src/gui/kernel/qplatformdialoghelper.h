@@ -141,14 +141,16 @@ public:
     Q_ENUM(ButtonRole)
 
     enum ButtonLayout {
-        // keep this in sync with QDialogButtonBox::ButtonLayout and QMessageBox::ButtonLayout
+        // keep this in sync with QDialogButtonBox::ButtonLayout
         UnknownLayout = -1,
         WinLayout,
         MacLayout,
         KdeLayout,
         GnomeLayout,
-        MacModelessLayout
+        MacModelessLayout,
+        AndroidLayout
     };
+    Q_ENUM(ButtonLayout)
 
     QPlatformDialogHelper();
     virtual ~QPlatformDialogHelper();

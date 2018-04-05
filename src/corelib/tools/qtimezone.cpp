@@ -62,15 +62,14 @@ static QTimeZonePrivate *newBackendTimeZone()
 #else
 #if defined Q_OS_MAC
     return new QMacTimeZonePrivate();
-#elif defined Q_OS_ANDROID
+#elif defined(Q_OS_ANDROID) && !defined(Q_OS_ANDROID_EMBEDDED)
     return new QAndroidTimeZonePrivate();
-#elif defined Q_OS_UNIX
+#elif defined(Q_OS_UNIX) || defined(Q_OS_ANDROID_EMBEDDED)
     return new QTzTimeZonePrivate();
-    // Registry based timezone backend not available on WinRT
-#elif defined Q_OS_WIN
-    return new QWinTimeZonePrivate();
 #elif QT_CONFIG(icu)
     return new QIcuTimeZonePrivate();
+#elif defined Q_OS_WIN
+    return new QWinTimeZonePrivate();
 #else
     return new QUtcTimeZonePrivate();
 #endif // System Locales
@@ -89,15 +88,14 @@ static QTimeZonePrivate *newBackendTimeZone(const QByteArray &ianaId)
 #else
 #if defined Q_OS_MAC
     return new QMacTimeZonePrivate(ianaId);
-#elif defined Q_OS_ANDROID
+#elif defined(Q_OS_ANDROID) && !defined(Q_OS_ANDROID_EMBEDDED)
     return new QAndroidTimeZonePrivate(ianaId);
-#elif defined Q_OS_UNIX
+#elif defined(Q_OS_UNIX) || defined(Q_OS_ANDROID_EMBEDDED)
     return new QTzTimeZonePrivate(ianaId);
-    // Registry based timezone backend not available on WinRT
-#elif defined Q_OS_WIN
-    return new QWinTimeZonePrivate(ianaId);
 #elif QT_CONFIG(icu)
     return new QIcuTimeZonePrivate(ianaId);
+#elif defined Q_OS_WIN
+    return new QWinTimeZonePrivate(ianaId);
 #else
     return new QUtcTimeZonePrivate(ianaId);
 #endif // System Locales
@@ -139,7 +137,7 @@ Q_GLOBAL_STATIC(QTimeZoneSingleton, global_tz);
     \note For consistency with QDateTime, QTimeZone does not account for leap
     seconds.
 
-    \section1
+    \section1 Remarks
 
     \section2 IANA Time Zone IDs
 
@@ -222,6 +220,20 @@ Q_GLOBAL_STATIC(QTimeZoneSingleton, global_tz);
     \l{Unicode CLDR (Unicode Common Locale Data Repository)} for the details.
 
     \sa QDateTime
+*/
+
+/*!
+  \enum QTimeZone::anonymous
+
+  Sane UTC offsets range from -14 to +14 hours.
+  No known zone > 12 hrs West of Greenwich (Baker Island, USA).
+  No known zone > 14 hrs East of Greenwich (Kiritimati, Christmas Island, Kiribati).
+
+  \value MinUtcOffsetSecs
+          -14 * 3600,
+
+  \value MaxUtcOffsetSecs
+          +14 * 3600
 */
 
 /*!
@@ -338,12 +350,9 @@ QTimeZone::QTimeZone(const QByteArray &ianaId)
 */
 
 QTimeZone::QTimeZone(int offsetSeconds)
+    : d((offsetSeconds >= MinUtcOffsetSecs && offsetSeconds <= MaxUtcOffsetSecs)
+        ? new QUtcTimeZonePrivate(offsetSeconds) : nullptr)
 {
-    // offsetSeconds must fall between -14:00 and +14:00 hours
-    if (offsetSeconds >= -50400 && offsetSeconds <= 50400)
-        d = new QUtcTimeZonePrivate(offsetSeconds);
-    else
-        d = 0;
 }
 
 /*!
@@ -961,7 +970,13 @@ QDataStream &operator>>(QDataStream &ds, QTimeZone &tz)
         int country;
         QString comment;
         ds >> ianaId >> utcOffset >> name >> abbreviation >> country >> comment;
-        tz = QTimeZone(ianaId.toUtf8(), utcOffset, name, abbreviation, (QLocale::Country) country, comment);
+        // Try creating as a system timezone, which succeeds (producing a valid
+        // zone) iff ianaId is valid; we can then ignore the other data.
+        tz = QTimeZone(ianaId.toUtf8());
+        // If not, then construct a custom timezone using all the saved values:
+        if (!tz.isValid())
+            tz = QTimeZone(ianaId.toUtf8(), utcOffset, name, abbreviation,
+                           QLocale::Country(country), comment);
     } else {
         tz = QTimeZone(ianaId.toUtf8());
     }

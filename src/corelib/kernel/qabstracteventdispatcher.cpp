@@ -375,8 +375,7 @@ void QAbstractEventDispatcher::closingDown()
 */
 
 /*!
-    Installs an event filter \a filterObj for all native event filters
-    received by the application.
+    Installs an event filter \a filterObj for all native events received by the application.
 
     The event filter \a filterObj receives events via its \l {QAbstractNativeEventFilter::}{nativeEventFilter()}
     function, which is called for all events received by all threads.
@@ -480,12 +479,12 @@ bool QAbstractEventDispatcher::filterNativeEvent(const QByteArray &eventType, vo
     the processing of the event should continue.
 */
 
-/*! \fn bool QAbstractEventDispatcher::registerEventNotifier(QWinEventNotifier *notifier);
+/*! \fn bool QAbstractEventDispatcher::registerEventNotifier(QWinEventNotifier *notifier)
 
   This pure virtual method exists on windows only and has to be reimplemented by a Windows specific
   event dispatcher implementation. \a notifier is the QWinEventNotifier instance to be registered.
 
-  The method should return true if the registration of \a notifier was sucessful, otherwise false.
+  The method should return true if the registration of \a notifier was successful, otherwise false.
 
   QWinEventNotifier calls this method in it's constructor and there should never be a need to call this
   method directly.
@@ -493,7 +492,7 @@ bool QAbstractEventDispatcher::filterNativeEvent(const QByteArray &eventType, vo
   \sa QWinEventNotifier, unregisterEventNotifier()
 */
 
-/*! \fn bool QAbstractEventDispatcher::unregisterEventNotifier(QWinEventNotifier *notifier);
+/*! \fn bool QAbstractEventDispatcher::unregisterEventNotifier(QWinEventNotifier *notifier)
 
   This pure virtual method exists on windows only and has to be reimplemented by a Windows specific
   event dispatcher implementation. \a notifier is the QWinEventNotifier instance to be unregistered.

@@ -19,11 +19,13 @@ SOURCES += \
     $$PWD/qwindowskeymapper.cpp \
     $$PWD/qwindowsmousehandler.cpp \
     $$PWD/qwindowsole.cpp \
+    $$PWD/qwindowsdropdataobject.cpp \
     $$PWD/qwindowsmime.cpp \
     $$PWD/qwindowsinternalmimedata.cpp \
     $$PWD/qwindowscursor.cpp \
     $$PWD/qwindowsinputcontext.cpp \
     $$PWD/qwindowstheme.cpp \
+    $$PWD/qwindowsmenu.cpp \
     $$PWD/qwindowsdialoghelpers.cpp \
     $$PWD/qwindowsservices.cpp \
     $$PWD/qwindowsnativeinterface.cpp \
@@ -31,6 +33,7 @@ SOURCES += \
     $$PWD/qwin10helpers.cpp
 
 HEADERS += \
+    $$PWD/qwindowscombase.h \
     $$PWD/qwindowswindow.h \
     $$PWD/qwindowsintegration.h \
     $$PWD/qwindowscontext.h \
@@ -39,16 +42,18 @@ HEADERS += \
     $$PWD/qwindowsmousehandler.h \
     $$PWD/qtwindowsglobal.h \
     $$PWD/qwindowsole.h \
+    $$PWD/qwindowsdropdataobject.h \
     $$PWD/qwindowsmime.h \
     $$PWD/qwindowsinternalmimedata.h \
     $$PWD/qwindowscursor.h \
     $$PWD/qwindowsinputcontext.h \
     $$PWD/qwindowstheme.h \
+    $$PWD/qwindowsmenu.h \
     $$PWD/qwindowsdialoghelpers.h \
     $$PWD/qwindowsservices.h \
     $$PWD/qwindowsnativeinterface.h \
     $$PWD/qwindowsopengltester.h \
-    $$PWD/qwindowsthreadpoolrunner.h
+    $$PWD/qwindowsthreadpoolrunner.h \
     $$PWD/qwin10helpers.h
 
 INCLUDEPATH += $$PWD
@@ -69,37 +74,42 @@ qtConfig(dynamicgl) {
     HEADERS += $$PWD/qwindowseglcontext.h
 }
 
-!contains( DEFINES, QT_NO_CLIPBOARD ) {
-    SOURCES += $$PWD/qwindowsclipboard.cpp
-    HEADERS += $$PWD/qwindowsclipboard.h
+qtConfig(systemtrayicon) {
+    SOURCES += $$PWD/qwindowssystemtrayicon.cpp
+    HEADERS += $$PWD/qwindowssystemtrayicon.h
 }
 
-# drag and drop on windows only works if a clipboard is available
-!contains( DEFINES, QT_NO_DRAGANDDROP ) {
-    !win32:SOURCES += $$PWD/qwindowsdrag.cpp
-    !win32:HEADERS += $$PWD/qwindowsdrag.h
-    win32:!contains( DEFINES, QT_NO_CLIPBOARD ) {
+qtConfig(vulkan) {
+    SOURCES += $$PWD/qwindowsvulkaninstance.cpp
+    HEADERS += $$PWD/qwindowsvulkaninstance.h
+}
+
+qtConfig(clipboard) {
+    SOURCES += $$PWD/qwindowsclipboard.cpp
+    HEADERS += $$PWD/qwindowsclipboard.h
+    # drag and drop on windows only works if a clipboard is available
+    qtConfig(draganddrop) {
         HEADERS += $$PWD/qwindowsdrag.h
         SOURCES += $$PWD/qwindowsdrag.cpp
     }
 }
 
-!contains( DEFINES, QT_NO_TABLETEVENT ) {
+qtConfig(tabletevent) {
     INCLUDEPATH += $$QT_SOURCE_TREE/src/3rdparty/wintab
     HEADERS += $$PWD/qwindowstabletsupport.h
     SOURCES += $$PWD/qwindowstabletsupport.cpp
 }
 
-!contains( DEFINES, QT_NO_SESSIONMANAGER ) {
+qtConfig(sessionmanager) {
     SOURCES += $$PWD/qwindowssessionmanager.cpp
     HEADERS += $$PWD/qwindowssessionmanager.h
 }
 
-!contains( DEFINES, QT_NO_IMAGEFORMAT_PNG ):RESOURCES += $$PWD/cursors.qrc
+qtConfig(imageformat_png):RESOURCES += $$PWD/cursors.qrc
 
 RESOURCES += $$PWD/openglblacklists.qrc
 
-qtConfig(accessibility): include($$PWD/accessible/accessible.pri)
+qtConfig(accessibility): include($$PWD/uiautomation/uiautomation.pri)
 
 qtConfig(combined-angle-lib) {
     DEFINES *= LIBEGL_NAME=$${LIBQTANGLE_NAME}

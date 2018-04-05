@@ -40,8 +40,6 @@
 #include "qhttpnetworkconnection_p.h"
 #include "qhttp2protocolhandler_p.h"
 
-#if !defined(QT_NO_HTTP)
-
 #include "http2/bitstreams_p.h"
 
 #include <private/qnoncontiguousbytedevice_p.h>
@@ -88,7 +86,8 @@ HPack::HttpHeader build_headers(const QHttpNetworkRequest &request, quint32 maxH
     if (size.second > maxHeaderListSize)
         return HttpHeader(); // Bad, we cannot send this request ...
 
-    for (const auto &field : request.header()) {
+    const auto requestHeader = request.header();
+    for (const auto &field : requestHeader) {
         const HeaderSize delta = entry_size(field.first, field.second);
         if (!delta.first) // Overflow???
             break;
@@ -161,8 +160,6 @@ bool sum_will_overflow(qint32 windowSize, qint32 delta)
 using namespace Http2;
 
 const std::deque<quint32>::size_type QHttp2ProtocolHandler::maxRecycledStreams = 10000;
-const qint32 QHttp2ProtocolHandler::sessionMaxRecvWindowSize;
-const qint32 QHttp2ProtocolHandler::streamInitialRecvWindowSize;
 const quint32 QHttp2ProtocolHandler::maxAcceptableTableSize;
 
 QHttp2ProtocolHandler::QHttp2ProtocolHandler(QHttpNetworkConnectionChannel *channel)
@@ -170,10 +167,47 @@ QHttp2ProtocolHandler::QHttp2ProtocolHandler(QHttpNetworkConnectionChannel *chan
       decoder(HPack::FieldLookupTable::DefaultSize),
       encoder(HPack::FieldLookupTable::DefaultSize, true)
 {
+    Q_ASSERT(channel && m_connection);
+
     continuedFrames.reserve(20);
-    bool ok = false;
-    const int env = qEnvironmentVariableIntValue("QT_HTTP2_ENABLE_PUSH_PROMISE", &ok);
-    pushPromiseEnabled = ok && env;
+
+    const ProtocolParameters params(m_connection->http2Parameters());
+    Q_ASSERT(params.validate());
+
+    maxSessionReceiveWindowSize = params.maxSessionReceiveWindowSize;
+
+    const RawSettings &data = params.settingsFrameData;
+    for (auto param = data.cbegin(), end = data.cend(); param != end; ++param) {
+        switch (param.key()) {
+        case Settings::INITIAL_WINDOW_SIZE_ID:
+            streamInitialReceiveWindowSize = param.value();
+            break;
+        case Settings::ENABLE_PUSH_ID:
+            pushPromiseEnabled = param.value();
+            break;
+        case Settings::HEADER_TABLE_SIZE_ID:
+        case Settings::MAX_CONCURRENT_STREAMS_ID:
+        case Settings::MAX_FRAME_SIZE_ID:
+        case Settings::MAX_HEADER_LIST_SIZE_ID:
+            // These other settings are just recommendations to our peer. We
+            // only check they are not crazy in ProtocolParameters::validate().
+        default:
+            break;
+        }
+    }
+
+    if (!channel->ssl) {
+        // We upgraded from HTTP/1.1 to HTTP/2. channel->request was already sent
+        // as HTTP/1.1 request. The response with status code 101 triggered
+        // protocol switch and now we are waiting for the real response, sent
+        // as HTTP/2 frames.
+        Q_ASSERT(channel->reply);
+        const quint32 initialStreamID = createNewStream(HttpMessagePair(channel->request, channel->reply),
+                                                        true /* uploaded by HTTP/1.1 */);
+        Q_ASSERT(initialStreamID == 1);
+        Stream &stream = activeStreams[initialStreamID];
+        stream.state = Stream::halfClosedLocal;
+    }
 }
 
 void QHttp2ProtocolHandler::_q_uploadDataReadyRead()
@@ -350,28 +384,27 @@ bool QHttp2ProtocolHandler::sendClientPreface()
     if (prefaceSent)
         return true;
 
-    const qint64 written = m_socket->write(Http2clientPreface,
+    const qint64 written = m_socket->write(Http2::Http2clientPreface,
                                            Http2::clientPrefaceLength);
     if (written != Http2::clientPrefaceLength)
         return false;
 
     // 6.5 SETTINGS
-    frameWriter.start(FrameType::SETTINGS, FrameFlag::EMPTY, Http2::connectionStreamID);
-    // MAX frame size (16 kb), enable/disable PUSH
-    frameWriter.append(Settings::MAX_FRAME_SIZE_ID);
-    frameWriter.append(quint32(Http2::maxFrameSize));
-    frameWriter.append(Settings::ENABLE_PUSH_ID);
-    frameWriter.append(quint32(pushPromiseEnabled));
+    const ProtocolParameters params(m_connection->http2Parameters());
+    Q_ASSERT(params.validate());
+    frameWriter.setOutboundFrame(params.settingsFrame());
+    Q_ASSERT(frameWriter.outboundFrame().payloadSize());
 
     if (!frameWriter.write(*m_socket))
         return false;
 
-    sessionRecvWindowSize = sessionMaxRecvWindowSize;
-    if (defaultSessionWindowSize < sessionMaxRecvWindowSize) {
-        const auto delta = sessionMaxRecvWindowSize - defaultSessionWindowSize;
-        if (!sendWINDOW_UPDATE(connectionStreamID, delta))
-            return false;
-    }
+    sessionReceiveWindowSize = maxSessionReceiveWindowSize;
+    // ProtocolParameters::validate does not allow maxSessionReceiveWindowSize
+    // to be smaller than defaultSessionWindowSize, so everything is OK here with
+    // 'delta':
+    const auto delta = maxSessionReceiveWindowSize - Http2::defaultSessionWindowSize;
+    if (!sendWINDOW_UPDATE(Http2::connectionStreamID, delta))
+        return false;
 
     prefaceSent = true;
     waitingForSettingsACK = true;
@@ -519,10 +552,10 @@ void QHttp2ProtocolHandler::handleDATA()
     if (!activeStreams.contains(streamID) && !streamWasReset(streamID))
         return connectionError(ENHANCE_YOUR_CALM, "DATA on invalid stream");
 
-    if (qint32(inboundFrame.payloadSize()) > sessionRecvWindowSize)
+    if (qint32(inboundFrame.payloadSize()) > sessionReceiveWindowSize)
         return connectionError(FLOW_CONTROL_ERROR, "Flow control error");
 
-    sessionRecvWindowSize -= inboundFrame.payloadSize();
+    sessionReceiveWindowSize -= inboundFrame.payloadSize();
 
     if (activeStreams.contains(streamID)) {
         auto &stream = activeStreams[streamID];
@@ -541,20 +574,20 @@ void QHttp2ProtocolHandler::handleDATA()
             if (inboundFrame.flags().testFlag(FrameFlag::END_STREAM)) {
                 finishStream(stream);
                 deleteActiveStream(stream.streamID);
-            } else if (stream.recvWindow < streamInitialRecvWindowSize / 2) {
+            } else if (stream.recvWindow < streamInitialReceiveWindowSize / 2) {
                 QMetaObject::invokeMethod(this, "sendWINDOW_UPDATE", Qt::QueuedConnection,
                                           Q_ARG(quint32, stream.streamID),
-                                          Q_ARG(quint32, streamInitialRecvWindowSize - stream.recvWindow));
-                stream.recvWindow = streamInitialRecvWindowSize;
+                                          Q_ARG(quint32, streamInitialReceiveWindowSize - stream.recvWindow));
+                stream.recvWindow = streamInitialReceiveWindowSize;
             }
         }
     }
 
-    if (sessionRecvWindowSize < sessionMaxRecvWindowSize / 2) {
+    if (sessionReceiveWindowSize < maxSessionReceiveWindowSize / 2) {
         QMetaObject::invokeMethod(this, "sendWINDOW_UPDATE", Qt::QueuedConnection,
                                   Q_ARG(quint32, connectionStreamID),
-                                  Q_ARG(quint32, sessionMaxRecvWindowSize - sessionRecvWindowSize));
-        sessionRecvWindowSize = sessionMaxRecvWindowSize;
+                                  Q_ARG(quint32, maxSessionReceiveWindowSize - sessionReceiveWindowSize));
+        sessionReceiveWindowSize = maxSessionReceiveWindowSize;
     }
 }
 
@@ -1034,12 +1067,26 @@ void QHttp2ProtocolHandler::updateStream(Stream &stream, const HPack::HttpHeader
     }
 
     const auto httpReplyPrivate = httpReply->d_func();
+
+    // For HTTP/1 'location' is handled (and redirect URL set) when a protocol
+    // handler emits channel->allDone(). Http/2 protocol handler never emits
+    // allDone, since we have many requests multiplexed in one channel at any
+    // moment and we are probably not done yet. So we extract url and set it
+    // here, if needed.
+    int statusCode = 0;
+    QUrl redirectUrl;
+
     for (const auto &pair : headers) {
         const auto &name = pair.name;
         auto value = pair.value;
 
+        // TODO: part of this code copies what SPDY protocol handler does when
+        // processing headers. Binary nature of HTTP/2 and SPDY saves us a lot
+        // of parsing and related errors/bugs, but it would be nice to have
+        // more detailed validation of headers.
         if (name == ":status") {
-            httpReply->setStatusCode(value.left(3).toInt());
+            statusCode = value.left(3).toInt();
+            httpReply->setStatusCode(statusCode);
             httpReplyPrivate->reasonPhrase = QString::fromLatin1(value.mid(4));
         } else if (name == ":version") {
             httpReplyPrivate->majorVersion = value.at(5) - '0';
@@ -1050,12 +1097,17 @@ void QHttp2ProtocolHandler::updateStream(Stream &stream, const HPack::HttpHeader
             if (ok)
                 httpReply->setContentLength(length);
         } else {
+            if (name == "location")
+                redirectUrl = QUrl::fromEncoded(value);
             QByteArray binder(", ");
             if (name == "set-cookie")
                 binder = "\n";
-            httpReply->setHeaderField(name, value.replace('\0', binder));
+            httpReplyPrivate->fields.append(qMakePair(name, value.replace('\0', binder)));
         }
     }
+
+    if (QHttpNetworkReply::isHttpRedirect(statusCode) && redirectUrl.isValid())
+        httpReply->setRedirectUrl(redirectUrl);
 
     if (connectionType == Qt::DirectConnection)
         emit httpReply->headerChanged();
@@ -1157,7 +1209,7 @@ void QHttp2ProtocolHandler::finishStreamWithError(Stream &stream, QNetworkReply:
                         << "finished with error:" << message;
 }
 
-quint32 QHttp2ProtocolHandler::createNewStream(const HttpMessagePair &message)
+quint32 QHttp2ProtocolHandler::createNewStream(const HttpMessagePair &message, bool uploadDone)
 {
     const qint32 newStreamID = allocateStreamID();
     if (!newStreamID)
@@ -1176,12 +1228,14 @@ quint32 QHttp2ProtocolHandler::createNewStream(const HttpMessagePair &message)
 
     const Stream newStream(message, newStreamID,
                            streamInitialSendWindowSize,
-                           streamInitialRecvWindowSize);
+                           streamInitialReceiveWindowSize);
 
-    if (auto src = newStream.data()) {
-        connect(src, SIGNAL(readyRead()), this,
-                SLOT(_q_uploadDataReadyRead()), Qt::QueuedConnection);
-        src->setProperty("HTTP2StreamID", newStreamID);
+    if (!uploadDone) {
+        if (auto src = newStream.data()) {
+            connect(src, SIGNAL(readyRead()), this,
+                    SLOT(_q_uploadDataReadyRead()), Qt::QueuedConnection);
+            src->setProperty("HTTP2StreamID", newStreamID);
+        }
     }
 
     activeStreams.insert(newStreamID, newStream);
@@ -1369,7 +1423,7 @@ bool QHttp2ProtocolHandler::tryReserveStream(const Http2::Frame &pushPromiseFram
     promise.reservedID = reservedID;
     promise.pushHeader = requestHeader;
 
-    activeStreams.insert(reservedID, Stream(urlKey, reservedID, streamInitialRecvWindowSize));
+    activeStreams.insert(reservedID, Stream(urlKey, reservedID, streamInitialReceiveWindowSize));
     return true;
 }
 
@@ -1403,7 +1457,7 @@ void QHttp2ProtocolHandler::initReplyFromPushPromise(const HttpMessagePair &mess
         // Let's pretent we're sending a request now:
         Stream closedStream(message, promise.reservedID,
                             streamInitialSendWindowSize,
-                            streamInitialRecvWindowSize);
+                            streamInitialReceiveWindowSize);
         closedStream.state = Stream::halfClosedLocal;
         activeStreams.insert(promise.reservedID, closedStream);
         promisedStream = &activeStreams[promise.reservedID];
@@ -1456,5 +1510,3 @@ void QHttp2ProtocolHandler::closeSession()
 }
 
 QT_END_NAMESPACE
-
-#endif // !defined(QT_NO_HTTP)

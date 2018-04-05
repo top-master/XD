@@ -58,6 +58,7 @@
 #include "QtCore/qpointer.h"
 #include "QtCore/qdatetime.h"
 #include "QtCore/qsharedpointer.h"
+#include "QtCore/qscopedpointer.h"
 #include "qatomic.h"
 
 #include <QtNetwork/QNetworkCacheMetaData>
@@ -71,7 +72,7 @@
 #include <QtNetwork/QSslConfiguration>
 #endif
 
-#ifndef QT_NO_HTTP
+QT_REQUIRE_CONFIG(http);
 
 QT_BEGIN_NAMESPACE
 
@@ -85,14 +86,14 @@ public:
     QNetworkReplyHttpImpl(QNetworkAccessManager* const, const QNetworkRequest&, QNetworkAccessManager::Operation&, QIODevice* outgoingData);
     virtual ~QNetworkReplyHttpImpl();
 
-    void close() Q_DECL_OVERRIDE;
-    void abort() Q_DECL_OVERRIDE;
-    qint64 bytesAvailable() const Q_DECL_OVERRIDE;
-    bool isSequential () const Q_DECL_OVERRIDE;
-    qint64 size() const Q_DECL_OVERRIDE;
-    qint64 readData(char*, qint64) Q_DECL_OVERRIDE;
-    void setReadBufferSize(qint64 size) Q_DECL_OVERRIDE;
-    bool canReadLine () const Q_DECL_OVERRIDE;
+    void close() override;
+    void abort() override;
+    qint64 bytesAvailable() const override;
+    bool isSequential () const override;
+    qint64 size() const override;
+    qint64 readData(char*, qint64) override;
+    void setReadBufferSize(qint64 size) override;
+    bool canReadLine () const override;
 
     Q_DECLARE_PRIVATE(QNetworkReplyHttpImpl)
     Q_PRIVATE_SLOT(d_func(), void _q_startOperation())
@@ -140,10 +141,10 @@ public:
 
 #ifndef QT_NO_SSL
 protected:
-    void ignoreSslErrors() Q_DECL_OVERRIDE;
-    void ignoreSslErrorsImplementation(const QList<QSslError> &errors) Q_DECL_OVERRIDE;
-    void setSslConfigurationImplementation(const QSslConfiguration &configuration) Q_DECL_OVERRIDE;
-    void sslConfigurationImplementation(QSslConfiguration &configuration) const Q_DECL_OVERRIDE;
+    void ignoreSslErrors() override;
+    void ignoreSslErrorsImplementation(const QList<QSslError> &errors) override;
+    void setSslConfigurationImplementation(const QSslConfiguration &configuration) override;
+    void sslConfigurationImplementation(QSslConfiguration &configuration) const override;
 #endif
 
 signals:
@@ -160,6 +161,10 @@ signals:
 
 class QNetworkReplyHttpImplPrivate: public QNetworkReplyPrivate
 {
+#if QT_CONFIG(bearermanagement)
+    bool startWaitForSession(QSharedPointer<QNetworkSession> &session);
+#endif
+
 public:
 
     static QHttpNetworkRequest::Priority convert(const QNetworkRequest::Priority& prio);
@@ -260,7 +265,7 @@ public:
 
 
 #ifndef QT_NO_SSL
-    QSslConfiguration sslConfiguration;
+    QScopedPointer<QSslConfiguration> sslConfiguration;
     bool pendingIgnoreAllSslErrors;
     QList<QSslError> pendingIgnoreSslErrorsList;
 #endif
@@ -290,7 +295,7 @@ public:
 #ifndef QT_NO_SSL
     void replyEncrypted();
     void replySslErrors(const QList<QSslError> &, bool *, QList<QSslError> *);
-    void replySslConfigurationChanged(const QSslConfiguration&);
+    void replySslConfigurationChanged(const QSslConfiguration &newSslConfiguration);
     void replyPreSharedKeyAuthenticationRequiredSlot(QSslPreSharedKeyAuthenticator *);
 #endif
 #ifndef QT_NO_NETWORKPROXY
@@ -309,7 +314,5 @@ public:
 };
 
 QT_END_NAMESPACE
-
-#endif // QT_NO_HTTP
 
 #endif

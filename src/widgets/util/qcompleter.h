@@ -47,10 +47,9 @@
 #include <QtCore/qabstractitemmodel.h>
 #include <QtCore/qrect.h>
 
+QT_REQUIRE_CONFIG(completer);
+
 QT_BEGIN_NAMESPACE
-
-
-#ifndef QT_NO_COMPLETER
 
 class QCompleterPrivate;
 class QAbstractItemView;
@@ -83,10 +82,10 @@ public:
         CaseInsensitivelySortedModel
     };
 
-    QCompleter(QObject *parent = Q_NULLPTR);
-    QCompleter(QAbstractItemModel *model, QObject *parent = Q_NULLPTR);
-#ifndef QT_NO_STRINGLISTMODEL
-    QCompleter(const QStringList& completions, QObject *parent = Q_NULLPTR);
+    QCompleter(QObject *parent = nullptr);
+    QCompleter(QAbstractItemModel *model, QObject *parent = nullptr);
+#if QT_CONFIG(stringlistmodel)
+    QCompleter(const QStringList& completions, QObject *parent = nullptr);
 #endif
     ~QCompleter();
 
@@ -143,8 +142,8 @@ public:
     virtual QStringList splitPath(const QString &path) const;
 
 protected:
-    bool eventFilter(QObject *o, QEvent *e) Q_DECL_OVERRIDE;
-    bool event(QEvent *) Q_DECL_OVERRIDE;
+    bool eventFilter(QObject *o, QEvent *e) override;
+    bool event(QEvent *) override;
 
 Q_SIGNALS:
     void activated(const QString &text);
@@ -161,8 +160,6 @@ private:
     Q_PRIVATE_SLOT(d_func(), void _q_autoResizePopup())
     Q_PRIVATE_SLOT(d_func(), void _q_fileSystemModelDirectoryLoaded(const QString&))
 };
-
-#endif // QT_NO_COMPLETER
 
 QT_END_NAMESPACE
 

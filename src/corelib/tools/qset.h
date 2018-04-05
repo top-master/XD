@@ -131,6 +131,7 @@ public:
         inline iterator operator--(int) { iterator r = *this; --i; return r; }
         inline iterator operator+(int j) const { return i + j; }
         inline iterator operator-(int j) const { return i - j; }
+        friend inline iterator operator+(int j, iterator k) { return k + j; }
         inline iterator &operator+=(int j) { i += j; return *this; }
         inline iterator &operator-=(int j) { i -= j; return *this; }
     };
@@ -165,6 +166,7 @@ public:
         inline const_iterator operator--(int) { const_iterator r = *this; --i; return r; }
         inline const_iterator operator+(int j) const { return i + j; }
         inline const_iterator operator-(int j) const { return i - j; }
+        friend inline const_iterator operator+(int j, const_iterator k) { return k + j; }
         inline const_iterator &operator+=(int j) { i += j; return *this; }
         inline const_iterator &operator-=(int j) { i -= j; return *this; }
     };
@@ -340,13 +342,14 @@ Q_INLINE_TEMPLATE bool QSet<T>::intersects(const QSet<T> &other) const
 template <class T>
 Q_INLINE_TEMPLATE QSet<T> &QSet<T>::subtract(const QSet<T> &other)
 {
-    QSet<T> copy1(*this);
-    QSet<T> copy2(other);
-    typename QSet<T>::const_iterator i = copy1.constEnd();
-    while (i != copy1.constBegin()) {
-        --i;
-        if (copy2.contains(*i))
+    if (&other == this) {
+        clear();
+    } else {
+        auto i = other.constEnd();
+        while (i != other.constBegin()) {
+            --i;
             remove(*i);
+        }
     }
     return *this;
 }

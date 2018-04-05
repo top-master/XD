@@ -44,10 +44,10 @@
 #include "qscrollbar.h"
 #include "qstyle.h"
 #include "qstyleoption.h"
+#if QT_CONFIG(menu)
 #include "qmenu.h"
+#endif
 #include <QtCore/qelapsedtimer.h>
-
-#ifndef QT_NO_SCROLLBAR
 
 #ifndef QT_NO_ACCESSIBILITY
 #include "qaccessible.h"
@@ -186,15 +186,6 @@ QT_BEGIN_NAMESPACE
 
     Most GUI styles use the pageStep() value to calculate the size of the
     slider.
-
-    \table 100%
-    \row \li \inlineimage macintosh-horizontalscrollbar.png Screenshot of a Macintosh style scroll bar
-         \li A scroll bar shown in the \l{Macintosh Style Widget Gallery}{Macintosh widget style}.
-    \row \li \inlineimage windowsvista-horizontalscrollbar.png Screenshot of a Windows Vista style scroll bar
-         \li A scroll bar shown in the \l{Windows Vista Style Widget Gallery}{Windows Vista widget style}.
-    \row \li \inlineimage fusion-horizontalscrollbar.png Screenshot of a Fusion style scroll bar
-         \li A scroll bar shown in the \l{Fusion Style Widget Gallery}{Fusion widget style}.
-    \endtable
 
     \sa QScrollArea, QSlider, QDial, QSpinBox, {fowler}{GUI Design Handbook: Scroll Bar}, {Sliders Example}
 */
@@ -406,7 +397,7 @@ void QScrollBar::contextMenuEvent(QContextMenuEvent *event)
         return ;
     }
 
-#ifndef QT_NO_MENU
+#if QT_CONFIG(menu)
     bool horiz = HORIZONTAL;
     QPointer<QMenu> menu = new QMenu(this);
     QAction *actScrollHere = menu->addAction(tr("Scroll here"));
@@ -437,7 +428,7 @@ void QScrollBar::contextMenuEvent(QContextMenuEvent *event)
         triggerAction(QAbstractSlider::SliderSingleStepSub);
     else if (actionSelected == actScrollDn)
         triggerAction(QAbstractSlider::SliderSingleStepAdd);
-#endif // QT_NO_MENU
+#endif // QT_CONFIG(menu)
 }
 #endif // QT_NO_CONTEXTMENU
 
@@ -502,7 +493,7 @@ bool QScrollBar::event(QEvent *event)
 /*!
     \reimp
 */
-#ifndef QT_NO_WHEELEVENT
+#if QT_CONFIG(wheelevent)
 void QScrollBar::wheelEvent(QWheelEvent *event)
 {
     event->ignore();
@@ -737,5 +728,3 @@ Q_WIDGETS_EXPORT QStyleOptionSlider qt_qscrollbarStyleOption(QScrollBar *scrollb
 QT_END_NAMESPACE
 
 #include "moc_qscrollbar.cpp"
-
-#endif // QT_NO_SCROLLBAR

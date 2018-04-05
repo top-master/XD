@@ -46,7 +46,9 @@
 #include <qdebug.h>
 #include <qdrag.h>
 #include <qclipboard.h>
+#if QT_CONFIG(menu)
 #include <qmenu.h>
+#endif
 #include <qstyle.h>
 #include <qtimer.h>
 #include "private/qtextdocumentlayout_p.h"
@@ -62,8 +64,6 @@
 #include <limits.h>
 #include <qtexttable.h>
 #include <qvariant.h>
-
-#ifndef QT_NO_TEXTEDIT
 
 QT_BEGIN_NAMESPACE
 
@@ -364,7 +364,7 @@ void QPlainTextDocumentLayout::layoutBlock(const QTextBlock &block)
     int extraMargin = 0;
     if (option.flags() & QTextOption::AddSpaceForLineAndParagraphSeparators) {
         QFontMetrics fm(block.charFormat().font());
-        extraMargin += fm.width(QChar(0x21B5));
+        extraMargin += fm.horizontalAdvance(QChar(0x21B5));
     }
     tl->beginLayout();
     qreal availableWidth = d->width;
@@ -747,7 +747,8 @@ QPlainTextEditPrivate::QPlainTextEditPrivate()
       tabChangesFocus(false),
       lineWrap(QPlainTextEdit::WidgetWidth),
       wordWrap(QTextOption::WrapAtWordBoundaryOrAnywhere),
-      clickCausedFocus(0),topLine(0),topLineFracture(0),
+      clickCausedFocus(0), placeholderVisible(1),
+      topLine(0), topLineFracture(0),
       pageUpDownLastCursorYIsValid(false)
 {
     showCursorOnInitialShow = true;
@@ -784,6 +785,7 @@ void QPlainTextEditPrivate::init(const QString &txt)
     QObject::connect(control, SIGNAL(selectionChanged()), q, SIGNAL(selectionChanged()));
     QObject::connect(control, SIGNAL(cursorPositionChanged()), q, SLOT(_q_cursorPositionChanged()));
 
+    QObject::connect(control, SIGNAL(textChanged()), q, SLOT(_q_textChanged()));
     QObject::connect(control, SIGNAL(textChanged()), q, SLOT(updateMicroFocus()));
 
     // set a null page size initially to avoid any relayouting until the textedit
@@ -814,6 +816,24 @@ void QPlainTextEditPrivate::init(const QString &txt)
 #if 0 // Used to be included in Qt4 for Q_WS_WIN
     setSingleFingerPanEnabled(true);
 #endif
+}
+
+void QPlainTextEditPrivate::_q_textChanged()
+{
+    Q_Q(QPlainTextEdit);
+
+    // We normally only repaint the part of view that contains text in the
+    // document that has changed (in _q_repaintContents). But the placeholder
+    // text is not a part of the document, but is drawn on separately. So whenever
+    // we either show or hide the placeholder text, we issue a full update.
+    bool placeholderCurrentyVisible = placeholderVisible;
+
+    placeholderVisible = !placeholderText.isEmpty()
+            && q->document()->isEmpty()
+            && q->firstVisibleBlock().layout()->preeditAreaText().isEmpty();
+
+    if (placeholderCurrentyVisible != placeholderVisible)
+        viewport->update();
 }
 
 void QPlainTextEditPrivate::_q_repaintContents(const QRectF &contentsRect)
@@ -947,7 +967,7 @@ void QPlainTextEditPrivate::pageUpDown(QTextCursor::MoveOperation op, QTextCurso
     }
 }
 
-#ifndef QT_NO_SCROLLBAR
+#if QT_CONFIG(scrollbar)
 
 void QPlainTextEditPrivate::_q_adjustScrollbars()
 {
@@ -1881,6 +1901,7 @@ static void fillBackground(QPainter *p, const QRectF &rect, QBrush brush, const 
 */
 void QPlainTextEdit::paintEvent(QPaintEvent *e)
 {
+    Q_D(QPlainTextEdit);
     QPainter painter(viewport());
     Q_ASSERT(qobject_cast<QPlainTextDocumentLayout*>(document()->documentLayout()));
 
@@ -1903,6 +1924,15 @@ void QPlainTextEdit::paintEvent(QPaintEvent *e)
     er.setRight(qMin(er.right(), maxX));
     painter.setClipRect(er);
 
+    if (d->placeholderVisible) {
+        QColor col = d->control->palette().text().color();
+        col.setAlpha(128);
+        painter.setPen(col);
+        painter.setClipRect(e->rect());
+        const int margin = int(document()->documentMargin());
+        QRectF textRect = viewportRect.adjusted(margin, margin, 0, 0);
+        painter.drawText(textRect, Qt::AlignTop | Qt::TextWordWrap, placeholderText());
+    }
 
     QAbstractTextDocumentLayout::PaintContext context = getPaintContext();
 
@@ -1977,17 +2007,8 @@ void QPlainTextEdit::paintEvent(QPaintEvent *e)
                 }
             }
 
+            layout->draw(&painter, offset, selections, er);
 
-            if (!placeholderText().isEmpty() && document()->isEmpty()) {
-              Q_D(QPlainTextEdit);
-              QColor col = d->control->palette().text().color();
-              col.setAlpha(128);
-              painter.setPen(col);
-              const int margin = int(document()->documentMargin());
-              painter.drawText(r.adjusted(margin, 0, 0, 0), Qt::AlignTop | Qt::TextWordWrap, placeholderText());
-            } else {
-              layout->draw(&painter, offset, selections, er);
-            }
             if ((drawCursor && !drawCursorAsBlock)
                 || (editable && context.cursorPosition < -1
                     && !layout->preeditAreaText().isEmpty())) {
@@ -2296,7 +2317,7 @@ void QPlainTextEdit::changeEvent(QEvent *e)
 
 /*! \reimp
 */
-#ifndef QT_NO_WHEELEVENT
+#if QT_CONFIG(wheelevent)
 void QPlainTextEdit::wheelEvent(QWheelEvent *e)
 {
     Q_D(QPlainTextEdit);
@@ -2453,28 +2474,50 @@ void QPlainTextEdit::setOverwriteMode(bool overwrite)
     d->control->setOverwriteMode(overwrite);
 }
 
+#if QT_DEPRECATED_SINCE(5, 10)
 /*!
     \property QPlainTextEdit::tabStopWidth
     \brief the tab stop width in pixels
+    \deprecated in Qt 5.10. Use tabStopDistance instead.
 
     By default, this property contains a value of 80.
 */
 
 int QPlainTextEdit::tabStopWidth() const
 {
-    Q_D(const QPlainTextEdit);
-    return qRound(d->control->document()->defaultTextOption().tabStop());
+    return qRound(tabStopDistance());
 }
 
 void QPlainTextEdit::setTabStopWidth(int width)
 {
+    setTabStopDistance(width);
+}
+#endif
+
+/*!
+    \property QPlainTextEdit::tabStopDistance
+    \brief the tab stop distance in pixels
+    \since 5.10
+
+    By default, this property contains a value of 80.
+*/
+
+qreal QPlainTextEdit::tabStopDistance() const
+{
+    Q_D(const QPlainTextEdit);
+    return d->control->document()->defaultTextOption().tabStopDistance();
+}
+
+void QPlainTextEdit::setTabStopDistance(qreal distance)
+{
     Q_D(QPlainTextEdit);
     QTextOption opt = d->control->document()->defaultTextOption();
-    if (opt.tabStop() == width || width < 0)
+    if (opt.tabStopDistance() == distance || distance < 0)
         return;
-    opt.setTabStop(width);
+    opt.setTabStopDistance(distance);
     d->control->document()->setDefaultTextOption(opt);
 }
+
 
 /*!
     \property QPlainTextEdit::cursorWidth
@@ -3194,5 +3237,3 @@ QT_END_NAMESPACE
 
 #include "moc_qplaintextedit.cpp"
 #include "moc_qplaintextedit_p.cpp"
-
-#endif // QT_NO_TEXTEDIT

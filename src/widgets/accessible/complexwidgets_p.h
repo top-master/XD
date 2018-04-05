@@ -54,7 +54,9 @@
 #include <QtWidgets/private/qtwidgetsglobal_p.h>
 #include <QtCore/qpointer.h>
 #include <QtWidgets/qaccessiblewidget.h>
+#if QT_CONFIG(itemviews)
 #include <QtWidgets/qabstractitemview.h>
+#endif
 
 QT_BEGIN_NAMESPACE
 
@@ -68,7 +70,7 @@ class QTitleBar;
 class QAbstractScrollArea;
 class QScrollArea;
 
-#ifndef QT_NO_SCROLLAREA
+#if QT_CONFIG(scrollarea)
 class QAccessibleAbstractScrollArea : public QAccessibleWidget
 {
 public:
@@ -83,11 +85,11 @@ public:
         Undefined
     };
 
-    QAccessibleInterface *child(int index) const Q_DECL_OVERRIDE;
-    int childCount() const Q_DECL_OVERRIDE;
-    int indexOfChild(const QAccessibleInterface *child) const Q_DECL_OVERRIDE;
-    bool isValid() const Q_DECL_OVERRIDE;
-    QAccessibleInterface *childAt(int x, int y) const Q_DECL_OVERRIDE;
+    QAccessibleInterface *child(int index) const override;
+    int childCount() const override;
+    int indexOfChild(const QAccessibleInterface *child) const override;
+    bool isValid() const override;
+    QAccessibleInterface *childAt(int x, int y) const override;
 
 //protected:
     QAbstractScrollArea *abstractScrollArea() const;
@@ -103,50 +105,50 @@ class QAccessibleScrollArea : public QAccessibleAbstractScrollArea
 public:
     explicit QAccessibleScrollArea(QWidget *widget);
 };
-#endif // QT_NO_SCROLLAREA
+#endif // QT_CONFIG(scrollarea)
 
-#ifndef QT_NO_TABBAR
+#if QT_CONFIG(tabbar)
 class QAccessibleTabBar : public QAccessibleWidget
 {
 public:
     explicit QAccessibleTabBar(QWidget *w);
     ~QAccessibleTabBar();
 
-    int childCount() const Q_DECL_OVERRIDE;
-    QString text(QAccessible::Text t) const Q_DECL_OVERRIDE;
+    int childCount() const override;
+    QString text(QAccessible::Text t) const override;
 
-    QAccessibleInterface* child(int index) const Q_DECL_OVERRIDE;
-    int indexOfChild(const QAccessibleInterface *child) const Q_DECL_OVERRIDE;
+    QAccessibleInterface* child(int index) const override;
+    int indexOfChild(const QAccessibleInterface *child) const override;
 
 protected:
     QTabBar *tabBar() const;
     mutable QHash<int, QAccessible::Id> m_childInterfaces;
 };
-#endif // QT_NO_TABBAR
+#endif // QT_CONFIG(tabbar)
 
-#ifndef QT_NO_COMBOBOX
+#if QT_CONFIG(combobox)
 class QAccessibleComboBox : public QAccessibleWidget
 {
 public:
     explicit QAccessibleComboBox(QWidget *w);
 
-    int childCount() const Q_DECL_OVERRIDE;
-    QAccessibleInterface *childAt(int x, int y) const Q_DECL_OVERRIDE;
-    int indexOfChild(const QAccessibleInterface *child) const Q_DECL_OVERRIDE;
-    QAccessibleInterface* child(int index) const Q_DECL_OVERRIDE;
+    int childCount() const override;
+    QAccessibleInterface *childAt(int x, int y) const override;
+    int indexOfChild(const QAccessibleInterface *child) const override;
+    QAccessibleInterface* child(int index) const override;
 
-    QString text(QAccessible::Text t) const Q_DECL_OVERRIDE;
+    QString text(QAccessible::Text t) const override;
 
     // QAccessibleActionInterface
-    QStringList actionNames() const Q_DECL_OVERRIDE;
-    QString localizedActionDescription(const QString &actionName) const Q_DECL_OVERRIDE;
-    void doAction(const QString &actionName) Q_DECL_OVERRIDE;
-    QStringList keyBindingsForAction(const QString &actionName) const Q_DECL_OVERRIDE;
+    QStringList actionNames() const override;
+    QString localizedActionDescription(const QString &actionName) const override;
+    void doAction(const QString &actionName) override;
+    QStringList keyBindingsForAction(const QString &actionName) const override;
 
 protected:
     QComboBox *comboBox() const;
 };
-#endif // QT_NO_COMBOBOX
+#endif // QT_CONFIG(combobox)
 
 #endif // QT_NO_ACCESSIBILITY
 

@@ -559,6 +559,9 @@ void Moc::parse()
                     if (test(EQ)) {
                         // namespace Foo = Bar::Baz;
                         until(SEMIC);
+                    } else if (test(LPAREN)) {
+                        // Ignore invalid code such as: 'namespace __identifier("x")' (QTBUG-56634)
+                        until(RPAREN);
                     } else if (!test(SEMIC)) {
                         NamespaceDef def;
                         def.classname = nsName;
@@ -671,6 +674,9 @@ void Moc::parse()
                 if (test(NAMESPACE)) {
                     while (test(SCOPE) || test(IDENTIFIER))
                         ;
+                    // Ignore invalid code such as: 'using namespace __identifier("x")' (QTBUG-63772)
+                    if (test(LPAREN))
+                        until(RPAREN);
                     next(SEMIC);
                 }
                 break;
@@ -1727,9 +1733,13 @@ void Moc::checkProperties(ClassDef *cdef)
             }
             p.notifyId = notifyId;
             if (notifyId == -1) {
-                QByteArray msg = "NOTIFY signal '" + p.notify + "' of property '" + p.name
-                        + "' does not exist in class " + cdef->classname + ".";
-                error(msg.constData());
+                int index = cdef->nonClassSignalList.indexOf(p.notify);
+                if (index == -1) {
+                    cdef->nonClassSignalList << p.notify;
+                    p.notifyId = -1 - cdef->nonClassSignalList.count();
+                } else {
+                    p.notifyId = -2 - index;
+                }
             }
         }
     }

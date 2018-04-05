@@ -1,6 +1,6 @@
 /****************************************************************************
 **
-** Copyright (C) 2016 The Qt Company Ltd.
+** Copyright (C) 2017 The Qt Company Ltd.
 ** Contact: https://www.qt.io/licensing/
 **
 ** This file is part of the documentation of the Qt Toolkit.
@@ -939,6 +939,8 @@
             order in which they are given.
     \row    \li precompile_header \li Enables support for the use of
             \l{Using Precompiled Headers}{precompiled headers} in projects.
+    \row    \li precompile_header_c (MSVC only) \li Enables support for the use of
+            \l{Using Precompiled Headers}{precompiled headers} for C files.
     \row    \li warn_on  \li The compiler should output as many warnings as possible.
             If \c warn_off is also specified, the last one takes effect.
     \row    \li warn_off \li The compiler should output as few warnings as possible.
@@ -1323,6 +1325,30 @@
     For example:
 
     \snippet code/doc_src_qmake-manual.pro 40
+
+    \target OBJECTIVE_HEADERS
+    \section1 OBJECTIVE_HEADERS
+
+    Defines the Objective-C++ header files for the project.
+
+    qmake automatically detects whether \l{moc} is required by the classes in the
+    headers, and adds the appropriate dependencies and files to the project for
+    generating and linking the moc files.
+
+    This is similar to the HEADERS variable, but will let the generated moc
+    files be compiled with the Objective-C++ compiler.
+
+    See also \l{#OBJECTIVE_SOURCES}{OBJECTIVE_SOURCES}.
+
+    \target OBJECTIVE_SOURCES
+    \section1 OBJECTIVE_SOURCES
+
+    Specifies the names of all Objective-C/C++ source files in the project.
+
+    This variable is now obsolete, Objective-C/C++ files (.m and .mm) can be
+    added to the \l{#SOURCES}{SOURCES} variable.
+
+    See also \l{#OBJECTIVE_HEADERS}{OBJECTIVE_HEADERS}.
 
     \target OBJECTS
     \section1 OBJECTS
@@ -1797,9 +1823,55 @@
     Specifies the name of the property list file, \c{.plist}, you
     would like to include in your \macos, iOS, tvOS, and watchOS application bundle.
 
-    In the \c{.plist} file, you can define some variables, e.g., @EXECUTABLE@,
-    which qmake will replace with the actual executable name. Other variables
-    include @ICON@, @TYPEINFO@, @LIBRARY@, and @SHORT_VERSION@.
+    In the \c{.plist} file, you can define some variables which
+    qmake will replace with the relevant values:
+
+    \table
+    \header
+        \li Placeholder(s)
+        \li Effect
+    \row
+        \li \c ${PRODUCT_BUNDLE_IDENTIFIER}, \c @BUNDLEIDENTIFIER@
+        \li Expands to the target bundle's bundle identifier string,
+            for example: \c{com.example.myapp}. Determined by concatenating the
+            values of QMAKE_TARGET_BUNDLE_PREFIX and QMAKE_BUNDLE, separated
+            by a full stop (\c{.}).
+    \row
+        \li \c ${EXECUTABLE_NAME}, \c @EXECUTABLE@, \c @LIBRARY@
+        \li Equivalent to the value of QMAKE_APPLICATION_BUNDLE_NAME,
+            QMAKE_PLUGIN_BUNDLE_NAME, or QMAKE_FRAMEWORK_BUNDLE_NAME
+            (depending on the type of target being created),
+            or TARGET if none of the previous values are set.
+    \row
+        \li \c ${ASSETCATALOG_COMPILER_APPICON_NAME}, \c @ICON@
+        \li Expands to the value of ICON.
+    \row
+        \li \c ${QMAKE_PKGINFO_TYPEINFO}, \c @TYPEINFO@
+        \li Expands to the value of QMAKE_PKGINFO_TYPEINFO.
+    \row
+        \li \c ${QMAKE_FULL_VERSION}, \c @FULL_VERSION@
+        \li Expands to the value of VERSION expressed with three version components.
+    \row
+        \li \c ${QMAKE_SHORT_VERSION}, \c @SHORT_VERSION@
+        \li Expands to the value of VERSION expressed with two version components.
+    \row
+        \li \c ${MACOSX_DEPLOYMENT_TARGET}
+        \li Expands to the value of QMAKE_MACOSX_DEPLOYMENT_TARGET.
+    \row
+        \li \c ${IPHONEOS_DEPLOYMENT_TARGET}
+        \li Expands to the value of QMAKE_IPHONEOS_DEPLOYMENT_TARGET.
+    \row
+        \li \c ${TVOS_DEPLOYMENT_TARGET}
+        \li Expands to the value of QMAKE_TVOS_DEPLOYMENT_TARGET.
+    \row
+        \li \c ${WATCHOS_DEPLOYMENT_TARGET}
+        \li Expands to the value of QMAKE_WATCHOS_DEPLOYMENT_TARGET.
+    \endtable
+
+    \note When using the Xcode generator, the above \c{${var}}-style
+    placeholders are replaced directly by the Xcode build system and are not
+    handled by qmake. The \c{@var@} style placeholders work only with the qmake
+    Makefile generators and not with the Xcode generator.
 
     If building for iOS, and the \c{.plist} file contains the key
     \c NSPhotoLibraryUsageDescription, qmake will include an additional plugin
@@ -1808,6 +1880,14 @@
     documentation from Apple for more information regarding this key.
 
     \note Most of the time, the default \c{Info.plist} is good enough.
+
+    \section1 QMAKE_IOS_DEPLOYMENT_TARGET
+
+    \note This variable is used on the iOS platform only.
+
+    Specifies the hard minimum version of iOS that the application supports.
+
+    For more information, see \l {Expressing Supported iOS Versions}.
 
     \section1 QMAKE_LFLAGS
 
@@ -2101,12 +2181,11 @@
 
     \section1 QMAKE_MACOSX_DEPLOYMENT_TARGET
 
-    This variable only takes effect when building on \macos. On that
-    platform, the variable will be forwarded to the MACOSX_DEPLOYMENT_TARGET
-    environment variable, which is interpreted by the compiler or linker.
-    For more information, see the
-    \l{Qt for macOS - Deployment#macOS Version Dependencies}{Deploying
-    an Application on \macos} document.
+    \note This variable is used on the \macos platform only.
+
+    Specifies the hard minimum version of \macos that the application supports.
+
+    For more information, see \l{macOS Version Dependencies}.
 
     \section1 QMAKE_MAKEFILE
 
@@ -2251,10 +2330,37 @@
     This is only utilized if the \l{VERSION} or \l{RC_ICONS} variable is set
     and the \l{RC_FILE} and \l{RES_FILE} variables are not set.
 
+    \section1 QMAKE_TVOS_DEPLOYMENT_TARGET
+
+    \note This variable is used on the tvOS platform only.
+
+    Specifies the hard minimum version of tvOS that the application supports.
+
+    For more information, see \l {Expressing Supported iOS Versions}.
+
+    \section1 QMAKE_UIC_FLAGS
+
+    This variable is used to customize the list of options passed to the
+    \l{uic}{User Interface Compiler} in each of the build rules where it is
+    used. For example, \c{-no-stringliteral} can be passed to use QLatin1String
+    instead of QStringLiteral in generated code (which is the default for
+    dynamic libraries).
+
+    \section1 QMAKE_WATCHOS_DEPLOYMENT_TARGET
+
+    \note This variable is used on the watchOS platform only.
+
+    Specifies the hard minimum version of watchOS that the application supports.
+
+    For more information, see \l {Expressing Supported iOS Versions}.
+
     \section1 QT
 
     Specifies the \l{All Modules}{Qt modules} that are used by your project. For
     the value to add for each module, see the module documentation.
+
+    At the C++ implementation level, using a Qt module makes its headers
+    available for inclusion and causes it to be linked to the binary.
 
     By default, \c QT contains \c core and \c gui, ensuring that standard
     GUI applications can be built without further configuration.
@@ -2807,7 +2913,8 @@
     Returns the absolute path of \c path.
 
     If \c base is not specified, uses the current directory as the base
-    directory.
+    directory.  If it is a relative path, it is resolved relative to the current
+    directory before use.
 
     For example, the following call returns the string
     \c {"/home/johndoe/myproject/readme.txt"}:
@@ -3046,9 +3153,15 @@
 
     \section2 relative_path(filePath[, base])
 
-    Returns the path to \c filePath relative to \c base. If \c base is not
-    specified, it is the current project directory. This function is a wrapper
-    around QDir::relativeFilePath.
+    Returns the path to \c filePath relative to \c base.
+
+    If \c base is not specified, it is the current project
+    directory. If it is relative, it is resolved relative to the
+    current project directory before use.
+
+    If \c filePath is relative, it is first resolved against the base
+    directory; in that case, this function effectively acts as
+    $$clean_path().
 
     See also \l{absolute_path(path[, base])}{absolute_path()},
     \l{clean_path(path)}{clean_path()}.
@@ -3064,11 +3177,6 @@
     prints the message:
 
     \snippet code/doc_src_qmake-manual.pro 70
-
-    \section2 sprintf(string, arguments...)
-
-    Replaces %1-%9 with the arguments passed in the comma-separated list
-    of function \c arguments and returns the processed string.
 
     \section2 resolve_depends(variablename, prefix)
 
@@ -3135,6 +3243,11 @@
     For example:
 
     \snippet code/doc_src_qmake-manual.pro 168
+
+    \section2 sprintf(string, arguments...)
+
+    Replaces %1-%9 in \c string with the arguments passed in the comma-separated
+    list of function \c arguments and returns the processed string.
 
     \target str_member()
     \section2 str_member(arg [, start [, end]])
@@ -3203,7 +3316,7 @@
 
     \section2 system_quote(arg)
 
-    Quotes \c arg for the for the shell that is used by the \c{system()}
+    Quotes \c arg for the shell that is used by the \c{system()}
     functions.
 
     See also \l{shell_quote(arg)}{shell_quote()}.
@@ -3534,6 +3647,20 @@
 
     \snippet code/doc_src_qmake-manual.pro 169
 
+    \section2 versionAtLeast(variablename, versionNumber)
+
+    Tests that the version number from \c variablename is greater than or equal
+    to \c versionNumber. The version number is considered to be a sequence of
+    non-negative decimal numbers delimited by '.'; any non-numerical tail of
+    the string will be ignored. Comparison is performed segment-wise from left
+    to right; if one version is a prefix of the other, it is considered smaller.
+
+    \section2 versionAtMost(variablename, versionNumber)
+
+    Tests that the version number from \c variablename is less than or equal to
+    \c versionNumber. Works as
+    \l{versionAtLeast(variablename, versionNumber)}{versionAtLeast()}.
+
     \section2 warning(string)
 
     Always succeeds, and displays \c string as a warning message to the user.
@@ -3731,8 +3858,8 @@
        compiled (see QLibraryInfo::DataPath).
     \endlist
 
-    \note The \c QMAKESPEC path will automatically be added to the
-    \l{INCLUDEPATH} system variable.
+    \note The \c QMAKESPEC path will be automatically added to the generated
+    Makefile after the contents of the \l{INCLUDEPATH} system variable.
 
     \target cache
     \section1 Cache File
@@ -4507,6 +4634,11 @@
     For example:
 
     \snippet code/doc_src_qmake-manual.pro 106
+
+    To use the precompiled header also for C files on MSVC nmake target, add
+    \c precompile_header_c to the \l{CONFIG} variable. If the header is
+    used also for C++ and it contains C++ keywords/includes, enclose them
+    with \c{#ifdef __cplusplus}).
 
     \section1 Notes on Possible Issues
 

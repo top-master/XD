@@ -53,7 +53,6 @@
 
 #include <QtWidgets/private/qtwidgetsglobal_p.h>
 
-#ifndef QT_NO_WIZARD
 #if QT_CONFIG(style_windowsvista)
 
 #include <qobject.h>
@@ -62,6 +61,8 @@
 #include <QtWidgets/private/qwidget_p.h>
 #include <QtWidgets/private/qstylehelper_p.h>
 #include <qt_windows.h>
+
+QT_REQUIRE_CONFIG(wizard);
 
 QT_BEGIN_NAMESPACE
 
@@ -103,8 +104,7 @@ public:
     static int titleBarSize() { return QVistaHelper::titleBarSizeDp() / QVistaHelper::m_devicePixelRatio; }
     static int titleBarSizeDp() { return QVistaHelper::frameSizeDp() + QVistaHelper::captionSizeDp(); }
     static int topPadding() { // padding under text
-        return int(QStyleHelper::dpiScaled(
-                QSysInfo::WindowsVersion >= QSysInfo::WV_WINDOWS7 ? 4 : 6));
+        return int(QStyleHelper::dpiScaled(4));
     }
     static int topOffset();
 
@@ -149,7 +149,6 @@ private:
 
     int titleBarOffset;  // Extra spacing above the text
     int iconSpacing;    // Space between button and icon
-    int textSpacing;    // Space between icon and text
     static int m_devicePixelRatio;
 };
 
@@ -157,5 +156,4 @@ private:
 QT_END_NAMESPACE
 
 #endif // style_windowsvista
-#endif // QT_NO_WIZARD
 #endif // QWIZARD_WIN_P_H

@@ -53,7 +53,6 @@
 
 #include <QtWidgets/private/qtwidgetsglobal_p.h>
 
-#ifndef QT_NO_LINEEDIT
 #include "private/qwidget_p.h"
 #include "QtWidgets/qlineedit.h"
 #include "QtGui/qtextlayout.h"
@@ -62,7 +61,9 @@
 #include "QtGui/qclipboard.h"
 #include "QtGui/qinputmethod.h"
 #include "QtCore/qpoint.h"
+#if QT_CONFIG(completer)
 #include "QtWidgets/qcompleter.h"
+#endif
 #include "QtCore/qthread.h"
 #include "QtGui/private/qinputcontrol_p.h"
 
@@ -74,8 +75,9 @@
 #  undef DrawText
 #endif
 
-QT_BEGIN_NAMESPACE
+QT_REQUIRE_CONFIG(lineedit);
 
+QT_BEGIN_NAMESPACE
 
 class Q_WIDGETS_EXPORT QWidgetLineControl : public QInputControl
 {
@@ -250,6 +252,11 @@ public:
 
     QString displayText() const { return m_textLayout.text(); }
 
+    QString surroundingText() const
+    {
+        return m_text.isNull() ? QString::fromLatin1("") : m_text;
+    }
+
     void backspace();
     void del();
     void deselect() { internalDeselect(); finishChange(); }
@@ -284,7 +291,7 @@ public:
     void setValidator(const QValidator *v) { m_validator = const_cast<QValidator*>(v); }
 #endif
 
-#ifndef QT_NO_COMPLETER
+#if QT_CONFIG(completer)
     QCompleter *completer() const { return m_completer; }
     /* Note that you must set the widget for the completer separately */
     void setCompleter(const QCompleter *c) { m_completer = const_cast<QCompleter*>(c); }
@@ -456,7 +463,7 @@ private:
     QPointer<QValidator> m_validator;
 #endif
     QPointer<QCompleter> m_completer;
-#ifndef QT_NO_COMPLETER
+#if QT_CONFIG(completer)
     bool advanceToEnabledItem(int dir);
 #endif
 
@@ -493,8 +500,8 @@ private:
     void parseInputMask(const QString &maskFields);
     bool isValidInput(QChar key, QChar mask) const;
     bool hasAcceptableInput(const QString &text) const;
-    QString maskString(uint pos, const QString &str, bool clear = false) const;
-    QString clearString(uint pos, uint len) const;
+    QString maskString(int pos, const QString &str, bool clear = false) const;
+    QString clearString(int pos, int len) const;
     QString stripString(const QString &str) const;
     int findInMask(int pos, bool forward, bool findSeparator, QChar searchChar = QChar()) const;
 
@@ -543,7 +550,7 @@ Q_SIGNALS:
     void editFocusChange(bool);
 #endif
 protected:
-    virtual void timerEvent(QTimerEvent *event) Q_DECL_OVERRIDE;
+    virtual void timerEvent(QTimerEvent *event) override;
 
 private Q_SLOTS:
     void _q_deleteSelected();
@@ -556,7 +563,5 @@ private:
 };
 
 QT_END_NAMESPACE
-
-#endif // QT_NO_LINEEDIT
 
 #endif // QWIDGETLINECONTROL_P_H

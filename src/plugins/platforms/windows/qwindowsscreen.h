@@ -113,6 +113,8 @@ public:
 
     const QWindowsScreenData &data() const  { return m_data; }
 
+    static QRect virtualGeometry(const QPlatformScreen *screen);
+
 private:
     QWindowsScreenData m_data;
 #ifndef QT_NO_CURSOR
@@ -134,6 +136,7 @@ public:
     const WindowsScreenList &screens() const { return m_screens; }
 
     const QWindowsScreen *screenAtDp(const QPoint &p) const;
+    const QWindowsScreen *screenForHwnd(HWND hwnd) const;
 
 private:
     void removeScreen(int index);

@@ -67,10 +67,11 @@
 #include <private/qhttpnetworkheader_p.h>
 #include <private/qhttpnetworkrequest_p.h>
 #include <private/qhttpnetworkreply_p.h>
+#include <private/http2protocol_p.h>
 
 #include <private/qhttpnetworkconnectionchannel_p.h>
 
-#ifndef QT_NO_HTTP
+QT_REQUIRE_CONFIG(http);
 
 QT_BEGIN_NAMESPACE
 
@@ -93,7 +94,8 @@ public:
     enum ConnectionType {
         ConnectionTypeHTTP,
         ConnectionTypeSPDY,
-        ConnectionTypeHTTP2
+        ConnectionTypeHTTP2,
+        ConnectionTypeHTTP2Direct
     };
 
 #ifndef QT_NO_BEARERMANAGEMENT
@@ -122,6 +124,7 @@ public:
 
     //add a new HTTP request through this connection
     QHttpNetworkReply* sendRequest(const QHttpNetworkRequest &request);
+    void fillHttp2Queue();
 
 #ifndef QT_NO_NETWORKPROXY
     //set the proxy for this connection
@@ -137,6 +140,9 @@ public:
 
     ConnectionType connectionType();
     void setConnectionType(ConnectionType type);
+
+    Http2::ProtocolParameters http2Parameters() const;
+    void setHttp2Parameters(const Http2::ProtocolParameters &params);
 
 #ifndef QT_NO_SSL
     void setSslConfiguration(const QSslConfiguration &config);
@@ -208,6 +214,7 @@ public:
 
     QHttpNetworkReply *queueRequest(const QHttpNetworkRequest &request);
     void requeueRequest(const HttpMessagePair &pair); // e.g. after pipeline broke
+    void fillHttp2Queue();
     bool dequeueRequest(QAbstractSocket *socket);
     void prepareRequest(HttpMessagePair &request);
     void updateChannel(int i, const HttpMessagePair &messagePair);
@@ -280,13 +287,13 @@ public:
     QSharedPointer<QNetworkSession> networkSession;
 #endif
 
+    Http2::ProtocolParameters http2Parameters;
+
     friend class QHttpNetworkConnectionChannel;
 };
 
 
 
 QT_END_NAMESPACE
-
-#endif // QT_NO_HTTP
 
 #endif

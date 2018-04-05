@@ -39,7 +39,6 @@
 
 #import <UIKit/UIKit.h>
 
-#include <QtCore/qoperatingsystemversion.h>
 #include <QtGui/qwindow.h>
 #include <QtGui/private/qguiapplication_p.h>
 #include <qpa/qplatformtheme.h>
@@ -49,7 +48,7 @@
 #include "qiosmessagedialog.h"
 
 QIOSMessageDialog::QIOSMessageDialog()
-    : m_alertController(Q_NULLPTR)
+    : m_alertController(nullptr)
 {
 }
 
@@ -109,8 +108,7 @@ bool QIOSMessageDialog::show(Qt::WindowFlags windowFlags, Qt::WindowModality win
     Q_UNUSED(windowFlags);
     if (m_alertController // Ensure that the dialog is not showing already
             || !options() // Some message dialogs don't have options (QErrorMessage)
-            || windowModality == Qt::NonModal // We can only do modal dialogs
-            || QOperatingSystemVersion::current() < QOperatingSystemVersion(QOperatingSystemVersion::IOS, 8)) // API limitation
+            || windowModality == Qt::NonModal) // We can only do modal dialogs
         return false;
 
     m_alertController = [[UIAlertController
@@ -138,5 +136,5 @@ void QIOSMessageDialog::hide()
     m_eventLoop.exit();
     [m_alertController dismissViewControllerAnimated:YES completion:nil];
     [m_alertController release];
-    m_alertController = Q_NULLPTR;
+    m_alertController = nullptr;
 }

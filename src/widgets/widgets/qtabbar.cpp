@@ -38,7 +38,9 @@
 ****************************************************************************/
 
 #include "private/qlayoutengine_p.h"
+#if QT_CONFIG(itemviews)
 #include "qabstractitemdelegate.h"
+#endif
 #include "qapplication.h"
 #include "qbitmap.h"
 #include "qcursor.h"
@@ -47,9 +49,13 @@
 #include "qstyle.h"
 #include "qstyleoption.h"
 #include "qstylepainter.h"
+#if QT_CONFIG(tabwidget)
 #include "qtabwidget.h"
+#endif
 #include "qtooltip.h"
+#if QT_CONFIG(whatsthis)
 #include "qwhatsthis.h"
+#endif
 #include "private/qtextengine_p.h"
 #ifndef QT_NO_ACCESSIBILITY
 #include "qaccessible.h"
@@ -60,8 +66,6 @@
 
 #include "qdebug.h"
 #include "private/qtabbar_p.h"
-
-#ifndef QT_NO_TABBAR
 
 #if 0 // Used to be included in Qt4 for Q_WS_MAC
 #include <private/qt_mac_p.h>
@@ -176,10 +180,6 @@ void QTabBarPrivate::initBasicStyleOption(QStyleOptionTab *option, int tabIndex)
 
     if (tab.textColor.isValid())
         option->palette.setColor(q->foregroundRole(), tab.textColor);
-    else if (q->style()->inherits("QMacStyle")
-             && isCurrent && !documentMode && q->isActiveWindow()) {
-        option->palette.setColor(QPalette::WindowText, Qt::white);
-    }
     option->icon = tab.icon;
     option->iconSize = q->iconSize();  // Will get the default value then.
 
@@ -207,7 +207,7 @@ void QTabBarPrivate::initBasicStyleOption(QStyleOptionTab *option, int tabIndex)
         option->position = QStyleOptionTab::Middle;
     }
 
-#ifndef QT_NO_TABWIDGET
+#if QT_CONFIG(tabwidget)
     if (const QTabWidget *tw = qobject_cast<const QTabWidget *>(q->parentWidget())) {
         option->features |= QStyleOptionTab::HasFrame;
         if (tw->cornerWidget(Qt::TopLeftCorner) || tw->cornerWidget(Qt::BottomLeftCorner))
@@ -302,7 +302,7 @@ void QTabBar::initStyleOption(QStyleOptionTab *option, int tabIndex) const
 
     \table 100%
     \row \li \inlineimage fusion-tabbar.png Screenshot of a Fusion style tab bar
-         \li A tab bar shown in the Fusion widget style.
+         \li A tab bar shown in the \l{Qt Widget Gallery}{Fusion widget style}.
     \row \li \inlineimage fusion-tabbar-truncated.png Screenshot of a truncated Fusion tab bar
          \li A truncated tab bar shown in the Fusion widget style.
     \endtable
@@ -451,9 +451,10 @@ void QTabBarPrivate::layoutTabs()
     QVector<QLayoutStruct> tabChain(tabList.count() + 2);
 
     // We put an empty item at the front and back and set its expansive attribute
-    // depending on tabAlignment.
+    // depending on tabAlignment and expanding.
     tabChain[tabChainIndex].init();
-    tabChain[tabChainIndex].expansive = (tabAlignment != Qt::AlignLeft)
+    tabChain[tabChainIndex].expansive = (!expanding)
+                                        && (tabAlignment != Qt::AlignLeft)
                                         && (tabAlignment != Qt::AlignJustify);
     tabChain[tabChainIndex].empty = true;
     ++tabChainIndex;
@@ -518,13 +519,12 @@ void QTabBarPrivate::layoutTabs()
         maxExtent = maxWidth;
     }
 
-    if (!expanding) {
-        // Mirror our front item.
-        tabChain[tabChainIndex].init();
-        tabChain[tabChainIndex].expansive = (tabAlignment != Qt::AlignRight)
-                                            && (tabAlignment != Qt::AlignJustify);
-        tabChain[tabChainIndex].empty = true;
-    }
+    // Mirror our front item.
+    tabChain[tabChainIndex].init();
+    tabChain[tabChainIndex].expansive = (!expanding)
+                                        && (tabAlignment != Qt::AlignRight)
+                                        && (tabAlignment != Qt::AlignJustify);
+    tabChain[tabChainIndex].empty = true;
     Q_ASSERT(tabChainIndex == tabChain.count() - 1); // add an assert just to make sure.
 
     // Do the calculation
@@ -1034,7 +1034,7 @@ void QTabBar::removeTab(int index)
                         newIndex--;
                     if (d->validIndex(newIndex))
                         break;
-                    // else fallthrough
+                    Q_FALLTHROUGH();
                 case SelectRightTab:
                     newIndex = index;
                     if (newIndex >= d->tabList.size())
@@ -1224,7 +1224,7 @@ QString QTabBar::tabToolTip(int index) const
 }
 #endif // QT_NO_TOOLTIP
 
-#ifndef QT_NO_WHATSTHIS
+#if QT_CONFIG(whatsthis)
 /*!
     \since 4.1
 
@@ -1252,7 +1252,7 @@ QString QTabBar::tabWhatsThis(int index) const
     return QString();
 }
 
-#endif // QT_NO_WHATSTHIS
+#endif // QT_CONFIG(whatsthis)
 
 /*!
     Sets the data of the tab at position \a index to \a data.
@@ -1632,7 +1632,7 @@ bool QTabBar::event(QEvent *event)
             }
         }
 #endif // QT_NO_TOOLTIP
-#ifndef QT_NO_WHATSTHIS
+#if QT_CONFIG(whatsthis)
     } else if (event->type() == QEvent::QueryWhatsThis) {
         const QTabBarPrivate::Tab *tab = d->at(d->indexAtPos(static_cast<QHelpEvent*>(event)->pos()));
         if (!tab || tab->whatsThis.isEmpty())
@@ -1646,7 +1646,7 @@ bool QTabBar::event(QEvent *event)
                 return true;
             }
         }
-#endif // QT_NO_WHATSTHIS
+#endif // QT_CONFIG(whatsthis)
 #ifndef QT_NO_SHORTCUT
     } else if (event->type() == QEvent::Shortcut) {
         QShortcutEvent *se = static_cast<QShortcutEvent *>(event);
@@ -2185,7 +2185,7 @@ void QTabBar::keyPressEvent(QKeyEvent *event)
 
 /*!\reimp
  */
-#ifndef QT_NO_WHEELEVENT
+#if QT_CONFIG(wheelevent)
 void QTabBar::wheelEvent(QWheelEvent *event)
 {
 #ifndef Q_OS_MAC
@@ -2197,7 +2197,7 @@ void QTabBar::wheelEvent(QWheelEvent *event)
     Q_UNUSED(event)
 #endif
 }
-#endif //QT_NO_WHEELEVENT
+#endif // QT_CONFIG(wheelevent)
 
 void QTabBarPrivate::setCurrentNextEnabledIndex(int offset)
 {
@@ -2221,7 +2221,7 @@ void QTabBar::changeEvent(QEvent *event)
             d->elideMode = Qt::TextElideMode(style()->styleHint(QStyle::SH_TabBar_ElideMode, 0, this));
         if (!d->useScrollButtonsSetByUser)
             d->useScrollButtons = !style()->styleHint(QStyle::SH_TabBar_PreferNoArrows, 0, this);
-        // fallthrough
+        Q_FALLTHROUGH();
     case QEvent::FontChange:
         d->textSizes.clear();
         d->refresh();
@@ -2682,7 +2682,7 @@ void QTabBarPrivate::Tab::TabBarAnimation::updateCurrentValue(const QVariant &cu
     priv->moveTab(priv->tabList.indexOf(*tab), current.toInt());
 }
 
-void QTabBarPrivate::Tab::TabBarAnimation::updateState(QAbstractAnimation::State, QAbstractAnimation::State newState)
+void QTabBarPrivate::Tab::TabBarAnimation::updateState(QAbstractAnimation::State newState, QAbstractAnimation::State)
 {
     if (newState == Stopped) priv->moveTabFinished(priv->tabList.indexOf(*tab));
 }
@@ -2691,7 +2691,5 @@ void QTabBarPrivate::Tab::TabBarAnimation::updateState(QAbstractAnimation::State
 QT_END_NAMESPACE
 
 #include "moc_qtabbar.cpp"
-
-#endif // QT_NO_TABBAR
 
 #include "moc_qtabbar_p.cpp"

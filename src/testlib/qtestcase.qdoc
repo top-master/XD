@@ -82,11 +82,6 @@
    QCOMPARE tries to output the contents of the values if the comparison fails,
    so it is visible from the test log why the comparison failed.
 
-   QCOMPARE is very strict on the data types. Both \a actual and \a expected
-   have to be of the same type, otherwise the test won't compile. This prohibits
-   unspecified behavior from being introduced; that is behavior that usually
-   occurs when the compiler implicitly casts the argument.
-
    For your own classes, you can use \l QTest::toString() to format values for
    outputting into the test log.
 
@@ -108,7 +103,7 @@
    to catch an exception thrown from the \a expression. If the \a expression
    throws an exception and its type is the same as \a exceptiontype
    or \a exceptiontype is substitutable with the type of thrown exception
-   (i.e. usually the type of thrown exception is publically derived
+   (i.e. usually the type of thrown exception is publicly derived
    from \a exceptiontype) then execution will be continued. If not-substitutable
    type of exception is thrown or the \a expression doesn't throw an exception
    at all, then a failure will be recorded in the test log and
@@ -575,6 +570,15 @@
     \sa QTest::keyClicks()
 */
 
+/*! \fn void QTest::keySequence(QWidget *widget, const QKeySequence &keySequence)
+    \overload
+    \since 5.10
+
+    Simulates typing of \a keySequence into a \a widget.
+
+    \sa QTest::keyClick(), QTest::keyClicks()
+*/
+
 /*! \fn void QTest::keyClick(QWindow *window, Qt::Key key, Qt::KeyboardModifiers modifier = Qt::NoModifier, int delay=-1)
     \overload
     \since 5.0
@@ -609,6 +613,15 @@
     any keyboard modifiers and without delay of the test.
 
     \sa QTest::keyClicks()
+*/
+
+/*! \fn void QTest::keySequence(QWindow *window, const QKeySequence &keySequence)
+    \overload
+    \since 5.10
+
+    Simulates typing of \a keySequence into a \a window.
+
+    \sa QTest::keyClick(), QTest::keyClicks()
 */
 
 /*! \fn void QTest::keyEvent(KeyAction action, QWidget *widget, Qt::Key key, Qt::KeyboardModifiers modifier = Qt::NoModifier, int delay=-1)
@@ -864,7 +877,42 @@
 */
 
 /*!
-    \fn char *QTest::toString(const T &value)
+    \fn template <typename T1, typename T2> char *QTest::toString(const QPair<T1, T2> &pair)
+    \overload
+    \since 5.11
+    Returns a textual representation of the \a pair.
+*/
+
+/*!
+    \fn template <typename T1, typename T2> char *QTest::toString(const std::pair<T1, T2> &pair)
+    \overload
+    \since 5.11
+    Returns a textual representation of the \a pair.
+*/
+
+/*!
+    \fn char *QTest::toString(const QVector2D &v)
+    \overload
+    \since 5.11
+    Returns a textual representation of the 2D vector \a v.
+*/
+
+/*!
+    \fn char *QTest::toString(const QVector3D &v)
+    \overload
+    \since 5.11
+    Returns a textual representation of the 3D vector \a v.
+*/
+
+/*!
+    \fn char *QTest::toString(const QVector4D &v)
+    \overload
+    \since 5.11
+    Returns a textual representation of the 4D vector \a v.
+*/
+
+/*!
+    \fn template<typename T> char *QTest::toString(const T &value)
 
     Returns a textual representation of \a value. This function is used by
     \l QCOMPARE() to output verbose information in case of a test failure.
@@ -912,6 +960,22 @@
     \since 5.8
 
     Returns a string containing \c{nullptr}.
+*/
+
+/*!
+    \fn char *QTest::toString(const QStringView &string)
+    \overload
+    \since 5.11
+
+    Returns a textual representation of the given \a string.
+*/
+
+/*!
+    \fn char *QTest::toString(const QUuid &uuid)
+    \overload
+    \since 5.11
+
+    Returns a textual representation of the given \a uuid.
 */
 
 /*!
@@ -1062,6 +1126,21 @@
     \sa QTest::qSleep(), QSignalSpy::wait()
 */
 
+/*! \fn template <typename Functor> bool QTest::qWaitFor(Functor predicate, int timeout)
+
+    Waits for \a timeout milliseconds or until the \a predicate returns true.
+
+    Returns \c true if the \a predicate returned true at any point, otherwise returns \c false.
+
+    Example:
+    \snippet code/src_qtestlib_qtestcase.cpp 30
+
+    The code above will wait for the object to become ready, for a
+    maximum of three seconds.
+
+    \since 5.10
+*/
+
 /*! \fn bool QTest::qWaitForWindowExposed(QWindow *window, int timeout)
     \since 5.0
 
@@ -1070,6 +1149,10 @@
 
     This is mainly useful for asynchronous systems like X11, where a window will be mapped to screen some
     time after being asked to show itself on the screen.
+
+    Note that a window that is mapped to screen may still not be considered exposed if the window client
+    area is completely covered by other windows, or if the window is otherwise not visible. This function
+    will then time out when waiting for such a window.
 
     \sa QTest::qWaitForWindowActive(), QWindow::isExposed()
 */
@@ -1092,6 +1175,13 @@
 
     This is mainly useful for asynchronous systems like X11, where a window will be mapped to screen some
     time after being asked to show itself on the screen.
+
+    Note that a window that is mapped to screen may still not be considered exposed if the window client
+    area is completely covered by other windows, or if the window is otherwise not visible. This function
+    will then time out when waiting for such a window.
+
+    A specific configuration where this happens is when using QGLWidget as a viewport widget on macOS:
+    The viewport widget gets the expose event, not the parent widget.
 
     \sa QTest::qWaitForWindowActive()
 */
@@ -1287,10 +1377,6 @@
 */
 
 // Internals of qtestmouse.h:
-
-/*! \fn void QTest::waitForEvents()
-    \internal
-*/
 
 /*! \fn void QTest::mouseEvent(MouseAction action, QWidget *widget, Qt::MouseButton button, Qt::KeyboardModifiers stateKey, QPoint pos, int delay=-1)
     \internal

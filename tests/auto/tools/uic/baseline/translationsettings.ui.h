@@ -10,15 +10,12 @@
 #define TRANSLATIONSETTINGS_H
 
 #include <QtCore/QVariant>
-#include <QtWidgets/QAction>
 #include <QtWidgets/QApplication>
-#include <QtWidgets/QButtonGroup>
 #include <QtWidgets/QComboBox>
 #include <QtWidgets/QDialog>
 #include <QtWidgets/QDialogButtonBox>
 #include <QtWidgets/QGridLayout>
 #include <QtWidgets/QGroupBox>
-#include <QtWidgets/QHeaderView>
 #include <QtWidgets/QLabel>
 #include <QtWidgets/QVBoxLayout>
 
@@ -102,10 +99,10 @@ public:
 
     void retranslateUi(QDialog *TranslationSettings)
     {
-        TranslationSettings->setWindowTitle(QApplication::translate("TranslationSettings", "Qt Linguist - Translation file settings", Q_NULLPTR));
-        groupBox->setTitle(QApplication::translate("TranslationSettings", "Target language", Q_NULLPTR));
-        label->setText(QApplication::translate("TranslationSettings", "Language", Q_NULLPTR));
-        lblCountry->setText(QApplication::translate("TranslationSettings", "Country/Region", Q_NULLPTR));
+        TranslationSettings->setWindowTitle(QApplication::translate("TranslationSettings", "Qt Linguist - Translation file settings", nullptr));
+        groupBox->setTitle(QApplication::translate("TranslationSettings", "Target language", nullptr));
+        label->setText(QApplication::translate("TranslationSettings", "Language", nullptr));
+        lblCountry->setText(QApplication::translate("TranslationSettings", "Country/Region", nullptr));
     } // retranslateUi
 
 };

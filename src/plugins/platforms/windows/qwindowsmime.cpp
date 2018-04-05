@@ -41,6 +41,7 @@
 #include "qwindowscontext.h"
 
 #include <QtGui/private/qdnd_p.h>
+#include <QtCore/QByteArrayMatcher>
 #include <QtCore/QTextCodec>
 #include <QtCore/QMap>
 #include <QtCore/QUrl>
@@ -51,6 +52,7 @@
 #include <QtGui/QImageWriter>
 
 #include <shlobj.h>
+#include <algorithm>
 
 QT_BEGIN_NAMESPACE
 
@@ -955,9 +957,11 @@ QVariant QWindowsMimeHtml::convertToMime(const QString &mime, IDataObject *pData
     QVariant result;
     if (canConvertToMime(mime, pDataObj)) {
         QByteArray html = getData(CF_HTML, pDataObj);
+        static Q_RELAXED_CONSTEXPR auto startMatcher = qMakeStaticByteArrayMatcher("StartHTML:");
+        static Q_RELAXED_CONSTEXPR auto endMatcher   = qMakeStaticByteArrayMatcher("EndHTML:");
         qCDebug(lcQpaMime) << __FUNCTION__ << "raw:" << html;
-        int start = html.indexOf("StartHTML:");
-        int end = html.indexOf("EndHTML:");
+        int start = startMatcher.indexIn(html);
+        int end = endMatcher.indexIn(html);
 
         if (start != -1) {
             int startOffset = start + 10;
@@ -997,10 +1001,13 @@ bool QWindowsMimeHtml::convertFromMime(const FORMATETC &formatetc, const QMimeDa
             "StartFragment:0000000000\r\n"       // 56-81
             "EndFragment:0000000000\r\n\r\n";    // 82-107
 
-        if (data.indexOf("<!--StartFragment-->") == -1)
+        static Q_RELAXED_CONSTEXPR auto startFragmentMatcher = qMakeStaticByteArrayMatcher("<!--StartFragment-->");
+        static Q_RELAXED_CONSTEXPR auto endFragmentMatcher   = qMakeStaticByteArrayMatcher("<!--EndFragment-->");
+
+        if (startFragmentMatcher.indexIn(data) == -1)
             result += "<!--StartFragment-->";
         result += data;
-        if (data.indexOf("<!--EndFragment-->") == -1)
+        if (endFragmentMatcher.indexIn(data) == -1)
             result += "<!--EndFragment-->";
 
         // set the correct number for EndHTML
@@ -1008,9 +1015,9 @@ bool QWindowsMimeHtml::convertFromMime(const FORMATETC &formatetc, const QMimeDa
         memcpy(reinterpret_cast<char *>(result.data() + 53 - pos.length()), pos.constData(), size_t(pos.length()));
 
         // set correct numbers for StartFragment and EndFragment
-        pos = QByteArray::number(result.indexOf("<!--StartFragment-->") + 20);
+        pos = QByteArray::number(startFragmentMatcher.indexIn(result) + 20);
         memcpy(reinterpret_cast<char *>(result.data() + 79 - pos.length()), pos.constData(), size_t(pos.length()));
-        pos = QByteArray::number(result.indexOf("<!--EndFragment-->"));
+        pos = QByteArray::number(endFragmentMatcher.indexIn(result));
         memcpy(reinterpret_cast<char *>(result.data() + 103 - pos.length()), pos.constData(), size_t(pos.length()));
 
         return setData(result, pmedium);
@@ -1246,7 +1253,7 @@ bool QBuiltInMimes::convertFromMime(const FORMATETC &formatetc, const QMimeData 
             r[byteLength+1] = 0;
             data = r;
         } else {
-#ifndef QT_NO_DRAGANDDROP
+#if QT_CONFIG(draganddrop)
             data = QInternalMimeData::renderDataHelper(outFormats.value(getCf(formatetc)), mimeData);
 #endif //QT_NO_DRAGANDDROP
         }
@@ -1258,15 +1265,16 @@ bool QBuiltInMimes::convertFromMime(const FORMATETC &formatetc, const QMimeData 
 QVector<FORMATETC> QBuiltInMimes::formatsForMime(const QString &mimeType, const QMimeData *mimeData) const
 {
     QVector<FORMATETC> formatetcs;
-    if (!outFormats.keys(mimeType).isEmpty() && mimeData->formats().contains(mimeType))
-        formatetcs += setCf(outFormats.key(mimeType));
+    const auto mit = std::find(outFormats.cbegin(), outFormats.cend(), mimeType);
+    if (mit != outFormats.cend() && mimeData->formats().contains(mimeType))
+        formatetcs += setCf(mit.key());
     return formatetcs;
 }
 
 bool QBuiltInMimes::canConvertToMime(const QString &mimeType, IDataObject *pDataObj) const
 {
-    return (!inFormats.keys(mimeType).isEmpty())
-        && canGetData(inFormats.key(mimeType), pDataObj);
+    const auto mit = std::find(inFormats.cbegin(), inFormats.cend(), mimeType);
+    return mit != inFormats.cend() && canGetData(mit.key(), pDataObj);
 }
 
 QVariant QBuiltInMimes::convertToMime(const QString &mimeType, IDataObject *pDataObj, QVariant::Type preferredType) const
@@ -1309,7 +1317,7 @@ public:
     QString mimeForFormat(const FORMATETC &formatetc) const override;
 
 private:
-    QMap<int, QString> formats;
+    mutable QMap<int, QString> formats;
     static QStringList ianaTypes;
     static QStringList excludeList;
 };
@@ -1346,7 +1354,7 @@ QLastResortMimes::QLastResortMimes()
 bool QLastResortMimes::canConvertFromMime(const FORMATETC &formatetc, const QMimeData *mimeData) const
 {
     // really check
-#ifndef QT_NO_DRAGANDDROP
+#if QT_CONFIG(draganddrop)
     return formatetc.tymed & TYMED_HGLOBAL
         && (formats.contains(formatetc.cfFormat)
         && QInternalMimeData::hasFormatHelper(formats.value(formatetc.cfFormat), mimeData));
@@ -1360,7 +1368,7 @@ bool QLastResortMimes::canConvertFromMime(const FORMATETC &formatetc, const QMim
 
 bool QLastResortMimes::convertFromMime(const FORMATETC &formatetc, const QMimeData *mimeData, STGMEDIUM * pmedium) const
 {
-#ifndef QT_NO_DRAGANDDROP
+#if QT_CONFIG(draganddrop)
     return canConvertFromMime(formatetc, mimeData)
         && setData(QInternalMimeData::renderDataHelper(formats.value(getCf(formatetc)), mimeData), pmedium);
 #else
@@ -1374,15 +1382,13 @@ bool QLastResortMimes::convertFromMime(const FORMATETC &formatetc, const QMimeDa
 QVector<FORMATETC> QLastResortMimes::formatsForMime(const QString &mimeType, const QMimeData * /*mimeData*/) const
 {
     QVector<FORMATETC> formatetcs;
-    if (!formats.keys(mimeType).isEmpty()) {
-        formatetcs += setCf(formats.key(mimeType));
-    } else if (!excludeList.contains(mimeType, Qt::CaseInsensitive)){
-        // register any other available formats
-        int cf = QWindowsMime::registerMimeType(mimeType);
-        QLastResortMimes *that = const_cast<QLastResortMimes *>(this);
-        that->formats.insert(cf, mimeType);
-        formatetcs += setCf(cf);
-    }
+    auto mit = std::find(formats.begin(), formats.end(), mimeType);
+    // register any other available formats
+    if (mit == formats.end() && !excludeList.contains(mimeType, Qt::CaseInsensitive))
+        mit = formats.insert(QWindowsMime::registerMimeType(mimeType), mimeType);
+    if (mit != formats.end())
+        formatetcs += setCf(mit.key());
+
     if (!formatetcs.isEmpty())
         qCDebug(lcQpaMime) << __FUNCTION__ << mimeType << formatetcs;
     return formatetcs;
@@ -1420,14 +1426,11 @@ bool QLastResortMimes::canConvertToMime(const QString &mimeType, IDataObject *pD
         QString clipFormat = customMimeType(mimeType);
         const UINT cf = RegisterClipboardFormat(reinterpret_cast<const wchar_t *> (clipFormat.utf16()));
         return canGetData(int(cf), pDataObj);
-    } else if (formats.keys(mimeType).isEmpty()) {
-        // if it is not in there then register it and see if we can get it
-        int cf = QWindowsMime::registerMimeType(mimeType);
-        return canGetData(cf, pDataObj);
-    } else {
-        return canGetData(formats.key(mimeType), pDataObj);
     }
-    return false;
+    // if it is not in there then register it and see if we can get it
+    const auto mit = std::find(formats.cbegin(), formats.cend(), mimeType);
+    const int cf = mit != formats.cend() ? mit.key() : QWindowsMime::registerMimeType(mimeType);
+    return canGetData(cf, pDataObj);
 }
 
 QVariant QLastResortMimes::convertToMime(const QString &mimeType, IDataObject *pDataObj, QVariant::Type preferredType) const
@@ -1441,11 +1444,10 @@ QVariant QLastResortMimes::convertToMime(const QString &mimeType, IDataObject *p
             QString clipFormat = customMimeType(mimeType, &lindex);
             const UINT cf = RegisterClipboardFormat(reinterpret_cast<const wchar_t *> (clipFormat.utf16()));
             data = getData(int(cf), pDataObj, lindex);
-        } else if (formats.keys(mimeType).isEmpty()) {
-            int cf = QWindowsMime::registerMimeType(mimeType);
-            data = getData(cf, pDataObj);
         } else {
-            data = getData(formats.key(mimeType), pDataObj);
+            const auto mit = std::find(formats.cbegin(), formats.cend(), mimeType);
+            const int cf = mit != formats.cend() ? mit.key() : QWindowsMime::registerMimeType(mimeType);
+            data = getData(cf, pDataObj);
         }
         if (!data.isEmpty())
             val = data; // it should be enough to return the data and let QMimeData do the rest.
@@ -1461,7 +1463,7 @@ QString QLastResortMimes::mimeForFormat(const FORMATETC &formatetc) const
 
     const QString clipFormat = QWindowsMimeConverter::clipboardFormatName(getCf(formatetc));
     if (!clipFormat.isEmpty()) {
-#ifndef QT_NO_DRAGANDDROP
+#if QT_CONFIG(draganddrop)
         if (QInternalMimeData::canReadData(clipFormat))
             format = clipFormat;
         else if((formatetc.cfFormat >= 0xC000)){

@@ -45,6 +45,7 @@
 #include <qdesktopwidget.h>
 #endif
 #include <qpixmap.h>
+#include <qrandom.h>
 
 #include <private/qdrawhelper_p.h>
 #include <qpainter.h>
@@ -152,6 +153,7 @@ private slots:
     void setEqualClipRegionAndPath();
 
     void clipRectSaveRestore();
+    void clipStateSaveRestore();
 
     void clippedFillPath_data();
     void clippedFillPath();
@@ -303,6 +305,8 @@ private slots:
     void blendNullRGB32();
     void toRGB64();
 
+    void fillPolygon();
+
 private:
     void fillData();
     void setPenColor(QPainter& p);
@@ -396,51 +400,6 @@ void tst_QPainter::cleanupTestCase()
     QFile::remove(QLatin1String("expected.png"));
     QFile::remove(QLatin1String("foo.png"));
 }
-
-static const char* const maskSource_data[] = {
-"16 13 6 1",
-". c None",
-"d c #000000",
-"# c #999999",
-"c c #cccccc",
-"b c #ffff00",
-"a c #ffffff",
-"...#####........",
-"..#aaaaa#.......",
-".#abcbcba######.",
-".#acbcbcaaaaaa#d",
-".#abcbcbcbcbcb#d",
-"#############b#d",
-"#aaaaaaaaaa##c#d",
-"#abcbcbcbcbbd##d",
-".#abcbcbcbcbcd#d",
-".#acbcbcbcbcbd#d",
-"..#acbcbcbcbb#dd",
-"..#############d",
-"...ddddddddddddd"};
-
-static const char* const maskResult_data[] = {
-"16 13 6 1",
-". c #ff0000",
-"d c #000000",
-"# c #999999",
-"c c #cccccc",
-"b c #ffff00",
-"a c #ffffff",
-"...#####........",
-"..#aaaaa#.......",
-".#abcbcba######.",
-".#acbcbcaaaaaa#d",
-".#abcbcbcbcbcb#d",
-"#############b#d",
-"#aaaaaaaaaa##c#d",
-"#abcbcbcbcbbd##d",
-".#abcbcbcbcbcd#d",
-".#acbcbcbcbcbd#d",
-"..#acbcbcbcbb#dd",
-"..#############d",
-"...ddddddddddddd"};
-
 
 #ifndef QT_NO_WIDGETS
 void tst_QPainter::drawPixmap_comp_data()
@@ -2869,7 +2828,7 @@ void tst_QPainter::monoImages()
     }
 }
 
-#if !defined(Q_OS_IRIX) && !defined(Q_OS_AIX) && !defined(Q_CC_MSVC) && !defined(Q_OS_SOLARIS) && !defined(__UCLIBC__)
+#if !defined(Q_OS_AIX) && !defined(Q_CC_MSVC) && !defined(Q_OS_SOLARIS) && !defined(__UCLIBC__)
 #include <fenv.h>
 
 static const QString fpeExceptionString(int exception)
@@ -3095,7 +3054,7 @@ void tst_QPainter::fpe_steepSlopes_data()
 
 qreal randf()
 {
-    return rand() / (RAND_MAX + 1.0);
+    return QRandomGenerator::global()->bounded(1.0);
 }
 
 QPointF randInRect(const QRectF &rect)
@@ -3467,6 +3426,35 @@ void tst_QPainter::clipRectSaveRestore()
     QCOMPARE(img.pixel(0, 0), QColor(Qt::black).rgba());
 }
 
+void tst_QPainter::clipStateSaveRestore()
+{
+    QImage img(16, 16, QImage::Format_RGB32);
+    img.fill(Qt::blue);
+    {
+        QPainter p(&img);
+        p.setClipRect(QRect(5, 5, 10, 10));
+        p.save();
+        p.setClipping(false);
+        p.restore();
+        p.fillRect(0, 0, 16, 16, Qt::red);
+        p.end();
+        QCOMPARE(img.pixel(0, 0), QColor(Qt::blue).rgb());
+    }
+
+    img.fill(Qt::blue);
+    {
+        QPainter p(&img);
+        p.setClipRect(QRect(5, 5, 10, 10));
+        p.setClipping(false);
+        p.save();
+        p.setClipping(true);
+        p.restore();
+        p.fillRect(0, 0, 16, 16, Qt::red);
+        p.end();
+        QCOMPARE(img.pixel(0, 0), QColor(Qt::red).rgb());
+    }
+}
+
 void tst_QPainter::clippedImage()
 {
     QImage img(16, 16, QImage::Format_ARGB32_Premultiplied);
@@ -3557,11 +3545,9 @@ void tst_QPainter::drawImage_data()
                 continue;
             for (int odd_x = 0; odd_x <= 1; ++odd_x) {
                 for (int odd_width = 0; odd_width <= 1; ++odd_width) {
-                    QString description =
-                        QString("srcFormat %1, dstFormat %2, odd x: %3, odd width: %4")
-                            .arg(srcFormat).arg(dstFormat).arg(odd_x).arg(odd_width);
-
-                    QTest::newRow(qPrintable(description)) << (10 + odd_x) << 10 << (20 + odd_width) << 20
+                    QTest::addRow("srcFormat %d, dstFormat %d, odd x: %d, odd width: %d",
+                                  srcFormat, dstFormat, odd_x, odd_width)
+                        << (10 + odd_x) << 10 << (20 + odd_width) << 20
                         << QImage::Format(srcFormat)
                         << QImage::Format(dstFormat);
                 }
@@ -4542,7 +4528,7 @@ void tst_QPainter::drawText_subPixelPositionsInRaster_qtbug5053()
 {
     QFontMetricsF fm(qApp->font());
 
-    QImage baseLine(fm.width(QChar::fromLatin1('e')), fm.height(), QImage::Format_RGB32);
+    QImage baseLine(fm.horizontalAdvance(QChar::fromLatin1('e')), fm.height(), QImage::Format_RGB32);
     baseLine.fill(Qt::white);
     {
         QPainter p(&baseLine);
@@ -5188,6 +5174,112 @@ void tst_QPainter::toRGB64()
 
     for (int i=0; i < dst.width(); ++i) {
         QVERIFY(dst.pixelColor(i,0) == QColor(Qt::white));
+    }
+}
+
+void tst_QPainter::fillPolygon()
+{
+    QImage image(50, 50, QImage::Format_RGB32);
+    image.fill(Qt::white);
+
+    QPainter painter(&image);
+    QBrush brush(Qt::black, Qt::SolidPattern);
+    painter.setBrush(brush);
+
+    QPen pen(Qt::red, 0, Qt::SolidLine, Qt::FlatCap, Qt::MiterJoin);
+    painter.setPen(pen);
+
+    const QPoint diamondpoints[5] = {
+        QPoint(-15, 0),
+        QPoint(0, -15),
+        QPoint(15, 0),
+        QPoint(0, 15),
+        QPoint(-15, 0)
+    };
+    enum { Outside1, Border1, Inside, Border2, Outside2 } state;
+
+    for (int i = 0; i < 16 ; i++)
+    {
+        for (int j = 0; j < 16 ; j++)
+        {
+            image.fill(Qt::white);
+            painter.resetTransform();
+            painter.translate(25 + i/16., 25 + j/16.);
+            painter.drawPolygon(diamondpoints, 5);
+
+            for (int x = 0; x < 50; x++) {
+                state = Outside1;
+                for (int y = 0; y < 50; y++) {
+                    QRgb c = image.pixel(x, y);
+                    switch (state) {
+                    case Outside1:
+                        if (c == QColor(Qt::red).rgb())
+                            state = Border1;
+                        else
+                            QCOMPARE(c, QColor(Qt::white).rgb());
+                        break;
+                    case Border1:
+                        if (c == QColor(Qt::black).rgb())
+                            state = Inside;
+                        else if (c == QColor(Qt::white).rgb())
+                            state = Outside2;
+                        else
+                            QCOMPARE(c, QColor(Qt::red).rgb());
+                        break;
+                    case Inside:
+                        if (c == QColor(Qt::red).rgb())
+                            state = Border2;
+                        else
+                            QCOMPARE(c, QColor(Qt::black).rgb());
+                        break;
+                    case Border2:
+                        if (c == QColor(Qt::white).rgb())
+                            state = Outside2;
+                        else
+                            QCOMPARE(c, QColor(Qt::red).rgb());
+                        break;
+                    case Outside2:
+                        QCOMPARE(c, QColor(Qt::white).rgb());
+                    }
+                }
+            }
+            for (int y = 0; y < 50; y++) {
+                state = Outside1;
+                for (int x = 0; x < 50; x++) {
+                    QRgb c = image.pixel(x, y);
+                    switch (state) {
+                    case Outside1:
+                        if (c == QColor(Qt::red).rgb())
+                            state = Border1;
+                        else
+                            QCOMPARE(c, QColor(Qt::white).rgb());
+                        break;
+                    case Border1:
+                        if (c == QColor(Qt::black).rgb())
+                            state = Inside;
+                        else if (c == QColor(Qt::white).rgb())
+                            state = Outside2;
+                        else
+                            QCOMPARE(c, QColor(Qt::red).rgb());
+                        break;
+                    case Inside:
+                        if (c == QColor(Qt::red).rgb())
+                            state = Border2;
+                        else
+                            QCOMPARE(c, QColor(Qt::black).rgb());
+                        break;
+                    case Border2:
+                        if (c == QColor(Qt::white).rgb())
+                            state = Outside2;
+                        else
+                            QCOMPARE(c, QColor(Qt::red).rgb());
+                        break;
+                    case Outside2:
+                        QCOMPARE(c, QColor(Qt::white).rgb());
+                    }
+                }
+            }
+        }
     }
 }
 

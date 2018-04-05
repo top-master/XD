@@ -40,7 +40,7 @@
 #ifndef QTESTCASE_H
 #define QTESTCASE_H
 
-#include <QtTest/qtest_global.h>
+#include <QtTest/qttestglobal.h>
 
 #include <QtCore/qstring.h>
 #include <QtCore/qnamespace.h>
@@ -63,13 +63,13 @@ class QRegularExpression;
 do {\
     if (!QTest::qVerify(static_cast<bool>(statement), #statement, "", __FILE__, __LINE__))\
         return;\
-} while (0)
+} while (false)
 
 #define QFAIL(message) \
 do {\
     QTest::qFail(message, __FILE__, __LINE__);\
     return;\
-} while (0)
+} while (false)
 
 #define QVERIFY2(statement, description) \
 do {\
@@ -80,13 +80,13 @@ do {\
         if (!QTest::qVerify(false, #statement, (description), __FILE__, __LINE__))\
             return;\
     }\
-} while (0)
+} while (false)
 
 #define QCOMPARE(actual, expected) \
 do {\
     if (!QTest::qCompare(actual, expected, #actual, #expected, __FILE__, __LINE__))\
         return;\
-} while (0)
+} while (false)
 
 
 #ifndef QT_NO_EXCEPTIONS
@@ -111,7 +111,7 @@ do {\
                          " but unknown exception caught", __FILE__, __LINE__);\
             return;\
         }\
-    } while (0)
+    } while (false)
 
 #else // QT_NO_EXCEPTIONS
 
@@ -147,6 +147,8 @@ do {\
         } \
     }
 
+// Ideally we'd use qWaitFor instead of QTRY_LOOP_IMPL, but due
+// to a compiler bug on MSVC < 2017 we can't (see QTBUG-59096)
 #define QTRY_IMPL(expr, timeout)\
     const int qt_test_step = 50; \
     const int qt_test_timeoutValue = timeout; \
@@ -158,7 +160,7 @@ do {\
 do { \
     QTRY_IMPL((expr), timeout);\
     QVERIFY(expr); \
-} while (0)
+} while (false)
 
 #define QTRY_VERIFY(expr) QTRY_VERIFY_WITH_TIMEOUT((expr), 5000)
 
@@ -167,7 +169,7 @@ do { \
 do { \
     QTRY_IMPL((expr), timeout);\
     QVERIFY2(expr, messageExpression); \
-} while (0)
+} while (false)
 
 #define QTRY_VERIFY2(expr, messageExpression) QTRY_VERIFY2_WITH_TIMEOUT((expr), (messageExpression), 5000)
 
@@ -176,7 +178,7 @@ do { \
 do { \
     QTRY_IMPL(((expr) == (expected)), timeout);\
     QCOMPARE((expr), expected); \
-} while (0)
+} while (false)
 
 #define QTRY_COMPARE(expr, expected) QTRY_COMPARE_WITH_TIMEOUT((expr), expected, 5000)
 
@@ -184,7 +186,7 @@ do { \
 do {\
     QTest::qSkip(statement, __FILE__, __LINE__);\
     return;\
-} while (0)
+} while (false)
 
 #ifdef Q_COMPILER_VARIADIC_MACROS
 
@@ -200,7 +202,7 @@ do {\
 do {\
     if (!QTest::qExpectFail(dataIndex, comment, QTest::mode, __FILE__, __LINE__))\
         return;\
-} while (0)
+} while (false)
 
 #define QFETCH(Type, name)\
     Type name = *static_cast<Type *>(QTest::qData(#name, ::qMetaTypeId<typename std::remove_cv<Type >::type>()))
@@ -212,7 +214,7 @@ do {\
 do {\
     if (!QTest::qTest(actual, testElement, #actual, #testElement, __FILE__, __LINE__))\
         return;\
-} while (0)
+} while (false)
 
 #define QWARN(msg)\
     QTest::qWarn(msg, __FILE__, __LINE__)
@@ -248,7 +250,23 @@ namespace QTest
     template <typename T> // Fallback
     inline typename std::enable_if<!QtPrivate::IsQEnumHelper<T>::Value, char*>::type toString(const T &)
     {
-        return Q_NULLPTR;
+        return nullptr;
+    }
+
+    template<typename F> // Output QFlags of registered enumerations
+    inline typename std::enable_if<QtPrivate::IsQEnumHelper<F>::Value, char*>::type toString(QFlags<F> f)
+    {
+        const QMetaEnum me = QMetaEnum::fromType<F>();
+        return qstrdup(me.valueToKeys(int(f)).constData());
+    }
+
+    template <typename F> // Fallback: Output hex value
+    inline typename std::enable_if<!QtPrivate::IsQEnumHelper<F>::Value, char*>::type toString(QFlags<F> f)
+    {
+        const size_t space = 3 + 2 * sizeof(unsigned); // 2 for 0x, two hex digits per byte, 1 for '\0'
+        char *msg = new char[space];
+        qsnprintf(msg, space, "0x%x", unsigned(f));
+        return msg;
     }
 
     } // namespace Internal
@@ -259,16 +277,26 @@ namespace QTest
         return Internal::toString(t);
     }
 
+    template <typename T1, typename T2>
+    inline char *toString(const QPair<T1, T2> &pair);
+
+    template <typename T1, typename T2>
+    inline char *toString(const std::pair<T1, T2> &pair);
+
     Q_TESTLIB_EXPORT char *toHexRepresentation(const char *ba, int length);
     Q_TESTLIB_EXPORT char *toPrettyCString(const char *unicode, int length);
-    Q_TESTLIB_EXPORT char *toPrettyUnicode(const ushort *unicode, int length);
+    Q_TESTLIB_EXPORT char *toPrettyUnicode(QStringView string);
     Q_TESTLIB_EXPORT char *toString(const char *);
     Q_TESTLIB_EXPORT char *toString(const void *);
 
-    Q_TESTLIB_EXPORT int qExec(QObject *testObject, int argc = 0, char **argv = Q_NULLPTR);
+    Q_TESTLIB_EXPORT void qInit(QObject *testObject, int argc = 0, char **argv = nullptr);
+    Q_TESTLIB_EXPORT int qRun();
+    Q_TESTLIB_EXPORT void qCleanup();
+
+    Q_TESTLIB_EXPORT int qExec(QObject *testObject, int argc = 0, char **argv = nullptr);
     Q_TESTLIB_EXPORT int qExec(QObject *testObject, const QStringList &arguments);
 
-    Q_TESTLIB_EXPORT void setMainSourcePath(const char *file, const char *builddir = Q_NULLPTR);
+    Q_TESTLIB_EXPORT void setMainSourcePath(const char *file, const char *builddir = nullptr);
 
     Q_TESTLIB_EXPORT bool qVerify(bool statement, const char *statementStr, const char *description,
                                  const char *file, int line);
@@ -276,17 +304,17 @@ namespace QTest
     Q_TESTLIB_EXPORT void qSkip(const char *message, const char *file, int line);
     Q_TESTLIB_EXPORT bool qExpectFail(const char *dataIndex, const char *comment, TestFailMode mode,
                            const char *file, int line);
-    Q_TESTLIB_EXPORT void qWarn(const char *message, const char *file = Q_NULLPTR, int line = 0);
+    Q_TESTLIB_EXPORT void qWarn(const char *message, const char *file = nullptr, int line = 0);
     Q_TESTLIB_EXPORT void ignoreMessage(QtMsgType type, const char *message);
-#ifndef QT_NO_REGULAREXPRESSION
+#if QT_CONFIG(regularexpression)
     Q_TESTLIB_EXPORT void ignoreMessage(QtMsgType type, const QRegularExpression &messagePattern);
 #endif
 
 #if QT_CONFIG(temporaryfile)
     Q_TESTLIB_EXPORT QSharedPointer<QTemporaryDir> qExtractTestData(const QString &dirName);
 #endif
-    Q_TESTLIB_EXPORT QString qFindTestData(const char* basepath, const char* file = Q_NULLPTR, int line = 0, const char* builddir = Q_NULLPTR);
-    Q_TESTLIB_EXPORT QString qFindTestData(const QString& basepath, const char* file = Q_NULLPTR, int line = 0, const char* builddir = Q_NULLPTR);
+    Q_TESTLIB_EXPORT QString qFindTestData(const char* basepath, const char* file = nullptr, int line = 0, const char* builddir = nullptr);
+    Q_TESTLIB_EXPORT QString qFindTestData(const QString& basepath, const char* file = nullptr, int line = 0, const char* builddir = nullptr);
 
     Q_TESTLIB_EXPORT void *qData(const char *tagName, int typeId);
     Q_TESTLIB_EXPORT void *qGlobalData(const char *tagName, int typeId);
@@ -319,6 +347,8 @@ namespace QTest
     Q_TESTLIB_EXPORT QTestData &newRow(const char *dataTag);
     Q_TESTLIB_EXPORT QTestData &addRow(const char *format, ...) Q_ATTRIBUTE_FORMAT_PRINTF(1, 2);
 
+#if QT_VERSION < QT_VERSION_CHECK(6, 0, 0)
+    // kept after adding implementation of <T1, T2> out of paranoia:
     template <typename T>
     inline bool qCompare(T const &t1, T const &t2, const char *actual, const char *expected,
                         const char *file, int line)
@@ -326,6 +356,7 @@ namespace QTest
         return compare_helper(t1 == t2, "Compared values are not the same",
                               toString(t1), toString(t2), actual, expected, file, line);
     }
+#endif
 
     Q_TESTLIB_EXPORT bool qCompare(float const &t1, float const &t2,
                     const char *actual, const char *expected, const char *file, int line);
@@ -376,7 +407,12 @@ namespace QTest
 #endif
 
     template <typename T1, typename T2>
-    bool qCompare(T1 const &, T2 const &, const char *, const char *, const char *, int);
+    inline bool qCompare(const T1 &t1, const T2 &t2, const char *actual, const char *expected,
+                         const char *file, int line)
+    {
+        return compare_helper(t1 == t2, "Compared values are not the same",
+                              toString(t1), toString(t2), actual, expected, file, line);
+    }
 
     inline bool qCompare(double const &t1, float const &t2, const char *actual,
                                  const char *expected, const char *file, int line)

@@ -10,9 +10,7 @@
 #define HISTORY_H
 
 #include <QtCore/QVariant>
-#include <QtWidgets/QAction>
 #include <QtWidgets/QApplication>
-#include <QtWidgets/QButtonGroup>
 #include <QtWidgets/QDialog>
 #include <QtWidgets/QDialogButtonBox>
 #include <QtWidgets/QGridLayout>
@@ -93,9 +91,9 @@ public:
 
     void retranslateUi(QDialog *HistoryDialog)
     {
-        HistoryDialog->setWindowTitle(QApplication::translate("HistoryDialog", "History", Q_NULLPTR));
-        removeButton->setText(QApplication::translate("HistoryDialog", "&Remove", Q_NULLPTR));
-        removeAllButton->setText(QApplication::translate("HistoryDialog", "Remove &All", Q_NULLPTR));
+        HistoryDialog->setWindowTitle(QApplication::translate("HistoryDialog", "History", nullptr));
+        removeButton->setText(QApplication::translate("HistoryDialog", "&Remove", nullptr));
+        removeAllButton->setText(QApplication::translate("HistoryDialog", "Remove &All", nullptr));
     } // retranslateUi
 
 };

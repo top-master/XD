@@ -43,27 +43,38 @@
 #include "qcocoahelpers.h"
 #include "qcocoamenubar.h"
 #include "qcocoamenuitem.h"
+#include "qcocoaintegration.h"
 
 #include <QtCore/private/qcore_mac_p.h>
 #include <QtCore/private/qthread_p.h>
 #include <QtCore/qcoreapplication.h>
-#include <QtCore/qdir.h>
-#include <QtCore/qstring.h>
-#include <QtCore/qdebug.h>
 #include <QtGui/private/qguiapplication_p.h>
 
-QT_FORWARD_DECLARE_CLASS(QCFString)
-QT_FORWARD_DECLARE_CLASS(QString)
-
-@implementation QCocoaMenuLoader
+@implementation QCocoaMenuLoader {
+    NSMenu *theMenu;
+    NSMenu *appMenu;
+    NSMenuItem *quitItem;
+    NSMenuItem *preferencesItem;
+    NSMenuItem *aboutItem;
+    NSMenuItem *aboutQtItem;
+    NSMenuItem *hideItem;
+    NSMenuItem *lastAppSpecificItem;
+    NSMenuItem *servicesItem;
+    NSMenuItem *hideAllOthersItem;
+    NSMenuItem *showAllItem;
+}
 
 + (instancetype)sharedMenuLoader
 {
     static QCocoaMenuLoader *shared = nil;
     static dispatch_once_t onceToken;
     dispatch_once(&onceToken, ^{
-                      shared = [[self alloc] init];
-                  });
+        shared = [[self alloc] init];
+        atexit_b(^{
+            [shared release];
+            shared = nil;
+        });
+    });
     return shared;
 }
 
@@ -314,17 +325,17 @@ QT_FORWARD_DECLARE_CLASS(QString)
 {
 
 #ifndef QT_NO_TRANSLATION
-    [servicesItem setTitle:qt_mac_applicationmenu_string(0).toNSString()];
-    [hideItem setTitle:qt_mac_applicationmenu_string(1).arg(qt_mac_applicationName()).toNSString()];
-    [hideAllOthersItem setTitle:qt_mac_applicationmenu_string(2).toNSString()];
-    [showAllItem setTitle:qt_mac_applicationmenu_string(3).toNSString()];
-    [preferencesItem setTitle:qt_mac_applicationmenu_string(4).toNSString()];
-    [quitItem setTitle:qt_mac_applicationmenu_string(5).arg(qt_mac_applicationName()).toNSString()];
-    [aboutItem setTitle:qt_mac_applicationmenu_string(6).arg(qt_mac_applicationName()).toNSString()];
+    [servicesItem setTitle:qt_mac_applicationmenu_string(ServicesAppMenuItem).toNSString()];
+    [hideItem setTitle:qt_mac_applicationmenu_string(HideAppMenuItem).arg(qt_mac_applicationName()).toNSString()];
+    [hideAllOthersItem setTitle:qt_mac_applicationmenu_string(HideOthersAppMenuItem).toNSString()];
+    [showAllItem setTitle:qt_mac_applicationmenu_string(ShowAllAppMenuItem).toNSString()];
+    [preferencesItem setTitle:qt_mac_applicationmenu_string(PreferencesAppMenuItem).toNSString()];
+    [quitItem setTitle:qt_mac_applicationmenu_string(QuitAppMenuItem).arg(qt_mac_applicationName()).toNSString()];
+    [aboutItem setTitle:qt_mac_applicationmenu_string(AboutAppMenuItem).arg(qt_mac_applicationName()).toNSString()];
 #endif
 }
 
-- (IBAction)qtDispatcherToQPAMenuItem:(id)sender
+- (void)qtDispatcherToQPAMenuItem:(id)sender
 {
     NSMenuItem *item = static_cast<NSMenuItem *>(sender);
     if (item == quitItem) {
@@ -349,9 +360,12 @@ QT_FORWARD_DECLARE_CLASS(QString)
 
 - (BOOL)validateMenuItem:(NSMenuItem*)menuItem
 {
-    if ([menuItem action] == @selector(hide:)
-        || [menuItem action] == @selector(hideOtherApplications:)
+    if ([menuItem action] == @selector(hideOtherApplications:)
         || [menuItem action] == @selector(unhideAllApplications:)) {
+        return [NSApp validateMenuItem:menuItem];
+    } else if ([menuItem action] == @selector(hide:)) {
+        if (QCocoaIntegration::instance()->activePopupWindow())
+            return NO;
         return [NSApp validateMenuItem:menuItem];
     } else if ([menuItem tag]) {
         QCocoaMenuItem *cocoaItem = reinterpret_cast<QCocoaMenuItem *>([menuItem tag]);
@@ -361,9 +375,10 @@ QT_FORWARD_DECLARE_CLASS(QString)
     }
 }
 
-- (NSArray*) mergeable
+- (NSArray<NSMenuItem *> *)mergeable
 {
-    // don't include the quitItem here, since we want it always visible and enabled regardless
+    // Don't include the quitItem here, since we want it always visible and enabled regardless
+    // Note that lastAppSpecificItem may be nil, so we can't use @[] here.
     return [NSArray arrayWithObjects:preferencesItem, aboutItem, aboutQtItem, lastAppSpecificItem, nil];
 }
 

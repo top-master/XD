@@ -42,21 +42,32 @@
 #include <qaccessible.h>
 #include <qapplication.h>
 #include <qevent.h>
+#if QT_CONFIG(itemviews)
 #include <qheaderview.h>
+#endif
+#if QT_CONFIG(tabbar)
 #include <qtabbar.h>
+#include <private/qtabbar_p.h>
+#endif
+#if QT_CONFIG(combobox)
 #include <qcombobox.h>
-#include <qlistview.h>
-#include <qtableview.h>
+#endif
+#if QT_CONFIG(lineedit)
 #include <qlineedit.h>
+#endif
 #include <qstyle.h>
 #include <qstyleoption.h>
 #include <qtooltip.h>
+#if QT_CONFIG(whatsthis)
 #include <qwhatsthis.h>
-#include <qtreeview.h>
-#include <private/qtabbar_p.h>
+#endif
 #include <QAbstractScrollArea>
+#if QT_CONFIG(scrollarea)
 #include <QScrollArea>
+#endif
+#if QT_CONFIG(scrollbar)
 #include <QScrollBar>
+#endif
 #include <QDebug>
 
 #ifndef QT_NO_ACCESSIBILITY
@@ -66,7 +77,7 @@ QT_BEGIN_NAMESPACE
 QString qt_accStripAmp(const QString &text);
 QString qt_accHotKey(const QString &text);
 
-#ifndef QT_NO_TABBAR
+#if QT_CONFIG(tabbar)
 /*!
   \class QAccessibleTabBar
   \brief The QAccessibleTabBar class implements the QAccessibleInterface for tab bars.
@@ -82,16 +93,16 @@ public:
         : m_parent(parent), m_index(index)
     {}
 
-    void *interface_cast(QAccessible::InterfaceType t) Q_DECL_OVERRIDE {
+    void *interface_cast(QAccessible::InterfaceType t) override {
         if (t == QAccessible::ActionInterface) {
             return static_cast<QAccessibleActionInterface*>(this);
         }
         return 0;
     }
 
-    QObject *object() const Q_DECL_OVERRIDE { return 0; }
-    QAccessible::Role role() const Q_DECL_OVERRIDE { return QAccessible::PageTab; }
-    QAccessible::State state() const Q_DECL_OVERRIDE {
+    QObject *object() const override { return 0; }
+    QAccessible::Role role() const override { return QAccessible::PageTab; }
+    QAccessible::State state() const override {
         if (!isValid()) {
             QAccessible::State s;
             s.invalid = true;
@@ -99,7 +110,7 @@ public:
         }
         return parent()->state();
     }
-    QRect rect() const Q_DECL_OVERRIDE {
+    QRect rect() const override {
         if (!isValid())
             return QRect();
 
@@ -109,13 +120,13 @@ public:
         return rec;
     }
 
-    bool isValid() const Q_DECL_OVERRIDE { return m_parent.data() && m_parent->count() > m_index; }
+    bool isValid() const override { return m_parent.data() && m_parent->count() > m_index; }
 
-    QAccessibleInterface *childAt(int, int) const Q_DECL_OVERRIDE { return 0; }
-    int childCount() const Q_DECL_OVERRIDE { return 0; }
-    int indexOfChild(const QAccessibleInterface *) const Q_DECL_OVERRIDE  { return -1; }
+    QAccessibleInterface *childAt(int, int) const override { return 0; }
+    int childCount() const override { return 0; }
+    int indexOfChild(const QAccessibleInterface *) const override  { return -1; }
 
-    QString text(QAccessible::Text t) const Q_DECL_OVERRIDE
+    QString text(QAccessible::Text t) const override
     {
         if (!isValid())
             return QString();
@@ -145,26 +156,26 @@ public:
         return str;
     }
 
-    void setText(QAccessible::Text, const QString &) Q_DECL_OVERRIDE {}
+    void setText(QAccessible::Text, const QString &) override {}
 
-    QAccessibleInterface *parent() const Q_DECL_OVERRIDE {
+    QAccessibleInterface *parent() const override {
         return QAccessible::queryAccessibleInterface(m_parent.data());
     }
-    QAccessibleInterface *child(int) const Q_DECL_OVERRIDE { return 0; }
+    QAccessibleInterface *child(int) const override { return 0; }
 
     // action interface
-    QStringList actionNames() const Q_DECL_OVERRIDE
+    QStringList actionNames() const override
     {
         return QStringList(pressAction());
     }
 
-    void doAction(const QString &actionName) Q_DECL_OVERRIDE
+    void doAction(const QString &actionName) override
     {
         if (isValid() && actionName == pressAction())
             m_parent->setCurrentIndex(m_index);
     }
 
-    QStringList keyBindingsForAction(const QString &) const Q_DECL_OVERRIDE
+    QStringList keyBindingsForAction(const QString &) const override
     {
         return QStringList();
     }
@@ -259,9 +270,9 @@ QString QAccessibleTabBar::text(QAccessible::Text t) const
     return QString();
 }
 
-#endif // QT_NO_TABBAR
+#endif // QT_CONFIG(tabbar)
 
-#ifndef QT_NO_COMBOBOX
+#if QT_CONFIG(combobox)
 /*!
   \class QAccessibleComboBox
   \brief The QAccessibleComboBox class implements the QAccessibleInterface for editable and read-only combo boxes.
@@ -379,9 +390,9 @@ QStringList QAccessibleComboBox::keyBindingsForAction(const QString &/*actionNam
     return QStringList();
 }
 
-#endif // QT_NO_COMBOBOX
+#endif // QT_CONFIG(combobox)
 
-#ifndef QT_NO_SCROLLAREA
+#if QT_CONFIG(scrollarea)
 // ======================= QAccessibleAbstractScrollArea =======================
 QAccessibleAbstractScrollArea::QAccessibleAbstractScrollArea(QWidget *widget)
     : QAccessibleWidget(widget, QAccessible::Client)
@@ -490,7 +501,7 @@ QAccessibleScrollArea::QAccessibleScrollArea(QWidget *widget)
 {
     Q_ASSERT(qobject_cast<QScrollArea *>(widget));
 }
-#endif // QT_NO_SCROLLAREA
+#endif // QT_CONFIG(scrollarea)
 
 QT_END_NAMESPACE
 

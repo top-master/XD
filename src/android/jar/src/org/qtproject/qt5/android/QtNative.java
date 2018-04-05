@@ -49,18 +49,21 @@ import android.app.Service;
 import android.content.Context;
 import android.content.Intent;
 import android.content.pm.PackageManager;
+import android.content.pm.ActivityInfo;
 import android.net.Uri;
+import android.os.Build;
 import android.os.Handler;
+import android.os.IBinder;
 import android.os.Looper;
 import android.content.ClipboardManager;
 import android.content.ClipboardManager.OnPrimaryClipChangedListener;
-import android.os.Build;
 import android.util.Log;
 import android.view.ContextMenu;
 import android.view.KeyEvent;
 import android.view.Menu;
 import android.view.MotionEvent;
 import android.view.View;
+import android.view.InputDevice;
 
 import java.lang.reflect.Method;
 import java.security.KeyStore;
@@ -95,6 +98,7 @@ public class QtNative
     private static ClipboardManager m_clipboardManager = null;
     private static Method m_checkSelfPermissionMethod = null;
     private static Boolean m_tabletEventSupported = null;
+    public static QtThread m_qtThread = new QtThread();
     private static final Runnable runPendingCppRunnablesRunnable = new Runnable() {
         @Override
         public void run() {
@@ -161,41 +165,64 @@ public class QtNative
     }
 
     // this method loads full path libs
-    public static void loadQtLibraries(ArrayList<String> libraries)
+    public static void loadQtLibraries(final ArrayList<String> libraries)
     {
-        if (libraries == null)
-            return;
-
-        for (String libName : libraries) {
-            try {
-                File f = new File(libName);
-                if (f.exists())
-                    System.load(libName);
-            } catch (SecurityException e) {
-                Log.i(QtTAG, "Can't load '" + libName + "'", e);
-            } catch (Exception e) {
-                Log.i(QtTAG, "Can't load '" + libName + "'", e);
+        m_qtThread.run(new Runnable() {
+            @Override
+            public void run() {
+                if (libraries == null)
+                    return;
+                for (String libName : libraries) {
+                    try {
+                        File f = new File(libName);
+                        if (f.exists())
+                            System.load(libName);
+                    } catch (SecurityException e) {
+                        Log.i(QtTAG, "Can't load '" + libName + "'", e);
+                    } catch (Exception e) {
+                        Log.i(QtTAG, "Can't load '" + libName + "'", e);
+                    }
+                }
             }
-        }
+        });
     }
 
     // this method loads bundled libs by name.
-    public static void loadBundledLibraries(ArrayList<String> libraries, String nativeLibraryDir)
+    public static void loadBundledLibraries(final ArrayList<String> libraries, final String nativeLibraryDir)
     {
-        if (libraries == null)
-            return;
+        m_qtThread.run(new Runnable() {
+            @Override
+            public void run() {
+                if (libraries == null)
+                    return;
 
-        for (String libName : libraries) {
-            try {
-                File f = new File(nativeLibraryDir+"lib"+libName+".so");
-                if (f.exists())
-                    System.load(f.getAbsolutePath());
-                else
-                    Log.i(QtTAG, "Can't find '" + f.getAbsolutePath());
-            } catch (Exception e) {
-                Log.i(QtTAG, "Can't load '" + libName + "'", e);
+                for (String libName : libraries) {
+                    try {
+                        String libNameTemplate = "lib" + libName + ".so";
+                        File f = new File(nativeLibraryDir + libNameTemplate);
+                        if (!f.exists()) {
+                            Log.i(QtTAG, "Can't find '" + f.getAbsolutePath());
+                            try {
+                                ActivityInfo info = m_activity.getPackageManager().getActivityInfo(m_activity.getComponentName(),
+                                                                                           PackageManager.GET_META_DATA);
+                                String systemLibraryDir = QtNativeLibrariesDir.systemLibrariesDir;
+                                if (info.metaData.containsKey("android.app.system_libs_prefix"))
+                                    systemLibraryDir = info.metaData.getString("android.app.system_libs_prefix");
+                                f = new File(systemLibraryDir + libNameTemplate);
+                            } catch (Exception e) {
+
+                            }
+                        }
+                        if (f.exists())
+                            System.load(f.getAbsolutePath());
+                        else
+                            Log.i(QtTAG, "Can't find '" + f.getAbsolutePath());
+                    } catch (Exception e) {
+                        Log.i(QtTAG, "Can't load '" + libName + "'", e);
+                    }
+                }
             }
-        }
+        });
     }
 
     public static void setActivity(Activity qtMainActivity, QtActivityDelegate qtActivityDelegate)
@@ -276,34 +303,66 @@ public class QtNative
     }
 
     public static boolean startApplication(String params,
-                                           String environment,
+                                           final String environment,
                                            String mainLibrary,
                                            String nativeLibraryDir) throws Exception
     {
-        File f = new File(nativeLibraryDir + "lib" + mainLibrary + ".so");
+        String mainLibNameTemplate = "lib" + mainLibrary + ".so";
+        File f = new File(nativeLibraryDir + mainLibNameTemplate);
+        if (!f.exists()) {
+            try {
+                ActivityInfo info = m_activity.getPackageManager().getActivityInfo(m_activity.getComponentName(),
+                                                                                   PackageManager.GET_META_DATA);
+                String systemLibraryDir = QtNativeLibrariesDir.systemLibrariesDir;
+                if (info.metaData.containsKey("android.app.system_libs_prefix"))
+                    systemLibraryDir = info.metaData.getString("android.app.system_libs_prefix");
+                f = new File(systemLibraryDir + mainLibNameTemplate);
+            } catch (Exception e) {
+
+            }
+        }
         if (!f.exists())
             throw new Exception("Can't find main library '" + mainLibrary + "'");
 
         if (params == null)
             params = "-platform\tandroid";
 
-        boolean res = false;
+        final String mainLibraryPath = f.getAbsolutePath();
+        final boolean[] res = new boolean[1];
+        res[0] = false;
         synchronized (m_mainActivityMutex) {
-            res = startQtAndroidPlugin();
-            setDisplayMetrics(m_displayMetricsScreenWidthPixels,
-                              m_displayMetricsScreenHeightPixels,
-                              m_displayMetricsDesktopWidthPixels,
-                              m_displayMetricsDesktopHeightPixels,
-                              m_displayMetricsXDpi,
-                              m_displayMetricsYDpi,
-                              m_displayMetricsScaledDensity,
-                              m_displayMetricsDensity);
             if (params.length() > 0 && !params.startsWith("\t"))
                 params = "\t" + params;
-            startQtApplication(f.getAbsolutePath() + params, environment);
+            final String qtParams = f.getAbsolutePath() + params;
+            m_qtThread.run(new Runnable() {
+                @Override
+                public void run() {
+                    try {
+                        System.load(mainLibraryPath);
+                    } catch (Exception e) {
+                        Log.i(QtTAG, "Can't load '" + mainLibraryPath + "'", e);
+                    }
+                    res[0] = startQtAndroidPlugin(qtParams, environment);
+                    setDisplayMetrics(m_displayMetricsScreenWidthPixels,
+                                      m_displayMetricsScreenHeightPixels,
+                                      m_displayMetricsDesktopWidthPixels,
+                                      m_displayMetricsDesktopHeightPixels,
+                                      m_displayMetricsXDpi,
+                                      m_displayMetricsYDpi,
+                                      m_displayMetricsScaledDensity,
+                                      m_displayMetricsDensity);
+                }
+            });
+            m_qtThread.post(new Runnable() {
+                @Override
+                public void run() {
+                    startQtApplication();
+                }
+            });
+            waitForServiceSetup();
             m_started = true;
         }
-        return res;
+        return res[0];
     }
 
     public static void setApplicationDisplayMetrics(int screenWidthPixels,
@@ -347,8 +406,9 @@ public class QtNative
 
 
     // application methods
-    public static native void startQtApplication(String params, String env);
-    public static native boolean startQtAndroidPlugin();
+    public static native boolean startQtAndroidPlugin(String params, String env);
+    public static native void startQtApplication();
+    public static native void waitForServiceSetup();
     public static native void quitQtCoreApplication();
     public static native void quitQtAndroidPlugin();
     public static native void terminateQt();
@@ -470,6 +530,18 @@ public class QtNative
         }
     }
 
+    static public boolean sendGenericMotionEvent(MotionEvent event, int id)
+    {
+        if (event.getActionMasked() != MotionEvent.ACTION_SCROLL
+                || (event.getSource() & InputDevice.SOURCE_CLASS_POINTER) != InputDevice.SOURCE_CLASS_POINTER) {
+            return false;
+        }
+
+        mouseWheel(id, (int) event.getX(), (int) event.getY(),
+                       event.getAxisValue(MotionEvent.AXIS_HSCROLL), event.getAxisValue(MotionEvent.AXIS_VSCROLL));
+        return true;
+    }
+
     public static Context getContext() {
         if (m_activity != null)
             return m_activity;
@@ -516,12 +588,13 @@ public class QtNative
                                       final int x1,
                                       final int y1,
                                       final int x2,
-                                      final int y2)
+                                      final int y2,
+                                      final boolean rtl)
     {
         runAction(new Runnable() {
             @Override
             public void run() {
-                m_activityDelegate.updateHandles(mode, x1, y1, x2, y2);
+                m_activityDelegate.updateHandles(mode, x1, y1, x2, y2, rtl);
             }
         });
     }
@@ -773,13 +846,13 @@ public class QtNative
         });
     }
 
-    private static void hideSplashScreen()
+    private static void hideSplashScreen(final int duration)
     {
         runAction(new Runnable() {
             @Override
             public void run() {
                 if (m_activityDelegate != null)
-                    m_activityDelegate.hideSplashScreen();
+                    m_activityDelegate.hideSplashScreen(duration);
             }
         });
     }
@@ -800,6 +873,7 @@ public class QtNative
     public static native void mouseDown(int winId, int x, int y);
     public static native void mouseUp(int winId, int x, int y);
     public static native void mouseMove(int winId, int x, int y);
+    public static native void mouseWheel(int winId, int x, int y, float hdelta, float vdelta);
     public static native void touchBegin(int winId);
     public static native void touchAdd(int winId, int pointerId, int action, boolean primary, int x, int y, float major, float minor, float rotation, float pressure);
     public static native void touchEnd(int winId, int action);
@@ -866,4 +940,9 @@ public class QtNative
 
     private static native void setNativeActivity(Activity activity);
     private static native void setNativeService(Service service);
+    // activity methods
+
+    // service methods
+    public static native IBinder onBind(Intent intent);
+    // service methods
 }

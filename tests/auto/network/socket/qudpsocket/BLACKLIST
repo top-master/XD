@@ -1,12 +1,7 @@
-[multicast:same bind, group ipv6 address]
-*
-[multicast]
-osx
 [writeDatagramToNonExistingPeer]
 windows
 osx
 [asyncReadDatagram]
-windows
 osx
 [multicastLeaveAfterClose]
 osx
@@ -25,4 +20,7 @@ osx
 osx
 [zeroLengthDatagram]
 osx
-
+[linkLocalIPv6]
+linux
+[readyReadForEmptyDatagram]
+linux

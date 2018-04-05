@@ -39,7 +39,7 @@
 
 #include "qabstractscrollarea.h"
 
-#ifndef QT_NO_SCROLLAREA
+#if QT_CONFIG(scrollarea)
 
 #include "qscrollbar.h"
 #include "qapplication.h"
@@ -50,7 +50,9 @@
 #include "qboxlayout.h"
 #include "qpainter.h"
 #include "qmargins.h"
+#if QT_CONFIG(itemviews)
 #include "qheaderview.h"
+#endif
 
 #include <QDebug>
 
@@ -332,16 +334,27 @@ void QAbstractScrollAreaPrivate::setSingleFingerPanEnabled(bool on)
 
 void QAbstractScrollAreaPrivate::layoutChildren()
 {
+    bool needH = false;
+    bool needV = false;
+    layoutChildren_helper(&needH, &needV);
+    // Call a second time if one scrollbar was needed and not the other to
+    // check if it needs to readjust accordingly
+    if (needH != needV)
+        layoutChildren_helper(&needH, &needV);
+}
+
+void QAbstractScrollAreaPrivate::layoutChildren_helper(bool *needHorizontalScrollbar, bool *needVerticalScrollbar)
+{
     Q_Q(QAbstractScrollArea);
     bool htransient = hbar->style()->styleHint(QStyle::SH_ScrollBar_Transient, 0, hbar);
-    bool needh = (hbarpolicy != Qt::ScrollBarAlwaysOff) && ((hbarpolicy == Qt::ScrollBarAlwaysOn && !htransient)
-                 || ((hbarpolicy == Qt::ScrollBarAsNeeded || htransient)
-                     && hbar->minimum() < hbar->maximum() && !hbar->sizeHint().isEmpty()));
+    bool needh = *needHorizontalScrollbar || ((hbarpolicy != Qt::ScrollBarAlwaysOff) && ((hbarpolicy == Qt::ScrollBarAlwaysOn && !htransient)
+                            || ((hbarpolicy == Qt::ScrollBarAsNeeded || htransient)
+                            && hbar->minimum() < hbar->maximum() && !hbar->sizeHint().isEmpty())));
 
     bool vtransient = vbar->style()->styleHint(QStyle::SH_ScrollBar_Transient, 0, vbar);
-    bool needv = (vbarpolicy != Qt::ScrollBarAlwaysOff) && ((vbarpolicy == Qt::ScrollBarAlwaysOn && !vtransient)
-                 || ((vbarpolicy == Qt::ScrollBarAsNeeded || vtransient)
-                     && vbar->minimum() < vbar->maximum() && !vbar->sizeHint().isEmpty()));
+    bool needv = *needVerticalScrollbar || ((vbarpolicy != Qt::ScrollBarAlwaysOff) && ((vbarpolicy == Qt::ScrollBarAlwaysOn && !vtransient)
+                            || ((vbarpolicy == Qt::ScrollBarAsNeeded || vtransient)
+                            && vbar->minimum() < vbar->maximum() && !vbar->sizeHint().isEmpty())));
 
     QStyleOption opt(0);
     opt.init(q);
@@ -520,6 +533,8 @@ void QAbstractScrollAreaPrivate::layoutChildren()
         viewportRect.adjust(left, top, -right, -bottom);
 
     viewport->setGeometry(QStyle::visualRect(opt.direction, opt.rect, viewportRect)); // resize the viewport last
+    *needHorizontalScrollbar = needh;
+    *needVerticalScrollbar = needv;
 }
 
 /*!
@@ -1148,7 +1163,7 @@ bool QAbstractScrollArea::event(QEvent *e)
     case QEvent::ApplicationLayoutDirectionChange:
     case QEvent::LayoutRequest:
         d->layoutChildren();
-        // fall through
+        Q_FALLTHROUGH();
     default:
         return QFrame::event(e);
     }
@@ -1188,7 +1203,7 @@ bool QAbstractScrollArea::viewportEvent(QEvent *e)
     case QEvent::TouchEnd:
     case QEvent::MouseMove:
     case QEvent::ContextMenu:
-#ifndef QT_NO_WHEELEVENT
+#if QT_CONFIG(wheelevent)
     case QEvent::Wheel:
 #endif
 #ifndef QT_NO_DRAGANDDROP
@@ -1305,7 +1320,7 @@ void QAbstractScrollArea::mouseMoveEvent(QMouseEvent *e)
 
     \sa QWidget::wheelEvent()
 */
-#ifndef QT_NO_WHEELEVENT
+#if QT_CONFIG(wheelevent)
 void QAbstractScrollArea::wheelEvent(QWheelEvent *e)
 {
     Q_D(QAbstractScrollArea);
@@ -1473,7 +1488,7 @@ bool QAbstractScrollAreaPrivate::canStartScrollingAt( const QPoint &startPos )
 {
     Q_Q(QAbstractScrollArea);
 
-#ifndef QT_NO_GRAPHICSVIEW
+#if QT_CONFIG(graphicsview)
     // don't start scrolling when a drag mode has been set.
     // don't start scrolling on a movable item.
     if (QGraphicsView *view = qobject_cast<QGraphicsView *>(q)) {
@@ -1660,4 +1675,4 @@ QT_END_NAMESPACE
 #include "moc_qabstractscrollarea.cpp"
 #include "moc_qabstractscrollarea_p.cpp"
 
-#endif // QT_NO_SCROLLAREA
+#endif // QT_CONFIG(scrollarea)

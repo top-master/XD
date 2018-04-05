@@ -459,6 +459,8 @@ void tst_QSharedMemory::readOnly()
 {
 #if !QT_CONFIG(process)
     QSKIP("No qprocess support", SkipAll);
+#elif defined(Q_OS_MACOS)
+    QSKIP("QTBUG-59936: Times out on macOS", SkipAll);
 #else
     rememberKey("readonly_segfault");
     // ### on windows disable the popup somehow
@@ -813,6 +815,7 @@ void tst_QSharedMemory::uniqueKey_data()
     QTest::newRow("key != key1") << QString("key") << QString("key1");
     QTest::newRow("ke1y != key1") << QString("ke1y") << QString("key1");
     QTest::newRow("key1 != key2") << QString("key1") << QString("key2");
+    QTest::newRow("Noël -> Nol") << QString::fromUtf8("N\xc3\xabl") << QString("Nol");
 }
 
 void tst_QSharedMemory::uniqueKey()

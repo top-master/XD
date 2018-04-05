@@ -83,8 +83,6 @@ void RasterWindow::renderLater()
 void RasterWindow::resizeEvent(QResizeEvent *resizeEvent)
 {
     m_backingStore->resize(resizeEvent->size());
-    if (isExposed())
-        renderNow();
 }
 //! [5]
 
@@ -111,6 +109,7 @@ void RasterWindow::renderNow()
 
     painter.fillRect(0, 0, width(), height(), Qt::white);
     render(&painter);
+    painter.end();
 
     m_backingStore->endPaint();
     m_backingStore->flush(rect);

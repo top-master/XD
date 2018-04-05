@@ -95,17 +95,6 @@ enum ThreadAction {
     PendingCallBlockAction = 28,
     SendMessageAction = 29,
     HuntAndEmitAction = 30,
-
-    AddTimeoutAction = 50,
-    RealAddTimeoutAction = 51,
-    RemoveTimeoutAction = 52,
-    KillTimerAction = 58,
-    TimerEventAction = 59,
-    AddWatchAction = 60,
-    RemoveWatchAction = 61,
-    ToggleWatchAction = 62,
-    SocketReadAction = 63,
-    SocketWriteAction = 64
 };
 
 struct QDBusLockerBase
@@ -176,49 +165,20 @@ struct QDBusWriteLocker: QDBusLockerBase
     }
 };
 
-struct QDBusMutexLocker: QDBusLockerBase
-{
-    QDBusConnectionPrivate *self;
-    QMutex *mutex;
-    ThreadAction action;
-    inline QDBusMutexLocker(ThreadAction a, QDBusConnectionPrivate *s,
-                            QMutex *m)
-        : self(s), mutex(m), action(a)
-    {
-        reportThreadAction(action, BeforeLock, self);
-        mutex->lock();
-        reportThreadAction(action, AfterLock, self);
-    }
-
-    inline ~QDBusMutexLocker()
-    {
-        reportThreadAction(action, BeforeUnlock, self);
-        mutex->unlock();
-        reportThreadAction(action, AfterUnlock, self);
-    }
-};
-
-struct QDBusDispatchLocker: QDBusMutexLocker
-{
-    inline QDBusDispatchLocker(ThreadAction a, QDBusConnectionPrivate *s)
-        : QDBusMutexLocker(a, s, &s->dispatchLock)
-    { }
-};
-
 #if QDBUS_THREAD_DEBUG
 # define SEM_ACQUIRE(action, sem)                                       \
     do {                                                                \
     QDBusLockerBase::reportThreadAction(action, QDBusLockerBase::BeforeAcquire, this); \
     sem.acquire();                                                      \
     QDBusLockerBase::reportThreadAction(action, QDBusLockerBase::AfterAcquire, this); \
-    } while (0)
+    } while (false)
 
 # define SEM_RELEASE(action, sem)                                       \
     do {                                                                \
     QDBusLockerBase::reportThreadAction(action, QDBusLockerBase::BeforeRelease, that); \
     sem.release();                                                      \
     QDBusLockerBase::reportThreadAction(action, QDBusLockerBase::AfterRelease, that); \
-    } while (0)
+    } while (false)
 
 #else
 # define SEM_ACQUIRE(action, sem)       sem.acquire()

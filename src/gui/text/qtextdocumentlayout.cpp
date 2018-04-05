@@ -399,26 +399,6 @@ static bool operator<(const QCheckPoint &checkPoint, int pos)
     return checkPoint.positionInFrame < pos;
 }
 
-#if defined(Q_CC_MSVC) && _MSC_VER < 1600
-//The STL implementation of MSVC 2008 requires the definitions
-
-static bool operator<(const QCheckPoint &checkPoint1, const QCheckPoint &checkPoint2)
-{
-    return checkPoint1.y < checkPoint2.y;
-}
-
-static bool operator<(QFixed y, const QCheckPoint &checkPoint)
-{
-    return y < checkPoint.y;
-}
-
-static bool operator<(int pos, const QCheckPoint &checkPoint)
-{
-    return pos < checkPoint.positionInFrame;
-}
-
-#endif
-
 static void fillBackground(QPainter *p, const QRectF &rect, QBrush brush, const QPointF &origin, const QRectF &gradientRect = QRectF())
 {
     p->save();
@@ -1427,7 +1407,7 @@ void QTextDocumentLayoutPrivate::drawListItem(const QPointF &offset, QPainter *p
     case QTextListFormat::ListLowerRoman:
     case QTextListFormat::ListUpperRoman:
         itemText = static_cast<QTextList *>(object)->itemText(bl);
-        size.setWidth(fontMetrics.width(itemText));
+        size.setWidth(fontMetrics.horizontalAdvance(itemText));
         size.setHeight(fontMetrics.height());
         break;
 
@@ -1445,7 +1425,7 @@ void QTextDocumentLayoutPrivate::drawListItem(const QPointF &offset, QPainter *p
 
     QRectF r(pos, size);
 
-    qreal xoff = fontMetrics.width(QLatin1Char(' '));
+    qreal xoff = fontMetrics.horizontalAdvance(QLatin1Char(' '));
     if (dir == Qt::LeftToRight)
         xoff = -xoff - size.width();
     r.translate( xoff, (fontMetrics.height() / 2) - (size.height() / 2));
@@ -2613,7 +2593,7 @@ void QTextDocumentLayoutPrivate::layoutBlock(const QTextBlock &bl, int blockPosi
     QFixed extraMargin;
     if (docPrivate->defaultTextOption.flags() & QTextOption::AddSpaceForLineAndParagraphSeparators) {
         QFontMetricsF fm(bl.charFormat().font());
-        extraMargin = QFixed::fromReal(fm.width(QChar(QChar(0x21B5))));
+        extraMargin = QFixed::fromReal(fm.horizontalAdvance(QChar(QChar(0x21B5))));
     }
 
     const QFixed indent = this->blockIndent(blockFormat);

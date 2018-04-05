@@ -56,7 +56,7 @@
 
 static bool initResources()
 {
-#if !defined (QT_NO_IMAGEFORMAT_PNG)
+#if QT_CONFIG(imageformat_png)
     Q_INIT_RESOURCE(cursors);
 #endif
     return true;
@@ -184,7 +184,7 @@ static HCURSOR createBitmapCursor(const QCursor &cursor, qreal scaleFactor = 1)
     return createBitmapCursor(bbits, mbits, cursor.hotSpot(), invb, invm);
 }
 
-static QSize systemCursorSize(const QPlatformScreen *screen = Q_NULLPTR)
+static QSize systemCursorSize(const QPlatformScreen *screen = nullptr)
 {
     const QSize primaryScreenCursorSize(GetSystemMetrics(SM_CXCURSOR), GetSystemMetrics(SM_CYCURSOR));
     if (screen) {
@@ -203,7 +203,7 @@ static QSize systemCursorSize(const QPlatformScreen *screen = Q_NULLPTR)
     return primaryScreenCursorSize;
 }
 
-#if defined (QT_NO_IMAGEFORMAT_PNG)
+#if !QT_CONFIG(imageformat_png)
 
 static inline QSize standardCursorSize() { return QSize(32, 32); }
 
@@ -548,6 +548,8 @@ CursorHandlePtr QWindowsCursor::standardWindowCursor(Qt::CursorShape shape)
     return it != m_standardCursorCache.end() ? it.value() : CursorHandlePtr(new CursorHandle);
 }
 
+HCURSOR QWindowsCursor::m_overriddenCursor = nullptr;
+
 /*!
     \brief Return cached pixmap cursor or create new one.
 */
@@ -586,6 +588,13 @@ QWindowsCursor::QWindowsCursor(const QPlatformScreen *screen)
     Q_UNUSED(dummy)
 }
 
+inline CursorHandlePtr QWindowsCursor::cursorHandle(const QCursor &cursor)
+{
+    return cursor.shape() == Qt::BitmapCursor
+        ? pixmapWindowCursor(cursor)
+        : standardWindowCursor(cursor.shape());
+}
+
 /*!
     \brief Set a cursor on a window.
 
@@ -603,14 +612,33 @@ void QWindowsCursor::changeCursor(QCursor *cursorIn, QWindow *window)
         platformWindow->setCursor(CursorHandlePtr(new CursorHandle));
         return;
     }
-    const CursorHandlePtr wcursor =
-        cursorIn->shape() == Qt::BitmapCursor ?
-        pixmapWindowCursor(*cursorIn) : standardWindowCursor(cursorIn->shape());
+    const CursorHandlePtr wcursor = cursorHandle(*cursorIn);
     if (wcursor->handle()) {
         platformWindow->setCursor(wcursor);
     } else {
         qWarning("%s: Unable to obtain system cursor for %d",
                  __FUNCTION__, cursorIn->shape());
+    }
+}
+
+void QWindowsCursor::setOverrideCursor(const QCursor &cursor)
+{
+    const CursorHandlePtr wcursor = cursorHandle(cursor);
+    if (wcursor->handle()) {
+        const HCURSOR previousCursor = SetCursor(wcursor->handle());
+        if (m_overriddenCursor == nullptr)
+            m_overriddenCursor = previousCursor;
+    } else {
+        qWarning("%s: Unable to obtain system cursor for %d",
+                 __FUNCTION__, cursor.shape());
+    }
+}
+
+void QWindowsCursor::clearOverrideCursor()
+{
+    if (m_overriddenCursor) {
+        SetCursor(m_overriddenCursor);
+        m_overriddenCursor = nullptr;
     }
 }
 

@@ -175,26 +175,26 @@ public:
     explicit QMYSQLResult(const QMYSQLDriver *db);
     ~QMYSQLResult();
 
-    QVariant handle() const Q_DECL_OVERRIDE;
+    QVariant handle() const override;
 protected:
     void cleanup();
-    bool fetch(int i) Q_DECL_OVERRIDE;
-    bool fetchNext() Q_DECL_OVERRIDE;
-    bool fetchLast() Q_DECL_OVERRIDE;
-    bool fetchFirst() Q_DECL_OVERRIDE;
-    QVariant data(int field) Q_DECL_OVERRIDE;
-    bool isNull(int field) Q_DECL_OVERRIDE;
-    bool reset (const QString& query) Q_DECL_OVERRIDE;
-    int size() Q_DECL_OVERRIDE;
-    int numRowsAffected() Q_DECL_OVERRIDE;
-    QVariant lastInsertId() const Q_DECL_OVERRIDE;
-    QSqlRecord record() const Q_DECL_OVERRIDE;
-    void virtual_hook(int id, void *data) Q_DECL_OVERRIDE;
-    bool nextResult() Q_DECL_OVERRIDE;
+    bool fetch(int i) override;
+    bool fetchNext() override;
+    bool fetchLast() override;
+    bool fetchFirst() override;
+    QVariant data(int field) override;
+    bool isNull(int field) override;
+    bool reset (const QString& query) override;
+    int size() override;
+    int numRowsAffected() override;
+    QVariant lastInsertId() const override;
+    QSqlRecord record() const override;
+    void virtual_hook(int id, void *data) override;
+    bool nextResult() override;
 
 #if MYSQL_VERSION_ID >= 40108
-    bool prepare(const QString &stmt) Q_DECL_OVERRIDE;
-    bool exec() Q_DECL_OVERRIDE;
+    bool prepare(const QString &stmt) override;
+    bool exec() override;
 #endif
 };
 
@@ -269,7 +269,7 @@ static QSqlError qMakeError(const QString& err, QSqlError::ErrorType type,
     const char *cerr = p->mysql ? mysql_error(p->mysql) : 0;
     return QSqlError(QLatin1String("QMYSQL: ") + err,
                      p->tc ? toUnicode(p->tc, cerr) : QString::fromLatin1(cerr),
-                     type, mysql_errno(p->mysql));
+                     type, QString::number(mysql_errno(p->mysql)));
 }
 
 
@@ -331,7 +331,8 @@ static QVariant::Type qDecodeMYSQLType(int mysqltype, uint flags)
 static QSqlField qToField(MYSQL_FIELD *field, QTextCodec *tc)
 {
     QSqlField f(toUnicode(tc, field->name),
-                qDecodeMYSQLType(int(field->type), field->flags));
+                qDecodeMYSQLType(int(field->type), field->flags),
+                toUnicode(tc, field->table));
     f.setRequired(IS_NOT_NULL(field->flags));
     f.setLength(field->length);
     f.setPrecision(field->decimals);
@@ -348,7 +349,7 @@ static QSqlError qMakeStmtError(const QString& err, QSqlError::ErrorType type,
     const char *cerr = mysql_stmt_error(stmt);
     return QSqlError(QLatin1String("QMYSQL3: ") + err,
                      QString::fromLatin1(cerr),
-                     type, mysql_stmt_errno(stmt));
+                     type, QString::number(mysql_stmt_errno(stmt)));
 }
 
 static bool qIsBlob(int t)
@@ -1158,16 +1159,22 @@ static void qLibraryInit()
     }
 # endif // MYSQL_VERSION_ID
 #endif // Q_NO_MYSQL_EMBEDDED
+
+#ifdef MARIADB_BASE_VERSION
+    qAddPostRoutine([]() { mysql_server_end(); });
+#endif
 }
 
 static void qLibraryEnd()
 {
-#ifndef Q_NO_MYSQL_EMBEDDED
-# if MYSQL_VERSION_ID > 40000
-#  if (MYSQL_VERSION_ID >= 40110 && MYSQL_VERSION_ID < 50000) || MYSQL_VERSION_ID >= 50003
-    mysql_library_end();
-#  else
-    mysql_server_end();
+#if !defined(MARIADB_BASE_VERSION)
+# if !defined(Q_NO_MYSQL_EMBEDDED)
+#  if MYSQL_VERSION_ID > 40000
+#   if (MYSQL_VERSION_ID >= 40110 && MYSQL_VERSION_ID < 50000) || MYSQL_VERSION_ID >= 50003
+     mysql_library_end();
+#   else
+     mysql_server_end();
+#   endif
 #  endif
 # endif
 #endif

@@ -37,6 +37,11 @@ MainWindow::MainWindow(QWidget *parent) :
 {
     ui->setupUi(this);
 
+    auto *a = ui->menuStuff->addAction("Enabled Submenu (QTBUG-63172)");
+    auto *qtbug63172_Menu = new QMenu;
+    qtbug63172_Menu->addAction("We're Good!");
+    a->setMenu(qtbug63172_Menu);
+
     startTimer(1000);
 
     connect(ui->menuAfter_aboutToShow, &QMenu::aboutToShow, [=] {
@@ -55,6 +60,19 @@ MainWindow::MainWindow(QWidget *parent) :
 
     connect(ui->pushButton, &QPushButton::clicked, [=] {
         menuApp->populateMenu(ui->menuOn_Click, true /*clear*/);
+    });
+
+    connect(ui->addManyButton, &QPushButton::clicked, [=] {
+        QMenu *menu = new QMenu(QLatin1String("Many More ") +
+                                QString::number(ui->menuBar->actions().count()));
+        ui->menuBar->insertMenu(ui->menuDynamic_Stuff->menuAction(), menu);
+        for (int i = 0; i < 2000; i++) {
+            auto *action = menu->addAction(QLatin1String("Item ") + QString::number(i));
+            if (i & 0x1)
+                action->setEnabled(false);
+            if (i & 0x2)
+                action->setVisible(false);
+        }
     });
 }
 

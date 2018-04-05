@@ -63,7 +63,6 @@
 #include <QFileDialog>
 #include <QDialogButtonBox>
 #include <QMessageBox>
-#include <QSignalMapper>
 #include <QApplication>
 #include <QPainter>
 #include <QMouseEvent>
@@ -98,6 +97,7 @@ MainWindow::MainWindow(const CustomSizeHintMap &customSizeHints,
                        QWidget *parent, Qt::WindowFlags flags)
     : QMainWindow(parent, flags)
 {
+    Q_UNUSED(message);
     setObjectName("MainWindow");
     setWindowTitle("Qt Main Window Example");
 
@@ -383,7 +383,7 @@ void MainWindow::switchLayoutDirection()
 class CreateDockWidgetDialog : public QDialog
 {
 public:
-    explicit CreateDockWidgetDialog(QWidget *parent = Q_NULLPTR);
+    explicit CreateDockWidgetDialog(QWidget *parent = nullptr);
 
     QString enteredObjectName() const { return m_objectName->text(); }
     Qt::DockWidgetArea location() const;

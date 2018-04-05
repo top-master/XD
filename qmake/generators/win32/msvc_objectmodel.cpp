@@ -47,15 +47,15 @@ static DotNET vsVersionFromString(const char *versionString)
         DotNET version;
     };
     static VSVersionMapping mapping[] = {
-        "7.0", NET2002,
-        "7.1", NET2003,
-        "8.0", NET2005,
-        "9.0", NET2008,
-        "10.0", NET2010,
-        "11.0", NET2012,
-        "12.0", NET2013,
-        "14.0", NET2015,
-        "15.0", NET2017
+        { "7.0", NET2002 },
+        { "7.1", NET2003 },
+        { "8.0", NET2005 },
+        { "9.0", NET2008 },
+        { "10.0", NET2010 },
+        { "11.0", NET2012 },
+        { "12.0", NET2013 },
+        { "14.0", NET2015 },
+        { "15.0", NET2017 }
     };
     DotNET result = NETUnknown;
     for (const auto entry : mapping) {
@@ -320,7 +320,7 @@ triState operator!(const triState &rhs)
 QStringList VCToolBase::fixCommandLine(const QString &input)
 {
     // The splitting regexp is a bit bizarre for backwards compat reasons (why else ...).
-    return input.split(QRegExp(QLatin1String("\n\t|\r\\\\h|\r\n")));
+    return input.split(QRegExp(QLatin1String("(\n\t|\r\\\\h|\r\n)\\s*")));
 }
 
 static QString vcCommandSeparator()

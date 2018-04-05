@@ -1,6 +1,6 @@
 /****************************************************************************
 **
-** Copyright (C) 2016 The Qt Company Ltd.
+** Copyright (C) 2017 The Qt Company Ltd.
 ** Contact: https://www.qt.io/licensing/
 **
 ** This file is part of the QtCore module of the Qt Toolkit.
@@ -63,6 +63,7 @@ static void setBoolLane(QBasicAtomicInt *atomic, bool enable, int shift)
     \class QLoggingCategory
     \inmodule QtCore
     \since 5.2
+    \threadsafe
 
     \brief The QLoggingCategory class represents a category, or 'area' in the
     logging infrastructure.
@@ -94,6 +95,9 @@ static void setBoolLane(QBasicAtomicInt *atomic, bool enable, int shift)
        \li Avoid the category names \c{debug}, \c{info}, \c{warning}, and \c{critical}.
        \li Category names starting with \c{qt} are reserved for Qt modules.
     \endlist
+
+    QLoggingCategory objects implicitly defined by Q_LOGGING_CATEGORY()
+    are created on first use in a thread-safe manner.
 
     \section1 Checking Category Configuration
 
@@ -330,12 +334,11 @@ bool QLoggingCategory::isEnabled(QtMsgType msgtype) const
 /*!
     Changes the message type \a type for the category to \a enable.
 
-    \note Changes only affect the current QLoggingCategory object, and won't
-    change the settings of other objects for the same category name.
-    Use either \l setFilterRules() or \l installFilter() to change the
-    configuration globally.
+    This method is meant to be used only from inside a filter
+    installed by \l installFilter(). See \l {Configuring Categories} for
+    an overview on how to configure categories globally.
 
-    \note \c QtFatalMsg cannot be changed. It will always return \c true.
+    \note \c QtFatalMsg cannot be changed. It will always remain \c true.
 */
 void QLoggingCategory::setEnabled(QtMsgType type, bool enable)
 {
@@ -407,8 +410,8 @@ QLoggingCategory *QLoggingCategory::defaultCategory()
     filter is free to change the respective category configuration with
     \l setEnabled().
 
-    The filter might be called concurrently from different threads, and
-    therefore has to be reentrant.
+    The filter might be called from different threads, but never concurrently.
+    The filter shall not call any static functions of QLoggingCategory.
 
     Example:
     \snippet qloggingcategory/main.cpp 21
@@ -442,6 +445,7 @@ void QLoggingCategory::setFilterRules(const QString &rules)
 /*!
     \macro qCDebug(category)
     \relates QLoggingCategory
+    \threadsafe
     \since 5.2
 
     Returns an output stream for debug messages in the logging category
@@ -458,12 +462,15 @@ void QLoggingCategory::setFilterRules(const QString &rules)
     \note Arguments are not processed if debug output for the category is not
     enabled, so do not rely on any side effects.
 
+    \note Using the macro is thread-safe.
+
     \sa qDebug()
 */
 
 /*!
     \macro qCDebug(category, const char *message, ...)
     \relates QLoggingCategory
+    \threadsafe
     \since 5.3
 
     Logs a debug message \a message in the logging category \a category.
@@ -477,12 +484,15 @@ void QLoggingCategory::setFilterRules(const QString &rules)
     \note Arguments might not be processed if debug output for the category is
     not enabled, so do not rely on any side effects.
 
+    \note Using the macro is thread-safe.
+
     \sa qDebug()
 */
 
 /*!
     \macro qCInfo(category)
     \relates QLoggingCategory
+    \threadsafe
     \since 5.5
 
     Returns an output stream for informational messages in the logging category
@@ -499,12 +509,15 @@ void QLoggingCategory::setFilterRules(const QString &rules)
     \note Arguments are not processed if debug output for the category is not
     enabled, so do not rely on any side effects.
 
+    \note Using the macro is thread-safe.
+
     \sa qInfo()
 */
 
 /*!
     \macro qCInfo(category, const char *message, ...)
     \relates QLoggingCategory
+    \threadsafe
     \since 5.5
 
     Logs an informational message \a message in the logging category \a category.
@@ -518,12 +531,15 @@ void QLoggingCategory::setFilterRules(const QString &rules)
     \note Arguments might not be processed if debug output for the category is
     not enabled, so do not rely on any side effects.
 
+    \note Using the macro is thread-safe.
+
     \sa qInfo()
 */
 
 /*!
     \macro qCWarning(category)
     \relates QLoggingCategory
+    \threadsafe
     \since 5.2
 
     Returns an output stream for warning messages in the logging category
@@ -540,12 +556,15 @@ void QLoggingCategory::setFilterRules(const QString &rules)
     \note Arguments are not processed if warning output for the category is not
     enabled, so do not rely on any side effects.
 
+    \note Using the macro is thread-safe.
+
     \sa qWarning()
 */
 
 /*!
     \macro qCWarning(category, const char *message, ...)
     \relates QLoggingCategory
+    \threadsafe
     \since 5.3
 
     Logs a warning message \a message in the logging category \a category.
@@ -559,12 +578,15 @@ void QLoggingCategory::setFilterRules(const QString &rules)
     \note Arguments might not be processed if warning output for the category is
     not enabled, so do not rely on any side effects.
 
+    \note Using the macro is thread-safe.
+
     \sa qWarning()
 */
 
 /*!
     \macro qCCritical(category)
     \relates QLoggingCategory
+    \threadsafe
     \since 5.2
 
     Returns an output stream for critical messages in the logging category
@@ -581,12 +603,15 @@ void QLoggingCategory::setFilterRules(const QString &rules)
     \note Arguments are not processed if critical output for the category is not
     enabled, so do not rely on any side effects.
 
+    \note Using the macro is thread-safe.
+
     \sa qCritical()
 */
 
 /*!
     \macro qCCritical(category, const char *message, ...)
     \relates QLoggingCategory
+    \threadsafe
     \since 5.3
 
     Logs a critical message \a message in the logging category \a category.
@@ -599,6 +624,8 @@ void QLoggingCategory::setFilterRules(const QString &rules)
 
     \note Arguments might not be processed if critical output for the category
     is not enabled, so do not rely on any side effects.
+
+    \note Using the macro is thread-safe.
 
     \sa qCritical()
 */
@@ -624,7 +651,8 @@ void QLoggingCategory::setFilterRules(const QString &rules)
     \a string identifier. By default, all message types are enabled.
 
     Only one translation unit in a library or executable can define a category
-    with a specific name.
+    with a specific name. The implicitly defined QLoggingCategory object is
+    created on first use, in a thread-safe manner.
 
     This macro must be used outside of a class or method.
 */
@@ -640,7 +668,8 @@ void QLoggingCategory::setFilterRules(const QString &rules)
     and more severe are enabled, types with a lower severity are disabled.
 
     Only one translation unit in a library or executable can define a category
-    with a specific name.
+    with a specific name. The implicitly defined QLoggingCategory object is
+    created on first use, in a thread-safe manner.
 
     This macro must be used outside of a class or method. It is only defined
     if variadic macros are supported.

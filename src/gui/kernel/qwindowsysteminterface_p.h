@@ -75,7 +75,7 @@ public:
         ActivatedWindow = 0x05,
         WindowStateChanged = 0x06,
         Mouse = UserInputEvent | 0x07,
-        FrameStrutMouse = UserInputEvent | 0x08,
+        FrameStrutMouse = UserInputEvent | 0x08,  // ### Qt6 remove
         Wheel = UserInputEvent | 0x09,
         Key = UserInputEvent | 0x0a,
         Touch = UserInputEvent | 0x0b,
@@ -98,7 +98,8 @@ public:
 #endif
         ApplicationStateChanged = 0x19,
         FlushEvents = 0x20,
-        WindowScreenChanged = 0x21
+        WindowScreenChanged = 0x21,
+        SafeAreaMarginsChanged = 0x22
     };
 
     class WindowSystemEvent {
@@ -131,12 +132,10 @@ public:
 
     class GeometryChangeEvent : public WindowSystemEvent {
     public:
-        GeometryChangeEvent(QWindow *window, const QRect &newGeometry, const QRect &oldGeometry)
-            : WindowSystemEvent(GeometryChange), window(window), newGeometry(newGeometry), oldGeometry(oldGeometry)
-        { }
+        GeometryChangeEvent(QWindow *window, const QRect &newGeometry);
         QPointer<QWindow> window;
+        QRect requestedGeometry;
         QRect newGeometry;
-        QRect oldGeometry;
     };
 
     class EnterEvent : public WindowSystemEvent {
@@ -168,13 +167,13 @@ public:
 
     class WindowStateChangedEvent : public WindowSystemEvent {
     public:
-        WindowStateChangedEvent(QWindow *_window, Qt::WindowState _newState, Qt::WindowState _oldState)
+        WindowStateChangedEvent(QWindow *_window, Qt::WindowStates _newState, Qt::WindowStates _oldState)
             : WindowSystemEvent(WindowStateChanged), window(_window), newState(_newState), oldState(_oldState)
         { }
 
         QPointer<QWindow> window;
-        Qt::WindowState newState;
-        Qt::WindowState oldState;
+        Qt::WindowStates newState;
+        Qt::WindowStates oldState;
     };
 
     class WindowScreenChangedEvent : public WindowSystemEvent {
@@ -185,6 +184,15 @@ public:
 
         QPointer<QWindow> window;
         QPointer<QScreen> screen;
+    };
+
+    class SafeAreaMarginsChangedEvent : public WindowSystemEvent {
+    public:
+        SafeAreaMarginsChangedEvent(QWindow *w)
+            : WindowSystemEvent(SafeAreaMarginsChanged), window(w)
+        { }
+
+        QPointer<QWindow> window;
     };
 
     class ApplicationStateChangedEvent : public WindowSystemEvent {
@@ -227,18 +235,27 @@ public:
 
     class MouseEvent : public InputEvent {
     public:
-        MouseEvent(QWindow * w, ulong time, const QPointF &local, const QPointF &global,
-                   Qt::MouseButtons b, Qt::KeyboardModifiers mods,
-                   Qt::MouseEventSource src = Qt::MouseEventNotSynthesized)
-            : InputEvent(w, time, Mouse, mods), localPos(local), globalPos(global), buttons(b), source(src) { }
-        MouseEvent(QWindow * w, ulong time, EventType t, const QPointF &local, const QPointF &global,
-                   Qt::MouseButtons b, Qt::KeyboardModifiers mods,
-                   Qt::MouseEventSource src = Qt::MouseEventNotSynthesized)
-            : InputEvent(w, time, t, mods), localPos(local), globalPos(global), buttons(b), source(src) { }
+        MouseEvent(QWindow *w, ulong time, const QPointF &local, const QPointF &global,
+                   Qt::MouseButtons state, Qt::KeyboardModifiers mods,
+                   Qt::MouseButton b, QEvent::Type type,
+                   Qt::MouseEventSource src = Qt::MouseEventNotSynthesized, bool frame = false)
+            : InputEvent(w, time, Mouse, mods), localPos(local), globalPos(global), buttons(state),
+              source(src), nonClientArea(frame), button(b), buttonType(type) { }
+
+        // ### In Qt6 this method can be removed as there won't be need for compatibility code path
+        bool enhancedMouseEvent() const
+        {
+            static const bool disableEnhanced = qEnvironmentVariableIsSet("QT_QPA_DISABLE_ENHANCED_MOUSE");
+            return !disableEnhanced && buttonType != QEvent::None;
+        }
+
         QPointF localPos;
         QPointF globalPos;
         Qt::MouseButtons buttons;
         Qt::MouseEventSource source;
+        bool nonClientArea;
+        Qt::MouseButton button;
+        QEvent::Type buttonType;
     };
 
     class WheelEvent : public InputEvent {
@@ -423,9 +440,9 @@ public:
 #ifndef QT_NO_GESTURES
     class GestureEvent : public InputEvent {
     public:
-        GestureEvent(QWindow *window, ulong time, Qt::NativeGestureType type, QPointF pos, QPointF globalPos)
+        GestureEvent(QWindow *window, ulong time, Qt::NativeGestureType type, QTouchDevice *dev, QPointF pos, QPointF globalPos)
             : InputEvent(window, time, Gesture, Qt::NoModifier), type(type), pos(pos), globalPos(globalPos),
-              realValue(0), sequenceId(0), intValue(0) { }
+              realValue(0), sequenceId(0), intValue(0), device(dev) { }
         Qt::NativeGestureType type;
         QPointF pos;
         QPointF globalPos;
@@ -434,6 +451,7 @@ public:
         // Windows
         ulong sequenceId;
         quint64 intValue;
+        QTouchDevice *device;
     };
 #endif
 
@@ -514,7 +532,7 @@ public:
 
     static QList<QTouchEvent::TouchPoint>
         fromNativeTouchPoints(const QList<QWindowSystemInterface::TouchPoint> &points,
-                              const QWindow *window, quint8 deviceId, QEvent::Type *type = Q_NULLPTR);
+                              const QWindow *window, quint8 deviceId, QEvent::Type *type = nullptr);
     static QList<QWindowSystemInterface::TouchPoint>
         toNativeTouchPoints(const QList<QTouchEvent::TouchPoint>& pointList,
                             const QWindow *window);

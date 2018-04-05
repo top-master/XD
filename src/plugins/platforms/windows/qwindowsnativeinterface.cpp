@@ -64,7 +64,8 @@ enum ResourceType {
     HandleType,
     GlHandleType,
     GetDCType,
-    ReleaseDCType
+    ReleaseDCType,
+    VkSurface
 };
 
 static int resourceType(const QByteArray &key)
@@ -77,7 +78,8 @@ static int resourceType(const QByteArray &key)
         "handle",
         "glhandle",
         "getdc",
-        "releasedc"
+        "releasedc",
+        "vkSurface"
     };
     const char ** const end = names + sizeof(names) / sizeof(names[0]);
     const char **result = std::find(names, end, key);
@@ -112,6 +114,12 @@ void *QWindowsNativeInterface::nativeResourceForWindow(const QByteArray &resourc
     case QWindow::OpenGLSurface:
     case QWindow::OpenVGSurface:
         break;
+    case QWindow::VulkanSurface:
+#if QT_CONFIG(vulkan)
+        if (type == VkSurface)
+            return bw->surface(nullptr, nullptr); // returns the address of the VkSurfaceKHR, not the value, as expected
+#endif
+        break;
     }
     qWarning("%s: Invalid key '%s' requested.", __FUNCTION__, resource.constData());
     return 0;
@@ -126,7 +134,7 @@ void *QWindowsNativeInterface::nativeResourceForCursor(const QByteArray &resourc
                 return static_cast<const QWindowsCursor *>(pCursor)->hCursor(cursor);
         }
     }
-    return Q_NULLPTR;
+    return nullptr;
 }
 #endif // !QT_NO_CURSOR
 
@@ -272,7 +280,7 @@ QFunctionPointer QWindowsNativeInterface::platformFunction(const QByteArray &fun
         return QFunctionPointer(QWindowsWindow::setHasBorderInFullScreenStatic);
     else if (function == QWindowsWindowFunctions::isTabletModeIdentifier())
         return QFunctionPointer(QWindowsNativeInterface::isTabletMode);
-    return Q_NULLPTR;
+    return nullptr;
 }
 
 QVariant QWindowsNativeInterface::gpu() const

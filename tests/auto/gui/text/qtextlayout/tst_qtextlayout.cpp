@@ -203,7 +203,7 @@ void tst_QTextLayout::init()
     testFont.setPixelSize(TESTFONT_SIZE);
     testFont.setWeight(QFont::Normal);
 #ifdef QT_BUILD_INTERNAL
-    QCOMPARE(QFontMetrics(testFont).width('a'), testFont.pixelSize());
+    QCOMPARE(QFontMetrics(testFont).horizontalAdvance('a'), testFont.pixelSize());
 #endif
 }
 
@@ -1312,7 +1312,7 @@ void tst_QTextLayout::testDefaultTabs()
     QCOMPARE(line.cursorToX(31), 480.);
 
     QTextOption option = layout.textOption();
-    option.setTabStop(90);
+    option.setTabStopDistance(90);
     layout.setTextOption(option);
     layout.beginLayout();
     line = layout.createLine();
@@ -1351,7 +1351,7 @@ void tst_QTextLayout::testTabs()
 
     layout.setCacheEnabled(true);
     QTextOption option = layout.textOption();
-    option.setTabStop(150);
+    option.setTabStopDistance(150);
     layout.setTextOption(option);
 
     layout.beginLayout();

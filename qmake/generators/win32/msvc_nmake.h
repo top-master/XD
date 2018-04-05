@@ -52,7 +52,8 @@ protected:
     virtual QStringList &findDependencies(const QString &file);
     QString var(const ProKey &value) const;
     QString precompH, precompObj, precompPch;
-    bool usePCH;
+    QString precompObjC, precompPchC;
+    bool usePCH, usePCHC;
 
 public:
     NmakeMakefileGenerator();

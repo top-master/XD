@@ -64,7 +64,9 @@ public:
         DontPassOsMouseEventsSynthesizedFromTouch = 0x20, // Do not pass OS-generated mouse events from touch.
         // Keep in sync with QWindowsFontDatabase::FontOptions
         DontUseDirectWriteFonts = QWindowsFontDatabase::DontUseDirectWriteFonts,
-        DontUseColorFonts = QWindowsFontDatabase::DontUseColorFonts
+        DontUseColorFonts = QWindowsFontDatabase::DontUseColorFonts,
+        AlwaysUseNativeMenus = 0x100,
+        NoNativeMenus = 0x200
     };
 
     explicit QWindowsIntegration(const QStringList &paramList);
@@ -81,9 +83,9 @@ public:
 #endif
     QAbstractEventDispatcher *createEventDispatcher() const override;
     void initialize() override;
-#ifndef QT_NO_CLIPBOARD
+#if QT_CONFIG(clipboard)
     QPlatformClipboard *clipboard() const override;
-#  ifndef QT_NO_DRAGANDDROP
+#  if QT_CONFIG(draganddrop)
     QPlatformDrag *drag() const override;
 #  endif
 #endif // !QT_NO_CLIPBOARD
@@ -109,8 +111,12 @@ public:
 
     void beep() const override;
 
-#if !defined(QT_NO_SESSIONMANAGER)
+#if QT_CONFIG(sessionmanager)
     QPlatformSessionManager *createPlatformSessionManager(const QString &id, const QString &key) const override;
+#endif
+
+#if QT_CONFIG(vulkan)
+    QPlatformVulkanInstance *createPlatformVulkanInstance(QVulkanInstance *instance) const override;
 #endif
 
 protected:

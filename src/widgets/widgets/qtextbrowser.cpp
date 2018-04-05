@@ -40,8 +40,6 @@
 #include "qtextbrowser.h"
 #include "qtextedit_p.h"
 
-#ifndef QT_NO_TEXTBROWSER
-
 #include <qstack.h>
 #include <qapplication.h>
 #include <qevent.h>
@@ -52,7 +50,9 @@
 #include <qtextcodec.h>
 #include <qpainter.h>
 #include <qdir.h>
+#if QT_CONFIG(whatsthis)
 #include <qwhatsthis.h>
+#endif
 #include <qtextobject.h>
 #include <qdesktopservices.h>
 
@@ -135,7 +135,7 @@ public:
     void setSource(const QUrl &url);
 
     // re-imlemented from QTextEditPrivate
-    virtual QUrl resolveUrl(const QUrl &url) const Q_DECL_OVERRIDE;
+    virtual QUrl resolveUrl(const QUrl &url) const override;
     inline QUrl resolveUrl(const QString &url) const
     { return resolveUrl(QUrl(url)); }
 
@@ -162,6 +162,9 @@ QString QTextBrowserPrivate::findFile(const QUrl &name) const
 #endif
             fileName = name.toLocalFile();
     }
+
+    if (fileName.isEmpty())
+        return fileName;
 
     if (QFileInfo(fileName).isAbsolute())
         return fileName;
@@ -307,7 +310,7 @@ void QTextBrowserPrivate::setSource(const QUrl &url)
 #ifndef QT_NO_CURSOR
                 QApplication::restoreOverrideCursor();
 #endif
-#ifndef QT_NO_WHATSTHIS
+#if QT_CONFIG(whatsthis)
                 QWhatsThis::showText(QCursor::pos(), txt, q);
 #endif
                 return;
@@ -1089,6 +1092,8 @@ QVariant QTextBrowser::loadResource(int /*type*/, const QUrl &name)
 
     QByteArray data;
     QString fileName = d->findFile(d->resolveUrl(name));
+    if (fileName.isEmpty())
+        return QVariant();
     QFile f(fileName);
     if (f.open(QFile::ReadOnly)) {
         data = f.readAll();
@@ -1268,5 +1273,3 @@ bool QTextBrowser::event(QEvent *e)
 QT_END_NAMESPACE
 
 #include "moc_qtextbrowser.cpp"
-
-#endif // QT_NO_TEXTBROWSER

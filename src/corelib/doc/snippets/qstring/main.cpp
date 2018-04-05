@@ -262,6 +262,17 @@ void Widget::argFunction()
                     .arg(i).arg(total).arg(fileName);
     //! [11]
 
+    {
+    //! [11-qstringview]
+    int i;                // current file's number
+    int total;            // number of files to process
+    QStringView fileName; // current file's name
+
+    QString status = QString("Processing file %1 of %2: %3")
+                    .arg(i).arg(total).arg(fileName);
+    //! [11-qstringview]
+    }
+
     //! [12] //! [13]
     QString str;
     //! [12]
@@ -321,6 +332,12 @@ void Widget::compareSensitiveFunction()
     int y = QString::compare("auto", "Car", Qt::CaseSensitive);     // y > 0
     int z = QString::compare("auto", "Car", Qt::CaseInsensitive);   // z < 0
     //! [16]
+
+    //! [QtPrivate::compareStrings-QSV-QSV]
+    int x = QtPrivate::compareStrings(u"aUtO", u"AuTo", Qt::CaseInsensitive);  // x == 0
+    int y = QtPrivate::compareStrings(u"auto", u"Car", Qt::CaseSensitive);     // y > 0
+    int z = QtPrivate::compareStrings(u"auto", u"Car", Qt::CaseInsensitive);   // z < 0
+    //! [QtPrivate::compareStrings-QSV-QSV]
 }
 
 void Widget::containsFunction()
@@ -733,7 +750,6 @@ void Widget::sizeFunction()
     int n = str.size();         // n == 5
     str.data()[0];              // returns 'W'
     str.data()[4];              // returns 'd'
-    str.data()[5];              // returns '\0'
     //! [58]
 }
 
@@ -793,6 +809,18 @@ void Widget::splitCaseSensitiveFunction()
     QStringList list2 = str.split(',', QString::SkipEmptyParts);
     // list2: [ "a", "b", "c" ]
     //! [62]
+
+    //! [62-empty]
+    QString str = "abc";
+    auto parts = str.split("");
+    // parts: {"", "a", "b", "c", ""}
+    //! [62-empty]
+
+    //! [62-slashes]
+    QString str = "/a/b/c/";
+    auto parts = str.split('/');
+    // parts: {"", "a", "b", "c", ""}
+    //! [62-slashes]
 }
 
 void Widget::sprintfFunction()

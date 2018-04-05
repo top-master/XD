@@ -45,13 +45,9 @@
 #include <qtoolbar.h>
 #include <private/qwindow_p.h>
 
-static inline void setFrameless(QWidget *w)
-{
-    Qt::WindowFlags flags = w->windowFlags();
-    flags |= Qt::FramelessWindowHint;
-    flags &= ~(Qt::WindowTitleHint | Qt::WindowSystemMenuHint | Qt::WindowMinMaxButtonsHint | Qt::WindowCloseButtonHint);
-    w->setWindowFlags(flags);
-}
+#include <QtTest/private/qtesthelpers_p.h>
+
+using namespace QTestPrivate;
 
 class tst_QWidget_window : public QObject
 {
@@ -99,6 +95,13 @@ private slots:
     void tst_eventfilter_on_toplevel();
 
     void QTBUG_50561_QCocoaBackingStore_paintDevice_crash();
+
+    void setWindowState_data();
+    void setWindowState();
+
+    void nativeShow();
+
+    void QTBUG_56277_resize_on_showEvent();
 };
 
 void tst_QWidget_window::initTestCase()
@@ -211,12 +214,12 @@ class PaintTestWidget : public QWidget
 public:
     int paintEventCount;
 
-    explicit PaintTestWidget(QWidget *parent = Q_NULLPTR)
+    explicit PaintTestWidget(QWidget *parent = nullptr)
         : QWidget(parent)
         , paintEventCount(0)
     {}
 
-    void paintEvent(QPaintEvent *event) Q_DECL_OVERRIDE
+    void paintEvent(QPaintEvent *event) override
     {
         ++paintEventCount;
         QWidget::paintEvent(event);
@@ -689,7 +692,7 @@ public:
     int resizeCount;
 
 protected:
-    void resizeEvent(QResizeEvent *) Q_DECL_OVERRIDE
+    void resizeEvent(QResizeEvent *) override
     {
         resizeCount++;
     }
@@ -756,7 +759,7 @@ public:
         , moveCount(0)
     { }
 
-    void moveEvent(QMoveEvent *) Q_DECL_OVERRIDE
+    void moveEvent(QMoveEvent *) override
     {
         moveCount++;
     }
@@ -795,7 +798,7 @@ public:
     }
 
 protected:
-    bool eventFilter(QObject *o, QEvent *e) Q_DECL_OVERRIDE
+    bool eventFilter(QObject *o, QEvent *e) override
     {
         if (e->type() == filterEventType())
             ++eventCount;
@@ -844,7 +847,7 @@ void tst_QWidget_window::QTBUG_50561_QCocoaBackingStore_paintDevice_crash()
     QMainWindow w;
     w.addToolBar(new QToolBar(&w));
     w.show();
-    QTest::qWaitForWindowExposed(&w);
+    QVERIFY(QTest::qWaitForWindowExposed(&w));
 
     // Simulate window system close
     QCloseEvent *e = new QCloseEvent;
@@ -859,6 +862,101 @@ void tst_QWidget_window::QTBUG_50561_QCocoaBackingStore_paintDevice_crash()
     // No crash, all good.
     // Wrap up and leave
     w.close();
+}
+
+void tst_QWidget_window::setWindowState_data()
+{
+    QString platformName = QGuiApplication::platformName().toLower();
+
+    QTest::addColumn<Qt::WindowStates>("state");
+    QTest::newRow("0") << Qt::WindowStates();
+    QTest::newRow("Qt::WindowMaximized") << Qt::WindowStates(Qt::WindowMaximized);
+    QTest::newRow("Qt::WindowMinimized") << Qt::WindowStates(Qt::WindowMinimized);
+    QTest::newRow("Qt::WindowFullScreen") << Qt::WindowStates(Qt::WindowFullScreen);
+
+    if (platformName != "xcb" && platformName != "windows" && !platformName.startsWith("wayland")
+        && platformName != "offscreen")
+        return; // Combination of states is not preserved on all platforms.
+    if (platformName == "xcb" && qgetenv("XDG_CURRENT_DESKTOP") != "KDE"
+        && qgetenv("XDG_CURRENT_DESKTOP") != "Unity")
+        return; // Not all window managers support state combinations.
+
+    QTest::newRow("Qt::WindowMaximized|Qt::WindowMinimized")
+        << (Qt::WindowMaximized | Qt::WindowMinimized);
+    QTest::newRow("Qt::WindowFullScreen|Qt::WindowMinimized")
+        << (Qt::WindowFullScreen | Qt::WindowMinimized);
+    QTest::newRow("Qt::WindowMaximized|Qt::WindowFullScreen")
+        << (Qt::WindowMaximized | Qt::WindowFullScreen);
+    QTest::newRow("Qt::WindowMaximized|Qt::WindowFullScreen|Qt::WindowMinimized")
+        << (Qt::WindowMaximized | Qt::WindowFullScreen | Qt::WindowMinimized);
+}
+
+void tst_QWidget_window::setWindowState()
+{
+    QFETCH(Qt::WindowStates, state);
+
+    // This tests make sure that the states are preserved when the window is shown.
+
+    QWidget w;
+    w.setWindowState(state);
+    QCOMPARE(w.windowState(), state);
+    w.show();
+    QCOMPARE(w.windowState(), state);
+    QCOMPARE(w.windowHandle()->windowStates(), state);
+    if (!(state & Qt::WindowMinimized))
+        QVERIFY(QTest::qWaitForWindowExposed(&w));
+    QTRY_COMPARE(w.windowState(), state);
+    QCOMPARE(w.windowHandle()->windowStates(), state);
+
+    // Minimizing keeps other states
+    w.showMinimized();
+    QCOMPARE(w.windowState(), state | Qt::WindowMinimized);
+    QTest::qWait(100);
+    QCOMPARE(w.windowState(), state | Qt::WindowMinimized);
+    QCOMPARE(w.windowHandle()->windowStates(), state | Qt::WindowMinimized);
+}
+
+void tst_QWidget_window::nativeShow()
+{
+    // Verify that a native widget can be shown using the QWindow::setVisible() API
+    QWidget w;
+    w.winId();
+    w.windowHandle()->setVisible(true);
+    QVERIFY(QTest::qWaitForWindowExposed(&w));
+    QVERIFY(w.isVisible());
+
+    // ... and that we can hide it
+    w.windowHandle()->setVisible(false);
+    QTRY_VERIFY(!w.isVisible());
+}
+
+class ResizedOnShowEventWidget : public QWidget
+{
+public:
+    void showEvent(QShowEvent *) override
+    {
+        const auto *primaryScreen = QApplication::primaryScreen();
+        auto newSize = primaryScreen->availableGeometry().size() / 4;
+        if (newSize == geometry().size())
+            newSize -= QSize(10, 10);
+        resize(newSize);
+    }
+};
+
+void tst_QWidget_window::QTBUG_56277_resize_on_showEvent()
+{
+    const auto platformName = QGuiApplication::platformName().toLower();
+    if (platformName != "cocoa" && platformName != "windows")
+        QSKIP("This can only be consistently tested on desktop platforms with well-known behavior.");
+
+    ResizedOnShowEventWidget w;
+    w.show();
+    QVERIFY(QTest::qWaitForWindowExposed(&w));
+    const auto *screen = w.windowHandle()->screen();
+    const auto geometry = w.geometry();
+    const int frameHeight = geometry.top() - w.frameGeometry().top();
+    const int topmostY = screen->availableGeometry().top() + frameHeight;
+    QVERIFY(geometry.top() > topmostY || geometry.left() > screen->availableGeometry().left());
 }
 
 QTEST_MAIN(tst_QWidget_window)

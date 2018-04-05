@@ -9,14 +9,13 @@ import "codecs/codecs.qbs" as SrcCodecs
 import "global/global.qbs" as SrcGlobal
 import "io/io.qbs" as SrcIo
 import "itemmodels/itemmodels.qbs" as SrcItemModels
-import "json/json.qbs" as SrcJson
 import "kernel/kernel.qbs" as SrcKernel
 import "mimetypes/mimetypes.qbs" as SrcMimeTypes
 import "plugin/plugin.qbs" as SrcPlugin
+import "serialization/serialization.qbs" as SrcSerialization
 import "statemachine/statemachine.qbs" as SrcStateMachine
 import "thread/thread.qbs" as SrcThread
 import "tools/tools.qbs" as SrcTools
-import "xml/xml.qbs" as SrcXml
 
 QtModuleProject {
     name: "QtCore"
@@ -141,12 +140,14 @@ QtModuleProject {
                     dynamicLibraries.push("runtimeobject");
                 } else {
                     dynamicLibraries.push("advapi32");
-                    dynamicLibraries.push("ws2_32");
                     dynamicLibraries.push("mpr");
-                    dynamicLibraries.push("uuid");
+                    dynamicLibraries.push("netapi32");
                     dynamicLibraries.push("ole32");
-                    dynamicLibraries.push("winmm");
+                    dynamicLibraries.push("userenv");
+                    dynamicLibraries.push("uuid");
                     dynamicLibraries.push("version");
+                    dynamicLibraries.push("winmm");
+                    dynamicLibraries.push("ws2_32");
                 }
             }
             if (QtCorePrivateConfig.icu) {
@@ -221,14 +222,13 @@ QtModuleProject {
         SrcGlobal { }
         SrcIo { }
         SrcItemModels { }
-        SrcJson { }
         SrcKernel { }
         SrcMimeTypes { }
         SrcPlugin { }
+        SrcSerialization { }
         SrcStateMachine { }
         SrcThread { }
         SrcTools { }
-        SrcXml { }
 
         Group {
             name: "sources_harfbuzz"

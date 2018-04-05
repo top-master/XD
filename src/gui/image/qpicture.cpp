@@ -456,8 +456,8 @@ public:
     QFakeDevice() { dpi_x = qt_defaultDpiX(); dpi_y = qt_defaultDpiY(); }
     void setDpiX(int dpi) { dpi_x = dpi; }
     void setDpiY(int dpi) { dpi_y = dpi; }
-    QPaintEngine *paintEngine() const Q_DECL_OVERRIDE { return 0; }
-    int metric(PaintDeviceMetric m) const Q_DECL_OVERRIDE
+    QPaintEngine *paintEngine() const override { return 0; }
+    int metric(PaintDeviceMetric m) const override
     {
         switch(m) {
             case PdmPhysicalDpiX:
@@ -1194,6 +1194,7 @@ QT_BEGIN_INCLUDE_NAMESPACE
 #include "qpictureformatplugin.h"
 QT_END_INCLUDE_NAMESPACE
 
+#if QT_DEPRECATED_SINCE(5, 10)
 /*!
     \obsolete
 
@@ -1206,7 +1207,12 @@ QT_END_INCLUDE_NAMESPACE
 
 const char* QPicture::pictureFormat(const QString &fileName)
 {
-    return QPictureIO::pictureFormat(fileName);
+    const QByteArray format = QPictureIO::pictureFormat(fileName);
+    // This function returns a const char * from a QByteArray.
+    // Double check that the QByteArray is not detached, otherwise
+    // we would return a dangling pointer.
+    Q_ASSERT(!format.isDetached());
+    return format;
 }
 
 /*!
@@ -1279,6 +1285,7 @@ QList<QByteArray> QPicture::outputFormats()
 {
     return QPictureIO::outputFormats();
 }
+#endif // QT_DEPRECATED_SINCE(5, 10)
 
 /*****************************************************************************
   QPictureIO member functions

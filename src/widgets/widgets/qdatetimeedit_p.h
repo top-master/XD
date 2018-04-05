@@ -52,7 +52,6 @@
 //
 
 #include <QtWidgets/private/qtwidgetsglobal_p.h>
-#include "QtWidgets/qcombobox.h"
 #include "QtWidgets/qcalendarwidget.h"
 #include "QtWidgets/qspinbox.h"
 #include "QtWidgets/qtoolbutton.h"
@@ -62,8 +61,6 @@
 #include "private/qdatetimeparser_p.h"
 
 #include "qdebug.h"
-
-#ifndef QT_NO_DATETIMEEDIT
 
 QT_BEGIN_NAMESPACE
 
@@ -83,25 +80,25 @@ public:
     void clearSection(int index);
 
     // Override QAbstractSpinBoxPrivate:
-    void emitSignals(EmitPolicy ep, const QVariant &old) Q_DECL_OVERRIDE;
-    QString textFromValue(const QVariant &f) const Q_DECL_OVERRIDE;
-    QVariant valueFromText(const QString &f) const Q_DECL_OVERRIDE;
-    void _q_editorCursorPositionChanged(int oldpos, int newpos) Q_DECL_OVERRIDE;
-    void interpret(EmitPolicy ep) Q_DECL_OVERRIDE;
-    void clearCache() const Q_DECL_OVERRIDE;
-    QStyle::SubControl newHoverControl(const QPoint &pos) Q_DECL_OVERRIDE;
-    void updateEditFieldGeometry() Q_DECL_OVERRIDE;
-    QVariant getZeroVariant() const Q_DECL_OVERRIDE;
-    void setRange(const QVariant &min, const QVariant &max) Q_DECL_OVERRIDE;
-    void updateEdit() Q_DECL_OVERRIDE;
+    void emitSignals(EmitPolicy ep, const QVariant &old) override;
+    QString textFromValue(const QVariant &f) const override;
+    QVariant valueFromText(const QString &f) const override;
+    void _q_editorCursorPositionChanged(int oldpos, int newpos) override;
+    void interpret(EmitPolicy ep) override;
+    void clearCache() const override;
+    QStyle::SubControl newHoverControl(const QPoint &pos) override;
+    void updateEditFieldGeometry() override;
+    QVariant getZeroVariant() const override;
+    void setRange(const QVariant &min, const QVariant &max) override;
+    void updateEdit() override;
 
     // Override QDateTimeParser:
-    QString displayText() const Q_DECL_OVERRIDE { return edit->text(); }
-    QDateTime getMinimum() const Q_DECL_OVERRIDE { return minimum.toDateTime(); }
-    QDateTime getMaximum() const Q_DECL_OVERRIDE { return maximum.toDateTime(); }
-    QLocale locale() const Q_DECL_OVERRIDE { return q_func()->locale(); }
-    QString getAmPmText(AmPm ap, Case cs) const Q_DECL_OVERRIDE;
-    int cursorPosition() const Q_DECL_OVERRIDE { return edit ? edit->cursorPosition() : -1; }
+    QString displayText() const override { return edit->text(); }
+    QDateTime getMinimum() const override { return minimum.toDateTime(); }
+    QDateTime getMaximum() const override { return maximum.toDateTime(); }
+    QLocale locale() const override { return q_func()->locale(); }
+    QString getAmPmText(AmPm ap, Case cs) const override;
+    int cursorPosition() const override { return edit ? edit->cursorPosition() : -1; }
 
     int absoluteIndex(QDateTimeEdit::Section s, int index) const;
     int absoluteIndex(const SectionNode &s) const;
@@ -180,7 +177,5 @@ private:
 };
 
 QT_END_NAMESPACE
-
-#endif // QT_NO_DATETIMEEDIT
 
 #endif // QDATETIMEEDIT_P_H

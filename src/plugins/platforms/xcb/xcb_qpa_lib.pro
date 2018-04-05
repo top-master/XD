@@ -5,10 +5,13 @@ DEFINES += QT_NO_FOREACH
 QT += \
     core-private gui-private \
     service_support-private theme_support-private \
-    eventdispatcher_support-private fontdatabase_support-private
+    eventdispatcher_support-private fontdatabase_support-private \
+    edid_support-private
 
 qtHaveModule(linuxaccessibility_support-private): \
     QT += linuxaccessibility_support-private
+
+qtConfig(vulkan): QT += vulkan_support-private
 
 SOURCES = \
         qxcbclipboard.cpp \
@@ -43,44 +46,46 @@ HEADERS = \
         qxcbcursor.h \
         qxcbimage.h \
         qxcbxsettings.h \
-        qxcbsystemtraytracker.h
+        qxcbsystemtraytracker.h \
+        qxcbxkbcommon.h
 
 load(qt_build_paths)
 
 DEFINES += QT_BUILD_XCB_PLUGIN
-# needed by Xcursor ...
-qtConfig(xcb-xlib) {
-    DEFINES += XCB_USE_XLIB
-    QMAKE_USE += xcb_xlib
 
-    qtConfig(xinput2) {
-        DEFINES += XCB_USE_XINPUT2
-        SOURCES += qxcbconnection_xi2.cpp
-        QMAKE_USE += xinput2
-    }
+qtConfig(xcb-xlib) {
+    QMAKE_USE += xcb_xlib
 }
 
-# build with session management support
+qtConfig(xcb-xinput) {
+    SOURCES += qxcbconnection_xi2.cpp
+}
+
 qtConfig(xcb-sm) {
-    DEFINES += XCB_USE_SM
     QMAKE_USE += x11sm
     SOURCES += qxcbsessionmanager.cpp
     HEADERS += qxcbsessionmanager.h
 }
 
 include(gl_integrations/gl_integrations.pri)
+include(nativepainting/nativepainting.pri)
+
+qtConfig(vulkan) {
+    SOURCES += \
+        qxcbvulkaninstance.cpp \
+        qxcbvulkanwindow.cpp
+
+    HEADERS += \
+        qxcbvulkaninstance.h \
+        qxcbvulkanwindow.h
+}
 
 !qtConfig(system-xcb) {
-    DEFINES += XCB_USE_RENDER
     QMAKE_USE += xcb-static xcb
 } else {
-    LIBS += -lxcb-xinerama  ### there is no configure test for this!
     qtConfig(xkb): QMAKE_USE += xcb_xkb
-    # to support custom cursors with depth > 1
-    qtConfig(xcb-render) {
-        DEFINES += XCB_USE_RENDER
-        QMAKE_USE += xcb_render
-    }
+    qtConfig(xcb-render): QMAKE_USE += xcb_render
+    qtConfig(xcb-xinput): QMAKE_USE += xcb_xinput
     QMAKE_USE += xcb_syslibs
 }
 
@@ -94,5 +99,7 @@ include(gl_integrations/gl_integrations.pri)
 } else {
     QMAKE_USE += xkbcommon
 }
+
+qtConfig(dlopen): QMAKE_USE += libdl
 
 load(qt_module)

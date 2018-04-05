@@ -47,28 +47,18 @@
 
 #include <cmath>
 
-#if defined(Q_OS_OSX) && !QT_OSX_DEPLOYMENT_TARGET_BELOW(__MAC_10_11)
+#if defined(Q_OS_MACOS)
 #import <AppKit/AppKit.h>
 #endif
 
-#if defined(QT_PLATFORM_UIKIT) && !QT_IOS_DEPLOYMENT_TARGET_BELOW(__IPHONE_8_2)
+#if defined(QT_PLATFORM_UIKIT)
 #import <UIKit/UIKit.h>
 #endif
 
 // These are available cross platform, exported as kCTFontWeightXXX from CoreText.framework,
 // but they are not documented and are not in public headers so are private API and exposed
 // only through the NSFontWeightXXX and UIFontWeightXXX aliases in AppKit and UIKit (rdar://26109857)
-#if QT_MAC_DEPLOYMENT_TARGET_BELOW(__MAC_10_11, __IPHONE_8_2)
-#define kCTFontWeightUltraLight -0.8
-#define kCTFontWeightThin -0.6
-#define kCTFontWeightLight -0.4
-#define kCTFontWeightRegular 0
-#define kCTFontWeightMedium 0.23
-#define kCTFontWeightSemibold 0.3
-#define kCTFontWeightBold 0.4
-#define kCTFontWeightHeavy 0.56
-#define kCTFontWeightBlack 0.62
-#elif defined(Q_OS_OSX)
+#if defined(Q_OS_MACOS)
 #define kCTFontWeightUltraLight NSFontWeightUltraLight
 #define kCTFontWeightThin NSFontWeightThin
 #define kCTFontWeightLight NSFontWeightLight
@@ -112,25 +102,32 @@ bool QCoreTextFontEngine::ct_getSfntTable(void *user_data, uint tag, uchar *buff
 
 QFont::Weight QCoreTextFontEngine::qtWeightFromCFWeight(float value)
 {
-    if (value >= kCTFontWeightBlack)
-        return QFont::Black;
-    if (value >= kCTFontWeightHeavy)
-        return QFont::ExtraBold;
-    if (value >= kCTFontWeightBold)
-        return QFont::Bold;
-    if (value >= kCTFontWeightSemibold)
-        return QFont::DemiBold;
-    if (value >= kCTFontWeightMedium)
-        return QFont::Medium;
-    if (value == kCTFontWeightRegular)
-        return QFont::Normal;
-    if (value <= kCTFontWeightUltraLight)
-        return QFont::Thin;
-    if (value <= kCTFontWeightThin)
-        return QFont::ExtraLight;
-    if (value <= kCTFontWeightLight)
-        return QFont::Light;
-    return QFont::Normal;
+#define COMPARE_WEIGHT_DISTANCE(ct_weight, qt_weight) \
+    { \
+        float d; \
+        if ((d = qAbs(value - ct_weight)) < distance) { \
+            distance = d; \
+            ret = qt_weight; \
+        } \
+    }
+
+    float distance = qAbs(value - kCTFontWeightBlack);
+    QFont::Weight ret = QFont::Black;
+
+    // Compare distance to system weight to find the closest match.
+    // (Note: Must go from high to low, so that midpoints are rounded up)
+    COMPARE_WEIGHT_DISTANCE(kCTFontWeightHeavy, QFont::ExtraBold);
+    COMPARE_WEIGHT_DISTANCE(kCTFontWeightBold, QFont::Bold);
+    COMPARE_WEIGHT_DISTANCE(kCTFontWeightSemibold, QFont::DemiBold);
+    COMPARE_WEIGHT_DISTANCE(kCTFontWeightMedium, QFont::Medium);
+    COMPARE_WEIGHT_DISTANCE(kCTFontWeightRegular, QFont::Normal);
+    COMPARE_WEIGHT_DISTANCE(kCTFontWeightLight, QFont::Light);
+    COMPARE_WEIGHT_DISTANCE(kCTFontWeightThin, QFont::ExtraLight);
+    COMPARE_WEIGHT_DISTANCE(kCTFontWeightUltraLight, QFont::Thin);
+
+#undef COMPARE_WEIGHT_DISTANCE
+
+    return ret;
 }
 
 static void loadAdvancesForGlyphs(CTFontRef ctfont,
@@ -185,6 +182,14 @@ public:
         : QCoreTextFontEngine(font, def)
         , m_fontData(fontData)
     {}
+    QFontEngine *cloneWithSize(qreal pixelSize) const
+    {
+        QFontDef newFontDef = fontDef;
+        newFontDef.pixelSize = pixelSize;
+        newFontDef.pointSize = pixelSize * 72.0 / qt_defaultDpi();
+
+        return new QCoreTextRawFontEngine(cgFont, newFontDef, m_fontData);
+    }
     QByteArray m_fontData;
 };
 
@@ -658,11 +663,7 @@ QImage QCoreTextFontEngine::imageForGlyph(glyph_t glyph, QFixed subPixelPosition
     if (!im.width() || !im.height())
         return im;
 
-#ifdef Q_OS_OSX
-    CGColorSpaceRef colorspace = CGColorSpaceCreateWithName(kCGColorSpaceGenericRGB);
-#else
-    CGColorSpaceRef colorspace = CGColorSpaceCreateDeviceRGB();
-#endif
+    CGColorSpaceRef colorspace = CGColorSpaceCreateWithName(kCGColorSpaceSRGB);
     uint cgflags = isColorGlyph ? kCGImageAlphaPremultipliedFirst : kCGImageAlphaNoneSkipFirst;
 #ifdef kCGBitmapByteOrder32Host //only needed because CGImage.h added symbols in the minor version
     cgflags |= kCGBitmapByteOrder32Host;
@@ -823,7 +824,7 @@ void QCoreTextFontEngine::getUnscaledGlyph(glyph_t glyph, QPainterPath *path, gl
 
 QFixed QCoreTextFontEngine::emSquareSize() const
 {
-    return QFixed::QFixed(int(CTFontGetUnitsPerEm(ctfont)));
+    return QFixed(int(CTFontGetUnitsPerEm(ctfont)));
 }
 
 QFontEngine *QCoreTextFontEngine::cloneWithSize(qreal pixelSize) const

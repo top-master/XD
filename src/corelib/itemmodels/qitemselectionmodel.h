@@ -42,12 +42,12 @@
 
 #include <QtCore/qglobal.h>
 
-#ifndef QT_NO_ITEMVIEWS
-
 #include <QtCore/qset.h>
 #include <QtCore/qvector.h>
 #include <QtCore/qlist.h>
 #include <QtCore/qabstractitemmodel.h>
+
+QT_REQUIRE_CONFIG(itemmodel);
 
 QT_BEGIN_NAMESPACE
 
@@ -166,7 +166,7 @@ public:
     Q_DECLARE_FLAGS(SelectionFlags, SelectionFlag)
     Q_FLAG(SelectionFlags)
 
-    explicit QItemSelectionModel(QAbstractItemModel *model = Q_NULLPTR);
+    explicit QItemSelectionModel(QAbstractItemModel *model = nullptr);
     explicit QItemSelectionModel(QAbstractItemModel *model, QObject *parent);
     virtual ~QItemSelectionModel();
 
@@ -272,7 +272,5 @@ QT_END_NAMESPACE
 
 Q_DECLARE_METATYPE(QItemSelectionRange)
 Q_DECLARE_METATYPE(QItemSelection)
-
-#endif // QT_NO_ITEMVIEWS
 
 #endif // QITEMSELECTIONMODEL_H

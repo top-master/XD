@@ -86,6 +86,7 @@ QCocoaMenuBar::~QCocoaMenuBar()
         // the menu bar was updated
         qDeleteAll(children());
         updateMenuBarImmediately();
+        resetKnownMenuItemsToQt();
     }
 }
 
@@ -154,7 +155,7 @@ void QCocoaMenuBar::insertMenu(QPlatformMenu *platformMenu, QPlatformMenu *befor
         }
     }
 
-    syncMenu(menu);
+    syncMenu_helper(menu, false /*internaCall*/);
 
     if (needsImmediateUpdate())
         updateMenuBarImmediately();
@@ -182,11 +183,16 @@ void QCocoaMenuBar::removeMenu(QPlatformMenu *platformMenu)
 
 void QCocoaMenuBar::syncMenu(QPlatformMenu *menu)
 {
+    syncMenu_helper(menu, false /*internaCall*/);
+}
+
+void QCocoaMenuBar::syncMenu_helper(QPlatformMenu *menu, bool menubarUpdate)
+{
     QMacAutoReleasePool pool;
 
     QCocoaMenu *cocoaMenu = static_cast<QCocoaMenu *>(menu);
     Q_FOREACH (QCocoaMenuItem *item, cocoaMenu->items())
-        cocoaMenu->syncMenuItem(item);
+        cocoaMenu->syncMenuItem_helper(item, menubarUpdate);
 
     BOOL shouldHide = YES;
     if (cocoaMenu->isVisible()) {
@@ -301,9 +307,16 @@ void QCocoaMenuBar::redirectKnownMenuItemsToFirstResponder()
 void QCocoaMenuBar::resetKnownMenuItemsToQt()
 {
     // Undo the effect of redirectKnownMenuItemsToFirstResponder():
-    // set the menu items' actions to itemFired and their targets to
-    // the QCocoaMenuDelegate.
-    updateMenuBarImmediately();
+    // reset the menu items' target/action.
+    foreach (QCocoaMenuBar *mb, static_menubars) {
+        foreach (QCocoaMenu *m, mb->m_menus) {
+            foreach (QCocoaMenuItem *i, m->items()) {
+                if (i->effectiveRole() >= QPlatformMenuItem::ApplicationSpecificRole) {
+                    m->setItemTargetAction(i);
+                }
+            }
+        }
+    }
 }
 
 void QCocoaMenuBar::updateMenuBarImmediately()
@@ -347,14 +360,14 @@ void QCocoaMenuBar::updateMenuBarImmediately()
         menu->setAttachedItem(item);
         menu->setMenuParent(mb);
         // force a sync?
-        mb->syncMenu(menu);
+        mb->syncMenu_helper(menu, true /*menubarUpdate*/);
         menu->propagateEnabledState(!disableForModal);
     }
 
     QCocoaMenuLoader *loader = [QCocoaMenuLoader sharedMenuLoader];
     [loader ensureAppMenuInMenu:mb->nsMenu()];
 
-    NSMutableSet *mergedItems = [[NSMutableSet setWithCapacity:0] retain];
+    NSMutableSet *mergedItems = [[NSMutableSet setWithCapacity:mb->merged().count()] retain];
     foreach (QCocoaMenuItem *m, mb->merged()) {
         [mergedItems addObject:m->nsItem()];
         m->syncMerged();
@@ -434,7 +447,12 @@ NSMenuItem *QCocoaMenuBar::itemForRole(QPlatformMenuItem::MenuRole r)
         foreach (QCocoaMenuItem *i, m->items())
             if (i->effectiveRole() == r)
                 return i->nsItem();
-    return Q_NULLPTR;
+    return nullptr;
+}
+
+QCocoaWindow *QCocoaMenuBar::cocoaWindow() const
+{
+    return m_window.data();
 }
 
 QT_END_NAMESPACE

@@ -42,15 +42,22 @@
 #ifndef QT_NO_TOOLBAR
 
 #include <qapplication.h>
+#if QT_CONFIG(combobox)
 #include <qcombobox.h>
+#endif
 #include <qevent.h>
 #include <qlayout.h>
 #include <qmainwindow.h>
 #include <qmenu.h>
+#if QT_CONFIG(menubar)
 #include <qmenubar.h>
+#endif
+#if QT_CONFIG(rubberband)
 #include <qrubberband.h>
+#endif
 #include <qsignalmapper.h>
 #include <qstylepainter.h>
+#include <qstyleoption.h>
 #include <qtoolbutton.h>
 #include <qwidgetaction.h>
 #include <qtimer.h>
@@ -85,7 +92,6 @@ void QToolBarPrivate::init()
     q->setBackgroundRole(QPalette::Button);
     q->setAttribute(Qt::WA_Hover);
     q->setAttribute(Qt::WA_X11NetWmWindowTypeToolBar);
-    q->setProperty("_q_platform_MacUseNSWindow", QVariant(true));
 
     QStyle *style = q->style();
     int e = style->pixelMetric(QStyle::PM_ToolBarIconSize, 0, q);
@@ -797,7 +803,7 @@ QAction *QToolBar::addAction(const QIcon &icon, const QString &text,
     return action;
 }
 
-/*!\fn QAction *QToolBar::addAction(const QString &text, const QObject *receiver, PointerToMemberFunction method)
+/*!\fn template<typename PointerToMemberFunction> QAction *QToolBar::addAction(const QString &text, const QObject *receiver, PointerToMemberFunction method)
 
     \since 5.6
 
@@ -809,7 +815,7 @@ QAction *QToolBar::addAction(const QIcon &icon, const QString &text,
     \a method of the \a receiver.
 */
 
-/*!\fn QAction *QToolBar::addAction(const QString &text, Functor functor)
+/*!\fn template<typename Functor> QAction *QToolBar::addAction(const QString &text, Functor functor)
 
     \since 5.6
 
@@ -821,7 +827,7 @@ QAction *QToolBar::addAction(const QIcon &icon, const QString &text,
     \a functor.
 */
 
-/*!\fn QAction *QToolBar::addAction(const QString &text, const QObject *context, Functor functor)
+/*!\fn template<typename Functor> QAction *QToolBar::addAction(const QString &text, const QObject *context, Functor functor)
 
     \since 5.6
 
@@ -835,7 +841,7 @@ QAction *QToolBar::addAction(const QIcon &icon, const QString &text,
     If \a context is destroyed, the functor will not be called.
 */
 
-/*!\fn QAction *QToolBar::addAction(const QIcon &icon, const QString &text, const QObject *receiver, PointerToMemberFunction method)
+/*!\fn template<typename PointerToMemberFunction> QAction *QToolBar::addAction(const QIcon &icon, const QString &text, const QObject *receiver, PointerToMemberFunction method)
 
     \since 5.6
 
@@ -847,7 +853,7 @@ QAction *QToolBar::addAction(const QIcon &icon, const QString &text,
     \a method of the \a receiver.
 */
 
-/*!\fn QAction *QToolBar::addAction(const QIcon &icon, const QString &text, Functor functor)
+/*!\fn template<typename Functor> QAction *QToolBar::addAction(const QIcon &icon, const QString &text, Functor functor)
 
     \since 5.6
 
@@ -859,7 +865,7 @@ QAction *QToolBar::addAction(const QIcon &icon, const QString &text,
     \a functor.
 */
 
-/*!\fn QAction *QToolBar::addAction(const QIcon &icon, const QString &text, const QObject *context, Functor functor)
+/*!\fn template<typename Functor> QAction *QToolBar::addAction(const QIcon &icon, const QString &text, const QObject *context, Functor functor)
 
     \since 5.6
 
@@ -1113,6 +1119,8 @@ static bool waitForPopup(QToolBar *tb, QWidget *popup)
 static void enableMacToolBar(QToolBar *toolbar, bool enable)
 {
     QPlatformNativeInterface *nativeInterface = QApplication::platformNativeInterface();
+    if (!nativeInterface)
+        return;
     QPlatformNativeInterface::NativeResourceForIntegrationFunction function =
         nativeInterface->nativeResourceFunctionForIntegration("setContentBorderAreaEnabled");
     if (!function)

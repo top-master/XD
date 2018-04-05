@@ -56,12 +56,8 @@
 
 // -------------------------------------------------------------------------
 
-@interface QIOSViewController () {
-  @public
-    QPointer<QT_PREPEND_NAMESPACE(QIOSScreen)> m_screen;
-    BOOL m_updatingProperties;
-    QMetaObject::Connection m_focusWindowChangeConnection;
-}
+@interface QIOSViewController ()
+@property (nonatomic, assign) QPointer<QT_PREPEND_NAMESPACE(QIOSScreen)> platformScreen;
 @property (nonatomic, assign) BOOL changingOrientation;
 @end
 
@@ -72,13 +68,12 @@
 
 @implementation QIOSDesktopManagerView
 
-- (id)init
+- (instancetype)init
 {
     if (!(self = [super init]))
         return nil;
 
-    QIOSIntegration *iosIntegration = QIOSIntegration::instance();
-    if (iosIntegration && iosIntegration->debugWindowManagement()) {
+    if (qEnvironmentVariableIntValue("QT_IOS_DEBUG_WINDOW_MANAGEMENT")) {
         static UIImage *gridPattern = nil;
         static dispatch_once_t onceToken;
         dispatch_once(&onceToken, ^{
@@ -126,7 +121,7 @@
 {
     Q_UNUSED(subview);
 
-    QT_PREPEND_NAMESPACE(QIOSScreen) *screen = self.qtViewController->m_screen;
+    QT_PREPEND_NAMESPACE(QIOSScreen) *screen = self.qtViewController.platformScreen;
 
     // The 'window' property of our view is not valid until the window
     // has been shown, so we have to access it through the QIOSScreen.
@@ -157,6 +152,26 @@
 
 - (void)layoutSubviews
 {
+    if (QGuiApplication::applicationState() == Qt::ApplicationSuspended) {
+        // Despite the OpenGL ES Programming Guide telling us to avoid all
+        // use of OpenGL while in the background, iOS will perform its view
+        // snapshotting for the app switcher after the application has been
+        // backgrounded; once for each orientation. Presumably the expectation
+        // is that no rendering needs to be done to provide an alternate
+        // orientation snapshot, just relayouting of views. But in our case,
+        // or any non-stretchable content case such as a OpenGL based game,
+        // this is not true. Instead of continuing layout, which will send
+        // potentially expensive geometry changes (with isExposed false,
+        // since we're in the background), we short-circuit the snapshotting
+        // here. iOS will still use the latest rendered frame to create the
+        // application switcher thumbnail, but it will be based on the last
+        // active orientation of the application.
+        QIOSScreen *screen = self.qtViewController.platformScreen;
+        qCDebug(lcQpaWindow) << "ignoring layout of subviews while suspended,"
+            << "likely system snapshot of" << screen->screen()->primaryOrientation();
+        return;
+    }
+
     for (int i = int(self.subviews.count) - 1; i >= 0; --i) {
         UIView *view = static_cast<UIView *>([self.subviews objectAtIndex:i]);
         if (![view isKindOfClass:[QUIView class]])
@@ -176,8 +191,8 @@
         return;
 
     // Re-apply window states to update geometry
-    if (window->windowState() & (Qt::WindowFullScreen | Qt::WindowMaximized))
-        window->handle()->setWindowState(window->windowState());
+    if (window->windowStates() & (Qt::WindowFullScreen | Qt::WindowMaximized))
+        window->handle()->setWindowState(window->windowStates());
 }
 
 // Even if the root view controller has both wantsFullScreenLayout and
@@ -227,7 +242,10 @@
 
 // -------------------------------------------------------------------------
 
-@implementation QIOSViewController
+@implementation QIOSViewController {
+    BOOL m_updatingProperties;
+    QMetaObject::Connection m_focusWindowChangeConnection;
+}
 
 #ifndef Q_OS_TVOS
 @synthesize prefersStatusBarHidden;
@@ -235,11 +253,10 @@
 @synthesize preferredStatusBarStyle;
 #endif
 
-- (id)initWithQIOSScreen:(QT_PREPEND_NAMESPACE(QIOSScreen) *)screen
+- (instancetype)initWithQIOSScreen:(QT_PREPEND_NAMESPACE(QIOSScreen) *)screen
 {
     if (self = [self init]) {
-        m_screen = screen;
-
+        self.platformScreen = screen;
 
         self.changingOrientation = NO;
 #ifndef Q_OS_TVOS
@@ -297,7 +314,7 @@
 - (BOOL)shouldAutorotate
 {
 #ifndef Q_OS_TVOS
-    return m_screen && m_screen->uiScreen() == [UIScreen mainScreen] && !self.lockedOrientation;
+    return self.platformScreen && self.platformScreen->uiScreen() == [UIScreen mainScreen] && !self.lockedOrientation;
 #else
     return NO;
 #endif
@@ -377,8 +394,8 @@
     if (!QCoreApplication::instance())
         return;
 
-    if (m_screen)
-        m_screen->updateProperties();
+    if (self.platformScreen)
+        self.platformScreen->updateProperties();
 }
 
 // -------------------------------------------------------------------------
@@ -388,12 +405,12 @@
     if (!isQtApplication())
         return;
 
-    if (!m_screen || !m_screen->screen())
+    if (!self.platformScreen || !self.platformScreen->screen())
         return;
 
     // For now we only care about the main screen, as both the statusbar
     // visibility and orientation is only appropriate for the main screen.
-    if (m_screen->uiScreen() != [UIScreen mainScreen])
+    if (self.platformScreen->uiScreen() != [UIScreen mainScreen])
         return;
 
     // Prevent recursion caused by updating the status bar appearance (position
@@ -415,7 +432,7 @@
         return;
 
     // We only care about changes to focusWindow that involves our screen
-    if (!focusWindow->screen() || focusWindow->screen()->handle() != m_screen)
+    if (!focusWindow->screen() || focusWindow->screen()->handle() != self.platformScreen)
         return;
 
     // All decisions are based on the the top level window

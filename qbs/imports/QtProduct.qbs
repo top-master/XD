@@ -14,6 +14,7 @@ Product {
     Depends { name: mkspecModule; condition: mkspecModule !== undefined } // TODO: Explicit comparison should not be needed, but is
 
     property bool targetsUWP: mkspec.startsWith("winrt-")
+    readonly property bool hasUiKit: qbs.targetOS.containsAny(["ios", "tvos", "watchos"])
     property string mkspec: hostBuild ? QtMultiplexConfig.hostMkspec
                                       : QtMultiplexConfig.targetMkspec
     property string mkspecModule: QtUtils.qmakeMkspecToQbsModule(mkspec)

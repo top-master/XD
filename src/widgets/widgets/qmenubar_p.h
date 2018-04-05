@@ -56,9 +56,10 @@
 #include <private/qmenu_p.h> // Mac needs what in this file!
 #include <qpa/qplatformmenu.h>
 
+QT_REQUIRE_CONFIG(menubar);
+
 QT_BEGIN_NAMESPACE
 
-#ifndef QT_NO_MENUBAR
 class QMenuBarExtension;
 class QMenuBarPrivate : public QWidgetPrivate
 {
@@ -131,12 +132,12 @@ public:
 
     QBasicTimer autoReleaseTimer;
     QPlatformMenuBar *platformMenuBar;
-    QPlatformMenu *getPlatformMenu(QAction *action);
+    QPlatformMenu *getPlatformMenu(const QAction *action);
+    QPlatformMenu *findInsertionPlatformMenu(const QAction *action);
+    void copyActionToPlatformMenu(const QAction *e, QPlatformMenu *menu);
 
     inline int indexOf(QAction *act) const { return q_func()->actions().indexOf(act); }
 };
-
-#endif // QT_NO_MENUBAR
 
 QT_END_NAMESPACE
 

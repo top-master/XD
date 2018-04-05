@@ -131,6 +131,18 @@ void QDBusMetaTypeId::init()
         qDBusRegisterMetaType<QList<QDBusObjectPath> >();
         qDBusRegisterMetaType<QList<QDBusSignature> >();
         qDBusRegisterMetaType<QList<QDBusUnixFileDescriptor> >();
+
+        qDBusRegisterMetaType<QVector<bool> >();
+        qDBusRegisterMetaType<QVector<short> >();
+        qDBusRegisterMetaType<QVector<ushort> >();
+        qDBusRegisterMetaType<QVector<int> >();
+        qDBusRegisterMetaType<QVector<uint> >();
+        qDBusRegisterMetaType<QVector<qlonglong> >();
+        qDBusRegisterMetaType<QVector<qulonglong> >();
+        qDBusRegisterMetaType<QVector<double> >();
+        qDBusRegisterMetaType<QVector<QDBusObjectPath> >();
+        qDBusRegisterMetaType<QVector<QDBusSignature> >();
+        qDBusRegisterMetaType<QVector<QDBusUnixFileDescriptor> >();
 #endif
 
         initialized.store(true);
@@ -216,7 +228,6 @@ Q_GLOBAL_STATIC(QReadWriteLock, customTypesLock)
 void QDBusMetaType::registerMarshallOperators(int id, MarshallFunction mf,
                                               DemarshallFunction df)
 {
-    QByteArray var;
     QVector<QDBusCustomTypeInfo> *ct = customTypes();
     if (id < 0 || !mf || !df || !ct)
         return;                 // error!

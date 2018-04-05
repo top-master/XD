@@ -55,13 +55,13 @@
 @interface QUITextPosition : UITextPosition
 
 @property (nonatomic) NSUInteger index;
-+ (QUITextPosition *)positionWithIndex:(NSUInteger)index;
++ (instancetype)positionWithIndex:(NSUInteger)index;
 
 @end
 
 @implementation QUITextPosition
 
-+ (QUITextPosition *)positionWithIndex:(NSUInteger)index
++ (instancetype)positionWithIndex:(NSUInteger)index
 {
     QUITextPosition *pos = [[QUITextPosition alloc] init];
     pos.index = index;
@@ -75,15 +75,15 @@
 @interface QUITextRange : UITextRange
 
 @property (nonatomic) NSRange range;
-+ (QUITextRange *)rangeWithNSRange:(NSRange)range;
++ (instancetype)rangeWithNSRange:(NSRange)range;
 
 @end
 
 @implementation QUITextRange
 
-+ (QUITextRange *)rangeWithNSRange:(NSRange)nsrange
++ (instancetype)rangeWithNSRange:(NSRange)nsrange
 {
-    QUITextRange *range = [[QUITextRange alloc] init];
+    QUITextRange *range = [[self alloc] init];
     range.range = nsrange;
     return [range autorelease];
 }
@@ -117,7 +117,7 @@
 
 @implementation WrapperView
 
-- (id)initWithView:(UIView *)view
+- (instancetype)initWithView:(UIView *)view
 {
     if (self = [self init]) {
         [self addSubview:view];
@@ -132,7 +132,7 @@
 
 - (void)layoutSubviews
 {
-    UIView* view = [self.subviews firstObject];
+    UIView *view = [self.subviews firstObject];
     view.frame = self.bounds;
 
     // FIXME: During orientation changes the size and position
@@ -161,9 +161,15 @@
 
 // -------------------------------------------------------------------------
 
-@implementation QIOSTextInputResponder
+@implementation QIOSTextInputResponder {
+    QT_PREPEND_NAMESPACE(QIOSInputContext) *m_inputContext;
+    QT_PREPEND_NAMESPACE(QInputMethodQueryEvent) *m_configuredImeState;
+    QString m_markedText;
+    BOOL m_inSendEventToFocusObject;
+    BOOL m_inSelectionChange;
+}
 
-- (id)initWithInputContext:(QT_PREPEND_NAMESPACE(QIOSInputContext) *)inputContext
+- (instancetype)initWithInputContext:(QT_PREPEND_NAMESPACE(QIOSInputContext) *)inputContext
 {
     if (!(self = [self init]))
         return self;
@@ -238,7 +244,7 @@
         self.inputAccessoryView = [[[WrapperView alloc] initWithView:accessoryView] autorelease];
 
 #ifndef Q_OS_TVOS
-    if (QSysInfo::MacintoshVersion >= QSysInfo::MV_IOS_9_0) {
+    if (__builtin_available(iOS 9, *)) {
         if (platformData.value(kImePlatformDataHideShortcutsBar).toBool()) {
             // According to the docs, leadingBarButtonGroups/trailingBarButtonGroups should be set to nil to hide the shortcuts bar.
             // However, starting with iOS 10, the API has been surrounded with NS_ASSUME_NONNULL, which contradicts this and causes
@@ -377,7 +383,6 @@
     QScopedValueRollback<BOOL> rollback(m_inSendEventToFocusObject, true);
     QWindowSystemInterface::handleKeyEvent(qApp->focusWindow(), QEvent::KeyPress, key, modifiers);
     QWindowSystemInterface::handleKeyEvent(qApp->focusWindow(), QEvent::KeyRelease, key, modifiers);
-    QWindowSystemInterface::flushWindowSystemEvents();
 }
 
 #ifndef QT_NO_SHORTCUT
@@ -549,7 +554,7 @@
     [self sendKeyPressRelease:key modifiers:modifiers];
 }
 
-- (void)addKeyCommandsToArray:(NSMutableArray *)array key:(NSString *)key
+- (void)addKeyCommandsToArray:(NSMutableArray<UIKeyCommand *> *)array key:(NSString *)key
 {
     SEL s = @selector(keyCommandTriggered:);
     [array addObject:[UIKeyCommand keyCommandWithInput:key modifierFlags:0 action:s]];
@@ -560,19 +565,19 @@
     [array addObject:[UIKeyCommand keyCommandWithInput:key modifierFlags:UIKeyModifierCommand|UIKeyModifierShift action:s]];
 }
 
-- (NSArray *)keyCommands
+- (NSArray<UIKeyCommand *> *)keyCommands
 {
     // Since keyCommands is called for every key
     // press/release, we cache the result
     static dispatch_once_t once;
-    static NSMutableArray *array;
+    static NSMutableArray<UIKeyCommand *> *array;
 
     dispatch_once(&once, ^{
         // We let Qt move the cursor around when the arrow keys are being used. This
         // is normally implemented through UITextInput, but since IM in Qt have poor
         // support for moving the cursor vertically, and even less support for selecting
         // text across multiple paragraphs, we do this through key events.
-        array = [NSMutableArray new];
+        array = [NSMutableArray<UIKeyCommand *> new];
         [self addKeyCommandsToArray:array key:UIKeyInputUpArrow];
         [self addKeyCommandsToArray:array key:UIKeyInputDownArrow];
         [self addKeyCommandsToArray:array key:UIKeyInputLeftArrow];
@@ -826,13 +831,13 @@
     return startRect.united(endRect).toCGRect();
 }
 
-- (NSArray *)selectionRectsForRange:(UITextRange *)range
+- (NSArray<UITextSelectionRect *> *)selectionRectsForRange:(UITextRange *)range
 {
     Q_UNUSED(range);
     // This method is supposed to return a rectangle for each line with selection. Since we don't
     // expose an API in Qt/IM for getting this information, and since we never seems to be getting
     // a call from UIKit for this, we return an empty array until a need arise.
-    return [[NSArray new] autorelease];
+    return [[NSArray<UITextSelectionRect *> new] autorelease];
 }
 
 - (CGRect)caretRectForPosition:(UITextPosition *)position
@@ -880,9 +885,10 @@
 
 - (UITextPosition *)closestPositionToPoint:(CGPoint)point
 {
-    // No API in Qt for determining this. Use sensible default instead:
-    Q_UNUSED(point);
-    return [QUITextPosition positionWithIndex:[self currentImeState:Qt::ImCursorPosition].toInt()];
+    QPointF p = QPointF::fromCGPoint(point);
+    const QTransform mapToLocal = QGuiApplication::inputMethod()->inputItemTransform().inverted();
+    int textPos = QInputMethod::queryFocusObject(Qt::ImCursorPosition, p * mapToLocal).toInt();
+    return [QUITextPosition positionWithIndex:textPos];
 }
 
 - (UITextPosition *)closestPositionToPoint:(CGPoint)point withinRange:(UITextRange *)range
@@ -916,7 +922,7 @@
 
     QObject *focusObject = QGuiApplication::focusObject();
     if (!focusObject)
-        return [NSDictionary dictionary];
+        return @{};
 
     // Assume position is the same as the cursor for now. QInputMethodQueryEvent with Qt::ImFont
     // needs to be extended to take an extra position argument before this can be fully correct.
@@ -925,8 +931,8 @@
     QFont qfont = qvariant_cast<QFont>(e.value(Qt::ImFont));
     UIFont *uifont = [UIFont fontWithName:qfont.family().toNSString() size:qfont.pointSize()];
     if (!uifont)
-        return [NSDictionary dictionary];
-    return [NSDictionary dictionaryWithObject:uifont forKey:NSFontAttributeName];
+        return @{};
+    return @{NSFontAttributeName: uifont};
 }
 #endif
 

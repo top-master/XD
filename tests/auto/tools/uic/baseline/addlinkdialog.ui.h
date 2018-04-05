@@ -10,14 +10,11 @@
 #define ADDLINKDIALOG_H
 
 #include <QtCore/QVariant>
-#include <QtWidgets/QAction>
 #include <QtWidgets/QApplication>
-#include <QtWidgets/QButtonGroup>
 #include <QtWidgets/QDialog>
 #include <QtWidgets/QDialogButtonBox>
 #include <QtWidgets/QFormLayout>
 #include <QtWidgets/QFrame>
-#include <QtWidgets/QHeaderView>
 #include <QtWidgets/QLabel>
 #include <QtWidgets/QLineEdit>
 #include <QtWidgets/QSpacerItem>
@@ -100,9 +97,9 @@ public:
 
     void retranslateUi(QDialog *AddLinkDialog)
     {
-        AddLinkDialog->setWindowTitle(QApplication::translate("AddLinkDialog", "Insert Link", Q_NULLPTR));
-        label->setText(QApplication::translate("AddLinkDialog", "Title:", Q_NULLPTR));
-        label_2->setText(QApplication::translate("AddLinkDialog", "URL:", Q_NULLPTR));
+        AddLinkDialog->setWindowTitle(QApplication::translate("AddLinkDialog", "Insert Link", nullptr));
+        label->setText(QApplication::translate("AddLinkDialog", "Title:", nullptr));
+        label_2->setText(QApplication::translate("AddLinkDialog", "URL:", nullptr));
     } // retranslateUi
 
 };

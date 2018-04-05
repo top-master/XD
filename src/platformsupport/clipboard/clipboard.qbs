@@ -24,7 +24,7 @@ QtModuleProject {
 
         cpp.includePaths: project.includePaths.concat(base)
         cpp.defines: base.concat("QT_NO_CAST_FROM_ASCII")
-        cpp.frameworks: ["AppKit"]
+        cpp.frameworks: ["AppKit", "ImageIO"]
 
         Group {
             files: [

@@ -59,12 +59,9 @@
 #include "qgraphicstransform.h"
 #include <private/qgraphicstransform_p.h>
 
-#include <private/qgraphicseffect_p.h>
-#include <qgraphicseffect.h>
-
 #include <QtCore/qpoint.h>
 
-#if !defined(QT_NO_GRAPHICSVIEW)
+QT_REQUIRE_CONFIG(graphicsview);
 
 QT_BEGIN_NAMESPACE
 
@@ -193,6 +190,7 @@ public:
     void updateAncestorFlags();
     void setIsMemberOfGroup(bool enabled);
     void remapItemPos(QEvent *event, QGraphicsItem *item);
+    QTransform genericMapFromSceneTransform(const QWidget *viewport = nullptr) const;
     QPointF genericMapFromScene(const QPointF &pos, const QWidget *viewport) const;
     inline bool itemIsUntransformable() const
     {
@@ -217,13 +215,13 @@ public:
                               bool ignoreDirtyBit = false, bool ignoreOpacity = false) const;
     virtual void transformChanged() {}
     int depth() const;
-#ifndef QT_NO_GRAPHICSEFFECT
+#if QT_CONFIG(graphicseffect)
     enum InvalidateReason {
         OpacityChanged
     };
     void invalidateParentGraphicsEffectsRecursively();
     void invalidateChildGraphicsEffectsRecursively(InvalidateReason reason);
-#endif //QT_NO_GRAPHICSEFFECT
+#endif // QT_CONFIG(graphicseffect)
     void invalidateDepthRecursively();
     void resolveDepth();
     void addChild(QGraphicsItem *child);
@@ -590,7 +588,7 @@ struct QGraphicsItemPaintInfo
     quint32 drawItem : 1;
 };
 
-#ifndef QT_NO_GRAPHICSEFFECT
+#if QT_CONFIG(graphicseffect)
 class QGraphicsItemEffectSourcePrivate : public QGraphicsEffectSourcePrivate
 {
 public:
@@ -598,28 +596,28 @@ public:
         : QGraphicsEffectSourcePrivate(), item(i), info(0)
     {}
 
-    void detach() Q_DECL_OVERRIDE
+    void detach() override
     {
         item->d_ptr->graphicsEffect = 0;
         item->prepareGeometryChange();
     }
 
-    const QGraphicsItem *graphicsItem() const Q_DECL_OVERRIDE
+    const QGraphicsItem *graphicsItem() const override
     { return item; }
 
-    const QWidget *widget() const Q_DECL_OVERRIDE
+    const QWidget *widget() const override
     { return 0; }
 
-    void update() Q_DECL_OVERRIDE {
+    void update() override {
         item->d_ptr->updateDueToGraphicsEffect = true;
         item->update();
         item->d_ptr->updateDueToGraphicsEffect = false;
     }
 
-    void effectBoundingRectChanged() Q_DECL_OVERRIDE
+    void effectBoundingRectChanged() override
     { item->prepareGeometryChange(); }
 
-    bool isPixmap() const Q_DECL_OVERRIDE
+    bool isPixmap() const override
     {
         return item->type() == QGraphicsPixmapItem::Type
                && !(item->flags() & QGraphicsItem::ItemIsSelectable)
@@ -627,10 +625,10 @@ public:
             //|| (item->d_ptr->isObject && qobject_cast<QDeclarativeImage *>(q_func()));
     }
 
-    const QStyleOption *styleOption() const Q_DECL_OVERRIDE
+    const QStyleOption *styleOption() const override
     { return info ? info->option : 0; }
 
-    QRect deviceRect() const Q_DECL_OVERRIDE
+    QRect deviceRect() const override
     {
         if (!info || !info->widget) {
             qWarning("QGraphicsEffectSource::deviceRect: Not yet implemented, lacking device context");
@@ -639,18 +637,18 @@ public:
         return info->widget->rect();
     }
 
-    QRectF boundingRect(Qt::CoordinateSystem system) const Q_DECL_OVERRIDE;
-    void draw(QPainter *) Q_DECL_OVERRIDE;
+    QRectF boundingRect(Qt::CoordinateSystem system) const override;
+    void draw(QPainter *) override;
     QPixmap pixmap(Qt::CoordinateSystem system,
                    QPoint *offset,
-                   QGraphicsEffect::PixmapPadMode mode) const Q_DECL_OVERRIDE;
+                   QGraphicsEffect::PixmapPadMode mode) const override;
     QRect paddedEffectRect(Qt::CoordinateSystem system, QGraphicsEffect::PixmapPadMode mode, const QRectF &sourceRect, bool *unpadded = 0) const;
 
     QGraphicsItem *item;
     QGraphicsItemPaintInfo *info;
     QTransform lastEffectTransform;
 };
-#endif //QT_NO_GRAPHICSEFFECT
+#endif // QT_CONFIG(graphicseffect)
 
 /*!
     Returns \c true if \a item1 is on top of \a item2.
@@ -784,7 +782,7 @@ inline bool QGraphicsItemPrivate::insertionOrder(QGraphicsItem *a, QGraphicsItem
 inline void QGraphicsItemPrivate::markParentDirty(bool updateBoundingRect)
 {
     QGraphicsItemPrivate *parentp = this;
-#ifndef QT_NO_GRAPHICSEFFECT
+#if QT_CONFIG(graphicseffect)
     if (updateBoundingRect && parentp->graphicsEffect && !parentp->inSetPosHelper) {
         parentp->notifyInvalidated = 1;
         static_cast<QGraphicsItemEffectSourcePrivate *>(parentp->graphicsEffect->d_func()
@@ -800,7 +798,7 @@ inline void QGraphicsItemPrivate::markParentDirty(bool updateBoundingRect)
             // ### Only do this if the parent's effect applies to the entire subtree.
             parentp->notifyBoundingRectChanged = 1;
         }
-#ifndef QT_NO_GRAPHICSEFFECT
+#if QT_CONFIG(graphicseffect)
         if (parentp->graphicsEffect) {
             if (updateBoundingRect) {
                 static_cast<QGraphicsItemEffectSourcePrivate *>(parentp->graphicsEffect->d_func()
@@ -817,7 +815,5 @@ inline void QGraphicsItemPrivate::markParentDirty(bool updateBoundingRect)
 }
 
 QT_END_NAMESPACE
-
-#endif // QT_NO_GRAPHICSVIEW
 
 #endif

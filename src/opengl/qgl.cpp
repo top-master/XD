@@ -1292,19 +1292,19 @@ QGLFormat::OpenGLVersionFlags Q_AUTOTEST_EXPORT qOpenGLVersionFlagsFromString(co
             switch (versionString[2].toLatin1()) {
             case '5':
                 versionFlags |= QGLFormat::OpenGL_Version_1_5;
-                // fall through
+                Q_FALLTHROUGH();
             case '4':
                 versionFlags |= QGLFormat::OpenGL_Version_1_4;
-                // fall through
+                Q_FALLTHROUGH();
             case '3':
                 versionFlags |= QGLFormat::OpenGL_Version_1_3;
-                // fall through
+                Q_FALLTHROUGH();
             case '2':
                 versionFlags |= QGLFormat::OpenGL_Version_1_2;
-                // fall through
+                Q_FALLTHROUGH();
             case '1':
                 versionFlags |= QGLFormat::OpenGL_Version_1_1;
-                // fall through
+                Q_FALLTHROUGH();
             default:
                 break;
             }
@@ -1329,13 +1329,13 @@ QGLFormat::OpenGLVersionFlags Q_AUTOTEST_EXPORT qOpenGLVersionFlagsFromString(co
             switch (versionString[2].toLatin1()) {
             case '3':
                 versionFlags |= QGLFormat::OpenGL_Version_3_3;
-                // fall through
+                Q_FALLTHROUGH();
             case '2':
                 versionFlags |= QGLFormat::OpenGL_Version_3_2;
-                // fall through
+                Q_FALLTHROUGH();
             case '1':
                 versionFlags |= QGLFormat::OpenGL_Version_3_1;
-                // fall through
+                Q_FALLTHROUGH();
             case '0':
                 break;
             default:
@@ -1360,13 +1360,13 @@ QGLFormat::OpenGLVersionFlags Q_AUTOTEST_EXPORT qOpenGLVersionFlagsFromString(co
             switch (versionString[2].toLatin1()) {
             case '3':
                 versionFlags |= QGLFormat::OpenGL_Version_4_3;
-                // fall through
+                Q_FALLTHROUGH();
             case '2':
                 versionFlags |= QGLFormat::OpenGL_Version_4_2;
-                // fall through
+                Q_FALLTHROUGH();
             case '1':
                 versionFlags |= QGLFormat::OpenGL_Version_4_1;
-                // fall through
+                Q_FALLTHROUGH();
             case '0':
                 break;
             default:
@@ -2104,17 +2104,17 @@ struct DDSFormat {
     would mirror the image and automatically generate mipmaps. This
     option helps preserve this default behavior.
 
-    \omitvalue CanFlipNativePixmapBindOption Used by x11 from pixmap to choose
-    whether or not it can bind the pixmap upside down or not.
+    \omitvalue CanFlipNativePixmapBindOption \omit Used by x11 from pixmap to choose
+    whether or not it can bind the pixmap upside down or not. \endomit
 
-    \omitvalue MemoryManagedBindOption Used by paint engines to
+    \omitvalue MemoryManagedBindOption \omit Used by paint engines to
     indicate that the pixmap should be memory managed along side with
     the pixmap/image that it stems from, e.g. installing destruction
-    hooks in them.
+    hooks in them. \endomit
 
-    \omitvalue TemporarilyCachedBindOption Used by paint engines on some
+    \omitvalue TemporarilyCachedBindOption \omit Used by paint engines on some
     platforms to indicate that the pixmap or image texture is possibly
-    cached only temporarily and must be destroyed immediately after the use.
+    cached only temporarily and must be destroyed immediately after the use. \endomit
 
     \omitvalue InternalBindOption
 */

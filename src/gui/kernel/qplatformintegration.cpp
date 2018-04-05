@@ -237,6 +237,10 @@ QPlatformServices *QPlatformIntegration::services() const
     is required to have this capability.
 
     \value ApplicationIcon The platform supports setting the application icon. (since 5.5)
+
+    \value TopStackedNativeChildWindows The platform supports native child windows via
+    QWindowContainer without having to punch a transparent hole in the
+    backingstore. (since 5.10)
  */
 
 /*!
@@ -260,7 +264,8 @@ QPlatformServices *QPlatformIntegration::services() const
 
 bool QPlatformIntegration::hasCapability(Capability cap) const
 {
-    return cap == NonFullScreenWindows || cap == NativeWidgets || cap == WindowManagement;
+    return cap == NonFullScreenWindows || cap == NativeWidgets || cap == WindowManagement
+        || cap == TopStackedNativeChildWindows || cap == WindowActivation;
 }
 
 QPlatformPixmap *QPlatformIntegration::createPlatformPixmap(QPlatformPixmap::PixelType type) const
@@ -387,6 +392,8 @@ QVariant QPlatformIntegration::styleHint(StyleHint hint) const
         return false;
     case ShowIsMaximized:
         return false;
+    case ShowShortcutsInContextMenus:
+        return QPlatformTheme::defaultThemeHint(QPlatformTheme::ShowShortcutsInContextMenus);
     case PasswordMaskDelay:
         return QPlatformTheme::defaultThemeHint(QPlatformTheme::PasswordMaskDelay);
     case PasswordMaskCharacter:
@@ -411,6 +418,8 @@ QVariant QPlatformIntegration::styleHint(StyleHint hint) const
         return QPlatformTheme::defaultThemeHint(QPlatformTheme::UiEffects);
     case WheelScrollLines:
         return QPlatformTheme::defaultThemeHint(QPlatformTheme::WheelScrollLines);
+    case MouseQuickSelectionThreshold:
+        return QPlatformTheme::defaultThemeHint(QPlatformTheme::MouseQuickSelectionThreshold);
     }
 
     return 0;
@@ -437,12 +446,13 @@ Qt::KeyboardModifiers QPlatformIntegration::queryKeyboardModifiers() const
 
 /*!
   Should be used to obtain a list of possible shortcuts for the given key
-  event. As that needs system functionality it cannot be done in qkeymapper.
+  event. Shortcuts should be encoded as int(Qt::Key + Qt::KeyboardModifiers).
 
-  One example for more than 1 possibility is the key combination of Shift+5.
+  One example for more than one possibility is the key combination of Shift+5.
   That one might trigger a shortcut which is set as "Shift+5" as well as one
-  using %. These combinations depend on the currently set keyboard layout
-  which cannot be obtained by Qt functionality.
+  using %. These combinations depend on the currently set keyboard layout.
+
+  \note This function should be called only from key event handlers.
 */
 QList<int> QPlatformIntegration::possibleKeys(const QKeyEvent *) const
 {
@@ -621,5 +631,27 @@ void QPlatformIntegration::setApplicationIcon(const QIcon &icon) const
 {
     Q_UNUSED(icon);
 }
+
+#if QT_CONFIG(vulkan) || defined(Q_CLANG_QDOC)
+
+/*!
+    Factory function for QPlatformVulkanInstance. The \a instance parameter is a
+    pointer to the instance for which a platform-specific backend needs to be
+    created.
+
+    Returns a pointer to a QPlatformOpenGLContext instance or \c NULL if the context could
+    not be created.
+
+    \sa QVulkanInstance
+    \since 5.10
+*/
+QPlatformVulkanInstance *QPlatformIntegration::createPlatformVulkanInstance(QVulkanInstance *instance) const
+{
+    Q_UNUSED(instance);
+    qWarning("This plugin does not support createPlatformVulkanInstance");
+    return nullptr;
+}
+
+#endif // QT_CONFIG(vulkan)
 
 QT_END_NAMESPACE

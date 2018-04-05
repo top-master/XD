@@ -63,11 +63,15 @@ Q_DECLARE_LOGGING_CATEGORY(lcQpaGl)
 Q_DECLARE_LOGGING_CATEGORY(lcQpaMime)
 Q_DECLARE_LOGGING_CATEGORY(lcQpaInputMethods)
 Q_DECLARE_LOGGING_CATEGORY(lcQpaDialogs)
+Q_DECLARE_LOGGING_CATEGORY(lcQpaMenus)
 Q_DECLARE_LOGGING_CATEGORY(lcQpaTablet)
 Q_DECLARE_LOGGING_CATEGORY(lcQpaAccessibility)
+Q_DECLARE_LOGGING_CATEGORY(lcQpaUiAutomation)
+Q_DECLARE_LOGGING_CATEGORY(lcQpaTrayIcon)
 
 class QWindow;
 class QPlatformScreen;
+class QWindowsMenuBar;
 class QWindowsScreenManager;
 class QWindowsTabletSupport;
 class QWindowsWindow;
@@ -81,13 +85,7 @@ class QTouchDevice;
 struct QWindowsUser32DLL
 {
     inline void init();
-    inline bool initTouch();
 
-    typedef BOOL (WINAPI *IsTouchWindow)(HWND, PULONG); // Windows 7
-    typedef BOOL (WINAPI *RegisterTouchWindow)(HWND, ULONG);
-    typedef BOOL (WINAPI *UnregisterTouchWindow)(HWND);
-    typedef BOOL (WINAPI *GetTouchInputInfo)(HANDLE, UINT, PVOID, int);
-    typedef BOOL (WINAPI *CloseTouchInputHandle)(HANDLE);
     typedef BOOL (WINAPI *SetProcessDPIAware)();
     typedef BOOL (WINAPI *AddClipboardFormatListener)(HWND);
     typedef BOOL (WINAPI *RemoveClipboardFormatListener)(HWND);
@@ -96,13 +94,6 @@ struct QWindowsUser32DLL
     typedef BOOL (WINAPI *EnableNonClientDpiScaling)(HWND);
     typedef int  (WINAPI *GetWindowDpiAwarenessContext)(HWND);
     typedef int  (WINAPI *GetAwarenessFromDpiAwarenessContext)(int);
-
-    // Touch functions from Windows 7 onwards (also for use with Q_CC_MSVC).
-    IsTouchWindow isTouchWindow = nullptr;
-    RegisterTouchWindow registerTouchWindow = nullptr;
-    UnregisterTouchWindow unregisterTouchWindow = nullptr;
-    GetTouchInputInfo getTouchInputInfo = nullptr;
-    CloseTouchInputHandle closeTouchInputHandle = nullptr;
 
     // Windows Vista onwards
     SetProcessDPIAware setProcessDPIAware = nullptr;
@@ -177,6 +168,7 @@ public:
 
     QWindowsWindow *findClosestPlatformWindow(HWND) const;
     QWindowsWindow *findPlatformWindow(HWND) const;
+    QWindowsWindow *findPlatformWindow(const QWindowsMenuBar *mb) const;
     QWindow *findWindow(HWND) const;
     QWindowsWindow *findPlatformWindowAt(HWND parent, const QPoint &screenPoint,
                                              unsigned cwex_flags) const;
@@ -192,7 +184,7 @@ public:
     QWindow *keyGrabber() const;
     void setKeyGrabber(QWindow *hwnd);
 
-    void setWindowCreationContext(const QSharedPointer<QWindowCreationContext> &ctx);
+    QSharedPointer<QWindowCreationContext> setWindowCreationContext(const QSharedPointer<QWindowCreationContext> &ctx);
     QSharedPointer<QWindowCreationContext> windowCreationContext() const;
 
     void setTabletAbsoluteRange(int a);
@@ -215,6 +207,8 @@ public:
     static QByteArray comErrorString(HRESULT hr);
     bool asyncExpose() const;
     void setAsyncExpose(bool value);
+
+    static DWORD readAdvancedExplorerSettings(const wchar_t *subKey, DWORD defaultValue);
 
     QTouchDevice *touchDevice() const;
 

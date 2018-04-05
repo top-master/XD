@@ -246,6 +246,7 @@ bool QSqlDriver::isOpenError() const
 
 /*!
     \enum QSqlDriver::DbmsType
+    \internal
 
     This enum contains DBMS types.
 
@@ -671,7 +672,7 @@ QString QSqlDriver::formatValue(const QSqlField &field, bool trimStrings) const
                 break;
             }
         }
-            // fall through
+            Q_FALLTHROUGH();
         default:
             r = field.value().toString();
             break;
@@ -807,6 +808,7 @@ QSql::NumericalPrecisionPolicy QSqlDriver::numericalPrecisionPolicy() const
 
 /*!
     \since 5.4
+    \internal
 
     Returns the current DBMS type for the database connection.
 */

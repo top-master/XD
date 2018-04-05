@@ -38,7 +38,7 @@
 ****************************************************************************/
 
 #include "qgroupbox.h"
-#ifndef QT_NO_GROUPBOX
+
 #include "qapplication.h"
 #include "qbitmap.h"
 #include "qdrawutil.h"
@@ -145,6 +145,8 @@ void QGroupBoxPrivate::click()
     \ingroup geomanagement
     \inmodule QtWidgets
 
+    \image windows-groupbox.png
+
     A group box provides a frame, a title on top, a keyboard shortcut, and
     displays various other widgets inside itself. The keyboard shortcut moves
     keyboard focus to one of the group box's child widgets.
@@ -165,15 +167,6 @@ void QGroupBoxPrivate::click()
     QGroupBox with a layout:
 
     \snippet widgets/groupbox/window.cpp 2
-
-    \table 100%
-    \row \li \inlineimage windowsvista-groupbox.png Screenshot of a Windows Vista style group box
-         \li \inlineimage macintosh-groupbox.png Screenshot of a Macintosh style group box
-         \li \inlineimage fusion-groupbox.png Screenshot of a Fusion style group box
-    \row \li A \l{Windows Vista Style Widget Gallery}{Windows Vista style} group box.
-         \li A \l{Macintosh Style Widget Gallery}{Macintosh style} group box.
-         \li A \l{Fusion Style Widget Gallery}{Fusion style} group box.
-    \endtable
 
     \sa QButtonGroup, {Group Box Example}
 */
@@ -491,7 +484,7 @@ QSize QGroupBox::minimumSizeHint() const
 
     QFontMetrics metrics(fontMetrics());
 
-    int baseWidth = metrics.width(d->title) + metrics.width(QLatin1Char(' '));
+    int baseWidth = metrics.horizontalAdvance(d->title) + metrics.horizontalAdvance(QLatin1Char(' '));
     int baseHeight = metrics.height();
     if (d->checkable) {
         baseWidth += style()->pixelMetric(QStyle::PM_IndicatorWidth);
@@ -758,9 +751,6 @@ void QGroupBox::mouseReleaseEvent(QMouseEvent *event)
         update(style()->subControlRect(QStyle::CC_GroupBox, &box, QStyle::SC_GroupBoxCheckBox, this));
 }
 
-
 QT_END_NAMESPACE
 
 #include "moc_qgroupbox.cpp"
-
-#endif //QT_NO_GROUPBOX

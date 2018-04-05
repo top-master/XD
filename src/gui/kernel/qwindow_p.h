@@ -105,6 +105,9 @@ public:
         , hasCursor(false)
 #endif
         , compositing(false)
+#if QT_CONFIG(vulkan)
+        , vulkanInstance(nullptr)
+#endif
     {
         isWindow = true;
     }
@@ -127,8 +130,13 @@ public:
 
     QWindow *topLevelWindow() const;
 
+#if QT_CONFIG(opengl)
+    virtual QOpenGLContext *shareContext() const;
+#endif
+
     virtual QWindow *eventReceiver() { Q_Q(QWindow); return q; }
 
+    virtual void setVisible(bool visible);
     void updateVisibility();
     void _q_clearAlert();
 
@@ -147,9 +155,13 @@ public:
     virtual void clearFocusObject();
     virtual QRectF closestAcceptableGeometry(const QRectF &rect) const;
 
+    virtual void processSafeAreaMarginsChanged() {};
+
     bool isPopup() const { return (windowFlags & Qt::WindowType_Mask) == Qt::Popup; }
 
     static QWindowPrivate *get(QWindow *window) { return window->d_func(); }
+
+    static Qt::WindowState effectiveState(Qt::WindowStates);
 
     QWindow::SurfaceType surfaceType;
     Qt::WindowFlags windowFlags;
@@ -163,7 +175,7 @@ public:
     QString windowFilePath;
     QIcon windowIcon;
     QRect geometry;
-    Qt::WindowState windowState;
+    Qt::WindowStates windowState;
     QWindow::Visibility visibility;
     bool resizeEventPending;
     bool receivedExpose;
@@ -194,6 +206,10 @@ public:
 
     bool compositing;
     QElapsedTimer lastComposeTime;
+
+#if QT_CONFIG(vulkan)
+    QVulkanInstance *vulkanInstance;
+#endif
 };
 
 

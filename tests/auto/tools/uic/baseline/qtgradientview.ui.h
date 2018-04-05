@@ -10,11 +10,8 @@
 #define QTGRADIENTVIEW_H
 
 #include <QtCore/QVariant>
-#include <QtWidgets/QAction>
 #include <QtWidgets/QApplication>
-#include <QtWidgets/QButtonGroup>
 #include <QtWidgets/QHBoxLayout>
-#include <QtWidgets/QHeaderView>
 #include <QtWidgets/QListWidget>
 #include <QtWidgets/QSpacerItem>
 #include <QtWidgets/QToolButton>
@@ -108,11 +105,11 @@ public:
 
     void retranslateUi(QWidget *QtGradientView)
     {
-        QtGradientView->setWindowTitle(QApplication::translate("QtGradientView", "Gradient View", Q_NULLPTR));
-        newButton->setText(QApplication::translate("QtGradientView", "New...", Q_NULLPTR));
-        editButton->setText(QApplication::translate("QtGradientView", "Edit...", Q_NULLPTR));
-        renameButton->setText(QApplication::translate("QtGradientView", "Rename", Q_NULLPTR));
-        removeButton->setText(QApplication::translate("QtGradientView", "Remove", Q_NULLPTR));
+        QtGradientView->setWindowTitle(QApplication::translate("QtGradientView", "Gradient View", nullptr));
+        newButton->setText(QApplication::translate("QtGradientView", "New...", nullptr));
+        editButton->setText(QApplication::translate("QtGradientView", "Edit...", nullptr));
+        renameButton->setText(QApplication::translate("QtGradientView", "Rename", nullptr));
+        removeButton->setText(QApplication::translate("QtGradientView", "Remove", nullptr));
     } // retranslateUi
 
 };

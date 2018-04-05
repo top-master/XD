@@ -50,6 +50,7 @@
 #include <QtGui/QOpenGLFunctions>
 #ifndef QT_NO_OPENGL
 #include <QtGui/qopengltextureblitter.h>
+#include <QtGui/qoffscreensurface.h>
 #endif
 #include <qpa/qplatformgraphicsbuffer.h>
 #include <qpa/qplatformgraphicsbufferhelper.h>
@@ -70,6 +71,13 @@
 #define GL_UNSIGNED_INT_2_10_10_10_REV    0x8368
 #endif
 
+#ifndef GL_FRAMEBUFFER_SRB
+#define GL_FRAMEBUFFER_SRGB 0x8DB9
+#endif
+#ifndef GL_FRAMEBUFFER_SRGB_CAPABLE
+#define GL_FRAMEBUFFER_SRGB_CAPABLE 0x8DBA
+#endif
+
 QT_BEGIN_NAMESPACE
 
 class QPlatformBackingStorePrivate
@@ -88,14 +96,15 @@ public:
     ~QPlatformBackingStorePrivate()
     {
 #ifndef QT_NO_OPENGL
-        QOpenGLContext *ctx = QOpenGLContext::currentContext();
-        if (ctx) {
+        if (context) {
+            QOffscreenSurface offscreenSurface;
+            offscreenSurface.setFormat(context->format());
+            offscreenSurface.create();
+            context->makeCurrent(&offscreenSurface);
             if (textureId)
-                ctx->functions()->glDeleteTextures(1, &textureId);
+                context->functions()->glDeleteTextures(1, &textureId);
             if (blitter)
                 blitter->destroy();
-        } else if (textureId || blitter) {
-            qWarning("No context current during QPlatformBackingStore destruction, OpenGL resources not released");
         }
         delete blitter;
 #endif
@@ -103,6 +112,7 @@ public:
     QWindow *window;
     QBackingStore *backingStore;
 #ifndef QT_NO_OPENGL
+    QScopedPointer<QOpenGLContext> context;
     mutable GLuint textureId;
     mutable QSize textureSize;
     mutable bool needsSwizzle;
@@ -227,17 +237,6 @@ void QPlatformTextureList::clear()
     windows.
 */
 
-/*!
-    \fn void QPlatformBackingStore::flush(QWindow *window, const QRegion &region,
-                                  const QPoint &offset)
-
-    Flushes the given \a region from the specified \a window onto the
-    screen.
-
-    The \a offset parameter is relative to the origin of the backing
-    store image.
-*/
-
 #ifndef QT_NO_OPENGL
 
 static inline QRect deviceRect(const QRect &rect, QWindow *window)
@@ -245,6 +244,11 @@ static inline QRect deviceRect(const QRect &rect, QWindow *window)
     QRect deviceRect(rect.topLeft() * window->devicePixelRatio(),
                      rect.size() * window->devicePixelRatio());
     return deviceRect;
+}
+
+static inline QPoint deviceOffset(const QPoint &pt, QWindow *window)
+{
+    return pt * window->devicePixelRatio();
 }
 
 static QRegion deviceRegion(const QRegion &region, QWindow *window, const QPoint &offset)
@@ -269,7 +273,7 @@ static inline QRect toBottomLeftRect(const QRect &topLeftRect, int windowHeight)
 }
 
 static void blitTextureForWidget(const QPlatformTextureList *textures, int idx, QWindow *window, const QRect &deviceWindowRect,
-                                 QOpenGLTextureBlitter *blitter, const QPoint &offset)
+                                 QOpenGLTextureBlitter *blitter, const QPoint &offset, bool canUseSrgb)
 {
     const QRect clipRect = textures->clipRect(idx);
     if (clipRect.isEmpty())
@@ -289,7 +293,15 @@ static void blitTextureForWidget(const QPlatformTextureList *textures, int idx, 
                                                                      deviceRect(rectInWindow, window).size(),
                                                                      QOpenGLTextureBlitter::OriginBottomLeft);
 
+    QOpenGLFunctions *funcs = QOpenGLContext::currentContext()->functions();
+    const bool srgb = textures->flags(idx).testFlag(QPlatformTextureList::TextureIsSrgb);
+    if (srgb && canUseSrgb)
+        funcs->glEnable(GL_FRAMEBUFFER_SRGB);
+
     blitter->blit(textures->textureId(idx), target, source);
+
+    if (srgb && canUseSrgb)
+        funcs->glDisable(GL_FRAMEBUFFER_SRGB);
 }
 
 /*!
@@ -307,20 +319,31 @@ static void blitTextureForWidget(const QPlatformTextureList *textures, int idx, 
 
 void QPlatformBackingStore::composeAndFlush(QWindow *window, const QRegion &region,
                                             const QPoint &offset,
-                                            QPlatformTextureList *textures, QOpenGLContext *context,
+                                            QPlatformTextureList *textures,
                                             bool translucentBackground)
 {
     if (!qt_window_private(window)->receivedExpose)
         return;
 
-    if (!context->makeCurrent(window)) {
+    if (!d_ptr->context) {
+        d_ptr->context.reset(new QOpenGLContext);
+        d_ptr->context->setFormat(d_ptr->window->requestedFormat());
+        d_ptr->context->setScreen(d_ptr->window->screen());
+        d_ptr->context->setShareContext(qt_window_private(d_ptr->window)->shareContext());
+        if (!d_ptr->context->create()) {
+            qWarning("composeAndFlush: QOpenGLContext creation failed");
+            return;
+        }
+    }
+
+    if (!d_ptr->context->makeCurrent(window)) {
         qWarning("composeAndFlush: makeCurrent() failed");
         return;
     }
 
     QWindowPrivate::get(window)->lastComposeTime.start();
 
-    QOpenGLFunctions *funcs = context->functions();
+    QOpenGLFunctions *funcs = d_ptr->context->functions();
     funcs->glViewport(0, 0, window->width() * window->devicePixelRatio(), window->height() * window->devicePixelRatio());
     funcs->glClearColor(0, 0, 0, translucentBackground ? 0 : 1);
     funcs->glClear(GL_COLOR_BUFFER_BIT);
@@ -333,11 +356,25 @@ void QPlatformBackingStore::composeAndFlush(QWindow *window, const QRegion &regi
     d_ptr->blitter->bind();
 
     const QRect deviceWindowRect = deviceRect(QRect(QPoint(), window->size()), window);
+    const QPoint deviceWindowOffset = deviceOffset(offset, window);
+
+    bool canUseSrgb = false;
+    // If there are any sRGB textures in the list, check if the destination
+    // framebuffer is sRGB capable.
+    for (int i = 0; i < textures->count(); ++i) {
+        if (textures->flags(i).testFlag(QPlatformTextureList::TextureIsSrgb)) {
+            GLint cap = 0;
+            funcs->glGetIntegerv(GL_FRAMEBUFFER_SRGB_CAPABLE, &cap);
+            if (cap)
+                canUseSrgb = true;
+            break;
+        }
+    }
 
     // Textures for renderToTexture widgets.
     for (int i = 0; i < textures->count(); ++i) {
         if (!textures->flags(i).testFlag(QPlatformTextureList::StacksOnTop))
-            blitTextureForWidget(textures, i, window, deviceWindowRect, d_ptr->blitter, offset);
+            blitTextureForWidget(textures, i, window, deviceWindowRect, d_ptr->blitter, offset, canUseSrgb);
     }
 
     // Backingstore texture with the normal widgets.
@@ -394,7 +431,7 @@ void QPlatformBackingStore::composeAndFlush(QWindow *window, const QRegion &regi
             d_ptr->blitter->setRedBlueSwizzle(true);
         // The backingstore is for the entire tlw.
         // In case of native children offset tells the position relative to the tlw.
-        const QRect srcRect = toBottomLeftRect(deviceWindowRect.translated(offset), d_ptr->textureSize.height());
+        const QRect srcRect = toBottomLeftRect(deviceWindowRect.translated(deviceWindowOffset), d_ptr->textureSize.height());
         const QMatrix3x3 source = QOpenGLTextureBlitter::sourceTransform(srcRect,
                                                                          d_ptr->textureSize,
                                                                          origin);
@@ -406,13 +443,13 @@ void QPlatformBackingStore::composeAndFlush(QWindow *window, const QRegion &regi
     // Textures for renderToTexture widgets that have WA_AlwaysStackOnTop set.
     for (int i = 0; i < textures->count(); ++i) {
         if (textures->flags(i).testFlag(QPlatformTextureList::StacksOnTop))
-            blitTextureForWidget(textures, i, window, deviceWindowRect, d_ptr->blitter, offset);
+            blitTextureForWidget(textures, i, window, deviceWindowRect, d_ptr->blitter, offset, canUseSrgb);
     }
 
     funcs->glDisable(GL_BLEND);
     d_ptr->blitter->release();
 
-    context->swapBuffers(window);
+    d_ptr->context->swapBuffers(window);
 }
 #endif
 /*!
@@ -667,7 +704,7 @@ void QPlatformBackingStore::endPaint()
 */
 QPlatformGraphicsBuffer *QPlatformBackingStore::graphicsBuffer() const
 {
-    return Q_NULLPTR;
+    return nullptr;
 }
 
 /*!

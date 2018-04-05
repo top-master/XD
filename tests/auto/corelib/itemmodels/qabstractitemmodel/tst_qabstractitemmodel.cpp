@@ -31,6 +31,7 @@
 
 #include <QtCore/QSortFilterProxyModel>
 #include <QtCore/QStringListModel>
+#include <QtGui/QStandardItemModel>
 
 #include "dynamictreemodel.h"
 
@@ -101,8 +102,11 @@ private slots:
 
     void testRoleNames();
     void testDragActions();
+    void dragActionsFallsBackToDropActions();
 
     void testFunctionPointerSignalConnection();
+
+    void checkIndex();
 
 private:
     DynamicTreeModel *m_model;
@@ -2157,6 +2161,27 @@ void tst_QAbstractItemModel::testDragActions()
     QVERIFY(actions & Qt::MoveAction);
 }
 
+class OverrideDropActions : public QStringListModel
+{
+    Q_OBJECT
+public:
+    OverrideDropActions(QObject *parent = 0)
+      : QStringListModel(parent)
+    {
+    }
+    Qt::DropActions supportedDropActions() const override
+    {
+        return Qt::MoveAction;
+    }
+};
+
+void tst_QAbstractItemModel::dragActionsFallsBackToDropActions()
+{
+    QAbstractItemModel *model = new OverrideDropActions(this);
+    QCOMPARE(model->supportedDragActions(), Qt::MoveAction);
+    QCOMPARE(model->supportedDropActions(), Qt::MoveAction);
+}
+
 class SignalConnectionTester : public QObject
 {
     Q_OBJECT
@@ -2261,6 +2286,75 @@ void tst_QAbstractItemModel::testFunctionPointerSignalConnection()
 //     model.rowsInserted(QModelIndex(), 0, 0);
 }
 
+void tst_QAbstractItemModel::checkIndex()
+{
+    const QRegularExpression ignorePattern("^Index QModelIndex");
+
+    // checkIndex is QAbstractItemModel API; using QStandardItem as an easy
+    // way to build a tree model
+    QStandardItemModel model;
+    QStandardItem *topLevel = new QStandardItem("topLevel");
+    model.appendRow(topLevel);
+
+    topLevel->appendRow(new QStandardItem("child1"));
+    topLevel->appendRow(new QStandardItem("child2"));
+
+    QVERIFY(model.checkIndex(QModelIndex()));
+    QVERIFY(model.checkIndex(QModelIndex(), QAbstractItemModel::CheckIndexOption::DoNotUseParent));
+    QVERIFY(model.checkIndex(QModelIndex(), QAbstractItemModel::CheckIndexOption::ParentIsInvalid));
+    QTest::ignoreMessage(QtWarningMsg, ignorePattern);
+    QVERIFY(!model.checkIndex(QModelIndex(), QAbstractItemModel::CheckIndexOption::IndexIsValid));
+
+    QModelIndex topLevelIndex = model.index(0, 0);
+    QVERIFY(topLevelIndex.isValid());
+    QVERIFY(model.checkIndex(topLevelIndex));
+    QVERIFY(model.checkIndex(topLevelIndex, QAbstractItemModel::CheckIndexOption::DoNotUseParent));
+    QVERIFY(model.checkIndex(topLevelIndex, QAbstractItemModel::CheckIndexOption::ParentIsInvalid));
+    QVERIFY(model.checkIndex(topLevelIndex, QAbstractItemModel::CheckIndexOption::IndexIsValid));
+
+    QModelIndex childIndex = model.index(0, 0, topLevelIndex);
+    QVERIFY(childIndex.isValid());
+    QVERIFY(model.checkIndex(childIndex));
+    QVERIFY(model.checkIndex(childIndex, QAbstractItemModel::CheckIndexOption::DoNotUseParent));
+    QTest::ignoreMessage(QtWarningMsg, ignorePattern);
+    QVERIFY(!model.checkIndex(childIndex, QAbstractItemModel::CheckIndexOption::ParentIsInvalid));
+    QVERIFY(model.checkIndex(childIndex, QAbstractItemModel::CheckIndexOption::IndexIsValid));
+
+    childIndex = model.index(1, 0, topLevelIndex);
+    QVERIFY(childIndex.isValid());
+    QVERIFY(model.checkIndex(childIndex));
+    QVERIFY(model.checkIndex(childIndex, QAbstractItemModel::CheckIndexOption::DoNotUseParent));
+    QTest::ignoreMessage(QtWarningMsg, ignorePattern);
+    QVERIFY(!model.checkIndex(childIndex, QAbstractItemModel::CheckIndexOption::ParentIsInvalid));
+    QVERIFY(model.checkIndex(childIndex, QAbstractItemModel::CheckIndexOption::IndexIsValid));
+
+    topLevel->removeRow(1);
+    QTest::ignoreMessage(QtWarningMsg, ignorePattern);
+    QVERIFY(!model.checkIndex(childIndex));
+    QVERIFY(model.checkIndex(childIndex, QAbstractItemModel::CheckIndexOption::DoNotUseParent));
+    QTest::ignoreMessage(QtWarningMsg, ignorePattern);
+    QVERIFY(!model.checkIndex(childIndex, QAbstractItemModel::CheckIndexOption::ParentIsInvalid));
+    QTest::ignoreMessage(QtWarningMsg, ignorePattern);
+    QVERIFY(!model.checkIndex(childIndex, QAbstractItemModel::CheckIndexOption::IndexIsValid));
+
+    QStandardItemModel model2;
+    model2.appendRow(new QStandardItem("otherTopLevel"));
+    topLevelIndex = model2.index(0, 0);
+    QVERIFY(topLevelIndex.isValid());
+    QVERIFY(model2.checkIndex(topLevelIndex));
+    QVERIFY(model2.checkIndex(topLevelIndex, QAbstractItemModel::CheckIndexOption::DoNotUseParent));
+    QVERIFY(model2.checkIndex(topLevelIndex, QAbstractItemModel::CheckIndexOption::ParentIsInvalid));
+    QVERIFY(model2.checkIndex(topLevelIndex, QAbstractItemModel::CheckIndexOption::IndexIsValid));
+
+    QTest::ignoreMessage(QtWarningMsg, ignorePattern);
+    QVERIFY(!model.checkIndex(topLevelIndex));
+    QTest::ignoreMessage(QtWarningMsg, ignorePattern);
+    QVERIFY(!model.checkIndex(topLevelIndex, QAbstractItemModel::CheckIndexOption::DoNotUseParent));
+    QTest::ignoreMessage(QtWarningMsg, ignorePattern);
+    QVERIFY(!model.checkIndex(topLevelIndex, QAbstractItemModel::CheckIndexOption::ParentIsInvalid));
+    QTest::ignoreMessage(QtWarningMsg, ignorePattern);
+    QVERIFY(!model.checkIndex(topLevelIndex, QAbstractItemModel::CheckIndexOption::IndexIsValid));
+}
 
 QTEST_MAIN(tst_QAbstractItemModel)
 #include "tst_qabstractitemmodel.moc"

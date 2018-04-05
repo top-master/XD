@@ -44,10 +44,9 @@
 #include <QtWidgets/qwidget.h>
 #include <QtGui/qicon.h>
 
+QT_REQUIRE_CONFIG(tabwidget);
+
 QT_BEGIN_NAMESPACE
-
-
-#ifndef QT_NO_TABWIDGET
 
 class QTabBar;
 class QTabWidgetPrivate;
@@ -69,7 +68,7 @@ class Q_WIDGETS_EXPORT QTabWidget : public QWidget
     Q_PROPERTY(bool tabBarAutoHide READ tabBarAutoHide WRITE setTabBarAutoHide)
 
 public:
-    explicit QTabWidget(QWidget *parent = Q_NULLPTR);
+    explicit QTabWidget(QWidget *parent = nullptr);
     ~QTabWidget();
 
     int addTab(QWidget *widget, const QString &);
@@ -94,7 +93,7 @@ public:
     QString tabToolTip(int index) const;
 #endif
 
-#ifndef QT_NO_WHATSTHIS
+#if QT_CONFIG(whatsthis)
     void setTabWhatsThis(int index, const QString &text);
     QString tabWhatsThis(int index) const;
 #endif
@@ -121,10 +120,10 @@ public:
     TabShape tabShape() const;
     void setTabShape(TabShape s);
 
-    QSize sizeHint() const Q_DECL_OVERRIDE;
-    QSize minimumSizeHint() const Q_DECL_OVERRIDE;
-    int heightForWidth(int width) const Q_DECL_OVERRIDE;
-    bool hasHeightForWidth() const Q_DECL_OVERRIDE;
+    QSize sizeHint() const override;
+    QSize minimumSizeHint() const override;
+    int heightForWidth(int width) const override;
+    bool hasHeightForWidth() const override;
 
     void setCornerWidget(QWidget * w, Qt::Corner corner = Qt::TopRightCorner);
     QWidget * cornerWidget(Qt::Corner corner = Qt::TopRightCorner) const;
@@ -162,13 +161,13 @@ protected:
     virtual void tabInserted(int index);
     virtual void tabRemoved(int index);
 
-    void showEvent(QShowEvent *) Q_DECL_OVERRIDE;
-    void resizeEvent(QResizeEvent *) Q_DECL_OVERRIDE;
-    void keyPressEvent(QKeyEvent *) Q_DECL_OVERRIDE;
-    void paintEvent(QPaintEvent *) Q_DECL_OVERRIDE;
+    void showEvent(QShowEvent *) override;
+    void resizeEvent(QResizeEvent *) override;
+    void keyPressEvent(QKeyEvent *) override;
+    void paintEvent(QPaintEvent *) override;
     void setTabBar(QTabBar *);
-    void changeEvent(QEvent *) Q_DECL_OVERRIDE;
-    bool event(QEvent *) Q_DECL_OVERRIDE;
+    void changeEvent(QEvent *) override;
+    bool event(QEvent *) override;
     void initStyleOption(QStyleOptionTabWidgetFrame *option) const;
 
 
@@ -180,8 +179,6 @@ private:
     Q_PRIVATE_SLOT(d_func(), void _q_tabMoved(int, int))
     void setUpLayout(bool = false);
 };
-
-#endif // QT_NO_TABWIDGET
 
 QT_END_NAMESPACE
 

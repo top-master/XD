@@ -15,7 +15,12 @@ Project {
         name: "bundled_pcre2"
         type: ["staticlibrary"]
         commonCppDefines: ["PCRE2_CODE_UNIT_WIDTH=16", "PCRE2_STATIC"]
-        cpp.defines: base.concat("HAVE_CONFIG_H")
+        cpp.defines: {
+            var result = base.concat("HAVE_CONFIG_H");
+            if (product.targetsUWP || product.hasUiKit || qbs.targetOS.contains("qnx"))
+                result.push("PCRE2_DISABLE_JIT");
+            return result;
+        }
         cpp.enableExceptions: false
         cpp.enableRtti: false
         cpp.warningLevel: "none"
@@ -25,7 +30,6 @@ Project {
             files: [
                 "config.h",
                 "pcre2.h",
-                "pcre2_printint.c",
             ]
             fileTags: ["hpp"]
         }

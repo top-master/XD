@@ -36,6 +36,7 @@
 #include <qevent.h>
 #include <qlineedit.h>
 #include <QBoxLayout>
+#include <QSysInfo>
 
 QT_FORWARD_DECLARE_CLASS(QWidget)
 
@@ -286,7 +287,7 @@ void tst_QFocusEvent::checkReason_Shortcut()
 void tst_QFocusEvent::checkReason_focusWidget()
 {
     // This test checks that a widget doesn't loose
-    // its focuswidget just because the focuswidget looses focus.
+    // its focuswidget just because the focuswidget loses focus.
     QWidget window1;
     QWidget frame1;
     QWidget frame2;
@@ -329,6 +330,14 @@ void tst_QFocusEvent::checkReason_ActiveWindow()
     QTRY_VERIFY(childFocusWidgetOne->focusOutEventRecieved);
     QVERIFY(childFocusWidgetOne->focusOutEventLostFocus);
 
+#if defined(Q_OS_WIN)
+    if (QSysInfo::kernelVersion() == "10.0.15063") {
+        // Activate window of testFocusWidget, focus in that window goes to childFocusWidgetOne
+        QWARN("Windows 10 Creators Update (10.0.15063) requires explicit activateWindow()");
+        testFocusWidget->activateWindow();
+    }
+#endif
+
     QVERIFY( !childFocusWidgetOne->focusInEventRecieved );
     QVERIFY( childFocusWidgetOne->focusOutEventRecieved );
     QCOMPARE( childFocusWidgetOne->focusOutEventReason, (int)Qt::ActiveWindowFocusReason);
@@ -336,10 +345,6 @@ void tst_QFocusEvent::checkReason_ActiveWindow()
 
     d->hide();
     QTest::qWait(100);
-
-#if defined(Q_OS_IRIX)
-    QEXPECT_FAIL("", "IRIX requires explicit activateWindow(), so this test does not make any sense.", Abort);
-#endif
 
     if (!QGuiApplication::platformName().compare(QLatin1String("offscreen"), Qt::CaseInsensitive)
         || !QGuiApplication::platformName().compare(QLatin1String("minimal"), Qt::CaseInsensitive)) {

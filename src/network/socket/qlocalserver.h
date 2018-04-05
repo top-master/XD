@@ -43,10 +43,9 @@
 #include <QtNetwork/qtnetworkglobal.h>
 #include <QtNetwork/qabstractsocket.h>
 
+QT_REQUIRE_CONFIG(localserver);
+
 QT_BEGIN_NAMESPACE
-
-
-#ifndef QT_NO_LOCALSERVER
 
 class QLocalSocket;
 class QLocalServerPrivate;
@@ -72,7 +71,7 @@ public:
     Q_DECLARE_FLAGS(SocketOptions, SocketOption)
     Q_FLAG(SocketOptions)
 
-    explicit QLocalServer(QObject *parent = Q_NULLPTR);
+    explicit QLocalServer(QObject *parent = nullptr);
     ~QLocalServer();
 
     void close();
@@ -88,10 +87,12 @@ public:
     static bool removeServer(const QString &name);
     QAbstractSocket::SocketError serverError() const;
     void setMaxPendingConnections(int numConnections);
-    bool waitForNewConnection(int msec = 0, bool *timedOut = Q_NULLPTR);
+    bool waitForNewConnection(int msec = 0, bool *timedOut = nullptr);
 
     void setSocketOptions(SocketOptions options);
     SocketOptions socketOptions() const;
+
+    qintptr socketDescriptor() const;
 
 protected:
     virtual void incomingConnection(quintptr socketDescriptor);
@@ -102,8 +103,6 @@ private:
 };
 
 Q_DECLARE_OPERATORS_FOR_FLAGS(QLocalServer::SocketOptions)
-
-#endif // QT_NO_LOCALSERVER
 
 QT_END_NAMESPACE
 

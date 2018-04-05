@@ -177,8 +177,8 @@ void drawTriangle(qint32 *bits, int width, int height, const QPoint *center,
     const int y2 = clip == Clip ? qBound(0, v2->y() >> 8, height) : v2->y() >> 8;
     const int yC = clip == Clip ? qBound(0, center->y() >> 8, height) : center->y() >> 8;
 
-    const int v1Frac = clip == Clip ? (y1 << 8) + 0xff - v1->y() : ~v2->y() & 0xff;
-    const int v2Frac = clip == Clip ? (y2 << 8) + 0xff - v2->y() : ~v1->y() & 0xff;
+    const int v1Frac = clip == Clip ? (y1 << 8) + 0xff - v1->y() : ~v1->y() & 0xff;
+    const int v2Frac = clip == Clip ? (y2 << 8) + 0xff - v2->y() : ~v2->y() & 0xff;
     const int centerFrac = clip == Clip ? (yC << 8) + 0xff - center->y() : ~center->y() & 0xff;
 
     int dx1 = 0, x1 = 0, dx2 = 0, x2 = 0;
@@ -436,7 +436,7 @@ static void drawPolygons(qint32 *bits, int width, int height, const QPoint *vert
                          const quint32 *indices, int indexCount, qint32 value)
 {
     Q_ASSERT(indexCount != 0);
-    typedef QVarLengthArray<quint8, 16> ScanLine;
+    typedef QVarLengthArray<quint16, 16> ScanLine;
     QVarLengthArray<ScanLine, 128> scans(height);
     int first = 0;
     for (int i = 1; i < indexCount; ++i) {
@@ -461,16 +461,16 @@ static void drawPolygons(qint32 *bits, int width, int height, const QPoint *vert
         for (int y = fromY; y < toY; ++y) {
             quint32 c = quint32(x >> 8);
             if (c < quint32(width))
-                scans[y].append(quint8(c));
+                scans[y].append(quint16(c));
             x += dx;
         }
     }
     for (int i = 0; i < height; ++i) {
-        quint8 *scanline = scans[i].data();
+        quint16 *scanline = scans[i].data();
         int size = scans[i].size();
         for (int j = 1; j < size; ++j) {
             int k = j;
-            quint8 value = scanline[k];
+            quint16 value = scanline[k];
             for (; k != 0 && value < scanline[k - 1]; --k)
                 scanline[k] = scanline[k - 1];
             scanline[k] = value;
@@ -478,7 +478,7 @@ static void drawPolygons(qint32 *bits, int width, int height, const QPoint *vert
         qint32 *line = bits + i * width;
         int j = 0;
         for (; j + 1 < size; j += 2) {
-            for (quint8 x = scanline[j]; x < scanline[j + 1]; ++x)
+            for (quint16 x = scanline[j]; x < scanline[j + 1]; ++x)
                 line[x] = value;
         }
         if (j < size) {
@@ -516,7 +516,7 @@ static void makeDistanceField(QDistanceFieldData *data, const QPainterPath &path
     for (int i = 0; i < imgWidth * imgHeight; ++i)
         bits[i] = exteriorColor;
 
-    const qreal angleStep = qreal(15 * 3.141592653589793238 / 180);
+    const qreal angleStep = qDegreesToRadians(qreal(15));
     const QPoint rotation(qRound(qCos(angleStep) * 0x4000),
                           qRound(qSin(angleStep) * 0x4000)); // 2:14 signed
 

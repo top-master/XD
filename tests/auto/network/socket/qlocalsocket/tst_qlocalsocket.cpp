@@ -306,9 +306,11 @@ void tst_QLocalSocket::listen()
         // already isListening
         QTest::ignoreMessage(QtWarningMsg, "QLocalServer::listen() called when already listening");
         QVERIFY(!server.listen(name));
+        QVERIFY(server.socketDescriptor() != -1);
     } else {
         QVERIFY(!server.errorString().isEmpty());
         QCOMPARE(server.serverError(), QAbstractSocket::HostNotFoundError);
+        QCOMPARE(server.socketDescriptor(), -1);
     }
     QCOMPARE(server.maxPendingConnections(), 30);
     bool timedOut = false;
@@ -474,7 +476,7 @@ void tst_QLocalSocket::connectWithOldOpen()
     class OverriddenOpen : public LocalSocket
     {
     public:
-        virtual bool open(OpenMode mode) Q_DECL_OVERRIDE
+        virtual bool open(OpenMode mode) override
         { return QIODevice::open(mode); }
     };
 
@@ -967,12 +969,14 @@ void tst_QLocalSocket::processConnection()
     QProcess producer;
     ProcessOutputDumper producerOutputDumper(&producer);
     QList<QProcess*> consumers;
+    producer.setProcessChannelMode(QProcess::MergedChannels);
     producer.start(socketProcess, serverArguments);
     QVERIFY2(producer.waitForStarted(-1), qPrintable(producer.errorString()));
     for (int i = 0; i < processes; ++i) {
         QStringList arguments = QStringList() << "--client";
         QProcess *p = new QProcess;
         consumers.append(p);
+        p->setProcessChannelMode(QProcess::MergedChannels);
         p->start(socketProcess, arguments);
     }
 
@@ -1189,7 +1193,8 @@ void tst_QLocalSocket::writeToClientAndDisconnect()
 void tst_QLocalSocket::debug()
 {
     // Make sure this compiles
-    QTest::ignoreMessage(QtDebugMsg, "QLocalSocket::ConnectionRefusedError QLocalSocket::UnconnectedState");
+    if (QLoggingCategory::defaultCategory()->isDebugEnabled())
+        QTest::ignoreMessage(QtDebugMsg, "QLocalSocket::ConnectionRefusedError QLocalSocket::UnconnectedState");
     qDebug() << QLocalSocket::ConnectionRefusedError << QLocalSocket::UnconnectedState;
 }
 

@@ -91,7 +91,7 @@ bool QMakeProject::test(const ProKey &func, const QList<ProStringList> &args)
         return boolRet(evaluateBoolFunction(*it, args, func));
 
     evalError(QStringLiteral("'%1' is not a recognized test function.")
-              .arg(func.toQString(m_tmp1)));
+              .arg(func.toQStringView()));
     return false;
 }
 
@@ -116,14 +116,14 @@ QStringList QMakeProject::expand(const ProKey &func, const QList<ProStringList> 
     }
 
     evalError(QStringLiteral("'%1' is not a recognized replace function.")
-              .arg(func.toQString(m_tmp1)));
+              .arg(func.toQStringView()));
     return QStringList();
 }
 
 ProString QMakeProject::expand(const QString &expr, const QString &where, int line)
 {
     ProString ret;
-    ProFile *pro = m_parser->parsedProBlock(QStringRef(&expr), where, line,
+    ProFile *pro = m_parser->parsedProBlock(QStringRef(&expr), 0, where, line,
                                             QMakeParser::ValueGrammar);
     if (pro->isOk()) {
         m_current.pro = pro;

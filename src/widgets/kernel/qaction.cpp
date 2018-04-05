@@ -45,9 +45,12 @@
 #include "qapplication.h"
 #include "qevent.h"
 #include "qlist.h"
+#include "qstylehints.h"
 #include <private/qshortcutmap_p.h>
 #include <private/qapplication_p.h>
+#if QT_CONFIG(menu)
 #include <private/qmenu_p.h>
+#endif
 #include <private/qdebug_p.h>
 
 #define QAPP_CHECK(functionName) \
@@ -63,7 +66,7 @@ QT_BEGIN_NAMESPACE
  */
 static QString qt_strippedText(QString s)
 {
-    s.remove(QStringLiteral("..."));
+    s.remove(QLatin1String("..."));
     for (int i = 0; i < s.size(); ++i) {
         if (s.at(i) == QLatin1Char('&'))
             s.remove(i, 1);
@@ -75,6 +78,7 @@ static QString qt_strippedText(QString s)
 QActionPrivate::QActionPrivate() : group(0), enabled(1), forceDisabled(0),
                                    visible(1), forceInvisible(0), checkable(0), checked(0), separator(0), fontSet(false),
                                    iconVisibleInMenu(-1),
+                                   shortcutVisibleInContextMenu(-1),
                                    menuRole(QAction::TextHeuristicRole),
                                    priority(QAction::NormalPriority)
 {
@@ -91,7 +95,7 @@ QActionPrivate::~QActionPrivate()
 
 bool QActionPrivate::showStatusText(QWidget *widget, const QString &str)
 {
-#ifdef QT_NO_STATUSTIP
+#if !QT_CONFIG(statustip)
     Q_UNUSED(widget);
     Q_UNUSED(str);
 #else
@@ -112,7 +116,7 @@ void QActionPrivate::sendDataChanged()
         QWidget *w = widgets.at(i);
         QApplication::sendEvent(w, &e);
     }
-#ifndef QT_NO_GRAPHICSVIEW
+#if QT_CONFIG(graphicsview)
     for (int i = 0; i < graphicsWidgets.size(); ++i) {
         QGraphicsWidget *w = graphicsWidgets.at(i);
         QApplication::sendEvent(w, &e);
@@ -277,6 +281,8 @@ void QActionPrivate::setShortcutEnabled(bool enable, QShortcutMap &map)
 /*!
     Constructs an action with \a parent. If \a parent is an action
     group the action will be automatically inserted into the group.
+
+    \note The \a parent argument is optional since Qt 5.7.
 */
 QAction::QAction(QObject* parent)
     : QAction(*new QActionPrivate, parent)
@@ -358,7 +364,7 @@ QList<QWidget *> QAction::associatedWidgets() const
     return d->widgets;
 }
 
-#ifndef QT_NO_GRAPHICSVIEW
+#if QT_CONFIG(graphicsview)
 /*!
   \since 4.5
   Returns a list of widgets this action has been added to.
@@ -563,7 +569,7 @@ QAction::~QAction()
         QWidget *w = d->widgets.at(i);
         w->removeAction(this);
     }
-#ifndef QT_NO_GRAPHICSVIEW
+#if QT_CONFIG(graphicsview)
     for (int i = d->graphicsWidgets.size()-1; i >= 0; --i) {
         QGraphicsWidget *w = d->graphicsWidgets.at(i);
         w->removeAction(this);
@@ -641,7 +647,7 @@ QIcon QAction::icon() const
     return d->icon;
 }
 
-#ifndef QT_NO_MENU
+#if QT_CONFIG(menu)
 /*!
   Returns the menu contained by this action. Actions that contain
   menus can be used to create menu items with submenus, or inserted
@@ -668,7 +674,7 @@ void QAction::setMenu(QMenu *menu)
         menu->d_func()->setOverrideMenuAction(this);
     d->sendDataChanged();
 }
-#endif // QT_NO_MENU
+#endif // QT_CONFIG(menu)
 
 /*!
   If \a b is true then this action will be considered a separator.
@@ -1082,7 +1088,7 @@ QAction::event(QEvent *e)
                    "QAction::event",
                    "Received shortcut event from incorrect shortcut");
         if (se->isAmbiguous())
-            qWarning("QAction::eventFilter: Ambiguous shortcut overload: %s", se->key().toString(QKeySequence::NativeText).toLatin1().constData());
+            qWarning("QAction::event: Ambiguous shortcut overload: %s", se->key().toString(QKeySequence::NativeText).toLatin1().constData());
         else
             activate(Trigger);
         return true;
@@ -1114,6 +1120,8 @@ void
 QAction::setData(const QVariant &data)
 {
     Q_D(QAction);
+    if (d->userData == data)
+        return;
     d->userData = data;
     d->sendDataChanged();
 }
@@ -1276,8 +1284,7 @@ void QAction::setIconVisibleInMenu(bool visible)
         d->iconVisibleInMenu = visible;
         // Only send data changed if we really need to.
         if (oldValue != -1
-            || (oldValue == -1
-                && visible == !QApplication::instance()->testAttribute(Qt::AA_DontShowIconsInMenus))) {
+            || visible == !QApplication::instance()->testAttribute(Qt::AA_DontShowIconsInMenus)) {
             d->sendDataChanged();
         }
     }
@@ -1290,6 +1297,45 @@ bool QAction::isIconVisibleInMenu() const
         return !QApplication::instance()->testAttribute(Qt::AA_DontShowIconsInMenus);
     }
     return d->iconVisibleInMenu;
+}
+
+/*!
+    \property QAction::shortcutVisibleInContextMenu
+    \brief Whether or not an action should show a shortcut in a context menu
+    \since 5.10
+
+    In some applications, it may make sense to have actions with shortcuts in
+    context menus. If true, the shortcut (if valid) is shown when the action is
+    shown via a context menu, when it is false, it is not shown.
+
+    The default is to follow whether the Qt::AA_DontShowShortcutsInContextMenus attribute
+    is set for the application, falling back to the widget style hint.
+    Explicitly setting this property overrides the presence (or abscence) of the attribute.
+
+    \sa QAction::shortcut, QCoreApplication::setAttribute()
+*/
+void QAction::setShortcutVisibleInContextMenu(bool visible)
+{
+    Q_D(QAction);
+    if (d->shortcutVisibleInContextMenu == -1 || visible != bool(d->shortcutVisibleInContextMenu)) {
+        int oldValue = d->shortcutVisibleInContextMenu;
+        d->shortcutVisibleInContextMenu = visible;
+        // Only send data changed if we really need to.
+        if (oldValue != -1
+            || visible == !QApplication::instance()->testAttribute(Qt::AA_DontShowShortcutsInContextMenus)) {
+            d->sendDataChanged();
+        }
+    }
+}
+
+bool QAction::isShortcutVisibleInContextMenu() const
+{
+    Q_D(const QAction);
+    if (d->shortcutVisibleInContextMenu == -1) {
+        return !QCoreApplication::testAttribute(Qt::AA_DontShowShortcutsInContextMenus)
+            && QGuiApplication::styleHints()->showShortcutsInContextMenus();
+    }
+    return d->shortcutVisibleInContextMenu;
 }
 
 #ifndef QT_NO_DEBUG_STREAM

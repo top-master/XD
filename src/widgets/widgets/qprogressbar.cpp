@@ -38,7 +38,7 @@
 ****************************************************************************/
 
 #include "qprogressbar.h"
-#ifndef QT_NO_PROGRESSBAR
+
 #include <qlocale.h>
 #include <qevent.h>
 #include <qpainter.h>
@@ -177,6 +177,8 @@ bool QProgressBarPrivate::repaintRequired() const
     \ingroup basicwidgets
     \inmodule QtWidgets
 
+    \image windows-progressbar.png
+
     A progress bar is used to give the user an indication of the
     progress of an operation and to reassure them that the application
     is still running.
@@ -198,15 +200,6 @@ bool QProgressBarPrivate::repaintRequired() const
     example, when using QNetworkAccessManager to download items when
     they are unable to determine the size of the item being downloaded.
 
-    \table
-    \row \li \inlineimage macintosh-progressbar.png Screenshot of a Macintosh style progress bar
-         \li A progress bar shown in the Macintosh widget style.
-    \row \li \inlineimage windowsvista-progressbar.png Screenshot of a Windows Vista style progress bar
-         \li A progress bar shown in the Windows Vista widget style.
-    \row \li \inlineimage fusion-progressbar.png Screenshot of a Fusion style progress bar
-         \li A progress bar shown in the Fusion widget style.
-    \endtable
-
     \sa QProgressDialog, {fowler}{GUI Design Handbook: Progress Indicator}
 */
 
@@ -220,7 +213,7 @@ bool QProgressBarPrivate::repaintRequired() const
 
     Note that whether or not the text is drawn is dependent on the style.
     Currently CleanLooks and Plastique draw the text. Mac, Windows
-    and WindowsXP style do not.
+    and WindowsVista style do not.
 
     \sa textDirection
 */
@@ -428,7 +421,7 @@ QSize QProgressBar::sizeHint() const
     QStyleOptionProgressBar opt;
     initStyleOption(&opt);
     int cw = style()->pixelMetric(QStyle::PM_ProgressBarChunkWidth, &opt, this);
-    QSize size = QSize(qMax(9, cw) * 7 + fm.width(QLatin1Char('0')) * 4, fm.height() + 8);
+    QSize size = QSize(qMax(9, cw) * 7 + fm.horizontalAdvance(QLatin1Char('0')) * 4, fm.height() + 8);
     if (opt.orientation == Qt::Vertical)
         size = size.transposed();
     return style()->sizeFromContents(QStyle::CT_ProgressBar, &opt, size, this);
@@ -630,5 +623,3 @@ QString QProgressBar::format() const
 QT_END_NAMESPACE
 
 #include "moc_qprogressbar.cpp"
-
-#endif // QT_NO_PROGRESSBAR

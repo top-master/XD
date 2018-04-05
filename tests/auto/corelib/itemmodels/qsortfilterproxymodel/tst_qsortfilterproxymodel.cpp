@@ -28,7 +28,6 @@
 
 #include <QtTest/QtTest>
 #include "dynamictreemodel.h"
-#include "modeltest.h"
 
 #include <QtCore/QCoreApplication>
 #include <QtGui/QStandardItem>
@@ -94,6 +93,7 @@ private slots:
     void changeSourceDataKeepsStableSorting_qtbug1548();
     void changeSourceDataForwardsRoles_qtbug35440();
     void resortingDoesNotBreakTreeModels();
+    void dynamicFilterWithoutSort();
     void sortFilterRole();
     void selectionFilteredOut();
     void match_data();
@@ -147,6 +147,14 @@ private slots:
 
     void sourceLayoutChangeLeavesValidPersistentIndexes();
     void rowMoveLeavesValidPersistentIndexes();
+
+    void emitLayoutChangedOnlyIfSortingChanged_data();
+    void emitLayoutChangedOnlyIfSortingChanged();
+
+    void checkSetNewModel();
+
+    void removeIntervals_data();
+    void removeIntervals();
 
 protected:
     void buildHierarchy(const QStringList &data, QAbstractItemModel *model);
@@ -1869,9 +1877,6 @@ void tst_QSortFilterProxyModel::changeFilter()
         QCOMPARE(args.at(2).toInt(), finalRemoveIntervals.at(i).second);
     }
 
-#ifdef Q_OS_IRIX
-    QEXPECT_FAIL("filter (2)", "Not reliable on IRIX", Abort);
-#endif
     QCOMPARE(finalInsertSpy.count(), insertIntervals.count());
     for (int i = 0; i < finalInsertSpy.count(); ++i) {
         QList<QVariant> args = finalInsertSpy.at(i);
@@ -2057,8 +2062,6 @@ static void checkSortedTableModel(const QAbstractItemModel *model, const QString
 
 void tst_QSortFilterProxyModel::changeSourceDataKeepsStableSorting_qtbug1548()
 {
-    QSKIP("This test will fail, see QTBUG-1548");
-
     // Check that emitting dataChanged from the source model
     // for a change of a role which is not the sorting role
     // doesn't alter the sorting. In this case, we sort on the DisplayRole,
@@ -3312,7 +3315,7 @@ void tst_QSortFilterProxyModel::filteredColumns()
     FilteredColumnProxyModel *proxy = new FilteredColumnProxyModel(this);
     proxy->setSourceModel(model);
 
-    new ModelTest(proxy, this);
+    new QAbstractItemModelTester(proxy, this);
 
     ModelInsertCommand *insertCommand = new ModelInsertCommand(model, this);
     insertCommand->setNumCols(2);
@@ -3351,7 +3354,7 @@ void tst_QSortFilterProxyModel::headerDataChanged()
     QSortFilterProxyModel *proxy = new QSortFilterProxyModel(this);
     proxy->setSourceModel(model);
 
-    new ModelTest(proxy, this);
+    new QAbstractItemModelTester(proxy, this);
 
     model->emitHeaderDataChanged();
 }
@@ -3568,6 +3571,13 @@ void tst_QSortFilterProxyModel::testParentLayoutChanged()
             parentItem = item;
         }
     }
+    // item 0
+    // item 10
+    //  - item 1
+    //  - item 11
+    //    - item 2
+    //    - item 12
+    // ...
 
     QSortFilterProxyModel proxy;
     proxy.sort(0, Qt::AscendingOrder);
@@ -3609,11 +3619,12 @@ void tst_QSortFilterProxyModel::testParentLayoutChanged()
     QVERIFY(proxy2ParentsChangedSpy.isValid());
 
     QStandardItem *item = model.invisibleRootItem()->child(1)->child(1);
+    QCOMPARE(item->text(), QStringLiteral("item 11"));
 
     // Ensure mapped:
     proxy.mapFromSource(model.indexFromItem(item));
 
-    item->setData("Changed");
+    item->setText("Changed");
 
     QCOMPARE(dataChangedSpy.size(), 1);
     QCOMPARE(layoutAboutToBeChangedSpy.size(), 1);
@@ -3883,7 +3894,7 @@ void tst_QSortFilterProxyModel::hierarchyFilterInvalidation()
     view.setCurrentIndex(proxy.index(2, 0).child(0, 0));
 
     view.show();
-    QTest::qWaitForWindowExposed(&view);
+    QVERIFY(QTest::qWaitForWindowExposed(&view));
 
     proxy.setMode(true);
 }
@@ -3940,7 +3951,7 @@ void tst_QSortFilterProxyModel::simpleFilterInvalidation()
     view.setModel(&proxy);
 
     view.show();
-    QTest::qWaitForWindowExposed(&view);
+    QVERIFY(QTest::qWaitForWindowExposed(&view));
 
     proxy.setMode(true);
     model.insertRow(0, new QStandardItem("extra"));
@@ -4026,7 +4037,7 @@ public:
 
     }
 
-    QModelIndex mapToSource(const QModelIndex &proxyIndex) const
+    QModelIndex mapToSource(const QModelIndex &proxyIndex) const override
     {
       Q_ASSERT(sourceModel());
       return QSortFilterProxyModel::mapToSource(proxyIndex);
@@ -4062,11 +4073,11 @@ public:
     }
 
     bool canDropMimeData(const QMimeData *, Qt::DropAction,
-                         int row, int /* column */, const QModelIndex & /* parent */) const Q_DECL_OVERRIDE
+                         int row, int /* column */, const QModelIndex & /* parent */) const override
     { return row == 1; }
 
     bool dropMimeData(const QMimeData *, Qt::DropAction,
-                      int row, int /* column */, const QModelIndex & /* parent */) Q_DECL_OVERRIDE
+                      int row, int /* column */, const QModelIndex & /* parent */) override
     { return row == 1; }
 };
 
@@ -4121,7 +4132,7 @@ void tst_QSortFilterProxyModel::resortingDoesNotBreakTreeModels()
     proxy.sort(0);
     proxy.setSourceModel(treeModel);
 
-    ModelTest modelTest(&proxy);
+    QAbstractItemModelTester modelTester(&proxy);
 
     QCOMPARE(proxy.rowCount(), 2);
     e1->setText("entry1");
@@ -4220,6 +4231,10 @@ public:
 
     QModelIndex index(int, int, const QModelIndex& parent = QModelIndex()) const override
     {
+        // QTBUG-44962: Would we always expect the parent to belong to the model
+        qDebug() << parent.model() << this;
+        Q_ASSERT(!parent.isValid() || parent.model() == this);
+
         quintptr parentId = (parent.isValid()) ? parent.internalId() : 0;
         if (parentId >= m_depth)
             return QModelIndex();
@@ -4351,6 +4366,299 @@ void tst_QSortFilterProxyModel::rowMoveLeavesValidPersistentIndexes()
     // Before fixing QTBUG-47711 (moveRows case), that could be
     // a dangling pointer.
     QVERIFY(persistentIndex.parent().isValid());
+}
+
+void tst_QSortFilterProxyModel::emitLayoutChangedOnlyIfSortingChanged_data()
+{
+    QTest::addColumn<int>("changedRow");
+    QTest::addColumn<Qt::ItemDataRole>("changedRole");
+    QTest::addColumn<QString>("newData");
+    QTest::addColumn<QString>("expectedSourceRowTexts");
+    QTest::addColumn<QString>("expectedProxyRowTexts");
+    QTest::addColumn<int>("expectedLayoutChanged");
+
+    // Starting point:
+    // a source model with 8,7,6,5,4,3,2,1
+    // a proxy model keeping only even rows and sorting them, therefore showing 2,4,6,8
+
+    // When setData changes ordering, layoutChanged should be emitted
+    QTest::newRow("ordering_change") << 0 << Qt::DisplayRole << "0" << "07654321" << "0246" << 1;
+
+    // When setData on visible row doesn't change ordering, layoutChanged should not be emitted
+    QTest::newRow("no_ordering_change") << 6 << Qt::DisplayRole << "0" << "87654301" << "0468" << 0;
+
+    // When setData happens on a filtered out row, layoutChanged should not be emitted
+    QTest::newRow("filtered_out") << 1 << Qt::DisplayRole << "9" << "89654321" << "2468" << 0;
+
+    // When setData makes a row visible, layoutChanged should not be emitted (rowsInserted is emitted instead)
+    QTest::newRow("make_row_visible") << 7 << Qt::DisplayRole << "0" << "87654320" << "02468" << 0;
+
+    // When setData makes a row hidden, layoutChanged should not be emitted (rowsRemoved is emitted instead)
+    QTest::newRow("make_row_hidden") << 4 << Qt::DisplayRole << "1" << "87651321" << "268" << 0;
+
+    // When setData happens on an unrelated role, layoutChanged should not be emitted
+    QTest::newRow("unrelated_role") << 0 << Qt::DecorationRole << "" << "87654321" << "2468" << 0;
+
+    // When many changes happen together... and trigger removal, insertion, and layoutChanged
+    QTest::newRow("many_changes") << -1 << Qt::DisplayRole << "3,4,2,5,6,0,7,9" << "34256079" << "0246" << 1;
+
+    // When many changes happen together... and trigger removal, insertion, but no change in ordering of visible rows => no layoutChanged
+    QTest::newRow("many_changes_no_layoutChanged") << -1 << Qt::DisplayRole << "7,5,4,3,2,1,0,8" << "75432108" << "0248" << 0;
+}
+
+// Custom version of QStringListModel which supports emitting dataChanged for many rows at once
+class CustomStringListModel : public QAbstractListModel
+{
+public:
+    bool setData(const QModelIndex &index, const QVariant &value, int role) override
+    {
+        if (index.row() >= 0 && index.row() < lst.size()
+            && (role == Qt::EditRole || role == Qt::DisplayRole)) {
+            lst.replace(index.row(), value.toString());
+            emit dataChanged(index, index, { Qt::DisplayRole, Qt::EditRole });
+            return true;
+        }
+        return false;
+    }
+    QVariant data(const QModelIndex &index, int role = Qt::DisplayRole) const override
+    {
+        if (role == Qt::DisplayRole || role == Qt::EditRole)
+            return lst.at(index.row());
+        return QVariant();
+    }
+    int rowCount(const QModelIndex & = QModelIndex()) const override { return lst.count(); }
+
+    void replaceData(const QStringList &newData)
+    {
+        lst = newData;
+        emit dataChanged(index(0, 0), index(rowCount() - 1, 0), { Qt::DisplayRole, Qt::EditRole });
+    }
+
+    void emitDecorationChangedSignal()
+    {
+        const QModelIndex idx = index(0, 0);
+        emit dataChanged(idx, idx, { Qt::DecorationRole });
+    }
+
+private:
+    QStringList lst;
+};
+
+void tst_QSortFilterProxyModel::emitLayoutChangedOnlyIfSortingChanged()
+{
+    QFETCH(int, changedRow);
+    QFETCH(QString, newData);
+    QFETCH(Qt::ItemDataRole, changedRole);
+    QFETCH(QString, expectedSourceRowTexts);
+    QFETCH(QString, expectedProxyRowTexts);
+    QFETCH(int, expectedLayoutChanged);
+
+    CustomStringListModel model;
+    QStringList strings;
+    for (auto i = 8; i >= 1; --i)
+        strings.append(QString::number(i));
+    model.replaceData(strings);
+    QCOMPARE(rowTexts(&model), QStringLiteral("87654321"));
+
+    class FilterEvenRowsProxyModel : public QSortFilterProxyModel
+    {
+    public:
+        bool filterAcceptsRow(int srcRow, const QModelIndex& srcParent) const override
+        {
+            return sourceModel()->index(srcRow, 0, srcParent).data().toInt() % 2 == 0;
+        }
+    };
+
+    FilterEvenRowsProxyModel proxy;
+    proxy.sort(0);
+    proxy.setSourceModel(&model);
+    QCOMPARE(rowTexts(&proxy), QStringLiteral("2468"));
+
+    QSignalSpy modelDataChangedSpy(&model, &QAbstractItemModel::dataChanged);
+    QSignalSpy proxyLayoutChangedSpy(&proxy, &QAbstractItemModel::layoutChanged);
+
+    if (changedRole == Qt::DecorationRole)
+        model.emitDecorationChangedSignal();
+    else if (changedRow == -1)
+        model.replaceData(newData.split(QLatin1Char(',')));
+    else
+        model.setData(model.index(changedRow, 0), newData, changedRole);
+
+    QCOMPARE(rowTexts(&model), expectedSourceRowTexts);
+    QCOMPARE(rowTexts(&proxy), expectedProxyRowTexts);
+    QCOMPARE(modelDataChangedSpy.size(), 1);
+    QCOMPARE(proxyLayoutChangedSpy.size(), expectedLayoutChanged);
+}
+
+void tst_QSortFilterProxyModel::removeIntervals_data()
+{
+    QTest::addColumn<QStringList>("sourceItems");
+    QTest::addColumn<int>("sortOrder");
+    QTest::addColumn<QString>("filter");
+    QTest::addColumn<QStringList>("replacementSourceItems");
+    QTest::addColumn<IntPairList>("expectedRemovedProxyIntervals");
+    QTest::addColumn<QStringList>("expectedProxyItems");
+
+    QTest::newRow("filter all, sort ascending")
+        << (QStringList() << "a"
+                          << "b"
+                          << "c") // sourceItems
+        << static_cast<int>(Qt::AscendingOrder) // sortOrder
+        << "[^x]" // filter
+        << (QStringList() << "x"
+                          << "x"
+                          << "x") // replacementSourceItems
+        << (IntPairList() << IntPair(0, 2)) // expectedRemovedIntervals
+        << QStringList() // expectedProxyItems
+        ;
+
+    QTest::newRow("filter all, sort descending")
+        << (QStringList() << "a"
+                          << "b"
+                          << "c") // sourceItems
+        << static_cast<int>(Qt::DescendingOrder) // sortOrder
+        << "[^x]" // filter
+        << (QStringList() << "x"
+                          << "x"
+                          << "x") // replacementSourceItems
+        << (IntPairList() << IntPair(0, 2)) // expectedRemovedIntervals
+        << QStringList() // expectedProxyItems
+        ;
+
+    QTest::newRow("filter first and last, sort ascending")
+        << (QStringList() << "a"
+                          << "b"
+                          << "c") // sourceItems
+        << static_cast<int>(Qt::AscendingOrder) // sortOrder
+        << "[^x]" // filter
+        << (QStringList() << "x"
+                          << "b"
+                          << "x") // replacementSourceItems
+        << (IntPairList() << IntPair(2, 2) << IntPair(0, 0)) // expectedRemovedIntervals
+        << (QStringList() << "b") // expectedProxyItems
+        ;
+
+    QTest::newRow("filter first and last, sort descending")
+        << (QStringList() << "a"
+                          << "b"
+                          << "c") // sourceItems
+        << static_cast<int>(Qt::DescendingOrder) // sortOrder
+        << "[^x]" // filter
+        << (QStringList() << "x"
+                          << "b"
+                          << "x") // replacementSourceItems
+        << (IntPairList() << IntPair(2, 2) << IntPair(0, 0)) // expectedRemovedIntervals
+        << (QStringList() << "b") // expectedProxyItems
+        ;
+}
+
+void tst_QSortFilterProxyModel::removeIntervals()
+{
+    QFETCH(QStringList, sourceItems);
+    QFETCH(int, sortOrder);
+    QFETCH(QString, filter);
+    QFETCH(QStringList, replacementSourceItems);
+    QFETCH(IntPairList, expectedRemovedProxyIntervals);
+    QFETCH(QStringList, expectedProxyItems);
+
+    CustomStringListModel model;
+    QSortFilterProxyModel proxy;
+
+    model.replaceData(sourceItems);
+    proxy.setSourceModel(&model);
+
+    for (int i = 0; i < sourceItems.count(); ++i) {
+        QModelIndex sindex = model.index(i, 0, QModelIndex());
+        QModelIndex pindex = proxy.index(i, 0, QModelIndex());
+        QCOMPARE(proxy.data(pindex, Qt::DisplayRole), model.data(sindex, Qt::DisplayRole));
+    }
+
+    proxy.setDynamicSortFilter(true);
+
+    if (sortOrder != -1)
+        proxy.sort(0, static_cast<Qt::SortOrder>(sortOrder));
+    if (!filter.isEmpty())
+        proxy.setFilterRegExp(QRegExp(filter));
+
+    (void)proxy.rowCount(QModelIndex()); // force mapping
+
+    QSignalSpy removeSpy(&proxy, &QSortFilterProxyModel::rowsRemoved);
+    QSignalSpy insertSpy(&proxy, &QSortFilterProxyModel::rowsInserted);
+    QSignalSpy aboutToRemoveSpy(&proxy, &QSortFilterProxyModel::rowsAboutToBeRemoved);
+    QSignalSpy aboutToInsertSpy(&proxy, &QSortFilterProxyModel::rowsAboutToBeInserted);
+
+    QVERIFY(removeSpy.isValid());
+    QVERIFY(insertSpy.isValid());
+    QVERIFY(aboutToRemoveSpy.isValid());
+    QVERIFY(aboutToInsertSpy.isValid());
+
+    model.replaceData(replacementSourceItems);
+
+    QCOMPARE(aboutToRemoveSpy.count(), expectedRemovedProxyIntervals.count());
+    for (int i = 0; i < aboutToRemoveSpy.count(); ++i) {
+        QList<QVariant> args = aboutToRemoveSpy.at(i);
+        QCOMPARE(args.at(1).type(), QVariant::Int);
+        QCOMPARE(args.at(2).type(), QVariant::Int);
+        QCOMPARE(args.at(1).toInt(), expectedRemovedProxyIntervals.at(i).first);
+        QCOMPARE(args.at(2).toInt(), expectedRemovedProxyIntervals.at(i).second);
+    }
+    QCOMPARE(removeSpy.count(), expectedRemovedProxyIntervals.count());
+    for (int i = 0; i < removeSpy.count(); ++i) {
+        QList<QVariant> args = removeSpy.at(i);
+        QCOMPARE(args.at(1).type(), QVariant::Int);
+        QCOMPARE(args.at(2).type(), QVariant::Int);
+        QCOMPARE(args.at(1).toInt(), expectedRemovedProxyIntervals.at(i).first);
+        QCOMPARE(args.at(2).toInt(), expectedRemovedProxyIntervals.at(i).second);
+    }
+
+    QCOMPARE(insertSpy.count(), 0);
+    QCOMPARE(aboutToInsertSpy.count(), 0);
+
+    QCOMPARE(proxy.rowCount(QModelIndex()), expectedProxyItems.count());
+    for (int i = 0; i < expectedProxyItems.count(); ++i) {
+        QModelIndex pindex = proxy.index(i, 0, QModelIndex());
+        QCOMPARE(proxy.data(pindex, Qt::DisplayRole).toString(), expectedProxyItems.at(i));
+    }
+}
+
+void tst_QSortFilterProxyModel::dynamicFilterWithoutSort()
+{
+    QStringListModel model;
+    const QStringList initial = QString("bravo charlie delta echo").split(QLatin1Char(' '));
+    model.setStringList(initial);
+    QSortFilterProxyModel proxy;
+    proxy.setDynamicSortFilter(true);
+    proxy.setSourceModel(&model);
+
+    QSignalSpy layoutChangeSpy(&proxy, &QAbstractItemModel::layoutChanged);
+    QSignalSpy resetSpy(&proxy, &QAbstractItemModel::modelReset);
+
+    QVERIFY(layoutChangeSpy.isValid());
+    QVERIFY(resetSpy.isValid());
+
+    model.setStringList(QStringList() << "Monday" << "Tuesday" << "Wednesday" << "Thursday" << "Friday");
+
+    QVERIFY(layoutChangeSpy.isEmpty());
+
+    QCOMPARE(model.stringList(), QStringList() << "Monday" << "Tuesday" << "Wednesday" << "Thursday" << "Friday");
+
+    QCOMPARE(resetSpy.count(), 1);
+}
+
+void tst_QSortFilterProxyModel::checkSetNewModel()
+{
+    QTreeView tv;
+    StepTreeModel model1;
+    model1.setDepth(4);
+    StepTreeModel model2;
+    model2.setDepth(4);
+
+    QSortFilterProxyModel proxy;
+    proxy.setSourceModel(&model1);
+    tv.setModel(&proxy);
+    tv.show();
+    tv.expandAll(); // create persistent indexes
+    proxy.setSourceModel(&model2);
 }
 
 QTEST_MAIN(tst_QSortFilterProxyModel)

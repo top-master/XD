@@ -63,8 +63,13 @@
 
 #include <QtGui/private/qguiapplication_p.h>
 
-#ifdef XCB_USE_XLIB
+#if QT_CONFIG(xcb_xlib)
 #include <X11/Xlib.h>
+#if QT_CONFIG(xcb_native_painting)
+#include "qxcbnativepainting.h"
+#include "qpixmap_x11_p.h"
+#include "qbackingstore_x11_p.h"
+#endif
 #endif
 
 #include <qpa/qplatforminputcontextfactory_p.h>
@@ -82,6 +87,11 @@
 #endif
 
 #include <QtCore/QFileInfo>
+
+#if QT_CONFIG(vulkan)
+#include "qxcbvulkaninstance.h"
+#include "qxcbvulkanwindow.h"
+#endif
 
 QT_BEGIN_NAMESPACE
 
@@ -111,7 +121,7 @@ static bool runningUnderDebugger()
 #endif
 }
 
-QXcbIntegration *QXcbIntegration::m_instance = Q_NULLPTR;
+QXcbIntegration *QXcbIntegration::m_instance = nullptr;
 
 QXcbIntegration::QXcbIntegration(const QStringList &parameters, int &argc, char **argv)
     : m_services(new QGenericUnixServices)
@@ -123,7 +133,7 @@ QXcbIntegration::QXcbIntegration(const QStringList &parameters, int &argc, char 
     qApp->setAttribute(Qt::AA_CompressHighFrequencyEvents, true);
 
     qRegisterMetaType<QXcbWindow*>();
-#ifdef XCB_USE_XLIB
+#if QT_CONFIG(xcb_xlib)
     XInitThreads();
 #endif
     m_nativeInterface.reset(new QXcbNativeInterface);
@@ -166,8 +176,8 @@ QXcbIntegration::QXcbIntegration(const QStringList &parameters, int &argc, char 
 
 #if defined(QT_DEBUG)
     if (!noGrabArg && !doGrabArg && underDebugger) {
-        qDebug("Qt: gdb: -nograb added to command-line options.\n"
-               "\t Use the -dograb option to enforce grabbing.");
+        qCDebug(lcQpaXcb, "Qt: gdb: -nograb added to command-line options.\n"
+                "\t Use the -dograb option to enforce grabbing.");
     }
 #endif
     m_canGrab = (!underDebugger && !noGrabArg) || (underDebugger && doGrabArg);
@@ -178,32 +188,70 @@ QXcbIntegration::QXcbIntegration(const QStringList &parameters, int &argc, char 
 
     const int numParameters = parameters.size();
     m_connections.reserve(1 + numParameters / 2);
-    m_connections << new QXcbConnection(m_nativeInterface.data(), m_canGrab, m_defaultVisualId, displayName);
+    auto conn = new QXcbConnection(m_nativeInterface.data(), m_canGrab, m_defaultVisualId, displayName);
+    if (conn->isConnected())
+        m_connections << conn;
+    else
+        delete conn;
 
     for (int i = 0; i < numParameters - 1; i += 2) {
         qCDebug(lcQpaScreen) << "connecting to additional display: " << parameters.at(i) << parameters.at(i+1);
         QString display = parameters.at(i) + QLatin1Char(':') + parameters.at(i+1);
-        m_connections << new QXcbConnection(m_nativeInterface.data(), m_canGrab, m_defaultVisualId, display.toLatin1().constData());
+        conn = new QXcbConnection(m_nativeInterface.data(), m_canGrab, m_defaultVisualId, display.toLatin1().constData());
+        if (conn->isConnected())
+            m_connections << conn;
+        else
+            delete conn;
+    }
+
+    if (m_connections.isEmpty()) {
+        qCritical("Could not connect to any X display.");
+        exit(1);
     }
 
     m_fontDatabase.reset(new QGenericUnixFontDatabase());
+
+#if QT_CONFIG(xcb_native_painting)
+    if (nativePaintingEnabled()) {
+        qCDebug(lcQpaXcb, "QXCB USING NATIVE PAINTING");
+        qt_xcb_native_x11_info_init(defaultConnection());
+    }
+#endif
 }
 
 QXcbIntegration::~QXcbIntegration()
 {
     qDeleteAll(m_connections);
-    m_instance = Q_NULLPTR;
+    m_instance = nullptr;
+}
+
+QPlatformPixmap *QXcbIntegration::createPlatformPixmap(QPlatformPixmap::PixelType type) const
+{
+#if QT_CONFIG(xcb_native_painting)
+    if (nativePaintingEnabled())
+        return new QX11PlatformPixmap(type);
+#endif
+
+    return QPlatformIntegration::createPlatformPixmap(type);
 }
 
 QPlatformWindow *QXcbIntegration::createPlatformWindow(QWindow *window) const
 {
     QXcbScreen *screen = static_cast<QXcbScreen *>(window->screen()->handle());
     QXcbGlIntegration *glIntegration = screen->connection()->glIntegration();
-    if (window->type() != Qt::Desktop && window->supportsOpenGL()) {
-        if (glIntegration) {
-            QXcbWindow *xcbWindow = glIntegration->createWindow(window);
+    if (window->type() != Qt::Desktop) {
+        if (window->supportsOpenGL()) {
+            if (glIntegration) {
+                QXcbWindow *xcbWindow = glIntegration->createWindow(window);
+                xcbWindow->create();
+                return xcbWindow;
+            }
+#if QT_CONFIG(vulkan)
+        } else if (window->surfaceType() == QSurface::VulkanSurface) {
+            QXcbWindow *xcbWindow = new QXcbVulkanWindow(window);
             xcbWindow->create();
             return xcbWindow;
+#endif
         }
     }
 
@@ -214,25 +262,9 @@ QPlatformWindow *QXcbIntegration::createPlatformWindow(QWindow *window) const
     return xcbWindow;
 }
 
-class QXcbForeignWindow : public QXcbWindow
-{
-public:
-    QXcbForeignWindow(QWindow *window, WId nativeHandle)
-        : QXcbWindow(window) { m_window = nativeHandle; }
-    ~QXcbForeignWindow() {}
-    bool isForeignWindow() const override { return true; }
-
-protected:
-    // No-ops
-    void create() override {}
-    void destroy() override {}
-};
-
 QPlatformWindow *QXcbIntegration::createForeignWindow(QWindow *window, WId nativeHandle) const
 {
-    QXcbWindow *xcbWindow = new QXcbForeignWindow(window, nativeHandle);
-    xcbWindow->create();
-    return xcbWindow;
+    return new QXcbForeignWindow(window, nativeHandle);
 }
 
 #ifndef QT_NO_OPENGL
@@ -242,7 +274,7 @@ QPlatformOpenGLContext *QXcbIntegration::createPlatformOpenGLContext(QOpenGLCont
     QXcbGlIntegration *glIntegration = screen->connection()->glIntegration();
     if (!glIntegration) {
         qWarning("QXcbIntegration: Cannot create platform OpenGL context, neither GLX nor EGL are enabled");
-        return Q_NULLPTR;
+        return nullptr;
     }
     return glIntegration->createPlatformOpenGLContext(context);
 }
@@ -250,6 +282,11 @@ QPlatformOpenGLContext *QXcbIntegration::createPlatformOpenGLContext(QOpenGLCont
 
 QPlatformBackingStore *QXcbIntegration::createPlatformBackingStore(QWindow *window) const
 {
+#if QT_CONFIG(xcb_native_painting)
+    if (nativePaintingEnabled())
+        return new QXcbNativeBackingStore(window);
+#endif
+
     return new QXcbBackingStore(window);
 }
 
@@ -259,7 +296,7 @@ QPlatformOffscreenSurface *QXcbIntegration::createPlatformOffscreenSurface(QOffs
     QXcbGlIntegration *glIntegration = screen->connection()->glIntegration();
     if (!glIntegration) {
         qWarning("QXcbIntegration: Cannot create platform offscreen surface, neither GLX nor EGL are enabled");
-        return Q_NULLPTR;
+        return nullptr;
     }
     return glIntegration->createPlatformOffscreenSurface(surface);
 }
@@ -305,12 +342,15 @@ QAbstractEventDispatcher *QXcbIntegration::createEventDispatcher() const
 
 void QXcbIntegration::initialize()
 {
+    const QLatin1String defaultInputContext("compose");
     // Perform everything that may potentially need the event dispatcher (timers, socket
     // notifiers) here instead of the constructor.
     QString icStr = QPlatformInputContextFactory::requested();
     if (icStr.isNull())
-        icStr = QLatin1String("compose");
+        icStr = defaultInputContext;
     m_inputContext.reset(QPlatformInputContextFactory::create(icStr));
+    if (!m_inputContext && icStr != defaultInputContext && icStr != QLatin1String("none"))
+        m_inputContext.reset(QPlatformInputContextFactory::create(defaultInputContext));
 }
 
 void QXcbIntegration::moveToScreen(QWindow *window, int screen)
@@ -471,7 +511,7 @@ QByteArray QXcbIntegration::wmClass() const
     return m_wmClass;
 }
 
-#if !defined(QT_NO_SESSIONMANAGER) && defined(XCB_USE_SM)
+#if QT_CONFIG(xcb_sm)
 QPlatformSessionManager *QXcbIntegration::createPlatformSessionManager(const QString &id, const QString &key) const
 {
     return new QXcbSessionManager(id, key);
@@ -497,5 +537,22 @@ void QXcbIntegration::beep() const
     xcb_connection_t *connection = static_cast<QXcbScreen *>(screen)->xcb_connection();
     xcb_bell(connection, 0);
 }
+
+bool QXcbIntegration::nativePaintingEnabled() const
+{
+#if QT_CONFIG(xcb_native_painting)
+    static bool enabled = qEnvironmentVariableIsSet("QT_XCB_NATIVE_PAINTING");
+    return enabled;
+#else
+    return false;
+#endif
+}
+
+#if QT_CONFIG(vulkan)
+QPlatformVulkanInstance *QXcbIntegration::createPlatformVulkanInstance(QVulkanInstance *instance) const
+{
+    return new QXcbVulkanInstance(instance);
+}
+#endif
 
 QT_END_NAMESPACE

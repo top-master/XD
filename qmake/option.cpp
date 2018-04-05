@@ -28,6 +28,7 @@
 
 #include "option.h"
 #include "cachekeys.h"
+#include <ioutils.h>
 #include <qdir.h>
 #include <qregexp.h>
 #include <qhash.h>
@@ -37,6 +38,8 @@
 #include <stdarg.h>
 
 QT_BEGIN_NAMESPACE
+
+using namespace QMakeInternal;
 
 EvalHandler Option::evalHandler;
 QMakeGlobals *Option::globals;
@@ -325,7 +328,7 @@ Option::init(int argc, char **argv)
 #endif
         if(Option::qmake_mode == Option::QMAKE_GENERATE_NOTHING)
             Option::qmake_mode = default_mode(argv0);
-        if(!argv0.isEmpty() && !QFileInfo(argv0).isRelative()) {
+        if (!argv0.isEmpty() && IoUtils::isAbsolutePath(argv0)) {
             globals->qmake_abslocation = argv0;
         } else if (argv0.contains(QLatin1Char('/'))
 #ifdef Q_OS_WIN
@@ -352,16 +355,19 @@ Option::init(int argc, char **argv)
                 }
             }
         }
-        if (!globals->qmake_abslocation.isNull())
-            globals->qmake_abslocation = QDir::cleanPath(globals->qmake_abslocation);
-        else // This is rather unlikely to ever happen on a modern system ...
-            globals->qmake_abslocation = QLibraryInfo::rawLocation(QLibraryInfo::HostBinariesPath,
-                                                                   QLibraryInfo::EffectivePaths) +
+        if (Q_UNLIKELY(globals->qmake_abslocation.isNull())) {
+            // This is rather unlikely to ever happen on a modern system ...
+            globals->qmake_abslocation = QLibraryInfo::rawLocation(
+                                                QLibraryInfo::HostBinariesPath,
+                                                QLibraryInfo::EffectivePaths)
 #ifdef Q_OS_WIN
-                    "/qmake.exe";
+                                         + "/qmake.exe";
 #else
-                    "/qmake";
+                                         + "/qmake";
 #endif
+        } else {
+            globals->qmake_abslocation = QDir::cleanPath(globals->qmake_abslocation);
+        }
     } else {
         Option::qmake_mode = Option::QMAKE_GENERATE_MAKEFILE;
     }

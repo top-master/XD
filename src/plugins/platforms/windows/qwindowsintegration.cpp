@@ -42,6 +42,7 @@
 #include "qwindowswindow.h"
 #include "qwindowscontext.h"
 #include "qwin10helpers.h"
+#include "qwindowsmenu.h"
 #include "qwindowsopenglcontext.h"
 
 #include "qwindowsscreen.h"
@@ -50,27 +51,28 @@
 #ifndef QT_NO_FREETYPE
 #  include <QtFontDatabaseSupport/private/qwindowsfontdatabase_ft_p.h>
 #endif
-#ifndef QT_NO_CLIPBOARD
+#if QT_CONFIG(clipboard)
 #  include "qwindowsclipboard.h"
-#  ifndef QT_NO_DRAGANDDROP
+#  if QT_CONFIG(draganddrop)
 #    include "qwindowsdrag.h"
 #  endif
 #endif
 #include "qwindowsinputcontext.h"
 #include "qwindowskeymapper.h"
 #ifndef QT_NO_ACCESSIBILITY
-#  include "accessible/qwindowsaccessibility.h"
+#  include "uiautomation/qwindowsuiaaccessibility.h"
 #endif
 
 #include <qpa/qplatformnativeinterface.h>
 #include <qpa/qwindowsysteminterface.h>
-#ifndef QT_NO_SESSIONMANAGER
+#if QT_CONFIG(sessionmanager)
 #  include "qwindowssessionmanager.h"
 #endif
 #include <QtGui/qtouchdevice.h>
 #include <QtGui/private/qguiapplication_p.h>
 #include <QtGui/private/qhighdpiscaling_p.h>
 #include <QtGui/qpa/qplatforminputcontextfactory_p.h>
+#include <QtGui/qpa/qplatformcursor.h>
 
 #include <QtEventDispatcherSupport/private/qwindowsguieventdispatcher_p.h>
 
@@ -137,9 +139,9 @@ struct QWindowsIntegrationPrivate
     unsigned m_options = 0;
     QWindowsContext m_context;
     QPlatformFontDatabase *m_fontDatabase = nullptr;
-#ifndef QT_NO_CLIPBOARD
+#if QT_CONFIG(clipboard)
     QWindowsClipboard m_clipboard;
-#  ifndef QT_NO_DRAGANDDROP
+#  if QT_CONFIG(draganddrop)
     QWindowsDrag m_drag;
 #  endif
 #endif
@@ -149,7 +151,7 @@ struct QWindowsIntegrationPrivate
 #endif // QT_NO_OPENGL
     QScopedPointer<QPlatformInputContext> m_inputContext;
 #ifndef QT_NO_ACCESSIBILITY
-    QWindowsAccessibility m_accessibility;
+   QWindowsUiaAccessibility m_accessibility;
 #endif
     QWindowsServices m_services;
 };
@@ -206,6 +208,10 @@ static inline unsigned parseOptions(const QStringList &paramList,
         } else if (parseIntOption(param, QLatin1String("verbose"), 0, INT_MAX, &QWindowsContext::verbose)
             || parseIntOption(param, QLatin1String("tabletabsoluterange"), 0, INT_MAX, tabletAbsoluteRange)
             || parseIntOption(param, QLatin1String("dpiawareness"), QtWindows::ProcessDpiUnaware, QtWindows::ProcessPerMonitorDpiAware, dpiAwareness)) {
+        } else if (param == QLatin1String("menus=native")) {
+            options |= QWindowsIntegration::AlwaysUseNativeMenus;
+        } else if (param == QLatin1String("menus=none")) {
+            options |= QWindowsIntegration::NoNativeMenus;
         } else {
             qWarning() << "Unknown option" << param;
         }
@@ -237,6 +243,7 @@ QWindowsIntegrationPrivate::QWindowsIntegrationPrivate(const QStringList &paramL
     }
 
     m_context.initTouch(m_options);
+    QPlatformCursor::setCapability(QPlatformCursor::OverrideCursor);
 }
 
 QWindowsIntegrationPrivate::~QWindowsIntegrationPrivate()
@@ -245,13 +252,13 @@ QWindowsIntegrationPrivate::~QWindowsIntegrationPrivate()
         delete m_fontDatabase;
 }
 
-QWindowsIntegration *QWindowsIntegration::m_instance = Q_NULLPTR;
+QWindowsIntegration *QWindowsIntegration::m_instance = nullptr;
 
 QWindowsIntegration::QWindowsIntegration(const QStringList &paramList) :
     d(new QWindowsIntegrationPrivate(paramList))
 {
     m_instance = this;
-#ifndef QT_NO_CLIPBOARD
+#if QT_CONFIG(clipboard)
     d->m_clipboard.registerViewer();
 #endif
     d->m_context.screenManager().handleScreenChanges();
@@ -259,7 +266,7 @@ QWindowsIntegration::QWindowsIntegration(const QStringList &paramList) :
 
 QWindowsIntegration::~QWindowsIntegration()
 {
-    m_instance = Q_NULLPTR;
+    m_instance = nullptr;
 }
 
 void QWindowsIntegration::initialize()
@@ -329,25 +336,13 @@ QPlatformWindow *QWindowsIntegration::createPlatformWindow(QWindow *window) cons
         << " handle=" << obtained.hwnd << ' ' << obtained.flags << '\n';
 
     if (Q_UNLIKELY(!obtained.hwnd))
-        return Q_NULLPTR;
+        return nullptr;
 
     QWindowsWindow *result = createPlatformWindowHelper(window, obtained);
     Q_ASSERT(result);
 
-    if (requested.flags != obtained.flags)
-        window->setFlags(obtained.flags);
-    // Trigger geometry change (unless it has a special state in which case setWindowState()
-    // will send the message) and screen change signals of QWindow.
-    if ((obtained.flags & Qt::Desktop) != Qt::Desktop) {
-        const Qt::WindowState state = window->windowState();
-        if (state != Qt::WindowMaximized && state != Qt::WindowFullScreen
-            && requested.geometry != obtained.geometry) {
-            QWindowSystemInterface::handleGeometryChange(window, obtained.geometry);
-        }
-        QPlatformScreen *screen = result->screenForGeometry(obtained.geometry);
-        if (screen && result->screen() != screen)
-            QWindowSystemInterface::handleWindowScreenChanged(window, screen->screen());
-    }
+    if (QWindowsMenuBar *menuBarToBeInstalled = QWindowsMenuBar::menuBarOf(window))
+        menuBarToBeInstalled->install(result);
 
     return result;
 }
@@ -361,7 +356,7 @@ QPlatformWindow *QWindowsIntegration::createForeignWindow(QWindow *window, WId n
     }
     QWindowsForeignWindow *result = new QWindowsForeignWindow(window, hwnd);
     const QRect obtainedGeometry = result->geometry();
-    QScreen *screen = Q_NULLPTR;
+    QScreen *screen = nullptr;
     if (const QPlatformScreen *pScreen = result->screenForGeometry(obtainedGeometry))
         screen = pScreen->screen();
     if (screen && screen != window->screen())
@@ -407,7 +402,7 @@ QWindowsStaticOpenGLContext *QWindowsStaticOpenGLContext::doCreate()
         qCWarning(lcQpaGl, "Software OpenGL failed. Falling back to system OpenGL.");
         if (QWindowsOpenGLTester::supportedRenderers() & QWindowsOpenGLTester::DesktopGl)
             return QOpenGLStaticContext::create();
-        return Q_NULLPTR;
+        return nullptr;
     default:
         break;
     }
@@ -547,12 +542,12 @@ QList<int> QWindowsIntegration::possibleKeys(const QKeyEvent *e) const
     return d->m_context.possibleKeys(e);
 }
 
-#ifndef QT_NO_CLIPBOARD
+#if QT_CONFIG(clipboard)
 QPlatformClipboard * QWindowsIntegration::clipboard() const
 {
     return &d->m_clipboard;
 }
-#  ifndef QT_NO_DRAGANDDROP
+#  if QT_CONFIG(draganddrop)
 QPlatformDrag *QWindowsIntegration::drag() const
 {
     return &d->m_drag;
@@ -577,7 +572,7 @@ unsigned QWindowsIntegration::options() const
     return d->m_options;
 }
 
-#if !defined(QT_NO_SESSIONMANAGER)
+#if QT_CONFIG(sessionmanager)
 QPlatformSessionManager *QWindowsIntegration::createPlatformSessionManager(const QString &id, const QString &key) const
 {
     return new QWindowsSessionManager(id, key);
@@ -610,5 +605,12 @@ void QWindowsIntegration::beep() const
 {
     MessageBeep(MB_OK);  // For QApplication
 }
+
+#if QT_CONFIG(vulkan)
+QPlatformVulkanInstance *QWindowsIntegration::createPlatformVulkanInstance(QVulkanInstance *instance) const
+{
+    return new QWindowsVulkanInstance(instance);
+}
+#endif
 
 QT_END_NAMESPACE

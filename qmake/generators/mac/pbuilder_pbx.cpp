@@ -279,9 +279,6 @@ ProjectBuilderMakefileGenerator::writeSubDirs(QTextStream &t)
         QString configName = (as_release ? "Release" : "Debug");
 
         QMap<QString, QString> settings;
-        settings.insert("COPY_PHASE_STRIP", (as_release ? "YES" : "NO"));
-        if(as_release)
-            settings.insert("GCC_GENERATE_DEBUGGING_SYMBOLS", "NO");
         if(project->isActiveConfig("sdk") && !project->isEmpty("QMAKE_MAC_SDK"))
             settings.insert("SDKROOT", project->first("QMAKE_MAC_SDK").toQString());
         {
@@ -576,13 +573,13 @@ ProjectBuilderMakefileGenerator::writeMakeParts(QTextStream &t)
                            FileFixifyFromOutdir | FileFixifyAbsolute));
 
     //DUMP SOURCES
+    QSet<QString> processedSources;
     QMap<QString, ProStringList> groups;
     QList<ProjectBuilderSources> sources;
     sources.append(ProjectBuilderSources("SOURCES", true));
     sources.append(ProjectBuilderSources("GENERATED_SOURCES", true));
     sources.append(ProjectBuilderSources("GENERATED_FILES"));
     sources.append(ProjectBuilderSources("HEADERS"));
-    sources.append(ProjectBuilderSources("QMAKE_INTERNAL_INCLUDED_FILES"));
     if(!project->isEmpty("QMAKE_EXTRA_COMPILERS")) {
         const ProStringList &quc = project->values("QMAKE_EXTRA_COMPILERS");
         for (ProStringList::ConstIterator it = quc.begin(); it != quc.end(); ++it) {
@@ -626,6 +623,7 @@ ProjectBuilderMakefileGenerator::writeMakeParts(QTextStream &t)
             }
         }
     }
+    sources.append(ProjectBuilderSources("QMAKE_INTERNAL_INCLUDED_FILES"));
     for(int source = 0; source < sources.size(); ++source) {
         ProStringList &src_list = project->values(ProKey("QMAKE_PBX_" + sources.at(source).keyName()));
         ProStringList &root_group_list = project->values("QMAKE_PBX_GROUPS");
@@ -639,6 +637,9 @@ ProjectBuilderMakefileGenerator::writeMakeParts(QTextStream &t)
                 continue;
             if(file.endsWith(Option::prl_ext))
                 continue;
+            if (processedSources.contains(file))
+                continue;
+            processedSources.insert(file);
 
             bool in_root = true;
             QString src_key = keyFor(file);
@@ -778,8 +779,9 @@ ProjectBuilderMakefileGenerator::writeMakeParts(QTextStream &t)
                                 mkt << "\\\n\t";
                             ++added;
                             const QString file_name = fileFixify(fn, FileFixifyFromOutdir);
+                            const QString tmpOut = fileFixify(tmp_out.first().toQString(), FileFixifyFromOutdir);
                             mkt << ' ' << escapeDependencyPath(Option::fixPathToTargetOS(
-                                    replaceExtraCompilerVariables(tmp_out.first().toQString(), file_name, QString(), NoShell)));
+                                    replaceExtraCompilerVariables(tmpOut, file_name, QString(), NoShell)));
                         }
                     }
                 }
@@ -1491,11 +1493,9 @@ ProjectBuilderMakefileGenerator::writeMakeParts(QTextStream &t)
                 settings.insert("PROVISIONING_PROFILE_SPECIFIER", project->first("QMAKE_PROVISIONING_PROFILE").toQString());
         }
 
-        settings.insert("COPY_PHASE_STRIP", (as_release ? "YES" : "NO"));
         settings.insert("APPLICATION_EXTENSION_API_ONLY", project->isActiveConfig("app_extension_api_only") ? "YES" : "NO");
         // required for tvOS (and watchos), optional on iOS (deployment target >= iOS 6.0)
         settings.insert("ENABLE_BITCODE", project->isActiveConfig("bitcode") ? "YES" : "NO");
-        settings.insert("GCC_GENERATE_DEBUGGING_SYMBOLS", as_release ? "NO" : "YES");
         if(!as_release)
             settings.insert("GCC_OPTIMIZATION_LEVEL", "0");
         if(project->isActiveConfig("sdk") && !project->isEmpty("QMAKE_MAC_SDK"))
@@ -1898,7 +1898,7 @@ int
 ProjectBuilderMakefileGenerator::pbuilderVersion() const
 {
     if (!project->isEmpty("QMAKE_PBUILDER_VERSION"))
-        return project->first("QMAKE_PBUILDER_VERSION").toQString().toInt();
+        return project->first("QMAKE_PBUILDER_VERSION").toInt();
     return 46; // Xcode 3.2-compatible; default format since that version
 }
 

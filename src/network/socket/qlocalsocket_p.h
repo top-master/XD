@@ -53,12 +53,12 @@
 
 #include <QtNetwork/private/qtnetworkglobal_p.h>
 
-#ifndef QT_NO_LOCALSOCKET
-
 #include "qlocalsocket.h"
 #include "private/qiodevice_p.h"
 
 #include <qtimer.h>
+
+QT_REQUIRE_CONFIG(localserver);
 
 #if defined(QT_LOCALSOCKET_TCP)
 #   include "qtcpsocket.h"
@@ -120,6 +120,7 @@ public:
     void init();
 
 #if defined(QT_LOCALSOCKET_TCP)
+    qint64 skip(qint64 maxSize) override;
     QLocalUnixSocket* tcpSocket;
     bool ownsTcpSocket;
     void setSocket(QLocalUnixSocket*);
@@ -139,6 +140,7 @@ public:
     QWindowsPipeReader *pipeReader;
     QLocalSocket::LocalSocketError error;
 #else
+    qint64 skip(qint64 maxSize) override;
     QLocalUnixSocket unixSocket;
     QString generateErrorString(QLocalSocket::LocalSocketError, const QString &function) const;
     void errorOccurred(QLocalSocket::LocalSocketError, const QString &function);
@@ -160,8 +162,6 @@ public:
 };
 
 QT_END_NAMESPACE
-
-#endif // QT_NO_LOCALSOCKET
 
 #endif // QLOCALSOCKET_P_H
 

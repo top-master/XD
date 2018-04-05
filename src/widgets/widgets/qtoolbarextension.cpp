@@ -38,21 +38,20 @@
 ****************************************************************************/
 
 #include "qtoolbarextension_p.h"
-#include <qpixmap.h>
+#include <qevent.h>
 #include <qstyle.h>
 #include <qstylepainter.h>
 #include <qstyleoption.h>
-
-#ifndef QT_NO_TOOLBUTTON
 
 QT_BEGIN_NAMESPACE
 
 QToolBarExtension::QToolBarExtension(QWidget *parent)
     : QToolButton(parent)
+    , m_orientation(Qt::Horizontal)
 {
     setObjectName(QLatin1String("qt_toolbar_ext_button"));
     setAutoRaise(true);
-    setOrientation(Qt::Horizontal);
+    setOrientation(m_orientation);
     setSizePolicy(QSizePolicy::Minimum, QSizePolicy::Minimum);
     setCheckable(true);
 }
@@ -65,7 +64,8 @@ void QToolBarExtension::setOrientation(Qt::Orientation o)
         setIcon(style()->standardIcon(QStyle::SP_ToolBarHorizontalExtensionButton, &opt));
     } else {
         setIcon(style()->standardIcon(QStyle::SP_ToolBarVerticalExtensionButton, &opt));
-   }
+    }
+    m_orientation = o;
 }
 
 void QToolBarExtension::paintEvent(QPaintEvent *)
@@ -85,8 +85,18 @@ QSize QToolBarExtension::sizeHint() const
     return QSize(ext, ext);
 }
 
+bool QToolBarExtension::event(QEvent *event)
+{
+    switch (event->type()) {
+    case QEvent::LayoutDirectionChange:
+        setOrientation(m_orientation);
+        break;
+    default:
+        break;
+    }
+    return QToolButton::event(event);
+}
+
 QT_END_NAMESPACE
 
 #include "moc_qtoolbarextension_p.cpp"
-
-#endif // QT_NO_TOOLBUTTON

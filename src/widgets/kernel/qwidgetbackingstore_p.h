@@ -111,8 +111,6 @@ public:
     void sync();
     void flush(QWidget *widget = 0);
 
-    inline QPoint topLevelOffset() const { return tlwOffset; }
-
     QBackingStore *backingStore() const { return store; }
 
     inline bool isDirty() const
@@ -138,8 +136,6 @@ private:
     QBackingStore *store;
     uint updateRequestSent : 1;
 
-    QPoint tlwOffset;
-
     QPlatformTextureListWatcher *textureListWatcher;
     QElapsedTimer perfTime;
     int perfFrames;
@@ -149,7 +145,7 @@ private:
     static bool flushPaint(QWidget *widget, const QRegion &rgn);
     static void unflushPaint(QWidget *widget, const QRegion &rgn);
     static void qt_flush(QWidget *widget, const QRegion &region, QBackingStore *backingStore,
-                         QWidget *tlw, const QPoint &tlwOffset,
+                         QWidget *tlw,
                          QPlatformTextureList *widgetTextures,
                          QWidgetBackingStore *widgetBackingStore);
 
@@ -176,11 +172,11 @@ private:
     {
         if (widget && !widget->d_func()->inDirtyList && !widget->data->in_destructor) {
             QWidgetPrivate *widgetPrivate = widget->d_func();
-#ifndef QT_NO_GRAPHICSEFFECT
+#if QT_CONFIG(graphicseffect)
             if (widgetPrivate->graphicsEffect)
                 widgetPrivate->dirty = widgetPrivate->effectiveRectFor(rgn.boundingRect());
             else
-#endif //QT_NO_GRAPHICSEFFECT
+#endif // QT_CONFIG(graphicseffect)
                 widgetPrivate->dirty = rgn;
             dirtyWidgets.append(widget);
             widgetPrivate->inDirtyList = true;

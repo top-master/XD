@@ -183,10 +183,10 @@ class Q_WIDGETS_EXPORT QWidget : public QObject, public QPaintDevice
     Q_PROPERTY(QString toolTip READ toolTip WRITE setToolTip)
     Q_PROPERTY(int toolTipDuration READ toolTipDuration WRITE setToolTipDuration)
 #endif
-#ifndef QT_NO_STATUSTIP
+#if QT_CONFIG(statustip)
     Q_PROPERTY(QString statusTip READ statusTip WRITE setStatusTip)
 #endif
-#ifndef QT_NO_WHATSTHIS
+#if QT_CONFIG(whatsthis)
     Q_PROPERTY(QString whatsThis READ whatsThis WRITE setWhatsThis)
 #endif
 #ifndef QT_NO_ACCESSIBILITY
@@ -211,10 +211,10 @@ public:
     };
     Q_DECLARE_FLAGS(RenderFlags, RenderFlag)
 
-    explicit QWidget(QWidget* parent = Q_NULLPTR, Qt::WindowFlags f = Qt::WindowFlags());
+    explicit QWidget(QWidget* parent = nullptr, Qt::WindowFlags f = Qt::WindowFlags());
     ~QWidget();
 
-    int devType() const Q_DECL_OVERRIDE;
+    int devType() const override;
 
     WId winId() const;
     void createWinId(); // internal, going away
@@ -347,10 +347,10 @@ public:
 
     Q_INVOKABLE QPixmap grab(const QRect &rectangle = QRect(QPoint(0, 0), QSize(-1, -1)));
 
-#ifndef QT_NO_GRAPHICSEFFECT
+#if QT_CONFIG(graphicseffect)
     QGraphicsEffect *graphicsEffect() const;
     void setGraphicsEffect(QGraphicsEffect *effect);
-#endif //QT_NO_GRAPHICSEFFECT
+#endif // QT_CONFIG(graphicseffect)
 
 #ifndef QT_NO_GESTURES
     void grabGesture(Qt::GestureType type, Qt::GestureFlags flags = Qt::GestureFlags());
@@ -386,11 +386,11 @@ public:
     void setToolTipDuration(int msec);
     int toolTipDuration() const;
 #endif
-#ifndef QT_NO_STATUSTIP
+#if QT_CONFIG(statustip)
     void setStatusTip(const QString &);
     QString statusTip() const;
 #endif
-#ifndef QT_NO_WHATSTHIS
+#if QT_CONFIG(whatsthis)
     void setWhatsThis(const QString &);
     QString whatsThis() const;
 #endif
@@ -451,7 +451,7 @@ public:
     inline bool updatesEnabled() const;
     void setUpdatesEnabled(bool enable);
 
-#ifndef QT_NO_GRAPHICSVIEW
+#if QT_CONFIG(graphicsview)
     QGraphicsProxyWidget *graphicsProxyWidget() const;
 #endif
 
@@ -578,7 +578,7 @@ public:
     void setAttribute(Qt::WidgetAttribute, bool on = true);
     inline bool testAttribute(Qt::WidgetAttribute) const;
 
-    QPaintEngine *paintEngine() const Q_DECL_OVERRIDE;
+    QPaintEngine *paintEngine() const override;
 
     void ensurePolished() const;
 
@@ -596,7 +596,7 @@ public:
 
     QWindow *windowHandle() const;
 
-    static QWidget *createWindowContainer(QWindow *window, QWidget *parent=Q_NULLPTR, Qt::WindowFlags flags=Qt::WindowFlags());
+    static QWidget *createWindowContainer(QWindow *window, QWidget *parent=nullptr, Qt::WindowFlags flags=Qt::WindowFlags());
 
     friend class QDesktopScreenWidget;
 
@@ -608,12 +608,12 @@ Q_SIGNALS:
 
 protected:
     // Event handlers
-    bool event(QEvent *event) Q_DECL_OVERRIDE;
+    bool event(QEvent *event) override;
     virtual void mousePressEvent(QMouseEvent *event);
     virtual void mouseReleaseEvent(QMouseEvent *event);
     virtual void mouseDoubleClickEvent(QMouseEvent *event);
     virtual void mouseMoveEvent(QMouseEvent *event);
-#ifndef QT_NO_WHEELEVENT
+#if QT_CONFIG(wheelevent)
     virtual void wheelEvent(QWheelEvent *event);
 #endif
     virtual void keyPressEvent(QKeyEvent *event);
@@ -629,7 +629,7 @@ protected:
 #ifndef QT_NO_CONTEXTMENU
     virtual void contextMenuEvent(QContextMenuEvent *event);
 #endif
-#ifndef QT_NO_TABLETEVENT
+#if QT_CONFIG(tabletevent)
     virtual void tabletEvent(QTabletEvent *event);
 #endif
 #ifndef QT_NO_ACTION
@@ -650,10 +650,10 @@ protected:
     // Misc. protected functions
     virtual void changeEvent(QEvent *);
 
-    int metric(PaintDeviceMetric) const Q_DECL_OVERRIDE;
-    void initPainter(QPainter *painter) const Q_DECL_OVERRIDE;
-    QPaintDevice *redirected(QPoint *offset) const Q_DECL_OVERRIDE;
-    QPainter *sharedPainter() const Q_DECL_OVERRIDE;
+    int metric(PaintDeviceMetric) const override;
+    void initPainter(QPainter *painter) const override;
+    QPaintDevice *redirected(QPoint *offset) const override;
+    QPainter *sharedPainter() const override;
 
     virtual void inputMethodEvent(QInputMethodEvent *);
 public:
@@ -738,12 +738,12 @@ Q_DECLARE_OPERATORS_FOR_FLAGS(QWidget::RenderFlags)
 #ifndef Q_QDOC
 template <> inline QWidget *qobject_cast<QWidget*>(QObject *o)
 {
-    if (!o || !o->isWidgetType()) return Q_NULLPTR;
+    if (!o || !o->isWidgetType()) return nullptr;
     return static_cast<QWidget*>(o);
 }
 template <> inline const QWidget *qobject_cast<const QWidget*>(const QObject *o)
 {
-    if (!o || !o->isWidgetType()) return Q_NULLPTR;
+    if (!o || !o->isWidgetType()) return nullptr;
     return static_cast<const QWidget*>(o);
 }
 #endif // !Q_QDOC

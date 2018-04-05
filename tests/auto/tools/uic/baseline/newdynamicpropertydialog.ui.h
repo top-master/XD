@@ -10,15 +10,12 @@
 #define NEWDYNAMICPROPERTYDIALOG_H
 
 #include <QtCore/QVariant>
-#include <QtWidgets/QAction>
 #include <QtWidgets/QApplication>
-#include <QtWidgets/QButtonGroup>
 #include <QtWidgets/QComboBox>
 #include <QtWidgets/QDialog>
 #include <QtWidgets/QDialogButtonBox>
 #include <QtWidgets/QFormLayout>
 #include <QtWidgets/QHBoxLayout>
-#include <QtWidgets/QHeaderView>
 #include <QtWidgets/QLabel>
 #include <QtWidgets/QLineEdit>
 #include <QtWidgets/QSpacerItem>
@@ -111,9 +108,9 @@ public:
 
     void retranslateUi(QDialog *qdesigner_internal__NewDynamicPropertyDialog)
     {
-        qdesigner_internal__NewDynamicPropertyDialog->setWindowTitle(QApplication::translate("qdesigner_internal::NewDynamicPropertyDialog", "Create Dynamic Property", Q_NULLPTR));
-        label->setText(QApplication::translate("qdesigner_internal::NewDynamicPropertyDialog", "Property Name", Q_NULLPTR));
-        label_2->setText(QApplication::translate("qdesigner_internal::NewDynamicPropertyDialog", "Property Type", Q_NULLPTR));
+        qdesigner_internal__NewDynamicPropertyDialog->setWindowTitle(QApplication::translate("qdesigner_internal::NewDynamicPropertyDialog", "Create Dynamic Property", nullptr));
+        label->setText(QApplication::translate("qdesigner_internal::NewDynamicPropertyDialog", "Property Name", nullptr));
+        label_2->setText(QApplication::translate("qdesigner_internal::NewDynamicPropertyDialog", "Property Type", nullptr));
     } // retranslateUi
 
 };

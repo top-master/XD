@@ -46,7 +46,7 @@ void tst_QRasterWindow::create()
     w.resize(640, 480);
     w.show();
 
-    QTest::qWaitForWindowExposed(&w);
+    QVERIFY(QTest::qWaitForWindowExposed(&w));
 }
 
 class PainterWindow : public QRasterWindow
@@ -54,7 +54,7 @@ class PainterWindow : public QRasterWindow
 public:
     void reset() { paintCount = 0; }
 
-    void paintEvent(QPaintEvent*) Q_DECL_OVERRIDE {
+    void paintEvent(QPaintEvent*) override {
         ++paintCount;
         QPainter p(this);
         p.fillRect(QRect(0, 0, 100, 100), Qt::blue);
@@ -70,7 +70,7 @@ void tst_QRasterWindow::basic()
     w.reset();
     w.resize(400, 400);
     w.show();
-    QTest::qWaitForWindowExposed(&w);
+    QVERIFY(QTest::qWaitForWindowExposed(&w));;
 
     QVERIFY(w.paintCount >= 1);
 

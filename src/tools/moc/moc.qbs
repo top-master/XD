@@ -3,6 +3,7 @@ import qbs.FileInfo
 import "moc.js" as Moc
 
 QtHostTool {
+    description: "Qt Meta Object Compiler"
     toolFileTag: "qt.moc-tool"
     useBootstrapLib: true
 

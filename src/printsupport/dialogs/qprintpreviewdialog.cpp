@@ -51,7 +51,9 @@
 #include <QtWidgets/qstyle.h>
 #include <QtWidgets/qtoolbutton.h>
 #include <QtGui/qvalidator.h>
+#if QT_CONFIG(filedialog)
 #include <QtWidgets/qfiledialog.h>
+#endif
 #include <QtWidgets/qmainwindow.h>
 #include <QtWidgets/qtoolbar.h>
 #include <QtCore/QCoreApplication>
@@ -77,7 +79,7 @@ class QPrintPreviewMainWindow : public QMainWindow
 {
 public:
     QPrintPreviewMainWindow(QWidget *parent) : QMainWindow(parent) {}
-    QMenu *createPopupMenu() Q_DECL_OVERRIDE { return 0; }
+    QMenu *createPopupMenu() override { return nullptr; }
 };
 
 class ZoomFactorValidator : public QDoubleValidator
@@ -88,7 +90,7 @@ public:
     ZoomFactorValidator(qreal bottom, qreal top, int decimals, QObject *parent)
         : QDoubleValidator(bottom, top, decimals, parent) {}
 
-    State validate(QString &input, int &pos) const Q_DECL_OVERRIDE
+    State validate(QString &input, int &pos) const override
     {
         bool replacePercent = false;
         if (input.endsWith(QLatin1Char('%'))) {
@@ -113,21 +115,21 @@ class LineEdit : public QLineEdit
 {
     Q_OBJECT
 public:
-    LineEdit(QWidget* parent = 0)
+    LineEdit(QWidget* parent = nullptr)
         : QLineEdit(parent)
     {
         setContextMenuPolicy(Qt::NoContextMenu);
-        connect(this, SIGNAL(returnPressed()), SLOT(handleReturnPressed()));
+        connect(this, &LineEdit::returnPressed, this, &LineEdit::handleReturnPressed);
     }
 
 protected:
-    void focusInEvent(QFocusEvent *e) Q_DECL_OVERRIDE
+    void focusInEvent(QFocusEvent *e) override
     {
         origText = text();
         QLineEdit::focusInEvent(e);
     }
 
-    void focusOutEvent(QFocusEvent *e) Q_DECL_OVERRIDE
+    void focusOutEvent(QFocusEvent *e) override
     {
         if (isModified() && !hasAcceptableInput())
             setText(origText);
@@ -150,7 +152,7 @@ class QPrintPreviewDialogPrivate : public QDialogPrivate
     Q_DECLARE_PUBLIC(QPrintPreviewDialog)
 public:
     QPrintPreviewDialogPrivate()
-        : printDialog(0), ownPrinter(false),
+        : printDialog(nullptr), ownPrinter(false),
           initialized(false) {}
 
     // private slots
@@ -165,7 +167,7 @@ public:
     void _q_previewChanged();
     void _q_zoomFactorChanged();
 
-    void init(QPrinter *printer = 0);
+    void init(QPrinter *printer = nullptr);
     void populateScene();
     void layoutPages();
     void setupActions();
@@ -482,7 +484,7 @@ void QPrintPreviewDialogPrivate::updatePageNumLabel()
     int numPages = preview->pageCount();
     int maxChars = QString::number(numPages).length();
     pageNumLabel->setText(QString::fromLatin1("/ %1").arg(numPages));
-    int cyphersWidth = q->fontMetrics().width(QString().fill(QLatin1Char('8'), maxChars));
+    int cyphersWidth = q->fontMetrics().horizontalAdvance(QString().fill(QLatin1Char('8'), maxChars));
     int maxWidth = pageNumEdit->minimumSizeHint().width() + cyphersWidth;
     pageNumEdit->setMinimumWidth(maxWidth);
     pageNumEdit->setMaximumWidth(maxWidth);
@@ -734,7 +736,7 @@ void QPrintPreviewDialog::done(int result)
     if (d->receiverToDisconnectOnClose) {
         disconnect(this, SIGNAL(finished(int)),
                    d->receiverToDisconnectOnClose, d->memberToDisconnectOnClose);
-        d->receiverToDisconnectOnClose = 0;
+        d->receiverToDisconnectOnClose = nullptr;
     }
     d->memberToDisconnectOnClose.clear();
 }

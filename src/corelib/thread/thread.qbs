@@ -7,16 +7,6 @@ Group {
         "qatomic.cpp",
         "qatomic.h",
         "qbasicatomic.h",
-        "qexception.cpp",
-        "qexception.h",
-        "qfutureinterface.cpp",
-        "qfutureinterface.h",
-        "qfutureinterface_p.h",
-        "qfuturesynchronizer.h",
-        "qfuturewatcher.cpp",
-        "qfuturewatcher.h",
-        "qfuturewatcher_p.h",
-        "qfuture.h",
         "qgenericatomic.h",
         "qmutex.cpp",
         "qmutex.h",
@@ -27,8 +17,6 @@ Group {
         "qreadwritelock.cpp",
         "qreadwritelock.h",
         "qreadwritelock_p.h",
-        "qresultstore.cpp",
-        "qresultstore.h",
         "qrunnable.cpp",
         "qrunnable.h",
         "qsemaphore.cpp",
@@ -43,6 +31,24 @@ Group {
         "qthreadstorage.h",
         "qwaitcondition.h",
     ]
+    Group {
+        condition: QtGlobalConfig.future
+        name: "future"
+        files: [
+            "qexception.cpp",
+            "qexception.h",
+            "qfuture.h",
+            "qfutureinterface.cpp",
+            "qfutureinterface.h",
+            "qfutureinterface_p.h",
+            "qfuturesynchronizer.h",
+            "qfuturewatcher.cpp",
+            "qfuturewatcher.h",
+            "qfuturewatcher_p.h",
+            "qresultstore.cpp",
+            "qresultstore.h",
+        ]
+    }
     Group {
         name: "thread/windows"
         condition: qbs.targetOS.contains("windows")

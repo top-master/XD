@@ -294,7 +294,7 @@ void myMessageOutput(QtMsgType type, const QMessageLogContext &context, const QS
         break;
     case QtFatalMsg:
         fprintf(stderr, "Fatal: %s (%s:%u, %s)\n", localMsg.constData(), context.file, context.line, context.function);
-        abort();
+        break;
     }
 }
 
@@ -617,7 +617,7 @@ template<> class QTypeInfo<A> : public QTypeInfoMerger<A, B, C, D> {};
         void overloadedFunction(int, QString);
         void overloadedFunction(int, QString) const;
     };
-    ... qConstOverload<>(&Foo::overloadedFunction)
+    ... qConstOverload<int, QString>(&Foo::overloadedFunction)
     ... qNonConstOverload<int, QString>(&Foo::overloadedFunction)
 //! [54]
 

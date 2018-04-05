@@ -53,6 +53,7 @@
 #include "qcoreapplication_p.h"
 #include <private/qthread_p.h>
 #include <private/qmutexpool_p.h>
+#include <private/qwineventnotifier_p.h>
 
 QT_BEGIN_NAMESPACE
 
@@ -96,13 +97,14 @@ LRESULT QT_WIN_CALLBACK qt_internal_proc(HWND hwnd, UINT message, WPARAM wp, LPA
 QEventDispatcherWin32Private::QEventDispatcherWin32Private()
     : threadId(GetCurrentThreadId()), interrupt(false), closingDown(false), internalHwnd(0),
       getMessageHook(0), serialNumber(0), lastSerialNumber(0), sendPostedEventsWindowsTimerId(0),
-      wakeUps(0)
-    , activateNotifiersPosted(false)
+      wakeUps(0), activateNotifiersPosted(false), winEventNotifierActivatedEvent(NULL)
 {
 }
 
 QEventDispatcherWin32Private::~QEventDispatcherWin32Private()
 {
+    if (winEventNotifierActivatedEvent)
+        CloseHandle(winEventNotifierActivatedEvent);
     if (internalHwnd)
         DestroyWindow(internalHwnd);
 }
@@ -207,7 +209,8 @@ LRESULT QT_WIN_CALLBACK qt_internal_proc(HWND hwnd, UINT message, WPARAM wp, LPA
         // in the queue. WM_QT_ACTIVATENOTIFIERS will be posted again as a result of
         // event processing.
         MSG msg;
-        if (!PeekMessage(&msg, 0, WM_QT_SOCKETNOTIFIER, WM_QT_SOCKETNOTIFIER, PM_NOREMOVE)
+        if (!PeekMessage(&msg, d->internalHwnd,
+                         WM_QT_SOCKETNOTIFIER, WM_QT_SOCKETNOTIFIER, PM_NOREMOVE)
             && d->queuedSocketEvents.isEmpty()) {
             // register all socket notifiers
             for (QSFDict::iterator it = d->active_fd.begin(), end = d->active_fd.end();
@@ -537,12 +540,14 @@ bool QEventDispatcherWin32::processEvents(QEventLoop::ProcessEventsFlags flags)
     bool needWM_QT_SENDPOSTEDEVENTS = false;
     do {
         DWORD waitRet = 0;
-        HANDLE pHandles[MAXIMUM_WAIT_OBJECTS - 1];
+        DWORD nCount = 0;
+        HANDLE *pHandles = nullptr;
+        if (d->winEventNotifierActivatedEvent) {
+            nCount = 1;
+            pHandles = &d->winEventNotifierActivatedEvent;
+        }
         QVarLengthArray<MSG> processedTimers;
         while (!d->interrupt) {
-            DWORD nCount = d->winEventNotifierList.count();
-            Q_ASSERT(nCount < MAXIMUM_WAIT_OBJECTS - 1);
-
             MSG msg;
             bool haveMessage;
 
@@ -584,8 +589,6 @@ bool QEventDispatcherWin32::processEvents(QEventLoop::ProcessEventsFlags flags)
             }
             if (!haveMessage) {
                 // no message - check for signalled objects
-                for (int i=0; i<(int)nCount; i++)
-                    pHandles[i] = d->winEventNotifierList.at(i)->handle();
                 waitRet = MsgWaitForMultipleObjectsEx(nCount, pHandles, 0, QS_ALLINPUT, MWMO_ALERTABLE);
                 if ((haveMessage = (waitRet == WAIT_OBJECT_0 + nCount))) {
                     // a new message has arrived, process it
@@ -626,7 +629,7 @@ bool QEventDispatcherWin32::processEvents(QEventLoop::ProcessEventsFlags flags)
                     DispatchMessage(&msg);
                 }
             } else if (waitRet - WAIT_OBJECT_0 < nCount) {
-                d->activateEventNotifier(d->winEventNotifierList.at(waitRet - WAIT_OBJECT_0));
+                activateEventNotifiers();
             } else {
                 // nothing todo so break
                 break;
@@ -639,16 +642,11 @@ bool QEventDispatcherWin32::processEvents(QEventLoop::ProcessEventsFlags flags)
                    && !d->interrupt
                    && (flags & QEventLoop::WaitForMoreEvents));
         if (canWait) {
-            DWORD nCount = d->winEventNotifierList.count();
-            Q_ASSERT(nCount < MAXIMUM_WAIT_OBJECTS - 1);
-            for (int i=0; i<(int)nCount; i++)
-                pHandles[i] = d->winEventNotifierList.at(i)->handle();
-
             emit aboutToBlock();
             waitRet = MsgWaitForMultipleObjectsEx(nCount, pHandles, INFINITE, QS_ALLINPUT, MWMO_ALERTABLE | MWMO_INPUTAVAILABLE);
             emit awake();
             if (waitRet - WAIT_OBJECT_0 < nCount) {
-                d->activateEventNotifier(d->winEventNotifierList.at(waitRet - WAIT_OBJECT_0));
+                activateEventNotifiers();
                 retVal = true;
             }
         }
@@ -906,12 +904,13 @@ bool QEventDispatcherWin32::registerEventNotifier(QWinEventNotifier *notifier)
     if (d->winEventNotifierList.contains(notifier))
         return true;
 
-    if (d->winEventNotifierList.count() >= MAXIMUM_WAIT_OBJECTS - 2) {
-        qWarning("QWinEventNotifier: Cannot have more than %d enabled at one time", MAXIMUM_WAIT_OBJECTS - 2);
-        return false;
-    }
     d->winEventNotifierList.append(notifier);
-    return true;
+    d->winEventNotifierListModified = true;
+
+    if (!d->winEventNotifierActivatedEvent)
+        d->winEventNotifierActivatedEvent = CreateEvent(0, TRUE, FALSE, nullptr);
+
+    return QWinEventNotifierPrivate::get(notifier)->registerWaitObject();
 }
 
 void QEventDispatcherWin32::unregisterEventNotifier(QWinEventNotifier *notifier)
@@ -927,17 +926,40 @@ void QEventDispatcherWin32::unregisterEventNotifier(QWinEventNotifier *notifier)
     Q_D(QEventDispatcherWin32);
 
     int i = d->winEventNotifierList.indexOf(notifier);
-    if (i != -1)
-        d->winEventNotifierList.takeAt(i);
+    if (i == -1)
+        return;
+    d->winEventNotifierList.takeAt(i);
+    d->winEventNotifierListModified = true;
+    QWinEventNotifierPrivate *nd = QWinEventNotifierPrivate::get(notifier);
+    if (nd->waitHandle)
+        nd->unregisterWaitObject();
 }
 
 void QEventDispatcherWin32::activateEventNotifiers()
 {
     Q_D(QEventDispatcherWin32);
-    //### this could break if events are removed/added in the activation
-    for (int i=0; i<d->winEventNotifierList.count(); i++) {
-        if (WaitForSingleObjectEx(d->winEventNotifierList.at(i)->handle(), 0, TRUE) == WAIT_OBJECT_0)
-            d->activateEventNotifier(d->winEventNotifierList.at(i));
+    ResetEvent(d->winEventNotifierActivatedEvent);
+
+    // Activate signaled notifiers. Our winEventNotifierList can be modified in activation slots.
+    do {
+        d->winEventNotifierListModified = false;
+        for (int i = 0; i < d->winEventNotifierList.count(); ++i) {
+            QWinEventNotifier *notifier = d->winEventNotifierList.at(i);
+            QWinEventNotifierPrivate *nd = QWinEventNotifierPrivate::get(notifier);
+            if (nd->signaledCount.load() != 0) {
+                --nd->signaledCount;
+                nd->unregisterWaitObject();
+                d->activateEventNotifier(notifier);
+            }
+        }
+    } while (d->winEventNotifierListModified);
+
+    // Re-register the remaining activated notifiers.
+    for (int i = 0; i < d->winEventNotifierList.count(); ++i) {
+        QWinEventNotifier *notifier = d->winEventNotifierList.at(i);
+        QWinEventNotifierPrivate *nd = QWinEventNotifierPrivate::get(notifier);
+        if (!nd->waitHandle)
+            nd->registerWaitObject();
     }
 }
 

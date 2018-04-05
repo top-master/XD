@@ -60,28 +60,28 @@
 #include <qdebug.h>
 #include <qvariantanimation.h>
 
-#ifndef QT_NO_TABBAR
-
 #define ANIMATION_DURATION 250
 
 #include <qstyleoption.h>
+
+QT_REQUIRE_CONFIG(tabbar);
 
 QT_BEGIN_NAMESPACE
 
 class QMovableTabWidget : public QWidget
 {
 public:
-    explicit QMovableTabWidget(QWidget *parent = Q_NULLPTR);
+    explicit QMovableTabWidget(QWidget *parent = nullptr);
     void setPixmap(const QPixmap &pixmap);
 
 protected:
-    void paintEvent(QPaintEvent *e) Q_DECL_OVERRIDE;
+    void paintEvent(QPaintEvent *e) override;
 
 private:
     QPixmap m_pixmap;
 };
 
-class QTabBarPrivate  : public QWidgetPrivate
+class Q_WIDGETS_EXPORT QTabBarPrivate : public QWidgetPrivate
 {
     Q_DECLARE_PUBLIC(QTabBar)
 public:
@@ -118,7 +118,7 @@ public:
 #ifndef QT_NO_TOOLTIP
         QString toolTip;
 #endif
-#ifndef QT_NO_WHATSTHIS
+#if QT_CONFIG(whatsthis)
         QString whatsThis;
 #endif
         QIcon icon;
@@ -142,9 +142,9 @@ public:
             TabBarAnimation(Tab *t, QTabBarPrivate *_priv) : tab(t), priv(_priv)
             { setEasingCurve(QEasingCurve::InOutQuad); }
 
-            void updateCurrentValue(const QVariant &current) Q_DECL_OVERRIDE;
+            void updateCurrentValue(const QVariant &current) override;
 
-            void updateState(State, State newState) Q_DECL_OVERRIDE;
+            void updateState(State newState, State) override;
         private:
             //these are needed for the callbacks
             Tab *tab;
@@ -180,7 +180,7 @@ public:
 
     int indexAtPos(const QPoint &p) const;
 
-    inline bool isAnimated() const { Q_Q(const QTabBar); return q->style()->styleHint(QStyle::SH_Widget_Animate, 0, q); }
+    inline bool isAnimated() const { Q_Q(const QTabBar); return q->style()->styleHint(QStyle::SH_Widget_Animation_Duration, 0, q) > 0; }
     inline bool validIndex(int index) const { return index >= 0 && index < tabList.count(); }
     void setCurrentNextEnabledIndex(int offset);
 
@@ -278,17 +278,14 @@ class CloseButton : public QAbstractButton
 public:
     explicit CloseButton(QWidget *parent = 0);
 
-    QSize sizeHint() const Q_DECL_OVERRIDE;
-    QSize minimumSizeHint() const Q_DECL_OVERRIDE
+    QSize sizeHint() const override;
+    QSize minimumSizeHint() const override
         { return sizeHint(); }
-    void enterEvent(QEvent *event) Q_DECL_OVERRIDE;
-    void leaveEvent(QEvent *event) Q_DECL_OVERRIDE;
-    void paintEvent(QPaintEvent *event) Q_DECL_OVERRIDE;
+    void enterEvent(QEvent *event) override;
+    void leaveEvent(QEvent *event) override;
+    void paintEvent(QPaintEvent *event) override;
 };
 
-
 QT_END_NAMESPACE
-
-#endif
 
 #endif

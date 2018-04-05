@@ -53,15 +53,14 @@
 
 #include <QtWidgets/private/qtwidgetsglobal_p.h>
 
-#if !defined(QT_NO_GRAPHICSVIEW)
-
 #include <QtCore/qrect.h>
 #include <QtCore/qlist.h>
 #include <QtWidgets/qgraphicsitem.h>
 #include <private/qgraphicssceneindex_p.h>
 
-QT_BEGIN_NAMESPACE
+QT_REQUIRE_CONFIG(graphicsview);
 
+QT_BEGIN_NAMESPACE
 
 class Q_AUTOTEST_EXPORT QGraphicsSceneLinearIndex : public QGraphicsSceneIndex
 {
@@ -71,10 +70,10 @@ public:
     QGraphicsSceneLinearIndex(QGraphicsScene *scene = 0) : QGraphicsSceneIndex(scene), m_numSortedElements(0)
     { }
 
-    QList<QGraphicsItem *> items(Qt::SortOrder order = Qt::DescendingOrder) const Q_DECL_OVERRIDE
+    QList<QGraphicsItem *> items(Qt::SortOrder order = Qt::DescendingOrder) const override
     { Q_UNUSED(order); return m_items; }
 
-    virtual QList<QGraphicsItem *> estimateItems(const QRectF &rect, Qt::SortOrder order) const Q_DECL_OVERRIDE
+    virtual QList<QGraphicsItem *> estimateItems(const QRectF &rect, Qt::SortOrder order) const override
     {
         Q_UNUSED(rect);
         Q_UNUSED(order);
@@ -82,16 +81,16 @@ public:
     }
 
 protected :
-    virtual void clear() Q_DECL_OVERRIDE
+    virtual void clear() override
     {
         m_items.clear();
         m_numSortedElements = 0;
     }
 
-    virtual void addItem(QGraphicsItem *item) Q_DECL_OVERRIDE
+    virtual void addItem(QGraphicsItem *item) override
     { m_items << item; }
 
-    virtual void removeItem(QGraphicsItem *item) Q_DECL_OVERRIDE
+    virtual void removeItem(QGraphicsItem *item) override
     {
         // Sort m_items if needed
         if (m_numSortedElements < m_items.size())
@@ -115,7 +114,5 @@ private:
 };
 
 QT_END_NAMESPACE
-
-#endif // QT_NO_GRAPHICSVIEW
 
 #endif // QGRAPHICSSCENELINEARINDEX_H

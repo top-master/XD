@@ -750,13 +750,47 @@ QString QDir::filePath(const QString &fileName) const
 QString QDir::absoluteFilePath(const QString &fileName) const
 {
     const QDirPrivate* d = d_ptr.constData();
-    if (isAbsolutePath(fileName))
+    // Don't trust our own isAbsolutePath(); Q_OS_WIN needs a drive.
+    if (QFileSystemEntry(fileName).isAbsolute())
         return fileName;
 
     d->resolveAbsoluteEntry();
     const QString absoluteDirPath = d->absoluteDirEntry.filePath();
     if (fileName.isEmpty())
         return absoluteDirPath;
+#ifdef Q_OS_WIN
+    // Handle the "absolute except for drive" case (i.e. \blah not c:\blah):
+    int size = absoluteDirPath.length();
+    if ((fileName.startsWith(QLatin1Char('/'))
+         || fileName.startsWith(QLatin1Char('\\')))
+        && size > 1) {
+        // Combine absoluteDirPath's drive with fileName
+        int drive = 2; // length of drive prefix
+        if (Q_UNLIKELY(absoluteDirPath.at(1).unicode() != ':')) {
+            // Presumably, absoluteDirPath is an UNC path; use its //server/share
+            // part as "drive" - it's as sane a thing as we can do.
+            for (int i = 2; i-- > 0; ) { // Scan two "path fragments":
+                while (drive < size && absoluteDirPath.at(drive).unicode() == '/')
+                    drive++;
+                if (drive >= size) {
+                    qWarning("Base directory starts with neither a drive nor a UNC share: %s",
+                             qPrintable(QDir::toNativeSeparators(absoluteDirPath)));
+                    return QString();
+                }
+                while (drive < size && absoluteDirPath.at(drive).unicode() != '/')
+                    drive++;
+            }
+            // We'll append fileName, which starts with a slash; so omit trailing slash:
+            if (absoluteDirPath.at(drive).unicode() == '/')
+                drive--;
+        } else if (!absoluteDirPath.at(0).isLetter()) {
+            qWarning("Base directory's drive is not a letter: %s",
+                     qPrintable(QDir::toNativeSeparators(absoluteDirPath)));
+            return QString();
+        }
+        return absoluteDirPath.leftRef(drive) % fileName;
+    }
+#endif // Q_OS_WIN
     if (!absoluteDirPath.endsWith(QLatin1Char('/')))
         return absoluteDirPath % QLatin1Char('/') % fileName;
     return absoluteDirPath % fileName;
@@ -2001,7 +2035,7 @@ QString QDir::homePath()
 
     Returns the system's temporary directory.
 
-    The directory is constructed using the absolute path of the temporary directory,
+    The directory is constructed using the absolute canonical path of the temporary directory,
     ensuring that its path() will be the same as its absolutePath().
 
     See tempPath() for details.
@@ -2010,7 +2044,7 @@ QString QDir::homePath()
 */
 
 /*!
-    Returns the absolute path of the system's temporary directory.
+    Returns the absolute canonical path of the system's temporary directory.
 
     On Unix/Linux systems this is the path in the \c TMPDIR environment
     variable or \c{/tmp} if \c TMPDIR is not defined. On Windows this is
@@ -2087,6 +2121,7 @@ bool QDir::match(const QString &filter, const QString &fileName)
 #endif // QT_NO_REGEXP
 
 /*!
+    \internal
     Returns \a path with redundant directory separators removed,
     and "."s and ".."s resolved (as far as possible).
 

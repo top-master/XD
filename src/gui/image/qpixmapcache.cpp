@@ -193,7 +193,7 @@ public:
     QPMCache();
     ~QPMCache();
 
-    void timerEvent(QTimerEvent *) Q_DECL_OVERRIDE;
+    void timerEvent(QTimerEvent *) override;
     bool insert(const QString& key, const QPixmap &pixmap, int cost);
     QPixmapCache::Key insert(const QPixmap &pixmap, int cost);
     bool replace(const QPixmapCache::Key &key, const QPixmap &pixmap, int cost);
@@ -383,8 +383,9 @@ bool QPMCache::remove(const QString &key)
     //The key was not in the cache
     if (cacheKey == cacheKeys.constEnd())
         return false;
+    const bool result = QCache<QPixmapCache::Key, QPixmapCacheEntry>::remove(cacheKey.value());
     cacheKeys.erase(cacheKey);
-    return QCache<QPixmapCache::Key, QPixmapCacheEntry>::remove(cacheKey.value());
+    return result;
 }
 
 bool QPMCache::remove(const QPixmapCache::Key &key)

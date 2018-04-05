@@ -199,7 +199,7 @@ private slots:
     void findWithRegExpReturnsFalseIfNoMoreResults();
 #endif
 
-#ifndef QT_NO_WHEELEVENT
+#if QT_CONFIG(wheelevent)
     void wheelEvent();
 #endif
 
@@ -2507,7 +2507,7 @@ void tst_QTextEdit::highlightLongLine()
     };
     NumHighlighter nh(edit.document());
     edit.show();
-    QTest::qWaitForWindowActive(edit.windowHandle());
+    QVERIFY(QTest::qWaitForWindowActive(edit.windowHandle()));
     QCoreApplication::processEvents();
     //If there is a quadratic behaviour, this would take forever.
     QVERIFY(true);
@@ -2566,7 +2566,7 @@ void tst_QTextEdit::findWithRegExpReturnsFalseIfNoMoreResults()
 }
 #endif
 
-#ifndef QT_NO_WHEELEVENT
+#if QT_CONFIG(wheelevent)
 
 class TextEdit : public QTextEdit
 {
@@ -2604,30 +2604,20 @@ namespace {
     class MyPaintEngine : public QPaintEngine
     {
     public:
-        bool begin(QPaintDevice *)
-        {
-            return true;
-        }
+        bool begin(QPaintDevice *) override { return true; }
 
-        bool end()
-        {
-            return true;
-        }
+        bool end() override { return true; }
 
-        void updateState(const QPaintEngineState &)
-        {
-        }
+        void updateState(const QPaintEngineState &) override  { }
 
-        void drawPixmap(const QRectF &, const QPixmap &, const QRectF &)
-        {
-        }
+        void drawPixmap(const QRectF &, const QPixmap &, const QRectF &) override { }
 
-        void drawTextItem(const QPointF &, const QTextItem &textItem) Q_DECL_OVERRIDE
+        void drawTextItem(const QPointF &, const QTextItem &textItem) override
         {
             itemFonts.append(qMakePair(textItem.text(), textItem.font()));
         }
 
-        Type type() const { return User; }
+        Type type() const override { return User; }
 
 
         QList<QPair<QString, QFont> > itemFonts;

@@ -1,4 +1,5 @@
 import qbs
+import QtTestlibConfig
 
 QtModuleProject {
     name: "QtTest"
@@ -16,6 +17,8 @@ QtModuleProject {
     }
 
     QtModule {
+        qbsSearchPaths: [project.qtbaseShadowDir + "/src/testlib/qbs"]
+
         Export {
             Depends { name: "cpp" }
             Depends { name: "Qt.core" }
@@ -59,9 +62,10 @@ QtModuleProject {
             "qplaintestlogger.cpp",
             "qsignaldumper.cpp",
             "qsignalspy.h",
+            "qtaptestlogger.cpp",
+            "qtaptestlogger_p.h",
             "qteamcitylogger.cpp",
             "qtest.h",
-            "qtest_global.h",
             "qtest_gui.h",
             "qtest_network.h",
             "qtest_widgets.h",
@@ -77,6 +81,7 @@ QtModuleProject {
             "qtestelementattribute.cpp",
             "qtestevent.h",
             "qtesteventloop.h",
+            "qtesthelpers_p.h",
             "qtestkeyboard.h",
             "qtestlog.cpp",
             "qtestmouse.cpp",
@@ -94,10 +99,21 @@ QtModuleProject {
         Group {
             condition: qbs.targetOS.contains("macos")
             files: [
+                "qappletestlogger.cpp",
+                "qappletestlogger_p.h",
                 "qtestutil_macos.mm",
                 "qtestutil_macos_p.h",
             ]
         }
+
+        Group {
+            condition: QtTestlibConfig.itemmodeltester
+            files: [
+                "qabstractitemmodeltester.cpp",
+                "qabstractitemmodeltester.h",
+            ]
+        }
+
     }
 }
 

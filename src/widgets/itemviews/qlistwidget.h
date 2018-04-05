@@ -46,10 +46,9 @@
 #include <QtCore/qvector.h>
 #include <QtCore/qitemselectionmodel.h>
 
+QT_REQUIRE_CONFIG(listwidget);
+
 QT_BEGIN_NAMESPACE
-
-
-#ifndef QT_NO_LISTWIDGET
 
 class QListWidget;
 class QListModel;
@@ -62,10 +61,10 @@ class Q_WIDGETS_EXPORT QListWidgetItem
     friend class QListWidget;
 public:
     enum ItemType { Type = 0, UserType = 1000 };
-    explicit QListWidgetItem(QListWidget *view = Q_NULLPTR, int type = Type);
-    explicit QListWidgetItem(const QString &text, QListWidget *view = Q_NULLPTR, int type = Type);
+    explicit QListWidgetItem(QListWidget *view = nullptr, int type = Type);
+    explicit QListWidgetItem(const QString &text, QListWidget *view = nullptr, int type = Type);
     explicit QListWidgetItem(const QIcon &icon, const QString &text,
-                             QListWidget *view = Q_NULLPTR, int type = Type);
+                             QListWidget *view = nullptr, int type = Type);
     QListWidgetItem(const QListWidgetItem &other);
     virtual ~QListWidgetItem();
 
@@ -100,7 +99,7 @@ public:
     inline void setToolTip(const QString &toolTip);
 #endif
 
-#ifndef QT_NO_WHATSTHIS
+#if QT_CONFIG(whatsthis)
     inline QString whatsThis() const
         { return data(Qt::WhatsThisRole).toString(); }
     inline void setWhatsThis(const QString &whatsThis);
@@ -180,7 +179,7 @@ inline void QListWidgetItem::setToolTip(const QString &atoolTip)
 { setData(Qt::ToolTipRole, atoolTip); }
 #endif
 
-#ifndef QT_NO_WHATSTHIS
+#if QT_CONFIG(whatsthis)
 inline void QListWidgetItem::setWhatsThis(const QString &awhatsThis)
 { setData(Qt::WhatsThisRole, awhatsThis); }
 #endif
@@ -205,10 +204,10 @@ class Q_WIDGETS_EXPORT QListWidget : public QListView
     friend class QListWidgetItem;
     friend class QListModel;
 public:
-    explicit QListWidget(QWidget *parent = Q_NULLPTR);
+    explicit QListWidget(QWidget *parent = nullptr);
     ~QListWidget();
 
-    void setSelectionModel(QItemSelectionModel *selectionModel) Q_DECL_OVERRIDE;
+    void setSelectionModel(QItemSelectionModel *selectionModel) override;
 
     QListWidgetItem *item(int row) const;
     int row(const QListWidgetItem *item) const;
@@ -240,6 +239,8 @@ public:
     void editItem(QListWidgetItem *item);
     void openPersistentEditor(QListWidgetItem *item);
     void closePersistentEditor(QListWidgetItem *item);
+    using QAbstractItemView::isPersistentEditorOpen;
+    bool isPersistentEditorOpen(QListWidgetItem *item) const;
 
     QWidget *itemWidget(QListWidgetItem *item) const;
     void setItemWidget(QListWidgetItem *item, QWidget *widget);
@@ -252,8 +253,11 @@ public:
 
     bool isItemHidden(const QListWidgetItem *item) const;
     void setItemHidden(const QListWidgetItem *item, bool hide);
+#if QT_VERSION >= QT_VERSION_CHECK(6, 0, 0)
+protected:
+#endif
 #if QT_CONFIG(draganddrop)
-    void dropEvent(QDropEvent *event) Q_DECL_OVERRIDE;
+    void dropEvent(QDropEvent *event) override;
 #endif
 public Q_SLOTS:
     void scrollToItem(const QListWidgetItem *item, QAbstractItemView::ScrollHint hint = EnsureVisible);
@@ -265,6 +269,7 @@ Q_SIGNALS:
     void itemDoubleClicked(QListWidgetItem *item);
     void itemActivated(QListWidgetItem *item);
     void itemEntered(QListWidgetItem *item);
+    // ### Qt 6: add changed roles
     void itemChanged(QListWidgetItem *item);
 
     void currentItemChanged(QListWidgetItem *current, QListWidgetItem *previous);
@@ -274,7 +279,7 @@ Q_SIGNALS:
     void itemSelectionChanged();
 
 protected:
-    bool event(QEvent *e) Q_DECL_OVERRIDE;
+    bool event(QEvent *e) override;
     virtual QStringList mimeTypes() const;
 #if QT_VERSION >= QT_VERSION_CHECK(6,0,0)
     virtual QMimeData *mimeData(const QList<QListWidgetItem *> &items) const;
@@ -285,13 +290,22 @@ protected:
     virtual bool dropMimeData(int index, const QMimeData *data, Qt::DropAction action);
     virtual Qt::DropActions supportedDropActions() const;
 #endif
+
+#if QT_VERSION >= QT_VERSION_CHECK(6, 0, 0)
+public:
+#else
+protected:
+#endif
     QList<QListWidgetItem*> items(const QMimeData *data) const;
 
-    QModelIndex indexFromItem(QListWidgetItem *item) const;
+    QModelIndex indexFromItem(const QListWidgetItem *item) const;
+#if QT_VERSION < QT_VERSION_CHECK(6, 0, 0)
+    QModelIndex indexFromItem(QListWidgetItem *item) const; // ### Qt 6: remove
+#endif
     QListWidgetItem *itemFromIndex(const QModelIndex &index) const;
 
 private:
-    void setModel(QAbstractItemModel *model) Q_DECL_OVERRIDE;
+    void setModel(QAbstractItemModel *model) override;
     Qt::SortOrder sortOrder() const;
 
     Q_DECLARE_PRIVATE(QListWidget)
@@ -309,7 +323,7 @@ private:
 };
 
 inline void QListWidget::removeItemWidget(QListWidgetItem *aItem)
-{ setItemWidget(aItem, Q_NULLPTR); }
+{ setItemWidget(aItem, nullptr); }
 
 inline void QListWidget::addItem(QListWidgetItem *aitem)
 { insertItem(count(), aitem); }
@@ -328,8 +342,6 @@ inline void QListWidgetItem::setHidden(bool ahide)
 
 inline bool QListWidgetItem::isHidden() const
 { return (view ? view->isItemHidden(this) : false); }
-
-#endif // QT_NO_LISTWIDGET
 
 QT_END_NAMESPACE
 

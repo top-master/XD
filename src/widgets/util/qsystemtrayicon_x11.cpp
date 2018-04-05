@@ -47,7 +47,9 @@
 #include "qevent.h"
 #include "qapplication.h"
 #include "qlist.h"
+#if QT_CONFIG(menu)
 #include "qmenu.h"
+#endif
 #include "qtimer.h"
 #include "qsystemtrayicon_p.h"
 #include "qpaintengine.h"
@@ -85,12 +87,12 @@ public:
     QRect globalGeometry() const;
 
 protected:
-    virtual void mousePressEvent(QMouseEvent *ev) Q_DECL_OVERRIDE;
-    virtual void mouseDoubleClickEvent(QMouseEvent *ev) Q_DECL_OVERRIDE;
-    virtual bool event(QEvent *) Q_DECL_OVERRIDE;
-    virtual void paintEvent(QPaintEvent *) Q_DECL_OVERRIDE;
-    virtual void resizeEvent(QResizeEvent *) Q_DECL_OVERRIDE;
-    virtual void moveEvent(QMoveEvent *) Q_DECL_OVERRIDE;
+    virtual void mousePressEvent(QMouseEvent *ev) override;
+    virtual void mouseDoubleClickEvent(QMouseEvent *ev) override;
+    virtual bool event(QEvent *) override;
+    virtual void paintEvent(QPaintEvent *) override;
+    virtual void resizeEvent(QResizeEvent *) override;
+    virtual void moveEvent(QMoveEvent *) override;
 
 private slots:
     void systemTrayWindowChanged(QScreen *screen);
@@ -210,7 +212,7 @@ bool QSystemTrayIconSys::event(QEvent *e)
     case QEvent::ToolTip:
         QApplication::sendEvent(q, e);
         break;
-#ifndef QT_NO_WHEELEVENT
+#if QT_CONFIG(wheelevent)
     case QEvent::Wheel:
         return QApplication::sendEvent(q, e);
 #endif

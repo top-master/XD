@@ -144,7 +144,7 @@ QAbstractFileEngine *QWinRTFileEngineHandler::create(const QString &fileName) co
     if (file != d->files.end())
         return new QWinRTFileEngine(fileName, file.value().Get());
 
-    return Q_NULLPTR;
+    return nullptr;
 }
 
 static HRESULT getDestinationFolder(const QString &fileName, const QString &newFileName,
@@ -414,10 +414,11 @@ QDateTime QWinRTFileEngine::fileTime(FileTime type) const
     HRESULT hr;
     DateTime dateTime = { 0 };
     switch (type) {
-    case CreationTime:
+    case BirthTime:
         hr = d->file->get_DateCreated(&dateTime);
         RETURN_IF_FAILED("Failed to get file creation time", return QDateTime());
         break;
+    case MetadataChangeTime:
     case ModificationTime:
     case AccessTime: {
         ComPtr<IAsyncOperation<FileProperties::BasicProperties *>> op;
@@ -426,8 +427,7 @@ QDateTime QWinRTFileEngine::fileTime(FileTime type) const
         ComPtr<FileProperties::IBasicProperties> properties;
         hr = QWinRTFunctions::await(op, properties.GetAddressOf());
         RETURN_IF_FAILED("Failed to get file properties", return QDateTime());
-        hr = type == ModificationTime ? properties->get_DateModified(&dateTime)
-                                      : properties->get_ItemDate(&dateTime);
+        hr = properties->get_DateModified(&dateTime);
         RETURN_IF_FAILED("Failed to get file date", return QDateTime());
     }
         break;

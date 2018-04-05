@@ -40,12 +40,9 @@
 #define QTGRADIENTVIEWDIALOG_H
 
 #include <QtCore/QVariant>
-#include <QtWidgets/QAction>
 #include <QtWidgets/QApplication>
-#include <QtWidgets/QButtonGroup>
 #include <QtWidgets/QDialog>
 #include <QtWidgets/QDialogButtonBox>
-#include <QtWidgets/QHeaderView>
 #include <QtWidgets/QVBoxLayout>
 #include "qtgradientview.h"
 
@@ -92,7 +89,7 @@ public:
 
     void retranslateUi(QDialog *QtGradientViewDialog)
     {
-        QtGradientViewDialog->setWindowTitle(QApplication::translate("QtGradientViewDialog", "Select Gradient", Q_NULLPTR));
+        QtGradientViewDialog->setWindowTitle(QApplication::translate("QtGradientViewDialog", "Select Gradient", nullptr));
     } // retranslateUi
 
 };

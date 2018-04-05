@@ -53,13 +53,12 @@
 
 #include <QtWidgets/private/qtwidgetsglobal_p.h>
 #include "private/qabstractitemview_p.h"
-#include "qrubberband.h"
 #include "qbitarray.h"
 #include "qbsptree_p.h"
 #include <limits.h>
 #include <qscrollbar.h>
 
-#ifndef QT_NO_LISTVIEW
+QT_REQUIRE_CONFIG(listview);
 
 QT_BEGIN_NAMESPACE
 
@@ -225,6 +224,7 @@ public:
     QRect mapToViewport(const QRect &rect) const override;
     int horizontalOffset() const override;
     int verticalOffset() const override;
+    inline static QSize viewportSize(const QAbstractItemView *v);
     void updateHorizontalScrollBar(const QSize &step) override;
     void updateVerticalScrollBar(const QSize &step) override;
 
@@ -473,7 +473,5 @@ inline int QCommonListViewBase::hiddenCount() const { return dd->hiddenRows.coun
 inline bool QCommonListViewBase::isRightToLeft() const { return qq->isRightToLeft(); }
 
 QT_END_NAMESPACE
-
-#endif // QT_NO_LISTVIEW
 
 #endif // QLISTVIEW_P_H

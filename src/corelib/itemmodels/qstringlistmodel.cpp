@@ -47,8 +47,6 @@
 
 #include <algorithm>
 
-#ifndef QT_NO_STRINGLISTMODEL
-
 QT_BEGIN_NAMESPACE
 
 /*!
@@ -131,7 +129,7 @@ int QStringListModel::rowCount(const QModelIndex &parent) const
 */
 QModelIndex QStringListModel::sibling(int row, int column, const QModelIndex &idx) const
 {
-    if (!idx.isValid() || column != 0 || row >= lst.count())
+    if (!idx.isValid() || column != 0 || row >= lst.count() || row < 0)
         return QModelIndex();
 
     return createIndex(row, 0);
@@ -329,5 +327,3 @@ Qt::DropActions QStringListModel::supportedDropActions() const
 QT_END_NAMESPACE
 
 #include "moc_qstringlistmodel.cpp"
-
-#endif // QT_NO_STRINGLISTMODEL

@@ -11,6 +11,7 @@
     "QtDBus" => "$basedir/src/dbus",
     "QtConcurrent" => "$basedir/src/concurrent",
     "QtAccessibilitySupport" => "$basedir/src/platformsupport/accessibility",
+    "QtWindowsUIAutomationSupport" => "$basedir/src/platformsupport/windowsuiautomation",
     "QtLinuxAccessibilitySupport" => "$basedir/src/platformsupport/linuxaccessibility",
     "QtClipboardSupport" => "$basedir/src/platformsupport/clipboard",
     "QtDeviceDiscoverySupport" => "$basedir/src/platformsupport/devicediscovery",
@@ -21,11 +22,12 @@
     "QtServiceSupport" => "$basedir/src/platformsupport/services",
     "QtThemeSupport" => "$basedir/src/platformsupport/themes",
     "QtGraphicsSupport" => "$basedir/src/platformsupport/graphics",
-    "QtCglSupport" => "$basedir/src/platformsupport/cglconvenience",
     "QtEglSupport" => "$basedir/src/platformsupport/eglconvenience",
     "QtFbSupport" => "$basedir/src/platformsupport/fbconvenience",
     "QtGlxSupport" => "$basedir/src/platformsupport/glxconvenience",
     "QtKmsSupport" => "$basedir/src/platformsupport/kmsconvenience",
+    "QtEdidSupport" => "$basedir/src/platformsupport/edid",
+    "QtVulkanSupport" => "$basedir/src/platformsupport/vkconvenience",
     "QtPlatformHeaders" => "$basedir/src/platformheaders",
     "QtANGLE/KHR" => "!$basedir/src/3rdparty/angle/include/KHR",
     "QtANGLE/GLES2" => "!$basedir/src/3rdparty/angle/include/GLES2",
@@ -52,6 +54,7 @@
     "qnamespace.h" => "Qt",
     "qnumeric.h" => "QtNumeric",
     "qvariant.h" => "QVariantHash,QVariantList,QVariantMap",
+    "qvulkanfunctions.h" => "QVulkanFunctions,QVulkanDeviceFunctions",
     "qgl.h" => "QGL",
     "qtsqlglobal.h" => "QSql",
     "qssl.h" => "QSsl",
@@ -70,6 +73,9 @@
     },
     "QtDBus" => {
         "qdbusmacros.h" => "QtDbus/qtdbusglobal.h"
+    },
+    "QtTest" => {
+        "qtest_global.h" => "QtTest/qttestglobal.h"
     }
 );
 
@@ -80,4 +86,7 @@ my @zlib_headers = ( "zconf.h", "zlib.h" );
 @ignore_headers = ( @internal_zlib_headers );
 @ignore_for_include_check = ( "qsystemdetection.h", "qcompilerdetection.h", "qprocessordetection.h", @zlib_headers, @angle_headers);
 @ignore_for_qt_begin_namespace_check = ( "qt_windows.h", @zlib_headers, @angle_headers);
-%inject_headers = ( "$basedir/src/corelib/global" => [ "qconfig.h", "qconfig_p.h" ] );
+%inject_headers = (
+    "$basedir/src/corelib/global" => [ "qconfig.h", "qconfig_p.h" ],
+    "$basedir/src/gui/vulkan" => [ "^qvulkanfunctions.h", "^qvulkanfunctions_p.h" ]
+);

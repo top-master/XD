@@ -388,7 +388,7 @@ QVersionNumber QVersionNumber::commonPrefix(const QVersionNumber &v1,
 /*!
     \fn QString QVersionNumber::toString() const
 
-    Returns a string with all of the segments delimited by a '.'.
+    Returns a string with all of the segments delimited by a period (\c{.}).
 
     \sa majorVersion(), minorVersion(), microVersion(), segments()
 */
@@ -406,9 +406,28 @@ QString QVersionNumber::toString() const
     return version;
 }
 
+#if QT_STRINGVIEW_LEVEL < 2
 /*!
-    \fn QVersionNumber QVersionNumber::fromString(const QString &string,
-                                                  int *suffixIndex)
+    Constructs a QVersionNumber from a specially formatted \a string of
+    non-negative decimal numbers delimited by a period (\c{.}).
+
+    Once the numerical segments have been parsed, the remainder of the string
+    is considered to be the suffix string.  The start index of that string will be
+    stored in \a suffixIndex if it is not null.
+
+    \snippet qversionnumber/main.cpp 3
+
+    \sa isNull()
+*/
+QVersionNumber QVersionNumber::fromString(const QString &string, int *suffixIndex)
+{
+    return fromString(QLatin1String(string.toLatin1()), suffixIndex);
+}
+#endif
+
+/*!
+    \since 5.10
+    \overload
 
     Constructs a QVersionNumber from a specially formatted \a string of
     non-negative decimal numbers delimited by '.'.
@@ -421,16 +440,34 @@ QString QVersionNumber::toString() const
 
     \sa isNull()
 */
-QVersionNumber QVersionNumber::fromString(const QString &string, int *suffixIndex)
+QVersionNumber QVersionNumber::fromString(QStringView string, int *suffixIndex)
+{
+    return fromString(QLatin1String(string.toLatin1()), suffixIndex);
+}
+
+/*!
+    \since 5.10
+    \overload
+
+    Constructs a QVersionNumber from a specially formatted \a string of
+    non-negative decimal numbers delimited by '.'.
+
+    Once the numerical segments have been parsed, the remainder of the string
+    is considered to be the suffix string.  The start index of that string will be
+    stored in \a suffixIndex if it is not null.
+
+    \snippet qversionnumber/main.cpp 3-latin1-1
+
+    \sa isNull()
+*/
+QVersionNumber QVersionNumber::fromString(QLatin1String string, int *suffixIndex)
 {
     QVector<int> seg;
 
-    const QByteArray cString(string.toLatin1());
-
-    const char *start = cString.constData();
+    const char *start = string.begin();
     const char *end = start;
     const char *lastGoodEnd = start;
-    const char *endOfString = cString.constData() + cString.size();
+    const char *endOfString = string.end();
 
     do {
         bool ok = false;
@@ -443,7 +480,7 @@ QVersionNumber QVersionNumber::fromString(const QString &string, int *suffixInde
     } while (start < endOfString && (end < endOfString && *end == '.'));
 
     if (suffixIndex)
-        *suffixIndex = int(lastGoodEnd - cString.constData());
+        *suffixIndex = int(lastGoodEnd - string.begin());
 
     return QVersionNumber(qMove(seg));
 }

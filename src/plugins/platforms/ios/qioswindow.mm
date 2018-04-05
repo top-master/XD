@@ -73,7 +73,7 @@ QIOSWindow::QIOSWindow(QWindow *window)
     m_normalGeometry = initialGeometry(window, QPlatformWindow::geometry(),
         screen()->availableGeometry().width(), screen()->availableGeometry().height());
 
-    setWindowState(window->windowState());
+    setWindowState(window->windowStates());
     setOpacity(window->opacity());
 
     Qt::ScreenOrientation initialOrientation = window->contentOrientation();
@@ -96,7 +96,7 @@ QIOSWindow::~QIOSWindow()
     [m_view touchesCancelled:[NSSet set] withEvent:0];
 
     clearAccessibleCache();
-    m_view->m_qioswindow = 0;
+    m_view.platformWindow = 0;
     [m_view removeFromSuperview];
     [m_view release];
 }
@@ -139,7 +139,7 @@ void QIOSWindow::setVisible(bool visible)
     } else if (!visible && [m_view isActiveWindow]) {
         // Our window was active/focus window but now hidden, so relinquish
         // focus to the next possible window in the stack.
-        NSArray *subviews = m_view.viewController.view.subviews;
+        NSArray<UIView *> *subviews = m_view.viewController.view.subviews;
         for (int i = int(subviews.count) - 1; i >= 0; --i) {
             UIView *view = [subviews objectAtIndex:i];
             if (view.hidden)
@@ -223,13 +223,20 @@ void QIOSWindow::applyGeometry(const QRect &rect)
         [m_view layoutIfNeeded];
 }
 
+QMargins QIOSWindow::safeAreaMargins() const
+{
+    UIEdgeInsets safeAreaInsets = m_view.qt_safeAreaInsets;
+    return QMargins(safeAreaInsets.left, safeAreaInsets.top,
+        safeAreaInsets.right, safeAreaInsets.bottom);
+}
+
 bool QIOSWindow::isExposed() const
 {
-    return qApp->applicationState() >= Qt::ApplicationActive
+    return qApp->applicationState() != Qt::ApplicationSuspended
         && window()->isVisible() && !window()->geometry().isEmpty();
 }
 
-void QIOSWindow::setWindowState(Qt::WindowState state)
+void QIOSWindow::setWindowState(Qt::WindowStates state)
 {
     // Update the QWindow representation straight away, so that
     // we can update the statusbar visibility based on the new
@@ -239,24 +246,27 @@ void QIOSWindow::setWindowState(Qt::WindowState state)
     if (window()->isTopLevel() && window()->isVisible() && window()->isActive())
         [m_view.qtViewController updateProperties];
 
-    switch (state) {
-    case Qt::WindowNoState:
-        applyGeometry(m_normalGeometry);
-        break;
-    case Qt::WindowMaximized:
-        applyGeometry(window()->flags() & Qt::MaximizeUsingFullscreenGeometryHint ?
-            screen()->geometry() : screen()->availableGeometry());
-        break;
-    case Qt::WindowFullScreen:
-        applyGeometry(screen()->geometry());
-        break;
-    case Qt::WindowMinimized:
+    if (state & Qt::WindowMinimized) {
         applyGeometry(QRect());
-        break;
-    case Qt::WindowActive:
-        Q_UNREACHABLE();
-    default:
-        Q_UNREACHABLE();
+    } else if (state & (Qt::WindowFullScreen | Qt::WindowMaximized)) {
+        // When an application is in split-view mode, the UIScreen still has the
+        // same geometry, but the UIWindow is resized to the area reserved for the
+        // application. We use this to constrain the geometry used when applying the
+        // fullscreen or maximized window states. Note that we do not do this
+        // in applyGeometry(), as we don't want to artificially limit window
+        // placement "outside" of the screen bounds if that's what the user wants.
+
+        QRect uiWindowBounds = QRectF::fromCGRect(m_view.window.bounds).toRect();
+        QRect fullscreenGeometry = screen()->geometry().intersected(uiWindowBounds);
+        QRect maximizedGeometry = window()->flags() & Qt::MaximizeUsingFullscreenGeometryHint ?
+            fullscreenGeometry : screen()->availableGeometry().intersected(uiWindowBounds);
+
+        if (state & Qt::WindowFullScreen)
+            applyGeometry(fullscreenGeometry);
+        else
+            applyGeometry(maximizedGeometry);
+    } else {
+        applyGeometry(m_normalGeometry);
     }
 }
 
@@ -291,7 +301,7 @@ void QIOSWindow::raiseOrLower(bool raise)
     if (!isQtApplication())
         return;
 
-    NSArray *subviews = m_view.superview.subviews;
+    NSArray<UIView *> *subviews = m_view.superview.subviews;
     if (subviews.count == 1)
         return;
 
@@ -370,6 +380,19 @@ CAEAGLLayer *QIOSWindow::eaglLayer() const
     Q_ASSERT([m_view.layer isKindOfClass:[CAEAGLLayer class]]);
     return static_cast<CAEAGLLayer *>(m_view.layer);
 }
+
+#ifndef QT_NO_DEBUG_STREAM
+QDebug operator<<(QDebug debug, const QIOSWindow *window)
+{
+    QDebugStateSaver saver(debug);
+    debug.nospace();
+    debug << "QIOSWindow(" << (const void *)window;
+    if (window)
+        debug << ", window=" << window->window();
+    debug << ')';
+    return debug;
+}
+#endif // !QT_NO_DEBUG_STREAM
 
 #include "moc_qioswindow.cpp"
 

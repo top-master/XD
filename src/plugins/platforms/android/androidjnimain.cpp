@@ -59,6 +59,7 @@
 #include "qandroideventdispatcher.h"
 #include <android/api-level.h>
 
+#include <QtCore/qthread.h>
 #include <QtCore/private/qjnihelpers_p.h>
 #include <QtCore/private/qjni_p.h>
 #include <QtGui/private/qguiapplication_p.h>
@@ -83,7 +84,7 @@ static jmethodID m_setSurfaceGeometryMethodID = nullptr;
 static jmethodID m_destroySurfaceMethodID = nullptr;
 
 static int m_pendingApplicationState = -1;
-static QBasicMutex m_pendingAppStateMtx;
+static QBasicMutex m_platformMutex;
 
 static jclass m_bitmapClass  = nullptr;
 static jmethodID m_createBitmapMethodID = nullptr;
@@ -99,19 +100,11 @@ extern "C" typedef int (*Main)(int, char **); //use the standard main method to 
 static Main m_main = nullptr;
 static void *m_mainLibraryHnd = nullptr;
 static QList<QByteArray> m_applicationParams;
-pthread_t m_qtAppThread = 0;
 static sem_t m_exitSemaphore, m_terminateSemaphore;
-
-struct SurfaceData
-{
-    ~SurfaceData() { delete surface; }
-    QJNIObjectPrivate *surface = nullptr;
-    AndroidSurfaceClient *client = nullptr;
-};
 
 QHash<int, AndroidSurfaceClient *> m_surfaces;
 
-static QMutex m_surfacesMutex;
+static QBasicMutex m_surfacesMutex;
 static int m_surfaceId = 1;
 
 
@@ -130,27 +123,26 @@ static const char m_qtTag[] = "Qt";
 static const char m_classErrorMsg[] = "Can't find class \"%s\"";
 static const char m_methodErrorMsg[] = "Can't find method \"%s%s\"";
 
-static void flushPendingApplicationState();
-
 namespace QtAndroid
 {
+    QBasicMutex *platformInterfaceMutex()
+    {
+        return &m_platformMutex;
+    }
+
     void setAndroidPlatformIntegration(QAndroidPlatformIntegration *androidPlatformIntegration)
     {
-        QMutexLocker lock(&m_surfacesMutex);
         m_androidPlatformIntegration = androidPlatformIntegration;
 
         // flush the pending state if necessary.
-        if (m_androidPlatformIntegration) {
-            flushPendingApplicationState();
-        } else {
-            QMutexLocker locker(&m_pendingAppStateMtx);
-            m_pendingApplicationState = -1;
-        }
+        if (m_androidPlatformIntegration && (m_pendingApplicationState != -1))
+            QWindowSystemInterface::handleApplicationStateChanged(Qt::ApplicationState(m_pendingApplicationState));
+
+        m_pendingApplicationState = -1;
     }
 
     QAndroidPlatformIntegration *androidPlatformIntegration()
     {
-        QMutexLocker locker(&m_surfacesMutex);
         return m_androidPlatformIntegration;
     }
 
@@ -449,57 +441,10 @@ namespace QtAndroid
 
 } // namespace QtAndroid
 
-// Force an update of the pending application state (state set before the platform plugin was created)
-static void flushPendingApplicationState()
-{
-    QMutexLocker locker(&m_pendingAppStateMtx);
-    if (m_pendingApplicationState == -1)
-        return;
-
-    QWindowSystemInterface::handleApplicationStateChanged(Qt::ApplicationState(m_pendingApplicationState));
-    m_pendingApplicationState = -1;
-}
-
-static jboolean startQtAndroidPlugin(JNIEnv* /*env*/, jobject /*object*//*, jobject applicationAssetManager*/)
+static jboolean startQtAndroidPlugin(JNIEnv *env, jobject /*object*/, jstring paramsString, jstring environmentString)
 {
     m_androidPlatformIntegration = nullptr;
     m_androidAssetsFileEngineHandler = new AndroidAssetsFileEngineHandler();
-    return true;
-}
-
-static void *startMainMethod(void */*data*/)
-{
-    QVarLengthArray<const char *> params(m_applicationParams.size());
-    for (int i = 0; i < m_applicationParams.size(); i++)
-        params[i] = static_cast<const char *>(m_applicationParams[i].constData());
-
-    int ret = m_main(m_applicationParams.length(), const_cast<char **>(params.data()));
-
-    if (m_mainLibraryHnd) {
-        int res = dlclose(m_mainLibraryHnd);
-        if (res < 0)
-            qWarning() << "dlclose failed:" << dlerror();
-    }
-
-    if (m_applicationClass)
-        QJNIObjectPrivate::callStaticMethod<void>(m_applicationClass, "quitApp", "()V");
-
-    // All attached threads should be detached before returning from this function.
-    JavaVM *vm = QtAndroidPrivate::javaVM();
-    if (vm != 0)
-        vm->DetachCurrentThread();
-
-    sem_post(&m_terminateSemaphore);
-    sem_wait(&m_exitSemaphore);
-    sem_destroy(&m_exitSemaphore);
-
-    // We must call exit() to ensure that all global objects will be destructed
-    exit(ret);
-    return 0;
-}
-
-static jboolean startQtApplication(JNIEnv *env, jobject /*object*/, jstring paramsString, jstring environmentString)
-{
     m_mainLibraryHnd = nullptr;
     { // Set env. vars
         const char *nativeString = env->GetStringUTFChars(environmentString, 0);
@@ -548,7 +493,54 @@ static jboolean startQtApplication(JNIEnv *env, jobject /*object*/, jstring para
     if (sem_init(&m_terminateSemaphore, 0, 0) == -1)
         return false;
 
-    return pthread_create(&m_qtAppThread, nullptr, startMainMethod, nullptr) == 0;
+    return true;
+}
+
+static void waitForServiceSetup(JNIEnv *env, jclass /*clazz*/)
+{
+    Q_UNUSED(env);
+    // The service must wait until the QCoreApplication starts otherwise onBind will be
+    // called too early
+    if (m_serviceObject)
+        QtAndroidPrivate::waitForServiceSetup();
+}
+
+static jboolean startQtApplication(JNIEnv */*env*/, jclass /*clazz*/)
+{
+    {
+        JNIEnv* env = nullptr;
+        JavaVMAttachArgs args;
+        args.version = JNI_VERSION_1_6;
+        args.name = "QtMainThread";
+        args.group = NULL;
+        JavaVM *vm = QtAndroidPrivate::javaVM();
+        if (vm != 0)
+            vm->AttachCurrentThread(&env, &args);
+    }
+
+    QVarLengthArray<const char *> params(m_applicationParams.size());
+    for (int i = 0; i < m_applicationParams.size(); i++)
+        params[i] = static_cast<const char *>(m_applicationParams[i].constData());
+
+    int ret = m_main(m_applicationParams.length(), const_cast<char **>(params.data()));
+
+    if (m_mainLibraryHnd) {
+        int res = dlclose(m_mainLibraryHnd);
+        if (res < 0)
+            qWarning() << "dlclose failed:" << dlerror();
+    }
+
+    if (m_applicationClass) {
+        qWarning("exit app 0");
+        QJNIObjectPrivate::callStaticMethod<void>(m_applicationClass, "quitApp", "()V");
+    }
+
+    sem_post(&m_terminateSemaphore);
+    sem_wait(&m_exitSemaphore);
+    sem_destroy(&m_exitSemaphore);
+
+    // We must call exit() to ensure that all global objects will be destructed
+    exit(ret);
 }
 
 static void quitQtCoreApplication(JNIEnv *env, jclass /*clazz*/)
@@ -594,7 +586,6 @@ static void terminateQt(JNIEnv *env, jclass /*clazz*/)
 
     if (!QAndroidEventDispatcherStopper::instance()->stopped()) {
         sem_post(&m_exitSemaphore);
-        pthread_join(m_qtAppThread, nullptr);
     }
 }
 
@@ -627,6 +618,7 @@ static void setDisplayMetrics(JNIEnv */*env*/, jclass /*clazz*/,
     m_scaledDensity = scaledDensity;
     m_density = density;
 
+    QMutexLocker lock(&m_platformMutex);
     if (!m_androidPlatformIntegration) {
         QAndroidPlatformIntegration::setDefaultDisplayMetrics(desktopWidthPixels,
                                                               desktopHeightPixels,
@@ -668,18 +660,22 @@ static void updateWindow(JNIEnv */*env*/, jobject /*thiz*/)
 
 static void updateApplicationState(JNIEnv */*env*/, jobject /*thiz*/, jint state)
 {
-    if (!m_main || !QtAndroid::androidPlatformIntegration()) {
-        QMutexLocker locker(&m_pendingAppStateMtx);
-        m_pendingApplicationState = Qt::ApplicationState(state);
+    QMutexLocker lock(&m_platformMutex);
+    if (!m_main || !m_androidPlatformIntegration) {
+        m_pendingApplicationState = state;
         return;
     }
 
-    flushPendingApplicationState();
-
+    // We're about to call user code from the Android thread, since we don't know
+    //the side effects we'll unlock first!
+    lock.unlock();
     if (state == Qt::ApplicationActive)
         QtAndroidPrivate::handleResume();
     else if (state == Qt::ApplicationInactive)
         QtAndroidPrivate::handlePause();
+    lock.relock();
+    if (!m_androidPlatformIntegration)
+        return;
 
     if (state <= Qt::ApplicationInactive) {
         // NOTE: sometimes we will receive two consecutive suspended notifications,
@@ -691,7 +687,6 @@ static void updateApplicationState(JNIEnv */*env*/, jobject /*thiz*/, jint state
 
         // Don't send timers and sockets events anymore if we are going to hide all windows
         QAndroidEventDispatcherStopper::instance()->goingToStop(true);
-        QCoreApplication::processEvents();
         QWindowSystemInterface::handleApplicationStateChanged(Qt::ApplicationState(state));
         if (state == Qt::ApplicationSuspended)
             QAndroidEventDispatcherStopper::instance()->stopAll();
@@ -728,6 +723,7 @@ static void handleOrientationChanged(JNIEnv */*env*/, jobject /*thiz*/, jint new
     Qt::ScreenOrientation native = orientations[nativeOrientation - 1];
 
     QAndroidPlatformIntegration::setScreenOrientation(screenOrientation, native);
+    QMutexLocker lock(&m_platformMutex);
     if (m_androidPlatformIntegration) {
         QPlatformScreen *screen = m_androidPlatformIntegration->screen();
         QWindowSystemInterface::handleScreenOrientationChange(screen->screen(),
@@ -748,19 +744,26 @@ static void onNewIntent(JNIEnv *env, jclass /*cls*/, jobject data)
     QtAndroidPrivate::handleNewIntent(env, data);
 }
 
+static jobject onBind(JNIEnv */*env*/, jclass /*cls*/, jobject intent)
+{
+    return QtAndroidPrivate::callOnBindListener(intent);
+}
+
 static JNINativeMethod methods[] = {
-    {"startQtAndroidPlugin", "()Z", (void *)startQtAndroidPlugin},
-    {"startQtApplication", "(Ljava/lang/String;Ljava/lang/String;)V", (void *)startQtApplication},
+    {"startQtAndroidPlugin", "(Ljava/lang/String;Ljava/lang/String;)Z", (void *)startQtAndroidPlugin},
+    {"startQtApplication", "()V", (void *)startQtApplication},
     {"quitQtAndroidPlugin", "()V", (void *)quitQtAndroidPlugin},
     {"quitQtCoreApplication", "()V", (void *)quitQtCoreApplication},
     {"terminateQt", "()V", (void *)terminateQt},
+    {"waitForServiceSetup", "()V", (void *)waitForServiceSetup},
     {"setDisplayMetrics", "(IIIIDDDD)V", (void *)setDisplayMetrics},
     {"setSurface", "(ILjava/lang/Object;II)V", (void *)setSurface},
     {"updateWindow", "()V", (void *)updateWindow},
     {"updateApplicationState", "(I)V", (void *)updateApplicationState},
     {"handleOrientationChanged", "(II)V", (void *)handleOrientationChanged},
     {"onActivityResult", "(IILandroid/content/Intent;)V", (void *)onActivityResult},
-    {"onNewIntent", "(Landroid/content/Intent;)V", (void *)onNewIntent}
+    {"onNewIntent", "(Landroid/content/Intent;)V", (void *)onNewIntent},
+    {"onBind", "(Landroid/content/Intent;)Landroid/os/IBinder;", (void *)onBind}
 };
 
 #define FIND_AND_CHECK_CLASS(CLASS_NAME) \
@@ -874,7 +877,6 @@ Q_DECL_EXPORT jint JNICALL JNI_OnLoad(JavaVM *vm, void */*reserved*/)
         void *venv;
     } UnionJNIEnvToVoid;
 
-    __android_log_print(ANDROID_LOG_INFO, "Qt", "qt start");
     UnionJNIEnvToVoid uenv;
     uenv.venv = nullptr;
     m_javaVM = nullptr;
@@ -896,5 +898,10 @@ Q_DECL_EXPORT jint JNICALL JNI_OnLoad(JavaVM *vm, void */*reserved*/)
     QWindowSystemInterfacePrivate::TabletEvent::setPlatformSynthesizesMouse(false);
 
     m_javaVM = vm;
+    // attach qt main thread data to this thread
+    QObject threadSetter;
+    if (threadSetter.thread())
+        threadSetter.thread()->setObjectName("QtMainLoopThread");
+    __android_log_print(ANDROID_LOG_INFO, "Qt", "qt started");
     return JNI_VERSION_1_4;
 }

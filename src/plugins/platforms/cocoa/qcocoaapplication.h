@@ -83,26 +83,13 @@
 // We mean it.
 //
 
-/*
-        Cocoa Application Categories
-*/
 #include "qglobal.h"
 #include "private/qcore_mac_p.h"
 
 #import <AppKit/AppKit.h>
 
-@class QT_MANGLE_NAMESPACE(QCocoaMenuLoader);
 
-@interface NSApplication (QT_MANGLE_NAMESPACE(QApplicationIntegration))
-- (void)QT_MANGLE_NAMESPACE(qt_setDockMenu):(NSMenu *)newMenu;
-- (int)QT_MANGLE_NAMESPACE(qt_validModesForFontPanel):(NSFontPanel *)fontPanel;
-
-- (void)QT_MANGLE_NAMESPACE(qt_sendPostedMessage):(NSEvent *)event;
-- (BOOL)QT_MANGLE_NAMESPACE(qt_filterEvent):(NSEvent *)event;
-@end
-
-@interface QT_MANGLE_NAMESPACE(QNSApplication) : NSApplication {
-}
+@interface QT_MANGLE_NAMESPACE(QNSApplication) : NSApplication
 @end
 
 QT_NAMESPACE_ALIAS_OBJC_CLASS(QNSApplication);

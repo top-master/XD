@@ -10,12 +10,9 @@
 #define IDENTIFIERPAGE_H
 
 #include <QtCore/QVariant>
-#include <QtWidgets/QAction>
 #include <QtWidgets/QApplication>
-#include <QtWidgets/QButtonGroup>
 #include <QtWidgets/QCheckBox>
 #include <QtWidgets/QGridLayout>
-#include <QtWidgets/QHeaderView>
 #include <QtWidgets/QLineEdit>
 #include <QtWidgets/QRadioButton>
 #include <QtWidgets/QSpacerItem>
@@ -92,10 +89,10 @@ public:
 
     void retranslateUi(QWidget *IdentifierPage)
     {
-        IdentifierPage->setWindowTitle(QApplication::translate("IdentifierPage", "Form", Q_NULLPTR));
-        identifierCheckBox->setText(QApplication::translate("IdentifierPage", "Create identifiers", Q_NULLPTR));
-        globalButton->setText(QApplication::translate("IdentifierPage", "Global prefix:", Q_NULLPTR));
-        fileNameButton->setText(QApplication::translate("IdentifierPage", "Inherit prefix from file names", Q_NULLPTR));
+        IdentifierPage->setWindowTitle(QApplication::translate("IdentifierPage", "Form", nullptr));
+        identifierCheckBox->setText(QApplication::translate("IdentifierPage", "Create identifiers", nullptr));
+        globalButton->setText(QApplication::translate("IdentifierPage", "Global prefix:", nullptr));
+        fileNameButton->setText(QApplication::translate("IdentifierPage", "Inherit prefix from file names", nullptr));
     } // retranslateUi
 
 };

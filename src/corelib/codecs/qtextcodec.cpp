@@ -43,6 +43,7 @@
 
 #ifndef QT_NO_TEXTCODEC
 
+#include "qbytearraymatcher.h"
 #include "qlist.h"
 #include "qfile.h"
 #include "qstringlist.h"
@@ -87,7 +88,7 @@
 #include <stdlib.h>
 #include <ctype.h>
 #include <locale.h>
-#if defined (_XOPEN_UNIX) && !defined(Q_OS_QNX) && !defined(Q_OS_OSF) && !defined(Q_OS_ANDROID)
+#if defined (_XOPEN_UNIX) && !defined(Q_OS_QNX) && !defined(Q_OS_ANDROID)
 # include <langinfo.h>
 #endif
 
@@ -179,7 +180,7 @@ static QTextCodec *setupLocaleMapper()
     // This is because the builtin utf8 codec is around 5 times faster
     // then the using QIconvCodec
 
-#if defined (_XOPEN_UNIX) && !defined(Q_OS_OSF)
+#if defined (_XOPEN_UNIX)
     char *charset = nl_langinfo(CODESET);
     if (charset)
         locale = QTextCodec::codecForName(charset);
@@ -803,6 +804,7 @@ QTextEncoder* QTextCodec::makeEncoder(QTextCodec::ConversionFlags flags) const
     The \a state of the convertor used is updated.
 */
 
+#if QT_STRINGVIEW_LEVEL < 2
 /*!
     Converts \a str from Unicode to the encoding of this codec, and
     returns the result in a QByteArray.
@@ -810,6 +812,19 @@ QTextEncoder* QTextCodec::makeEncoder(QTextCodec::ConversionFlags flags) const
 QByteArray QTextCodec::fromUnicode(const QString& str) const
 {
     return convertFromUnicode(str.constData(), str.length(), 0);
+}
+#endif
+
+/*!
+    \overload
+    \since 5.10
+
+    Converts \a str from Unicode to the encoding of this codec, and
+    returns the result in a QByteArray.
+*/
+QByteArray QTextCodec::fromUnicode(QStringView str) const
+{
+    return convertFromUnicode(str.data(), str.length(), nullptr);
 }
 
 /*!
@@ -844,6 +859,7 @@ bool QTextCodec::canEncode(QChar ch) const
     return (state.invalidChars == 0);
 }
 
+#if QT_STRINGVIEW_LEVEL < 2
 /*!
     \overload
 
@@ -856,7 +872,22 @@ bool QTextCodec::canEncode(const QString& s) const
     convertFromUnicode(s.constData(), s.length(), &state);
     return (state.invalidChars == 0);
 }
+#endif
 
+/*!
+    \overload
+    \since 5.10
+
+    Returns \c true if the Unicode string \a s can be fully encoded
+    with this codec; otherwise returns \c false.
+*/
+bool QTextCodec::canEncode(QStringView s) const
+{
+    ConverterState state;
+    state.flags = ConvertInvalidToNull;
+    convertFromUnicode(s.data(), s.length(), &state);
+    return !state.invalidChars;
+}
 /*!
     \overload
 
@@ -921,6 +952,7 @@ bool QTextEncoder::hasFailure() const
     return state.invalidChars != 0;
 }
 
+#if QT_STRINGVIEW_LEVEL < 2
 /*!
     Converts the Unicode string \a str into an encoded QByteArray.
 */
@@ -928,6 +960,17 @@ QByteArray QTextEncoder::fromUnicode(const QString& str)
 {
     QByteArray result = c->fromUnicode(str.constData(), str.length(), &state);
     return result;
+}
+#endif
+
+/*!
+    \overload
+    \since 5.10
+    Converts the Unicode string \a str into an encoded QByteArray.
+*/
+QByteArray QTextEncoder::fromUnicode(QStringView str)
+{
+    return c->fromUnicode(str.data(), str.length(), &state);
 }
 
 /*!
@@ -1050,10 +1093,12 @@ QTextCodec *QTextCodec::codecForHtml(const QByteArray &ba, QTextCodec *defaultCo
     // determine charset
     QTextCodec *c = QTextCodec::codecForUtfText(ba, 0);
     if (!c) {
+        static Q_RELAXED_CONSTEXPR auto matcher = qMakeStaticByteArrayMatcher("meta ");
         QByteArray header = ba.left(1024).toLower();
-        int pos = header.indexOf("meta ");
+        int pos = matcher.indexIn(header);
         if (pos != -1) {
-            pos = header.indexOf("charset=", pos);
+            static Q_RELAXED_CONSTEXPR auto matcher = qMakeStaticByteArrayMatcher("charset=");
+            pos = matcher.indexIn(header, pos);
             if (pos != -1) {
                 pos += qstrlen("charset=");
 

@@ -143,9 +143,8 @@ private:
     };
 
     HANDLE handle;
-    Overlapped overlapped;
+    Overlapped *overlapped;
     QByteArray buffer;
-    qint64 numberOfBytesToWrite;
     qint64 pendingBytesWrittenValue;
     bool stopped;
     bool writeSequenceStarted;

@@ -38,15 +38,19 @@
 ****************************************************************************/
 
 // SHSTOCKICONINFO is only available since Vista
-#if _WIN32_WINNT < 0x0600
+#if _WIN32_WINNT < 0x0601
 #  undef _WIN32_WINNT
-#  define _WIN32_WINNT 0x0600
+#  define _WIN32_WINNT 0x0601
 #endif
 
 #include "qwindowstheme.h"
+#include "qwindowsmenu.h"
 #include "qwindowsdialoghelpers.h"
 #include "qwindowscontext.h"
 #include "qwindowsintegration.h"
+#if QT_CONFIG(systemtrayicon)
+#  include "qwindowssystemtrayicon.h"
+#endif
 #include "qt_windows.h"
 #include <commctrl.h>
 #include <objbase.h>
@@ -415,13 +419,7 @@ static inline QStringList iconThemeSearchPaths()
 
 static inline QStringList styleNames()
 {
-    QStringList result;
-    if (QSysInfo::WindowsVersion >= QSysInfo::WV_VISTA)
-        result.append(QStringLiteral("WindowsVista"));
-    if (QSysInfo::WindowsVersion >= QSysInfo::WV_XP)
-        result.append(QStringLiteral("WindowsXP"));
-    result.append(QStringLiteral("Windows"));
-    return result;
+    return { QStringLiteral("WindowsVista"), QStringLiteral("Windows") };
 }
 
 static inline int uiEffects()
@@ -553,6 +551,13 @@ QPlatformDialogHelper *QWindowsTheme::createPlatformDialogHelper(DialogType type
 {
     return QWindowsDialogs::createHelper(type);
 }
+
+#if QT_CONFIG(systemtrayicon)
+QPlatformSystemTrayIcon *QWindowsTheme::createPlatformSystemTrayIcon() const
+{
+    return new QWindowsSystemTrayIcon;
+}
+#endif
 
 void QWindowsTheme::windowsThemeChanged(QWindow * window)
 {
@@ -864,12 +869,18 @@ QPixmap QWindowsFileIconEngine::filePixmap(const QSize &size, QIcon::Mode, QIcon
     }
 
     SHFILEINFO info;
-    const unsigned int flags =
-        SHGFI_ICON|iconSize|SHGFI_SYSICONINDEX|SHGFI_ADDOVERLAYS|SHGFI_OVERLAYINDEX;
-
-    const bool val = cacheableDirIcon && useDefaultFolderIcon
-        ? shGetFileInfoBackground(QString::fromWCharArray(L"dummy"), FILE_ATTRIBUTE_DIRECTORY, &info, flags | SHGFI_USEFILEATTRIBUTES)
-        : shGetFileInfoBackground(filePath, 0, &info, flags);
+    unsigned int flags = SHGFI_ICON | iconSize | SHGFI_SYSICONINDEX | SHGFI_ADDOVERLAYS | SHGFI_OVERLAYINDEX;
+    DWORD attributes = 0;
+    QString path = filePath;
+    if (cacheableDirIcon && useDefaultFolderIcon) {
+        flags |= SHGFI_USEFILEATTRIBUTES;
+        attributes |= FILE_ATTRIBUTE_DIRECTORY;
+        path = QStringLiteral("dummy");
+    } else if (!fileInfo().exists()) {
+        flags |= SHGFI_USEFILEATTRIBUTES;
+        attributes |= FILE_ATTRIBUTE_NORMAL;
+    }
+    const bool val = shGetFileInfoBackground(path, attributes, &info, flags);
 
     // Even if GetFileInfo returns a valid result, hIcon can be empty in some cases
     if (val && info.hIcon) {
@@ -914,6 +925,57 @@ QPixmap QWindowsFileIconEngine::filePixmap(const QSize &size, QIcon::Mode, QIcon
 QIcon QWindowsTheme::fileIcon(const QFileInfo &fileInfo, QPlatformTheme::IconOptions iconOptions) const
 {
     return QIcon(new QWindowsFileIconEngine(fileInfo, iconOptions));
+}
+
+static inline bool doUseNativeMenus()
+{
+    const unsigned options = QWindowsIntegration::instance()->options();
+    if ((options & QWindowsIntegration::NoNativeMenus) != 0)
+        return false;
+    if ((options & QWindowsIntegration::AlwaysUseNativeMenus) != 0)
+        return true;
+    // "Auto" mode: For non-widget or Quick Controls 2 applications
+    if (!QCoreApplication::instance()->inherits("QApplication"))
+        return true;
+    const QWindowList &topLevels = QGuiApplication::topLevelWindows();
+    for (const QWindow *t : topLevels) {
+        if (t->inherits("QQuickApplicationWindow"))
+            return true;
+    }
+    return false;
+}
+
+bool QWindowsTheme::useNativeMenus()
+{
+    static const bool result = doUseNativeMenus();
+    return result;
+}
+
+QPlatformMenuItem *QWindowsTheme::createPlatformMenuItem() const
+{
+    qCDebug(lcQpaMenus) << __FUNCTION__;
+    return QWindowsTheme::useNativeMenus() ? new QWindowsMenuItem : nullptr;
+}
+
+QPlatformMenu *QWindowsTheme::createPlatformMenu() const
+{
+    qCDebug(lcQpaMenus) << __FUNCTION__;
+    // We create a popup menu here, since it will likely be used as context
+    // menu. Submenus should be created the factory functions of
+    // QPlatformMenu/Bar. Note though that Quick Controls 1 will use this
+    // function for submenus as well, but this has been found to work.
+    return QWindowsTheme::useNativeMenus() ? new QWindowsPopupMenu : nullptr;
+}
+
+QPlatformMenuBar *QWindowsTheme::createPlatformMenuBar() const
+{
+    qCDebug(lcQpaMenus) << __FUNCTION__;
+    return QWindowsTheme::useNativeMenus() ? new QWindowsMenuBar : nullptr;
+}
+
+void QWindowsTheme::showPlatformMenuBar()
+{
+    qCDebug(lcQpaMenus) << __FUNCTION__;
 }
 
 QT_END_NAMESPACE

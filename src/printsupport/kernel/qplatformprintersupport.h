@@ -72,11 +72,10 @@ public:
     QPlatformPrinterSupport();
     virtual ~QPlatformPrinterSupport();
 
-    virtual QPrintEngine *createNativePrintEngine(QPrinter::PrinterMode printerMode);
+    virtual QPrintEngine *createNativePrintEngine(QPrinter::PrinterMode printerMode, const QString &deviceId = QString());
     virtual QPaintEngine *createPaintEngine(QPrintEngine *, QPrinter::PrinterMode printerMode);
 
     virtual QPrintDevice createPrintDevice(const QString &id);
-    virtual QPrintDevice createDefaultPrintDevice();
     virtual QStringList availablePrintDeviceIds() const;
     virtual QString defaultPrintDeviceId() const;
 

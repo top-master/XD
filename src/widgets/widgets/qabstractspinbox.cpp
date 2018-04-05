@@ -39,19 +39,20 @@
 
 #include <qplatformdefs.h>
 #include <private/qabstractspinbox_p.h>
+#if QT_CONFIG(datetimeparser)
 #include <private/qdatetimeparser_p.h>
+#endif
 #include <private/qlineedit_p.h>
 #include <qabstractspinbox.h>
-
-#ifndef QT_NO_SPINBOX
 
 #include <qapplication.h>
 #include <qstylehints.h>
 #include <qclipboard.h>
 #include <qdatetime.h>
-#include <qdatetimeedit.h>
 #include <qevent.h>
+#if QT_CONFIG(menu)
 #include <qmenu.h>
+#endif
 #include <qpainter.h>
 #include <qpalette.h>
 #include <qstylepainter.h>
@@ -638,7 +639,15 @@ void QAbstractSpinBox::stepBy(int steps)
             e = AlwaysEmit;
     }
     if (!dontstep) {
-        d->setValue(d->bound(d->value + (d->singleStep * steps), old, steps), e);
+        QVariant singleStep;
+        switch (d->stepType) {
+        case QAbstractSpinBox::StepType::AdaptiveDecimalStepType:
+            singleStep = d->calculateAdaptiveDecimalStep(steps);
+            break;
+        default:
+            singleStep = d->singleStep;
+        }
+        d->setValue(d->bound(d->value + (singleStep * steps), old, steps), e);
     } else if (e == AlwaysEmit) {
         d->emitSignals(e, old);
     }
@@ -677,15 +686,20 @@ void QAbstractSpinBox::setLineEdit(QLineEdit *lineEdit)
         Q_ASSERT(lineEdit);
         return;
     }
+
+    if (lineEdit == d->edit)
+        return;
+
     delete d->edit;
     d->edit = lineEdit;
+    setProperty("_q_spinbox_lineedit", QVariant::fromValue<QWidget *>(d->edit));
     if (!d->edit->validator())
         d->edit->setValidator(d->validator);
 
     if (d->edit->parent() != this)
         d->edit->setParent(this);
 
-    d->edit->setFrame(false);
+    d->edit->setFrame(!style()->styleHint(QStyle::SH_SpinBox_ButtonsInsideFrame, nullptr, this));
     d->edit->setFocusProxy(this);
     d->edit->setAcceptDrops(false);
 
@@ -817,8 +831,13 @@ void QAbstractSpinBox::changeEvent(QEvent *event)
             d->spinClickTimerInterval = style()->styleHint(QStyle::SH_SpinBox_ClickAutoRepeatRate, 0, this);
             d->spinClickThresholdTimerInterval =
                 style()->styleHint(QStyle::SH_SpinBox_ClickAutoRepeatThreshold, 0, this);
+            if (d->edit)
+                d->edit->setFrame(!style()->styleHint(QStyle::SH_SpinBox_ButtonsInsideFrame, nullptr, this));
             d->reset();
             d->updateEditFieldGeometry();
+            break;
+        case QEvent::LocaleChange:
+            d->updateEdit();
             break;
         case QEvent::EnabledChange:
             if (!isEnabled()) {
@@ -869,15 +888,15 @@ QSize QAbstractSpinBox::sizeHint() const
         s = d->textFromValue(d->minimum);
         s.truncate(18);
         s += fixedContent;
-        w = qMax(w, fm.width(s));
+        w = qMax(w, fm.horizontalAdvance(s));
         s = d->textFromValue(d->maximum);
         s.truncate(18);
         s += fixedContent;
-        w = qMax(w, fm.width(s));
+        w = qMax(w, fm.horizontalAdvance(s));
 
         if (d->specialValueText.size()) {
             s = d->specialValueText;
-            w = qMax(w, fm.width(s));
+            w = qMax(w, fm.horizontalAdvance(s));
         }
         w += 2; // cursor blinking space
 
@@ -910,15 +929,15 @@ QSize QAbstractSpinBox::minimumSizeHint() const
         s = d->textFromValue(d->minimum);
         s.truncate(18);
         s += fixedContent;
-        w = qMax(w, fm.width(s));
+        w = qMax(w, fm.horizontalAdvance(s));
         s = d->textFromValue(d->maximum);
         s.truncate(18);
         s += fixedContent;
-        w = qMax(w, fm.width(s));
+        w = qMax(w, fm.horizontalAdvance(s));
 
         if (d->specialValueText.size()) {
             s = d->specialValueText;
-            w = qMax(w, fm.width(s));
+            w = qMax(w, fm.horizontalAdvance(s));
         }
         w += 2; // cursor blinking space
 
@@ -1119,7 +1138,7 @@ void QAbstractSpinBox::keyReleaseEvent(QKeyEvent *event)
     \reimp
 */
 
-#ifndef QT_NO_WHEELEVENT
+#if QT_CONFIG(wheelevent)
 void QAbstractSpinBox::wheelEvent(QWheelEvent *event)
 {
     Q_D(QAbstractSpinBox);
@@ -1643,7 +1662,9 @@ void QAbstractSpinBox::initStyleOption(QStyleOptionSpinBox *option) const
     option->initFrom(this);
     option->activeSubControls = QStyle::SC_None;
     option->buttonSymbols = d->buttonSymbols;
-    option->subControls = QStyle::SC_SpinBoxFrame | QStyle::SC_SpinBoxEditField;
+    option->subControls = QStyle::SC_SpinBoxEditField;
+    if (!style()->styleHint(QStyle::SH_SpinBox_ButtonsInsideFrame, nullptr, this))
+        option->subControls |= QStyle::SC_SpinBoxFrame;
     if (d->buttonSymbols != QAbstractSpinBox::NoButtons) {
         option->subControls |= QStyle::SC_SpinBoxUp | QStyle::SC_SpinBoxDown;
         if (d->buttonState & Up) {
@@ -1885,6 +1906,11 @@ void QAbstractSpinBoxPrivate::clearCache() const
     cachedState = QValidator::Acceptable;
 }
 
+QVariant QAbstractSpinBoxPrivate::calculateAdaptiveDecimalStep(int steps) const
+{
+    Q_UNUSED(steps)
+    return singleStep;
+}
 
 // --- QSpinBoxValidator ---
 
@@ -1960,12 +1986,15 @@ QVariant operator+(const QVariant &arg1, const QVariant &arg2)
         break;
     }
     case QVariant::Double: ret = QVariant(arg1.toDouble() + arg2.toDouble()); break;
+#if QT_CONFIG(datetimeparser)
     case QVariant::DateTime: {
         QDateTime a2 = arg2.toDateTime();
         QDateTime a1 = arg1.toDateTime().addDays(QDATETIMEEDIT_DATETIME_MIN.daysTo(a2));
         a1.setTime(a1.time().addMSecs(QTime().msecsTo(a2.time())));
         ret = QVariant(a1);
+        break;
     }
+#endif // datetimeparser
     default: break;
     }
     return ret;
@@ -2020,6 +2049,7 @@ QVariant operator*(const QVariant &arg1, double multiplier)
         ret = static_cast<int>(qBound<double>(INT_MIN, arg1.toInt() * multiplier, INT_MAX));
         break;
     case QVariant::Double: ret = QVariant(arg1.toDouble() * multiplier); break;
+#if QT_CONFIG(datetimeparser)
     case QVariant::DateTime: {
         double days = QDATETIMEEDIT_DATE_MIN.daysTo(arg1.toDateTime().date()) * multiplier;
         int daysInt = (int)days;
@@ -2029,6 +2059,7 @@ QVariant operator*(const QVariant &arg1, double multiplier)
         ret = QDateTime(QDate().addDays(int(days)), QTime().addMSecs(msecs));
         break;
     }
+#endif // datetimeparser
     default: ret = arg1; break;
     }
 
@@ -2051,11 +2082,14 @@ double operator/(const QVariant &arg1, const QVariant &arg2)
         a1 = arg1.toDouble();
         a2 = arg2.toDouble();
         break;
+#if QT_CONFIG(datetimeparser)
     case QVariant::DateTime:
         a1 = QDATETIMEEDIT_DATE_MIN.daysTo(arg1.toDate());
         a2 = QDATETIMEEDIT_DATE_MIN.daysTo(arg2.toDate());
         a1 += (double)QDATETIMEEDIT_TIME_MIN.msecsTo(arg1.toDateTime().time()) / (long)(3600 * 24 * 1000);
         a2 += (double)QDATETIMEEDIT_TIME_MIN.msecsTo(arg2.toDateTime().time()) / (long)(3600 * 24 * 1000);
+        break;
+#endif // datetimeparser
     default: break;
     }
 
@@ -2143,5 +2177,3 @@ QVariant QAbstractSpinBoxPrivate::variantBound(const QVariant &min,
 QT_END_NAMESPACE
 
 #include "moc_qabstractspinbox.cpp"
-
-#endif // QT_NO_SPINBOX

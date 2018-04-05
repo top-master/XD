@@ -47,15 +47,22 @@
 #include <QtTest/private/qxunittestlogger_p.h>
 #include <QtTest/private/qxmltestlogger_p.h>
 #include <QtTest/private/qteamcitylogger_p.h>
+#include <QtTest/private/qtaptestlogger_p.h>
 #if defined(HAVE_XCTEST)
 #include <QtTest/private/qxctestlogger_p.h>
+#endif
+
+#if defined(Q_OS_DARWIN)
+#include <QtTest/private/qappletestlogger_p.h>
 #endif
 
 #include <QtCore/qatomic.h>
 #include <QtCore/qbytearray.h>
 #include <QtCore/QElapsedTimer>
 #include <QtCore/QVariant>
+#if QT_CONFIG(regularexpression)
 #include <QtCore/QRegularExpression>
+#endif
 
 #include <stdlib.h>
 #include <string.h>
@@ -139,7 +146,7 @@ namespace QTest {
             return tp == type
                    && (pattern.type() == QVariant::String ?
                        stringsMatch(pattern.toString(), message) :
-#ifndef QT_NO_REGULAREXPRESSION
+#if QT_CONFIG(regularexpression)
                        pattern.toRegularExpression().match(message).hasMatch());
 #else
                        false);
@@ -209,6 +216,11 @@ namespace QTest {
             FOREACH_LOGGER(logger->leaveTestFunction());
         }
 
+        static void enterTestData(QTestData *data)
+        {
+            FOREACH_LOGGER(logger->enterTestData(data));
+        }
+
         static void addIncident(QAbstractTestLogger::IncidentTypes type, const char *description,
                                 const char *file = 0, int line = 0)
         {
@@ -218,6 +230,12 @@ namespace QTest {
         static void addBenchmarkResult(const QBenchmarkResult &result)
         {
             FOREACH_LOGGER(logger->addBenchmarkResult(result));
+        }
+
+        static void addMessage(QtMsgType type, const QMessageLogContext &context,
+                               const QString &message)
+        {
+            FOREACH_LOGGER(logger->addMessage(type, context, message));
         }
 
         static void addMessage(QAbstractTestLogger::MessageTypes type, const QString &message,
@@ -289,11 +307,10 @@ namespace QTest {
             QTEST_ASSERT(QTest::TestLoggers::loggerCount() != 0);
         }
 
-        if (handleIgnoredMessage(type, message))
+        if (handleIgnoredMessage(type, message)) {
             // the message is expected, so just swallow it.
             return;
-
-        QString msg = qFormatLogMessage(type, context, message);
+        }
 
         if (type != QtFatalMsg) {
             if (counter.load() <= 0)
@@ -306,22 +323,10 @@ namespace QTest {
             }
         }
 
-        switch (type) {
-        case QtDebugMsg:
-            QTest::TestLoggers::addMessage(QAbstractTestLogger::QDebug, msg);
-            break;
-        case QtInfoMsg:
-            QTest::TestLoggers::addMessage(QAbstractTestLogger::QInfo, msg);
-            break;
-        case QtCriticalMsg:
-            QTest::TestLoggers::addMessage(QAbstractTestLogger::QSystem, msg);
-            break;
-        case QtWarningMsg:
-            QTest::TestLoggers::addMessage(QAbstractTestLogger::QWarning, msg);
-            break;
-        case QtFatalMsg:
-            QTest::TestLoggers::addMessage(QAbstractTestLogger::QFatal, msg);
-            /* Right now, we're inside the custom message handler and we're
+        QTest::TestLoggers::addMessage(type, context, message);
+
+        if (type == QtFatalMsg) {
+             /* Right now, we're inside the custom message handler and we're
              * being qt_message_output in qglobal.cpp. After we return from
              * this function, it will proceed with calling exit() and abort()
              * and hence crash. Therefore, we call these logging functions such
@@ -329,7 +334,6 @@ namespace QTest {
             QTestResult::addFailure("Received a fatal error.", "Unknown file", 0);
             QTestLog::leaveTestFunction();
             QTestLog::stopLogging();
-            break;
         }
     }
 }
@@ -343,6 +347,12 @@ void QTestLog::enterTestFunction(const char* function)
     QTEST_ASSERT(function);
 
     QTest::TestLoggers::enterTestFunction(function);
+}
+
+void QTestLog::enterTestData(QTestData *data)
+{
+    QTEST_ASSERT(data);
+    QTest::TestLoggers::enterTestData(data);
 }
 
 int QTestLog::unhandledIgnoreMessages()
@@ -372,7 +382,7 @@ void QTestLog::printUnhandledIgnoreMessages()
         if (list->pattern.type() == QVariant::String) {
             message = QStringLiteral("Did not receive message: \"") + list->pattern.toString() + QLatin1Char('"');
         } else {
-#ifndef QT_NO_REGULAREXPRESSION
+#if QT_CONFIG(regularexpression)
             message = QStringLiteral("Did not receive any message matching: \"") + list->pattern.toRegularExpression().pattern() + QLatin1Char('"');
 #endif
         }
@@ -504,12 +514,24 @@ void QTestLog::addLogger(LogMode mode, const char *filename)
     case QTestLog::TeamCity:
         logger = new QTeamCityLogger(filename);
         break;
+    case QTestLog::TAP:
+        logger = new QTapTestLogger(filename);
+        break;
 #if defined(HAVE_XCTEST)
     case QTestLog::XCTest:
         logger = new QXcodeTestLogger;
         break;
 #endif
     }
+
+#if defined(QT_USE_APPLE_UNIFIED_LOGGING)
+    // Logger that also feeds messages to AUL. It needs to wrap the existing
+    // logger, as it needs to be able to short circuit the existing logger
+    // in case AUL prints to stderr.
+    if (QAppleTestLogger::debugLoggingEnabled())
+        logger = new QAppleTestLogger(logger);
+#endif
+
     QTEST_ASSERT(logger);
     QTest::TestLoggers::addLogger(logger);
 }
@@ -556,14 +578,14 @@ void QTestLog::ignoreMessage(QtMsgType type, const char *msg)
     QTest::IgnoreResultList::append(QTest::ignoreResultList, type, QString::fromLocal8Bit(msg));
 }
 
-#ifndef QT_NO_REGULAREXPRESSION
+#if QT_CONFIG(regularexpression)
 void QTestLog::ignoreMessage(QtMsgType type, const QRegularExpression &expression)
 {
     QTEST_ASSERT(expression.isValid());
 
     QTest::IgnoreResultList::append(QTest::ignoreResultList, type, QVariant(expression));
 }
-#endif // QT_NO_REGULAREXPRESSION
+#endif // QT_CONFIG(regularexpression)
 
 void QTestLog::setMaxWarnings(int m)
 {
@@ -595,6 +617,11 @@ int QTestLog::skipCount()
 int QTestLog::blacklistCount()
 {
     return QTest::blacklists;
+}
+
+int QTestLog::totalCount()
+{
+    return passCount() + failCount() + skipCount() + blacklistCount();
 }
 
 void QTestLog::resetCounters()

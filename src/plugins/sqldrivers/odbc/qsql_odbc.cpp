@@ -64,6 +64,7 @@ QT_BEGIN_NAMESPACE
 #define ODBC_CHECK_DRIVER
 
 static const int COLNAMESIZE = 256;
+static const SQLSMALLINT TABLENAMESIZE = 128;
 //Map Qt parameter types to ODBC types
 static const SQLSMALLINT qParamType[4] = { SQL_PARAM_INPUT, SQL_PARAM_INPUT, SQL_PARAM_OUTPUT, SQL_PARAM_INPUT_OUTPUT };
 
@@ -162,27 +163,27 @@ public:
     QODBCResult(const QODBCDriver *db);
     virtual ~QODBCResult();
 
-    bool prepare(const QString &query) Q_DECL_OVERRIDE;
-    bool exec() Q_DECL_OVERRIDE;
+    bool prepare(const QString &query) override;
+    bool exec() override;
 
-    QVariant lastInsertId() const Q_DECL_OVERRIDE;
-    QVariant handle() const Q_DECL_OVERRIDE;
+    QVariant lastInsertId() const override;
+    QVariant handle() const override;
 
 protected:
-    bool fetchNext() Q_DECL_OVERRIDE;
-    bool fetchFirst() Q_DECL_OVERRIDE;
-    bool fetchLast() Q_DECL_OVERRIDE;
-    bool fetchPrevious() Q_DECL_OVERRIDE;
-    bool fetch(int i) Q_DECL_OVERRIDE;
-    bool reset(const QString &query) Q_DECL_OVERRIDE;
-    QVariant data(int field) Q_DECL_OVERRIDE;
-    bool isNull(int field) Q_DECL_OVERRIDE;
-    int size() Q_DECL_OVERRIDE;
-    int numRowsAffected() Q_DECL_OVERRIDE;
-    QSqlRecord record() const Q_DECL_OVERRIDE;
-    void virtual_hook(int id, void *data) Q_DECL_OVERRIDE;
-    void detachFromResultSet() Q_DECL_OVERRIDE;
-    bool nextResult() Q_DECL_OVERRIDE;
+    bool fetchNext() override;
+    bool fetchFirst() override;
+    bool fetchLast() override;
+    bool fetchPrevious() override;
+    bool fetch(int i) override;
+    bool reset(const QString &query) override;
+    QVariant data(int field) override;
+    bool isNull(int field) override;
+    int size() override;
+    int numRowsAffected() override;
+    QSqlRecord record() const override;
+    void virtual_hook(int id, void *data) override;
+    void detachFromResultSet() override;
+    bool nextResult() override;
 };
 
 class QODBCResultPrivate: public QSqlResultPrivate
@@ -334,7 +335,8 @@ static QSqlError qMakeError(const QString& err, QSqlError::ErrorType type, const
 {
     int nativeCode = -1;
     QString message = qODBCWarn(p, &nativeCode);
-    return QSqlError(QLatin1String("QODBC3: ") + err, message, type, nativeCode);
+    return QSqlError(QLatin1String("QODBC3: ") + err, message, type,
+                     nativeCode != -1 ? QString::number(nativeCode) : QString());
 }
 
 static QSqlError qMakeError(const QString& err, QSqlError::ErrorType type,
@@ -342,7 +344,8 @@ static QSqlError qMakeError(const QString& err, QSqlError::ErrorType type,
 {
     int nativeCode = -1;
     QString message = qODBCWarn(p, &nativeCode);
-    return QSqlError(QLatin1String("QODBC3: ") + err, qODBCWarn(p), type, nativeCode);
+    return QSqlError(QLatin1String("QODBC3: ") + err, qODBCWarn(p), type,
+                     nativeCode != -1 ? QString::number(nativeCode) : QString());
 }
 
 static QVariant::Type qDecodeODBCType(SQLSMALLINT sqltype, bool isSigned = true)
@@ -730,6 +733,12 @@ static QSqlField qMakeFieldInfo(const SQLHANDLE hStmt, int i, QString *errorMess
         f.setRequired(false);
     // else we don't know
     f.setAutoValue(isAutoValue(hStmt, i));
+    QVarLengthArray<SQLTCHAR> tableName(TABLENAMESIZE);
+    SQLSMALLINT tableNameLen;
+    r = SQLColAttribute(hStmt, i + 1, SQL_DESC_BASE_TABLE_NAME, tableName.data(),
+                        TABLENAMESIZE, &tableNameLen, 0);
+    if (r == SQL_SUCCESS)
+        f.setTableName(fromSQLTCHAR(tableName, tableNameLen));
     return f;
 }
 

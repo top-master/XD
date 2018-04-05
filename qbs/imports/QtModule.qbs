@@ -17,8 +17,6 @@ QtProduct {
     Depends { name: project.tracepointsProductName; required: false }
     Depends { name: "qt_sse2"; condition: !hostBuild }
 
-    property bool hasUiKit: qbs.targetOS.containsAny(["ios", "tvos", "watchos"])
-
 // TODO: For Windows: qt_targets.prf
 
 // TODO: Create pkgconfig files; see qt_module.prf and qmake

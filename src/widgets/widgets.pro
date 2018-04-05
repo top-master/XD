@@ -4,8 +4,7 @@ MODULE_CONFIG = uic
 
 CONFIG += $$MODULE_CONFIG
 DEFINES   += QT_NO_USING_NAMESPACE
-win32-msvc*|win32-icc:QMAKE_LFLAGS += /BASE:0x65000000
-irix-cc*:QMAKE_CXXFLAGS += -no_prelink -ptused
+msvc:equals(QT_ARCH, i386): QMAKE_LFLAGS += /BASE:0x65000000
 
 QMAKE_DOCS = $$PWD/doc/qtwidgets.qdocconf
 
@@ -23,8 +22,10 @@ include(itemviews/itemviews.pri)
 include(graphicsview/graphicsview.pri)
 include(util/util.pri)
 include(statemachine/statemachine.pri)
-include(effects/effects.pri)
 
+qtConfig(graphicseffect) {
+    include(effects/effects.pri)
+}
 
 QMAKE_LIBS += $$QMAKE_LIBS_GUI
 

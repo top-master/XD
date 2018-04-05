@@ -104,7 +104,7 @@ class DragThreadTransferData : public QObject
 public slots:
     void handleDrag();
 public:
-    explicit DragThreadTransferData(QObject *parent = Q_NULLPTR);
+    explicit DragThreadTransferData(QObject *parent = nullptr);
     QWindow *window;
     QWinRTInternalMimeData *mime;
     QPoint point;
@@ -771,12 +771,6 @@ void QWinRTDrag::setDropTarget(QWindow *target)
 {
     qCDebug(lcQpaMime) << __FUNCTION__ << target;
     m_dragTarget = target;
-}
-
-QMimeData *QWinRTDrag::platformDropData()
-{
-    qCDebug(lcQpaMime) << __FUNCTION__;
-    return m_mimeData;
 }
 
 void QWinRTDrag::setUiElement(ComPtr<ABI::Windows::UI::Xaml::IUIElement> &element)

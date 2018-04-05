@@ -55,31 +55,29 @@
 
 #include <algorithm>
 
-#include <Carbon/Carbon.h>
-
 QT_BEGIN_NAMESPACE
 
-Q_LOGGING_CATEGORY(lcQpaCocoaWindow, "qt.qpa.cocoa.window");
+Q_LOGGING_CATEGORY(lcQpaWindow, "qt.qpa.window");
+Q_LOGGING_CATEGORY(lcQpaDrawing, "qt.qpa.drawing");
+Q_LOGGING_CATEGORY(lcQpaMouse, "qt.qpa.input.mouse");
 
 //
 // Conversion Functions
 //
 
-QStringList qt_mac_NSArrayToQStringList(void *nsarray)
+QStringList qt_mac_NSArrayToQStringList(NSArray<NSString *> *array)
 {
     QStringList result;
-    NSArray *array = static_cast<NSArray *>(nsarray);
-    for (NSUInteger i=0; i<[array count]; ++i)
-        result << QString::fromNSString([array objectAtIndex:i]);
+    for (NSString *string in array)
+        result << QString::fromNSString(string);
     return result;
 }
 
-void *qt_mac_QStringListToNSMutableArrayVoid(const QStringList &list)
+NSMutableArray<NSString *> *qt_mac_QStringListToNSMutableArray(const QStringList &list)
 {
-    NSMutableArray *result = [NSMutableArray arrayWithCapacity:list.size()];
-    for (int i=0; i<list.size(); ++i){
-        [result addObject:list[i].toNSString()];
-    }
+    NSMutableArray<NSString *> *result = [NSMutableArray<NSString *> arrayWithCapacity:list.size()];
+    for (const QString &string : list)
+        [result addObject:string.toNSString()];
     return result;
 }
 
@@ -93,6 +91,7 @@ struct dndenum_mapper
 static dndenum_mapper dnd_enums[] = {
     { NSDragOperationLink,  Qt::LinkAction, true },
     { NSDragOperationMove,  Qt::MoveAction, true },
+    { NSDragOperationDelete,  Qt::MoveAction, true },
     { NSDragOperationCopy,  Qt::CopyAction, true },
     { NSDragOperationGeneric,  Qt::CopyAction, false },
     { NSDragOperationEvery, Qt::ActionMask, false },
@@ -234,49 +233,36 @@ QString qt_mac_applicationName()
     return appName;
 }
 
-int qt_mac_primaryScreenHeight()
+// -------------------------------------------------------------------------
+
+/*!
+    \fn QPointF qt_mac_flip(const QPointF &pos, const QRectF &reference)
+    \fn QRectF qt_mac_flip(const QRectF &rect, const QRectF &reference)
+
+    Flips the Y coordinate of the point/rect between quadrant I and IV.
+
+    The native coordinate system on macOS uses quadrant I, with origin
+    in bottom left, and Qt uses quadrant IV, with origin in top left.
+
+    By flipping the Y coordinate, we can map the point/rect between
+    the two coordinate systems.
+
+    The flip is always in relation to a reference rectangle, e.g.
+    the frame of the parent view, or the screen geometry. In the
+    latter case the specialized QCocoaScreen::mapFrom/To functions
+    should be used instead.
+*/
+QPointF qt_mac_flip(const QPointF &pos, const QRectF &reference)
 {
-    QMacAutoReleasePool pool;
-    NSArray *screens = [NSScreen screens];
-    if ([screens count] > 0) {
-        // The first screen in the screens array is documented to
-        // have the (0,0) origin and is designated the primary screen.
-        NSRect screenFrame = [[screens objectAtIndex: 0] frame];
-        return screenFrame.size.height;
-    }
-    return 0;
+    return QPointF(pos.x(), reference.height() - pos.y());
 }
 
-int qt_mac_flipYCoordinate(int y)
+QRectF qt_mac_flip(const QRectF &rect, const QRectF &reference)
 {
-    return qt_mac_primaryScreenHeight() - y;
+    return QRectF(qt_mac_flip(rect.bottomLeft(), reference), rect.size());
 }
 
-qreal qt_mac_flipYCoordinate(qreal y)
-{
-    return qt_mac_primaryScreenHeight() - y;
-}
-
-QPointF qt_mac_flipPoint(const NSPoint &p)
-{
-    return QPointF(p.x, qt_mac_flipYCoordinate(p.y));
-}
-
-NSPoint qt_mac_flipPoint(const QPoint &p)
-{
-    return NSMakePoint(p.x(), qt_mac_flipYCoordinate(p.y()));
-}
-
-NSPoint qt_mac_flipPoint(const QPointF &p)
-{
-    return NSMakePoint(p.x(), qt_mac_flipYCoordinate(p.y()));
-}
-
-NSRect qt_mac_flipRect(const QRect &rect)
-{
-    int flippedY = qt_mac_flipYCoordinate(rect.y() + rect.height());
-    return NSMakeRect(rect.x(), flippedY, rect.width(), rect.height());
-}
+// -------------------------------------------------------------------------
 
 Qt::MouseButton cocoaButton2QtButton(NSInteger buttonNum)
 {
@@ -301,9 +287,19 @@ QT_END_NAMESPACE
     the target-action for the OK/Cancel buttons and making
     sure the layout is consistent.
  */
-@implementation QNSPanelContentsWrapper
+@implementation QNSPanelContentsWrapper {
+    NSButton *_okButton;
+    NSButton *_cancelButton;
+    NSView *_panelContents;
+    NSEdgeInsets _panelContentsMargins;
+}
 
-- (instancetype)initWithPanelDelegate:(id<QT_MANGLE_NAMESPACE(QNSPanelDelegate)>)panelDelegate
+@synthesize okButton = _okButton;
+@synthesize cancelButton = _cancelButton;
+@synthesize panelContents = _panelContents;
+@synthesize panelContentsMargins = _panelContentsMargins;
+
+- (instancetype)initWithPanelDelegate:(id<QNSPanelDelegate>)panelDelegate
 {
     if ((self = [super initWithFrame:NSZeroRect])) {
         // create OK and Cancel buttons and add these as subviews
@@ -402,6 +398,22 @@ QT_END_NAMESPACE
     self.panelContents.needsDisplay = YES;
 
     self.needsDisplay = YES;
+    [super layout];
+}
+
+// -------------------------------------------------------------------------
+
+io_object_t q_IOObjectRetain(io_object_t obj)
+{
+    kern_return_t ret = IOObjectRetain(obj);
+    Q_ASSERT(!ret);
+    return obj;
+}
+
+void q_IOObjectRelease(io_object_t obj)
+{
+    kern_return_t ret = IOObjectRelease(obj);
+    Q_ASSERT(!ret);
 }
 
 @end

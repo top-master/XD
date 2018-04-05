@@ -40,13 +40,13 @@
 #include "qapplication.h"
 #include "qbitmap.h"
 #include "qdesktopwidget.h"
+#include <private/qdesktopwidget_p.h>
 #if QT_CONFIG(dialog)
 #include <private/qdialog_p.h>
 #endif
 #include "qdrawutil.h"
 #include "qevent.h"
 #include "qfontmetrics.h"
-#include "qmenu.h"
 #include "qstylepainter.h"
 #include "qpixmap.h"
 #include "qpointer.h"
@@ -59,16 +59,15 @@
 #if QT_CONFIG(dialogbuttonbox)
 #include "qdialogbuttonbox.h"
 #endif
-#if 0 // Used to be included in Qt4 for Q_WS_MAC
-#include "private/qmacstyle_mac_p.h"
-#include "private/qmacstyle_mac_p_p.h"
-#endif
 
 #ifndef QT_NO_ACCESSIBILITY
 #include "qaccessible.h"
 #endif
 
+#if QT_CONFIG(menu)
+#include "qmenu.h"
 #include "private/qmenu_p.h"
+#endif
 #include "private/qpushbutton_p.h"
 
 QT_BEGIN_NAMESPACE
@@ -80,6 +79,8 @@ QT_BEGIN_NAMESPACE
 
     \ingroup basicwidgets
     \inmodule QtWidgets
+
+    \image windows-pushbutton.png
 
     The push button, or command button, is perhaps the most commonly
     used widget in any graphical user interface. Push (click) a button
@@ -152,6 +153,11 @@ QT_BEGIN_NAMESPACE
     button is probably not what you want. When in doubt, use a tool
     button.
 
+    \note On \macos when a push button's width becomes smaller than 50 or
+    its height becomes smaller than 30, the button's corners are
+    changed from round to square. Use the setMinimumSize()
+    function to prevent this behavior.
+
     A variation of a command button is a menu button. These provide
     not just one command, but several, since when they are clicked
     they pop up a menu of options. Use the method setMenu() to
@@ -160,20 +166,6 @@ QT_BEGIN_NAMESPACE
     Other classes of buttons are option buttons (see QRadioButton) and
     check boxes (see QCheckBox).
 
-    \table 100%
-    \row \li \inlineimage macintosh-pushbutton.png Screenshot of a Macintosh style push button
-         \li A push button shown in the \l{Macintosh Style Widget Gallery}{Macintosh widget style}.
-
-         Note that when a button's width becomes smaller than 50 or
-         its height becomes smaller than 30, the button's corners are
-         changed from round to square. Use the setMinimumSize()
-         function to prevent this behavior.
-
-    \row \li \inlineimage windowsvista-pushbutton.png Screenshot of a Windows Vista style push button
-         \li A push button shown in the \l{Windows Vista Style Widget Gallery}{Windows Vista widget style}.
-    \row \li \inlineimage fusion-pushbutton.png Screenshot of a Fusion style push button
-         \li A push button shown in the \l{Fusion Style Widget Gallery}{Fusion widget style}.
-    \endtable
 
     In Qt, the QAbstractButton base class provides most of the modes
     and other API, and QPushButton provides GUI logic.
@@ -324,7 +316,7 @@ void QPushButton::initStyleOption(QStyleOptionButton *option) const
     option->features = QStyleOptionButton::None;
     if (d->flat)
         option->features |= QStyleOptionButton::Flat;
-#ifndef QT_NO_MENU
+#if QT_CONFIG(menu)
     if (d->menu)
         option->features |= QStyleOptionButton::HasMenu;
 #endif
@@ -429,7 +421,7 @@ QSize QPushButton::sizeHint() const
     if(!empty || !h)
         h = qMax(h, sz.height());
     opt.rect.setSize(QSize(w, h)); // PM_MenuButtonIndicator depends on the height
-#ifndef QT_NO_MENU
+#if QT_CONFIG(menu)
     if (menu())
         w += style()->pixelMetric(QStyle::PM_MenuButtonIndicator, &opt, this);
 #endif
@@ -469,7 +461,7 @@ void QPushButton::keyPressEvent(QKeyEvent *e)
             click();
             break;
         }
-        // fall through
+        Q_FALLTHROUGH();
     default:
         QAbstractButton::keyPressEvent(e);
     }
@@ -509,13 +501,13 @@ void QPushButton::focusOutEvent(QFocusEvent *e)
     }
 
     QAbstractButton::focusOutEvent(e);
-#ifndef QT_NO_MENU
+#if QT_CONFIG(menu)
     if (d->menu && d->menu->isVisible())        // restore pressed status
         setDown(true);
 #endif
 }
 
-#ifndef QT_NO_MENU
+#if QT_CONFIG(menu)
 /*!
     Associates the popup menu \a menu with this push button. This
     turns the button into a menu button, which in some styles will
@@ -524,7 +516,8 @@ void QPushButton::focusOutEvent(QFocusEvent *e)
     Ownership of the menu is \e not transferred to the push button.
 
     \image fusion-pushbutton-menu.png Screenshot of a Fusion style push button with popup menu.
-    A push button with popup menus shown in the \l{Fusion Style Widget Gallery}{Fusion widget style}.
+    A push button with popup menus shown in the \l{Qt Widget Gallery}
+    {Fusion widget style}.
 
     \sa menu()
 */
@@ -617,7 +610,7 @@ QPoint QPushButtonPrivate::adjustedMenuPosition()
     QPoint globalPos = q->mapToGlobal(rect.topLeft());
     int x = globalPos.x();
     int y = globalPos.y();
-    const QRect availableGeometry = QApplication::desktop()->availableGeometry(q);
+    const QRect availableGeometry = QDesktopWidgetPrivate::availableGeometry(q);
     if (horizontal) {
         if (globalPos.y() + rect.height() + menuSize.height() <= availableGeometry.bottom()) {
             y += rect.height();
@@ -637,7 +630,7 @@ QPoint QPushButtonPrivate::adjustedMenuPosition()
     return QPoint(x,y);
 }
 
-#endif // QT_NO_MENU
+#endif // QT_CONFIG(menu)
 
 void QPushButtonPrivate::resetLayoutItemMargins()
 {

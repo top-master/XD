@@ -53,14 +53,14 @@
 
 #include <QtWidgets/private/qtwidgetsglobal_p.h>
 
-#if !defined(QT_NO_GRAPHICSVIEW)
-
 #include "qgraphicssceneindex_p.h"
 #include "qgraphicsitem_p.h"
 #include "qgraphicsscene_bsp_p.h"
 
 #include <QtCore/qrect.h>
 #include <QtCore/qlist.h>
+
+QT_REQUIRE_CONFIG(graphicsview);
 
 QT_BEGIN_NAMESPACE
 
@@ -77,25 +77,25 @@ public:
     QGraphicsSceneBspTreeIndex(QGraphicsScene *scene = 0);
     ~QGraphicsSceneBspTreeIndex();
 
-    QList<QGraphicsItem *> estimateItems(const QRectF &rect, Qt::SortOrder order) const Q_DECL_OVERRIDE;
-    QList<QGraphicsItem *> estimateTopLevelItems(const QRectF &rect, Qt::SortOrder order) const Q_DECL_OVERRIDE;
-    QList<QGraphicsItem *> items(Qt::SortOrder order = Qt::DescendingOrder) const Q_DECL_OVERRIDE;
+    QList<QGraphicsItem *> estimateItems(const QRectF &rect, Qt::SortOrder order) const override;
+    QList<QGraphicsItem *> estimateTopLevelItems(const QRectF &rect, Qt::SortOrder order) const override;
+    QList<QGraphicsItem *> items(Qt::SortOrder order = Qt::DescendingOrder) const override;
 
     int bspTreeDepth() const;
     void setBspTreeDepth(int depth);
 
 protected Q_SLOTS:
-    void updateSceneRect(const QRectF &rect) Q_DECL_OVERRIDE;
+    void updateSceneRect(const QRectF &rect) override;
 
 protected:
-    bool event(QEvent *event) Q_DECL_OVERRIDE;
-    void clear() Q_DECL_OVERRIDE;
+    bool event(QEvent *event) override;
+    void clear() override;
 
-    void addItem(QGraphicsItem *item) Q_DECL_OVERRIDE;
-    void removeItem(QGraphicsItem *item) Q_DECL_OVERRIDE;
-    void prepareBoundingRectChange(const QGraphicsItem *item) Q_DECL_OVERRIDE;
+    void addItem(QGraphicsItem *item) override;
+    void removeItem(QGraphicsItem *item) override;
+    void prepareBoundingRectChange(const QGraphicsItem *item) override;
 
-    void itemChange(const QGraphicsItem *item, QGraphicsItem::GraphicsItemChange change, const void *const value) Q_DECL_OVERRIDE;
+    void itemChange(const QGraphicsItem *item, QGraphicsItem::GraphicsItemChange change, const void *const value) override;
 
 private :
     Q_DECLARE_PRIVATE(QGraphicsSceneBspTreeIndex)
@@ -198,7 +198,5 @@ static inline bool QRectF_intersects(const QRectF &s, const QRectF &r)
 }
 
 QT_END_NAMESPACE
-
-#endif // QT_NO_GRAPHICSVIEW
 
 #endif // QGRAPHICSBSPTREEINDEX_H

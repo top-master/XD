@@ -39,8 +39,6 @@
 
 #include "qglobal.h"
 
-#ifndef QT_NO_GRAPHICSVIEW
-
 #include "qgraphicslayout.h"
 #include "qgraphicsproxywidget.h"
 #include "private/qgraphicsproxywidget_p.h"
@@ -55,9 +53,12 @@
 #include <QtGui/qpainter.h>
 #include <QtWidgets/qstyleoption.h>
 #include <QtWidgets/qgraphicsview.h>
-#include <QtWidgets/qlistview.h>
+#if QT_CONFIG(lineedit)
 #include <QtWidgets/qlineedit.h>
+#endif
+#if QT_CONFIG(textedit)
 #include <QtWidgets/qtextedit.h>
+#endif
 
 QT_BEGIN_NAMESPACE
 
@@ -1273,7 +1274,7 @@ void QGraphicsProxyWidget::mouseDoubleClickEvent(QGraphicsSceneMouseEvent *event
 /*!
     \reimp
 */
-#ifndef QT_NO_WHEELEVENT
+#if QT_CONFIG(wheelevent)
 void QGraphicsProxyWidget::wheelEvent(QGraphicsSceneWheelEvent *event)
 {
     Q_D(QGraphicsProxyWidget);
@@ -1536,6 +1537,14 @@ void QGraphicsProxyWidget::paint(QPainter *painter, const QStyleOptionGraphicsIt
 }
 
 /*!
+  \enum QGraphicsProxyWidget::anonymous
+
+  The value returned by the virtual type() function.
+
+  \value Type A graphics proxy widget
+*/
+
+/*!
     \reimp
 */
 int QGraphicsProxyWidget::type() const
@@ -1607,5 +1616,3 @@ QGraphicsProxyWidget *QGraphicsProxyWidget::newProxyWidget(const QWidget *)
 QT_END_NAMESPACE
 
 #include "moc_qgraphicsproxywidget.cpp"
-
-#endif //QT_NO_GRAPHICSVIEW

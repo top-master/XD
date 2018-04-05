@@ -59,7 +59,7 @@
 #include <private/qtreeview_p.h>
 #include <QtWidgets/qheaderview.h>
 
-#ifndef QT_NO_TREEWIDGET
+QT_REQUIRE_CONFIG(treewidget);
 
 QT_BEGIN_NAMESPACE
 
@@ -91,24 +91,24 @@ public:
     void itemChanged(QTreeWidgetItem *item);
 
     QModelIndex index(const QTreeWidgetItem *item, int column) const;
-    QModelIndex index(int row, int column, const QModelIndex &parent) const Q_DECL_OVERRIDE;
-    QModelIndex parent(const QModelIndex &child) const Q_DECL_OVERRIDE;
-    int rowCount(const QModelIndex &parent) const Q_DECL_OVERRIDE;
-    int columnCount(const QModelIndex &parent = QModelIndex()) const Q_DECL_OVERRIDE;
-    bool hasChildren(const QModelIndex &parent) const Q_DECL_OVERRIDE;
+    QModelIndex index(int row, int column, const QModelIndex &parent) const override;
+    QModelIndex parent(const QModelIndex &child) const override;
+    int rowCount(const QModelIndex &parent) const override;
+    int columnCount(const QModelIndex &parent = QModelIndex()) const override;
+    bool hasChildren(const QModelIndex &parent) const override;
 
-    QVariant data(const QModelIndex &index, int role = Qt::DisplayRole) const Q_DECL_OVERRIDE;
-    bool setData(const QModelIndex &index, const QVariant &value, int role) Q_DECL_OVERRIDE;
+    QVariant data(const QModelIndex &index, int role = Qt::DisplayRole) const override;
+    bool setData(const QModelIndex &index, const QVariant &value, int role) override;
 
-    QMap<int, QVariant> itemData(const QModelIndex &index) const Q_DECL_OVERRIDE;
+    QMap<int, QVariant> itemData(const QModelIndex &index) const override;
 
-    QVariant headerData(int section, Qt::Orientation orientation, int role) const Q_DECL_OVERRIDE;
+    QVariant headerData(int section, Qt::Orientation orientation, int role) const override;
     bool setHeaderData(int section, Qt::Orientation orientation, const QVariant &value,
-                       int role) Q_DECL_OVERRIDE;
+                       int role) override;
 
-    Qt::ItemFlags flags(const QModelIndex &index) const Q_DECL_OVERRIDE;
+    Qt::ItemFlags flags(const QModelIndex &index) const override;
 
-    void sort(int column, Qt::SortOrder order) Q_DECL_OVERRIDE;
+    void sort(int column, Qt::SortOrder order) override;
     void ensureSorted(int column, Qt::SortOrder order,
                       int start, int end, const QModelIndex &parent);
     static bool itemLessThan(const QPair<QTreeWidgetItem*,int> &left,
@@ -120,17 +120,17 @@ public:
         const QList<QTreeWidgetItem*>::iterator &end,
         Qt::SortOrder order, QTreeWidgetItem *item);
 
-    bool insertRows(int row, int count, const QModelIndex &) Q_DECL_OVERRIDE;
-    bool insertColumns(int column, int count, const QModelIndex &) Q_DECL_OVERRIDE;
+    bool insertRows(int row, int count, const QModelIndex &) override;
+    bool insertColumns(int column, int count, const QModelIndex &) override;
 
-    bool removeRows(int row, int count, const QModelIndex &parent = QModelIndex()) Q_DECL_OVERRIDE;
+    bool removeRows(int row, int count, const QModelIndex &parent = QModelIndex()) override;
 
     // dnd
-    QStringList mimeTypes() const Q_DECL_OVERRIDE;
-    QMimeData *mimeData(const QModelIndexList &indexes) const Q_DECL_OVERRIDE;
+    QStringList mimeTypes() const override;
+    QMimeData *mimeData(const QModelIndexList &indexes) const override;
     bool dropMimeData(const QMimeData *data, Qt::DropAction action,
-                      int row, int column, const QModelIndex &parent) Q_DECL_OVERRIDE;
-    Qt::DropActions supportedDropActions() const Q_DECL_OVERRIDE;
+                      int row, int column, const QModelIndex &parent) override;
+    Qt::DropActions supportedDropActions() const override;
 
     QMimeData *internalMimeData() const;
 
@@ -139,13 +139,13 @@ public:
 
 protected:
     QTreeModel(QTreeModelPrivate &, QTreeWidget *parent = 0);
-    void emitDataChanged(QTreeWidgetItem *item, int column);
+    void emitDataChanged(QTreeWidgetItem *item, int column, const QVector<int> &roles);
     void beginInsertItems(QTreeWidgetItem *parent, int row, int count);
     void endInsertItems();
     void beginRemoveItems(QTreeWidgetItem *parent, int row, int count);
     void endRemoveItems();
     void sortItems(QList<QTreeWidgetItem*> *items, int column, Qt::SortOrder order);
-    void timerEvent(QTimerEvent *) Q_DECL_OVERRIDE;
+    void timerEvent(QTimerEvent *) override;
 
 private:
     QTreeWidgetItem *rootItem;
@@ -241,7 +241,5 @@ public:
 };
 
 QT_END_NAMESPACE
-
-#endif // QT_NO_TREEWIDGET
 
 #endif // QTREEWIDGET_P_H

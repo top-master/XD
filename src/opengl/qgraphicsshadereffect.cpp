@@ -39,8 +39,6 @@
 
 #include "qgraphicsshadereffect_p.h"
 
-#ifndef QT_NO_GRAPHICSEFFECT
-
 #include "qglshaderprogram.h"
 #include "gl2paintengineex/qglcustomshaderstage_p.h"
 #define QGL_HAVE_CUSTOM_SHADERS 1
@@ -145,7 +143,7 @@ public:
         setSource(source);
     }
 
-    void setUniforms(QGLShaderProgram *program) Q_DECL_OVERRIDE;
+    void setUniforms(QGLShaderProgram *program) override;
 
     QGraphicsShaderEffect *effect;
 };
@@ -312,5 +310,3 @@ void QGraphicsShaderEffect::setUniforms(QGLShaderProgram *program)
 }
 
 QT_END_NAMESPACE
-
-#endif // QT_NO_GRAPHICSEFFECT

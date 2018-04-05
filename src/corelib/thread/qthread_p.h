@@ -63,6 +63,7 @@
 #include "private/qobject_p.h"
 
 #include <algorithm>
+#include <atomic>
 
 #ifdef Q_OS_WINRT
 namespace ABI {
@@ -165,7 +166,7 @@ public:
     bool running;
     bool finished;
     bool isInFinish; //when in QThreadPrivate::finish
-    bool interruptionRequested;
+    std::atomic<bool> interruptionRequested;
 
     bool exited;
     int returnCode;
@@ -184,8 +185,8 @@ public:
 #endif // Q_OS_UNIX
 
 #ifdef Q_OS_WIN
-    static unsigned int __stdcall start(void *);
-    static void finish(void *, bool lockAnyway=true);
+    static unsigned int __stdcall start(void *) Q_DECL_NOEXCEPT;
+    static void finish(void *, bool lockAnyway=true) Q_DECL_NOEXCEPT;
 
     Qt::HANDLE handle;
     unsigned int id;
@@ -194,7 +195,7 @@ public:
 #endif // Q_OS_WIN
     QThreadData *data;
 
-    static void createEventDispatcher(QThreadData *data);
+    static QAbstractEventDispatcher *createEventDispatcher(QThreadData *data);
 
     void ref()
     {
@@ -221,7 +222,7 @@ public:
 
     static void setCurrentThread(QThread*) {}
     static QThread *threadForId(int) { return QThread::currentThread(); }
-    static void createEventDispatcher(QThreadData *data);
+    static QAbstractEventDispatcher *createEventDispatcher(QThreadData *data);
 
     void ref() {}
     void deref() {}
@@ -317,7 +318,7 @@ public:
     void init();
 
 private:
-    void run() Q_DECL_OVERRIDE;
+    void run() override;
 };
 
 QT_END_NAMESPACE

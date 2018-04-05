@@ -39,6 +39,7 @@
 
 #include "qcocoacursor.h"
 #include "qcocoawindow.h"
+#include "qcocoascreen.h"
 #include "qcocoahelpers.h"
 #include <QtGui/private/qcoregraphics_p.h>
 
@@ -70,7 +71,7 @@ void QCocoaCursor::changeCursor(QCursor *cursor, QWindow *window)
 
 QPoint QCocoaCursor::pos() const
 {
-    return qt_mac_flipPoint([NSEvent mouseLocation]).toPoint();
+    return QCocoaScreen::mapFromNative([NSEvent mouseLocation]).toPoint();
 }
 
 void QCocoaCursor::setPos(const QPoint &position)
@@ -86,7 +87,7 @@ void QCocoaCursor::setPos(const QPoint &position)
 
 NSCursor *QCocoaCursor::convertCursor(QCursor *cursor)
 {
-    if (cursor == Q_NULLPTR)
+    if (cursor == nullptr)
         return 0;
 
     const Qt::CursorShape newShape = cursor->shape();

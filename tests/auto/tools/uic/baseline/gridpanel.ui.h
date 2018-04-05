@@ -10,14 +10,11 @@
 #define GRIDPANEL_H
 
 #include <QtCore/QVariant>
-#include <QtWidgets/QAction>
 #include <QtWidgets/QApplication>
-#include <QtWidgets/QButtonGroup>
 #include <QtWidgets/QCheckBox>
 #include <QtWidgets/QGridLayout>
 #include <QtWidgets/QGroupBox>
 #include <QtWidgets/QHBoxLayout>
-#include <QtWidgets/QHeaderView>
 #include <QtWidgets/QLabel>
 #include <QtWidgets/QPushButton>
 #include <QtWidgets/QSpacerItem>
@@ -135,14 +132,14 @@ public:
 
     void retranslateUi(QWidget *qdesigner_internal__GridPanel)
     {
-        qdesigner_internal__GridPanel->setWindowTitle(QApplication::translate("qdesigner_internal::GridPanel", "Form", Q_NULLPTR));
-        m_gridGroupBox->setTitle(QApplication::translate("qdesigner_internal::GridPanel", "Grid", Q_NULLPTR));
-        m_visibleCheckBox->setText(QApplication::translate("qdesigner_internal::GridPanel", "Visible", Q_NULLPTR));
-        label->setText(QApplication::translate("qdesigner_internal::GridPanel", "Grid &X", Q_NULLPTR));
-        m_snapXCheckBox->setText(QApplication::translate("qdesigner_internal::GridPanel", "Snap", Q_NULLPTR));
-        m_resetButton->setText(QApplication::translate("qdesigner_internal::GridPanel", "Reset", Q_NULLPTR));
-        label_2->setText(QApplication::translate("qdesigner_internal::GridPanel", "Grid &Y", Q_NULLPTR));
-        m_snapYCheckBox->setText(QApplication::translate("qdesigner_internal::GridPanel", "Snap", Q_NULLPTR));
+        qdesigner_internal__GridPanel->setWindowTitle(QApplication::translate("qdesigner_internal::GridPanel", "Form", nullptr));
+        m_gridGroupBox->setTitle(QApplication::translate("qdesigner_internal::GridPanel", "Grid", nullptr));
+        m_visibleCheckBox->setText(QApplication::translate("qdesigner_internal::GridPanel", "Visible", nullptr));
+        label->setText(QApplication::translate("qdesigner_internal::GridPanel", "Grid &X", nullptr));
+        m_snapXCheckBox->setText(QApplication::translate("qdesigner_internal::GridPanel", "Snap", nullptr));
+        m_resetButton->setText(QApplication::translate("qdesigner_internal::GridPanel", "Reset", nullptr));
+        label_2->setText(QApplication::translate("qdesigner_internal::GridPanel", "Grid &Y", nullptr));
+        m_snapYCheckBox->setText(QApplication::translate("qdesigner_internal::GridPanel", "Snap", nullptr));
     } // retranslateUi
 
 };

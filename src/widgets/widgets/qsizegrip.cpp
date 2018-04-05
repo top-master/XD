@@ -39,8 +39,6 @@
 
 #include "qsizegrip.h"
 
-#ifndef QT_NO_SIZEGRIP
-
 #include "qapplication.h"
 #include "qevent.h"
 #include "qpainter.h"
@@ -57,6 +55,7 @@
 #endif
 
 #include <private/qwidget_p.h>
+#include <private/qdesktopwidget_p.h>
 #include <QtWidgets/qabstractscrollarea.h>
 
 QT_BEGIN_NAMESPACE
@@ -197,7 +196,7 @@ Qt::Corner QSizeGripPrivate::corner() const
     \table 50%
     \row \li \inlineimage fusion-statusbar-sizegrip.png Screenshot of a Fusion style size grip
     \li A size grip widget at the bottom-right corner of a main window, shown in the
-    \l{Fusion Style Widget Gallery}{Fusion widget style}.
+    \l{Qt Widget Gallery}{Fusion widget style}.
     \endtable
 
     The QSizeGrip class inherits QWidget and reimplements the \l
@@ -314,19 +313,19 @@ void QSizeGrip::mousePressEvent(QMouseEvent * e)
     bool hasVerticalSizeConstraint = true;
     bool hasHorizontalSizeConstraint = true;
     if (tlw->isWindow())
-        availableGeometry = QApplication::desktop()->availableGeometry(tlw);
+        availableGeometry = QDesktopWidgetPrivate::availableGeometry(tlw);
     else {
         const QWidget *tlwParent = tlw->parentWidget();
         // Check if tlw is inside QAbstractScrollArea/QScrollArea.
         // If that's the case tlw->parentWidget() will return the viewport
         // and tlw->parentWidget()->parentWidget() will return the scroll area.
-#ifndef QT_NO_SCROLLAREA
+#if QT_CONFIG(scrollarea)
         QAbstractScrollArea *scrollArea = qobject_cast<QAbstractScrollArea *>(tlwParent->parentWidget());
         if (scrollArea) {
             hasHorizontalSizeConstraint = scrollArea->horizontalScrollBarPolicy() == Qt::ScrollBarAlwaysOff;
             hasVerticalSizeConstraint = scrollArea->verticalScrollBarPolicy() == Qt::ScrollBarAlwaysOff;
         }
-#endif // QT_NO_SCROLLAREA
+#endif // QT_CONFIG(scrollarea)
         availableGeometry = tlwParent->contentsRect();
     }
 
@@ -507,5 +506,3 @@ bool QSizeGrip::event(QEvent *event)
 QT_END_NAMESPACE
 
 #include "moc_qsizegrip.cpp"
-
-#endif //QT_NO_SIZEGRIP

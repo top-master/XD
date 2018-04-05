@@ -42,6 +42,8 @@
 
 #include <QtGraphicsSupport/private/qrasterbackingstore_p.h>
 
+#include <private/qcore_mac_p.h>
+
 QT_BEGIN_NAMESPACE
 
 class QCocoaBackingStore : public QRasterBackingStore
@@ -50,10 +52,12 @@ public:
     QCocoaBackingStore(QWindow *window);
     ~QCocoaBackingStore();
 
-    void flush(QWindow *, const QRegion &, const QPoint &) Q_DECL_OVERRIDE;
+    void flush(QWindow *, const QRegion &, const QPoint &) override;
 
 private:
-    QImage::Format format() const Q_DECL_OVERRIDE;
+    bool windowHasUnifiedToolbar() const;
+    QImage::Format format() const override;
+    void redrawRoundedBottomCorners(CGRect) const;
 };
 
 QT_END_NAMESPACE

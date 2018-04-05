@@ -297,23 +297,27 @@ bool QFileSystemEntry::isAbsolute() const
 bool QFileSystemEntry::isDriveRoot() const
 {
     resolveFilePath();
+    return QFileSystemEntry::isDriveRootPath(m_filePath);
+}
+
+bool QFileSystemEntry::isDriveRootPath(const QString &path)
+{
 #ifndef Q_OS_WINRT
-    return (m_filePath.length() == 3
-           && m_filePath.at(0).isLetter() && m_filePath.at(1) == QLatin1Char(':')
-           && m_filePath.at(2) == QLatin1Char('/'));
+    return (path.length() == 3
+           && path.at(0).isLetter() && path.at(1) == QLatin1Char(':')
+           && path.at(2) == QLatin1Char('/'));
 #else // !Q_OS_WINRT
-    return m_filePath == QDir::rootPath();
+    return path == QDir::rootPath();
 #endif // !Q_OS_WINRT
 }
-#endif
+#endif // Q_OS_WIN
 
-bool QFileSystemEntry::isRoot() const
+bool QFileSystemEntry::isRootPath(const QString &path)
 {
-    resolveFilePath();
-    if (m_filePath == QLatin1String("/")
+    if (path == QLatin1String("/")
 #if defined(Q_OS_WIN)
-            || isDriveRoot()
-            || isUncRoot(m_filePath)
+            || isDriveRootPath(path)
+            || isUncRoot(path)
 #endif
             )
         return true;
@@ -321,9 +325,10 @@ bool QFileSystemEntry::isRoot() const
     return false;
 }
 
-bool QFileSystemEntry::isEmpty() const
+bool QFileSystemEntry::isRoot() const
 {
-    return m_filePath.isEmpty() && m_nativeFilePath.isEmpty();
+    resolveFilePath();
+    return isRootPath(m_filePath);
 }
 
 // private methods

@@ -31,13 +31,9 @@
 #include <QtGui>
 #include <QtWidgets>
 
-static inline void setFrameless(QWidget *w)
-{
-    Qt::WindowFlags flags = w->windowFlags();
-    flags |= Qt::FramelessWindowHint;
-    flags &= ~(Qt::WindowTitleHint | Qt::WindowSystemMenuHint | Qt::WindowMinMaxButtonsHint | Qt::WindowCloseButtonHint);
-    w->setWindowFlags(flags);
-}
+#include <QtTest/private/qtesthelpers_p.h>
+
+using namespace QTestPrivate;
 
 class tst_QBoxLayout : public QObject
 {
@@ -60,6 +56,7 @@ private slots:
     void taskQTBUG_40609_addingWidgetToItsOwnLayout();
     void taskQTBUG_40609_addingLayoutToItself();
     void replaceWidget();
+    void indexOf();
 };
 
 class CustomLayoutStyle : public QProxyStyle
@@ -160,7 +157,7 @@ void tst_QBoxLayout::sizeHint()
     lay1->addLayout(lay2);
     window.setLayout(lay1);
     window.show();
-    QTest::qWaitForWindowExposed(&window);
+    QVERIFY(QTest::qWaitForWindowExposed(&window));
     label->setText("foooooooo baaaaaaar");
     QSize sh = lay1->sizeHint();
     QApplication::processEvents();
@@ -181,7 +178,7 @@ void tst_QBoxLayout::sizeConstraints()
     lay->setSizeConstraint(QLayout::SetFixedSize);
     window.setLayout(lay);
     window.show();
-    QTest::qWaitForWindowExposed(&window);
+    QVERIFY(QTest::qWaitForWindowExposed(&window));
     QSize sh = window.sizeHint();
     delete lay->takeAt(1);
     QVERIFY(sh.width() >= window.sizeHint().width() &&
@@ -228,7 +225,7 @@ void tst_QBoxLayout::setStyleShouldChangeSpacing()
     style1->hspacing = 6;
     window.setStyle(style1.data());
     window.show();
-    QTest::qWaitForWindowExposed(&window);
+    QVERIFY(QTest::qWaitForWindowExposed(&window));
 
     int spacing = pb2->geometry().left() - pb1->geometry().right() - 1;
     QCOMPARE(spacing, 6);
@@ -297,7 +294,7 @@ void tst_QBoxLayout::taskQTBUG_40609_addingWidgetToItsOwnLayout(){
     layout.setObjectName("ef9e2b42298e0e6420105bb");
 
     QTest::ignoreMessage(QtWarningMsg, "QLayout: Cannot add a null widget to QVBoxLayout/ef9e2b42298e0e6420105bb");
-    layout.addWidget(Q_NULLPTR);
+    layout.addWidget(nullptr);
     QCOMPARE(layout.count(), 0);
 
     QTest::ignoreMessage(QtWarningMsg, "QLayout: Cannot add parent widget QWidget/347b469225a24a0ef05150a to its child layout QVBoxLayout/ef9e2b42298e0e6420105bb");
@@ -313,7 +310,7 @@ void tst_QBoxLayout::taskQTBUG_40609_addingLayoutToItself(){
     layout.setObjectName("cc751dd0f50f62b05a62da");
 
     QTest::ignoreMessage(QtWarningMsg, "QLayout: Cannot add a null layout to QVBoxLayout/cc751dd0f50f62b05a62da");
-    layout.addLayout(Q_NULLPTR);
+    layout.addLayout(nullptr);
     QCOMPARE(layout.count(), 0);
 
     QTest::ignoreMessage(QtWarningMsg, "QLayout: Cannot add layout QVBoxLayout/cc751dd0f50f62b05a62da to itself");
@@ -516,6 +513,25 @@ void tst_QBoxLayout::replaceWidget()
 
     QCOMPARE(boxLayout->indexOf(replaceFrom), -1);
     QCOMPARE(boxLayout->indexOf(replaceTo), 1);
+}
+
+void tst_QBoxLayout::indexOf()
+{
+    QWidget w;
+    auto outer = new QVBoxLayout(&w);
+    auto inner = new QHBoxLayout();
+    outer->addLayout(inner);
+    auto widget1 = new QWidget();
+    QWidget widget2;
+    inner->addWidget(widget1);
+
+    QCOMPARE(inner->indexOf(widget1), 0);
+    QCOMPARE(inner->indexOf(&widget2), -1);
+    QCOMPARE(outer->indexOf(widget1), -1);
+    QCOMPARE(outer->indexOf(&widget2), -1);
+    QCOMPARE(outer->indexOf(outer), -1);
+    QCOMPARE(outer->indexOf(inner), 0);
+    QCOMPARE(inner->indexOf(inner->itemAt(0)), 0);
 }
 
 QTEST_MAIN(tst_QBoxLayout)

@@ -33,6 +33,7 @@
 #  include <QtCore/QCoreApplication>
 #endif
 
+#include <QtCore/private/qglobal_p.h>
 #include <QtTest/QtTest>
 
 #include <qtimer.h>
@@ -74,6 +75,7 @@ private slots:
 
     void dontBlockEvents();
     void postedEventsShouldNotStarveTimers();
+    void connectTo();
 };
 
 class TimerHelper : public QObject
@@ -498,6 +500,9 @@ void tst_QTimer::moveToThread()
 {
 #if defined(Q_OS_WIN32)
     QSKIP("Does not work reliably on Windows :(");
+#elif defined(Q_OS_MACOS)
+    if (__builtin_available(macOS 10.12, *))
+        QSKIP("Does not work reliably on macOS 10.12 (QTBUG-59679)");
 #endif
     QTimer ti1;
     QTimer ti2;
@@ -750,7 +755,7 @@ void tst_QTimer::recurseOnTimeoutAndStopTimer()
 
 struct CountedStruct
 {
-    CountedStruct(int *count, QThread *t = Q_NULLPTR) : count(count), thread(t) { }
+    CountedStruct(int *count, QThread *t = nullptr) : count(count), thread(t) { }
     ~CountedStruct() { }
     void operator()() const { ++(*count); if (thread) QCOMPARE(QThread::currentThread(), thread); }
 
@@ -759,7 +764,7 @@ struct CountedStruct
 };
 
 static QScopedPointer<QEventLoop> _e;
-static QThread *_t = Q_NULLPTR;
+static QThread *_t = nullptr;
 
 class StaticEventLoop
 {
@@ -823,7 +828,7 @@ void tst_QTimer::singleShotToFunctors()
     _t->quit();
     _t->wait();
     _t->deleteLater();
-    _t = Q_NULLPTR;
+    _t = nullptr;
 
     {
         QObject c3;
@@ -832,7 +837,6 @@ void tst_QTimer::singleShotToFunctors()
     QTest::qWait(800);
     QCOMPARE(count, 2);
 
-#if defined(Q_COMPILER_LAMBDA)
     QTimer::singleShot(0, [&count] { ++count; });
     QCoreApplication::processEvents();
     QCOMPARE(count, 3);
@@ -851,10 +855,18 @@ void tst_QTimer::singleShotToFunctors()
 
     thread.quit();
     thread.wait();
-#endif
+
+    struct MoveOnly : CountedStruct {
+        Q_DISABLE_COPY(MoveOnly);
+        MoveOnly(MoveOnly &&o) : CountedStruct(std::move(o)) {};
+        MoveOnly(int *c) : CountedStruct(c) {}
+    };
+    QTimer::singleShot(0, MoveOnly(&count));
+    QCoreApplication::processEvents();
+    QCOMPARE(count, 5);
 
     _e.reset();
-    _t = Q_NULLPTR;
+    _t = nullptr;
 }
 
 void tst_QTimer::singleShot_chrono()
@@ -1007,6 +1019,32 @@ void tst_QTimer::crossThreadSingleShotToFunctor()
     t.quit();
     t.wait();
     delete o;
+}
+
+void tst_QTimer::connectTo()
+{
+    QTimer timer;
+    TimerHelper timerHelper;
+    timer.setInterval(0);
+    timer.start();
+
+    auto context = new QObject();
+
+    int count = 0;
+    timer.connectTo([&count] { count++; });
+    QMetaObject::Connection connection = timer.connectTo(context, [&count] { count++; });
+    timer.connectTo(&timerHelper, &TimerHelper::timeout);
+    timer.connectTo(&timer, &QTimer::stop);
+
+
+    QTest::qWait(100);
+    QCOMPARE(count, 2);
+    QCOMPARE(timerHelper.count, 1);
+
+    // Test that connection is bound to context lifetime
+    QVERIFY(connection);
+    delete context;
+    QVERIFY(!connection);
 }
 
 QTEST_MAIN(tst_QTimer)

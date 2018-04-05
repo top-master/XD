@@ -78,6 +78,8 @@ class QPlatformSessionManager;
 class QKeyEvent;
 class QPlatformOffscreenSurface;
 class QOffscreenSurface;
+class QPlatformVulkanInstance;
+class QVulkanInstance;
 
 class Q_GUI_EXPORT QPlatformIntegration
 {
@@ -95,11 +97,13 @@ public:
         NonFullScreenWindows,
         NativeWidgets,
         WindowManagement,
+        WindowActivation, // whether requestActivate is supported
         SyncState,
         RasterGLSurface,
         AllGLFunctionsQueryable,
         ApplicationIcon,
-        SwitchableWidgetComposition
+        SwitchableWidgetComposition,
+        TopStackedNativeChildWindows
     };
 
     virtual ~QPlatformIntegration() { }
@@ -160,6 +164,8 @@ public:
         ItemViewActivateItemOnSingleClick,
         UiEffects,
         WheelScrollLines,
+        ShowShortcutsInContextMenus,
+        MouseQuickSelectionThreshold
     };
 
     virtual QVariant styleHint(StyleHint hint) const;
@@ -187,6 +193,10 @@ public:
     void removeScreen(QScreen *screen);
 
     virtual void beep() const;
+
+#if QT_CONFIG(vulkan) || defined(Q_CLANG_QDOC)
+    virtual QPlatformVulkanInstance *createPlatformVulkanInstance(QVulkanInstance *instance) const;
+#endif
 
 protected:
     void screenAdded(QPlatformScreen *screen, bool isPrimary = false);

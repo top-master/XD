@@ -388,7 +388,7 @@ static void qt_palette_from_color(QPalette &pal, const QColor &button)
 
     \warning Some styles do not use the palette for all drawing, for
     instance, if they make use of native theme engines. This is the
-    case for both the Windows XP, Windows Vista, and the \macos
+    case for both the Windows Vista and the \macos
     styles.
 
     \sa QApplication::setPalette(), QWidget::setPalette(), QColor
@@ -751,21 +751,24 @@ const QBrush &QPalette::brush(ColorGroup gr, ColorRole cr) const
 void QPalette::setBrush(ColorGroup cg, ColorRole cr, const QBrush &b)
 {
     Q_ASSERT(cr < NColorRoles);
-    detach();
-    if(cg >= (int)NColorGroups) {
-        if(cg == All) {
-            for(int i = 0; i < (int)NColorGroups; i++)
-                d->br[i][cr] = b;
-            data.resolve_mask |= (1<<cr);
-            return;
-        } else if(cg == Current) {
-            cg = (ColorGroup)data.current_group;
-        } else {
-            qWarning("QPalette::setBrush: Unknown ColorGroup: %d", (int)cg);
-            cg = Active;
-        }
+
+    if (cg == All) {
+        for (uint i = 0; i < NColorGroups; i++)
+            setBrush(ColorGroup(i), cr, b);
+        return;
     }
-    d->br[cg][cr] = b;
+
+    if (cg == Current) {
+        cg = ColorGroup(data.current_group);
+    } else if (cg >= NColorGroups) {
+        qWarning("QPalette::setBrush: Unknown ColorGroup: %d", cg);
+        cg = Active;
+    }
+
+    if (d->br[cg][cr] != b) {
+        detach();
+        d->br[cg][cr] = b;
+    }
     data.resolve_mask |= (1<<cr);
 }
 
@@ -1091,7 +1094,6 @@ void QPalette::setColorGroup(ColorGroup cg, const QBrush &foreground, const QBru
                              const QBrush &link, const QBrush &link_visited,
                              const QBrush &toolTipBase, const QBrush &toolTipText)
 {
-    detach();
     setBrush(cg, WindowText, foreground);
     setBrush(cg, Button, button);
     setBrush(cg, Light, light);
@@ -1115,14 +1117,14 @@ void QPalette::setColorGroup(ColorGroup cg, const QBrush &foreground, const QBru
 
 Q_GUI_EXPORT QPalette qt_fusionPalette()
 {
-    QColor backGround(239, 235, 231);
+    QColor backGround(239, 239, 239);
     QColor light = backGround.lighter(150);
     QColor mid(backGround.darker(130));
     QColor midLight = mid.lighter(110);
     QColor base = Qt::white;
     QColor disabledBase(backGround);
     QColor dark = backGround.darker(150);
-    QColor darkDisabled = QColor(209, 200, 191).darker(110);
+    QColor darkDisabled = QColor(209, 209, 209).darker(110);
     QColor text = Qt::black;
     QColor hightlightedText = Qt::white;
     QColor disabledText = QColor(190, 190, 190);
@@ -1145,7 +1147,7 @@ Q_GUI_EXPORT QPalette qt_fusionPalette()
 
     fusionPalette.setBrush(QPalette::Active, QPalette::Highlight, QColor(48, 140, 198));
     fusionPalette.setBrush(QPalette::Inactive, QPalette::Highlight, QColor(48, 140, 198));
-    fusionPalette.setBrush(QPalette::Disabled, QPalette::Highlight, QColor(145, 141, 126));
+    fusionPalette.setBrush(QPalette::Disabled, QPalette::Highlight, QColor(145, 145, 145));
     return fusionPalette;
 }
 

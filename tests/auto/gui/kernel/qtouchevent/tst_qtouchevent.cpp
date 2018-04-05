@@ -48,7 +48,7 @@ public:
     ulong timestamp;
     QTouchDevice *deviceFromEvent;
 
-    explicit tst_QTouchEventWidget(QWidget *parent = Q_NULLPTR) : QWidget(parent)
+    explicit tst_QTouchEventWidget(QWidget *parent = nullptr) : QWidget(parent)
     {
         reset();
     }
@@ -63,7 +63,7 @@ public:
         deleteInTouchBegin = deleteInTouchUpdate = deleteInTouchEnd = false;
     }
 
-    bool event(QEvent *event) Q_DECL_OVERRIDE
+    bool event(QEvent *event) override
     {
         switch (event->type()) {
         case QEvent::TouchBegin:
@@ -117,7 +117,7 @@ public:
     bool deleteInTouchBegin, deleteInTouchUpdate, deleteInTouchEnd;
     tst_QTouchEventGraphicsItem **weakpointer;
 
-    explicit tst_QTouchEventGraphicsItem(QGraphicsItem *parent = Q_NULLPTR)
+    explicit tst_QTouchEventGraphicsItem(QGraphicsItem *parent = nullptr)
         : QGraphicsItem(parent), weakpointer(0)
     {
         reset();
@@ -140,13 +140,13 @@ public:
         deleteInTouchBegin = deleteInTouchUpdate = deleteInTouchEnd = false;
     }
 
-    QRectF boundingRect() const Q_DECL_OVERRIDE { return QRectF(0, 0, 10, 10); }
-    void paint(QPainter *painter, const QStyleOptionGraphicsItem *, QWidget *) Q_DECL_OVERRIDE
+    QRectF boundingRect() const override { return QRectF(0, 0, 10, 10); }
+    void paint(QPainter *painter, const QStyleOptionGraphicsItem *, QWidget *) override
     {
         painter->fillRect(QRectF(QPointF(0, 0), boundingRect().size()), Qt::yellow);
     }
 
-    bool sceneEvent(QEvent *event) Q_DECL_OVERRIDE
+    bool sceneEvent(QEvent *event) override
     {
         switch (event->type()) {
         case QEvent::TouchBegin:
@@ -317,9 +317,6 @@ void tst_QTouchEvent::touchDisabledByDefault()
 
 void tst_QTouchEvent::touchEventAcceptedByDefault()
 {
-    if (!QGuiApplication::platformName().compare(QLatin1String("wayland"), Qt::CaseInsensitive))
-        QSKIP("Wayland: This fails. Figure out why.");
-
     // QWidget
     {
         // enabling touch events should automatically accept touch events
@@ -606,9 +603,6 @@ QPointF normalized(const QPointF &pos, const QRectF &rect)
 
 void tst_QTouchEvent::basicRawEventTranslation()
 {
-    if (!QGuiApplication::platformName().compare(QLatin1String("wayland"), Qt::CaseInsensitive))
-        QSKIP("Wayland: This fails. Figure out why.");
-
     tst_QTouchEventWidget touchWidget;
     touchWidget.setWindowTitle(QTest::currentTestFunction());
     touchWidget.setAttribute(Qt::WA_AcceptTouchEvents);
@@ -733,9 +727,6 @@ void tst_QTouchEvent::basicRawEventTranslation()
 
 void tst_QTouchEvent::multiPointRawEventTranslationOnTouchScreen()
 {
-    if (!QGuiApplication::platformName().compare(QLatin1String("wayland"), Qt::CaseInsensitive))
-        QSKIP("Wayland: This fails. Figure out why.");
-
     tst_QTouchEventWidget touchWidget;
     touchWidget.setWindowTitle(QTest::currentTestFunction());
     touchWidget.setAttribute(Qt::WA_AcceptTouchEvents);
@@ -962,9 +953,6 @@ void tst_QTouchEvent::multiPointRawEventTranslationOnTouchScreen()
 
 void tst_QTouchEvent::multiPointRawEventTranslationOnTouchPad()
 {
-    if (!QGuiApplication::platformName().compare(QLatin1String("wayland"), Qt::CaseInsensitive))
-        QSKIP("Wayland: This fails. Figure out why.");
-
     tst_QTouchEventWidget touchWidget;
     touchWidget.setWindowTitle(QTest::currentTestFunction());
     touchWidget.setAttribute(Qt::WA_AcceptTouchEvents);
@@ -1191,9 +1179,6 @@ void tst_QTouchEvent::multiPointRawEventTranslationOnTouchPad()
 
 void tst_QTouchEvent::basicRawEventTranslationOfIds()
 {
-    if (!QGuiApplication::platformName().compare(QLatin1String("wayland"), Qt::CaseInsensitive))
-        QSKIP("Wayland: This fails. Figure out why.");
-
     tst_QTouchEventWidget touchWidget;
     touchWidget.setWindowTitle(QTest::currentTestFunction());
     touchWidget.setAttribute(Qt::WA_AcceptTouchEvents);
@@ -1311,9 +1296,6 @@ void tst_QTouchEvent::basicRawEventTranslationOfIds()
 
 void tst_QTouchEvent::deleteInEventHandler()
 {
-    if (!QGuiApplication::platformName().compare(QLatin1String("wayland"), Qt::CaseInsensitive))
-        QSKIP("Wayland: This fails. Figure out why.");
-
     // QWidget
     {
         QWidget window;
@@ -1463,9 +1445,6 @@ void tst_QTouchEvent::deleteInEventHandler()
 
 void tst_QTouchEvent::deleteInRawEventTranslation()
 {
-    if (!QGuiApplication::platformName().compare(QLatin1String("wayland"), Qt::CaseInsensitive))
-        QSKIP("Wayland: This fails. Figure out why.");
-
     tst_QTouchEventWidget touchWidget;
     touchWidget.setWindowTitle(QTest::currentTestFunction());
     touchWidget.setAttribute(Qt::WA_AcceptTouchEvents);
@@ -1628,7 +1607,7 @@ class WindowTouchEventFilter : public QObject
 {
     Q_OBJECT
 public:
-    bool eventFilter(QObject *obj, QEvent *event) Q_DECL_OVERRIDE;
+    bool eventFilter(QObject *obj, QEvent *event) override;
     struct TouchInfo {
         QList<QTouchEvent::TouchPoint> points;
         QEvent::Type lastSeenType;

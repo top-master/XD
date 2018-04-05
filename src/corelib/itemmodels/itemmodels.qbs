@@ -1,15 +1,13 @@
 import qbs
 
 Group {
+    condition: QtCoreConfig.itemmodel
     name: "item models"
     prefix: path + '/'
     files: [
         "qabstractitemmodel.cpp",
         "qabstractitemmodel.h",
         "qabstractitemmodel_p.h",
-        "qabstractproxymodel.cpp",
-        "qabstractproxymodel.h",
-        "qabstractproxymodel_p.h",
         "qidentityproxymodel.cpp",
         "qidentityproxymodel.h",
         "qitemselectionmodel.cpp",

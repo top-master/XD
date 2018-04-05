@@ -1,7 +1,7 @@
 /****************************************************************************
 **
 ** Copyright (C) 2016 The Qt Company Ltd.
-** Copyright (C) 2016 Intel Corporation.
+** Copyright (C) 2017 Intel Corporation.
 ** Contact: https://www.qt.io/licensing/
 **
 ** This file is part of the QtCore module of the Qt Toolkit.
@@ -42,11 +42,13 @@
 #include "qstring.h"
 #include "qvector.h"
 #include "qlist.h"
-#include "qthreadstorage.h"
 #include "qdir.h"
 #include "qdatetime.h"
 #include "qoperatingsystemversion.h"
 #include "qoperatingsystemversion_p.h"
+#if defined(Q_OS_WIN) || defined(Q_OS_CYGWIN) || defined(Q_OS_WINRT)
+#include "qoperatingsystemversion_win_p.h"
+#endif
 #include <private/qlocale_tools_p.h>
 
 #include <qmutex.h>
@@ -74,11 +76,15 @@
 #include <Ws2tcpip.h>
 #endif // Q_OS_WINRT
 
+#ifdef Q_OS_WIN
+#  include <qt_windows.h>
+#endif
+
 #if defined(Q_OS_VXWORKS) && defined(_WRS_KERNEL)
 #  include <envLib.h>
 #endif
 
-#if defined(Q_OS_ANDROID)
+#if defined(Q_OS_ANDROID) && !defined(Q_OS_ANDROID_EMBEDDED)
 #include <private/qjni_p.h>
 #endif
 
@@ -95,7 +101,26 @@
 #include <sys/sysctl.h>
 #endif
 
+#if defined(Q_OS_INTEGRITY)
+extern "C" {
+    // Function mmap resides in libshm_client.a. To be able to link with it one needs
+    // to define symbols 'shm_area_password' and 'shm_area_name', because the library
+    // is meant to allow the application that links to it to use POSIX shared memory
+    // without full system POSIX.
+#  pragma weak shm_area_password
+#  pragma weak shm_area_name
+    char *shm_area_password = "dummy";
+    char *shm_area_name = "dummy";
+}
+#endif
+
 #include "archdetect.cpp"
+
+#ifdef qFatal
+// the qFatal in this file are just redirections from elsewhere, so
+// don't capture any context again
+#  undef qFatal
+#endif
 
 QT_BEGIN_NAMESPACE
 
@@ -112,6 +137,38 @@ Q_CORE_EXPORT void *qMemSet(void *dest, int c, size_t n);
 Q_STATIC_ASSERT_X(sizeof(int) == 4, "Qt assumes that int is 32 bits");
 Q_STATIC_ASSERT_X(UCHAR_MAX == 255, "Qt assumes that char is 8 bits");
 Q_STATIC_ASSERT_X(QT_POINTER_SIZE == sizeof(void *), "QT_POINTER_SIZE defined incorrectly");
+Q_STATIC_ASSERT_X(sizeof(float) == 4, "Qt assumes that float is 32 bits");
+
+// While we'd like to check for __STDC_IEC_559__, as per ISO/IEC 9899:2011
+// Annex F (C11, normative for C++11), there are a few corner cases regarding
+// denormals where GHS compiler is relying hardware behavior that is not IEC
+// 559 compliant. So split the check in several subchecks.
+
+// On GHC the compiler reports std::numeric_limits<float>::is_iec559 as false.
+// This is all right according to our needs.
+#if !defined(Q_CC_GHS)
+Q_STATIC_ASSERT_X(std::numeric_limits<float>::is_iec559,
+                  "Qt assumes IEEE 754 floating point");
+#endif
+
+// Technically, presence of NaN and infinities are implied from the above check,
+// but double checking our environment doesn't hurt...
+Q_STATIC_ASSERT_X(std::numeric_limits<float>::has_infinity &&
+                  std::numeric_limits<float>::has_quiet_NaN &&
+                  std::numeric_limits<float>::has_signaling_NaN,
+                  "Qt assumes IEEE 754 floating point");
+
+// is_iec559 checks for ISO/IEC/IEEE 60559:2011 (aka IEEE 754-2008) compliance,
+// but that allows for a non-binary radix. We need to recheck that.
+// Note how __STDC_IEC_559__ would instead check for IEC 60559:1989, aka
+// ANSI/IEEE 754−1985, which specifically implies binary floating point numbers.
+Q_STATIC_ASSERT_X(std::numeric_limits<float>::radix == 2,
+                  "Qt assumes binary IEEE 754 floating point");
+
+// not required by the definition of size_t, but we depend on this
+Q_STATIC_ASSERT_X(sizeof(size_t) == sizeof(void *), "size_t and a pointer don't have the same size");
+Q_STATIC_ASSERT(sizeof(size_t) == sizeof(qsizetype)); // implied by the definition
+Q_STATIC_ASSERT((std::is_same<qsizetype, qptrdiff>::value));
 
 /*!
     \class QFlag
@@ -128,28 +185,28 @@ Q_STATIC_ASSERT_X(QT_POINTER_SIZE == sizeof(void *), "QT_POINTER_SIZE defined in
 /*!
     \fn QFlag::QFlag(int value)
 
-    Constructs a QFlag object that stores the given \a value.
+    Constructs a QFlag object that stores the \a value.
 */
 
 /*!
     \fn QFlag::QFlag(uint value)
     \since 5.3
 
-    Constructs a QFlag object that stores the given \a value.
+    Constructs a QFlag object that stores the \a value.
 */
 
 /*!
     \fn QFlag::QFlag(short value)
     \since 5.3
 
-    Constructs a QFlag object that stores the given \a value.
+    Constructs a QFlag object that stores the \a value.
 */
 
 /*!
     \fn QFlag::QFlag(ushort value)
     \since 5.3
 
-    Constructs a QFlag object that stores the given \a value.
+    Constructs a QFlag object that stores the \a value.
 */
 
 /*!
@@ -244,29 +301,28 @@ Q_STATIC_ASSERT_X(QT_POINTER_SIZE == sizeof(void *), "QT_POINTER_SIZE defined in
 */
 
 /*!
-    \fn QFlags::QFlags(const QFlags &other)
+    \fn template<typename Enum> QFlags<Enum>::QFlags(const QFlags &other)
 
     Constructs a copy of \a other.
 */
 
 /*!
-    \fn QFlags::QFlags(Enum flag)
+    \fn template <typename Enum> QFlags<Enum>::QFlags(Enum flags)
 
-    Constructs a QFlags object storing the given \a flag.
+    Constructs a QFlags object storing the \a flags.
 */
 
 /*!
-    \fn QFlags::QFlags(Zero zero)
+    \fn template <typename Enum> QFlags<Enum>::QFlags(Zero)
 
-    Constructs a QFlags object with no flags set. \a zero must be a
+    Constructs a QFlags object with no flags set. The parameter must be a
     literal 0 value.
 */
 
 /*!
-    \fn QFlags::QFlags(QFlag value)
+    \fn template <typename Enum> QFlags<Enum>::QFlags(QFlag flag)
 
-    Constructs a QFlags object initialized with the given integer \a
-    value.
+    Constructs a QFlags object initialized with the integer \a flag.
 
     The QFlag type is a helper type. By using it here instead of \c
     int, we effectively ensure that arbitrary enum values cannot be
@@ -275,7 +331,7 @@ Q_STATIC_ASSERT_X(QT_POINTER_SIZE == sizeof(void *), "QT_POINTER_SIZE defined in
 */
 
 /*!
-    \fn QFlags::QFlags(std::initializer_list<Enum> flags)
+    \fn template <typename Enum> QFlags<Enum>::QFlags(std::initializer_list<Enum> flags)
     \since 5.4
 
     Constructs a QFlags object initialized with all \a flags
@@ -285,14 +341,14 @@ Q_STATIC_ASSERT_X(QT_POINTER_SIZE == sizeof(void *), "QT_POINTER_SIZE defined in
 */
 
 /*!
-    \fn QFlags &QFlags::operator=(const QFlags &other)
+    \fn template <typename Enum> QFlags &QFlags<Enum>::operator=(const QFlags &other)
 
     Assigns \a other to this object and returns a reference to this
     object.
 */
 
 /*!
-    \fn QFlags &QFlags::operator&=(int mask)
+    \fn template <typename Enum> QFlags &QFlags<Enum>::operator&=(int mask)
 
     Performs a bitwise AND operation with \a mask and stores the
     result in this QFlags object. Returns a reference to this object.
@@ -301,19 +357,19 @@ Q_STATIC_ASSERT_X(QT_POINTER_SIZE == sizeof(void *), "QT_POINTER_SIZE defined in
 */
 
 /*!
-    \fn QFlags &QFlags::operator&=(uint mask)
+    \fn template <typename Enum> QFlags &QFlags<Enum>::operator&=(uint mask)
 
     \overload
 */
 
 /*!
-    \fn QFlags &QFlags::operator&=(Enum mask)
+    \fn template <typename Enum> QFlags &QFlags<Enum>::operator&=(Enum mask)
 
     \overload
 */
 
 /*!
-    \fn QFlags &QFlags::operator|=(QFlags other)
+    \fn template <typename Enum> QFlags &QFlags<Enum>::operator|=(QFlags other)
 
     Performs a bitwise OR operation with \a other and stores the
     result in this QFlags object. Returns a reference to this object.
@@ -322,13 +378,13 @@ Q_STATIC_ASSERT_X(QT_POINTER_SIZE == sizeof(void *), "QT_POINTER_SIZE defined in
 */
 
 /*!
-    \fn QFlags &QFlags::operator|=(Enum other)
+    \fn template <typename Enum> QFlags &QFlags<Enum>::operator|=(Enum other)
 
     \overload
 */
 
 /*!
-    \fn QFlags &QFlags::operator^=(QFlags other)
+    \fn template <typename Enum> QFlags &QFlags<Enum>::operator^=(QFlags other)
 
     Performs a bitwise XOR operation with \a other and stores the
     result in this QFlags object. Returns a reference to this object.
@@ -337,13 +393,13 @@ Q_STATIC_ASSERT_X(QT_POINTER_SIZE == sizeof(void *), "QT_POINTER_SIZE defined in
 */
 
 /*!
-    \fn QFlags &QFlags::operator^=(Enum other)
+    \fn template <typename Enum> QFlags &QFlags<Enum>::operator^=(Enum other)
 
     \overload
 */
 
 /*!
-    \fn QFlags::operator Int() const
+    \fn template <typename Enum> QFlags<Enum>::operator Int() const
 
     Returns the value stored in the QFlags object as an integer.
 
@@ -351,7 +407,7 @@ Q_STATIC_ASSERT_X(QT_POINTER_SIZE == sizeof(void *), "QT_POINTER_SIZE defined in
 */
 
 /*!
-    \fn QFlags QFlags::operator|(QFlags other) const
+    \fn template <typename Enum> QFlags QFlags<Enum>::operator|(QFlags other) const
 
     Returns a QFlags object containing the result of the bitwise OR
     operation on this object and \a other.
@@ -360,13 +416,13 @@ Q_STATIC_ASSERT_X(QT_POINTER_SIZE == sizeof(void *), "QT_POINTER_SIZE defined in
 */
 
 /*!
-    \fn QFlags QFlags::operator|(Enum other) const
+    \fn template <typename Enum> QFlags QFlags<Enum>::operator|(Enum other) const
 
     \overload
 */
 
 /*!
-    \fn QFlags QFlags::operator^(QFlags other) const
+    \fn template <typename Enum> QFlags QFlags<Enum>::operator^(QFlags other) const
 
     Returns a QFlags object containing the result of the bitwise XOR
     operation on this object and \a other.
@@ -375,13 +431,13 @@ Q_STATIC_ASSERT_X(QT_POINTER_SIZE == sizeof(void *), "QT_POINTER_SIZE defined in
 */
 
 /*!
-    \fn QFlags QFlags::operator^(Enum other) const
+    \fn template <typename Enum> QFlags QFlags<Enum>::operator^(Enum other) const
 
     \overload
 */
 
 /*!
-    \fn QFlags QFlags::operator&(int mask) const
+    \fn template <typename Enum> QFlags QFlags<Enum>::operator&(int mask) const
 
     Returns a QFlags object containing the result of the bitwise AND
     operation on this object and \a mask.
@@ -390,19 +446,19 @@ Q_STATIC_ASSERT_X(QT_POINTER_SIZE == sizeof(void *), "QT_POINTER_SIZE defined in
 */
 
 /*!
-    \fn QFlags QFlags::operator&(uint mask) const
+    \fn template <typename Enum> QFlags QFlags<Enum>::operator&(uint mask) const
 
     \overload
 */
 
 /*!
-    \fn QFlags QFlags::operator&(Enum mask) const
+    \fn template <typename Enum> QFlags QFlags<Enum>::operator&(Enum mask) const
 
     \overload
 */
 
 /*!
-    \fn QFlags QFlags::operator~() const
+    \fn template <typename Enum> QFlags QFlags<Enum>::operator~() const
 
     Returns a QFlags object that contains the bitwise negation of
     this object.
@@ -411,24 +467,24 @@ Q_STATIC_ASSERT_X(QT_POINTER_SIZE == sizeof(void *), "QT_POINTER_SIZE defined in
 */
 
 /*!
-    \fn bool QFlags::operator!() const
+    \fn template <typename Enum> bool QFlags<Enum>::operator!() const
 
     Returns \c true if no flag is set (i.e., if the value stored by the
     QFlags object is 0); otherwise returns \c false.
 */
 
 /*!
-    \fn bool QFlags::testFlag(Enum flag) const
+    \fn template <typename Enum> bool QFlags<Enum>::testFlag(Enum flag) const
     \since 4.2
 
-    Returns \c true if the \a flag is set, otherwise \c false.
+    Returns \c true if the flag \a flag is set, otherwise \c false.
 */
 
 /*!
-    \fn QFlags QFlags::setFlag(Enum flag, bool on)
+    \fn template <typename Enum> QFlags QFlags<Enum>::setFlag(Enum flag, bool on)
     \since 5.7
 
-    Sets the indicated \a flag if \a on is \c true or unsets it if
+    Sets the flag \a flag if \a on is \c true or unsets it if
     \a on is \c false. Returns a reference to this object.
 */
 
@@ -774,6 +830,21 @@ Q_STATIC_ASSERT_X(QT_POINTER_SIZE == sizeof(void *), "QT_POINTER_SIZE defined in
 */
 
 /*!
+    \typedef qsizetype
+    \relates <QtGlobal>
+    \since 5.10
+
+    Integral type providing Posix' \c ssize_t for all platforms.
+
+    This type is guaranteed to be the same size as a \c size_t on all
+    platforms supported by Qt.
+
+    Note that qsizetype is signed. Use \c size_t for unsigned values.
+
+    \sa qptrdiff
+*/
+
+/*!
     \enum QtMsgType
     \relates <QtGlobal>
 
@@ -851,11 +922,11 @@ Q_STATIC_ASSERT_X(QT_POINTER_SIZE == sizeof(void *), "QT_POINTER_SIZE defined in
     \sa quint64, qlonglong
 */
 
-/*! \fn T qAbs(const T &value)
+/*! \fn template <typename T> T qAbs(const T &t)
     \relates <QtGlobal>
 
-    Compares \a value to the 0 of type T and returns the absolute
-    value. Thus if T is \e {double}, then \a value is compared to
+    Compares \a t to the 0 of type T and returns the absolute
+    value. Thus if T is \e {double}, then \a t is compared to
     \e{(double) 0}.
 
     Example:
@@ -863,50 +934,50 @@ Q_STATIC_ASSERT_X(QT_POINTER_SIZE == sizeof(void *), "QT_POINTER_SIZE defined in
     \snippet code/src_corelib_global_qglobal.cpp 10
 */
 
-/*! \fn int qRound(double value)
+/*! \fn int qRound(double d)
     \relates <QtGlobal>
 
-    Rounds \a value to the nearest integer.
+    Rounds \a d to the nearest integer.
 
     Example:
 
     \snippet code/src_corelib_global_qglobal.cpp 11A
 */
 
-/*! \fn int qRound(float value)
+/*! \fn int qRound(float d)
     \relates <QtGlobal>
 
-    Rounds \a value to the nearest integer.
+    Rounds \a d to the nearest integer.
 
     Example:
 
     \snippet code/src_corelib_global_qglobal.cpp 11B
 */
 
-/*! \fn qint64 qRound64(double value)
+/*! \fn qint64 qRound64(double d)
     \relates <QtGlobal>
 
-    Rounds \a value to the nearest 64-bit integer.
+    Rounds \a d to the nearest 64-bit integer.
 
     Example:
 
     \snippet code/src_corelib_global_qglobal.cpp 12A
 */
 
-/*! \fn qint64 qRound64(float value)
+/*! \fn qint64 qRound64(float d)
     \relates <QtGlobal>
 
-    Rounds \a value to the nearest 64-bit integer.
+    Rounds \a d to the nearest 64-bit integer.
 
     Example:
 
     \snippet code/src_corelib_global_qglobal.cpp 12B
 */
 
-/*! \fn const T &qMin(const T &value1, const T &value2)
+/*! \fn template <typename T> const T &qMin(const T &a, const T &b)
     \relates <QtGlobal>
 
-    Returns the minimum of \a value1 and \a value2.
+    Returns the minimum of \a a and \a b.
 
     Example:
 
@@ -915,10 +986,10 @@ Q_STATIC_ASSERT_X(QT_POINTER_SIZE == sizeof(void *), "QT_POINTER_SIZE defined in
     \sa qMax(), qBound()
 */
 
-/*! \fn const T &qMax(const T &value1, const T &value2)
+/*! \fn template <typename T> const T &qMax(const T &a, const T &b)
     \relates <QtGlobal>
 
-    Returns the maximum of \a value1 and \a value2.
+    Returns the maximum of \a a and \a b.
 
     Example:
 
@@ -927,11 +998,11 @@ Q_STATIC_ASSERT_X(QT_POINTER_SIZE == sizeof(void *), "QT_POINTER_SIZE defined in
     \sa qMin(), qBound()
 */
 
-/*! \fn const T &qBound(const T &min, const T &value, const T &max)
+/*! \fn template <typename T> const T &qBound(const T &min, const T &val, const T &max)
     \relates <QtGlobal>
 
-    Returns \a value bounded by \a min and \a max. This is equivalent
-    to qMax(\a min, qMin(\a value, \a max)).
+    Returns \a val bounded by \a min and \a max. This is equivalent
+    to qMax(\a min, qMin(\a val, \a max)).
 
     Example:
 
@@ -940,7 +1011,7 @@ Q_STATIC_ASSERT_X(QT_POINTER_SIZE == sizeof(void *), "QT_POINTER_SIZE defined in
     \sa qMin(), qMax()
 */
 
-/*! \fn auto qOverload(T functionPointer)
+/*! \fn template <typename T> auto qOverload(T functionPointer)
     \relates <QtGlobal>
     \since 5.7
 
@@ -962,7 +1033,7 @@ Q_STATIC_ASSERT_X(QT_POINTER_SIZE == sizeof(void *), "QT_POINTER_SIZE defined in
     and Functor-Based Connections}
 */
 
-/*! \fn auto qConstOverload(T memberFunctionPointer)
+/*! \fn template <typename T> auto qConstOverload(T memberFunctionPointer)
     \relates <QtGlobal>
     \since 5.7
 
@@ -974,7 +1045,7 @@ Q_STATIC_ASSERT_X(QT_POINTER_SIZE == sizeof(void *), "QT_POINTER_SIZE defined in
     and Functor-Based Connections}
 */
 
-/*! \fn auto qNonConstOverload(T memberFunctionPointer)
+/*! \fn template <typename T> auto qNonConstOverload(T memberFunctionPointer)
     \relates <QtGlobal>
     \since 5.7
 
@@ -1363,13 +1434,6 @@ bool qSharedBuild() Q_DECL_NOTHROW
 */
 
 /*!
-    \macro Q_OS_ULTRIX
-    \relates <QtGlobal>
-
-    Defined on DEC Ultrix.
-*/
-
-/*!
     \macro Q_OS_LINUX
     \relates <QtGlobal>
 
@@ -1405,41 +1469,6 @@ bool qSharedBuild() Q_DECL_NOTHROW
 */
 
 /*!
-    \macro Q_OS_BSDI
-    \relates <QtGlobal>
-
-    Defined on BSD/OS.
-*/
-
-/*!
-    \macro Q_OS_IRIX
-    \relates <QtGlobal>
-
-    Defined on SGI Irix.
-*/
-
-/*!
-    \macro Q_OS_OSF
-    \relates <QtGlobal>
-
-    Defined on HP Tru64 UNIX.
-*/
-
-/*!
-    \macro Q_OS_SCO
-    \relates <QtGlobal>
-
-    Defined on SCO OpenServer 5.
-*/
-
-/*!
-    \macro Q_OS_UNIXWARE
-    \relates <QtGlobal>
-
-    Defined on UnixWare 7, Open UNIX 8.
-*/
-
-/*!
     \macro Q_OS_AIX
     \relates <QtGlobal>
 
@@ -1451,27 +1480,6 @@ bool qSharedBuild() Q_DECL_NOTHROW
     \relates <QtGlobal>
 
     Defined on GNU Hurd.
-*/
-
-/*!
-    \macro Q_OS_DGUX
-    \relates <QtGlobal>
-
-    Defined on DG/UX.
-*/
-
-/*!
-    \macro Q_OS_RELIANT
-    \relates <QtGlobal>
-
-    Defined on Reliant UNIX.
-*/
-
-/*!
-    \macro Q_OS_DYNIX
-    \relates <QtGlobal>
-
-    Defined on DYNIX/ptx.
 */
 
 /*!
@@ -2005,6 +2013,8 @@ static const char *osVer_helper(QOperatingSystemVersion version = QOperatingSyst
             return "El Capitan";
         case 12:
             return "Sierra";
+        case 13:
+            return "High Sierra";
         }
     }
     // unknown, future version
@@ -2288,7 +2298,7 @@ static bool findUnixOsVersion(QUnixOSVersion &v)
 #  endif // USE_ETC_OS_RELEASE
 #endif // Q_OS_UNIX
 
-#ifdef Q_OS_ANDROID
+#if defined(Q_OS_ANDROID) && !defined(Q_OS_ANDROID_EMBEDDED)
 static const char *osVer_helper(QOperatingSystemVersion)
 {
 /* Data:
@@ -2318,6 +2328,7 @@ Lollipop
 Marshmallow
 Nougat
 Nougat
+Oreo
  */
     static const char versions_string[] =
         "\0"
@@ -2333,13 +2344,14 @@ Nougat
         "Lollipop\0"
         "Marshmallow\0"
         "Nougat\0"
+        "Oreo\0"
         "\0";
 
     static const int versions_indices[] = {
            0,    0,    0,    1,    9,   15,   15,   15,
           22,   28,   28,   40,   40,   40,   50,   50,
           69,   69,   69,   80,   80,   87,   87,   96,
-         108,  108,   -1
+         108,  108,  115,   -1
     };
 
     static const int versions_count = (sizeof versions_indices) / (sizeof versions_indices[0]);
@@ -2437,6 +2449,9 @@ QString QSysInfo::currentCpuArchitecture()
     case PROCESSOR_ARCHITECTURE_IA64:
         return QStringLiteral("ia64");
     }
+#elif defined(Q_OS_DARWIN) && !defined(Q_OS_MACOS)
+    // iOS-based OSes do not return the architecture on uname(2)'s result.
+    return buildCpuArchitecture();
 #elif defined(Q_OS_UNIX)
     long ret = -1;
     struct utsname u;
@@ -2764,7 +2779,7 @@ QString QSysInfo::productVersion()
 */
 QString QSysInfo::prettyProductName()
 {
-#if defined(Q_OS_ANDROID) || defined(Q_OS_DARWIN) || defined(Q_OS_WIN)
+#if (defined(Q_OS_ANDROID) && !defined(Q_OS_ANDROID_EMBEDDED)) || defined(Q_OS_DARWIN) || defined(Q_OS_WIN)
     const auto version = QOperatingSystemVersion::current();
     const char *name = osVer_helper(version);
     if (name)
@@ -2809,10 +2824,11 @@ QString QSysInfo::prettyProductName()
 
     This function returns the same as QHostInfo::localHostName().
 
-    \sa QHostInfo::localDomainName
+    \sa QHostInfo::localDomainName, machineUniqueId()
  */
 QString QSysInfo::machineHostName()
 {
+    // the hostname can change, so we can't cache it
 #if defined(Q_OS_LINUX)
     // gethostname(3) on Linux just calls uname(2), so do it ourselves
     // and avoid a memcpy
@@ -2834,6 +2850,119 @@ QString QSysInfo::machineHostName()
     return QString();
 }
 #endif // QT_BOOTSTRAPPED
+
+enum {
+    UuidStringLen = sizeof("00000000-0000-0000-0000-000000000000") - 1
+};
+
+/*!
+    \since 5.10
+
+    Returns a unique ID for this machine, if one can be determined. If no
+    unique ID could be determined, this function returns an empty byte array.
+    Unlike machineHostName(), the value returned by this function is likely
+    globally unique.
+
+    A unique ID is useful in network operations to identify this machine for an
+    extended period of time, when the IP address could change or if this
+    machine could have more than one IP address. For example, the ID could be
+    used when communicating with a server or when storing device-specific data
+    in shared network storage.
+
+    Note that on some systems, this value will persist across reboots and on
+    some it will not. Applications should not blindly depend on this fact
+    without verifying the OS capabilities. In particular, on Linux systems,
+    this ID is usually permanent and it matches the D-Bus machine ID, except
+    for nodes without their own storage (replicated nodes).
+
+    \sa machineHostName(), bootUniqueId()
+*/
+QByteArray QSysInfo::machineUniqueId()
+{
+#ifdef Q_OS_BSD4
+    char uuid[UuidStringLen];
+    size_t uuidlen = sizeof(uuid);
+#  ifdef KERN_HOSTUUID
+    int name[] = { CTL_KERN, KERN_HOSTUUID };
+    if (sysctl(name, sizeof name / sizeof name[0], &uuid, &uuidlen, nullptr, 0) == 0
+            && uuidlen == sizeof(uuid))
+        return QByteArray(uuid, uuidlen);
+
+#  else
+    // Darwin: no fixed value, we need to search by name
+    if (sysctlbyname("kern.uuid", uuid, &uuidlen, nullptr, 0) == 0 && uuidlen == sizeof(uuid))
+        return QByteArray(uuid, uuidlen);
+#  endif
+#elif defined(Q_OS_UNIX)
+    // The modern name on Linux is /etc/machine-id, but that path is
+    // unlikely to exist on non-Linux (non-systemd) systems. The old
+    // path is more than enough.
+    static const char fullfilename[] = "/usr/local/var/lib/dbus/machine-id";
+    const char *firstfilename = fullfilename + sizeof("/usr/local") - 1;
+    int fd = qt_safe_open(firstfilename, O_RDONLY);
+    if (fd == -1 && errno == ENOENT)
+        fd = qt_safe_open(fullfilename, O_RDONLY);
+
+    if (fd != -1) {
+        char buffer[32];    // 128 bits, hex-encoded
+        qint64 len = qt_safe_read(fd, buffer, sizeof(buffer));
+        qt_safe_close(fd);
+
+        if (len != -1)
+            return QByteArray(buffer, len);
+    }
+#elif defined(Q_OS_WIN) && !defined(Q_OS_WINRT)
+    // Let's poke at the registry
+    HKEY key = NULL;
+    if (RegOpenKeyEx(HKEY_LOCAL_MACHINE, L"SOFTWARE\\Microsoft\\Cryptography", 0, KEY_READ, &key)
+            == ERROR_SUCCESS) {
+        wchar_t buffer[UuidStringLen + 1];
+        DWORD size = sizeof(buffer);
+        bool ok = (RegQueryValueEx(key, L"MachineGuid", NULL, NULL, (LPBYTE)buffer, &size) ==
+                   ERROR_SUCCESS);
+        RegCloseKey(key);
+        if (ok)
+            return QStringView(buffer, (size - 1) / 2).toLatin1();
+    }
+#endif
+    return QByteArray();
+}
+
+/*!
+    \since 5.10
+
+    Returns a unique ID for this machine's boot, if one can be determined. If
+    no unique ID could be determined, this function returns an empty byte
+    array. This value is expected to change after every boot and can be
+    considered globally unique.
+
+    This function is currently only implemented for Linux and Apple operating
+    systems.
+
+    \sa machineUniqueId()
+*/
+QByteArray QSysInfo::bootUniqueId()
+{
+#ifdef Q_OS_LINUX
+    // use low-level API here for simplicity
+    int fd = qt_safe_open("/proc/sys/kernel/random/boot_id", O_RDONLY);
+    if (fd != -1) {
+        char uuid[UuidStringLen];
+        qint64 len = qt_safe_read(fd, uuid, sizeof(uuid));
+        qt_safe_close(fd);
+        if (len == UuidStringLen)
+            return QByteArray(uuid, UuidStringLen);
+    }
+#elif defined(Q_OS_DARWIN)
+    // "kern.bootsessionuuid" is only available by name
+    char uuid[UuidStringLen];
+    size_t uuidlen = sizeof(uuid);
+    if (sysctlbyname("kern.bootsessionuuid", uuid, &uuidlen, nullptr, 0) == 0
+            && uuidlen == sizeof(uuid))
+        return QByteArray(uuid, uuidlen);
+#endif
+    return QByteArray();
+};
 
 /*!
     \macro void Q_ASSERT(bool test)
@@ -2978,10 +3107,10 @@ QString QSysInfo::machineHostName()
 */
 
 /*!
-    \fn T *q_check_ptr(T *pointer)
+    \fn template <typename T> T *q_check_ptr(T *p)
     \relates <QtGlobal>
 
-    Uses Q_CHECK_PTR on \a pointer, then returns \a pointer.
+    Uses Q_CHECK_PTR on \a p, then returns \a p.
 
     This can be used as an inline version of Q_CHECK_PTR.
 */
@@ -3005,13 +3134,20 @@ QString QSysInfo::machineHostName()
     If this macro is used outside a function, the behavior is undefined.
  */
 
-/*
-  The Q_CHECK_PTR macro calls this function if an allocation check
-  fails.
+/*!
+    \internal
+    The Q_CHECK_PTR macro calls this function if an allocation check
+    fails.
 */
-void qt_check_pointer(const char *n, int l)
+void qt_check_pointer(const char *n, int l) Q_DECL_NOTHROW
 {
-    qFatal("In file %s, line %d: Out of memory", n, l);
+    // make separate printing calls so that the first one may flush;
+    // the second one could want to allocate memory (fputs prints a
+    // newline and stderr auto-flushes).
+    fputs("Out of memory", stderr);
+    fprintf(stderr, "  in %s, line %d\n", n, l);
+
+    std::terminate();
 }
 
 /*
@@ -3041,7 +3177,7 @@ Q_NORETURN void qTerminate() Q_DECL_NOTHROW
 */
 void qt_assert(const char *assertion, const char *file, int line) Q_DECL_NOTHROW
 {
-    qFatal("ASSERT: \"%s\" in file %s, line %d", assertion, file, line);
+    QMessageLogger(file, line, nullptr).fatal("ASSERT: \"%s\" in file %s, line %d", assertion, file, line);
 }
 
 /*
@@ -3049,7 +3185,7 @@ void qt_assert(const char *assertion, const char *file, int line) Q_DECL_NOTHROW
 */
 void qt_assert_x(const char *where, const char *what, const char *file, int line) Q_DECL_NOTHROW
 {
-    qFatal("ASSERT failure in %s: \"%s\", file %s, line %d", where, what, file, line);
+    QMessageLogger(file, line, nullptr).fatal("ASSERT failure in %s: \"%s\", file %s, line %d", where, what, file, line);
 }
 
 
@@ -3058,7 +3194,7 @@ void qt_assert_x(const char *where, const char *what, const char *file, int line
     Deliberately not exported as part of the Qt API, but used in both
     qsimplerichtext.cpp and qgfxraster_qws.cpp
 */
-Q_CORE_EXPORT unsigned int qt_int_sqrt(unsigned int n)
+Q_CORE_EXPORT Q_DECL_CONST_FUNCTION unsigned int qt_int_sqrt(unsigned int n)
 {
     // n must be in the range 0...UINT_MAX/2-1
     if (n >= (UINT_MAX>>2)) {
@@ -3084,125 +3220,36 @@ Q_CORE_EXPORT unsigned int qt_int_sqrt(unsigned int n)
 void *qMemCopy(void *dest, const void *src, size_t n) { return memcpy(dest, src, n); }
 void *qMemSet(void *dest, int c, size_t n) { return memset(dest, c, n); }
 
-#if !defined(Q_OS_WIN) && !defined(QT_NO_THREAD) && !defined(Q_OS_INTEGRITY) && !defined(Q_OS_QNX) && \
-    defined(_POSIX_THREAD_SAFE_FUNCTIONS) && _POSIX_VERSION >= 200112L
-namespace {
-    // There are two incompatible versions of strerror_r:
-    // a) the XSI/POSIX.1 version, which returns an int,
-    //    indicating success or not
-    // b) the GNU version, which returns a char*, which may or may not
-    //    be the beginning of the buffer we used
-    // The GNU libc manpage for strerror_r says you should use the XSI
-    // version in portable code. However, it's impossible to do that if
-    // _GNU_SOURCE is defined so we use C++ overloading to decide what to do
-    // depending on the return type
-    static inline Q_DECL_UNUSED QString fromstrerror_helper(int, const QByteArray &buf)
-    {
-        return QString::fromLocal8Bit(buf.constData());
-    }
-    static inline Q_DECL_UNUSED QString fromstrerror_helper(const char *str, const QByteArray &)
-    {
-        return QString::fromLocal8Bit(str);
-    }
-}
-#endif
-
-QString qt_error_string(int errorCode)
-{
-    const char *s = 0;
-    QString ret;
-    if (errorCode == -1) {
-#if defined(Q_OS_WIN)
-        errorCode = GetLastError();
-#else
-        errorCode = errno;
-#endif
-    }
-    switch (errorCode) {
-    case 0:
-        break;
-    case EACCES:
-        s = QT_TRANSLATE_NOOP("QIODevice", "Permission denied");
-        break;
-    case EMFILE:
-        s = QT_TRANSLATE_NOOP("QIODevice", "Too many open files");
-        break;
-    case ENOENT:
-        s = QT_TRANSLATE_NOOP("QIODevice", "No such file or directory");
-        break;
-    case ENOSPC:
-        s = QT_TRANSLATE_NOOP("QIODevice", "No space left on device");
-        break;
-    default: {
-#if defined(Q_OS_WIN)
-        // Retrieve the system error message for the last-error code.
-#  ifndef Q_OS_WINRT
-        wchar_t *string = 0;
-        FormatMessage(FORMAT_MESSAGE_FROM_SYSTEM | FORMAT_MESSAGE_IGNORE_INSERTS | FORMAT_MESSAGE_ALLOCATE_BUFFER,
-                      NULL,
-                      errorCode,
-                      MAKELANGID(LANG_NEUTRAL, SUBLANG_DEFAULT),
-                      (LPWSTR)&string,
-                      0,
-                      NULL);
-        ret = QString::fromWCharArray(string);
-        LocalFree((HLOCAL)string);
-#  else // !Q_OS_WINRT
-        __declspec(thread) static wchar_t errorString[4096];
-        FormatMessage(FORMAT_MESSAGE_FROM_SYSTEM | FORMAT_MESSAGE_IGNORE_INSERTS,
-                      NULL,
-                      errorCode,
-                      MAKELANGID(LANG_NEUTRAL, SUBLANG_DEFAULT),
-                      errorString,
-                      ARRAYSIZE(errorString),
-                      NULL);
-        ret = QString::fromWCharArray(errorString);
-#  endif // Q_OS_WINRT
-
-        if (ret.isEmpty() && errorCode == ERROR_MOD_NOT_FOUND)
-            ret = QString::fromLatin1("The specified module could not be found.");
-#elif !defined(QT_NO_THREAD) && defined(_POSIX_THREAD_SAFE_FUNCTIONS) && _POSIX_VERSION >= 200112L && !defined(Q_OS_INTEGRITY) && !defined(Q_OS_QNX)
-        QByteArray buf(1024, '\0');
-        ret = fromstrerror_helper(strerror_r(errorCode, buf.data(), buf.size()), buf);
-#else
-        ret = QString::fromLocal8Bit(strerror(errorCode));
-#endif
-    break; }
-    }
-    if (s)
-        // ######## this breaks moc build currently
-//         ret = QCoreApplication::translate("QIODevice", s);
-        ret = QString::fromLatin1(s);
-    return ret.trimmed();
-}
-
 // In the C runtime on all platforms access to the environment is not thread-safe. We
 // add thread-safety for the Qt wrappers.
 static QBasicMutex environmentMutex;
 
-// getenv is declared as deprecated in VS2005. This function
-// makes use of the new secure getenv function.
 /*!
     \relates <QtGlobal>
+    \threadsafe
 
-    Returns the value of the environment variable with name \a
-    varName. To get the variable string, use QByteArray::constData().
+    Returns the value of the environment variable with name \a varName as a
+    QByteArray. If no variable by that name is found in the environment, this
+    function returns a default-constructed QByteArray.
+
+    The Qt environment manipulation functions are thread-safe, but this
+    requires that the C library equivalent functions like getenv and putenv are
+    not directly called.
+
     To convert the data to a QString use QString::fromLocal8Bit().
 
-    \note qgetenv() was introduced because getenv() from the standard
-    C library was deprecated in VC2005 (and later versions). qgetenv()
-    uses the new replacement function in VC, and calls the standard C
-    library's implementation on all other platforms.
+    \note on desktop Windows, qgetenv() may produce data loss if the
+    original string contains Unicode characters not representable in the
+    ANSI encoding. Use qEnvironmentVariable() instead.
+    On Unix systems, this function is lossless.
 
-    \warning Don't use qgetenv on Windows if the content may contain
-    non-US-ASCII characters, like file paths.
-
-    \sa qputenv(), qEnvironmentVariableIsSet(), qEnvironmentVariableIsEmpty()
+    \sa qputenv(), qEnvironmentVariable(), qEnvironmentVariableIsSet(),
+    qEnvironmentVariableIsEmpty()
 */
 QByteArray qgetenv(const char *varName)
 {
     QMutexLocker locker(&environmentMutex);
-#if defined(_MSC_VER) && _MSC_VER >= 1400
+#ifdef Q_CC_MSVC
     size_t requiredSize = 0;
     QByteArray buffer;
     getenv_s(&requiredSize, 0, 0, varName);
@@ -3219,6 +3266,92 @@ QByteArray qgetenv(const char *varName)
 #endif
 }
 
+
+/*!
+    QString qEnvironmentVariable(const char *varName, const QString &defaultValue);
+
+    \relates <QtGlobal>
+    \since 5.10
+
+    Returns the value of the environment variable with name \a varName as a
+    QString. If no variable by that name is found in the environment, this
+    function returns \a defaultValue.
+
+    The Qt environment manipulation functions are thread-safe, but this
+    requires that the C library equivalent functions like getenv and putenv are
+    not directly called.
+
+    The following table describes how to choose between qgetenv() and
+    qEnvironmentVariable():
+    \table
+      \header \li Condition         \li Recommendation
+      \row
+        \li Variable contains file paths or user text
+        \li qEnvironmentVariable()
+      \row
+        \li Windows-specific code
+        \li qEnvironmentVariable()
+      \row
+        \li Unix-specific code, destination variable is not QString and/or is
+            used to interface with non-Qt APIs
+        \li qgetenv()
+      \row
+        \li Destination variable is a QString
+        \li qEnvironmentVariable()
+      \row
+        \li Destination variable is a QByteArray or std::string
+        \li qgetenv()
+    \endtable
+
+    \note on Unix systems, this function may produce data loss if the original
+    string contains arbitrary binary data that cannot be decoded by the locale
+    codec. Use qgetenv() instead for that case. On Windows, this function is
+    lossless.
+
+    \note the variable name \a varName must contain only US-ASCII characters.
+
+    \sa qputenv(), qgetenv(), qEnvironmentVariableIsSet(), qEnvironmentVariableIsEmpty()
+*/
+QString qEnvironmentVariable(const char *varName, const QString &defaultValue)
+{
+#if defined(Q_OS_WIN) && !defined(Q_OS_WINRT)
+    QMutexLocker locker(&environmentMutex);
+    QVarLengthArray<wchar_t, 32> wname(int(strlen(varName)) + 1);
+    for (int i = 0; i < wname.size(); ++i) // wname.size() is correct: will copy terminating null
+        wname[i] = uchar(varName[i]);
+    size_t requiredSize = 0;
+    QString buffer;
+    _wgetenv_s(&requiredSize, 0, 0, wname.data());
+    if (requiredSize == 0)
+        return defaultValue;
+    buffer.resize(int(requiredSize));
+    _wgetenv_s(&requiredSize, reinterpret_cast<wchar_t *>(buffer.data()), requiredSize,
+               wname.data());
+    // requiredSize includes the terminating null, which we don't want.
+    Q_ASSERT(buffer.endsWith(QLatin1Char('\0')));
+    buffer.chop(1);
+    return buffer;
+#else
+    QByteArray value = qgetenv(varName);
+    if (value.isNull())
+        return defaultValue;
+// duplicated in qfile.h (QFile::decodeName)
+#if defined(Q_OS_DARWIN)
+    return QString::fromUtf8(value).normalized(QString::NormalizationForm_C);
+#else // other Unix
+    return QString::fromLocal8Bit(value);
+#endif
+#endif
+}
+
+/*!
+  \internal
+*/
+QString qEnvironmentVariable(const char *varName)
+{
+    return qEnvironmentVariable(varName, QString());
+}
+
 /*!
     \relates <QtGlobal>
     \since 5.1
@@ -3231,12 +3364,12 @@ QByteArray qgetenv(const char *varName)
     \endcode
     except that it's potentially much faster, and can't throw exceptions.
 
-    \sa qgetenv(), qEnvironmentVariableIsSet()
+    \sa qgetenv(), qEnvironmentVariable(), qEnvironmentVariableIsSet()
 */
 bool qEnvironmentVariableIsEmpty(const char *varName) Q_DECL_NOEXCEPT
 {
     QMutexLocker locker(&environmentMutex);
-#if defined(_MSC_VER) && _MSC_VER >= 1400
+#ifdef Q_CC_MSVC
     // we provide a buffer that can only hold the empty string, so
     // when the env.var isn't empty, we'll get an ERANGE error (buffer
     // too small):
@@ -3259,20 +3392,26 @@ bool qEnvironmentVariableIsEmpty(const char *varName) Q_DECL_NOEXCEPT
 
     Equivalent to
     \code
-    qgetenv(varName).toInt()
+    qgetenv(varName).toInt(ok, 0)
     \endcode
     except that it's much faster, and can't throw exceptions.
 
-    \sa qgetenv(), qEnvironmentVariableIsSet()
+    \note there's a limit on the length of the value, which is sufficient for
+    all valid values of int, not counting leading zeroes or spaces. Values that
+    are too long will either be truncated or this function will set \a ok to \c
+    false.
+
+    \sa qgetenv(), qEnvironmentVariable(), qEnvironmentVariableIsSet()
 */
 int qEnvironmentVariableIntValue(const char *varName, bool *ok) Q_DECL_NOEXCEPT
 {
-    QMutexLocker locker(&environmentMutex);
-#if defined(_MSC_VER) && _MSC_VER >= 1400
-    // we provide a buffer that can hold any int value:
     static const int NumBinaryDigitsPerOctalDigit = 3;
     static const int MaxDigitsForOctalInt =
         (std::numeric_limits<uint>::digits + NumBinaryDigitsPerOctalDigit - 1) / NumBinaryDigitsPerOctalDigit;
+
+    QMutexLocker locker(&environmentMutex);
+#ifdef Q_CC_MSVC
+    // we provide a buffer that can hold any int value:
     char buffer[MaxDigitsForOctalInt + 2]; // +1 for NUL +1 for optional '-'
     size_t dummy;
     if (getenv_s(&dummy, buffer, sizeof buffer, varName) != 0) {
@@ -3282,15 +3421,16 @@ int qEnvironmentVariableIntValue(const char *varName, bool *ok) Q_DECL_NOEXCEPT
     }
 #else
     const char * const buffer = ::getenv(varName);
-    if (!buffer || !*buffer) {
+    if (!buffer || strlen(buffer) > MaxDigitsForOctalInt + 2) {
         if (ok)
             *ok = false;
         return 0;
     }
 #endif
     bool ok_ = true;
-    const qlonglong value = qstrtoll(buffer, Q_NULLPTR, 0, &ok_);
-    if (int(value) != value) { // this is the check in QByteArray::toInt(), keep it in sync
+    const char *endptr;
+    const qlonglong value = qstrtoll(buffer, &endptr, 0, &ok_);
+    if (int(value) != value || *endptr != '\0') { // this is the check in QByteArray::toInt(), keep it in sync
         if (ok)
             *ok = false;
         return 0;
@@ -3312,12 +3452,12 @@ int qEnvironmentVariableIntValue(const char *varName, bool *ok) Q_DECL_NOEXCEPT
     \endcode
     except that it's potentially much faster, and can't throw exceptions.
 
-    \sa qgetenv(), qEnvironmentVariableIsEmpty()
+    \sa qgetenv(), qEnvironmentVariable(), qEnvironmentVariableIsEmpty()
 */
 bool qEnvironmentVariableIsSet(const char *varName) Q_DECL_NOEXCEPT
 {
     QMutexLocker locker(&environmentMutex);
-#if defined(_MSC_VER) && _MSC_VER >= 1400
+#ifdef Q_CC_MSVC
     size_t requiredSize = 0;
     (void)getenv_s(&requiredSize, 0, 0, varName);
     return requiredSize != 0;
@@ -3342,12 +3482,12 @@ bool qEnvironmentVariableIsSet(const char *varName) Q_DECL_NOEXCEPT
     uses the replacement function in VC, and calls the standard C
     library's implementation on all other platforms.
 
-    \sa qgetenv()
+    \sa qgetenv(), qEnvironmentVariable()
 */
 bool qputenv(const char *varName, const QByteArray& value)
 {
     QMutexLocker locker(&environmentMutex);
-#if defined(_MSC_VER) && _MSC_VER >= 1400
+#if defined(Q_CC_MSVC)
     return _putenv_s(varName, value.constData()) == 0;
 #elif (defined(_POSIX_VERSION) && (_POSIX_VERSION-0) >= 200112L) || defined(Q_OS_HAIKU)
     // POSIX.1-2001 has setenv
@@ -3373,12 +3513,12 @@ bool qputenv(const char *varName, const QByteArray& value)
 
     \since 5.1
 
-    \sa qputenv(), qgetenv()
+    \sa qputenv(), qgetenv(), qEnvironmentVariable()
 */
 bool qunsetenv(const char *varName)
 {
     QMutexLocker locker(&environmentMutex);
-#if defined(_MSC_VER) && _MSC_VER >= 1400
+#if defined(Q_CC_MSVC)
     return _putenv_s(varName, "") == 0;
 #elif (defined(_POSIX_VERSION) && (_POSIX_VERSION-0) >= 200112L) || defined(Q_OS_BSD4) || defined(Q_OS_HAIKU)
     // POSIX.1-2001, BSD and Haiku have unsetenv
@@ -3395,138 +3535,6 @@ bool qunsetenv(const char *varName)
     buffer += '=';
     char *envVar = qstrdup(buffer.constData());
     return putenv(envVar) == 0;
-#endif
-}
-
-#if defined(Q_OS_UNIX) && !defined(QT_NO_THREAD) && defined(_POSIX_THREAD_SAFE_FUNCTIONS) && (_POSIX_THREAD_SAFE_FUNCTIONS - 0 > 0)
-
-#  if defined(Q_OS_INTEGRITY) && defined(__GHS_VERSION_NUMBER) && (__GHS_VERSION_NUMBER < 500)
-// older versions of INTEGRITY used a long instead of a uint for the seed.
-typedef long SeedStorageType;
-#  else
-typedef uint SeedStorageType;
-#  endif
-
-typedef QThreadStorage<SeedStorageType *> SeedStorage;
-Q_GLOBAL_STATIC(SeedStorage, randTLS)  // Thread Local Storage for seed value
-
-#elif defined(Q_OS_ANDROID)
-typedef QThreadStorage<QJNIObjectPrivate> AndroidRandomStorage;
-Q_GLOBAL_STATIC(AndroidRandomStorage, randomTLS)
-#endif
-
-/*!
-    \relates <QtGlobal>
-    \since 4.2
-
-    Thread-safe version of the standard C++ \c srand() function.
-
-    Sets the argument \a seed to be used to generate a new random number sequence of
-    pseudo random integers to be returned by qrand().
-
-    The sequence of random numbers generated is deterministic per thread. For example,
-    if two threads call qsrand(1) and subsequently call qrand(), the threads will get
-    the same random number sequence.
-
-    \sa qrand()
-*/
-void qsrand(uint seed)
-{
-#if defined(Q_OS_UNIX) && !defined(QT_NO_THREAD) && defined(_POSIX_THREAD_SAFE_FUNCTIONS) && (_POSIX_THREAD_SAFE_FUNCTIONS - 0 > 0)
-    SeedStorage *seedStorage = randTLS();
-    if (seedStorage) {
-        SeedStorageType *pseed = seedStorage->localData();
-        if (!pseed)
-            seedStorage->setLocalData(pseed = new SeedStorageType);
-        *pseed = seed;
-    } else {
-        //global static seed storage should always exist,
-        //except after being deleted by QGlobalStaticDeleter.
-        //But since it still can be called from destructor of another
-        //global static object, fallback to srand(seed)
-        srand(seed);
-    }
-#elif defined(Q_OS_ANDROID)
-    if (randomTLS->hasLocalData()) {
-        randomTLS->localData().callMethod<void>("setSeed", "(J)V", jlong(seed));
-        return;
-    }
-
-    QJNIObjectPrivate random("java/util/Random",
-                             "(J)V",
-                             jlong(seed));
-    if (!random.isValid()) {
-        srand(seed);
-        return;
-    }
-
-    randomTLS->setLocalData(random);
-#else
-    // On Windows srand() and rand() already use Thread-Local-Storage
-    // to store the seed between calls
-    // this is also valid for QT_NO_THREAD
-    srand(seed);
-#endif
-}
-
-/*!
-    \relates <QtGlobal>
-    \since 4.2
-
-    Thread-safe version of the standard C++ \c rand() function.
-
-    Returns a value between 0 and \c RAND_MAX (defined in \c <cstdlib> and
-    \c <stdlib.h>), the next number in the current sequence of pseudo-random
-    integers.
-
-    Use \c qsrand() to initialize the pseudo-random number generator with
-    a seed value.
-
-    \sa qsrand()
-*/
-int qrand()
-{
-#if defined(Q_OS_UNIX) && !defined(QT_NO_THREAD) && defined(_POSIX_THREAD_SAFE_FUNCTIONS) && (_POSIX_THREAD_SAFE_FUNCTIONS - 0 > 0)
-    SeedStorage *seedStorage = randTLS();
-    if (seedStorage) {
-        SeedStorageType *pseed = seedStorage->localData();
-        if (!pseed) {
-            seedStorage->setLocalData(pseed = new SeedStorageType);
-            *pseed = 1;
-        }
-        return rand_r(pseed);
-    } else {
-        //global static seed storage should always exist,
-        //except after being deleted by QGlobalStaticDeleter.
-        //But since it still can be called from destructor of another
-        //global static object, fallback to rand()
-        return rand();
-    }
-#elif defined(Q_OS_ANDROID)
-    AndroidRandomStorage *randomStorage = randomTLS();
-    if (!randomStorage)
-        return rand();
-
-    if (randomStorage->hasLocalData()) {
-        return randomStorage->localData().callMethod<jint>("nextInt",
-                                                           "(I)I",
-                                                           RAND_MAX);
-    }
-
-    QJNIObjectPrivate random("java/util/Random",
-                             "(J)V",
-                             jlong(1));
-
-    if (!random.isValid())
-        return rand();
-
-    randomStorage->setLocalData(random);
-    return random.callMethod<jint>("nextInt", "(I)I", RAND_MAX);
-#else
-    // On Windows srand() and rand() already use Thread-Local-Storage
-    // to store the seed between calls
-    // this is also valid for QT_NO_THREAD
-    return rand();
 #endif
 }
 
@@ -3602,7 +3610,7 @@ int qrand()
 */
 
 /*!
-    \fn qAsConst(T &t)
+    \fn template <typename T> typename std::add_const<T>::type &qAsConst(T &t)
     \relates <QtGlobal>
     \since 5.7
 
@@ -3654,7 +3662,7 @@ int qrand()
 */
 
 /*!
-    \fn qAsConst(const T &&t)
+    \fn template <typename T> void qAsConst(const T &&t)
     \relates <QtGlobal>
     \since 5.7
     \overload
@@ -4066,43 +4074,6 @@ bool QInternal::activateCallbacks(Callback cb, void **parameters)
 */
 
 /*!
-    \macro Q_GLOBAL_STATIC(type, name)
-    \internal
-
-    Declares a global static variable with the given \a type and \a name.
-
-    Use this macro to instantiate an object in a thread-safe way, creating
-    a global pointer that can be used to refer to it.
-
-    \warning This macro is subject to a race condition that can cause the object
-    to be constructed twice. However, if this occurs, the second instance will
-    be immediately deleted.
-
-    See also
-    \l{http://www.aristeia.com/publications.html}{"C++ and the perils of Double-Checked Locking"}
-    by Scott Meyers and Andrei Alexandrescu.
-*/
-
-/*!
-    \macro Q_GLOBAL_STATIC_WITH_ARGS(type, name, arguments)
-    \internal
-
-    Declares a global static variable with the specified \a type and \a name.
-
-    Use this macro to instantiate an object using the \a arguments specified
-    in a thread-safe way, creating a global pointer that can be used to refer
-    to it.
-
-    \warning This macro is subject to a race condition that can cause the object
-    to be constructed twice. However, if this occurs, the second instance will
-    be immediately deleted.
-
-    See also
-    \l{http://www.aristeia.com/publications.html}{"C++ and the perils of Double-Checked Locking"}
-    by Scott Meyers and Andrei Alexandrescu.
-*/
-
-/*!
     \macro QT_NAMESPACE
     \internal
 
@@ -4350,6 +4321,7 @@ bool QInternal::activateCallbacks(Callback cb, void **parameters)
 /*!
     \macro qDebug(const char *message, ...)
     \relates <QtGlobal>
+    \threadsafe
 
     Calls the message handler with the debug message \a message. If no
     message handler has been installed, the message is printed to
@@ -4386,6 +4358,7 @@ bool QInternal::activateCallbacks(Callback cb, void **parameters)
 /*!
     \macro qInfo(const char *message, ...)
     \relates <QtGlobal>
+    \threadsafe
     \since 5.5
 
     Calls the message handler with the informational message \a message. If no
@@ -4423,14 +4396,18 @@ bool QInternal::activateCallbacks(Callback cb, void **parameters)
 /*!
     \macro qWarning(const char *message, ...)
     \relates <QtGlobal>
+    \threadsafe
 
     Calls the message handler with the warning message \a message. If no
     message handler has been installed, the message is printed to
     stderr. Under Windows, the message is sent to the debugger.
     On QNX the message is sent to slogger2. This
     function does nothing if \c QT_NO_WARNING_OUTPUT was defined
-    during compilation; it exits if the environment variable \c
-    QT_FATAL_WARNINGS is not empty.
+    during compilation; it exits if at the nth warning corresponding to the
+    counter in environment variable \c QT_FATAL_WARNINGS. That is, if the
+    environment variable contains the value 1, it will exit on the 1st message;
+    if it contains the value 10, it will exit on the 10th message. Any
+    non-numeric value is equivalent to 1.
 
     This function takes a format string and a list of arguments,
     similar to the C printf() function. The format should be a Latin-1
@@ -4457,6 +4434,7 @@ bool QInternal::activateCallbacks(Callback cb, void **parameters)
 /*!
     \macro qCritical(const char *message, ...)
     \relates <QtGlobal>
+    \threadsafe
 
     Calls the message handler with the critical message \a message. If no
     message handler has been installed, the message is printed to

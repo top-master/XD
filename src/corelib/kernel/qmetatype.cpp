@@ -53,17 +53,23 @@
 #include "qdatastream.h"
 #include "qmetatypeswitcher_p.h"
 
+#if QT_CONFIG(regularexpression)
+#  include "qregularexpression.h"
+#endif
+
 #ifndef QT_BOOTSTRAPPED
 #  include "qbitarray.h"
 #  include "qurl.h"
 #  include "qvariant.h"
-#  include "qabstractitemmodel.h"
-#  include "qregularexpression.h"
 #  include "qjsonvalue.h"
 #  include "qjsonobject.h"
 #  include "qjsonarray.h"
 #  include "qjsondocument.h"
 #  include "qbytearraylist.h"
+#endif
+
+#if QT_CONFIG(itemmodel)
+#  include "qabstractitemmodel.h"
 #endif
 
 #ifndef QT_NO_GEOM_VARIANT
@@ -216,6 +222,7 @@ struct DefinedTypesFilter {
     \value QChar QChar
     \value QString QString
     \value QByteArray QByteArray
+    \value Nullptr \c{std::nullptr_t}
 
     \value VoidStar \c{void *}
     \value Long \c{long}
@@ -287,6 +294,8 @@ struct DefinedTypesFilter {
 
     \value User  Base value for user types
     \value UnknownType This is an invalid type id. It is returned from QMetaType for types that are not registered
+    \omitvalue LastCoreType
+    \omitvalue LastGuiType
 
     Additional types can be registered using Q_DECLARE_METATYPE().
 
@@ -307,7 +316,8 @@ struct DefinedTypesFilter {
     \omitvalue WeakPointerToQObject
     \omitvalue TrackingPointerToQObject
     \omitvalue WasDeclaredAsMetaType
-    \omitvalue IsGadget This type is a Q_GADGET and it's corresponding QMetaObject can be accessed with QMetaType::metaObject Since 5.5.
+    \omitvalue IsGadget \omit This type is a Q_GADGET and it's corresponding QMetaObject can be accessed with QMetaType::metaObject Since 5.5. \endomit
+    \omitvalue PointerToGadget
 */
 
 /*!
@@ -585,7 +595,7 @@ Q_GLOBAL_STATIC(QMetaTypeDebugStreamRegistry, customTypesDebugStreamRegistry)
 */
 
 /*!
-    \fn bool QMetaType::registerConverter(MemberFunction function)
+    \fn  template<typename MemberFunction, int> bool QMetaType::registerConverter(MemberFunction function)
     \since 5.2
     \overload
     Registers a method \a function like To From::function() const as converter from type From
@@ -593,7 +603,7 @@ Q_GLOBAL_STATIC(QMetaTypeDebugStreamRegistry, customTypesDebugStreamRegistry)
 */
 
 /*!
-    \fn bool QMetaType::registerConverter(MemberFunctionOk function)
+    \fn template<typename MemberFunctionOk, char> bool QMetaType::registerConverter(MemberFunctionOk function)
     \since 5.2
     \overload
     Registers a method \a function like To From::function(bool *ok) const as converter from type From
@@ -601,7 +611,7 @@ Q_GLOBAL_STATIC(QMetaTypeDebugStreamRegistry, customTypesDebugStreamRegistry)
 */
 
 /*!
-    \fn bool QMetaType::registerConverter(UnaryFunction function)
+    \fn template<typename UnaryFunction> bool QMetaType::registerConverter(UnaryFunction function)
     \since 5.2
     \overload
     Registers a unary function object \a function as converter from type From
@@ -1342,8 +1352,10 @@ bool QMetaType::save(QDataStream &stream, int type, const void *data)
     case QMetaType::Void:
     case QMetaType::VoidStar:
     case QMetaType::QObjectStar:
+#if QT_CONFIG(itemmodel)
     case QMetaType::QModelIndex:
     case QMetaType::QPersistentModelIndex:
+#endif
     case QMetaType::QJsonValue:
     case QMetaType::QJsonObject:
     case QMetaType::QJsonArray:
@@ -1477,12 +1489,12 @@ bool QMetaType::save(QDataStream &stream, int type, const void *data)
         stream << *static_cast<const NS(QRegExp)*>(data);
         break;
 #endif
-#ifndef QT_BOOTSTRAPPED
-#ifndef QT_NO_REGULAREXPRESSION
+#if QT_CONFIG(regularexpression)
     case QMetaType::QRegularExpression:
         stream << *static_cast<const NS(QRegularExpression)*>(data);
         break;
-#endif // QT_NO_REGULAREXPRESSION
+#endif // QT_CONFIG(regularexpression)
+#ifndef QT_BOOTSTRAPPED
     case QMetaType::QEasingCurve:
         stream << *static_cast<const NS(QEasingCurve)*>(data);
         break;
@@ -1566,8 +1578,10 @@ bool QMetaType::load(QDataStream &stream, int type, void *data)
     case QMetaType::Void:
     case QMetaType::VoidStar:
     case QMetaType::QObjectStar:
+#if QT_CONFIG(itemmodel)
     case QMetaType::QModelIndex:
     case QMetaType::QPersistentModelIndex:
+#endif
     case QMetaType::QJsonValue:
     case QMetaType::QJsonObject:
     case QMetaType::QJsonArray:
@@ -1707,12 +1721,12 @@ bool QMetaType::load(QDataStream &stream, int type, void *data)
         stream >> *static_cast< NS(QRegExp)*>(data);
         break;
 #endif
-#ifndef QT_BOOTSTRAPPED
-#ifndef QT_NO_REGULAREXPRESSION
+#if QT_CONFIG(regularexpression)
     case QMetaType::QRegularExpression:
         stream >> *static_cast< NS(QRegularExpression)*>(data);
         break;
-#endif // QT_NO_REGULAREXPRESSION
+#endif // QT_CONFIG(regularexpression)
+#ifndef QT_BOOTSTRAPPED
     case QMetaType::QEasingCurve:
         stream >> *static_cast< NS(QEasingCurve)*>(data);
         break;

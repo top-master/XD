@@ -4,6 +4,7 @@ import qbs.ModUtils
 import QtCoreConfig
 
 QtHostTool {
+    description: "Qt User Interface Compiler"
     toolFileTag: "qt.uic-tool"
     condition: Qt.global.privateConfig.gui && Qt.global.privateConfig.widgets
     qbsSearchPaths: [project.qtbaseShadowDir + "/src/corelib/qbs"]
@@ -71,16 +72,8 @@ QtHostTool {
         name: "cpp generator"
         prefix: "cpp/"
         files: [
-            "cppextractimages.cpp",
-            "cppextractimages.h",
             "cppwritedeclaration.cpp",
             "cppwritedeclaration.h",
-            "cppwriteicondata.cpp",
-            "cppwriteicondata.h",
-            "cppwriteicondeclaration.cpp",
-            "cppwriteicondeclaration.h",
-            "cppwriteiconinitialization.cpp",
-            "cppwriteiconinitialization.h",
             "cppwriteincludes.cpp",
             "cppwriteincludes.h",
             "cppwriteinitialization.cpp",

@@ -331,20 +331,19 @@ void qt_set_thread_name(HANDLE threadId, LPCSTR threadName)
 
 #endif // QT_NO_THREAD
 
-void QThreadPrivate::createEventDispatcher(QThreadData *data)
+QAbstractEventDispatcher *QThreadPrivate::createEventDispatcher(QThreadData *data)
 {
+    Q_UNUSED(data);
 #ifndef Q_OS_WINRT
-    QEventDispatcherWin32 *theEventDispatcher = new QEventDispatcherWin32;
+    return new QEventDispatcherWin32;
 #else
-    QEventDispatcherWinRT *theEventDispatcher = new QEventDispatcherWinRT;
+    return new QEventDispatcherWinRT;
 #endif
-    data->eventDispatcher.storeRelease(theEventDispatcher);
-    theEventDispatcher->startingUp();
 }
 
 #ifndef QT_NO_THREAD
 
-unsigned int __stdcall QT_ENSURE_STACK_ALIGNED_FOR_SSE QThreadPrivate::start(void *arg)
+unsigned int __stdcall QT_ENSURE_STACK_ALIGNED_FOR_SSE QThreadPrivate::start(void *arg) Q_DECL_NOEXCEPT
 {
     QThread *thr = reinterpret_cast<QThread *>(arg);
     QThreadData *data = QThreadData::get2(thr);
@@ -360,10 +359,13 @@ unsigned int __stdcall QT_ENSURE_STACK_ALIGNED_FOR_SSE QThreadPrivate::start(voi
         data->quitNow = thr->d_func()->exited;
     }
 
-    if (data->eventDispatcher.load()) // custom event dispatcher set?
-        data->eventDispatcher.load()->startingUp();
-    else
-        createEventDispatcher(data);
+    QAbstractEventDispatcher *eventDispatcher = data->eventDispatcher.load();
+    if (!eventDispatcher) {
+        eventDispatcher = createEventDispatcher(data);
+        data->eventDispatcher.storeRelease(eventDispatcher);
+    }
+
+    eventDispatcher->startingUp();
 
 #if !defined(QT_NO_DEBUG) && defined(Q_CC_MSVC) && !defined(Q_OS_WINRT)
     // sets the name of the current thread.
@@ -381,7 +383,7 @@ unsigned int __stdcall QT_ENSURE_STACK_ALIGNED_FOR_SSE QThreadPrivate::start(voi
     return 0;
 }
 
-void QThreadPrivate::finish(void *arg, bool lockAnyway)
+void QThreadPrivate::finish(void *arg, bool lockAnyway) Q_DECL_NOEXCEPT
 {
     QThread *thr = reinterpret_cast<QThread *>(arg);
     QThreadPrivate *d = thr->d_func();

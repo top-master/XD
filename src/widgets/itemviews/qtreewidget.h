@@ -46,10 +46,9 @@
 #include <QtCore/qvariant.h>
 #include <QtCore/qvector.h>
 
+QT_REQUIRE_CONFIG(treewidget);
+
 QT_BEGIN_NAMESPACE
-
-
-#ifndef QT_NO_TREEWIDGET
 
 class QTreeWidget;
 class QTreeModel;
@@ -120,7 +119,7 @@ public:
     inline void setToolTip(int column, const QString &toolTip);
 #endif
 
-#ifndef QT_NO_WHATSTHIS
+#if QT_CONFIG(whatsthis)
     inline QString whatsThis(int column) const
         { return data(column, Qt::WhatsThisRole).toString(); }
     inline void setWhatsThis(int column, const QString &whatsThis);
@@ -179,7 +178,7 @@ public:
     inline QTreeWidgetItem *parent() const { return par; }
     inline QTreeWidgetItem *child(int index) const {
         if (index < 0 || index >= children.size())
-            return Q_NULLPTR;
+            return nullptr;
         executePendingSort();
         return children.at(index);
     }
@@ -225,7 +224,7 @@ inline void QTreeWidgetItem::setText(int column, const QString &atext)
 inline void QTreeWidgetItem::setIcon(int column, const QIcon &aicon)
 { setData(column, Qt::DecorationRole, aicon); }
 
-#ifndef QT_NO_STATUSTIP
+#if QT_CONFIG(statustip)
 inline void QTreeWidgetItem::setStatusTip(int column, const QString &astatusTip)
 { setData(column, Qt::StatusTipRole, astatusTip); }
 #endif
@@ -235,7 +234,7 @@ inline void QTreeWidgetItem::setToolTip(int column, const QString &atoolTip)
 { setData(column, Qt::ToolTipRole, atoolTip); }
 #endif
 
-#ifndef QT_NO_WHATSTHIS
+#if QT_CONFIG(whatsthis)
 inline void QTreeWidgetItem::setWhatsThis(int column, const QString &awhatsThis)
 { setData(column, Qt::WhatsThisRole, awhatsThis); }
 #endif
@@ -262,7 +261,7 @@ class Q_WIDGETS_EXPORT QTreeWidget : public QTreeView
     friend class QTreeModel;
     friend class QTreeWidgetItem;
 public:
-    explicit QTreeWidget(QWidget *parent = Q_NULLPTR);
+    explicit QTreeWidget(QWidget *parent = nullptr);
     ~QTreeWidget();
 
     int columnCount() const;
@@ -300,6 +299,8 @@ public:
     void editItem(QTreeWidgetItem *item, int column = 0);
     void openPersistentEditor(QTreeWidgetItem *item, int column = 0);
     void closePersistentEditor(QTreeWidgetItem *item, int column = 0);
+    using QAbstractItemView::isPersistentEditorOpen;
+    bool isPersistentEditorOpen(QTreeWidgetItem *item, int column = 0) const;
 
     QWidget *itemWidget(QTreeWidgetItem *item, int column) const;
     void setItemWidget(QTreeWidgetItem *item, int column, QWidget *widget);
@@ -323,7 +324,7 @@ public:
     QTreeWidgetItem *itemAbove(const QTreeWidgetItem *item) const;
     QTreeWidgetItem *itemBelow(const QTreeWidgetItem *item) const;
 
-    void setSelectionModel(QItemSelectionModel *selectionModel) Q_DECL_OVERRIDE;
+    void setSelectionModel(QItemSelectionModel *selectionModel) override;
 
 public Q_SLOTS:
     void scrollToItem(const QTreeWidgetItem *item,
@@ -338,6 +339,7 @@ Q_SIGNALS:
     void itemDoubleClicked(QTreeWidgetItem *item, int column);
     void itemActivated(QTreeWidgetItem *item, int column);
     void itemEntered(QTreeWidgetItem *item, int column);
+    // ### Qt 6: add changed roles
     void itemChanged(QTreeWidgetItem *item, int column);
     void itemExpanded(QTreeWidgetItem *item);
     void itemCollapsed(QTreeWidgetItem *item);
@@ -345,7 +347,7 @@ Q_SIGNALS:
     void itemSelectionChanged();
 
 protected:
-    bool event(QEvent *e) Q_DECL_OVERRIDE;
+    bool event(QEvent *e) override;
     virtual QStringList mimeTypes() const;
 #if QT_VERSION >= QT_VERSION_CHECK(6,0,0)
     virtual QMimeData *mimeData(const QList<QTreeWidgetItem *> &items) const;
@@ -355,16 +357,26 @@ protected:
     virtual bool dropMimeData(QTreeWidgetItem *parent, int index,
                               const QMimeData *data, Qt::DropAction action);
     virtual Qt::DropActions supportedDropActions() const;
+
+#if QT_VERSION >= QT_VERSION_CHECK(6, 0, 0)
+public:
+#else
+protected:
+#endif
     QList<QTreeWidgetItem*> items(const QMimeData *data) const;
 
     QModelIndex indexFromItem(const QTreeWidgetItem *item, int column = 0) const;
+#if QT_VERSION < QT_VERSION_CHECK(6, 0, 0)
     QModelIndex indexFromItem(QTreeWidgetItem *item, int column = 0) const; // ### Qt 6: remove
+#endif
     QTreeWidgetItem *itemFromIndex(const QModelIndex &index) const;
+
+protected:
 #if QT_CONFIG(draganddrop)
-    void dropEvent(QDropEvent *event) Q_DECL_OVERRIDE;
+    void dropEvent(QDropEvent *event) override;
 #endif
 private:
-    void setModel(QAbstractItemModel *model) Q_DECL_OVERRIDE;
+    void setModel(QAbstractItemModel *model) override;
 
     Q_DECLARE_PRIVATE(QTreeWidget)
     Q_DISABLE_COPY(QTreeWidget)
@@ -384,7 +396,7 @@ private:
 };
 
 inline void QTreeWidget::removeItemWidget(QTreeWidgetItem *item, int column)
-{ setItemWidget(item, column, Q_NULLPTR); }
+{ setItemWidget(item, column, nullptr); }
 
 inline QTreeWidgetItem *QTreeWidget::itemAt(int ax, int ay) const
 { return itemAt(QPoint(ax, ay)); }
@@ -421,8 +433,6 @@ inline void QTreeWidgetItem::setDisabled(bool disabled)
 
 inline bool QTreeWidgetItem::isDisabled() const
 { return !(flags() & Qt::ItemIsEnabled); }
-
-#endif // QT_NO_TREEWIDGET
 
 QT_END_NAMESPACE
 

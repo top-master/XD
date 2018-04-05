@@ -71,6 +71,19 @@ QT_BEGIN_NAMESPACE
 #  define DEBUG if (false) qDebug
 #endif
 
+static Qt::HANDLE createChangeNotification(const QString &path, uint flags)
+{
+    // Volume and folder paths need a trailing slash for proper notification
+    // (e.g. "c:" -> "c:/").
+    QString nativePath = QDir::toNativeSeparators(path);
+    if ((flags & FILE_NOTIFY_CHANGE_ATTRIBUTES) == 0 && !nativePath.endsWith(QLatin1Char('\\')))
+        nativePath.append(QLatin1Char('\\'));
+    const HANDLE result = FindFirstChangeNotification(reinterpret_cast<const wchar_t *>(nativePath.utf16()),
+                                                      FALSE, flags);
+    DEBUG() << __FUNCTION__ << nativePath << hex <<showbase << flags << "returns" << result;
+    return result;
+}
+
 #ifndef Q_OS_WINRT
 ///////////
 // QWindowsRemovableDriveListener
@@ -100,7 +113,8 @@ public:
 
 signals:
     void driveAdded();
-    void driveRemoved(const QString &);
+    void driveRemoved(); // Some drive removed
+    void driveRemoved(const QString &); // Watched/known drive removed
     void driveLockForRemoval(const QString &);
     void driveLockForRemovalFailed(const QString &);
 
@@ -113,16 +127,10 @@ private:
     quintptr m_lastMessageHash;
 };
 
-static inline QEventDispatcherWin32 *winEventDispatcher()
-{
-    return static_cast<QEventDispatcherWin32 *>(QCoreApplication::instance()->eventDispatcher());
-}
-
 QWindowsRemovableDriveListener::QWindowsRemovableDriveListener(QObject *parent)
     : QObject(parent)
     , m_lastMessageHash(0)
 {
-    winEventDispatcher()->installNativeEventFilter(this);
 }
 
 static void stopDeviceNotification(QWindowsRemovableDriveListener::RemovableDriveEntry &e)
@@ -239,7 +247,8 @@ inline void QWindowsRemovableDriveListener::handleDbtDriveArrivalRemoval(const M
         case DBT_DEVICEARRIVAL:
             emit driveAdded();
             break;
-        case DBT_DEVICEREMOVECOMPLETE: // handled by DBT_DEVTYP_HANDLE above
+        case DBT_DEVICEREMOVECOMPLETE: // See above for handling of drives registered with watchers
+            emit driveRemoved();
             break;
         }
     }
@@ -299,7 +308,8 @@ void QWindowsRemovableDriveListener::addPath(const QString &p)
     notify.dbch_size = sizeof(notify);
     notify.dbch_devicetype = DBT_DEVTYP_HANDLE;
     notify.dbch_handle = volumeHandle;
-    re.devNotify = RegisterDeviceNotification(winEventDispatcher()->internalHwnd(),
+    QEventDispatcherWin32 *winEventDispatcher = static_cast<QEventDispatcherWin32 *>(QAbstractEventDispatcher::instance());
+    re.devNotify = RegisterDeviceNotification(winEventDispatcher->internalHwnd(),
                                               &notify, DEVICE_NOTIFY_WINDOW_HANDLE);
     // Empirically found: The notifications also work when the handle is immediately
     // closed. Do it here to avoid having to close/reopen in lock message handling.
@@ -324,19 +334,24 @@ QWindowsFileSystemWatcherEngine::Handle::Handle()
 
 QWindowsFileSystemWatcherEngine::QWindowsFileSystemWatcherEngine(QObject *parent)
     : QFileSystemWatcherEngine(parent)
-#ifndef Q_OS_WINRT
-    , m_driveListener(new QWindowsRemovableDriveListener(this))
-#endif
 {
 #ifndef Q_OS_WINRT
-    parent->setProperty("_q_driveListener",
-                        QVariant::fromValue(static_cast<QObject *>(m_driveListener)));
-    QObject::connect(m_driveListener, &QWindowsRemovableDriveListener::driveLockForRemoval,
-                     this, &QWindowsFileSystemWatcherEngine::driveLockForRemoval);
-    QObject::connect(m_driveListener, &QWindowsRemovableDriveListener::driveLockForRemovalFailed,
-                     this, &QWindowsFileSystemWatcherEngine::driveLockForRemovalFailed);
-    QObject::connect(m_driveListener, &QWindowsRemovableDriveListener::driveRemoved,
-                     this, &QWindowsFileSystemWatcherEngine::driveRemoved);
+    if (QAbstractEventDispatcher *eventDispatcher = QAbstractEventDispatcher::instance()) {
+        m_driveListener = new QWindowsRemovableDriveListener(this);
+        eventDispatcher->installNativeEventFilter(m_driveListener);
+        parent->setProperty("_q_driveListener",
+                            QVariant::fromValue(static_cast<QObject *>(m_driveListener)));
+        QObject::connect(m_driveListener, &QWindowsRemovableDriveListener::driveLockForRemoval,
+                         this, &QWindowsFileSystemWatcherEngine::driveLockForRemoval);
+        QObject::connect(m_driveListener, &QWindowsRemovableDriveListener::driveLockForRemovalFailed,
+                         this, &QWindowsFileSystemWatcherEngine::driveLockForRemovalFailed);
+        QObject::connect(m_driveListener,
+                         QOverload<const QString &>::of(&QWindowsRemovableDriveListener::driveRemoved),
+                         this, &QWindowsFileSystemWatcherEngine::driveRemoved);
+    } else {
+        qWarning("QFileSystemWatcher: Removable drive notification will not work"
+                 " if there is no QCoreApplication instance.");
+    }
 #endif // !Q_OS_WINRT
 }
 
@@ -404,8 +419,29 @@ QStringList QWindowsFileSystemWatcherEngine::addPaths(const QStringList &paths,
             thread = *jt;
             QMutexLocker locker(&(thread->mutex));
 
-            handle = thread->handleForDir.value(QFileSystemWatcherPathKey(absolutePath));
-            if (handle.handle != INVALID_HANDLE_VALUE && handle.flags == flags) {
+            const auto hit = thread->handleForDir.find(QFileSystemWatcherPathKey(absolutePath));
+            if (hit != thread->handleForDir.end() && hit.value().flags < flags) {
+                // Requesting to add a file whose directory has been added previously.
+                // Recreate the notification handle to add the missing notification attributes
+                // for files (FILE_NOTIFY_CHANGE_ATTRIBUTES...)
+                DEBUG() << "recreating" << absolutePath << hex << showbase << hit.value().flags
+                    << "->" << flags;
+                const Qt::HANDLE fileHandle = createChangeNotification(absolutePath, flags);
+                if (fileHandle != INVALID_HANDLE_VALUE) {
+                    const int index = thread->handles.indexOf(hit.value().handle);
+                    const auto pit = thread->pathInfoForHandle.find(hit.value().handle);
+                    Q_ASSERT(index != -1);
+                    Q_ASSERT(pit != thread->pathInfoForHandle.end());
+                    FindCloseChangeNotification(hit.value().handle);
+                    thread->handles[index] = hit.value().handle = fileHandle;
+                    hit.value().flags = flags;
+                    thread->pathInfoForHandle.insert(fileHandle, pit.value());
+                    thread->pathInfoForHandle.erase(pit);
+                }
+            }
+            // In addition, check on flags for sufficient notification attributes
+            if (hit != thread->handleForDir.end() && hit.value().flags >= flags) {
+                handle = hit.value();
                 // found a thread now insert...
                 DEBUG() << "Found a thread" << thread;
 
@@ -426,14 +462,9 @@ QStringList QWindowsFileSystemWatcherEngine::addPaths(const QStringList &paths,
         }
 
         // no thread found, first create a handle
-        if (handle.handle == INVALID_HANDLE_VALUE || handle.flags != flags) {
+        if (handle.handle == INVALID_HANDLE_VALUE) {
             DEBUG() << "No thread found";
-            // Volume and folder paths need a trailing slash for proper notification
-            // (e.g. "c:" -> "c:/").
-            const QString effectiveAbsolutePath =
-                    isDir ? (absolutePath + QLatin1Char('/')) : absolutePath;
-
-            handle.handle = FindFirstChangeNotification((wchar_t*) QDir::toNativeSeparators(effectiveAbsolutePath).utf16(), false, flags);
+            handle.handle = createChangeNotification(absolutePath, flags);
             handle.flags = flags;
             if (handle.handle == INVALID_HANDLE_VALUE)
                 continue;
@@ -486,9 +517,11 @@ QStringList QWindowsFileSystemWatcherEngine::addPaths(const QStringList &paths,
     }
 
 #ifndef Q_OS_WINRT
-    for (const QString &path : paths) {
-        if (!p.contains(path))
-            m_driveListener->addPath(path);
+    if (Q_LIKELY(m_driveListener)) {
+        for (const QString &path : paths) {
+            if (!p.contains(path))
+                m_driveListener->addPath(path);
+        }
     }
 #endif // !Q_OS_WINRT
     return p;

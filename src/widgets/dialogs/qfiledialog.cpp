@@ -43,7 +43,6 @@
 #include <private/qwidgetitemdata_p.h>
 #include "qfiledialog.h"
 
-#ifndef QT_NO_FILEDIALOG
 #include "qfiledialog_p.h"
 #include <private/qguiapplication_p.h>
 #include <qfontmetrics.h>
@@ -51,9 +50,12 @@
 #include <qheaderview.h>
 #include <qshortcut.h>
 #include <qgridlayout.h>
+#if QT_CONFIG(menu)
 #include <qmenu.h>
+#endif
+#if QT_CONFIG(messagebox)
 #include <qmessagebox.h>
-#include <qinputdialog.h>
+#endif
 #include <stdlib.h>
 #include <qsettings.h>
 #include <qdebug.h>
@@ -515,7 +517,7 @@ void QFileDialog::changeEvent(QEvent *e)
 
 QFileDialogPrivate::QFileDialogPrivate()
     :
-#ifndef QT_NO_PROXYMODEL
+#if QT_CONFIG(proxymodel)
         proxyModel(0),
 #endif
         model(0),
@@ -661,7 +663,7 @@ void QFileDialogPrivate::retranslateStrings()
 
     QList<QAction*> actions = qFileDialogUi->treeView->header()->actions();
     QAbstractItemModel *abstractModel = model;
-#ifndef QT_NO_PROXYMODEL
+#if QT_CONFIG(proxymodel)
     if (proxyModel)
         abstractModel = proxyModel;
 #endif
@@ -841,7 +843,7 @@ void QFileDialog::setVisible(bool visible)
             // Set WA_DontShowOnScreen so that QDialog::setVisible(visible) below
             // updates the state correctly, but skips showing the non-native version:
             setAttribute(Qt::WA_DontShowOnScreen);
-#ifndef QT_NO_FSCOMPLETER
+#if QT_CONFIG(fscompleter)
             // So the completer doesn't try to complete and therefore show a popup
             if (!d->nativeDialogInUse)
                 d->completer->setModel(0);
@@ -849,7 +851,7 @@ void QFileDialog::setVisible(bool visible)
         } else {
             d->createWidgets();
             setAttribute(Qt::WA_DontShowOnScreen, false);
-#ifndef QT_NO_FSCOMPLETER
+#if QT_CONFIG(fscompleter)
             if (!d->nativeDialogInUse) {
                 if (d->proxyModel != 0)
                     d->completer->setModel(d->proxyModel);
@@ -922,7 +924,7 @@ void QFileDialog::setDirectory(const QString &directory)
     if (!d->nativeDialogInUse) {
         d->qFileDialogUi->newFolderButton->setEnabled(d->model->flags(root) & Qt::ItemIsDropEnabled);
         if (root != d->rootIndex()) {
-#ifndef QT_NO_FSCOMPLETER
+#if QT_CONFIG(fscompleter)
             if (directory.endsWith(QLatin1Char('/')))
                 d->completer->setCompletionPrefix(newDirectory);
             else
@@ -1992,7 +1994,7 @@ QFileIconProvider *QFileDialog::iconProvider() const
 {
     Q_D(const QFileDialog);
     if (!d->model)
-        return Q_NULLPTR;
+        return nullptr;
     return d->model->iconProvider();
 }
 
@@ -2629,11 +2631,11 @@ void QFileDialog::accept()
         if (!info.exists())
             info = QFileInfo(d->getEnvironmentVariable(fn));
         if (!info.exists()) {
-#ifndef QT_NO_MESSAGEBOX
+#if QT_CONFIG(messagebox)
             QString message = tr("%1\nDirectory not found.\nPlease verify the "
                                           "correct directory name was given.");
             QMessageBox::warning(this, windowTitle(), message.arg(info.fileName()));
-#endif // QT_NO_MESSAGEBOX
+#endif // QT_CONFIG(messagebox)
             return;
         }
         if (info.isDir()) {
@@ -2661,7 +2663,7 @@ void QFileDialog::accept()
         if (!info.exists() || !confirmOverwrite() || acceptMode() == AcceptOpen) {
             d->emitFilesSelected(QStringList(fn));
             QDialog::accept();
-#ifndef QT_NO_MESSAGEBOX
+#if QT_CONFIG(messagebox)
         } else {
             if (QMessageBox::warning(this, windowTitle(),
                                      tr("%1 already exists.\nDo you want to replace it?")
@@ -2683,11 +2685,11 @@ void QFileDialog::accept()
             if (!info.exists())
                 info = QFileInfo(d->getEnvironmentVariable(file));
             if (!info.exists()) {
-#ifndef QT_NO_MESSAGEBOX
+#if QT_CONFIG(messagebox)
                 QString message = tr("%1\nFile not found.\nPlease verify the "
                                      "correct file name was given.");
                 QMessageBox::warning(this, windowTitle(), message.arg(info.fileName()));
-#endif // QT_NO_MESSAGEBOX
+#endif // QT_CONFIG(messagebox)
                 return;
             }
             if (info.isDir()) {
@@ -2794,7 +2796,7 @@ bool QFileDialogPrivate::restoreWidgetState(QStringList &history, int splitterPo
 
     QList<QAction*> actions = headerView->actions();
     QAbstractItemModel *abstractModel = model;
-#ifndef QT_NO_PROXYMODEL
+#if QT_CONFIG(proxymodel)
     if (proxyModel)
         abstractModel = proxyModel;
 #endif
@@ -2828,7 +2830,10 @@ void QFileDialogPrivate::init(const QUrl &directory, const QString &nameFilter,
     if (!nameFilter.isEmpty())
         q->setNameFilter(nameFilter);
     q->setDirectoryUrl(workingDirectory(directory));
-    q->selectFile(initialSelection(directory));
+    if (directory.isLocalFile())
+        q->selectFile(initialSelection(directory));
+    else
+        q->selectUrl(directory);
 
 #ifndef QT_NO_SETTINGS
     // Try to restore from the FileDialog settings group; if it fails, fall back
@@ -2909,10 +2914,10 @@ void QFileDialogPrivate::createWidgets()
 #ifndef QT_NO_SHORTCUT
     qFileDialogUi->fileNameLabel->setBuddy(qFileDialogUi->fileNameEdit);
 #endif
-#ifndef QT_NO_FSCOMPLETER
+#if QT_CONFIG(fscompleter)
     completer = new QFSCompleter(model, q);
     qFileDialogUi->fileNameEdit->setCompleter(completer);
-#endif // QT_NO_FSCOMPLETER
+#endif // QT_CONFIG(fscompleter)
 
     qFileDialogUi->fileNameEdit->setInputMethodHints(Qt::ImhNoPredictiveText);
 
@@ -2948,10 +2953,10 @@ void QFileDialogPrivate::createWidgets()
     qFileDialogUi->treeView->setModel(model);
     QHeaderView *treeHeader = qFileDialogUi->treeView->header();
     QFontMetrics fm(q->font());
-    treeHeader->resizeSection(0, fm.width(QLatin1String("wwwwwwwwwwwwwwwwwwwwwwwwww")));
-    treeHeader->resizeSection(1, fm.width(QLatin1String("128.88 GB")));
-    treeHeader->resizeSection(2, fm.width(QLatin1String("mp3Folder")));
-    treeHeader->resizeSection(3, fm.width(QLatin1String("10/29/81 02:02PM")));
+    treeHeader->resizeSection(0, fm.horizontalAdvance(QLatin1String("wwwwwwwwwwwwwwwwwwwwwwwwww")));
+    treeHeader->resizeSection(1, fm.horizontalAdvance(QLatin1String("128.88 GB")));
+    treeHeader->resizeSection(2, fm.horizontalAdvance(QLatin1String("mp3Folder")));
+    treeHeader->resizeSection(3, fm.horizontalAdvance(QLatin1String("10/29/81 02:02PM")));
     treeHeader->setContextMenuPolicy(Qt::ActionsContextMenu);
 
     QActionGroup *showActionGroup = new QActionGroup(q);
@@ -2960,7 +2965,7 @@ void QFileDialogPrivate::createWidgets()
                      q, SLOT(_q_showHeader(QAction*)));;
 
     QAbstractItemModel *abstractModel = model;
-#ifndef QT_NO_PROXYMODEL
+#if QT_CONFIG(proxymodel)
     if (proxyModel)
         abstractModel = proxyModel;
 #endif
@@ -3041,7 +3046,7 @@ void QFileDialogPrivate::_q_showHeader(QAction *action)
     qFileDialogUi->treeView->header()->setSectionHidden(actionGroup->actions().indexOf(action) + 1, !action->isChecked());
 }
 
-#ifndef QT_NO_PROXYMODEL
+#if QT_CONFIG(proxymodel)
 /*!
     \since 4.3
 
@@ -3078,7 +3083,7 @@ void QFileDialog::setProxyModel(QAbstractProxyModel *proxyModel)
         proxyModel->setSourceModel(d->model);
         d->qFileDialogUi->listView->setModel(d->proxyModel);
         d->qFileDialogUi->treeView->setModel(d->proxyModel);
-#ifndef QT_NO_FSCOMPLETER
+#if QT_CONFIG(fscompleter)
         d->completer->setModel(d->proxyModel);
         d->completer->proxyModel = d->proxyModel;
 #endif
@@ -3088,7 +3093,7 @@ void QFileDialog::setProxyModel(QAbstractProxyModel *proxyModel)
         d->proxyModel = 0;
         d->qFileDialogUi->listView->setModel(d->model);
         d->qFileDialogUi->treeView->setModel(d->model);
-#ifndef QT_NO_FSCOMPLETER
+#if QT_CONFIG(fscompleter)
         d->completer->setModel(d->model);
         d->completer->sourceModel = d->model;
         d->completer->proxyModel = 0;
@@ -3119,7 +3124,7 @@ QAbstractProxyModel *QFileDialog::proxyModel() const
     Q_D(const QFileDialog);
     return d->proxyModel;
 }
-#endif // QT_NO_PROXYMODEL
+#endif // QT_CONFIG(proxymodel)
 
 /*!
     \internal
@@ -3353,7 +3358,7 @@ void QFileDialogPrivate::_q_showDetailsView()
 */
 void QFileDialogPrivate::_q_showContextMenu(const QPoint &position)
 {
-#ifdef QT_NO_MENU
+#if !QT_CONFIG(menu)
     Q_UNUSED(position);
 #else
     Q_Q(QFileDialog);
@@ -3382,7 +3387,7 @@ void QFileDialogPrivate::_q_showContextMenu(const QPoint &position)
         menu.addAction(newFolderAction);
     }
     menu.exec(view->viewport()->mapToGlobal(position));
-#endif // QT_NO_MENU
+#endif // QT_CONFIG(menu)
 }
 
 /*!
@@ -3417,7 +3422,7 @@ void QFileDialogPrivate::_q_deleteCurrent()
 
     QModelIndexList list = qFileDialogUi->listView->selectionModel()->selectedRows();
     for (int i = list.count() - 1; i >= 0; --i) {
-        QModelIndex index = list.at(i);
+        QPersistentModelIndex index = list.at(i);
         if (index == qFileDialogUi->listView->rootIndex())
             continue;
 
@@ -3427,10 +3432,9 @@ void QFileDialogPrivate::_q_deleteCurrent()
 
         QString fileName = index.data(QFileSystemModel::FileNameRole).toString();
         QString filePath = index.data(QFileSystemModel::FilePathRole).toString();
-        bool isDir = model->isDir(index);
 
         QFile::Permissions p(index.parent().data(QFileSystemModel::FilePermissions).toInt());
-#ifndef QT_NO_MESSAGEBOX
+#if QT_CONFIG(messagebox)
         Q_Q(QFileDialog);
         if (!(p & QFile::WriteUser) && (QMessageBox::warning(q_func(), QFileDialog::tr("Delete"),
                                     QFileDialog::tr("'%1' is write protected.\nDo you want to delete it anyway?")
@@ -3443,15 +3447,18 @@ void QFileDialogPrivate::_q_deleteCurrent()
                                       QMessageBox::Yes | QMessageBox::No, QMessageBox::No) == QMessageBox::No)
             return;
 
+        // the event loop has run, we have to validate if the index is valid because the model might have removed it.
+        if (!index.isValid())
+            return;
+
 #else
         if (!(p & QFile::WriteUser))
             return;
-#endif // QT_NO_MESSAGEBOX
+#endif // QT_CONFIG(messagebox)
 
-        // the event loop has run, we can NOT reuse index because the model might have removed it.
-        if (isDir) {
+        if (model->isDir(index) && !model->fileInfo(index).isSymLink()) {
             if (!removeDirectory(filePath)) {
-#ifndef QT_NO_MESSAGEBOX
+#if QT_CONFIG(messagebox)
             QMessageBox::warning(q, q->windowTitle(),
                                 QFileDialog::tr("Could not delete directory."));
 #endif
@@ -3617,7 +3624,7 @@ void QFileDialogPrivate::_q_enterDirectory(const QModelIndex &index)
         }
     } else {
         // Do not accept when shift-clicking to multi-select a file in environments with single-click-activation (KDE)
-        if (!q->style()->styleHint(QStyle::SH_ItemView_ActivateItemOnSingleClick, Q_NULLPTR, qFileDialogUi->treeView)
+        if (!q->style()->styleHint(QStyle::SH_ItemView_ActivateItemOnSingleClick, nullptr, qFileDialogUi->treeView)
             || q->fileMode() != QFileDialog::ExistingFiles || !(QGuiApplication::keyboardModifiers() & Qt::CTRL)) {
             q->accept();
         }
@@ -3632,7 +3639,7 @@ void QFileDialogPrivate::_q_enterDirectory(const QModelIndex &index)
 */
 void QFileDialogPrivate::_q_goToDirectory(const QString &path)
 {
- #ifndef QT_NO_MESSAGEBOX
+ #if QT_CONFIG(messagebox)
     Q_Q(QFileDialog);
 #endif
     QModelIndex index = qFileDialogUi->lookInCombo->model()->index(qFileDialogUi->lookInCombo->currentIndex(),
@@ -3651,12 +3658,12 @@ void QFileDialogPrivate::_q_goToDirectory(const QString &path)
 
     if (dir.exists() || path2.isEmpty() || path2 == model->myComputer().toString()) {
         _q_enterDirectory(index);
-#ifndef QT_NO_MESSAGEBOX
+#if QT_CONFIG(messagebox)
     } else {
         QString message = QFileDialog::tr("%1\nDirectory not found.\nPlease verify the "
                                           "correct directory name was given.");
         QMessageBox::warning(q, q->windowTitle(), message.arg(path2));
-#endif // QT_NO_MESSAGEBOX
+#endif // QT_CONFIG(messagebox)
     }
 }
 
@@ -4028,7 +4035,7 @@ void QFileDialogLineEdit::keyPressEvent(QKeyEvent *e)
         e->accept();
 }
 
-#ifndef QT_NO_FSCOMPLETER
+#if QT_CONFIG(fscompleter)
 
 QString QFSCompleter::pathFromIndex(const QModelIndex &index) const
 {
@@ -4128,11 +4135,9 @@ QStringList QFSCompleter::splitPath(const QString &path) const
     return parts;
 }
 
-#endif // QT_NO_COMPLETER
+#endif // QT_CONFIG(completer)
 
 
 QT_END_NAMESPACE
 
 #include "moc_qfiledialog.cpp"
-
-#endif // QT_NO_FILEDIALOG

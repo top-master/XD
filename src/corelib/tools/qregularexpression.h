@@ -43,14 +43,16 @@
 
 #include <QtCore/qglobal.h>
 
-#ifndef QT_NO_REGULAREXPRESSION
-
 #include <QtCore/qstring.h>
 #include <QtCore/qstringlist.h>
 #include <QtCore/qshareddata.h>
 #include <QtCore/qvariant.h>
 
+QT_REQUIRE_CONFIG(regularexpression);
+
 QT_BEGIN_NAMESPACE
+
+class QStringView;
 
 class QRegularExpressionMatch;
 class QRegularExpressionMatchIterator;
@@ -94,6 +96,7 @@ public:
 
     QString pattern() const;
     void setPattern(const QString &pattern);
+    void setWildcardPattern(const QString &pattern);
 
     bool isValid() const;
     int patternErrorOffset() const;
@@ -197,9 +200,16 @@ public:
 
     QString captured(int nth = 0) const;
     QStringRef capturedRef(int nth = 0) const;
+    QStringView capturedView(int nth = 0) const;
 
+#if QT_STRINGVIEW_LEVEL < 2
     QString captured(const QString &name) const;
     QStringRef capturedRef(const QString &name) const;
+#endif
+
+    QString captured(QStringView name) const;
+    QStringRef capturedRef(QStringView name) const;
+    QStringView capturedView(QStringView name) const;
 
     QStringList capturedTexts() const;
 
@@ -207,9 +217,15 @@ public:
     int capturedLength(int nth = 0) const;
     int capturedEnd(int nth = 0) const;
 
+#if QT_STRINGVIEW_LEVEL < 2
     int capturedStart(const QString &name) const;
     int capturedLength(const QString &name) const;
     int capturedEnd(const QString &name) const;
+#endif
+
+    int capturedStart(QStringView name) const;
+    int capturedLength(QStringView name) const;
+    int capturedEnd(QStringView name) const;
 
 private:
     friend class QRegularExpression;
@@ -261,7 +277,5 @@ private:
 Q_DECLARE_SHARED(QRegularExpressionMatchIterator)
 
 QT_END_NAMESPACE
-
-#endif // QT_NO_REGULAREXPRESSION
 
 #endif // QREGULAREXPRESSION_H

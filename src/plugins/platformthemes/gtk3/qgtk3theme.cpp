@@ -102,6 +102,15 @@ QGtk3Theme::QGtk3Theme()
     g_log_set_handler("Gtk", G_LOG_LEVEL_MESSAGE, gtkMessageHandler, NULL);
 }
 
+static inline QVariant gtkGetLongPressTime()
+{
+    const char *gtk_long_press_time = "gtk-long-press-time";
+    static bool found = g_object_class_find_property(G_OBJECT_GET_CLASS(gtk_settings_get_default()), gtk_long_press_time);
+    if (!found)
+        return QVariant();
+    return QVariant(gtkSetting<guint>(gtk_long_press_time));  // Since 3.14, apparently we support >= 3.6
+}
+
 QVariant QGtk3Theme::themeHint(QPlatformTheme::ThemeHint hint) const
 {
     switch (hint) {
@@ -111,8 +120,12 @@ QVariant QGtk3Theme::themeHint(QPlatformTheme::ThemeHint hint) const
         return QVariant(gtkSetting<gint>("gtk-double-click-distance"));
     case QPlatformTheme::MouseDoubleClickInterval:
         return QVariant(gtkSetting<gint>("gtk-double-click-time"));
-    case QPlatformTheme::MousePressAndHoldInterval:
-        return QVariant(gtkSetting<guint>("gtk-long-press-time"));
+    case QPlatformTheme::MousePressAndHoldInterval: {
+        QVariant v = gtkGetLongPressTime();
+        if (!v.isValid())
+            v = QGnomeTheme::themeHint(hint);
+        return v;
+    }
     case QPlatformTheme::PasswordMaskDelay:
         return QVariant(gtkSetting<guint>("gtk-entry-password-hint-timeout"));
     case QPlatformTheme::StartDragDistance:
@@ -140,7 +153,7 @@ bool QGtk3Theme::usePlatformNativeDialog(DialogType type) const
     case ColorDialog:
         return true;
     case FileDialog:
-        return true;
+        return useNativeFileDialog();
     case FontDialog:
         return true;
     default:
@@ -154,6 +167,8 @@ QPlatformDialogHelper *QGtk3Theme::createPlatformDialogHelper(DialogType type) c
     case ColorDialog:
         return new QGtk3ColorDialogHelper;
     case FileDialog:
+        if (!useNativeFileDialog())
+            return nullptr;
         return new QGtk3FileDialogHelper;
     case FontDialog:
         return new QGtk3FontDialogHelper;
@@ -170,6 +185,19 @@ QPlatformMenu* QGtk3Theme::createPlatformMenu() const
 QPlatformMenuItem* QGtk3Theme::createPlatformMenuItem() const
 {
     return new QGtk3MenuItem;
+}
+
+bool QGtk3Theme::useNativeFileDialog()
+{
+    /* Require GTK3 >= 3.15.5 to avoid running into this bug:
+     * https://bugzilla.gnome.org/show_bug.cgi?id=725164
+     *
+     * While this bug only occurs when using widget-based file dialogs
+     * (native GTK3 dialogs are fine) we have to disable platform file
+     * dialogs entirely since we can't avoid creation of a platform
+     * dialog helper.
+     */
+    return gtk_check_version(3, 15, 5) == 0;
 }
 
 QT_END_NAMESPACE

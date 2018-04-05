@@ -42,7 +42,9 @@
 #include <qwidgetaction.h>
 #include <qtoolbar.h>
 #include <qstyleoption.h>
+#if QT_CONFIG(toolbutton)
 #include <qtoolbutton.h>
+#endif
 #include <qmenu.h>
 #include <qdebug.h>
 #include <qmath.h>
@@ -51,7 +53,9 @@
 #endif
 
 #include "qmainwindowlayout_p.h"
+#if QT_CONFIG(toolbutton)
 #include "qtoolbarextension_p.h"
+#endif
 #include "qtoolbarlayout_p.h"
 #include "qtoolbarseparator_p.h"
 
@@ -666,7 +670,7 @@ void QToolBarLayout::setExpanded(bool exp)
     extension->setChecked(expanded);
 
     if (QMainWindow *win = qobject_cast<QMainWindow*>(tb->parentWidget())) {
-#ifdef QT_NO_DOCKWIDGET
+#if !QT_CONFIG(dockwidget)
         animating = false;
 #else
         animating = !tb->isWindow() && win->isAnimated();

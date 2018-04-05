@@ -545,19 +545,32 @@ void tst_QColor::setNamedColor_data()
             QColor bySetNamedColor;              \
             bySetNamedColor.setNamedColor(expr); \
             auto byCtor = QColor(expr);          \
-            QTest::newRow(e.name + QByteArrayLiteral(#expr)) \
+            QTest::addRow("%s: %s", e.name, #expr) \
                 << byCtor << bySetNamedColor << expected;    \
         } while (0)                              \
         /*end*/
 
-        ROW(QLatin1String(e.name));
-        ROW(QString(QLatin1String(e.name)));
+        const auto l1 = QLatin1String(e.name);
+        const auto l1UpperBA = QByteArray(e.name).toUpper();
+        const auto l1Upper = QLatin1String(l1UpperBA);
+        const auto l1SpaceBA = QByteArray(e.name).insert(1, ' ');
+        const auto l1Space = QLatin1String(l1SpaceBA);
+
+        const auto u16  = QString(l1);
+        const auto u16Upper = u16.toUpper();
+        const auto u16Space = QString(u16).insert(1, ' ');
+
+        ROW(l1);
+        ROW(u16);
+        ROW(QStringView(u16));
         // name should be case insensitive
-        ROW(QLatin1String(QByteArray(e.name).toUpper()));
-        ROW(QString(e.name).toUpper());
+        ROW(l1Upper);
+        ROW(u16Upper);
+        ROW(QStringView(u16Upper));
         // spaces should be ignored
-        ROW(QLatin1String(QByteArray(e.name).insert(1, ' ')));
-        ROW(QString(e.name).insert(1, ' '));
+        ROW(l1Space);
+        ROW(u16Space);
+        ROW(QStringView(u16Space));
 #undef ROW
     }
 }
@@ -1410,9 +1423,6 @@ void tst_QColor::achromaticHslHue()
 #if 0 // Used to be included in Qt4 for Q_WS_X11
 void tst_QColor::setallowX11ColorNames()
 {
-#if defined(Q_OS_IRIX)
-    QSKIP("This fails due to the gamma settings in the SGI X server");
-#endif
     RGBData x11RgbTbl[] = {
         // a few standard X11 color names
         { "DodgerBlue1", qRgb(30, 144, 255) },

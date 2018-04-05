@@ -1341,7 +1341,7 @@ QByteArray QMetaObject::normalizedSignature(const char *method)
 
 enum { MaximumParamCount = 11 }; // up to 10 arguments + 1 return value
 
-/*!
+/*
     Returns the signatures of all methods whose name matches \a nonExistentMember,
     or an empty QByteArray if there are no matches.
 */
@@ -1489,6 +1489,57 @@ bool QMetaObject::invokeMethod(QObject *obj,
                          val0, val1, val2, val3, val4, val5, val6, val7, val8, val9);
 }
 
+bool QMetaObject::invokeMethodImpl(QObject *object, QtPrivate::QSlotObjectBase *slot, Qt::ConnectionType type, void *ret)
+{
+    struct Holder {
+        QtPrivate::QSlotObjectBase *obj;
+        ~Holder() { obj->destroyIfLastRef(); }
+    } holder = { slot };
+    Q_UNUSED(holder);
+
+    if (! object)
+        return false;
+
+    QThread *currentThread = QThread::currentThread();
+    QThread *objectThread = object->thread();
+    if (type == Qt::AutoConnection)
+        type = (currentThread == objectThread) ? Qt::DirectConnection : Qt::QueuedConnection;
+
+    void *argv[] = { ret };
+
+    if (type == Qt::DirectConnection) {
+        slot->call(object, argv);
+    } else if (type == Qt::QueuedConnection) {
+        if (argv[0]) {
+            qWarning("QMetaObject::invokeMethod: Unable to invoke methods with return values in "
+                     "queued connections");
+            return false;
+        }
+
+        // args and typesCopy will be deallocated by ~QMetaCallEvent() using free()
+        void **args = static_cast<void **>(calloc(1, sizeof(void *)));
+        Q_CHECK_PTR(args);
+
+        int *types = static_cast<int *>(calloc(1, sizeof(int)));
+        Q_CHECK_PTR(types);
+
+        QCoreApplication::postEvent(object, new QMetaCallEvent(slot, 0, -1, 1, types, args));
+    } else if (type == Qt::BlockingQueuedConnection) {
+#ifndef QT_NO_THREAD
+        if (currentThread == objectThread)
+            qWarning("QMetaObject::invokeMethod: Dead lock detected");
+
+        QSemaphore semaphore;
+        QCoreApplication::postEvent(object, new QMetaCallEvent(slot, 0, -1, 0, 0, argv, &semaphore));
+        semaphore.acquire();
+#endif // QT_NO_THREAD
+    } else {
+        qWarning("QMetaObject::invokeMethod: Unknown connection type");
+        return false;
+    }
+    return true;
+}
+
 /*! \fn bool QMetaObject::invokeMethod(QObject *obj, const char *member,
                                        QGenericReturnArgument ret,
                                        QGenericArgument val0 = QGenericArgument(0),
@@ -1544,15 +1595,29 @@ bool QMetaObject::invokeMethod(QObject *obj,
 */
 
 /*!
-    \fn QMetaObject::Connection::Connection(const Connection &other)
+    \fn  template<typename Functor, typename FunctorReturnType> bool QMetaObject::invokeMethod(QObject *context, Functor function, Qt::ConnectionType type, FunctorReturnType *ret)
 
-    Constructs a copy of \a other.
+    \since 5.10
+
+    \overload
+
+    Invokes the \a function in the event loop of \a context. \a function can be a functor
+    or a pointer to a member function. Returns \c true if the function could be invoked.
+    Returns \c false if there is no such function or the parameters did not match.
+    The return value of the function call is placed in \a ret.
 */
 
 /*!
-    \fn QMetaObject::Connection::Connection &operator=(const Connection &other)
+    \fn  template<typename Functor, typename FunctorReturnType> bool QMetaObject::invokeMethod(QObject *context, Functor function, FunctorReturnType *ret)
 
-    Assigns \a other to this connection and returns a reference to this connection.
+    \since 5.10
+
+    \overload
+
+    Invokes the \a function in the event loop of \a context using the connection type Qt::AutoConnection.
+    \a function can be a functor or a pointer to a member function. Returns \c true if the function could
+    be invoked. Returns \c false if there is no such member or the parameters did not match.
+    The return value of the function call is placed in \a ret.
 */
 
 /*!
@@ -2024,7 +2089,7 @@ QMetaMethod::MethodType QMetaMethod::methodType() const
 }
 
 /*!
-    \fn QMetaMethod QMetaMethod::fromSignal(PointerToMemberFunction signal)
+    \fn  template <typename PointerToMemberFunction> QMetaMethod QMetaMethod::fromSignal(PointerToMemberFunction signal)
     \since 5.0
 
     Returns the meta-method that corresponds to the given \a signal, or an
@@ -3264,7 +3329,21 @@ int QMetaProperty::notifySignalIndex() const
     if (hasNotifySignal()) {
         int offset = priv(mobj->d.data)->propertyData +
                      priv(mobj->d.data)->propertyCount * 3 + idx;
-        return mobj->d.data[offset] + mobj->methodOffset();
+        int methodIndex = mobj->d.data[offset];
+        if (methodIndex & IsUnresolvedSignal) {
+            methodIndex &= ~IsUnresolvedSignal;
+            const QByteArray signalName = stringData(mobj, methodIndex);
+            const QMetaObject *m = mobj;
+            const int idx = indexOfMethodRelative<MethodSignal>(&m, signalName, 0, nullptr);
+            if (idx >= 0) {
+                return idx + m->methodOffset();
+            } else {
+                qWarning("QMetaProperty::notifySignal: cannot find the NOTIFY signal %s in class %s for property '%s'",
+                         signalName.constData(), objectClassName(mobj), name());
+                return -1;
+            }
+        }
+        return methodIndex + mobj->methodOffset();
     } else {
         return -1;
     }

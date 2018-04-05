@@ -34,6 +34,7 @@
 #endif
 
 #include "qmakeparser.h"
+#include "qmakevfs.h"
 #include "ioutils.h"
 
 #include <qlist.h>
@@ -176,12 +177,13 @@ public:
 
     void setTemplate();
 
-    ProStringList split_value_list(const QStringRef &vals, const ProFile *source = 0);
+    ProStringList split_value_list(const QStringRef &vals, int source = 0);
     VisitReturn expandVariableReferences(const ushort *&tokPtr, int sizeHint, ProStringList *ret, bool joined);
 
     QString currentFileName() const;
     QString currentDirectory() const;
     ProFile *currentProFile() const;
+    int currentFileId() const;
     QString resolvePath(const QString &fileName) const
         { return QMakeInternal::IoUtils::resolvePath(currentDirectory(), fileName); }
 
@@ -236,7 +238,7 @@ public:
     VisitReturn parseJsonInto(const QByteArray &json, const QString &into, ProValueMap *value);
 
     VisitReturn writeFile(const QString &ctx, const QString &fn, QIODevice::OpenMode mode,
-                          bool exe, const QString &contents);
+                          QMakeVfs::VfsFlags flags, const QString &contents);
 #if QT_CONFIG(process)
     void runProcess(QProcess *proc, const QString &command) const;
 #endif
@@ -285,6 +287,7 @@ public:
     QString m_outputDir;
 
     int m_listCount;
+    int m_toggle;
     bool m_valuemapInited;
     bool m_hostBuild;
     QString m_qmakespec;
@@ -304,7 +307,6 @@ public:
     ProStringList m_returnValue;
     ProValueMapStack m_valuemapStack; // VariableName must be us-ascii, the content however can be non-us-ascii.
     QString m_tmp1, m_tmp2, m_tmp3, m_tmp[2]; // Temporaries for efficient toQString
-    mutable QString m_mtmp;
 
     QMakeGlobals *m_option;
     QMakeParser *m_parser;

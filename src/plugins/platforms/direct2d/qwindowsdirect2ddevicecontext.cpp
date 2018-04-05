@@ -89,7 +89,8 @@ public:
 
             if (FAILED(hr)) {
                 success = false;
-                qWarning("%s: EndDraw failed: %#x, tag1: %lld, tag2: %lld", __FUNCTION__, hr, tag1, tag2);
+                qWarning("%s: EndDraw failed: %#lx, tag1: %lld, tag2: %lld",
+                         __FUNCTION__, long(hr), tag1, tag2);
             }
         }
 
@@ -160,7 +161,7 @@ void QWindowsDirect2DDeviceContextSuspender::resume()
 {
     if (m_dc) {
         m_dc->resume();
-        m_dc = Q_NULLPTR;
+        m_dc = nullptr;
     }
 }
 

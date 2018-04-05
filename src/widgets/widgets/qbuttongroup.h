@@ -43,10 +43,9 @@
 #include <QtWidgets/qtwidgetsglobal.h>
 #include <QtCore/qobject.h>
 
+QT_REQUIRE_CONFIG(buttongroup);
+
 QT_BEGIN_NAMESPACE
-
-
-#ifndef QT_NO_BUTTONGROUP
 
 class QAbstractButton;
 class QAbstractButtonPrivate;
@@ -58,7 +57,7 @@ class Q_WIDGETS_EXPORT QButtonGroup : public QObject
 
     Q_PROPERTY(bool exclusive READ exclusive WRITE setExclusive)
 public:
-    explicit QButtonGroup(QObject *parent = Q_NULLPTR);
+    explicit QButtonGroup(QObject *parent = nullptr);
     ~QButtonGroup();
 
     void setExclusive(bool);
@@ -93,8 +92,6 @@ private:
     friend class QAbstractButton;
     friend class QAbstractButtonPrivate;
 };
-
-#endif // QT_NO_BUTTONGROUP
 
 QT_END_NAMESPACE
 

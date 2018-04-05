@@ -41,6 +41,7 @@
 
 #include "qapplication.h"
 #include "qdesktopwidget.h"
+#include <private/qdesktopwidget_p.h>
 #include "qpainter.h"
 #include "qpixmap.h"
 #include "qtextdocument.h"
@@ -140,7 +141,7 @@ QSplashScreen::QSplashScreen(const QPixmap &pixmap, Qt::WindowFlags f)
     one. In that case pass the proper desktop() as the \a parent.
 */
 QSplashScreen::QSplashScreen(QWidget *parent, const QPixmap &pixmap, Qt::WindowFlags f)
-    : QWidget(*new QSplashScreenPrivate, parent, Qt::SplashScreen | f)
+    : QWidget(*new QSplashScreenPrivate, parent, Qt::SplashScreen | Qt::FramelessWindowHint | f)
 {
     d_func()->pixmap = pixmap;
     setPixmap(d_func()->pixmap);  // Does an implicit repaint
@@ -282,7 +283,7 @@ void QSplashScreen::setPixmap(const QPixmap &pixmap)
 
     QRect r(QPoint(), d->pixmap.size()  / d->pixmap.devicePixelRatio());
     resize(r.size());
-    move(QApplication::desktop()->screenGeometry().center() - r.center());
+    move(QDesktopWidgetPrivate::screenGeometry().center() - r.center());
     if (isVisible())
         repaint();
 }

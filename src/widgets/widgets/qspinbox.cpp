@@ -40,13 +40,13 @@
 #include <private/qabstractspinbox_p.h>
 #include <qspinbox.h>
 
-#ifndef QT_NO_SPINBOX
-
 #include <qlineedit.h>
 #include <qlocale.h>
 #include <qvalidator.h>
 #include <qdebug.h>
 
+#include <algorithm>
+#include <cmath>
 #include <float.h>
 
 QT_BEGIN_NAMESPACE
@@ -63,10 +63,10 @@ class QSpinBoxPrivate : public QAbstractSpinBoxPrivate
     Q_DECLARE_PUBLIC(QSpinBox)
 public:
     QSpinBoxPrivate();
-    void emitSignals(EmitPolicy ep, const QVariant &) Q_DECL_OVERRIDE;
+    void emitSignals(EmitPolicy ep, const QVariant &) override;
 
-    virtual QVariant valueFromText(const QString &n) const Q_DECL_OVERRIDE;
-    virtual QString textFromValue(const QVariant &n) const Q_DECL_OVERRIDE;
+    virtual QVariant valueFromText(const QString &n) const override;
+    virtual QString textFromValue(const QVariant &n) const override;
     QVariant validateAndInterpret(QString &input, int &pos,
                                   QValidator::State &state) const;
 
@@ -77,6 +77,8 @@ public:
     }
 
     int displayIntegerBase;
+
+    QVariant calculateAdaptiveDecimalStep(int steps) const override;
 };
 
 class QDoubleSpinBoxPrivate : public QAbstractSpinBoxPrivate
@@ -84,10 +86,10 @@ class QDoubleSpinBoxPrivate : public QAbstractSpinBoxPrivate
     Q_DECLARE_PUBLIC(QDoubleSpinBox)
 public:
     QDoubleSpinBoxPrivate();
-    void emitSignals(EmitPolicy ep, const QVariant &) Q_DECL_OVERRIDE;
+    void emitSignals(EmitPolicy ep, const QVariant &) override;
 
-    virtual QVariant valueFromText(const QString &n) const Q_DECL_OVERRIDE;
-    virtual QString textFromValue(const QVariant &n) const Q_DECL_OVERRIDE;
+    virtual QVariant valueFromText(const QString &n) const override;
+    virtual QString textFromValue(const QVariant &n) const override;
     QVariant validateAndInterpret(QString &input, int &pos,
                                   QValidator::State &state) const;
     double round(double input) const;
@@ -102,6 +104,8 @@ public:
     // When fiddling with the decimals property, we may lose precision in these properties.
     double actualMin;
     double actualMax;
+
+    QVariant calculateAdaptiveDecimalStep(int steps) const override;
 };
 
 
@@ -111,6 +115,8 @@ public:
 
     \ingroup basicwidgets
     \inmodule QtWidgets
+
+    \image windows-spinbox.png
 
     QSpinBox is designed to handle integers and discrete sets of
     values (e.g., month names); use QDoubleSpinBox for floating point
@@ -150,15 +156,6 @@ public:
     It is often desirable to give the user a special (often default)
     choice in addition to the range of numeric values. See
     setSpecialValueText() for how to do this with QSpinBox.
-
-    \table 100%
-    \row \li \inlineimage windowsvista-spinbox.png Screenshot of a Windows Vista spin box
-         \li A spin box shown in the \l{Windows Vista Style Widget Gallery}{Windows Vista widget style}.
-    \row \li \inlineimage fusion-spinbox.png Screenshot of a Fusion spin box
-         \li A spin box shown in the \l{Fusion Style Widget Gallery}{Fusion widget style}.
-    \row \li \inlineimage macintosh-spinbox.png Screenshot of a Macintosh spin box
-         \li A spin box shown in the \l{Macintosh Style Widget Gallery}{Macintosh widget style}.
-    \endtable
 
     \section1 Subclassing QSpinBox
 
@@ -421,6 +418,41 @@ void QSpinBox::setRange(int minimum, int maximum)
 {
     Q_D(QSpinBox);
     d->setRange(QVariant(minimum), QVariant(maximum));
+}
+
+/*!
+    Sets the step type for the spin box: single step or adaptive
+    decimal step.
+
+    Adaptive decimal step means that the step size will continuously be
+    adjusted to one power of ten below the current \l value. So when
+    the value is 1100, the step is set to 100, so stepping up once
+    increases it to 1200. For 1200 stepping up takes it to 1300. For
+    negative values, stepping down from -1100 goes to -1200.
+
+    Step direction is taken into account to handle edges cases, so
+    that stepping down from 100 takes the value to 99 instead of 90.
+    Thus a step up followed by a step down -- or vice versa -- always
+    lands on the starting value; 99 -> 100 -> 99.
+
+    Setting this will cause the spin box to disregard the value of
+    \l singleStep, although it is preserved so that \l singleStep
+    comes into effect if adaptive decimal step is later turned off.
+
+    \sa QAbstractSpinBox::groupSeparator()
+    \since 5.12
+*/
+
+void QSpinBox::setStepType(QAbstractSpinBox::StepType stepType)
+{
+    Q_D(QSpinBox);
+    d->stepType = stepType;
+}
+
+QAbstractSpinBox::StepType QSpinBox::stepType() const
+{
+    Q_D(const QSpinBox);
+    return d->stepType;
 }
 
 /*!
@@ -856,6 +888,44 @@ void QDoubleSpinBox::setRange(double minimum, double maximum)
 }
 
 /*!
+    Sets the step type for the spin box: single step or adaptive
+    decimal step.
+
+    Adaptive decimal step means that the step size will continuously be
+    adjusted to one power of ten below the current \l value. So when
+    the value is 1100, the step is set to 100, so stepping up once
+    increases it to 1200. For 1200 stepping up takes it to 1300. For
+    negative values, stepping down from -1100 goes to -1200.
+
+    It also works for any decimal values, 0.041 is increased to 0.042
+    by stepping once.
+
+    Step direction is taken into account to handle edges cases, so
+    that stepping down from 100 takes the value to 99 instead of 90.
+    Thus a step up followed by a step down -- or vice versa -- always
+    lands on the starting value; 99 -> 100 -> 99.
+
+    Setting this will cause the spin box to disregard the value of
+    \l singleStep, although it is preserved so that \l singleStep
+    comes into effect if adaptive decimal step is later turned off.
+
+    \sa QAbstractSpinBox::groupSeparator()
+    \since 5.12
+*/
+
+void QDoubleSpinBox::setStepType(StepType stepType)
+{
+    Q_D(QDoubleSpinBox);
+    d->stepType = stepType;
+}
+
+QAbstractSpinBox::StepType QDoubleSpinBox::stepType() const
+{
+    Q_D(const QDoubleSpinBox);
+    return d->stepType;
+}
+
+/*!
      \property QDoubleSpinBox::decimals
 
      \brief the precision of the spin box, in decimals
@@ -1087,6 +1157,22 @@ QVariant QSpinBoxPrivate::validateAndInterpret(QString &input, int &pos,
     return cachedValue;
 }
 
+QVariant QSpinBoxPrivate::calculateAdaptiveDecimalStep(int steps) const
+{
+    const int intValue = value.toInt();
+    const int absValue = qAbs(intValue);
+
+    if (absValue < 100)
+        return 1;
+
+    const bool valueNegative = intValue < 0;
+    const bool stepsNegative = steps < 0;
+    const int signCompensation = (valueNegative == stepsNegative) ? 0 : 1;
+
+    const int log = static_cast<int>(std::log10(absValue - signCompensation)) - 1;
+    return static_cast<int>(std::pow(10, log));
+}
+
 // --- QDoubleSpinBoxPrivate ---
 
 /*!
@@ -1312,6 +1398,27 @@ QString QDoubleSpinBoxPrivate::textFromValue(const QVariant &f) const
     return q->textFromValue(f.toDouble());
 }
 
+QVariant QDoubleSpinBoxPrivate::calculateAdaptiveDecimalStep(int steps) const
+{
+    const double doubleValue = value.toDouble();
+    const double minStep = std::pow(10, -decimals);
+    double absValue = qAbs(doubleValue);
+
+    if (absValue < minStep)
+        return minStep;
+
+    const bool valueNegative = doubleValue < 0;
+    const bool stepsNegative = steps < 0;
+    if (valueNegative != stepsNegative)
+        absValue /= 1.01;
+
+    const double shift = std::pow(10, 1 - std::floor(std::log10(absValue)));
+    const double absRounded = round(absValue * shift) / shift;
+    const double log = floorf(std::log10(absRounded)) - 1;
+
+    return std::max(minStep, std::pow(10, log));
+}
+
 /*! \reimp */
 bool QSpinBox::event(QEvent *event)
 {
@@ -1328,5 +1435,3 @@ bool QSpinBox::event(QEvent *event)
 QT_END_NAMESPACE
 
 #include "moc_qspinbox.cpp"
-
-#endif // QT_NO_SPINBOX

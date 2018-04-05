@@ -10,12 +10,9 @@
 #define INPUTPAGE_H
 
 #include <QtCore/QVariant>
-#include <QtWidgets/QAction>
 #include <QtWidgets/QApplication>
-#include <QtWidgets/QButtonGroup>
 #include <QtWidgets/QGridLayout>
 #include <QtWidgets/QHBoxLayout>
-#include <QtWidgets/QHeaderView>
 #include <QtWidgets/QLabel>
 #include <QtWidgets/QLineEdit>
 #include <QtWidgets/QSpacerItem>
@@ -84,9 +81,9 @@ public:
 
     void retranslateUi(QWidget *InputPage)
     {
-        InputPage->setWindowTitle(QApplication::translate("InputPage", "Form", Q_NULLPTR));
-        label->setText(QApplication::translate("InputPage", "File name:", Q_NULLPTR));
-        browseButton->setText(QApplication::translate("InputPage", "...", Q_NULLPTR));
+        InputPage->setWindowTitle(QApplication::translate("InputPage", "Form", nullptr));
+        label->setText(QApplication::translate("InputPage", "File name:", nullptr));
+        browseButton->setText(QApplication::translate("InputPage", "...", nullptr));
     } // retranslateUi
 
 };

@@ -39,9 +39,13 @@
 
 #include "private/qabstractbutton_p.h"
 
-#include "private/qbuttongroup_p.h"
+#if QT_CONFIG(itemviews)
 #include "qabstractitemview.h"
+#endif
+#if QT_CONFIG(buttongroup)
 #include "qbuttongroup.h"
+#include "private/qbuttongroup_p.h"
+#endif
 #include "qabstractbutton_p.h"
 #include "qevent.h"
 #include "qpainter.h"
@@ -171,7 +175,7 @@ QAbstractButtonPrivate::QAbstractButtonPrivate(QSizePolicy::ControlType type)
 #endif
     checkable(false), checked(false), autoRepeat(false), autoExclusive(false),
     down(false), blockRefresh(false), pressed(false),
-#ifndef QT_NO_BUTTONGROUP
+#if QT_CONFIG(buttongroup)
     group(0),
 #endif
     autoRepeatDelay(AUTO_REPEAT_DELAY),
@@ -181,7 +185,7 @@ QAbstractButtonPrivate::QAbstractButtonPrivate(QSizePolicy::ControlType type)
 
 QList<QAbstractButton *>QAbstractButtonPrivate::queryButtonList() const
 {
-#ifndef QT_NO_BUTTONGROUP
+#if QT_CONFIG(buttongroup)
     if (group)
         return group->d_func()->buttonList;
 #endif
@@ -190,7 +194,7 @@ QList<QAbstractButton *>QAbstractButtonPrivate::queryButtonList() const
     if (autoExclusive) {
         auto isNoMemberOfMyAutoExclusiveGroup = [](QAbstractButton *candidate) {
             return !candidate->autoExclusive()
-#ifndef QT_NO_BUTTONGROUP
+#if QT_CONFIG(buttongroup)
                 || candidate->group()
 #endif
                 ;
@@ -204,7 +208,7 @@ QList<QAbstractButton *>QAbstractButtonPrivate::queryButtonList() const
 
 QAbstractButton *QAbstractButtonPrivate::queryCheckedButton() const
 {
-#ifndef QT_NO_BUTTONGROUP
+#if QT_CONFIG(buttongroup)
     if (group)
         return group->d_func()->checkedButton;
 #endif
@@ -224,7 +228,7 @@ QAbstractButton *QAbstractButtonPrivate::queryCheckedButton() const
 
 void QAbstractButtonPrivate::notifyChecked()
 {
-#ifndef QT_NO_BUTTONGROUP
+#if QT_CONFIG(buttongroup)
     Q_Q(QAbstractButton);
     if (group) {
         QAbstractButton *previous = group->d_func()->checkedButton;
@@ -242,7 +246,7 @@ void QAbstractButtonPrivate::notifyChecked()
 void QAbstractButtonPrivate::moveFocus(int key)
 {
     QList<QAbstractButton *> buttonList = queryButtonList();;
-#ifndef QT_NO_BUTTONGROUP
+#if QT_CONFIG(buttongroup)
     bool exclusive = group ? group->d_func()->exclusive : autoExclusive;
 #else
     bool exclusive = autoExclusive;
@@ -333,7 +337,7 @@ void QAbstractButtonPrivate::moveFocus(int key)
 void QAbstractButtonPrivate::fixFocusPolicy()
 {
     Q_Q(QAbstractButton);
-#ifndef QT_NO_BUTTONGROUP
+#if QT_CONFIG(buttongroup)
     if (!group && !autoExclusive)
 #else
     if (!autoExclusive)
@@ -380,7 +384,7 @@ void QAbstractButtonPrivate::click()
     bool changeState = true;
     if (checked && queryCheckedButton() == q) {
         // the checked button of an exclusive or autoexclusive group cannot be unchecked
-#ifndef QT_NO_BUTTONGROUP
+#if QT_CONFIG(buttongroup)
         if (group ? group->d_func()->exclusive : autoExclusive)
 #else
         if (autoExclusive)
@@ -408,7 +412,7 @@ void QAbstractButtonPrivate::emitClicked()
     Q_Q(QAbstractButton);
     QPointer<QAbstractButton> guard(q);
     emit q->clicked(checked);
-#ifndef QT_NO_BUTTONGROUP
+#if QT_CONFIG(buttongroup)
     if (guard && group) {
         emit group->buttonClicked(group->id(q));
         if (guard && group)
@@ -422,7 +426,7 @@ void QAbstractButtonPrivate::emitPressed()
     Q_Q(QAbstractButton);
     QPointer<QAbstractButton> guard(q);
     emit q->pressed();
-#ifndef QT_NO_BUTTONGROUP
+#if QT_CONFIG(buttongroup)
     if (guard && group) {
         emit group->buttonPressed(group->id(q));
         if (guard && group)
@@ -436,7 +440,7 @@ void QAbstractButtonPrivate::emitReleased()
     Q_Q(QAbstractButton);
     QPointer<QAbstractButton> guard(q);
     emit q->released();
-#ifndef QT_NO_BUTTONGROUP
+#if QT_CONFIG(buttongroup)
     if (guard && group) {
         emit group->buttonReleased(group->id(q));
         if (guard && group)
@@ -450,7 +454,7 @@ void QAbstractButtonPrivate::emitToggled(bool checked)
     Q_Q(QAbstractButton);
     QPointer<QAbstractButton> guard(q);
     emit q->toggled(checked);
-#ifndef QT_NO_BUTTONGROUP
+#if QT_CONFIG(buttongroup)
     if (guard && group) {
         emit group->buttonToggled(group->id(q), checked);
         if (guard && group)
@@ -474,7 +478,7 @@ QAbstractButton::QAbstractButton(QWidget *parent)
  */
  QAbstractButton::~QAbstractButton()
 {
-#ifndef QT_NO_BUTTONGROUP
+#if QT_CONFIG(buttongroup)
     Q_D(QAbstractButton);
     if (d->group)
         d->group->removeButton(this);
@@ -621,7 +625,7 @@ void QAbstractButton::setChecked(bool checked)
 
     if (!checked && d->queryCheckedButton() == this) {
         // the checked button of an exclusive or autoexclusive group cannot be  unchecked
-#ifndef QT_NO_BUTTONGROUP
+#if QT_CONFIG(buttongroup)
         if (d->group ? d->group->d_func()->exclusive : d->autoExclusive)
             return;
         if (d->group)
@@ -796,7 +800,7 @@ bool QAbstractButton::autoExclusive() const
     return d->autoExclusive;
 }
 
-#ifndef QT_NO_BUTTONGROUP
+#if QT_CONFIG(buttongroup)
 /*!
   Returns the group that this button belongs to.
 
@@ -810,7 +814,7 @@ QButtonGroup *QAbstractButton::group() const
     Q_D(const QAbstractButton);
     return d->group;
 }
-#endif // QT_NO_BUTTONGROUP
+#endif // QT_CONFIG(buttongroup)
 
 /*!
 Performs an animated click: the button is pressed immediately, and
@@ -935,7 +939,7 @@ bool QAbstractButton::event(QEvent *e)
         case QEvent::HoverEnter:
         case QEvent::HoverLeave:
         case QEvent::ContextMenu:
-#ifndef QT_NO_WHEELEVENT
+#if QT_CONFIG(wheelevent)
         case QEvent::Wheel:
 #endif
             return true;
@@ -987,12 +991,13 @@ void QAbstractButton::mousePressEvent(QMouseEvent *e)
 void QAbstractButton::mouseReleaseEvent(QMouseEvent *e)
 {
     Q_D(QAbstractButton);
-    d->pressed = false;
 
     if (e->button() != Qt::LeftButton) {
         e->ignore();
         return;
     }
+
+    d->pressed = false;
 
     if (!d->down) {
         // refresh is required by QMacStyle to resume the default button animation
@@ -1068,10 +1073,10 @@ void QAbstractButton::keyPressEvent(QKeyEvent *e)
 #endif
         QWidget *pw = parentWidget();
         if (d->autoExclusive
-#ifndef QT_NO_BUTTONGROUP
+#if QT_CONFIG(buttongroup)
         || d->group
 #endif
-#ifndef QT_NO_ITEMVIEWS
+#if QT_CONFIG(itemviews)
         || (pw && qobject_cast<QAbstractItemView *>(pw->parentWidget()))
 #endif
         ) {

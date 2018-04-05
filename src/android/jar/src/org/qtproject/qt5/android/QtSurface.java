@@ -112,4 +112,10 @@ public class QtSurface extends SurfaceView implements SurfaceHolder.Callback
         QtNative.sendTrackballEvent(event, getId());
         return true;
     }
+
+    @Override
+    public boolean onGenericMotionEvent(MotionEvent event)
+    {
+        return QtNative.sendGenericMotionEvent(event, getId());
+    }
 }

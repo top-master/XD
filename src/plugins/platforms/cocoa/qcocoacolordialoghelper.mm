@@ -37,8 +37,6 @@
 **
 ****************************************************************************/
 
-#ifndef QT_NO_COLORDIALOG
-
 #include <QtCore/qdebug.h>
 #include <QtCore/qtimer.h>
 #include <qpa/qplatformtheme.h>
@@ -51,8 +49,15 @@
 
 QT_USE_NAMESPACE
 
-@interface QT_MANGLE_NAMESPACE(QNSColorPanelDelegate) : NSObject<NSWindowDelegate, QT_MANGLE_NAMESPACE(QNSPanelDelegate)>
-{
+@interface QT_MANGLE_NAMESPACE(QNSColorPanelDelegate) : NSObject<NSWindowDelegate, QNSPanelDelegate>
+- (void)restoreOriginalContentView;
+- (void)updateQtColor;
+- (void)finishOffWithCode:(NSInteger)code;
+@end
+
+QT_NAMESPACE_ALIAS_OBJC_CLASS(QNSColorPanelDelegate);
+
+@implementation QNSColorPanelDelegate {
     @public
     NSColorPanel *mColorPanel;
     QCocoaColorDialogHelper *mHelper;
@@ -63,17 +68,9 @@ QT_USE_NAMESPACE
     BOOL mDialogIsExecuting;
     BOOL mResultSet;
     BOOL mClosingDueToKnownButton;
-};
-- (void)restoreOriginalContentView;
-- (void)updateQtColor;
-- (void)finishOffWithCode:(NSInteger)code;
-@end
+}
 
-QT_NAMESPACE_ALIAS_OBJC_CLASS(QNSColorPanelDelegate);
-
-@implementation QNSColorPanelDelegate
-
-- (id)init
+- (instancetype)init
 {
     self = [super init];
     mColorPanel = [NSColorPanel sharedColorPanel];
@@ -424,5 +421,3 @@ QColor QCocoaColorDialogHelper::currentColor() const
 }
 
 QT_END_NAMESPACE
-
-#endif // QT_NO_COLORDIALOG

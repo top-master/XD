@@ -37,8 +37,6 @@
 **
 ****************************************************************************/
 
-#ifndef QT_NO_WIZARD
-
 #include <QtWidgets/private/qtwidgetsglobal_p.h>
 
 #if QT_CONFIG(style_windowsvista)
@@ -156,10 +154,7 @@ QVistaHelper::QVistaHelper(QWizard *wizard)
     backButton_ = new QVistaBackButton(wizard);
     backButton_->hide();
 
-    // Handle diff between Windows 7 and Vista
     iconSpacing = QStyleHelper::dpiScaled(7);
-    textSpacing = QSysInfo::WindowsVersion >= QSysInfo::WV_WINDOWS7 ?
-                  iconSpacing : QStyleHelper::dpiScaled(20);
 }
 
 QVistaHelper::~QVistaHelper()
@@ -265,7 +260,7 @@ static bool getCaptionQFont(int dpi, QFont *result)
     QPlatformNativeInterface *ni = QGuiApplication::platformNativeInterface();
     return ni && QMetaObject::invokeMethod(ni, "logFontToQFont", Qt::DirectConnection,
                                            Q_RETURN_ARG(QFont, *result),
-                                           Q_ARG(const void *, &logFont),
+                                           Q_ARG(const void*, &logFont),
                                            Q_ARG(int, dpi));
 }
 
@@ -668,12 +663,12 @@ bool QVistaHelper::drawBlackRect(const QRect &rect, HDC hdc)
     return value;
 }
 
-#if !defined(_MSC_VER) || _MSC_VER < 1700
+#ifndef Q_CC_MSVC
 static inline int getWindowBottomMargin()
 {
     return GetSystemMetrics(SM_CYSIZEFRAME);
 }
-#else // !_MSC_VER || _MSC_VER < 1700
+#else
 // QTBUG-36192, GetSystemMetrics(SM_CYSIZEFRAME) returns bogus values
 // for MSVC2012 which leads to the custom margin having no effect since
 // that only works when removing the entire margin.
@@ -683,7 +678,7 @@ static inline int getWindowBottomMargin()
     AdjustWindowRectEx(&rect, WS_POPUP | WS_CLIPSIBLINGS | WS_CLIPCHILDREN | WS_THICKFRAME | WS_DLGFRAME, FALSE, 0);
     return qAbs(rect.bottom);
 }
-#endif // _MSC_VER >= 1700
+#endif // Q_CC_MSVC
 
 int QVistaHelper::frameSizeDp()
 {
@@ -697,7 +692,7 @@ int QVistaHelper::captionSizeDp()
 
 int QVistaHelper::titleOffset()
 {
-    int iconOffset = wizard ->windowIcon().isNull() ? 0 : iconSize() + textSpacing;
+    int iconOffset = wizard ->windowIcon().isNull() ? 0 : iconSize() + iconSpacing;
     return leftMargin() + iconOffset;
 }
 
@@ -724,5 +719,3 @@ int QVistaHelper::topOffset()
 QT_END_NAMESPACE
 
 #endif // style_windowsvista
-
-#endif // QT_NO_WIZARD

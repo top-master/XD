@@ -69,7 +69,7 @@ public:
     {
         return QSpinBox::valueFromText(text);
     }
-#ifndef QT_NO_WHEELEVENT
+#if QT_CONFIG(wheelevent)
     void wheelEvent(QWheelEvent *event)
     {
         QSpinBox::wheelEvent(event);
@@ -144,6 +144,8 @@ private slots:
     void setGroupSeparatorShown();
 
     void wheelEvents();
+
+    void adaptiveDecimalStep();
 
 public slots:
     void valueChangedHelper(const QString &);
@@ -1218,7 +1220,7 @@ void tst_QSpinBox::setGroupSeparatorShown()
 
 void tst_QSpinBox::wheelEvents()
 {
-#ifndef QT_NO_WHEELEVENT
+#if QT_CONFIG(wheelevent)
     SpinBox spinBox;
     spinBox.setRange(-20, 20);
     spinBox.setValue(0);
@@ -1238,6 +1240,85 @@ void tst_QSpinBox::wheelEvents()
     spinBox.wheelEvent(&wheelHalfUp);
     QCOMPARE(spinBox.value(), 0);
 #endif
+}
+
+void tst_QSpinBox::adaptiveDecimalStep()
+{
+    SpinBox spinBox;
+    spinBox.setRange(-100000, 100000);
+    spinBox.setStepType(SpinBox::StepType::AdaptiveDecimalStepType);
+
+    // Positive values
+
+    spinBox.setValue(0);
+
+    // Go from 0 to 100
+    for (int i = 0; i < 100; i++) {
+        QCOMPARE(spinBox.value(), i);
+        spinBox.stepBy(1);
+    }
+
+    // Go from 100 to 1000
+    for (int i = 100; i < 1000; i += 10) {
+        QCOMPARE(spinBox.value(), i);
+        spinBox.stepBy(1);
+    }
+
+    // Go from 1000 to 10000
+    for (int i = 1000; i < 10000; i += 100) {
+        QCOMPARE(spinBox.value(), i);
+        spinBox.stepBy(1);
+    }
+
+    // Test decreasing the values now
+
+    // Go from 10000 down to 1000
+    for (int i = 10000; i > 1000; i -= 100) {
+        QCOMPARE(spinBox.value(), i);
+        spinBox.stepBy(-1);
+    }
+
+    // Go from 1000 down to 100
+    for (int i = 1000; i > 100; i -= 10) {
+        QCOMPARE(spinBox.value(), i);
+        spinBox.stepBy(-1);
+    }
+
+    // Negative values
+
+    spinBox.setValue(0);
+
+    // Go from 0 to -100
+    for (int i = 0; i > -100; i--) {
+        QCOMPARE(spinBox.value(), i);
+        spinBox.stepBy(-1);
+    }
+
+    // Go from -100 to -1000
+    for (int i = -100; i > -1000; i -= 10) {
+        QCOMPARE(spinBox.value(), i);
+        spinBox.stepBy(-1);
+    }
+
+    // Go from 1000 to 10000
+    for (int i = -1000; i > -10000; i -= 100) {
+        QCOMPARE(spinBox.value(), i);
+        spinBox.stepBy(-1);
+    }
+
+    // Test increasing the values now
+
+    // Go from -10000 up to -1000
+    for (int i = -10000; i < -1000; i += 100) {
+        QCOMPARE(spinBox.value(), i);
+        spinBox.stepBy(1);
+    }
+
+    // Go from -1000 up to -100
+    for (int i = -1000; i < -100; i += 10) {
+        QCOMPARE(spinBox.value(), i);
+        spinBox.stepBy(1);
+    }
 }
 
 QTEST_MAIN(tst_QSpinBox)

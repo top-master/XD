@@ -10,10 +10,7 @@
 #define ENUMNOSTDSET_H
 
 #include <QtCore/QVariant>
-#include <QtWidgets/QAction>
 #include <QtWidgets/QApplication>
-#include <QtWidgets/QButtonGroup>
-#include <QtWidgets/QHeaderView>
 #include <QtWidgets/QWidget>
 #include "worldtimeclock.h"
 
@@ -41,7 +38,7 @@ public:
 
     void retranslateUi(QWidget *Form)
     {
-        Form->setWindowTitle(QApplication::translate("Form", "Form", Q_NULLPTR));
+        Form->setWindowTitle(QApplication::translate("Form", "Form", nullptr));
     } // retranslateUi
 
 };

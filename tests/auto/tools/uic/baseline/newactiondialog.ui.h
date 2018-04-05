@@ -40,15 +40,12 @@
 #define NEWACTIONDIALOG_H
 
 #include <QtCore/QVariant>
-#include <QtWidgets/QAction>
 #include <QtWidgets/QApplication>
-#include <QtWidgets/QButtonGroup>
 #include <QtWidgets/QDialog>
 #include <QtWidgets/QDialogButtonBox>
 #include <QtWidgets/QFormLayout>
 #include <QtWidgets/QFrame>
 #include <QtWidgets/QHBoxLayout>
-#include <QtWidgets/QHeaderView>
 #include <QtWidgets/QLabel>
 #include <QtWidgets/QLineEdit>
 #include <QtWidgets/QSpacerItem>
@@ -162,10 +159,10 @@ public:
 
     void retranslateUi(QDialog *qdesigner_internal__NewActionDialog)
     {
-        qdesigner_internal__NewActionDialog->setWindowTitle(QApplication::translate("qdesigner_internal::NewActionDialog", "New Action...", Q_NULLPTR));
-        label->setText(QApplication::translate("qdesigner_internal::NewActionDialog", "&Text:", Q_NULLPTR));
-        label_3->setText(QApplication::translate("qdesigner_internal::NewActionDialog", "Object &name:", Q_NULLPTR));
-        label_2->setText(QApplication::translate("qdesigner_internal::NewActionDialog", "&Icon:", Q_NULLPTR));
+        qdesigner_internal__NewActionDialog->setWindowTitle(QApplication::translate("qdesigner_internal::NewActionDialog", "New Action...", nullptr));
+        label->setText(QApplication::translate("qdesigner_internal::NewActionDialog", "&Text:", nullptr));
+        label_3->setText(QApplication::translate("qdesigner_internal::NewActionDialog", "Object &name:", nullptr));
+        label_2->setText(QApplication::translate("qdesigner_internal::NewActionDialog", "&Icon:", nullptr));
     } // retranslateUi
 
 };

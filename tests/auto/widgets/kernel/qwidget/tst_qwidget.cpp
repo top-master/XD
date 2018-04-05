@@ -50,6 +50,7 @@
 #include <qcalendarwidget.h>
 #include <qmainwindow.h>
 #include <qdockwidget.h>
+#include <qrandom.h>
 #include <qtoolbar.h>
 #include <qtoolbutton.h>
 #include <QtGui/qpaintengine.h>
@@ -72,6 +73,9 @@
 #endif
 
 #include <QtTest/QTest>
+#include <QtTest/private/qtesthelpers_p.h>
+
+using namespace QTestPrivate;
 
 #if defined(Q_OS_WIN) && !defined(Q_OS_WINRT)
 #  include <QtCore/qt_windows.h>
@@ -107,22 +111,6 @@ bool macHasAccessToWindowsServer()
     return (sessionInfo & sessionHasGraphicAccess);
 }
 #endif
-
-// Make a widget frameless to prevent size constraints of title bars
-// from interfering (Windows).
-static inline void setFrameless(QWidget *w)
-{
-    Qt::WindowFlags flags = w->windowFlags();
-    flags |= Qt::FramelessWindowHint;
-    flags &= ~(Qt::WindowTitleHint | Qt::WindowSystemMenuHint | Qt::WindowMinMaxButtonsHint | Qt::WindowCloseButtonHint);
-    w->setWindowFlags(flags);
-}
-
-static inline void centerOnScreen(QWidget *w)
-{
-    const QPoint offset = QPoint(w->width() / 2, w->height() / 2);
-    w->move(QGuiApplication::primaryScreen()->availableGeometry().center() - offset);
-}
 
 #if defined(Q_OS_WIN) && !defined(Q_OS_WINRT)
 static inline void setWindowsAnimationsEnabled(bool enabled)
@@ -196,7 +184,10 @@ private slots:
     void mapFromAndTo();
     void focusChainOnHide();
     void focusChainOnReparent();
-    void setTabOrder();
+    void defaultTabOrder();
+    void reverseTabOrder();
+    void tabOrderWithProxy();
+    void tabOrderWithCompoundWidgets();
 #ifdef Q_OS_WIN
     void activation();
 #endif
@@ -1663,87 +1654,287 @@ public:
 class Composite : public QFrame
 {
 public:
-    Composite(QWidget* parent = 0, const char* name = 0)
+    Composite(QWidget* parent = 0, const QString &name = 0)
         : QFrame(parent)
     {
         setObjectName(name);
-        //QHBoxLayout* hbox = new QHBoxLayout(this, 2, 0);
-        //hbox->setAutoAdd(true);
+
+        lineEdit1 = new QLineEdit;
+        lineEdit2 = new QLineEdit;
+        lineEdit3 = new QLineEdit;
+        lineEdit3->setEnabled(false);
+
         QHBoxLayout* hbox = new QHBoxLayout(this);
-
-        lineEdit = new QLineEdit(this);
-        hbox->addWidget(lineEdit);
-
-        button = new QPushButton(this);
-        hbox->addWidget(button);
-        button->setFocusPolicy( Qt::NoFocus );
-
-        setFocusProxy( lineEdit );
-        setFocusPolicy( Qt::StrongFocus );
-
-        setTabOrder(lineEdit, button);
+        hbox->addWidget(lineEdit1);
+        hbox->addWidget(lineEdit2);
+        hbox->addWidget(lineEdit3);
     }
 
-private:
-    QLineEdit* lineEdit;
-    QPushButton* button;
+public:
+    QLineEdit *lineEdit1;
+    QLineEdit *lineEdit2;
+    QLineEdit *lineEdit3;
 };
 
-#define NUM_WIDGETS 4
-
-void tst_QWidget::setTabOrder()
+void tst_QWidget::defaultTabOrder()
 {
-    QTest::qWait(100);
-
+    const int compositeCount = 2;
     Container container;
-    container.setObjectName("setTabOrder");
-    container.setWindowTitle(container.objectName());
+    Composite *composite[compositeCount];
 
-    Composite* comp[NUM_WIDGETS];
-
-    QLineEdit *firstEdit = new QLineEdit(&container);
+    QLineEdit *firstEdit = new QLineEdit;
     container.box->addWidget(firstEdit);
 
-    int i = 0;
-    for(i = 0; i < NUM_WIDGETS; i++) {
-        comp[i] = new Composite(&container);
-        container.box->addWidget(comp[i]);
+    for (int i = 0; i < compositeCount; i++) {
+        composite[i] = new Composite();
+        container.box->addWidget(composite[i]);
     }
 
-    QLineEdit *lastEdit = new QLineEdit(&container);
+    QLineEdit *lastEdit = new QLineEdit();
     container.box->addWidget(lastEdit);
-
-    container.setTabOrder(lastEdit, comp[NUM_WIDGETS-1]);
-    for(i = NUM_WIDGETS-1; i > 0; i--) {
-        container.setTabOrder(comp[i], comp[i-1]);
-    }
-    container.setTabOrder(comp[0], firstEdit);
-
-    int current = NUM_WIDGETS-1;
-    lastEdit->setFocus();
 
     container.show();
     container.activateWindow();
     qApp->setActiveWindow(&container);
     QVERIFY(QTest::qWaitForWindowActive(&container));
 
-    QTRY_VERIFY(lastEdit->hasFocus());
-    container.tab();
-    do {
-        QVERIFY(comp[current]->focusProxy()->hasFocus());
-        container.tab();
-        current--;
-    } while (current >= 0);
+    QTRY_VERIFY(firstEdit->hasFocus());
 
+    // Check that focus moves between the line edits when we tab forward
+    for (int i = 0; i < compositeCount; ++i) {
+        container.tab();
+        QVERIFY(composite[i]->lineEdit1->hasFocus());
+        QVERIFY(!composite[i]->lineEdit2->hasFocus());
+        container.tab();
+        QVERIFY(!composite[i]->lineEdit1->hasFocus());
+        QVERIFY(composite[i]->lineEdit2->hasFocus());
+    }
+
+    container.tab();
+    QVERIFY(lastEdit->hasFocus());
+
+    // Check that focus moves between the line edits in reverse
+    // order when we tab backwards
+    for (int i = compositeCount - 1; i >= 0; --i) {
+        container.backTab();
+        QVERIFY(!composite[i]->lineEdit1->hasFocus());
+        QVERIFY(composite[i]->lineEdit2->hasFocus());
+
+        container.backTab();
+        QVERIFY(composite[i]->lineEdit1->hasFocus());
+        QVERIFY(!composite[i]->lineEdit2->hasFocus());
+    }
+
+    container.backTab();
     QVERIFY(firstEdit->hasFocus());
+}
+
+void tst_QWidget::reverseTabOrder()
+{
+    const int compositeCount = 2;
+    Container container;
+    Composite* composite[compositeCount];
+
+    QLineEdit *firstEdit = new QLineEdit();
+    container.box->addWidget(firstEdit);
+
+    for (int i = 0; i < compositeCount; i++) {
+        composite[i] = new Composite();
+        container.box->addWidget(composite[i]);
+    }
+
+    QLineEdit *lastEdit = new QLineEdit();
+    container.box->addWidget(lastEdit);
+
+    // Reverse tab order inside each composite
+    for (int i = 0; i < compositeCount; ++i)
+        QWidget::setTabOrder(composite[i]->lineEdit2, composite[i]->lineEdit1);
+
+    container.show();
+    container.activateWindow();
+    qApp->setActiveWindow(&container);
+    QVERIFY(QTest::qWaitForWindowActive(&container));
+
+    QTRY_VERIFY(firstEdit->hasFocus());
+
+    // Check that focus moves in reverse order when tabbing inside the composites
+    // (but in the correct order when tabbing between them)
+    for (int i = 0; i < compositeCount; ++i) {
+        container.tab();
+        QVERIFY(!composite[i]->lineEdit1->hasFocus());
+        QVERIFY(composite[i]->lineEdit2->hasFocus());
+        container.tab();
+        QVERIFY(composite[i]->lineEdit1->hasFocus());
+        QVERIFY(!composite[i]->lineEdit2->hasFocus());
+    }
+
+    container.tab();
+    QVERIFY(lastEdit->hasFocus());
+
+    // Check that focus moves in "normal" order when tabbing backwards inside the
+    // composites (since backwards of reversed order cancels each other out),
+    // but in the reverse order when tabbing between them.
+    for (int i = compositeCount - 1; i >= 0; --i) {
+        container.backTab();
+        QVERIFY(composite[i]->lineEdit1->hasFocus());
+        QVERIFY(!composite[i]->lineEdit2->hasFocus());
+        container.backTab();
+        QVERIFY(!composite[i]->lineEdit1->hasFocus());
+        QVERIFY(composite[i]->lineEdit2->hasFocus());
+    }
+
+    container.backTab();
+    QVERIFY(firstEdit->hasFocus());
+}
+
+void tst_QWidget::tabOrderWithProxy()
+{
+    const int compositeCount = 2;
+    Container container;
+    Composite* composite[compositeCount];
+
+    QLineEdit *firstEdit = new QLineEdit();
+    container.box->addWidget(firstEdit);
+
+    for (int i = 0; i < compositeCount; i++) {
+        composite[i] = new Composite();
+        container.box->addWidget(composite[i]);
+
+        // Set second child as focus proxy
+        composite[i]->setFocusPolicy(Qt::StrongFocus);
+        composite[i]->setFocusProxy(composite[i]->lineEdit2);
+    }
+
+    QLineEdit *lastEdit = new QLineEdit();
+    container.box->addWidget(lastEdit);
+
+    container.show();
+    container.activateWindow();
+    qApp->setActiveWindow(&container);
+    QVERIFY(QTest::qWaitForWindowActive(&container));
+
+    QTRY_VERIFY(firstEdit->hasFocus());
+
+    // Check that focus moves between the second line edits
+    // (the focus proxies) when we tab forward
+    for (int i = 0; i < compositeCount; ++i) {
+        container.tab();
+        QVERIFY(!composite[i]->lineEdit1->hasFocus());
+        QVERIFY(composite[i]->lineEdit2->hasFocus());
+    }
+
+    container.tab();
+    QVERIFY(lastEdit->hasFocus());
+
+    // Check that focus moves between the line edits
+    // in reverse order when we tab backwards.
+    // Note that in this case, the focus proxies should not
+    // be taken into consideration, since they only take
+    // effect when tabbing forward
+    for (int i = compositeCount - 1; i >= 0; --i) {
+        container.backTab();
+        QVERIFY(!composite[i]->lineEdit1->hasFocus());
+        QVERIFY(composite[i]->lineEdit2->hasFocus());
+        container.backTab();
+        QVERIFY(composite[i]->lineEdit1->hasFocus());
+        QVERIFY(!composite[i]->lineEdit2->hasFocus());
+    }
+
+    container.backTab();
+    QVERIFY(firstEdit->hasFocus());
+}
+
+void tst_QWidget::tabOrderWithCompoundWidgets()
+{
+    const int compositeCount = 4;
+    Container container;
+    Composite *composite[compositeCount];
+
+    QLineEdit *firstEdit = new QLineEdit();
+    container.box->addWidget(firstEdit);
+
+    for (int i = 0; i < compositeCount; i++) {
+        composite[i] = new Composite(0, QStringLiteral("Composite: ") + QString::number(i));
+        container.box->addWidget(composite[i]);
+
+        // Let the composite handle focus, and set a child as focus proxy (use the second child, just
+        // to ensure that we don't just tab to the first child by coinsidence). This will make the
+        // composite "compound". Also enable the last line edit to have a bit more data to check when
+        // tabbing forwards.
+        composite[i]->setFocusPolicy(Qt::StrongFocus);
+        composite[i]->setFocusProxy(composite[i]->lineEdit2);
+        composite[i]->lineEdit3->setEnabled(true);
+    }
+
+    QLineEdit *lastEdit = new QLineEdit();
+    container.box->addWidget(lastEdit);
+
+    // Reverse tab order between each composite
+    // (but not inside them), including first and last line edit.
+    // The result should not affect local tab order inside each
+    // composite, only between them.
+    QWidget::setTabOrder(lastEdit, composite[compositeCount - 1]);
+    for (int i = compositeCount - 1; i >= 1; --i)
+        QWidget::setTabOrder(composite[i], composite[i-1]);
+    QWidget::setTabOrder(composite[0], firstEdit);
+
+    container.show();
+    container.activateWindow();
+    qApp->setActiveWindow(&container);
+    QVERIFY(QTest::qWaitForWindowActive(&container));
+
+    lastEdit->setFocus();
+    QTRY_VERIFY(lastEdit->hasFocus());
+
+    // Check that focus moves between the line edits in the normal
+    // order when tabbing inside each compound, but in the reverse
+    // order when tabbing between them. Since the composites have
+    // lineEdit2 as focus proxy, lineEdit2 will be the first with focus
+    // when the compound gets focus, and lineEdit1 will therefore be skipped.
+    for (int i = compositeCount - 1; i >= 0; --i) {
+        container.tab();
+        Composite *c = composite[i];
+        QVERIFY(!c->lineEdit1->hasFocus());
+        QVERIFY(c->lineEdit2->hasFocus());
+        QVERIFY(!c->lineEdit3->hasFocus());
+        container.tab();
+        QVERIFY(!c->lineEdit1->hasFocus());
+        QVERIFY(!c->lineEdit2->hasFocus());
+        QVERIFY(c->lineEdit3->hasFocus());
+    }
+
+    container.tab();
+    QVERIFY(firstEdit->hasFocus());
+
+    // Check that focus moves in reverse order when backTab inside the composites, but
+    // in the 'correct' order when backTab between them (since the composites are in reverse tab
+    // order from before, which cancels it out). Note that when we backtab into a compound, we start
+    // at lineEdit3 rather than the focus proxy, since that is the reverse of what happens when we tab
+    // forward. And this time we will also backtab to lineEdit1, since there is no focus proxy that interferes.
+    for (int i = 0; i < compositeCount; ++i) {
+        container.backTab();
+        Composite *c = composite[i];
+        QVERIFY(!c->lineEdit1->hasFocus());
+        QVERIFY(!c->lineEdit2->hasFocus());
+        QVERIFY(c->lineEdit3->hasFocus());
+        container.backTab();
+        QVERIFY(!c->lineEdit1->hasFocus());
+        QVERIFY(c->lineEdit2->hasFocus());
+        QVERIFY(!c->lineEdit3->hasFocus());
+        container.backTab();
+        QVERIFY(c->lineEdit1->hasFocus());
+        QVERIFY(!c->lineEdit2->hasFocus());
+        QVERIFY(!c->lineEdit3->hasFocus());
+    }
+
+    container.backTab();
+    QVERIFY(lastEdit->hasFocus());
 }
 
 #ifdef Q_OS_WIN
 void tst_QWidget::activation()
 {
     Q_CHECK_PAINTEVENTS
-
-    int waitTime = 100;
 
     QWidget widget1;
     widget1.setObjectName("activation-Widget1");
@@ -1756,25 +1947,18 @@ void tst_QWidget::activation()
     widget1.show();
     widget2.show();
 
-    QTest::qWait(waitTime);
-    QCOMPARE(QApplication::activeWindow(), &widget2);
+    QTRY_COMPARE(QApplication::activeWindow(), &widget2);
     widget2.showMinimized();
-    QTest::qWait(waitTime);
 
-    QCOMPARE(QApplication::activeWindow(), &widget1);
+    QTRY_COMPARE(QApplication::activeWindow(), &widget1);
     widget2.showMaximized();
-    QTest::qWait(waitTime);
-    QCOMPARE(QApplication::activeWindow(), &widget2);
+    QTRY_COMPARE(QApplication::activeWindow(), &widget2);
     widget2.showMinimized();
-    QTest::qWait(waitTime);
-    QCOMPARE(QApplication::activeWindow(), &widget1);
+    QTRY_COMPARE(QApplication::activeWindow(), &widget1);
     widget2.showNormal();
-    QTest::qWait(waitTime);
-    QTest::qWait(waitTime);
-    QCOMPARE(QApplication::activeWindow(), &widget2);
+    QTRY_COMPARE(QApplication::activeWindow(), &widget2);
     widget2.hide();
-    QTest::qWait(waitTime);
-    QCOMPARE(QApplication::activeWindow(), &widget1);
+    QTRY_COMPARE(QApplication::activeWindow(), &widget1);
 }
 #endif // Q_OS_WIN
 
@@ -1809,9 +1993,11 @@ void tst_QWidget::windowState()
     QCOMPARE(widget1.pos(), pos);
     QCOMPARE(widget1.size(), size);
 
-#define VERIFY_STATE(s) QCOMPARE(int(widget1.windowState() & stateMask), int(s))
+#define VERIFY_STATE(s)                                                                            \
+    QCOMPARE(int(widget1.windowState() & stateMask), int(s));                                      \
+    QCOMPARE(int(widget1.windowHandle()->windowStates() & stateMask), int(s))
 
-    const int stateMask = Qt::WindowMaximized|Qt::WindowMinimized|Qt::WindowFullScreen;
+    const auto stateMask = Qt::WindowMaximized | Qt::WindowMinimized | Qt::WindowFullScreen;
 
     widget1.setWindowState(Qt::WindowMaximized);
     QTest::qWait(100);
@@ -2101,7 +2287,7 @@ void tst_QWidget::resizeEvent()
         wParent.resize(200, 200);
         ResizeWidget wChild(&wParent);
         wParent.show();
-        QTest::qWaitForWindowExposed(&wParent);
+        QVERIFY(QTest::qWaitForWindowExposed(&wParent));
         QCOMPARE (wChild.m_resizeEventCount, 1); // initial resize event before paint
         wParent.hide();
         QSize safeSize(640,480);
@@ -2117,7 +2303,7 @@ void tst_QWidget::resizeEvent()
         ResizeWidget wTopLevel;
         wTopLevel.resize(200, 200);
         wTopLevel.show();
-        QTest::qWaitForWindowExposed(&wTopLevel);
+        QVERIFY(QTest::qWaitForWindowExposed(&wTopLevel));
         QCOMPARE (wTopLevel.m_resizeEventCount, 1); // initial resize event before paint for toplevels
         wTopLevel.hide();
         QSize safeSize(640,480);
@@ -2126,7 +2312,7 @@ void tst_QWidget::resizeEvent()
         wTopLevel.resize(safeSize);
         QCOMPARE (wTopLevel.m_resizeEventCount, 1);
         wTopLevel.show();
-        QTest::qWaitForWindowExposed(&wTopLevel);
+        QVERIFY(QTest::qWaitForWindowExposed(&wTopLevel));
         QCOMPARE (wTopLevel.m_resizeEventCount, 2);
     }
 }
@@ -3195,9 +3381,6 @@ void tst_QWidget::restoreVersion1Geometry()
     widget.showNormal();
     QTest::qWait(10);
 
-    if (m_platform == QStringLiteral("xcb"))
-        QSKIP("QTBUG-26421");
-
     if (expectedWindowState != Qt::WindowNoState) {
         // restoring from maximized or fullscreen, we can only restore to the normal geometry
         QTRY_COMPARE(widget.geometry(), expectedNormalGeometry);
@@ -3523,7 +3706,7 @@ public:
         gotPaintEvent = true;
 //        qDebug() << "paint" << e->region();
         // Look for a full update, set partial to false if found.
-        foreach(QRect r, e->region().rects()) {
+        for (QRect r : e->region()) {
             partial = (r != rect());
             if (partial == false)
                 break;
@@ -4955,26 +5138,25 @@ static QPixmap grabWindow(QWindow *window, int x, int y, int width, int height)
 {
     QScreen *screen = window->screen();
     Q_ASSERT(screen);
-    QPixmap result = screen->grabWindow(window->winId(), x, y, width, height);
-    return result.devicePixelRatio() > 1 ? result.scaled(width, height) : result;
+    return screen->grabWindow(window->winId(), x, y, width, height);
 }
 
 #define VERIFY_COLOR(child, region, color) verifyColor(child, region, color, __LINE__)
 
 bool verifyColor(QWidget &child, const QRegion &region, const QColor &color, unsigned int callerLine)
 {
-    const QRegion r = QRegion(region);
     QWindow *window = child.window()->windowHandle();
     Q_ASSERT(window);
     const QPoint offset = child.mapTo(child.window(), QPoint(0,0));
     bool grabBackingStore = false;
-    for (int i = 0; i < r.rects().size(); ++i) {
-        QRect rect = r.rects().at(i).translated(offset);
+    for (QRect r : region) {
+        QRect rect = r.translated(offset);
         for (int t = 0; t < 6; t++) {
             const QPixmap pixmap = grabBackingStore
                 ? child.grab(rect)
                 : grabWindow(window, rect.left(), rect.top(), rect.width(), rect.height());
-            if (!QTest::qCompare(pixmap.size(), rect.size(), "pixmap.size()", "rect.size()", __FILE__, callerLine))
+            const QSize actualSize = pixmap.size() / pixmap.devicePixelRatioF();
+            if (!QTest::qCompare(actualSize, rect.size(), "pixmap.size()", "rect.size()", __FILE__, callerLine))
                 return false;
             QPixmap expectedPixmap(pixmap); /* ensure equal formats */
             expectedPixmap.detach();
@@ -4993,7 +5175,7 @@ bool verifyColor(QWidget &child, const QRegion &region, const QColor &color, uns
                 } else {
                     if (t == 4) {
                         grabBackingStore = true;
-                        rect = r.rects().at(i);
+                        rect = r;
                     } else {
                         QTest::qWait(200);
                     }
@@ -5201,19 +5383,22 @@ void tst_QWidget::multipleToplevelFocusCheck()
     TopLevelFocusCheck w1;
     TopLevelFocusCheck w2;
 
+    const QString title = QLatin1String(QTest::currentTestFunction());
+    w1.setWindowTitle(title + QLatin1String("_W1"));
+    w1.move(m_availableTopLeft + QPoint(20, 20));
     w1.resize(200, 200);
     w1.show();
     QVERIFY(QTest::qWaitForWindowExposed(&w1));
+    w2.setWindowTitle(title + QLatin1String("_W2"));
+    w2.move(w1.frameGeometry().topRight() + QPoint(20, 0));
     w2.resize(200,200);
     w2.show();
     QVERIFY(QTest::qWaitForWindowExposed(&w2));
-    QTest::qWait(50);
 
     QApplication::setActiveWindow(&w1);
     w1.activateWindow();
     QVERIFY(QTest::qWaitForWindowActive(&w1));
     QCOMPARE(QApplication::activeWindow(), static_cast<QWidget *>(&w1));
-    QTest::qWait(50);
     QTest::mouseDClick(&w1, Qt::LeftButton);
     QTRY_COMPARE(QApplication::focusWidget(), static_cast<QWidget *>(w1.edit));
 
@@ -5719,6 +5904,8 @@ void tst_QWidget::setToolTip()
             QTest::qWait(2200);     // delay is 2000
         QTest::mouseMove(popupWindow);
     }
+
+    QTRY_COMPARE(QApplication::topLevelWidgets().size(), 1);
 }
 
 void tst_QWidget::testWindowIconChangeEventPropagation()
@@ -5756,14 +5943,14 @@ void tst_QWidget::testWindowIconChangeEventPropagation()
     QList <EventSpyPtr> applicationEventSpies;
     QList <EventSpyPtr> widgetEventSpies;
     foreach (QWidget *widget, widgets) {
-        applicationEventSpies.append(EventSpyPtr(new EventSpy<QWidget>(widget, QEvent::ApplicationWindowIconChange)));
-        widgetEventSpies.append(EventSpyPtr(new EventSpy<QWidget>(widget, QEvent::WindowIconChange)));
+        applicationEventSpies.append(EventSpyPtr::create(widget, QEvent::ApplicationWindowIconChange));
+        widgetEventSpies.append(EventSpyPtr::create(widget, QEvent::WindowIconChange));
     }
     QList <WindowEventSpyPtr> appWindowEventSpies;
     QList <WindowEventSpyPtr> windowEventSpies;
     foreach (QWindow *window, windows) {
-        appWindowEventSpies.append(WindowEventSpyPtr(new EventSpy<QWindow>(window, QEvent::ApplicationWindowIconChange)));
-        windowEventSpies.append(WindowEventSpyPtr(new EventSpy<QWindow>(window, QEvent::WindowIconChange)));
+        appWindowEventSpies.append(WindowEventSpyPtr::create(window, QEvent::ApplicationWindowIconChange));
+        windowEventSpies.append(WindowEventSpyPtr::create(window, QEvent::WindowIconChange));
     }
 
     // QApplication::setWindowIcon
@@ -5877,7 +6064,7 @@ public:
         startTimer(1000);
     }
 
-    void timerEvent(QTimerEvent *) Q_DECL_OVERRIDE
+    void timerEvent(QTimerEvent *) override
     {
         switch (state++) {
         case 0:
@@ -5900,7 +6087,7 @@ public:
         return false;
     }
 
-    bool nativeEvent(const QByteArray &eventType, void *message, long *) Q_DECL_OVERRIDE
+    bool nativeEvent(const QByteArray &eventType, void *message, long *) override
     {
         if (isMapNotify(eventType, message))
             gotExpectedMapNotify = true;
@@ -5908,7 +6095,7 @@ public:
     }
 
     // QAbstractNativeEventFilter interface
-    bool nativeEventFilter(const QByteArray &eventType, void *message, long *) Q_DECL_OVERRIDE
+    bool nativeEventFilter(const QByteArray &eventType, void *message, long *) override
     {
         if (isMapNotify(eventType, message))
             gotExpectedGlobalEvent = true;
@@ -8034,7 +8221,7 @@ public:
         QPainter p(this);
 
         paintedRegion += event->region();
-        foreach(QRect r, event->region().rects())
+        for (const QRect &r : event->region())
             p.fillRect(r, Qt::red);
     }
 
@@ -8080,8 +8267,8 @@ void tst_QWidget::setMaskInResizeEvent()
 
     QRegion expectedParentUpdate(0, 0, 100, 10); // Old testWidget area.
     expectedParentUpdate += testWidget.geometry(); // New testWidget area.
-    QCOMPARE(w.paintedRegion, expectedParentUpdate);
-    QCOMPARE(testWidget.paintedRegion, testWidget.mask());
+    QTRY_COMPARE(w.paintedRegion, expectedParentUpdate);
+    QTRY_COMPARE(testWidget.paintedRegion, testWidget.mask());
 
     testWidget.paintedRegion = QRegion();
     // Now resize the widget again, but in the oposite direction
@@ -8545,7 +8732,7 @@ public:
         QPainter p(this);
 
         paintedRegion += event->region();
-        foreach(QRect r, event->region().rects())
+        for (const QRect &r : event->region())
             p.fillRect(r, Qt::red);
     }
 
@@ -9629,7 +9816,7 @@ void tst_QWidget::grab()
         for (int row = 0; row < image.height(); ++row) {
             QRgb *line = reinterpret_cast<QRgb *>(image.scanLine(row));
             for (int col = 0; col < image.width(); ++col)
-                line[col] = qRgba(rand() & 255, row, col, opaque ? 255 : 127);
+                line[col] = qRgba(QRandomGenerator::global()->bounded(255), row, col, opaque ? 255 : 127);
         }
 
         QPalette pal = widget.palette();
@@ -10333,7 +10520,7 @@ public slots:
         QTimer::singleShot(100, this, SLOT(doMouseMoves()));
         modal->exec();
         delete modal;
-        modal = Q_NULLPTR;
+        modal = nullptr;
     }
 
     void doMouseMoves()
@@ -10342,7 +10529,8 @@ public slots:
         QPoint point2(15, 20);
         QPoint point3(20, 20);
         QWindow *window = modal->windowHandle();
-        QWindowSystemInterface::handleEnterEvent(window, point1, window->mapToGlobal(point1));
+        const QPoint nativePoint1 = QHighDpi::toNativePixels(point1, window->screen());
+        QWindowSystemInterface::handleEnterEvent(window, nativePoint1);
         QTest::mouseMove(window, point1);
         QTest::mouseMove(window, point2);
         QTest::mouseMove(window, point3);
@@ -10405,7 +10593,7 @@ class KeyboardWidget : public QWidget
 {
 public:
     KeyboardWidget(QWidget* parent = 0) : QWidget(parent), m_eventCounter(0) {}
-    virtual void mousePressEvent(QMouseEvent* ev) Q_DECL_OVERRIDE {
+    virtual void mousePressEvent(QMouseEvent* ev) override {
         m_modifiers = ev->modifiers();
         m_appModifiers = QApplication::keyboardModifiers();
         ++m_eventCounter;
@@ -10508,6 +10696,8 @@ void tst_QWidget::qmlSetParentHelper()
 
 void tst_QWidget::testForOutsideWSRangeFlag()
 {
+    QSKIP("Test assumes QWindows can have 0x0 size, see QTBUG-61953");
+
     // QTBUG-49445
     {
         QWidget widget;

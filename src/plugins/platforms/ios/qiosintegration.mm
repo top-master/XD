@@ -85,7 +85,6 @@ QIOSIntegration::QIOSIntegration()
     , m_platformServices(new QIOSServices)
     , m_accessibility(0)
     , m_optionalPlugins(new QFactoryLoader(QIosOptionalPluginInterface_iid, QLatin1String("/platforms/darwin")))
-    , m_debugWindowManagement(false)
 {
     if (Q_UNLIKELY(![UIApplication sharedApplication])) {
         qFatal("Error: You are creating QApplication before calling UIApplicationMain.\n" \
@@ -94,20 +93,11 @@ QIOSIntegration::QIOSIntegration()
                "'applicationDidFinishLaunching' inside your UIApplication delegate.\n");
     }
 
-    // The backingstore needs a global share context in order to support composition in
-    // QPlatformBackingStore.
-    qApp->setAttribute(Qt::AA_ShareOpenGLContexts, true);
-    // And that context must match the format used for the backingstore's context.
-    QSurfaceFormat fmt = QSurfaceFormat::defaultFormat();
-    fmt.setDepthBufferSize(16);
-    fmt.setStencilBufferSize(8);
-    QSurfaceFormat::setDefaultFormat(fmt);
-
     // Set current directory to app bundle folder
     QDir::setCurrent(QString::fromUtf8([[[NSBundle mainBundle] bundlePath] UTF8String]));
 
     UIScreen *mainScreen = [UIScreen mainScreen];
-    NSMutableArray *screens = [[[UIScreen screens] mutableCopy] autorelease];
+    NSMutableArray<UIScreen *> *screens = [[[UIScreen screens] mutableCopy] autorelease];
     if (![screens containsObject:mainScreen]) {
         // Fallback for iOS 7.1 (QTBUG-42345)
         [screens insertObject:mainScreen atIndex:0];
@@ -122,12 +112,15 @@ QIOSIntegration::QIOSIntegration()
     m_touchDevice = new QTouchDevice;
     m_touchDevice->setType(QTouchDevice::TouchScreen);
     QTouchDevice::Capabilities touchCapabilities = QTouchDevice::Position | QTouchDevice::NormalizedPosition;
-    if (QOperatingSystemVersion::current() >= QOperatingSystemVersion(QOperatingSystemVersion::IOS, 9)) {
+    if (__builtin_available(iOS 9, *)) {
         if (mainScreen.traitCollection.forceTouchCapability == UIForceTouchCapabilityAvailable)
             touchCapabilities |= QTouchDevice::Pressure;
     }
     m_touchDevice->setCapabilities(touchCapabilities);
     QWindowSystemInterface::registerTouchDevice(m_touchDevice);
+#if QT_CONFIG(tabletevent)
+    QWindowSystemInterfacePrivate::TabletEvent::setPlatformSynthesizesMouse(false);
+#endif
     QMacInternalPasteboardMime::initializeMimeTypes();
 
     for (int i = 0; i < m_optionalPlugins->metaData().size(); ++i)
@@ -206,12 +199,12 @@ class QIOSOffscreenSurface : public QPlatformOffscreenSurface
 public:
     QIOSOffscreenSurface(QOffscreenSurface *offscreenSurface) : QPlatformOffscreenSurface(offscreenSurface) {}
 
-    QSurfaceFormat format() const Q_DECL_OVERRIDE
+    QSurfaceFormat format() const override
     {
         Q_ASSERT(offscreenSurface());
         return offscreenSurface()->requestedFormat();
     }
-    bool isValid() const Q_DECL_OVERRIDE { return true; }
+    bool isValid() const override { return true; }
 };
 
 QPlatformOffscreenSurface *QIOSIntegration::createPlatformOffscreenSurface(QOffscreenSurface *surface) const
@@ -325,16 +318,6 @@ void *QIOSIntegration::nativeResourceForWindow(const QByteArray &resource, QWind
         return reinterpret_cast<void *>(platformWindow->winId());
 
     return 0;
-}
-
-void QIOSIntegration::setDebugWindowManagement(bool enabled)
-{
-    m_debugWindowManagement = enabled;
-}
-
-bool QIOSIntegration::debugWindowManagement() const
-{
-    return m_debugWindowManagement;
 }
 
 // ---------------------------------------------------------

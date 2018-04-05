@@ -53,21 +53,26 @@
 
 #include <QtWidgets/private/qtwidgetsglobal_p.h>
 
-#ifndef QT_NO_LINEEDIT
 #include "private/qwidget_p.h"
 #include "QtWidgets/qlineedit.h"
+#if QT_CONFIG(toolbutton)
 #include "QtWidgets/qtoolbutton.h"
+#endif
 #include "QtGui/qtextlayout.h"
 #include "QtGui/qicon.h"
 #include "QtWidgets/qstyleoption.h"
 #include "QtCore/qbasictimer.h"
+#if QT_CONFIG(completer)
 #include "QtWidgets/qcompleter.h"
+#endif
 #include "QtCore/qpointer.h"
 #include "QtCore/qmimedata.h"
 
 #include "private/qwidgetlinecontrol_p.h"
 
 #include <algorithm>
+
+QT_REQUIRE_CONFIG(lineedit);
 
 QT_BEGIN_NAMESPACE
 
@@ -89,8 +94,8 @@ public:
 #endif
 
 protected:
-    void actionEvent(QActionEvent *e) Q_DECL_OVERRIDE;
-    void paintEvent(QPaintEvent *event) Q_DECL_OVERRIDE;
+    void actionEvent(QActionEvent *e) override;
+    void paintEvent(QPaintEvent *event) override;
 
 private slots:
     void updateCursor();
@@ -136,7 +141,7 @@ public:
         dragEnabled(0), clickCausedFocus(0), hscroll(0), vscroll(0),
         alignment(Qt::AlignLeading | Qt::AlignVCenter),
         leftTextMargin(0), topTextMargin(0), rightTextMargin(0), bottomTextMargin(0),
-        lastTextSize(0)
+        lastTextSize(0), mouseYThreshold(0)
     {
     }
 
@@ -150,6 +155,7 @@ public:
     QPointer<QAction> selectAllAction;
 #endif
     void init(const QString&);
+    void initMouseYThreshold();
 
     QRect adjustedControlRect(const QRect &) const;
 
@@ -201,7 +207,7 @@ public:
 #endif
     void _q_selectionChanged();
     void _q_updateNeeded(const QRect &);
-#ifndef QT_NO_COMPLETER
+#if QT_CONFIG(completer)
     void _q_completionHighlighted(const QString &);
 #endif
     QPoint mousePressPos;
@@ -248,11 +254,10 @@ private:
     SideWidgetEntryList leadingSideWidgets;
     SideWidgetEntryList trailingSideWidgets;
     int lastTextSize;
+    int mouseYThreshold;
 };
 Q_DECLARE_TYPEINFO(QLineEditPrivate::SideWidgetEntry, Q_PRIMITIVE_TYPE);
 Q_DECLARE_TYPEINFO(QLineEditPrivate::SideWidgetLocation, Q_PRIMITIVE_TYPE);
-
-#endif // QT_NO_LINEEDIT
 
 QT_END_NAMESPACE
 

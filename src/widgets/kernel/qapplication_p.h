@@ -92,7 +92,7 @@ extern QClipboard *qt_clipboard;
 #endif
 
 typedef QHash<QByteArray, QFont> FontHash;
-FontHash *qt_app_fonts_hash();
+Q_WIDGETS_EXPORT FontHash *qt_app_fonts_hash();
 
 typedef QHash<QByteArray, QPalette> PaletteHash;
 PaletteHash *qt_app_palettes_hash();
@@ -106,11 +106,11 @@ public:
     QApplicationPrivate(int &argc, char **argv, int flags);
     ~QApplicationPrivate();
 
-    virtual void notifyLayoutDirectionChange() Q_DECL_OVERRIDE;
-    virtual void notifyActiveWindowChange(QWindow *) Q_DECL_OVERRIDE;
+    virtual void notifyLayoutDirectionChange() override;
+    virtual void notifyActiveWindowChange(QWindow *) override;
 
-    virtual bool shouldQuit() Q_DECL_OVERRIDE;
-    bool tryCloseAllWindows() Q_DECL_OVERRIDE;
+    virtual bool shouldQuit() override;
+    bool tryCloseAllWindows() override;
 
 #if 0 // Used to be included in Qt4 for Q_WS_X11
 #ifndef QT_NO_SETTINGS
@@ -122,13 +122,13 @@ public:
     static QString desktopStyleKey();
 
 
-    void createEventDispatcher() Q_DECL_OVERRIDE;
+    void createEventDispatcher() override;
     static void dispatchEnterLeave(QWidget *enter, QWidget *leave, const QPointF &globalPosF);
 
-    void notifyWindowIconChanged() Q_DECL_OVERRIDE;
+    void notifyWindowIconChanged() override;
 
     //modality
-    bool isWindowBlocked(QWindow *window, QWindow **blockingWindow = 0) const Q_DECL_OVERRIDE;
+    bool isWindowBlocked(QWindow *window, QWindow **blockingWindow = 0) const override;
     static bool isBlockedByModal(QWidget *widget);
     static bool modalState();
     static bool tryModalHelper(QWidget *widget, QWidget **rettop = 0);
@@ -136,12 +136,6 @@ public:
     static QWidget *tryModalHelper_sys(QWidget *top);
     bool canQuit();
 #endif
-
-    //style
-    static bool usesNativeStyle()
-    {
-        return !overrides_native_style;
-    }
 
     bool notify_helper(QObject *receiver, QEvent * e);
 
@@ -158,14 +152,14 @@ public:
 #endif
 
     static bool inPopupMode();
-    bool popupActive() Q_DECL_OVERRIDE { return inPopupMode(); }
+    bool popupActive() override { return inPopupMode(); }
     void closePopup(QWidget *popup);
     void openPopup(QWidget *popup);
     static void setFocusWidget(QWidget *focus, Qt::FocusReason reason);
     static QWidget *focusNextPrevChild_helper(QWidget *toplevel, bool next,
                                               bool *wrappingOccurred = 0);
 
-#ifndef QT_NO_GRAPHICSVIEW
+#if QT_CONFIG(graphicsview)
     // Maintain a list of all scenes to ensure font and palette propagation to
     // all scenes.
     QList<QGraphicsScene *> scene_list;
@@ -178,14 +172,13 @@ public:
     static QSize app_strut;
     static QWidgetList *popupWidgets;
     static QStyle *app_style;
-    static bool overrides_native_style;
     static QPalette *sys_pal;
     static QPalette *set_pal;
 
 protected:
-    void notifyThemeChanged() Q_DECL_OVERRIDE;
+    void notifyThemeChanged() override;
 #ifndef QT_NO_DRAGANDDROP
-    void notifyDragStarted(const QDrag *) Q_DECL_OVERRIDE;
+    void notifyDragStarted(const QDrag *) override;
 #endif // QT_NO_DRAGANDDROP
 
 public:
@@ -195,7 +188,7 @@ public:
     static QWidget *focus_widget;
     static QWidget *hidden_focus_widget;
     static QWidget *active_window;
-#ifndef QT_NO_WHEELEVENT
+#if QT_CONFIG(wheelevent)
     static int  wheel_scroll_lines;
     static QPointer<QWidget> wheel_widget;
 #endif
@@ -249,7 +242,7 @@ public:
     static HWND getHWNDForWidget(const QWidget *widget)
     {
         if (QWindow *window = windowForWidget(widget))
-            if (window->handle())
+            if (window->handle() && QGuiApplication::platformNativeInterface())
                 return static_cast<HWND> (QGuiApplication::platformNativeInterface()->
                                           nativeResourceForWindow(QByteArrayLiteral("handle"), window));
         return 0;
@@ -284,7 +277,7 @@ public:
                                        ulong timestamp);
     static void translateTouchCancel(QTouchDevice *device, ulong timestamp);
 
-    QPixmap applyQIconStyleHelper(QIcon::Mode mode, const QPixmap& base) const Q_DECL_OVERRIDE;
+    QPixmap applyQIconStyleHelper(QIcon::Mode mode, const QPixmap& base) const override;
 private:
     static QApplicationPrivate *self;
     static bool tryCloseAllWidgetWindows(QWindowList *processedWindows);

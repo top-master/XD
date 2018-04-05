@@ -341,7 +341,7 @@ void qt_bitmapblit32_sse2_base(QRasterBuffer *rasterBuffer, int x, int y,
                           const uchar *src, int width, int height, int stride)
 {
     quint32 *dest = reinterpret_cast<quint32*>(rasterBuffer->scanLine(y)) + x;
-    const int destStride = rasterBuffer->bytesPerLine() / sizeof(quint32);
+    const int destStride = rasterBuffer->stride<quint32>();
 
     const __m128i c128 = _mm_set1_epi32(color);
     const __m128i maskmask1 = _mm_set_epi32(0x10101010, 0x20202020,
@@ -407,7 +407,7 @@ void qt_bitmapblit16_sse2(QRasterBuffer *rasterBuffer, int x, int y,
 {
     const quint16 c = qConvertRgb32To16(color.toArgb32());
     quint16 *dest = reinterpret_cast<quint16*>(rasterBuffer->scanLine(y)) + x;
-    const int destStride = rasterBuffer->bytesPerLine() / sizeof(quint16);
+    const int destStride = rasterBuffer->stride<quint32>();
 
     const __m128i c128 = _mm_set1_epi16(c);
 QT_WARNING_DISABLE_MSVC(4309) // truncation of constant value
@@ -558,6 +558,16 @@ void qt_scale_image_argb32_on_argb32_sse2(uchar *destPixels, int dbpl,
 
     // this bounds check here is required as floating point rounding above might in some cases lead to
     // w/h values that are one pixel too large, falling outside of the valid image area.
+    const int ystart = srcy >> 16;
+    if (ystart >= srch && iy < 0) {
+        srcy += iy;
+        --h;
+    }
+    const int xstart = basex >> 16;
+    if (xstart >=  (int)(sbpl/sizeof(quint32)) && ix < 0) {
+        basex += ix;
+        --w;
+    }
     int yend = (srcy + iy * (h - 1)) >> 16;
     if (yend < 0 || yend >= srch)
         --h;

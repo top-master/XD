@@ -134,10 +134,10 @@ class ExecCloseHelper : public QObject
 public:
     enum { CloseWindow = -1 };
 
-    explicit ExecCloseHelper(QObject *parent = Q_NULLPTR)
-        : QObject(parent), m_key(0), m_timerId(0), m_testCandidate(Q_NULLPTR) { }
+    explicit ExecCloseHelper(QObject *parent = nullptr)
+        : QObject(parent), m_key(0), m_timerId(0), m_testCandidate(nullptr) { }
 
-    void start(int key, QWidget *testCandidate = Q_NULLPTR)
+    void start(int key, QWidget *testCandidate = nullptr)
     {
         m_key = key;
         m_testCandidate = testCandidate;
@@ -147,7 +147,7 @@ public:
     bool done() const { return !m_timerId; }
 
 protected:
-    void timerEvent(QTimerEvent *te) Q_DECL_OVERRIDE;
+    void timerEvent(QTimerEvent *te) override;
 
 private:
     int m_key;
@@ -172,7 +172,7 @@ void ExecCloseHelper::timerEvent(QTimerEvent *te)
             QKeyEvent *ke = new QKeyEvent(QEvent::KeyPress, m_key, Qt::NoModifier);
             QCoreApplication::postEvent(m_testCandidate, ke);
         }
-        m_testCandidate = Q_NULLPTR;
+        m_testCandidate = nullptr;
         killTimer(m_timerId);
         m_timerId = m_key = 0;
     }
@@ -185,6 +185,12 @@ void tst_QMessageBox::cleanup()
 
 void tst_QMessageBox::sanityTest()
 {
+#if defined(Q_OS_MACOS)
+    if (QSysInfo::productVersion() == QLatin1String("10.12")) {
+        QSKIP("Test hangs on macOS 10.12 -- QTQAINFRA-1362");
+        return;
+    }
+#endif
     QMessageBox msgBox;
     msgBox.setText("This is insane");
     for (int i = 0; i < 10; i++)
@@ -588,7 +594,7 @@ void tst_QMessageBox::detailsText()
     box.setDetailedText(text);
     QCOMPARE(box.detailedText(), text);
     box.show();
-    QTest::qWaitForWindowExposed(&box);
+    QVERIFY(QTest::qWaitForWindowExposed(&box));
     // QTBUG-39334, the box should now have the default "Ok" button as well as
     // the "Show Details.." button.
     QCOMPARE(box.findChildren<QAbstractButton *>().size(), 2);
@@ -641,7 +647,7 @@ void tst_QMessageBox::expandDetails_QTBUG_32473()
     // that the window manager is also done manipulating the first QMessageBox.
     QWidget fleece;
     fleece.show();
-    QTest::qWaitForWindowExposed(&fleece);
+    QVERIFY(QTest::qWaitForWindowExposed(&fleece));
     if (geom.topLeft() == box.geometry().topLeft())
         QTest::qWait(500);
     QCOMPARE(geom.topLeft(), box.geometry().topLeft());

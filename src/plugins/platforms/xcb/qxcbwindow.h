@@ -82,7 +82,7 @@ public:
 
     void setVisible(bool visible) override;
     void setWindowFlags(Qt::WindowFlags flags) override;
-    void setWindowState(Qt::WindowState state) override;
+    void setWindowState(Qt::WindowStates state) override;
     WId winId() const override;
     void setParent(const QPlatformWindow *window) override;
 
@@ -110,6 +110,7 @@ public:
     void windowEvent(QEvent *event) override;
 
     bool startSystemResize(const QPoint &pos, Qt::Corner corner) override;
+    bool startSystemMove(const QPoint &pos) override;
 
     void setOpacity(qreal level) override;
     void setMask(const QRegion &region) override;
@@ -138,7 +139,7 @@ public:
     void handleFocusInEvent(const xcb_focus_in_event_t *event) override;
     void handleFocusOutEvent(const xcb_focus_out_event_t *event) override;
     void handlePropertyNotifyEvent(const xcb_property_notify_event_t *event) override;
-#ifdef XCB_USE_XINPUT22
+#if QT_CONFIG(xcb_xinput)
     void handleXIMouseEvent(xcb_ge_event_t *, Qt::MouseEventSource source = Qt::MouseEventNotSynthesized) override;
     void handleXIEnterLeave(xcb_ge_event_t *) override;
 #endif
@@ -146,7 +147,7 @@ public:
     QXcbWindow *toWindow() override;
 
     void handleMouseEvent(xcb_timestamp_t time, const QPoint &local, const QPoint &global,
-                          Qt::KeyboardModifiers modifiers, Qt::MouseEventSource source);
+                          Qt::KeyboardModifiers modifiers, QEvent::Type type, Qt::MouseEventSource source);
 
     void updateNetWmUserTime(xcb_timestamp_t timestamp);
 
@@ -177,10 +178,13 @@ public:
 
     QXcbScreen *xcbScreen() const;
 
-    bool doStartSystemResize(const QPoint &globalPos, Qt::Corner corner);
+    bool startSystemMoveResize(const QPoint &pos, int corner);
+    bool doStartSystemMoveResize(const QPoint &globalPos, int corner);
 
     virtual void create();
     virtual void destroy();
+
+    static QString windowTitle(const QXcbConnection *conn, xcb_window_t window);
 
 public Q_SLOTS:
     void updateSyncRequestCounter();
@@ -188,6 +192,7 @@ public Q_SLOTS:
 protected:
     virtual void resolveFormat(const QSurfaceFormat &format) { m_format = format; }
     virtual const xcb_visualtype_t *createVisual();
+    void setImageFormatForVisual(const xcb_visualtype_t *visual);
 
     QXcbScreen *parentScreen();
 
@@ -220,13 +225,16 @@ protected:
     bool compressExposeEvent(QRegion &exposeRegion);
 
     void handleButtonPressEvent(int event_x, int event_y, int root_x, int root_y,
-                                int detail, Qt::KeyboardModifiers modifiers, xcb_timestamp_t timestamp, Qt::MouseEventSource source = Qt::MouseEventNotSynthesized);
+                                int detail, Qt::KeyboardModifiers modifiers, xcb_timestamp_t timestamp,
+                                QEvent::Type type, Qt::MouseEventSource source = Qt::MouseEventNotSynthesized);
 
     void handleButtonReleaseEvent(int event_x, int event_y, int root_x, int root_y,
-                                  int detail, Qt::KeyboardModifiers modifiers, xcb_timestamp_t timestamp, Qt::MouseEventSource source = Qt::MouseEventNotSynthesized);
+                                  int detail, Qt::KeyboardModifiers modifiers, xcb_timestamp_t timestamp,
+                                  QEvent::Type type, Qt::MouseEventSource source = Qt::MouseEventNotSynthesized);
 
     void handleMotionNotifyEvent(int event_x, int event_y, int root_x, int root_y,
-                                 Qt::KeyboardModifiers modifiers, xcb_timestamp_t timestamp, Qt::MouseEventSource source = Qt::MouseEventNotSynthesized);
+                                 Qt::KeyboardModifiers modifiers, xcb_timestamp_t timestamp,
+                                 QEvent::Type type, Qt::MouseEventSource source = Qt::MouseEventNotSynthesized);
 
     void handleEnterNotifyEvent(int event_x, int event_y, int root_x, int root_y,
                                 quint8 mode, quint8 detail, xcb_timestamp_t timestamp);
@@ -244,7 +252,7 @@ protected:
     xcb_sync_int64_t m_syncValue;
     xcb_sync_counter_t m_syncCounter = 0;
 
-    Qt::WindowState m_windowState = Qt::WindowNoState;
+    Qt::WindowStates m_windowState = Qt::WindowNoState;
 
     xcb_gravity_t m_gravity = XCB_GRAVITY_STATIC;
 
@@ -254,6 +262,7 @@ protected:
     bool m_deferredActivation = false;
     bool m_embedded = false;
     bool m_alertState = false;
+    bool m_minimized = false;
     xcb_window_t m_netWmUserTimeWindow = XCB_NONE;
 
     QSurfaceFormat m_format;
@@ -265,7 +274,8 @@ protected:
     QSize m_oldWindowSize;
 
     xcb_visualid_t m_visualId = 0;
-    int m_lastWindowStateEvent = -1;
+    // Last sent state. Initialized to an invalid state, on purpose.
+    Qt::WindowStates m_lastWindowStateEvent = Qt::WindowActive;
 
     enum SyncState {
         NoSyncNeeded,
@@ -277,6 +287,20 @@ protected:
     QXcbSyncWindowRequest *m_pendingSyncRequest = nullptr;
     xcb_cursor_t m_currentBitmapCursor = XCB_CURSOR_NONE;
 };
+
+class QXcbForeignWindow : public QXcbWindow
+{
+public:
+    QXcbForeignWindow(QWindow *window, WId nativeHandle)
+        : QXcbWindow(window) { m_window = nativeHandle; }
+    ~QXcbForeignWindow();
+    bool isForeignWindow() const override { return true; }
+
+protected:
+    void create() override {} // No-op
+};
+
+QVector<xcb_rectangle_t> qRegionToXcbRectangleList(const QRegion &region);
 
 QT_END_NAMESPACE
 

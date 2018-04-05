@@ -868,7 +868,7 @@ void tst_QGL::graphicsViewClipping()
 
     scene.setSceneRect(view.viewport()->rect());
 
-    QVERIFY(QTest::qWaitForWindowExposed(&view));
+    QVERIFY(QTest::qWaitForWindowExposed(view.viewport()->windowHandle()));
     #ifdef Q_OS_MAC
         // The black rectangle jumps from the center to the upper left for some reason.
         QTest::qWait(100);
@@ -2142,7 +2142,7 @@ void tst_QGL::textureCleanup()
     QGLWidget w;
     w.resize(200,200);
     w.show();
-    QTest::qWaitForWindowExposed(&w);
+    QVERIFY(QTest::qWaitForWindowExposed(&w));
     w.makeCurrent();
 
     // Test pixmaps which have been loaded via QPixmapCache are removed from the texture cache

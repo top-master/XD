@@ -10,12 +10,9 @@
 #define CALCULATORFORM_H
 
 #include <QtCore/QVariant>
-#include <QtWidgets/QAction>
 #include <QtWidgets/QApplication>
-#include <QtWidgets/QButtonGroup>
 #include <QtWidgets/QGridLayout>
 #include <QtWidgets/QHBoxLayout>
-#include <QtWidgets/QHeaderView>
 #include <QtWidgets/QLabel>
 #include <QtWidgets/QSpacerItem>
 #include <QtWidgets/QSpinBox>
@@ -173,13 +170,13 @@ public:
 
     void retranslateUi(QWidget *CalculatorForm)
     {
-        CalculatorForm->setWindowTitle(QApplication::translate("CalculatorForm", "Calculator Builder", Q_NULLPTR));
-        label->setText(QApplication::translate("CalculatorForm", "Input 1", Q_NULLPTR));
-        label_3->setText(QApplication::translate("CalculatorForm", "+", Q_NULLPTR));
-        label_2->setText(QApplication::translate("CalculatorForm", "Input 2", Q_NULLPTR));
-        label_3_2->setText(QApplication::translate("CalculatorForm", "=", Q_NULLPTR));
-        label_2_2_2->setText(QApplication::translate("CalculatorForm", "Output", Q_NULLPTR));
-        outputWidget->setText(QApplication::translate("CalculatorForm", "0", Q_NULLPTR));
+        CalculatorForm->setWindowTitle(QApplication::translate("CalculatorForm", "Calculator Builder", nullptr));
+        label->setText(QApplication::translate("CalculatorForm", "Input 1", nullptr));
+        label_3->setText(QApplication::translate("CalculatorForm", "+", nullptr));
+        label_2->setText(QApplication::translate("CalculatorForm", "Input 2", nullptr));
+        label_3_2->setText(QApplication::translate("CalculatorForm", "=", nullptr));
+        label_2_2_2->setText(QApplication::translate("CalculatorForm", "Output", nullptr));
+        outputWidget->setText(QApplication::translate("CalculatorForm", "0", nullptr));
     } // retranslateUi
 
 };

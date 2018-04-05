@@ -71,6 +71,9 @@ public:
     QAbstractSocketPrivate();
     virtual ~QAbstractSocketPrivate();
 
+    // from QIODevicePrivate
+    qint64 skip(qint64 maxSize) override;
+
     // from QAbstractSocketEngineReceiver
     inline void readNotification() override { canReadNotification(); }
     inline void writeNotification() override { canWriteNotification(); }
@@ -95,7 +98,6 @@ public:
     void _q_startConnecting(const QHostInfo &hostInfo);
     void _q_testConnection();
     void _q_abortConnectionAttempt();
-    void _q_forceDisconnect();
 
     bool emittedReadyRead;
     bool emittedBytesWritten;
@@ -148,13 +150,13 @@ public:
     bool hasPendingData;
 
     QTimer *connectTimer;
-    QTimer *disconnectTimer;
 
     int hostLookupId;
 
     QAbstractSocket::SocketType socketType;
     QAbstractSocket::SocketState state;
 
+    // Must be kept in sync with QIODevicePrivate::errorString.
     QAbstractSocket::SocketError socketError;
 
     QAbstractSocket::NetworkLayerProtocol preferredNetworkLayerProtocol;

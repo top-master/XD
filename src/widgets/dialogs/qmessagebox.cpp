@@ -39,8 +39,6 @@
 
 #include <QtWidgets/qmessagebox.h>
 
-#ifndef QT_NO_MESSAGEBOX
-
 #include <QtWidgets/qdialogbuttonbox.h>
 #include "private/qlabel_p.h"
 #include "private/qapplication_p.h"
@@ -56,13 +54,17 @@
 #include <QtGui/qicon.h>
 #include <QtGui/qtextdocument.h>
 #include <QtWidgets/qapplication.h>
+#if QT_CONFIG(textedit)
 #include <QtWidgets/qtextedit.h>
-#include <QtWidgets/qtextbrowser.h>
+#endif
+#if QT_CONFIG(menu)
 #include <QtWidgets/qmenu.h>
+#endif
 #include "qdialog_p.h"
 #include <QtGui/qfont.h>
 #include <QtGui/qfontmetrics.h>
 #include <QtGui/qclipboard.h>
+#include <private/qdesktopwidget_p.h>
 
 #ifdef Q_OS_WIN
 #    include <QtCore/qt_windows.h>
@@ -86,7 +88,7 @@ enum Button { Old_Ok = 1, Old_Cancel = 2, Old_Yes = 3, Old_No = 4, Old_Abort = 5
               NewButtonMask = 0xFFFFFC00 };
 
 enum DetailButtonLabel { ShowLabel = 0, HideLabel = 1 };
-#ifndef QT_NO_TEXTEDIT
+#if QT_CONFIG(textedit)
 class QMessageBoxDetailsText : public QWidget
 {
     Q_OBJECT
@@ -96,7 +98,7 @@ public:
     public:
         TextEdit(QWidget *parent=0) : QTextEdit(parent) { }
 #ifndef QT_NO_CONTEXTMENU
-        void contextMenuEvent(QContextMenuEvent * e) Q_DECL_OVERRIDE
+        void contextMenuEvent(QContextMenuEvent * e) override
         {
             QMenu *menu = createStandardContextMenu();
             menu->setAttribute(Qt::WA_DeleteOnClose);
@@ -155,7 +157,7 @@ private:
     bool copyAvailable;
     TextEdit *textEdit;
 };
-#endif // QT_NO_TEXTEDIT
+#endif // QT_CONFIG(textedit)
 
 class DetailButton : public QPushButton
 {
@@ -171,7 +173,7 @@ public:
     void setLabel(DetailButtonLabel lbl)
     { setText(label(lbl)); }
 
-    QSize sizeHint() const Q_DECL_OVERRIDE
+    QSize sizeHint() const override
     {
         ensurePolished();
         QStyleOptionButton opt;
@@ -195,7 +197,7 @@ class QMessageBoxPrivate : public QDialogPrivate
 
 public:
     QMessageBoxPrivate() : escapeButton(0), defaultButton(0), checkbox(0), clickedButton(0), detailsButton(0),
-#ifndef QT_NO_TEXTEDIT
+#if QT_CONFIG(textedit)
                            detailsText(0),
 #endif
                            compatMode(false), autoAddOkButton(true),
@@ -245,7 +247,7 @@ public:
     QCheckBox *checkbox;
     QAbstractButton *clickedButton;
     DetailButton *detailsButton;
-#ifndef QT_NO_TEXTEDIT
+#if QT_CONFIG(textedit)
     QMessageBoxDetailsText *detailsText;
 #endif
     bool compatMode;
@@ -257,9 +259,9 @@ public:
     QByteArray signalToDisconnectOnClose;
     QSharedPointer<QMessageDialogOptions> options;
 private:
-    void initHelper(QPlatformDialogHelper *) Q_DECL_OVERRIDE;
-    void helperPrepareShow(QPlatformDialogHelper *) Q_DECL_OVERRIDE;
-    void helperDone(QDialog::DialogCode, QPlatformDialogHelper *) Q_DECL_OVERRIDE;
+    void initHelper(QPlatformDialogHelper *) override;
+    void helperPrepareShow(QPlatformDialogHelper *) override;
+    void helperDone(QDialog::DialogCode, QPlatformDialogHelper *) override;
 };
 
 void QMessageBoxPrivate::init(const QString &title, const QString &text)
@@ -360,7 +362,7 @@ void QMessageBoxPrivate::updateSize()
     if (!q->isVisible())
         return;
 
-    QSize screenSize = QApplication::desktop()->availableGeometry(QCursor::pos()).size();
+    QSize screenSize = QDesktopWidgetPrivate::availableGeometry(QCursor::pos()).size();
     int hardLimit = qMin(screenSize.width() - 480, 1000); // can never get bigger than this
     // on small screens allows the messagebox be the same size as the screen
     if (screenSize.width() <= 1024)
@@ -413,7 +415,7 @@ void QMessageBoxPrivate::updateSize()
     }
 
     QFontMetrics fm(QApplication::font("QMdiSubWindowTitleBar"));
-    int windowTitleWidth = qMin(fm.width(q->windowTitle()) + 50, hardLimit);
+    int windowTitleWidth = qMin(fm.horizontalAdvance(q->windowTitle()) + 50, hardLimit);
     if (windowTitleWidth > width)
         width = windowTitleWidth;
 
@@ -466,7 +468,7 @@ int QMessageBoxPrivate::execReturnCode(QAbstractButton *button)
 void QMessageBoxPrivate::_q_buttonClicked(QAbstractButton *button)
 {
     Q_Q(QMessageBox);
-#ifndef QT_NO_TEXTEDIT
+#if QT_CONFIG(textedit)
     if (detailsButton && detailsText && button == detailsButton) {
         detailsButton->setLabel(detailsText->isHidden() ? HideLabel : ShowLabel);
         detailsText->setHidden(!detailsText->isHidden());
@@ -1420,7 +1422,7 @@ void QMessageBox::keyPressEvent(QKeyEvent *e)
 
 #if !defined(QT_NO_CLIPBOARD) && !defined(QT_NO_SHORTCUT)
 
-#if !defined(QT_NO_TEXTEDIT)
+#if QT_CONFIG(textedit)
         if (e == QKeySequence::Copy) {
             if (d->detailsText && d->detailsText->isVisible() && d->detailsText->copy()) {
                 e->setAccepted(true);
@@ -1431,7 +1433,7 @@ void QMessageBox::keyPressEvent(QKeyEvent *e)
             e->setAccepted(true);
             return;
         }
-#endif // !QT_NO_TEXTEDIT
+#endif // QT_CONFIG(textedit)
 
 #if defined(Q_OS_WIN)
         if (e == QKeySequence::Copy) {
@@ -1447,7 +1449,7 @@ void QMessageBox::keyPressEvent(QKeyEvent *e)
             for (const auto *button : buttons)
                 textToCopy += button->text() + QLatin1String("   ");
             textToCopy += QLatin1Char('\n') + separator;
-#ifndef QT_NO_TEXTEDIT
+#if QT_CONFIG(textedit)
             if (d->detailsText)
                 textToCopy += d->detailsText->text() + QLatin1Char('\n') + separator;
 #endif
@@ -1834,7 +1836,7 @@ void QMessageBox::aboutQt(QWidget *parent, const QString &title)
         "<p>Qt and the Qt logo are trademarks of The Qt Company Ltd.</p>"
         "<p>Qt is The Qt Company Ltd product developed as an open source "
         "project. See <a href=\"http://%3/\">%3</a> for more information.</p>"
-        ).arg(QStringLiteral("2017"),
+        ).arg(QStringLiteral("2018"),
               QStringLiteral("qt.io/licensing"),
               QStringLiteral("qt.io"));
     QMessageBox *msgBox = new QMessageBox(parent);
@@ -1985,7 +1987,7 @@ int QMessageBoxPrivate::showOldMessageBox(QWidget *parent, QMessageBox::Icon ico
 
 void QMessageBoxPrivate::retranslateStrings()
 {
-#ifndef QT_NO_TEXTEDIT
+#if QT_CONFIG(textedit)
     if (detailsButton)
         detailsButton->setLabel(detailsText->isHidden() ? ShowLabel : HideLabel);
 #endif
@@ -2440,7 +2442,7 @@ void QMessageBox::setButtonText(int button, const QString &text)
     }
 }
 
-#ifndef QT_NO_TEXTEDIT
+#if QT_CONFIG(textedit)
 /*!
   \property QMessageBox::detailedText
   \brief the text to be displayed in the details area.
@@ -2488,7 +2490,7 @@ void QMessageBox::setDetailedText(const QString &text)
     }
     d->setupLayout();
 }
-#endif // QT_NO_TEXTEDIT
+#endif // QT_CONFIG(textedit)
 
 /*!
   \property QMessageBox::informativeText
@@ -2606,7 +2608,7 @@ QPixmap QMessageBoxPrivate::standardIcon(QMessageBox::Icon icon, QMessageBox *mb
         break;
     }
     if (!tmpIcon.isNull()) {
-        QWindow *window = Q_NULLPTR;
+        QWindow *window = nullptr;
         if (mb) {
             window = mb->windowHandle();
             if (!window) {
@@ -2737,5 +2739,3 @@ QT_END_NAMESPACE
 
 #include "moc_qmessagebox.cpp"
 #include "qmessagebox.moc"
-
-#endif // QT_NO_MESSAGEBOX

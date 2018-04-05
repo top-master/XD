@@ -86,7 +86,6 @@
 #include <qdebug.h>
 
 #include <AppKit/AppKit.h>
-#include <Carbon/Carbon.h>
 
 QT_BEGIN_NAMESPACE
 
@@ -285,7 +284,7 @@ bool QCocoaEventDispatcher::hasPendingEvents()
 {
     extern uint qGlobalPostedEventsCount();
     extern bool qt_is_gui_used; //qapplication.cpp
-    return qGlobalPostedEventsCount() || (qt_is_gui_used && GetNumEventsInQueue(GetMainEventQueue()));
+    return qGlobalPostedEventsCount() || (qt_is_gui_used && !CFRunLoopIsWaiting(CFRunLoopGetMain()));
 }
 
 static bool IsMouseOrKeyEvent( NSEvent* event )
@@ -401,8 +400,18 @@ bool QCocoaEventDispatcher::processEvents(QEventLoop::ProcessEventsFlags flags)
             // [NSApp run], which is the normal code path for cocoa applications.
             if (NSModalSession session = d->currentModalSession()) {
                 QBoolBlocker execGuard(d->currentExecIsNSAppRun, false);
-                while ([NSApp runModalSession:session] == NSModalResponseContinue && !d->interrupt)
+                while ([NSApp runModalSession:session] == NSModalResponseContinue && !d->interrupt) {
                     qt_mac_waitForMoreEvents(NSModalPanelRunLoopMode);
+                    if (session != d->currentModalSessionCached) {
+                        // It's possible to release the current modal session
+                        // while we are in this loop, for example, by closing all
+                        // windows from a slot via QApplication::closeAllWindows.
+                        // In this case we cannot use 'session' anymore. A warning
+                        // from Cocoa is: "Use of freed session detected. Do not
+                        // call runModalSession: after calling endModalSesion:."
+                        break;
+                    }
+                }
 
                 if (!d->interrupt && session == d->currentModalSessionCached) {
                     // Someone called [NSApp stopModal:] from outside the event
@@ -628,6 +637,8 @@ NSModalSession QCocoaEventDispatcherPrivate::currentModalSession()
         if (!info.session) {
             QMacAutoReleasePool pool;
             QCocoaWindow *cocoaWindow = static_cast<QCocoaWindow *>(info.window->handle());
+            if (!cocoaWindow)
+                continue;
             NSWindow *nswindow = cocoaWindow->nativeWindow();
             if (!nswindow)
                 continue;
@@ -638,6 +649,15 @@ NSModalSession QCocoaEventDispatcherPrivate::currentModalSession()
             [(NSWindow*) info.nswindow retain];
             QRect rect = cocoaWindow->geometry();
             info.session = [NSApp beginModalSessionForWindow:nswindow];
+
+            // The call to beginModalSessionForWindow above processes events and may
+            // have deleted or destroyed the window. Check if it's still valid.
+            if (!info.window)
+                continue;
+            cocoaWindow = static_cast<QCocoaWindow *>(info.window->handle());
+            if (!cocoaWindow)
+                continue;
+
             if (rect != cocoaWindow->geometry())
                 cocoaWindow->setGeometry(rect);
         }
@@ -887,21 +907,6 @@ void QCocoaEventDispatcherPrivate::processPostedEvents()
         lastSerial = serial;
         QCoreApplication::sendPostedEvents();
         QWindowSystemInterface::sendWindowSystemEvents(QEventLoop::AllEvents);
-    }
-}
-
-void QCocoaEventDispatcherPrivate::removeQueuedUserInputEvents(int nsWinNumber)
-{
-    if (nsWinNumber) {
-        int eventIndex = queuedUserInputEvents.size();
-
-        while (--eventIndex >= 0) {
-            NSEvent * nsevent = static_cast<NSEvent *>(queuedUserInputEvents.at(eventIndex));
-            if ([nsevent windowNumber] == nsWinNumber) {
-                queuedUserInputEvents.removeAt(eventIndex);
-                [nsevent release];
-            }
-        }
     }
 }
 

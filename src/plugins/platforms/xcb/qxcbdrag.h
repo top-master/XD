@@ -74,7 +74,6 @@ public:
     QXcbDrag(QXcbConnection *c);
     ~QXcbDrag();
 
-    QMimeData *platformDropData() override;
     bool eventFilter(QObject *o, QEvent *e) override;
 
     void startDrag() override;
@@ -117,7 +116,7 @@ private:
     QPointer<QWindow> currentWindow;
     QPoint currentPosition;
 
-    QXcbDropData *dropData;
+    QXcbDropData *m_dropData;
     Qt::DropAction accepted_drop_action;
 
     QWindow *desktop_proxy;
@@ -135,6 +134,10 @@ private:
     // rectangle in which the answer will be the same
     QRect source_sameanswer;
     bool waiting_for_status;
+
+    // helpers for setting executed drop action outside application
+    bool dropped;
+    bool canceled;
 
     // top-level window we sent position to last.
     xcb_window_t current_target;

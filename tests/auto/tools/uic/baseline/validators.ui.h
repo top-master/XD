@@ -1,7 +1,7 @@
 /********************************************************************************
 ** Form generated from reading UI file 'validators.ui'
 **
-** Created by: Qt User Interface Compiler version 5.0.0
+** Created by: Qt User Interface Compiler version 5.10.0
 **
 ** WARNING! All changes made in this file will be lost when recompiling UI file!
 ********************************************************************************/
@@ -10,16 +10,13 @@
 #define VALIDATORS_H
 
 #include <QtCore/QVariant>
-#include <QtWidgets/QAction>
 #include <QtWidgets/QApplication>
-#include <QtWidgets/QButtonGroup>
 #include <QtWidgets/QComboBox>
 #include <QtWidgets/QDoubleSpinBox>
 #include <QtWidgets/QFrame>
 #include <QtWidgets/QGridLayout>
 #include <QtWidgets/QGroupBox>
 #include <QtWidgets/QHBoxLayout>
-#include <QtWidgets/QHeaderView>
 #include <QtWidgets/QLabel>
 #include <QtWidgets/QLineEdit>
 #include <QtWidgets/QPushButton>
@@ -268,6 +265,8 @@ public:
         gridLayout1->addWidget(label_5, 0, 2, 1, 1);
 
         doubleFormat = new QComboBox(groupBox_2);
+        doubleFormat->addItem(QString());
+        doubleFormat->addItem(QString());
         doubleFormat->setObjectName(QStringLiteral("doubleFormat"));
 
         gridLayout1->addWidget(doubleFormat, 0, 3, 1, 1);
@@ -376,24 +375,22 @@ public:
 
     void retranslateUi(QWidget *ValidatorsForm)
     {
-        ValidatorsForm->setWindowTitle(QApplication::translate("ValidatorsForm", "Form", Q_NULLPTR));
-        groupBox->setTitle(QApplication::translate("ValidatorsForm", "QIntValidator", Q_NULLPTR));
-        label->setText(QApplication::translate("ValidatorsForm", "Min:", Q_NULLPTR));
-        label_2->setText(QApplication::translate("ValidatorsForm", "Max:", Q_NULLPTR));
-        label_7->setText(QApplication::translate("ValidatorsForm", "editingFinished()", Q_NULLPTR));
-        groupBox_2->setTitle(QApplication::translate("ValidatorsForm", "QDoubleValidator", Q_NULLPTR));
-        label_3->setText(QApplication::translate("ValidatorsForm", "Min:", Q_NULLPTR));
-        label_5->setText(QApplication::translate("ValidatorsForm", "Format:", Q_NULLPTR));
-        doubleFormat->clear();
-        doubleFormat->insertItems(0, QStringList()
-         << QApplication::translate("ValidatorsForm", "Standard", Q_NULLPTR)
-         << QApplication::translate("ValidatorsForm", "Scientific", Q_NULLPTR)
-        );
-        label_4->setText(QApplication::translate("ValidatorsForm", "Max:", Q_NULLPTR));
-        label_6->setText(QApplication::translate("ValidatorsForm", "Decimals:", Q_NULLPTR));
+        ValidatorsForm->setWindowTitle(QApplication::translate("ValidatorsForm", "Form", nullptr));
+        groupBox->setTitle(QApplication::translate("ValidatorsForm", "QIntValidator", nullptr));
+        label->setText(QApplication::translate("ValidatorsForm", "Min:", nullptr));
+        label_2->setText(QApplication::translate("ValidatorsForm", "Max:", nullptr));
+        label_7->setText(QApplication::translate("ValidatorsForm", "editingFinished()", nullptr));
+        groupBox_2->setTitle(QApplication::translate("ValidatorsForm", "QDoubleValidator", nullptr));
+        label_3->setText(QApplication::translate("ValidatorsForm", "Min:", nullptr));
+        label_5->setText(QApplication::translate("ValidatorsForm", "Format:", nullptr));
+        doubleFormat->setItemText(0, QApplication::translate("ValidatorsForm", "Standard", nullptr));
+        doubleFormat->setItemText(1, QApplication::translate("ValidatorsForm", "Scientific", nullptr));
+
+        label_4->setText(QApplication::translate("ValidatorsForm", "Max:", nullptr));
+        label_6->setText(QApplication::translate("ValidatorsForm", "Decimals:", nullptr));
         doubleLedWidget->setText(QString());
-        label_8->setText(QApplication::translate("ValidatorsForm", "editingFinished()", Q_NULLPTR));
-        pushButton->setText(QApplication::translate("ValidatorsForm", "Quit", Q_NULLPTR));
+        label_8->setText(QApplication::translate("ValidatorsForm", "editingFinished()", nullptr));
+        pushButton->setText(QApplication::translate("ValidatorsForm", "Quit", nullptr));
     } // retranslateUi
 
 };

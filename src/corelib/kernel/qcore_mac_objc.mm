@@ -42,7 +42,6 @@
 
 #ifdef Q_OS_OSX
 #include <AppKit/NSText.h>
-#include <Carbon/Carbon.h>
 #endif
 
 #include <qdebug.h>
@@ -53,7 +52,11 @@ QT_BEGIN_NAMESPACE
 
 QDebug operator<<(QDebug dbg, const NSObject *nsObject)
 {
-    return dbg << (nsObject ? nsObject.description.UTF8String : "NSObject(0x0)");
+    return dbg << (nsObject ?
+            dbg.verbosity() > 2 ?
+                nsObject.debugDescription.UTF8String :
+                nsObject.description.UTF8String
+        : "NSObject(0x0)");
 }
 
 QDebug operator<<(QDebug dbg, CFStringRef stringRef)
@@ -81,18 +84,122 @@ QT_FOR_EACH_MUTABLE_CORE_GRAPHICS_TYPE(QT_DECLARE_WEAK_QDEBUG_OPERATOR_FOR_CF_TY
 
 // -------------------------------------------------------------------------
 
+QT_END_NAMESPACE
+QT_USE_NAMESPACE
+@interface QT_MANGLE_NAMESPACE(QMacAutoReleasePoolTracker) : NSObject
+@end
+
+@implementation QT_MANGLE_NAMESPACE(QMacAutoReleasePoolTracker) {
+    NSAutoreleasePool **m_pool;
+}
+
+- (instancetype)initWithPool:(NSAutoreleasePool **)pool
+{
+    if ((self = [self init]))
+        m_pool = pool;
+    return self;
+}
+
+- (void)dealloc
+{
+    if (*m_pool) {
+        // The pool is still valid, which means we're not being drained from
+        // the corresponding QMacAutoReleasePool (see below).
+
+        // QMacAutoReleasePool has only a single member, the NSAutoreleasePool*
+        // so the address of that member is also the QMacAutoReleasePool itself.
+        QMacAutoReleasePool *pool = reinterpret_cast<QMacAutoReleasePool *>(m_pool);
+        qWarning() << "Premature drain of" << pool << "This can happen if you've allocated"
+            << "the pool on the heap, or as a member of a heap-allocated object. This is not a"
+            << "supported use of QMacAutoReleasePool, and might result in crashes when objects"
+            << "in the pool are deallocated and then used later on under the assumption they"
+            << "will be valid until" << pool << "has been drained.";
+
+        // Reset the pool so that it's not drained again later on
+        *m_pool = nullptr;
+    }
+
+    [super dealloc];
+}
+@end
+QT_NAMESPACE_ALIAS_OBJC_CLASS(QMacAutoReleasePoolTracker);
+QT_BEGIN_NAMESPACE
+
 QMacAutoReleasePool::QMacAutoReleasePool()
     : pool([[NSAutoreleasePool alloc] init])
 {
+    [[[QMacAutoReleasePoolTracker alloc] initWithPool:
+        reinterpret_cast<NSAutoreleasePool **>(&pool)] autorelease];
 }
 
 QMacAutoReleasePool::~QMacAutoReleasePool()
 {
+    if (!pool) {
+        qWarning() << "Prematurely drained pool" << this << "finally drained. Any objects belonging"
+            << "to this pool have already been released, and have potentially been invalid since the"
+            << "premature drain earlier on.";
+        return;
+    }
+
+    // Save and reset pool before draining, so that the pool tracker can know
+    // that it's being drained by its owning pool.
+    NSAutoreleasePool *savedPool = static_cast<NSAutoreleasePool*>(pool);
+    pool = nullptr;
+
     // Drain behaves the same as release, with the advantage that
     // if we're ever used in a garbage-collected environment, the
     // drain acts as a hint to the garbage collector to collect.
-    [static_cast<NSAutoreleasePool*>(pool) drain];
+    [savedPool drain];
 }
+
+#ifndef QT_NO_DEBUG_STREAM
+QDebug operator<<(QDebug debug, const QMacAutoReleasePool *pool)
+{
+    QDebugStateSaver saver(debug);
+    debug.nospace();
+    debug << "QMacAutoReleasePool(" << (const void *)pool << ')';
+    return debug;
+}
+#endif // !QT_NO_DEBUG_STREAM
+
+#ifdef Q_OS_MACOS
+/*
+    Ensure that Objective-C objects auto-released in main(), directly or indirectly,
+    after QCoreApplication construction, are released when the app goes out of scope.
+    The memory will be reclaimed by the system either way when the process exits,
+    but by having a root level pool we ensure that the objects get their dealloc
+    methods called, which is useful for debugging object ownership graphs, etc.
+*/
+
+QT_END_NAMESPACE
+#define ROOT_LEVEL_POOL_MARKER QT_ROOT_LEVEL_POOL__THESE_OBJECTS_WILL_BE_RELEASED_WHEN_QAPP_GOES_OUT_OF_SCOPE
+@interface QT_MANGLE_NAMESPACE(ROOT_LEVEL_POOL_MARKER) : NSObject @end
+@implementation QT_MANGLE_NAMESPACE(ROOT_LEVEL_POOL_MARKER) @end
+QT_NAMESPACE_ALIAS_OBJC_CLASS(ROOT_LEVEL_POOL_MARKER);
+QT_BEGIN_NAMESPACE
+
+const char ROOT_LEVEL_POOL_DISABLE_SWITCH[] = "QT_DISABLE_ROOT_LEVEL_AUTORELEASE_POOL";
+
+QMacRootLevelAutoReleasePool::QMacRootLevelAutoReleasePool()
+{
+    if (qEnvironmentVariableIsSet(ROOT_LEVEL_POOL_DISABLE_SWITCH))
+        return;
+
+    pool.reset(new QMacAutoReleasePool);
+
+    [[[ROOT_LEVEL_POOL_MARKER alloc] init] autorelease];
+
+    if (qstrcmp(qgetenv("OBJC_DEBUG_MISSING_POOLS"), "YES") == 0) {
+        qDebug("QCoreApplication root level NSAutoreleasePool in place. Break on ~%s and use\n" \
+            "'p [NSAutoreleasePool showPools]' to show leaked objects, or set %s",
+            __FUNCTION__, ROOT_LEVEL_POOL_DISABLE_SWITCH);
+    }
+}
+
+QMacRootLevelAutoReleasePool::~QMacRootLevelAutoReleasePool()
+{
+}
+#endif
 
 // -------------------------------------------------------------------------
 
@@ -140,6 +247,7 @@ struct qtKey2CocoaKeySortLessThan
     }
 };
 
+static const int NSEscapeCharacter = 27; // not defined by Cocoa headers
 static const int NumEntries = 59;
 static const KeyPair entries[NumEntries] = {
     { NSEnterCharacter, Qt::Key_Enter },
@@ -148,7 +256,7 @@ static const KeyPair entries[NumEntries] = {
     { NSNewlineCharacter, Qt::Key_Return },
     { NSCarriageReturnCharacter, Qt::Key_Return },
     { NSBackTabCharacter, Qt::Key_Backtab },
-    { kEscapeCharCode, Qt::Key_Escape },
+    { NSEscapeCharacter, Qt::Key_Escape },
     // Cocoa sends us delete when pressing backspace!
     // (NB when we reverse this list in qtKey2CocoaKey, there
     // will be two indices of Qt::Key_Backspace. But is seems to work
@@ -236,6 +344,36 @@ Qt::Key qt_mac_cocoaKey2QtKey(QChar keyCode)
 }
 
 #endif // Q_OS_OSX
+
+void qt_apple_check_os_version()
+{
+#if defined(__IPHONE_OS_VERSION_MIN_REQUIRED)
+    const char *os = "iOS";
+    const int version = __IPHONE_OS_VERSION_MIN_REQUIRED;
+#elif defined(__TV_OS_VERSION_MIN_REQUIRED)
+    const char *os = "tvOS";
+    const int version = __TV_OS_VERSION_MIN_REQUIRED;
+#elif defined(__WATCH_OS_VERSION_MIN_REQUIRED)
+    const char *os = "watchOS";
+    const int version = __WATCH_OS_VERSION_MIN_REQUIRED;
+#elif defined(__MAC_OS_X_VERSION_MIN_REQUIRED)
+    const char *os = "macOS";
+    const int version = __MAC_OS_X_VERSION_MIN_REQUIRED;
+#endif
+    const NSOperatingSystemVersion required = (NSOperatingSystemVersion){
+        version / 10000, version / 100 % 100, version % 100};
+    const NSOperatingSystemVersion current = NSProcessInfo.processInfo.operatingSystemVersion;
+    if (![NSProcessInfo.processInfo isOperatingSystemAtLeastVersion:required]) {
+        fprintf(stderr, "You can't use this version of %s with this version of %s. "
+                "You have %s %ld.%ld.%ld. Qt requires %s %ld.%ld.%ld or later.\n",
+                (reinterpret_cast<const NSString *>(
+                    NSBundle.mainBundle.infoDictionary[@"CFBundleName"]).UTF8String),
+                os,
+                os, long(current.majorVersion), long(current.minorVersion), long(current.patchVersion),
+                os, long(required.majorVersion), long(required.minorVersion), long(required.patchVersion));
+        abort();
+    }
+}
 
 // -------------------------------------------------------------------------
 

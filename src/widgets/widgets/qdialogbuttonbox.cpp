@@ -411,7 +411,9 @@ QPushButton *QDialogButtonBoxPrivate::createButton(QDialogButtonBox::StandardBut
     else
         addButton(button, static_cast<QDialogButtonBox::ButtonRole>(role), doLayout);
 #if QT_CONFIG(shortcut)
-    button->setShortcut(QGuiApplicationPrivate::platformTheme()->standardButtonShortcut(sbutton));
+    const QKeySequence standardShortcut = QGuiApplicationPrivate::platformTheme()->standardButtonShortcut(sbutton);
+    if (!standardShortcut.isEmpty())
+        button->setShortcut(standardShortcut);
 #endif
     return button;
 }
@@ -577,6 +579,8 @@ QDialogButtonBox::~QDialogButtonBox()
     \value MacLayout Use a policy appropriate for applications on \macos.
     \value KdeLayout Use a policy appropriate for applications on KDE.
     \value GnomeLayout Use a policy appropriate for applications on GNOME.
+    \value AndroidLayout Use a policy appropriate for applications on Android.
+                            This enum value was added in Qt 5.10.
 
     The button layout is specified by the \l{style()}{current style}. However,
     on the X11 platform, it may be influenced by the desktop environment.
@@ -923,8 +927,8 @@ void QDialogButtonBox::changeEvent(QEvent *event)
             for (StandardButtonHash::iterator it = d->standardButtonHash.begin(); it != end; ++it)
                 it.key()->setStyle(newStyle);
         }
-        // fallthrough intended
 #ifdef Q_OS_MAC
+        Q_FALLTHROUGH();
     case QEvent::MacSizeChange:
 #endif
         d->resetLayout();

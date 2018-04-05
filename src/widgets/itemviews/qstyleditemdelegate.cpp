@@ -39,13 +39,16 @@
 
 #include "qstyleditemdelegate.h"
 
-#ifndef QT_NO_ITEMVIEWS
 #include <qabstractitemmodel.h>
 #include <qapplication.h>
 #include <qbrush.h>
+#if QT_CONFIG(lineedit)
 #include <qlineedit.h>
+#endif
+#if QT_CONFIG(textedit)
 #include <qtextedit.h>
 #include <qplaintextedit.h>
+#endif
 #include <qpainter.h>
 #include <qpalette.h>
 #include <qpoint.h>
@@ -67,7 +70,9 @@
 #include <private/qlayoutengine_p.h>
 #include <qdebug.h>
 #include <qlocale.h>
+#if QT_CONFIG(tableview)
 #include <qtableview.h>
+#endif
 
 #include <limits.h>
 
@@ -500,7 +505,7 @@ void QStyledItemDelegate::updateEditorGeometry(QWidget *editor,
     // let the editor take up all available space
     //if the editor is not a QLineEdit
     //or it is in a QTableView
-#if !defined(QT_NO_TABLEVIEW) && !defined(QT_NO_LINEEDIT)
+#if QT_CONFIG(tableview) && QT_CONFIG(lineedit)
     if (qobject_cast<QExpandingLineEdit*>(editor) && !qobject_cast<const QTableView*>(widget))
         opt.showDecorationSelected = editor->style()->styleHint(QStyle::SH_ItemView_ShowDecorationSelected, 0, editor);
     else
@@ -509,12 +514,13 @@ void QStyledItemDelegate::updateEditorGeometry(QWidget *editor,
 
     QStyle *style = widget ? widget->style() : QApplication::style();
     QRect geom = style->subElementRect(QStyle::SE_ItemViewItemText, &opt, widget);
-    if ( editor->layoutDirection() == Qt::RightToLeft) {
-        const int delta = qSmartMinSize(editor).width() - geom.width();
-        if (delta > 0) {
-            //we need to widen the geometry
+    const int delta = qSmartMinSize(editor).width() - geom.width();
+    if (delta > 0) {
+        //we need to widen the geometry
+        if (editor->layoutDirection() == Qt::RightToLeft)
             geom.adjust(-delta, 0, 0, 0);
-        }
+        else
+            geom.adjust(0, 0, delta, 0);
     }
 
     editor->setGeometry(geom);
@@ -565,7 +571,7 @@ void QStyledItemDelegate::setItemEditorFactory(QItemEditorFactory *factory)
     \uicontrol Return keys are \e not handled.
 
     In the case of \uicontrol Tab, \uicontrol Backtab, \uicontrol Enter and \uicontrol Return
-    key press events, the \a editor's data is comitted to the model
+    key press events, the \a editor's data is committed to the model
     and the editor is closed. If the \a event is a \uicontrol Tab key press
     the view will open an editor on the next item in the
     view. Likewise, if the \a event is a \uicontrol Backtab key press the
@@ -641,5 +647,3 @@ bool QStyledItemDelegate::editorEvent(QEvent *event,
 QT_END_NAMESPACE
 
 #include "moc_qstyleditemdelegate.cpp"
-
-#endif // QT_NO_ITEMVIEWS

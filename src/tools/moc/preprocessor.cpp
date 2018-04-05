@@ -992,7 +992,7 @@ static void mergeStringLiterals(Symbols *_symbols)
                 mergeSymbolLexem.reserve(literalsLength);
                 mergeSymbolLexem.append('"');
                 mergeSymbolLexem.append(mergeSymbolOriginalLexem);
-                for (Symbols::const_iterator j = mergeSymbol + 1; j != i; ++j)
+                for (Symbols::iterator j = mergeSymbol + 1; j != i; ++j)
                     mergeSymbolLexem.append(j->lex.constData() + j->from + 1, j->len - 2); // append j->unquotedLexem()
                 mergeSymbolLexem.append('"');
                 mergeSymbol->len = mergeSymbol->lex.length();
@@ -1109,19 +1109,18 @@ void Preprocessor::preprocess(const QByteArray &filename, Symbols &preprocessed)
         }
         case PP_DEFINE:
         {
-            next(IDENTIFIER);
+            next();
             QByteArray name = lexem();
+            if (name.isEmpty() || !is_ident_start(name[0]))
+                error();
             Macro macro;
             macro.isVariadic = false;
-            Token t = next();
-            if (t == LPAREN) {
+            if (test(LPAREN)) {
                 // we have a function macro
                 macro.isFunction = true;
                 parseDefineArguments(&macro);
-            } else if (t == PP_WHITESPACE){
-                macro.isFunction = false;
             } else {
-                error("Moc: internal error");
+                macro.isFunction = false;
             }
             int start = index;
             until(PP_NEWLINE);
@@ -1132,14 +1131,14 @@ void Preprocessor::preprocess(const QByteArray &filename, Symbols &preprocessed)
             Token lastToken = HASH; // skip shitespace at the beginning
             for (int i = start; i < index - 1; ++i) {
                 Token token = symbols.at(i).token;
-                if (token ==  PP_WHITESPACE || token == WHITESPACE) {
+                if (token == WHITESPACE) {
                     if (lastToken == PP_HASH || lastToken == HASH ||
                         lastToken == PP_HASHHASH ||
-                        lastToken == PP_WHITESPACE || lastToken == WHITESPACE)
+                        lastToken == WHITESPACE)
                         continue;
                 } else if (token == PP_HASHHASH) {
                     if (!macro.symbols.isEmpty() &&
-                        (lastToken ==  PP_WHITESPACE || lastToken == WHITESPACE))
+                        lastToken == WHITESPACE)
                         macro.symbols.pop_back();
                 }
                 macro.symbols.append(symbols.at(i));
@@ -1160,7 +1159,7 @@ void Preprocessor::preprocess(const QByteArray &filename, Symbols &preprocessed)
             continue;
         }
         case PP_UNDEF: {
-            next(IDENTIFIER);
+            next();
             QByteArray name = lexem();
             until(PP_NEWLINE);
             macros.remove(name);

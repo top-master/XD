@@ -39,17 +39,25 @@
 
 #include "rangecontrols_p.h"
 
+#if QT_CONFIG(slider)
 #include <qslider.h>
+#endif
+#if QT_CONFIG(dial)
 #include <qdial.h>
+#endif
+#if QT_CONFIG(spinbox)
 #include <qspinbox.h>
+#endif
+#if QT_CONFIG(scrollbar)
 #include <qscrollbar.h>
+#endif
 #include <qstyle.h>
 #include <qstyleoption.h>
 #include <qdebug.h>
 #include <qglobal.h>
-#include <QDoubleSpinBox>
-#include <QDial>
+#if QT_CONFIG(lineedit)
 #include <QtWidgets/qlineedit.h>
+#endif
 #include <qmath.h>
 #include <private/qmath_p.h>
 
@@ -59,9 +67,9 @@ QT_BEGIN_NAMESPACE
 
 #ifndef QT_NO_ACCESSIBILITY
 
-#ifndef QT_NO_SPINBOX
+#if QT_CONFIG(spinbox)
 QAccessibleAbstractSpinBox::QAccessibleAbstractSpinBox(QWidget *w)
-: QAccessibleWidget(w, QAccessible::SpinBox), lineEdit(Q_NULLPTR)
+: QAccessibleWidget(w, QAccessible::SpinBox), lineEdit(nullptr)
 {
     Q_ASSERT(abstractSpinBox());
 }
@@ -282,9 +290,9 @@ QString QAccessibleDoubleSpinBox::text(QAccessible::Text textType) const
     return QAccessibleWidget::text(textType);
 }
 
-#endif // QT_NO_SPINBOX
+#endif // QT_CONFIG(spinbox)
 
-#ifndef QT_NO_SCROLLBAR
+#if QT_CONFIG(scrollbar)
 /*!
   \class QAccessibleScrollBar
   \brief The QAccessibleScrollBar class implements the QAccessibleInterface for scroll bars.
@@ -317,9 +325,9 @@ QString QAccessibleScrollBar::text(QAccessible::Text t) const
     return QAccessibleAbstractSlider::text(t);
 }
 
-#endif // QT_NO_SCROLLBAR
+#endif // QT_CONFIG(scrollbar)
 
-#ifndef QT_NO_SLIDER
+#if QT_CONFIG(slider)
 /*!
   \class QAccessibleSlider
   \brief The QAccessibleSlider class implements the QAccessibleInterface for sliders.
@@ -396,9 +404,9 @@ QAbstractSlider *QAccessibleAbstractSlider::abstractSlider() const
     return static_cast<QAbstractSlider *>(object());
 }
 
-#endif // QT_NO_SLIDER
+#endif // QT_CONFIG(slider)
 
-#ifndef QT_NO_DIAL
+#if QT_CONFIG(dial)
 // ======================================= QAccessibleDial ======================================
 QAccessibleDial::QAccessibleDial(QWidget *widget)
     : QAccessibleAbstractSlider(widget, QAccessible::Dial)
@@ -419,7 +427,7 @@ QDial *QAccessibleDial::dial() const
 {
     return static_cast<QDial*>(object());
 }
-#endif // QT_NO_DIAL
+#endif // QT_CONFIG(dial)
 
 #endif // QT_NO_ACCESSIBILITY
 

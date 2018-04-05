@@ -49,7 +49,7 @@
 QT_BEGIN_NAMESPACE
 
 QXcbEglIntegration::QXcbEglIntegration()
-    : m_connection(Q_NULLPTR)
+    : m_connection(nullptr)
     , m_egl_display(EGL_NO_DISPLAY)
 {
     qCDebug(lcQpaGl) << "Xcb EGL gl-integration created";
@@ -102,7 +102,6 @@ QPlatformOpenGLContext *QXcbEglIntegration::createPlatformOpenGLContext(QOpenGLC
     QXcbEglContext *platformContext = new QXcbEglContext(screen->surfaceFormatFor(context->format()),
                                                          context->shareHandle(),
                                                          eglDisplay(),
-                                                         screen->connection(),
                                                          context->nativeHandle());
     context->setNativeHandle(platformContext->nativeHandle());
     return platformContext;
@@ -116,7 +115,7 @@ QPlatformOffscreenSurface *QXcbEglIntegration::createPlatformOffscreenSurface(QO
 
 void *QXcbEglIntegration::xlib_display() const
 {
-#ifdef XCB_USE_XLIB
+#if QT_CONFIG(xcb_xlib)
     return m_connection->xlib_display();
 #else
     return EGL_DEFAULT_DISPLAY;

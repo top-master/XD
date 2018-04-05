@@ -26,7 +26,8 @@
 **
 ****************************************************************************/
 
-
+#include <QDialog>
+#include <QMainWindow>
 #include <QtTest/QtTest>
 
 #include <qapplication.h>
@@ -62,6 +63,10 @@ private slots:
     void task229128TriggeredSignalWithoutActiongroup();
     void task229128TriggeredSignalWhenInActiongroup();
     void repeat();
+    void setData();
+    void keysequence(); // QTBUG-53381
+    void disableShortcutsWithBlockedWidgets_data();
+    void disableShortcutsWithBlockedWidgets();
 
 private:
     int m_lastEventType;
@@ -235,7 +240,7 @@ void tst_QAction::setStandardKeys()
         expected  << ctrlC << ctrlInsert;
         break;
     default: // X11
-        expected  << ctrlC << QKeySequence(QStringLiteral("F16")) << ctrlInsert;
+        expected  << ctrlC << ctrlInsert << QKeySequence(QStringLiteral("F16"));
         break;
     }
 
@@ -273,6 +278,40 @@ void tst_QAction::alternateShortcuts()
 
 
     //this tests a crash (if the action did not unregister its alternate shortcuts)
+    QTest::keyClick(&testWidget, Qt::Key_A, Qt::ControlModifier);
+}
+
+void tst_QAction::keysequence()
+{
+    MyWidget testWidget(this);
+    testWidget.show();
+    QApplication::setActiveWindow(&testWidget);
+
+    {
+        QAction act(&testWidget);
+        testWidget.addAction(&act);
+
+        QKeySequence ks(QKeySequence::SelectAll);
+
+        act.setShortcut(ks);
+
+        QSignalSpy spy(&act, &QAction::triggered);
+
+        act.setAutoRepeat(true);
+        QTest::keySequence(&testWidget, ks);
+        QCoreApplication::processEvents();
+        QCOMPARE(spy.count(), 1); // act should have been triggered
+
+        act.setAutoRepeat(false);
+        QTest::keySequence(&testWidget, ks);
+        QCoreApplication::processEvents();
+        QCOMPARE(spy.count(), 2); //act should have been triggered a 2nd time
+
+        // end of the scope of the action, it will be destroyed and removed from widget
+        // This action should also unregister its shortcuts
+    }
+
+    // this tests a crash (if the action did not unregister its alternate shortcuts)
     QTest::keyClick(&testWidget, Qt::Key_A, Qt::ControlModifier);
 }
 
@@ -315,7 +354,7 @@ void tst_QAction::enabledVisibleInteraction()
 
 void tst_QAction::task200823_tooltip()
 {
-    const QScopedPointer<QAction> action(new QAction("foo", Q_NULLPTR));
+    const QScopedPointer<QAction> action(new QAction("foo", nullptr));
     QString shortcut("ctrl+o");
     action->setShortcut(shortcut);
 
@@ -329,7 +368,7 @@ void tst_QAction::task200823_tooltip()
 void tst_QAction::task229128TriggeredSignalWithoutActiongroup()
 {
     // test without a group
-    const QScopedPointer<QAction> actionWithoutGroup(new QAction("Test", Q_NULLPTR));
+    const QScopedPointer<QAction> actionWithoutGroup(new QAction("Test", nullptr));
     QSignalSpy spyWithoutGroup(actionWithoutGroup.data(), SIGNAL(triggered(bool)));
     QCOMPARE(spyWithoutGroup.count(), 0);
     actionWithoutGroup->trigger();
@@ -406,6 +445,68 @@ void tst_QAction::repeat()
     QTest::simulateEvent(&testWidget, true, Qt::Key_F, Qt::NoModifier, QString("f"), true);
     QTest::keyRelease(&testWidget, Qt::Key_F);
     QCOMPARE(spy.count(), 2);
+}
+
+void tst_QAction::setData() // QTBUG-62006
+{
+    QAction act(nullptr);
+    QSignalSpy spy(&act, &QAction::changed);
+    QCOMPARE(act.data(), QVariant());
+    QCOMPARE(spy.count(), 0);
+    act.setData(QVariant());
+    QCOMPARE(spy.count(), 0);
+
+    act.setData(-1);
+    QCOMPARE(spy.count(), 1);
+    act.setData(-1);
+    QCOMPARE(spy.count(), 1);
+}
+
+void tst_QAction::disableShortcutsWithBlockedWidgets_data()
+{
+    QTest::addColumn<Qt::ShortcutContext>("shortcutContext");
+    QTest::addColumn<Qt::WindowModality>("windowModality");
+
+    QTest::newRow("application modal dialog should block window shortcut.")
+        << Qt::WindowShortcut << Qt::ApplicationModal;
+
+    QTest::newRow("application modal dialog should block application shortcut.")
+        << Qt::ApplicationShortcut << Qt::ApplicationModal;
+
+    QTest::newRow("window modal dialog should block application shortcut.")
+        << Qt::ApplicationShortcut << Qt::WindowModal;
+
+    QTest::newRow("window modal dialog should block window shortcut.")
+        << Qt::WindowShortcut << Qt::WindowModal;
+}
+
+
+void tst_QAction::disableShortcutsWithBlockedWidgets()
+{
+    QMainWindow window;
+
+    QFETCH(Qt::ShortcutContext, shortcutContext);
+    QAction action(&window);
+    window.addAction(&action);
+    action.setShortcut(QKeySequence(Qt::Key_1));
+    action.setShortcutContext(shortcutContext);
+
+    window.show();
+    QVERIFY(QTest::qWaitForWindowExposed(&window));
+
+    QDialog dialog(&window);
+    QFETCH(Qt::WindowModality, windowModality);
+    dialog.setWindowModality(windowModality);
+
+    dialog.show();
+    QVERIFY(QTest::qWaitForWindowExposed(&dialog));
+
+    QApplication::setActiveWindow(&window);
+    QVERIFY(QTest::qWaitForWindowActive(&window));
+
+    QSignalSpy spy(&action, &QAction::triggered);
+    QTest::keyPress(&window, Qt::Key_1);
+    QCOMPARE(spy.count(), 0);
 }
 
 QTEST_MAIN(tst_QAction)

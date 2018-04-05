@@ -55,6 +55,7 @@
 #include <QtCore/private/qglobal_p.h>
 #include "qplatformdefs.h"
 #include "qatomic.h"
+#include "qbytearray.h"
 
 #ifndef Q_OS_UNIX
 # error "qcore_unix_p.h included on a non-Unix system"
@@ -101,6 +102,8 @@ struct sockaddr;
     } while (var == -1 && errno == EINTR)
 
 QT_BEGIN_NAMESPACE
+
+Q_DECLARE_TYPEINFO(pollfd, Q_PRIMITIVE_TYPE);
 
 // Internal operator functions for timespecs
 inline timespec &normalizedTimespec(timespec &t)
@@ -183,10 +186,11 @@ static inline int qt_safe_open(const char *pathname, int flags, mode_t mode = 07
     int fd;
     EINTR_LOOP(fd, QT_OPEN(pathname, flags, mode));
 
-    // unknown flags are ignored, so we have no way of verifying if
-    // O_CLOEXEC was accepted
+#ifndef O_CLOEXEC
     if (fd != -1)
         ::fcntl(fd, F_SETFD, FD_CLOEXEC);
+#endif
+
     return fd;
 }
 #undef QT_OPEN
@@ -337,12 +341,28 @@ static inline pid_t qt_safe_waitpid(pid_t pid, int *status, int options)
 // in qelapsedtimer_mac.cpp or qtimestamp_unix.cpp
 timespec qt_gettime() Q_DECL_NOTHROW;
 void qt_nanosleep(timespec amount);
+QByteArray qt_readlink(const char *path);
+
+/* non-static */
+inline bool qt_haveLinuxProcfs()
+{
+#ifdef Q_OS_LINUX
+#  ifdef QT_LINUX_ALWAYS_HAVE_PROCFS
+    return true;
+#  else
+    static const bool present = (access("/proc/version", F_OK) == 0);
+    return present;
+#  endif
+#else
+    return false;
+#endif
+}
 
 Q_CORE_EXPORT int qt_safe_poll(struct pollfd *fds, nfds_t nfds, const struct timespec *timeout_ts);
 
 static inline int qt_poll_msecs(struct pollfd *fds, nfds_t nfds, int timeout)
 {
-    timespec ts, *pts = Q_NULLPTR;
+    timespec ts, *pts = nullptr;
 
     if (timeout >= 0) {
         ts.tv_sec = timeout / 1000;

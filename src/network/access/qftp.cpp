@@ -43,8 +43,6 @@
 #include "private/qftp_p.h"
 #include "qabstractsocket.h"
 
-#ifndef QT_NO_FTP
-
 #include "qcoreapplication.h"
 #include "qtcpsocket.h"
 #include "qurlinfo_p.h"
@@ -1704,8 +1702,16 @@ int QFtp::connectToHost(const QString &host, quint16 port)
 int QFtp::login(const QString &user, const QString &password)
 {
     QStringList cmds;
-    cmds << (QLatin1String("USER ") + (user.isNull() ? QLatin1String("anonymous") : user) + QLatin1String("\r\n"));
-    cmds << (QLatin1String("PASS ") + (password.isNull() ? QLatin1String("anonymous@") : password) + QLatin1String("\r\n"));
+
+    if (user.isNull() || user.compare(QLatin1String("anonymous"), Qt::CaseInsensitive) == 0) {
+        cmds << (QLatin1String("USER ") + (user.isNull() ? QLatin1String("anonymous") : user) + QLatin1String("\r\n"));
+        cmds << (QLatin1String("PASS ") + (password.isNull() ? QLatin1String("anonymous@") : password) + QLatin1String("\r\n"));
+    } else {
+        cmds << (QLatin1String("USER ") + user + QLatin1String("\r\n"));
+        if (!password.isNull())
+            cmds << (QLatin1String("PASS ") + password + QLatin1String("\r\n"));
+    }
+
     return d_func()->addCommand(new QFtpCommand(Login, cmds));
 }
 
@@ -2453,5 +2459,3 @@ QT_END_NAMESPACE
 #include "qftp.moc"
 
 #include "moc_qftp_p.cpp"
-
-#endif // QT_NO_FTP

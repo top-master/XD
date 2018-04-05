@@ -5,7 +5,7 @@ import QtGuiPrivateConfig
  * Statically compile in code for
  * libxcb-fixes, libxcb-randr, libxcb-shm, libxcb-sync, libxcb-image,
  * libxcb-keysyms, libxcb-icccm, libxcb-renderutil, libxcb-xkb,
- * libxcb-xinerama
+ * libxcb-xinerama, libxcb-xinput
  */
 QtStaticLibrary {
     condition: project.conditionFunction() && !QtGuiPrivateConfig.system_xcb
@@ -39,6 +39,7 @@ QtStaticLibrary {
             "sync.c",
             "xfixes.c",
             "xinerama.c",
+            "xinput.c",
             "xkb.c",
         ]
     }

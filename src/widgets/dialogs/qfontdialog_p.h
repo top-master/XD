@@ -59,7 +59,7 @@
 #include <qpa/qplatformdialoghelper.h>
 #include "qsharedpointer.h"
 
-#ifndef QT_NO_FONTDIALOG
+QT_REQUIRE_CONFIG(fontdialog);
 
 QT_BEGIN_NAMESPACE
 
@@ -141,15 +141,13 @@ public:
     QPointer<QObject> receiverToDisconnectOnClose;
     QByteArray memberToDisconnectOnClose;
 
-    bool canBeNativeDialog() const Q_DECL_OVERRIDE;
+    bool canBeNativeDialog() const override;
     void _q_runNativeAppModalPanel();
 
 private:
-    virtual void initHelper(QPlatformDialogHelper *) Q_DECL_OVERRIDE;
-    virtual void helperPrepareShow(QPlatformDialogHelper *) Q_DECL_OVERRIDE;
+    virtual void initHelper(QPlatformDialogHelper *) override;
+    virtual void helperPrepareShow(QPlatformDialogHelper *) override;
 };
-
-#endif // QT_NO_FONTDIALOG
 
 QT_END_NAMESPACE
 

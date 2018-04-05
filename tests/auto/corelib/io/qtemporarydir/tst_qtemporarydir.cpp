@@ -35,6 +35,7 @@
 #include <qdir.h>
 #include <qset.h>
 #include <qtextcodec.h>
+#include <QtTest/private/qtesthelpers_p.h>
 #ifdef Q_OS_WIN
 # include <windows.h>
 #endif
@@ -112,16 +113,6 @@ void tst_QTemporaryDir::getSetCheck()
     QCOMPARE(true, obj1.autoRemove());
 }
 
-static inline bool canHandleUnicodeFileNames()
-{
-#if defined(Q_OS_WIN) && !defined(Q_OS_WINCE)
-    return true;
-#else
-    // Check for UTF-8 by converting the Euro symbol (see tst_utf8)
-    return QFile::encodeName(QString(QChar(0x20AC))) == QByteArrayLiteral("\342\202\254");
-#endif
-}
-
 static QString hanTestText()
 {
     QString text;
@@ -148,25 +139,24 @@ void tst_QTemporaryDir::fileTemplate_data()
 {
     QTest::addColumn<QString>("constructorTemplate");
     QTest::addColumn<QString>("prefix");
+    QTest::addColumn<QString>("suffix");
 
-    QTest::newRow("constructor default") << "" << "tst_qtemporarydir-";
+    QTest::newRow("default") << "" << "tst_qtemporarydir-" << "";
 
-    QTest::newRow("constructor with xxx sufix") << "qt_XXXXXXxxx" << "qt_XXXXXXxxx";
-    QTest::newRow("constructor with xXx sufix") << "qt_XXXXXXxXx" << "qt_XXXXXXxXx";
-    QTest::newRow("constructor with no suffix") << "qt_XXXXXX" << "qt_";
-    QTest::newRow("constructor with >6 X's, no suffix") << "qt_XXXXXXXXXX" << "qt_";
-    // When more than 6 X are present at the end, linux and windows will only replace the last 6,
-    // while Mac OS will actually replace all of them so we can only expect "qt_" (and check isValid).
-    QTest::newRow("constructor with XXXX suffix") << "qt_XXXXXX_XXXX" << "qt_";
-    QTest::newRow("constructor with XXXX prefix") << "qt_XXXX" << "qt_";
-    QTest::newRow("constructor with XXXXX prefix") << "qt_XXXXX" << "qt_";
-    if (canHandleUnicodeFileNames()) {
+    QTest::newRow("xxx-suffix") << "qt_XXXXXXxxx" << "qt_" << "xxx";
+    QTest::newRow("xXx-suffix") << "qt_XXXXXXxXx" << "qt_" << "xXx";
+    QTest::newRow("no-suffix") << "qt_XXXXXX" << "qt_" << "";
+    QTest::newRow("10X") << "qt_XXXXXXXXXX" << "qt_" << "";
+    QTest::newRow("4Xsuffix") << "qt_XXXXXX_XXXX" << "qt_" << "_XXXX";
+    QTest::newRow("4Xprefix") << "qt_XXXX" << "qt_XXXX" << "";
+    QTest::newRow("5Xprefix") << "qt_XXXXX" << "qt_XXXXX" << "";
+    if (QTestPrivate::canHandleUnicodeFileNames()) {
         // Test Umlauts (contained in Latin1)
         QString prefix = "qt_" + umlautTestText();
-        QTest::newRow("Umlauts") << (prefix + "XXXXXX") << prefix;
-        // Test Chinese
+        QTest::newRow("Umlauts") << (prefix + "XXXXXX") << prefix << "";
+        // test non-Latin1
         prefix = "qt_" + hanTestText();
-        QTest::newRow("Chinese characters") << (prefix + "XXXXXX") << prefix;
+        QTest::newRow("Chinese") << (prefix + "XXXXXX" + umlautTestText()) << prefix << umlautTestText();
     }
 }
 
@@ -174,14 +164,17 @@ void tst_QTemporaryDir::fileTemplate()
 {
     QFETCH(QString, constructorTemplate);
     QFETCH(QString, prefix);
+    QFETCH(QString, suffix);
 
     QTemporaryDir tempDir(constructorTemplate);
 
     QVERIFY(tempDir.isValid());
 
     QString dirName = QDir(tempDir.path()).dirName();
-    if (prefix.length())
+    if (prefix.length()) {
         QCOMPARE(dirName.left(prefix.length()), prefix);
+        QCOMPARE(dirName.right(suffix.length()), suffix);
+    }
 }
 
 
@@ -297,7 +290,7 @@ void tst_QTemporaryDir::nonWritableCurrentDir()
 {
 #ifdef Q_OS_UNIX
 
-#  if defined(Q_OS_ANDROID)
+#  if defined(Q_OS_ANDROID) && !defined(Q_OS_ANDROID_EMBEDDED)
     const char nonWritableDir[] = "/data";
 #  else
     const char nonWritableDir[] = "/home";

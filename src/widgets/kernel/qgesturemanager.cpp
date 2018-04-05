@@ -41,13 +41,15 @@
 #include "private/qstandardgestures_p.h"
 #include "private/qwidget_p.h"
 #include "private/qgesture_p.h"
+#if QT_CONFIG(graphicsview)
 #include "private/qgraphicsitem_p.h"
+#include "qgraphicsitem.h"
+#endif
 #include "private/qevent_p.h"
 #include "private/qapplication_p.h"
 #include "private/qwidgetwindow_p.h"
 #include "qgesture.h"
 #include "qevent.h"
-#include "qgraphicsitem.h"
 
 #ifdef Q_OS_OSX
 #include "qmacgesturerecognizer_p.h"
@@ -122,7 +124,7 @@ QGestureManager::~QGestureManager()
 
 Qt::GestureType QGestureManager::registerGestureRecognizer(QGestureRecognizer *recognizer)
 {
-    QGesture *dummy = recognizer->create(0);
+    const QScopedPointer<QGesture> dummy(recognizer->create(nullptr));
     if (Q_UNLIKELY(!dummy)) {
         qWarning("QGestureManager::registerGestureRecognizer: "
                  "the recognizer fails to create a gesture object, skipping registration.");
@@ -135,7 +137,6 @@ Qt::GestureType QGestureManager::registerGestureRecognizer(QGestureRecognizer *r
         type = Qt::GestureType(m_lastCustomGestureId);
     }
     m_recognizers.insertMulti(type, recognizer);
-    delete dummy;
     return type;
 }
 
@@ -143,10 +144,9 @@ void QGestureManager::unregisterGestureRecognizer(Qt::GestureType type)
 {
     QList<QGestureRecognizer *> list = m_recognizers.values(type);
     while (QGestureRecognizer *recognizer = m_recognizers.take(type)) {
-        if (!m_obsoleteGestures.contains(recognizer)) {
-            // inserting even an empty QSet will cause the recognizer to be deleted on destruction of the manager
-            m_obsoleteGestures.insert(recognizer, QSet<QGesture *>());
-        }
+        // ensuring an entry exists causes the recognizer to be deleted on destruction of the manager
+        auto &gestures = m_obsoleteGestures[recognizer];
+        Q_UNUSED(gestures);
     }
     foreach (QGesture *g, m_gestureToRecognizer.keys()) {
         QGestureRecognizer *recognizer = m_gestureToRecognizer.value(g);
@@ -209,7 +209,7 @@ QGesture *QGestureManager::getState(QObject *object, QGestureRecognizer *recogni
             return 0;
     } else if (QGesture *g = qobject_cast<QGesture *>(object)) {
         return g;
-#ifndef QT_NO_GRAPHICSVIEW
+#if QT_CONFIG(graphicsview)
     } else {
         Q_ASSERT(qobject_cast<QGraphicsObject *>(object));
         QGraphicsObject *graphicsObject = static_cast<QGraphicsObject *>(object);
@@ -242,6 +242,36 @@ QGesture *QGestureManager::getState(QObject *object, QGestureRecognizer *recogni
     m_gestureOwners[state] = object;
 
     return state;
+}
+
+static bool logIgnoredEvent(QEvent::Type t)
+{
+    bool result = false;
+    switch (t) {
+    case QEvent::MouseButtonPress:
+    case QEvent::MouseButtonRelease:
+    case QEvent::MouseButtonDblClick:
+    case QEvent::MouseMove:
+    case QEvent::TouchBegin:
+    case QEvent::TouchUpdate:
+    case QEvent::TouchCancel:
+    case QEvent::TouchEnd:
+    case QEvent::TabletEnterProximity:
+    case QEvent::TabletLeaveProximity:
+    case QEvent::TabletMove:
+    case QEvent::TabletPress:
+    case QEvent::TabletRelease:
+    case QEvent::GraphicsSceneMouseDoubleClick:
+    case QEvent::GraphicsSceneMousePress:
+    case QEvent::GraphicsSceneMouseRelease:
+    case QEvent::GraphicsSceneMouseMove:
+        result = true;
+        break;
+    default:
+        break;
+
+    }
+    return result;
 }
 
 bool QGestureManager::filterEventThroughContexts(const QMultiMap<QObject *,
@@ -289,10 +319,13 @@ bool QGestureManager::filterEventThroughContexts(const QMultiMap<QObject *,
                 qCDebug(lcGestureManager) << "QGestureManager:Recognizer: not gesture: " << state << event;
                 notGestures << state;
             } else if (recognizerState == QGestureRecognizer::Ignore) {
-                qCDebug(lcGestureManager) << "QGestureManager:Recognizer: ignored the event: " << state << event;
+                if (logIgnoredEvent(event->type()))
+                    qCDebug(lcGestureManager) << "QGestureManager:Recognizer: ignored the event: " << state << event;
             } else {
-                qCDebug(lcGestureManager) << "QGestureManager:Recognizer: hm, lets assume the recognizer"
+                if (logIgnoredEvent(event->type())) {
+                    qCDebug(lcGestureManager) << "QGestureManager:Recognizer: hm, lets assume the recognizer"
                         << "ignored the event: " << state << event;
+                }
             }
             if (resultHint & QGestureRecognizer::ConsumeEventHint) {
                 qCDebug(lcGestureManager) << "QGestureManager: we were asked to consume the event: "
@@ -512,7 +545,7 @@ bool QGestureManager::filterEvent(QWidget *receiver, QEvent *event)
     return contexts.isEmpty() ? false : filterEventThroughContexts(contexts, event);
 }
 
-#ifndef QT_NO_GRAPHICSVIEW
+#if QT_CONFIG(graphicsview)
 bool QGestureManager::filterEvent(QGraphicsObject *receiver, QEvent *event)
 {
     QMap<Qt::GestureType, int> types;

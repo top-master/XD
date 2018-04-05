@@ -39,19 +39,26 @@
 
 #include "qabstractitemdelegate.h"
 
-#ifndef QT_NO_ITEMVIEWS
 #include <qabstractitemmodel.h>
 #include <qabstractitemview.h>
 #include <qfontmetrics.h>
+#if QT_CONFIG(whatsthis)
 #include <qwhatsthis.h>
+#endif
 #include <qtooltip.h>
 #include <qevent.h>
 #include <qstring.h>
 #include <qdebug.h>
+#if QT_CONFIG(lineedit)
 #include <qlineedit.h>
+#endif
+#if QT_CONFIG(textedit)
 #include <qtextedit.h>
 #include <qplaintextedit.h>
+#endif
 #include <qapplication.h>
+#include <qvalidator.h>
+#include <qjsonvalue.h>
 #include <private/qtextengine_p.h>
 #include <private/qabstractitemdelegate_p.h>
 
@@ -393,7 +400,7 @@ bool QAbstractItemDelegate::helpEvent(QHelpEvent *event,
         }
         break;}
 #endif
-#ifndef QT_NO_WHATSTHIS
+#if QT_CONFIG(whatsthis)
     case QEvent::QueryWhatsThis: {
         if (index.data(Qt::WhatsThisRole).isValid())
             return true;
@@ -431,7 +438,7 @@ QAbstractItemDelegatePrivate::QAbstractItemDelegatePrivate()
 
 static bool editorHandlesKeyEvent(QWidget *editor, const QKeyEvent *event)
 {
-#ifndef QT_NO_TEXTEDIT
+#if QT_CONFIG(textedit)
     // do not filter enter / return / tab / backtab for QTextEdit or QPlainTextEdit
     if (qobject_cast<QTextEdit *>(editor) || qobject_cast<QPlainTextEdit *>(editor)) {
         switch (event->key()) {
@@ -445,7 +452,7 @@ static bool editorHandlesKeyEvent(QWidget *editor, const QKeyEvent *event)
             break;
         }
     }
-#endif // QT_NO_TEXTEDIT
+#endif // QT_CONFIG(textedit)
 
     Q_UNUSED(editor);
     Q_UNUSED(event);
@@ -519,7 +526,15 @@ bool QAbstractItemDelegatePrivate::editorEventFilter(QObject *object, QEvent *ev
             if (tryFixup(editor))
                 emit q->commitData(editor);
 
+            // If the application loses focus while editing, then the focus needs to go back
+            // to the itemview when the editor closes. This ensures that when the application
+            // is active again it will have the focus on the itemview as expected.
+            const bool manuallyFixFocus = (event->type() == QEvent::FocusOut) && !editor->hasFocus() &&
+                    editor->parentWidget() &&
+                    (static_cast<QFocusEvent *>(event)->reason() == Qt::ActiveWindowFocusReason);
             emit q->closeEditor(editor, QAbstractItemDelegate::NoHint);
+            if (manuallyFixFocus)
+                editor->parentWidget()->setFocus();
         }
 #ifndef QT_NO_SHORTCUT
     } else if (event->type() == QEvent::ShortcutOverride) {
@@ -534,7 +549,7 @@ bool QAbstractItemDelegatePrivate::editorEventFilter(QObject *object, QEvent *ev
 
 bool QAbstractItemDelegatePrivate::tryFixup(QWidget *editor)
 {
-#ifndef QT_NO_LINEEDIT
+#if QT_CONFIG(lineedit)
     if (QLineEdit *e = qobject_cast<QLineEdit*>(editor)) {
         if (!e->hasAcceptableInput()) {
 #if QT_CONFIG(validator)
@@ -549,7 +564,7 @@ bool QAbstractItemDelegatePrivate::tryFixup(QWidget *editor)
     }
 #else
     Q_UNUSED(editor)
-#endif // QT_NO_LINEEDIT
+#endif // QT_CONFIG(lineedit)
 
     return true;
 }
@@ -579,17 +594,25 @@ QString QAbstractItemDelegatePrivate::textForRole(Qt::ItemDataRole role, const Q
     case QVariant::Time:
         text = locale.toString(value.toTime(), formatType);
         break;
-    case QVariant::DateTime: {
-        const QDateTime dateTime = value.toDateTime();
-        text = locale.toString(dateTime.date(), formatType)
-             + QLatin1Char(' ')
-             + locale.toString(dateTime.time(), formatType);
-        break; }
-    default:
-        text = value.toString();
+    case QVariant::DateTime:
+        text = locale.toString(value.toDateTime(), formatType);
+        break;
+    default: {
+        if (value.canConvert<QJsonValue>()) {
+            const QJsonValue val = value.toJsonValue();
+            if (val.isBool())
+                text = QVariant(val.toBool()).toString();
+            else if (val.isDouble())
+                text = locale.toString(val.toDouble(), 'g', precision);
+            else if (val.isString())
+                text = val.toString();
+        } else {
+            text = value.toString();
+        }
         if (role == Qt::DisplayRole)
             text.replace(QLatin1Char('\n'), QChar::LineSeparator);
         break;
+    }
     }
     return text;
 }
@@ -604,5 +627,3 @@ void QAbstractItemDelegatePrivate::_q_commitDataAndCloseEditor(QWidget *editor)
 QT_END_NAMESPACE
 
 #include "moc_qabstractitemdelegate.cpp"
-
-#endif // QT_NO_ITEMVIEWS

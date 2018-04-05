@@ -55,9 +55,9 @@
 #include "qcompleter.h"
 #include <QtWidgets/qfilesystemmodel.h>
 
-QT_BEGIN_NAMESPACE
+QT_REQUIRE_CONFIG(fscompleter);
 
-#ifndef QT_NO_FSCOMPLETER
+QT_BEGIN_NAMESPACE
 
 /*!
     QCompleter that can deal with QFileSystemModel
@@ -71,14 +71,12 @@ public:
         setCaseSensitivity(Qt::CaseInsensitive);
 #endif
     }
-    QString pathFromIndex(const QModelIndex &index) const Q_DECL_OVERRIDE;
-    QStringList splitPath(const QString& path) const Q_DECL_OVERRIDE;
+    QString pathFromIndex(const QModelIndex &index) const override;
+    QStringList splitPath(const QString& path) const override;
 
     QAbstractProxyModel *proxyModel;
     QFileSystemModel *sourceModel;
 };
-
-#endif // QT_NO_FSCOMPLETER
 
 QT_END_NAMESPACE
 

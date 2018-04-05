@@ -341,8 +341,10 @@ public:
         if (file) {
             QMutexLocker lock(&file->mutex);
             switch (time) {
-                case CreationTime:
-                    return file->creation;
+                case BirthTime:
+                    return file->birth;
+                case MetadataChangeTime:
+                    return file->change;
                 case ModificationTime:
                     return file->modification;
                 case AccessTime:
@@ -351,6 +353,13 @@ public:
         }
 
         return QDateTime();
+    }
+
+    bool setFileTime(const QDateTime &newDate, FileTime time)
+    {
+        Q_UNUSED(newDate);
+        Q_UNUSED(time);
+        return false;
     }
 
     void setFileName(const QString &file)
@@ -449,7 +458,7 @@ protected:
 
         uint userId, groupId;
         QAbstractFileEngine::FileFlags fileFlags;
-        QDateTime creation, modification, access;
+        QDateTime birth, change, modification, access;
 
         QByteArray content;
     };
@@ -466,7 +475,7 @@ protected:
         if (create) {
             QSharedPointer<File> &p = fileSystem[fileName_];
             if (p.isNull())
-                p = QSharedPointer<File>(new File);
+                p = QSharedPointer<File>::create();
             return p;
         }
 
@@ -564,7 +573,7 @@ class FileEngineHandler
 void tst_QAbstractFileEngine::initTestCase()
 {
     m_previousCurrent = QDir::currentPath();
-    m_currentDir = QSharedPointer<QTemporaryDir>(new QTemporaryDir());
+    m_currentDir = QSharedPointer<QTemporaryDir>::create();
     QVERIFY2(!m_currentDir.isNull(), qPrintable("Could not create current directory."));
     QDir::setCurrent(m_currentDir->path());
 }

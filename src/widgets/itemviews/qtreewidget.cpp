@@ -39,7 +39,6 @@
 
 #include "qtreewidget.h"
 
-#ifndef QT_NO_TREEWIDGET
 #include <qheaderview.h>
 #include <qpainter.h>
 #include <qitemdelegate.h>
@@ -52,9 +51,6 @@
 #include <algorithm>
 
 QT_BEGIN_NAMESPACE
-
-// workaround for VC++ 6.0 linker bug (?)
-typedef bool(*LessThan)(const QPair<QTreeWidgetItem*,int>&,const QPair<QTreeWidgetItem*,int>&);
 
 class QTreeModelLessThan
 {
@@ -146,7 +142,7 @@ QTreeModel::QTreeModel(QTreeModelPrivate &dd, QTreeWidget *parent)
 QTreeModel::~QTreeModel()
 {
     clear();
-    headerItem->view = Q_NULLPTR;
+    headerItem->view = nullptr;
     delete headerItem;
     rootItem->view = 0;
     delete rootItem;
@@ -611,7 +607,7 @@ void QTreeModel::ensureSorted(int column, Qt::SortOrder order,
         sorting[i].second = start + i;
     }
 
-    LessThan compare = (order == Qt::AscendingOrder ? &itemLessThan : &itemGreaterThan);
+    const auto compare = (order == Qt::AscendingOrder ? &itemLessThan : &itemGreaterThan);
     std::stable_sort(sorting.begin(), sorting.end(), compare);
 
     QModelIndexList oldPersistentIndexes;
@@ -778,7 +774,7 @@ bool QTreeModel::isChanging() const
     if column is -1 then all columns have changed
 */
 
-void QTreeModel::emitDataChanged(QTreeWidgetItem *item, int column)
+void QTreeModel::emitDataChanged(QTreeWidgetItem *item, int column, const QVector<int> &roles)
 {
     if (signalsBlocked())
         return;
@@ -801,7 +797,7 @@ void QTreeModel::emitDataChanged(QTreeWidgetItem *item, int column)
         topLeft = index(item, column);
         bottomRight = topLeft;
     }
-    emit dataChanged(topLeft, bottomRight);
+    emit dataChanged(topLeft, bottomRight, roles);
 }
 
 void QTreeModel::beginInsertItems(QTreeWidgetItem *parent, int row, int count)
@@ -851,7 +847,7 @@ void QTreeModel::sortItems(QList<QTreeWidgetItem*> *items, int column, Qt::SortO
     }
 
     // do the sorting
-    LessThan compare = (order == Qt::AscendingOrder ? &itemLessThan : &itemGreaterThan);
+    const auto compare = (order == Qt::AscendingOrder ? &itemLessThan : &itemGreaterThan);
     std::stable_sort(sorting.begin(), sorting.end(), compare);
 
     QModelIndexList fromList;
@@ -1700,6 +1696,9 @@ Qt::ItemFlags QTreeWidgetItem::flags() const
 
     The \a role describes the type of data specified by \a value, and is defined by
     the Qt::ItemDataRole enum.
+
+    \note The default implementation treats Qt::EditRole and Qt::DisplayRole as
+    referring to the same data.
 */
 void QTreeWidgetItem::setData(int column, int role, const QVariant &value)
 {
@@ -1764,11 +1763,14 @@ void QTreeWidgetItem::setData(int column, int role, const QVariant &value)
     }
 
     if (model) {
-        model->emitDataChanged(this, column);
+        const QVector<int> roles((role == Qt::DisplayRole || role == Qt::EditRole) ?
+                                     QVector<int>({Qt::DisplayRole, Qt::EditRole}) :
+                                     QVector<int>({role}));
+        model->emitDataChanged(this, column, roles);
         if (role == Qt::CheckStateRole) {
             QTreeWidgetItem *p;
             for (p = par; p && (p->itemFlags & Qt::ItemIsAutoTristate); p = p->par)
-                model->emitDataChanged(p, column);
+                model->emitDataChanged(p, column, roles);
         }
     }
 }
@@ -2010,6 +2012,9 @@ void QTreeWidgetItem::addChildren(const QList<QTreeWidgetItem*> &children)
 */
 void QTreeWidgetItem::insertChildren(int index, const QList<QTreeWidgetItem*> &children)
 {
+    if (index < 0 || index > this->children.count() || children.isEmpty())
+        return;
+
     if (view && view->isSortingEnabled()) {
         for (int n = 0; n < children.count(); ++n)
             insertChild(index, children.at(n));
@@ -2354,6 +2359,8 @@ void QTreeWidgetPrivate::_q_dataChanged(const QModelIndex &topLeft,
   \ingroup model-view
   \inmodule QtWidgets
 
+  \image windows-treeview.png
+
   The QTreeWidget class is a convenience class that provides a standard
   tree widget with a classic item-based interface similar to that used by
   the QListView class in Qt 3.
@@ -2386,15 +2393,6 @@ void QTreeWidgetPrivate::_q_dataChanged(const QModelIndex &topLeft,
   \l{QTreeView::setSortingEnabled()}{setSortingEnabled()}. The
   \l{QTreeView::isSortingEnabled()}{isSortingEnabled()} function indicates
   whether sorting is enabled.
-
-  \table 100%
-  \row \li \inlineimage windowsvista-treeview.png Screenshot of a Windows Vista style tree widget
-       \li \inlineimage macintosh-treeview.png Screenshot of a Macintosh style tree widget
-       \li \inlineimage fusion-treeview.png Screenshot of a Fusion style tree widget
-  \row \li A \l{Windows Vista Style Widget Gallery}{Windows Vista style} tree widget.
-       \li A \l{Macintosh Style Widget Gallery}{Macintosh style} tree widget.
-       \li A \l{Fusion Style Widget Gallery}{Fusion style} tree widget.
-  \endtable
 
   \sa QTreeWidgetItem, QTreeWidgetItemIterator, QTreeView,
   {Model/View Programming}, {Settings Editor Example}
@@ -2734,14 +2732,14 @@ void QTreeWidget::setHeaderItem(QTreeWidgetItem *item)
 
     int oldCount = columnCount();
     if (oldCount < item->columnCount())
-         d->treeModel()->beginInsertColumns(QModelIndex(), oldCount, item->columnCount());
-    else
-         d->treeModel()->beginRemoveColumns(QModelIndex(), item->columnCount(), oldCount);
+         d->treeModel()->beginInsertColumns(QModelIndex(), oldCount, item->columnCount() - 1);
+    else if (oldCount > item->columnCount())
+         d->treeModel()->beginRemoveColumns(QModelIndex(), item->columnCount(), oldCount - 1);
     delete d->treeModel()->headerItem;
     d->treeModel()->headerItem = item;
     if (oldCount < item->columnCount())
         d->treeModel()->endInsertColumns();
-    else
+    else if (oldCount > item->columnCount())
         d->treeModel()->endRemoveColumns();
     d->treeModel()->headerDataChanged(Qt::Horizontal, 0, oldCount);
 }
@@ -2864,11 +2862,11 @@ QRect QTreeWidget::visualItemRect(const QTreeWidgetItem *item) const
     Q_D(const QTreeWidget);
     //the visual rect for an item is across all columns. So we need to determine
     //what is the first and last column and get their visual index rects
-    QModelIndex base = d->index(item);
+    const QModelIndex base = d->index(item);
     const int firstVisiblesection = header()->logicalIndexAt(- header()->offset());
     const int lastVisibleSection = header()->logicalIndexAt(header()->length() - header()->offset() - 1);
-    QModelIndex first = base.sibling(base.row(), header()->logicalIndex(firstVisiblesection));
-    QModelIndex last = base.sibling(base.row(), header()->logicalIndex(lastVisibleSection));
+    const QModelIndex first = base.sibling(base.row(), firstVisiblesection);
+    const QModelIndex last = base.sibling(base.row(), lastVisibleSection);
     return visualRect(first) | visualRect(last);
 }
 
@@ -2914,7 +2912,7 @@ void QTreeWidget::editItem(QTreeWidgetItem *item, int column)
 /*!
   Opens a persistent editor for the \a item in the given \a column.
 
-  \sa closePersistentEditor()
+  \sa closePersistentEditor(), isPersistentEditorOpen()
 */
 
 void QTreeWidget::openPersistentEditor(QTreeWidgetItem *item, int column)
@@ -2929,13 +2927,28 @@ void QTreeWidget::openPersistentEditor(QTreeWidgetItem *item, int column)
   This function has no effect if no persistent editor is open for this
   combination of item and column.
 
-  \sa openPersistentEditor()
+  \sa openPersistentEditor(), isPersistentEditorOpen()
 */
 
 void QTreeWidget::closePersistentEditor(QTreeWidgetItem *item, int column)
 {
     Q_D(QTreeWidget);
     QAbstractItemView::closePersistentEditor(d->index(item, column));
+}
+
+/*!
+    \since 5.10
+
+    Returns whether a persistent editor is open for item \a item in
+    column \a column.
+
+    \sa openPersistentEditor(), closePersistentEditor()
+*/
+
+bool QTreeWidget::isPersistentEditorOpen(QTreeWidgetItem *item, int column) const
+{
+    Q_D(const QTreeWidget);
+    return QAbstractItemView::isPersistentEditorOpen(d->index(item, column));
 }
 
 /*!
@@ -3359,6 +3372,7 @@ QModelIndex QTreeWidget::indexFromItem(const QTreeWidgetItem *item, int column) 
     return d->index(item, column);
 }
 
+#if QT_VERSION < QT_VERSION_CHECK(6, 0, 0)
 /*!
     \overload
     \internal
@@ -3367,6 +3381,7 @@ QModelIndex QTreeWidget::indexFromItem(QTreeWidgetItem *item, int column) const
 {
     return indexFromItem(const_cast<const QTreeWidgetItem *>(item), column);
 }
+#endif
 
 /*!
     Returns a pointer to the QTreeWidgetItem associated with the given \a index.
@@ -3468,5 +3483,3 @@ QT_END_NAMESPACE
 
 #include "moc_qtreewidget.cpp"
 #include "moc_qtreewidget_p.cpp"
-
-#endif // QT_NO_TREEWIDGET

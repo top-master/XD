@@ -39,7 +39,6 @@
 
 #include "qtablewidget.h"
 
-#ifndef QT_NO_TABLEWIDGET
 #include <qitemdelegate.h>
 #include <qpainter.h>
 #include <private/qtablewidget_p.h>
@@ -507,7 +506,7 @@ void QTableModel::sort(int column, Qt::SortOrder order)
             unsortable.append(row);
     }
 
-    LessThan compare = (order == Qt::AscendingOrder ? &itemLessThan : &itemGreaterThan);
+    const auto compare = (order == Qt::AscendingOrder ? &itemLessThan : &itemGreaterThan);
     std::stable_sort(sortable.begin(), sortable.end(), compare);
 
     QVector<QTableWidgetItem*> sorted_table(tableItems.count());
@@ -559,7 +558,7 @@ void QTableModel::ensureSorted(int column, Qt::SortOrder order,
         sorting.append(QPair<QTableWidgetItem*,int>(itm, row));
     }
 
-    LessThan compare = (order == Qt::AscendingOrder ? &itemLessThan : &itemGreaterThan);
+    const auto compare = (order == Qt::AscendingOrder ? &itemLessThan : &itemGreaterThan);
     std::stable_sort(sorting.begin(), sorting.end(), compare);
     QModelIndexList oldPersistentIndexes, newPersistentIndexes;
     QVector<QTableWidgetItem*> newTable = tableItems;
@@ -1366,6 +1365,9 @@ QTableWidgetItem *QTableWidgetItem::clone() const
 /*!
     Sets the item's data for the given \a role to the specified \a value.
 
+    \note The default implementation treats Qt::EditRole and Qt::DisplayRole as
+    referring to the same data.
+
     \sa Qt::ItemDataRole, data()
 */
 void QTableWidgetItem::setData(int role, const QVariant &value)
@@ -1504,6 +1506,8 @@ QTableWidgetItem &QTableWidgetItem::operator=(const QTableWidgetItem &other)
     \ingroup model-view
     \inmodule QtWidgets
 
+    \image windows-tableview.png
+
     Table widgets provide standard table display facilities for applications.
     The items in a QTableWidget are provided by QTableWidgetItem.
 
@@ -1521,7 +1525,7 @@ QTableWidgetItem &QTableWidgetItem::operator=(const QTableWidgetItem &other)
     \snippet qtablewidget-resizing/mainwindow.cpp 0
     \snippet qtablewidget-resizing/mainwindow.cpp 1
 
-    Items are created ouside the table (with no parent widget) and inserted
+    Items are created outside the table (with no parent widget) and inserted
     into the table with setItem():
 
     \snippet qtablewidget-resizing/mainwindow.cpp 2
@@ -1544,15 +1548,6 @@ QTableWidgetItem &QTableWidgetItem::operator=(const QTableWidgetItem &other)
     The number of rows in the table can be found with rowCount(), and the
     number of columns with columnCount(). The table can be cleared with the
     clear() function.
-
-    \table 100%
-    \row \li \inlineimage windowsvista-tableview.png Screenshot of a Windows Vista style table widget
-         \li \inlineimage macintosh-tableview.png Screenshot of a Macintosh style table widget
-         \li \inlineimage fusion-tableview.png Screenshot of a Fusion style table widget
-    \row \li A \l{Windows Vista Style Widget Gallery}{Windows Vista style} table widget.
-         \li A \l{Macintosh Style Widget Gallery}{Macintosh style} table widget.
-         \li A \l{Fusion Style Widget Gallery}{Fusion style} table widget.
-    \endtable
 
     \sa QTableWidgetItem, QTableView, {Model/View Programming}
 */
@@ -2228,7 +2223,7 @@ void QTableWidget::editItem(QTableWidgetItem *item)
 /*!
   Opens an editor for the give \a item. The editor remains open after editing.
 
-  \sa closePersistentEditor()
+  \sa closePersistentEditor(), isPersistentEditorOpen()
 */
 void QTableWidget::openPersistentEditor(QTableWidgetItem *item)
 {
@@ -2242,7 +2237,7 @@ void QTableWidget::openPersistentEditor(QTableWidgetItem *item)
 /*!
   Closes the persistent editor for \a item.
 
-  \sa openPersistentEditor()
+  \sa openPersistentEditor(), isPersistentEditorOpen()
 */
 void QTableWidget::closePersistentEditor(QTableWidgetItem *item)
 {
@@ -2251,6 +2246,20 @@ void QTableWidget::closePersistentEditor(QTableWidgetItem *item)
         return;
     QModelIndex index = d->tableModel()->index(item);
     QAbstractItemView::closePersistentEditor(index);
+}
+
+/*!
+    \since 5.10
+
+    Returns whether a persistent editor is open for item \a item.
+
+    \sa openPersistentEditor(), closePersistentEditor()
+*/
+bool QTableWidget::isPersistentEditorOpen(QTableWidgetItem *item) const
+{
+    Q_D(const QTableWidget);
+    const QModelIndex index = d->tableModel()->index(item);
+    return QAbstractItemView::isPersistentEditorOpen(index);
 }
 
 /*!
@@ -2646,13 +2655,27 @@ QList<QTableWidgetItem*> QTableWidget::items(const QMimeData *data) const
 
 /*!
   Returns the QModelIndex associated with the given \a item.
+
+  \note In Qt versions prior to 5.10, this function took a non-\c{const} \a item.
 */
 
-QModelIndex QTableWidget::indexFromItem(QTableWidgetItem *item) const
+QModelIndex QTableWidget::indexFromItem(const QTableWidgetItem *item) const
 {
     Q_D(const QTableWidget);
     return d->tableModel()->index(item);
 }
+
+#if QT_VERSION < QT_VERSION_CHECK(6, 0, 0)
+/*!
+  \internal
+  \obsolete
+  \overload
+*/
+QModelIndex QTableWidget::indexFromItem(QTableWidgetItem *item) const
+{
+    return indexFromItem(const_cast<const QTableWidgetItem *>(item));
+}
+#endif
 
 /*!
   Returns a pointer to the QTableWidgetItem associated with the given \a index.
@@ -2722,5 +2745,3 @@ QT_END_NAMESPACE
 
 #include "moc_qtablewidget.cpp"
 #include "moc_qtablewidget_p.cpp"
-
-#endif // QT_NO_TABLEWIDGET

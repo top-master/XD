@@ -1,6 +1,6 @@
 /****************************************************************************
 **
-** Copyright (C) 2016 The Qt Company Ltd.
+** Copyright (C) 2017 The Qt Company Ltd.
 ** Contact: https://www.qt.io/licensing/
 **
 ** This file is part of the QtGui module of the Qt Toolkit.
@@ -72,24 +72,27 @@ class Q_GUI_EXPORT QPlatformWindow : public QPlatformSurface
     Q_DECLARE_PRIVATE(QPlatformWindow)
 public:
     explicit QPlatformWindow(QWindow *window);
-    virtual ~QPlatformWindow();
+    ~QPlatformWindow() override;
+
+    virtual void initialize();
 
     QWindow *window() const;
     QPlatformWindow *parent() const;
 
-    QPlatformScreen *screen() const;
+    QPlatformScreen *screen() const override;
 
-    virtual QSurfaceFormat format() const Q_DECL_OVERRIDE;
+    virtual QSurfaceFormat format() const override;
 
     virtual void setGeometry(const QRect &rect);
     virtual QRect geometry() const;
     virtual QRect normalGeometry() const;
 
     virtual QMargins frameMargins() const;
+    virtual QMargins safeAreaMargins() const;
 
     virtual void setVisible(bool visible);
     virtual void setWindowFlags(Qt::WindowFlags flags);
-    virtual void setWindowState(Qt::WindowState state);
+    virtual void setWindowState(Qt::WindowStates state);
 
     virtual WId winId() const;
     virtual void setParent(const QPlatformWindow *window);
@@ -97,6 +100,7 @@ public:
     virtual void setWindowTitle(const QString &title);
     virtual void setWindowFilePath(const QString &title);
     virtual void setWindowIcon(const QIcon &icon);
+    virtual bool close();
     virtual void raise();
     virtual void lower();
 
@@ -126,6 +130,7 @@ public:
     virtual void windowEvent(QEvent *event);
 
     virtual bool startSystemResize(const QPoint &pos, Qt::Corner corner);
+    virtual bool startSystemMove(const QPoint &pos);
 
     virtual void setFrameStrutEventsEnabled(bool enabled);
     virtual bool frameStrutEventsEnabled() const;
@@ -139,6 +144,7 @@ public:
         const QRect &initialGeometry, int defaultWidth, int defaultHeight);
 
     virtual void requestUpdate();
+    virtual void deliverUpdateRequest();
 
     // Window property accessors. Platform plugins should use these
     // instead of accessing QWindow directly.

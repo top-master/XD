@@ -5,10 +5,10 @@ Group {
     prefix: path + '/'
     files: [
         "qalgorithms.h",
-        "qarraydataops.h",
-        "qarraydatapointer.h",
         "qarraydata.cpp",
         "qarraydata.h",
+        "qarraydataops.h",
+        "qarraydatapointer.h",
         "qbitarray.cpp",
         "qbitarray.h",
         "qbytearray.cpp",
@@ -32,17 +32,15 @@ Group {
         "qdatetime.cpp",
         "qdatetime.h",
         "qdatetime_p.h",
-        "qdatetimeparser.cpp",
-        "qdatetimeparser_p.h",
         "qdoublescanprint_p.h",
         "qeasingcurve.cpp",
         "qeasingcurve.h",
         "qfreelist.cpp",
         "qfreelist_p.h",
         "qharfbuzz.cpp",
-        "qhashfunctions.h",
         "qhash.cpp",
         "qhash.h",
+        "qhashfunctions.h",
         "qiterator.h",
         "qline.cpp",
         "qline.h",
@@ -63,7 +61,6 @@ Group {
         "qmessageauthenticationcode.cpp",
         "qmessageauthenticationcode.h",
         "qpair.h",
-        "qpodlist_p.h",
         "qpoint.cpp",
         "qpoint.h",
         "qqueue.cpp",
@@ -93,15 +90,18 @@ Group {
         "qsize.h",
         "qstack.cpp",
         "qstack.h",
+        "qstring.cpp",
+        "qstring.h",
         "qstringalgorithms_p.h",
         "qstringbuilder.cpp",
         "qstringbuilder.h",
         "qstringiterator_p.h",
-        "qstringmatcher.h",
-        "qstring.cpp",
-        "qstring.h",
         "qstringlist.cpp",
         "qstringlist.h",
+        "qstringliteral.h",
+        "qstringmatcher.h",
+        "qstringview.cpp",
+        "qstringview.h",
         "qtextboundaryfinder.cpp",
         "qtextboundaryfinder.h",
         "qtimeline.cpp",
@@ -225,6 +225,4 @@ Group {
             files: ["qvector_msvc.cpp"]
         }
     }
-
-    // TODO: SIMD-specific MIPS sources
 }

@@ -65,6 +65,59 @@ QXcbVirtualDesktop::QXcbVirtualDesktop(QXcbConnection *connection, xcb_screen_t 
     m_compositingActive = connection->getSelectionOwner(m_net_wm_cm_atom);
 
     m_workArea = getWorkArea();
+
+    readXResources();
+
+    auto rootAttribs = Q_XCB_REPLY_UNCHECKED(xcb_get_window_attributes, xcb_connection(),
+                                             screen->root);
+    const quint32 existingEventMask = !rootAttribs ? 0 : rootAttribs->your_event_mask;
+
+    const quint32 mask = XCB_CW_EVENT_MASK;
+    const quint32 values[] = {
+        // XCB_CW_EVENT_MASK
+        XCB_EVENT_MASK_ENTER_WINDOW
+        | XCB_EVENT_MASK_LEAVE_WINDOW
+        | XCB_EVENT_MASK_PROPERTY_CHANGE
+        | XCB_EVENT_MASK_STRUCTURE_NOTIFY // for the "MANAGER" atom (system tray notification).
+        | existingEventMask // don't overwrite the event mask on the root window
+    };
+
+    xcb_change_window_attributes(xcb_connection(), screen->root, mask, values);
+
+    auto reply = Q_XCB_REPLY_UNCHECKED(xcb_get_property, xcb_connection(),
+                                       false, screen->root,
+                                       atom(QXcbAtom::_NET_SUPPORTING_WM_CHECK),
+                                       XCB_ATOM_WINDOW, 0, 1024);
+    if (reply && reply->format == 32 && reply->type == XCB_ATOM_WINDOW) {
+        xcb_window_t windowManager = *((xcb_window_t *)xcb_get_property_value(reply.get()));
+
+        if (windowManager != XCB_WINDOW_NONE)
+            m_windowManagerName = QXcbWindow::windowTitle(connection, windowManager);
+    }
+
+    const xcb_query_extension_reply_t *sync_reply = xcb_get_extension_data(xcb_connection(), &xcb_sync_id);
+    if (!sync_reply || !sync_reply->present)
+        m_syncRequestSupported = false;
+    else
+        m_syncRequestSupported = true;
+
+    xcb_depth_iterator_t depth_iterator =
+        xcb_screen_allowed_depths_iterator(screen);
+
+    while (depth_iterator.rem) {
+        xcb_depth_t *depth = depth_iterator.data;
+        xcb_visualtype_iterator_t visualtype_iterator =
+            xcb_depth_visuals_iterator(depth);
+
+        while (visualtype_iterator.rem) {
+            xcb_visualtype_t *visualtype = visualtype_iterator.data;
+            m_visuals.insert(visualtype->visual_id, *visualtype);
+            m_visualDepths.insert(visualtype->visual_id, depth->depth);
+            xcb_visualtype_next(&visualtype_iterator);
+        }
+
+        xcb_depth_next(&depth_iterator);
+    }
 }
 
 QXcbVirtualDesktop::~QXcbVirtualDesktop()
@@ -79,7 +132,7 @@ QXcbScreen *QXcbVirtualDesktop::screenAt(const QPoint &pos) const
         if (screen->virtualDesktop() == this && screen->geometry().contains(pos))
             return screen;
     }
-    return Q_NULLPTR;
+    return nullptr;
 }
 
 void QXcbVirtualDesktop::addScreen(QPlatformScreen *s)
@@ -123,18 +176,33 @@ void QXcbVirtualDesktop::subscribeToXFixesSelectionNotify()
         const uint32_t mask = XCB_XFIXES_SELECTION_EVENT_MASK_SET_SELECTION_OWNER |
                               XCB_XFIXES_SELECTION_EVENT_MASK_SELECTION_WINDOW_DESTROY |
                               XCB_XFIXES_SELECTION_EVENT_MASK_SELECTION_CLIENT_CLOSE;
-        Q_XCB_CALL(xcb_xfixes_select_selection_input_checked(xcb_connection(), connection()->getQtSelectionOwner(), m_net_wm_cm_atom, mask));
+        xcb_xfixes_select_selection_input_checked(xcb_connection(), connection()->getQtSelectionOwner(), m_net_wm_cm_atom, mask);
     }
 }
 
+/*! \internal
+
+    Using _NET_WORKAREA to calculate the available desktop geometry on multi-head systems (systems
+    with more than one monitor) is unreliable. Different WMs have different interpretations of what
+    _NET_WORKAREA means with multiple attached monitors. This gets worse when monitors have
+    different dimensions and/or screens are not virtually aligned. In Qt we want the available
+    geometry per monitor (QScreen), not desktop (represented by _NET_WORKAREA). WM specification
+    does not have an atom for this. Thus, QScreen is limted by the lack of support from the
+    underlying system.
+
+    One option could be that Qt does WM's job of calculating this by subtracting geometries of
+    _NET_WM_STRUT_PARTIAL and windows where _NET_WM_WINDOW_TYPE(ATOM) = _NET_WM_WINDOW_TYPE_DOCK.
+    But this won't work on Gnome 3 shell as it seems that on this desktop environment the tool panel
+    is painted directly on the root window. Maybe there is some Gnome/GTK API that could be used
+    to get height of the panel, but I did not find one. Maybe other WMs have their own tricks, so
+    the reliability of this approach is questionable.
+ */
 QRect QXcbVirtualDesktop::getWorkArea() const
 {
     QRect r;
-    xcb_get_property_reply_t * workArea =
-        xcb_get_property_reply(xcb_connection(),
-            xcb_get_property_unchecked(xcb_connection(), false, screen()->root,
-                             atom(QXcbAtom::_NET_WORKAREA),
-                             XCB_ATOM_CARDINAL, 0, 1024), NULL);
+    auto workArea = Q_XCB_REPLY_UNCHECKED(xcb_get_property, xcb_connection(), false, screen()->root,
+                                          atom(QXcbAtom::_NET_WORKAREA),
+                                          XCB_ATOM_CARDINAL, 0, 1024);
     if (workArea && workArea->type == XCB_ATOM_CARDINAL && workArea->format == 32 && workArea->value_len >= 4) {
         // If workArea->value_len > 4, the remaining ones seem to be for WM's virtual desktops
         // (don't mess with QXcbVirtualDesktop which represents an X screen).
@@ -142,12 +210,11 @@ QRect QXcbVirtualDesktop::getWorkArea() const
         // "docked" panel (with _NET_WM_STRUT_PARTIAL atom set) on just one desktop.
         // But for now just assume the first 4 values give us the geometry of the
         // "work area", AKA "available geometry"
-        uint32_t *geom = (uint32_t*)xcb_get_property_value(workArea);
+        uint32_t *geom = (uint32_t*)xcb_get_property_value(workArea.get());
         r = QRect(geom[0], geom[1], geom[2], geom[3]);
     } else {
         r = QRect(QPoint(), size());
     }
-    free(workArea);
     return r;
 }
 
@@ -167,188 +234,95 @@ static inline QSizeF sizeInMillimeters(const QSize &size, const QDpi &dpi)
                   Q_MM_PER_INCH * size.height() / dpi.second);
 }
 
-QXcbScreen::QXcbScreen(QXcbConnection *connection, QXcbVirtualDesktop *virtualDesktop,
-                       xcb_randr_output_t outputId, xcb_randr_get_output_info_reply_t *output,
-                       const xcb_xinerama_screen_info_t *xineramaScreenInfo, int xineramaScreenIdx)
-    : QXcbObject(connection)
-    , m_virtualDesktop(virtualDesktop)
-    , m_output(outputId)
-    , m_crtc(output ? output->crtc : XCB_NONE)
-    , m_outputName(getOutputName(output))
-    , m_outputSizeMillimeters(output ? QSize(output->mm_width, output->mm_height) : QSize())
-    , m_virtualSize(virtualDesktop->size())
-    , m_virtualSizeMillimeters(virtualDesktop->physicalSize())
+bool QXcbVirtualDesktop::xResource(const QByteArray &identifier,
+                                   const QByteArray &expectedIdentifier,
+                                   QByteArray& stringValue)
 {
-    if (connection->hasXRandr()) {
-        xcb_randr_select_input(xcb_connection(), screen()->root, true);
-        xcb_randr_get_crtc_info_cookie_t crtcCookie =
-            xcb_randr_get_crtc_info_unchecked(xcb_connection(), m_crtc, output ? output->timestamp : 0);
-        xcb_randr_get_crtc_info_reply_t *crtc =
-            xcb_randr_get_crtc_info_reply(xcb_connection(), crtcCookie, NULL);
-        if (crtc) {
-            updateGeometry(QRect(crtc->x, crtc->y, crtc->width, crtc->height), crtc->rotation);
-            updateRefreshRate(crtc->mode);
-            free(crtc);
-        }
-    } else if (xineramaScreenInfo) {
-        m_geometry = QRect(xineramaScreenInfo->x_org, xineramaScreenInfo->y_org,
-                           xineramaScreenInfo->width, xineramaScreenInfo->height);
-        m_availableGeometry = m_geometry & m_virtualDesktop->workArea();
-        m_sizeMillimeters = sizeInMillimeters(m_geometry.size(), virtualDpi());
-        if (xineramaScreenIdx > -1)
-            m_outputName += QLatin1Char('-') + QString::number(xineramaScreenIdx);
+    if (identifier.startsWith(expectedIdentifier)) {
+        stringValue = identifier.mid(expectedIdentifier.size());
+        return true;
     }
+    return false;
+}
 
-    if (m_geometry.isEmpty())
-        m_geometry = QRect(QPoint(), m_virtualSize);
+static bool parseXftInt(const QByteArray& stringValue, int *value)
+{
+    Q_ASSERT(value != 0);
+    bool ok;
+    *value = stringValue.toInt(&ok);
+    return ok;
+}
 
-    if (m_availableGeometry.isEmpty())
-        m_availableGeometry = m_geometry & m_virtualDesktop->workArea();
+static QFontEngine::HintStyle parseXftHintStyle(const QByteArray& stringValue)
+{
+    if (stringValue == "hintfull")
+        return QFontEngine::HintFull;
+    else if (stringValue == "hintnone")
+        return QFontEngine::HintNone;
+    else if (stringValue == "hintmedium")
+        return QFontEngine::HintMedium;
+    else if (stringValue == "hintslight")
+        return QFontEngine::HintLight;
 
-    if (m_sizeMillimeters.isEmpty())
-        m_sizeMillimeters = m_virtualSizeMillimeters;
+    return QFontEngine::HintStyle(-1);
+}
 
-    readXResources();
+static QFontEngine::SubpixelAntialiasingType parseXftRgba(const QByteArray& stringValue)
+{
+    if (stringValue == "none")
+        return QFontEngine::Subpixel_None;
+    else if (stringValue == "rgb")
+        return QFontEngine::Subpixel_RGB;
+    else if (stringValue == "bgr")
+        return QFontEngine::Subpixel_BGR;
+    else if (stringValue == "vrgb")
+        return QFontEngine::Subpixel_VRGB;
+    else if (stringValue == "vbgr")
+        return QFontEngine::Subpixel_VBGR;
 
-    QScopedPointer<xcb_get_window_attributes_reply_t, QScopedPointerPodDeleter> rootAttribs(
-        xcb_get_window_attributes_reply(xcb_connection(),
-            xcb_get_window_attributes_unchecked(xcb_connection(), screen()->root), NULL));
-    const quint32 existingEventMask = rootAttribs.isNull() ? 0 : rootAttribs->your_event_mask;
+    return QFontEngine::SubpixelAntialiasingType(-1);
+}
 
-    const quint32 mask = XCB_CW_EVENT_MASK;
-    const quint32 values[] = {
-        // XCB_CW_EVENT_MASK
-        XCB_EVENT_MASK_ENTER_WINDOW
-        | XCB_EVENT_MASK_LEAVE_WINDOW
-        | XCB_EVENT_MASK_PROPERTY_CHANGE
-        | XCB_EVENT_MASK_STRUCTURE_NOTIFY // for the "MANAGER" atom (system tray notification).
-        | existingEventMask // don't overwrite the event mask on the root window
-    };
-
-    xcb_change_window_attributes(xcb_connection(), screen()->root, mask, values);
-
-    xcb_get_property_reply_t *reply =
-        xcb_get_property_reply(xcb_connection(),
-            xcb_get_property_unchecked(xcb_connection(), false, screen()->root,
-                             atom(QXcbAtom::_NET_SUPPORTING_WM_CHECK),
-                             XCB_ATOM_WINDOW, 0, 1024), NULL);
-
-    if (reply && reply->format == 32 && reply->type == XCB_ATOM_WINDOW) {
-        xcb_window_t windowManager = *((xcb_window_t *)xcb_get_property_value(reply));
-
-        if (windowManager != XCB_WINDOW_NONE) {
-            xcb_get_property_reply_t *windowManagerReply =
-                xcb_get_property_reply(xcb_connection(),
-                    xcb_get_property_unchecked(xcb_connection(), false, windowManager,
-                                     atom(QXcbAtom::_NET_WM_NAME),
-                                     atom(QXcbAtom::UTF8_STRING), 0, 1024), NULL);
-            if (windowManagerReply && windowManagerReply->format == 8 && windowManagerReply->type == atom(QXcbAtom::UTF8_STRING)) {
-                m_windowManagerName = QString::fromUtf8((const char *)xcb_get_property_value(windowManagerReply), xcb_get_property_value_length(windowManagerReply));
-            }
-
-            free(windowManagerReply);
-        }
-    }
-    free(reply);
-
-    const xcb_query_extension_reply_t *sync_reply = xcb_get_extension_data(xcb_connection(), &xcb_sync_id);
-    if (!sync_reply || !sync_reply->present)
-        m_syncRequestSupported = false;
-    else
-        m_syncRequestSupported = true;
-
-    xcb_depth_iterator_t depth_iterator =
-        xcb_screen_allowed_depths_iterator(screen());
-
-    while (depth_iterator.rem) {
-        xcb_depth_t *depth = depth_iterator.data;
-        xcb_visualtype_iterator_t visualtype_iterator =
-            xcb_depth_visuals_iterator(depth);
-
-        while (visualtype_iterator.rem) {
-            xcb_visualtype_t *visualtype = visualtype_iterator.data;
-            m_visuals.insert(visualtype->visual_id, *visualtype);
-            m_visualDepths.insert(visualtype->visual_id, depth->depth);
-            xcb_visualtype_next(&visualtype_iterator);
+void QXcbVirtualDesktop::readXResources()
+{
+    int offset = 0;
+    QByteArray resources;
+    while (true) {
+        auto reply = Q_XCB_REPLY_UNCHECKED(xcb_get_property, xcb_connection(),
+                                           false, screen()->root,
+                                           XCB_ATOM_RESOURCE_MANAGER,
+                                           XCB_ATOM_STRING, offset/4, 8192);
+        bool more = false;
+        if (reply && reply->format == 8 && reply->type == XCB_ATOM_STRING) {
+            resources += QByteArray((const char *)xcb_get_property_value(reply.get()), xcb_get_property_value_length(reply.get()));
+            offset += xcb_get_property_value_length(reply.get());
+            more = reply->bytes_after != 0;
         }
 
-        xcb_depth_next(&depth_iterator);
+        if (!more)
+            break;
     }
 
-    m_cursor = new QXcbCursor(connection, this);
-}
-
-QXcbScreen::~QXcbScreen()
-{
-    delete m_cursor;
-}
-
-QString QXcbScreen::getOutputName(xcb_randr_get_output_info_reply_t *outputInfo)
-{
-    QString name;
-    if (outputInfo) {
-        name = QString::fromUtf8((const char*)xcb_randr_get_output_info_name(outputInfo),
-                                 xcb_randr_get_output_info_name_length(outputInfo));
-    } else {
-        QByteArray displayName = connection()->displayName();
-        int dotPos = displayName.lastIndexOf('.');
-        if (dotPos != -1)
-            displayName.truncate(dotPos);
-        name = QString::fromLocal8Bit(displayName) + QLatin1Char('.')
-                + QString::number(m_virtualDesktop->number());
-    }
-    return name;
-}
-
-QWindow *QXcbScreen::topLevelAt(const QPoint &p) const
-{
-    xcb_window_t root = screen()->root;
-
-    int x = p.x();
-    int y = p.y();
-
-    xcb_window_t parent = root;
-    xcb_window_t child = root;
-
-    do {
-        xcb_translate_coordinates_cookie_t translate_cookie =
-            xcb_translate_coordinates_unchecked(xcb_connection(), parent, child, x, y);
-
-        xcb_translate_coordinates_reply_t *translate_reply =
-            xcb_translate_coordinates_reply(xcb_connection(), translate_cookie, NULL);
-
-        if (!translate_reply) {
-            return 0;
+    QList<QByteArray> split = resources.split('\n');
+    for (int i = 0; i < split.size(); ++i) {
+        const QByteArray &r = split.at(i);
+        int value;
+        QByteArray stringValue;
+        if (xResource(r, "Xft.dpi:\t", stringValue)) {
+            if (parseXftInt(stringValue, &value))
+                m_forcedDpi = value;
+        } else if (xResource(r, "Xft.hintstyle:\t", stringValue)) {
+            m_hintStyle = parseXftHintStyle(stringValue);
+        } else if (xResource(r, "Xft.antialias:\t", stringValue)) {
+            if (parseXftInt(stringValue, &value))
+                m_antialiasingEnabled = value;
+        } else if (xResource(r, "Xft.rgba:\t", stringValue)) {
+            m_subpixelType = parseXftRgba(stringValue);
         }
-
-        parent = child;
-        child = translate_reply->child;
-        x = translate_reply->dst_x;
-        y = translate_reply->dst_y;
-
-        free(translate_reply);
-
-        if (!child || child == root)
-            return 0;
-
-        QPlatformWindow *platformWindow = connection()->platformWindowFromId(child);
-        if (platformWindow)
-            return platformWindow->window();
-    } while (parent != child);
-
-    return 0;
-}
-
-void QXcbScreen::windowShown(QXcbWindow *window)
-{
-    // Freedesktop.org Startup Notification
-    if (!connection()->startupId().isEmpty() && window->window()->isTopLevel()) {
-        sendStartupMessage(QByteArrayLiteral("remove: ID=") + connection()->startupId());
-        connection()->clearStartupId();
     }
 }
 
-QSurfaceFormat QXcbScreen::surfaceFormatFor(const QSurfaceFormat &format) const
+QSurfaceFormat QXcbVirtualDesktop::surfaceFormatFor(const QSurfaceFormat &format) const
 {
     const xcb_visualid_t xcb_visualid = connection()->hasDefaultVisualId() ? connection()->defaultVisualId()
                                                                            : screen()->root_visual;
@@ -372,7 +346,7 @@ QSurfaceFormat QXcbScreen::surfaceFormatFor(const QSurfaceFormat &format) const
     return result;
 }
 
-const xcb_visualtype_t *QXcbScreen::visualForFormat(const QSurfaceFormat &format) const
+const xcb_visualtype_t *QXcbVirtualDesktop::visualForFormat(const QSurfaceFormat &format) const
 {
     const xcb_visualtype_t *candidate = nullptr;
 
@@ -408,6 +382,170 @@ const xcb_visualtype_t *QXcbScreen::visualForFormat(const QSurfaceFormat &format
     return candidate;
 }
 
+const xcb_visualtype_t *QXcbVirtualDesktop::visualForId(xcb_visualid_t visualid) const
+{
+    QMap<xcb_visualid_t, xcb_visualtype_t>::const_iterator it = m_visuals.find(visualid);
+    if (it == m_visuals.constEnd())
+        return 0;
+    return &*it;
+}
+
+quint8 QXcbVirtualDesktop::depthOfVisual(xcb_visualid_t visualid) const
+{
+    QMap<xcb_visualid_t, quint8>::const_iterator it = m_visualDepths.find(visualid);
+    if (it == m_visualDepths.constEnd())
+        return 0;
+    return *it;
+}
+
+QXcbScreen::QXcbScreen(QXcbConnection *connection, QXcbVirtualDesktop *virtualDesktop,
+                       xcb_randr_output_t outputId, xcb_randr_get_output_info_reply_t *output,
+                       const xcb_xinerama_screen_info_t *xineramaScreenInfo, int xineramaScreenIdx)
+    : QXcbObject(connection)
+    , m_virtualDesktop(virtualDesktop)
+    , m_output(outputId)
+    , m_crtc(output ? output->crtc : XCB_NONE)
+    , m_outputName(getOutputName(output))
+    , m_outputSizeMillimeters(output ? QSize(output->mm_width, output->mm_height) : QSize())
+    , m_virtualSize(virtualDesktop->size())
+    , m_virtualSizeMillimeters(virtualDesktop->physicalSize())
+{
+    if (connection->hasXRandr()) {
+        xcb_randr_select_input(xcb_connection(), screen()->root, true);
+        auto crtc = Q_XCB_REPLY_UNCHECKED(xcb_randr_get_crtc_info, xcb_connection(),
+                                          m_crtc, output ? output->timestamp : 0);
+        if (crtc) {
+            updateGeometry(QRect(crtc->x, crtc->y, crtc->width, crtc->height), crtc->rotation);
+            updateRefreshRate(crtc->mode);
+        }
+    } else if (xineramaScreenInfo) {
+        m_geometry = QRect(xineramaScreenInfo->x_org, xineramaScreenInfo->y_org,
+                           xineramaScreenInfo->width, xineramaScreenInfo->height);
+        m_availableGeometry = m_geometry & m_virtualDesktop->workArea();
+        m_sizeMillimeters = sizeInMillimeters(m_geometry.size(), virtualDpi());
+        if (xineramaScreenIdx > -1)
+            m_outputName += QLatin1Char('-') + QString::number(xineramaScreenIdx);
+    }
+
+    if (m_geometry.isEmpty())
+        m_geometry = QRect(QPoint(), m_virtualSize);
+
+    if (m_availableGeometry.isEmpty())
+        m_availableGeometry = m_geometry & m_virtualDesktop->workArea();
+
+    if (m_sizeMillimeters.isEmpty())
+        m_sizeMillimeters = m_virtualSizeMillimeters;
+
+    m_cursor = new QXcbCursor(connection, this);
+
+    if (connection->hasXRandr()) { // Parse EDID
+        QByteArray edid = getEdid();
+        if (m_edid.parse(edid)) {
+            qCDebug(lcQpaScreen, "EDID data for output \"%s\": identifier '%s', manufacturer '%s',"
+                                 "model '%s', serial '%s', physical size: %.2fx%.2f",
+                    name().toLatin1().constData(),
+                    m_edid.identifier.toLatin1().constData(),
+                    m_edid.manufacturer.toLatin1().constData(),
+                    m_edid.model.toLatin1().constData(),
+                    m_edid.serialNumber.toLatin1().constData(),
+                    m_edid.physicalSize.width(), m_edid.physicalSize.height());
+        } else {
+            // This property is defined by the xrandr spec. Parsing failure indicates a valid error,
+            // but keep this as debug, for details see 4f515815efc318ddc909a0399b71b8a684962f38.
+            qCDebug(lcQpaScreen) << "Failed to parse EDID data for output" << name() <<
+                                    "edid data: " << edid;
+        }
+    }
+}
+
+QXcbScreen::~QXcbScreen()
+{
+    delete m_cursor;
+}
+
+QString QXcbScreen::getOutputName(xcb_randr_get_output_info_reply_t *outputInfo)
+{
+    QString name;
+    if (outputInfo) {
+        name = QString::fromUtf8((const char*)xcb_randr_get_output_info_name(outputInfo),
+                                 xcb_randr_get_output_info_name_length(outputInfo));
+    } else {
+        QByteArray displayName = connection()->displayName();
+        int dotPos = displayName.lastIndexOf('.');
+        if (dotPos != -1)
+            displayName.truncate(dotPos);
+        name = QString::fromLocal8Bit(displayName) + QLatin1Char('.')
+                + QString::number(m_virtualDesktop->number());
+    }
+    return name;
+}
+
+QString QXcbScreen::manufacturer() const
+{
+    return m_edid.manufacturer;
+}
+
+QString QXcbScreen::model() const
+{
+    return m_edid.model;
+}
+
+QString QXcbScreen::serialNumber() const
+{
+    return m_edid.serialNumber;
+}
+
+QWindow *QXcbScreen::topLevelAt(const QPoint &p) const
+{
+    xcb_window_t root = screen()->root;
+
+    int x = p.x();
+    int y = p.y();
+
+    xcb_window_t parent = root;
+    xcb_window_t child = root;
+
+    do {
+        auto translate_reply = Q_XCB_REPLY_UNCHECKED(xcb_translate_coordinates, xcb_connection(), parent, child, x, y);
+        if (!translate_reply) {
+            return 0;
+        }
+
+        parent = child;
+        child = translate_reply->child;
+        x = translate_reply->dst_x;
+        y = translate_reply->dst_y;
+
+        if (!child || child == root)
+            return 0;
+
+        QPlatformWindow *platformWindow = connection()->platformWindowFromId(child);
+        if (platformWindow)
+            return platformWindow->window();
+    } while (parent != child);
+
+    return 0;
+}
+
+void QXcbScreen::windowShown(QXcbWindow *window)
+{
+    // Freedesktop.org Startup Notification
+    if (!connection()->startupId().isEmpty() && window->window()->isTopLevel()) {
+        sendStartupMessage(QByteArrayLiteral("remove: ID=") + connection()->startupId());
+        connection()->clearStartupId();
+    }
+}
+
+QSurfaceFormat QXcbScreen::surfaceFormatFor(const QSurfaceFormat &format) const
+{
+    return m_virtualDesktop->surfaceFormatFor(format);
+}
+
+const xcb_visualtype_t *QXcbScreen::visualForId(xcb_visualid_t visualid) const
+{
+    return m_virtualDesktop->visualForId(visualid);
+}
+
 void QXcbScreen::sendStartupMessage(const QByteArray &message) const
 {
     xcb_window_t rootWindow = root();
@@ -434,25 +572,21 @@ void QXcbScreen::sendStartupMessage(const QByteArray &message) const
     } while (sent < length);
 }
 
-const xcb_visualtype_t *QXcbScreen::visualForId(xcb_visualid_t visualid) const
+QRect QXcbScreen::availableGeometry() const
 {
-    QMap<xcb_visualid_t, xcb_visualtype_t>::const_iterator it = m_visuals.find(visualid);
-    if (it == m_visuals.constEnd())
-        return 0;
-    return &*it;
-}
-
-quint8 QXcbScreen::depthOfVisual(xcb_visualid_t visualid) const
-{
-    QMap<xcb_visualid_t, quint8>::const_iterator it = m_visualDepths.find(visualid);
-    if (it == m_visualDepths.constEnd())
-        return 0;
-    return *it;
+    static bool enforceNetWorkarea = !qEnvironmentVariableIsEmpty("QT_RELY_ON_NET_WORKAREA_ATOM");
+    bool isMultiHeadSystem = virtualSiblings().length() > 1;
+    bool useScreenGeometry = isMultiHeadSystem && !enforceNetWorkarea;
+    return useScreenGeometry ? m_geometry : m_availableGeometry;
 }
 
 QImage::Format QXcbScreen::format() const
 {
-    return qt_xcb_imageFormatForVisual(connection(), screen()->root_depth, visualForId(screen()->root_visual));
+    QImage::Format format;
+    bool needsRgbSwap;
+    qt_xcb_imageFormatForVisual(connection(), screen()->root_depth, visualForId(screen()->root_visual), &format, &needsRgbSwap);
+    // We are ignoring needsRgbSwap here and just assumes the backing-store will handle it.
+    return format;
 }
 
 QDpi QXcbScreen::virtualDpi() const
@@ -468,8 +602,9 @@ QDpi QXcbScreen::logicalDpi() const
     if (overrideDpi)
         return QDpi(overrideDpi, overrideDpi);
 
-    if (m_forcedDpi > 0) {
-        return QDpi(m_forcedDpi, m_forcedDpi);
+    const int forcedDpi = m_virtualDesktop->forcedDpi();
+    if (forcedDpi > 0) {
+        return QDpi(forcedDpi, forcedDpi);
     }
     return virtualDpi();
 }
@@ -581,19 +716,14 @@ void QXcbScreen::updateGeometry(xcb_timestamp_t timestamp)
     if (!connection()->hasXRandr())
         return;
 
-    xcb_randr_get_crtc_info_cookie_t crtcCookie =
-        xcb_randr_get_crtc_info_unchecked(xcb_connection(), m_crtc, timestamp);
-    xcb_randr_get_crtc_info_reply_t *crtc =
-        xcb_randr_get_crtc_info_reply(xcb_connection(), crtcCookie, NULL);
-    if (crtc) {
+    auto crtc = Q_XCB_REPLY_UNCHECKED(xcb_randr_get_crtc_info, xcb_connection(),
+                                      m_crtc, timestamp);
+    if (crtc)
         updateGeometry(QRect(crtc->x, crtc->y, crtc->width, crtc->height), crtc->rotation);
-        free(crtc);
-    }
 }
 
-void QXcbScreen::updateGeometry(const QRect &geom, uint8_t rotation)
+void QXcbScreen::updateGeometry(const QRect &geometry, uint8_t rotation)
 {
-    QRect xGeometry = geom;
     switch (rotation) {
     case XCB_RANDR_ROTATION_ROTATE_0: // xrandr --rotate normal
         m_orientation = Qt::LandscapeOrientation;
@@ -617,12 +747,12 @@ void QXcbScreen::updateGeometry(const QRect &geom, uint8_t rotation)
     // is known (probably back-calculated from DPI and resolution),
     // e.g. on VNC or with some hardware.
     if (m_sizeMillimeters.isEmpty())
-        m_sizeMillimeters = sizeInMillimeters(xGeometry.size(), virtualDpi());
+        m_sizeMillimeters = sizeInMillimeters(geometry.size(), virtualDpi());
 
-    qreal dpi = xGeometry.width() / physicalSize().width() * qreal(25.4);
+    qreal dpi = geometry.width() / physicalSize().width() * qreal(25.4);
     m_pixelDensity = qMax(1, qRound(dpi/96));
-    m_geometry = QRect(xGeometry.topLeft(), xGeometry.size());
-    m_availableGeometry = xGeometry & m_virtualDesktop->workArea();
+    m_geometry = geometry;
+    m_availableGeometry = geometry & m_virtualDesktop->workArea();
     QWindowSystemInterface::handleScreenGeometryChange(QPlatformScreen::screen(), m_geometry, m_availableGeometry);
 }
 
@@ -645,13 +775,11 @@ void QXcbScreen::updateRefreshRate(xcb_randr_mode_t mode)
 
     // we can safely use get_screen_resources_current here, because in order to
     // get here, we must have called get_screen_resources before
-    xcb_randr_get_screen_resources_current_cookie_t resourcesCookie =
-        xcb_randr_get_screen_resources_current_unchecked(xcb_connection(), screen()->root);
-    xcb_randr_get_screen_resources_current_reply_t *resources =
-        xcb_randr_get_screen_resources_current_reply(xcb_connection(), resourcesCookie, NULL);
+    auto resources = Q_XCB_REPLY_UNCHECKED(xcb_randr_get_screen_resources_current,
+                                           xcb_connection(), screen()->root);
     if (resources) {
         xcb_randr_mode_info_iterator_t modesIter =
-            xcb_randr_get_screen_resources_current_modes_iterator(resources);
+            xcb_randr_get_screen_resources_current_modes_iterator(resources.get());
         for (; modesIter.rem; xcb_randr_mode_info_next(&modesIter)) {
             xcb_randr_mode_info_t *modeInfo = modesIter.data;
             if (modeInfo->id == mode) {
@@ -662,29 +790,19 @@ void QXcbScreen::updateRefreshRate(xcb_randr_mode_t mode)
             }
         }
 
-        free(resources);
         QWindowSystemInterface::handleScreenRefreshRateChange(QPlatformScreen::screen(), m_refreshRate);
     }
-}
-
-static xcb_get_geometry_reply_t *getGeometryUnchecked(xcb_connection_t *connection, xcb_window_t window)
-{
-    const xcb_get_geometry_cookie_t geometry_cookie = xcb_get_geometry_unchecked(connection, window);
-    return xcb_get_geometry_reply(connection, geometry_cookie, NULL);
 }
 
 static inline bool translate(xcb_connection_t *connection, xcb_window_t child, xcb_window_t parent,
                              int *x, int *y)
 {
-    const xcb_translate_coordinates_cookie_t translate_cookie =
-        xcb_translate_coordinates_unchecked(connection, child, parent, *x, *y);
-    xcb_translate_coordinates_reply_t *translate_reply =
-        xcb_translate_coordinates_reply(connection, translate_cookie, NULL);
+    auto translate_reply = Q_XCB_REPLY_UNCHECKED(xcb_translate_coordinates,
+                                                 connection, child, parent, *x, *y);
     if (!translate_reply)
         return false;
     *x = translate_reply->dst_x;
     *y = translate_reply->dst_y;
-    free(translate_reply);
     return true;
 }
 
@@ -698,22 +816,20 @@ QPixmap QXcbScreen::grabWindow(WId window, int xIn, int yIn, int width, int heig
     QXcbScreen *screen = const_cast<QXcbScreen *>(this);
     xcb_window_t root = screen->root();
 
-    xcb_get_geometry_reply_t *rootReply = getGeometryUnchecked(xcb_connection(), root);
+    auto rootReply = Q_XCB_REPLY_UNCHECKED(xcb_get_geometry, xcb_connection(), root);
     if (!rootReply)
         return QPixmap();
 
     const quint8 rootDepth = rootReply->depth;
-    free(rootReply);
 
     QSize windowSize;
     quint8 effectiveDepth = 0;
     if (window) {
-        xcb_get_geometry_reply_t *windowReply = getGeometryUnchecked(xcb_connection(), window);
+        auto windowReply = Q_XCB_REPLY_UNCHECKED(xcb_get_geometry, xcb_connection(), window);
         if (!windowReply)
             return QPixmap();
         windowSize = QSize(windowReply->width, windowReply->height);
         effectiveDepth = windowReply->depth;
-        free(windowReply);
         if (effectiveDepth == rootDepth) {
             // if the depth of the specified window and the root window are the
             // same, grab pixels from the root window (so that we get the any
@@ -738,14 +854,12 @@ QPixmap QXcbScreen::grabWindow(WId window, int xIn, int yIn, int width, int heig
     if (height < 0)
         height = windowSize.height() - yIn;
 
-    xcb_get_window_attributes_reply_t *attributes_reply =
-        xcb_get_window_attributes_reply(xcb_connection(), xcb_get_window_attributes_unchecked(xcb_connection(), window), NULL);
+    auto attributes_reply = Q_XCB_REPLY_UNCHECKED(xcb_get_window_attributes, xcb_connection(), window);
 
     if (!attributes_reply)
         return QPixmap();
 
     const xcb_visualtype_t *visual = screen->visualForId(attributes_reply->visual);
-    free(attributes_reply);
 
     xcb_pixmap_t pixmap = xcb_generate_id(xcb_connection());
     xcb_create_pixmap(xcb_connection(), effectiveDepth, pixmap, window, width, height);
@@ -765,101 +879,45 @@ QPixmap QXcbScreen::grabWindow(WId window, int xIn, int yIn, int width, int heig
     return result;
 }
 
-static bool parseXftInt(const QByteArray& stringValue, int *value)
-{
-    Q_ASSERT(value != 0);
-    bool ok;
-    *value = stringValue.toInt(&ok);
-    return ok;
-}
-
-static QFontEngine::HintStyle parseXftHintStyle(const QByteArray& stringValue)
-{
-    if (stringValue == "hintfull")
-        return QFontEngine::HintFull;
-    else if (stringValue == "hintnone")
-        return QFontEngine::HintNone;
-    else if (stringValue == "hintmedium")
-        return QFontEngine::HintMedium;
-    else if (stringValue == "hintslight")
-        return QFontEngine::HintLight;
-
-    return QFontEngine::HintStyle(-1);
-}
-
-static QFontEngine::SubpixelAntialiasingType parseXftRgba(const QByteArray& stringValue)
-{
-    if (stringValue == "none")
-        return QFontEngine::Subpixel_None;
-    else if (stringValue == "rgb")
-        return QFontEngine::Subpixel_RGB;
-    else if (stringValue == "bgr")
-        return QFontEngine::Subpixel_BGR;
-    else if (stringValue == "vrgb")
-        return QFontEngine::Subpixel_VRGB;
-    else if (stringValue == "vbgr")
-        return QFontEngine::Subpixel_VBGR;
-
-    return QFontEngine::SubpixelAntialiasingType(-1);
-}
-
-bool QXcbScreen::xResource(const QByteArray &identifier,
-                           const QByteArray &expectedIdentifier,
-                           QByteArray& stringValue)
-{
-    if (identifier.startsWith(expectedIdentifier)) {
-        stringValue = identifier.mid(expectedIdentifier.size());
-        return true;
-    }
-    return false;
-}
-
-void QXcbScreen::readXResources()
-{
-    int offset = 0;
-    QByteArray resources;
-    while(1) {
-        xcb_get_property_reply_t *reply =
-            xcb_get_property_reply(xcb_connection(),
-                xcb_get_property_unchecked(xcb_connection(), false, screen()->root,
-                                 XCB_ATOM_RESOURCE_MANAGER,
-                                 XCB_ATOM_STRING, offset/4, 8192), NULL);
-        bool more = false;
-        if (reply && reply->format == 8 && reply->type == XCB_ATOM_STRING) {
-            resources += QByteArray((const char *)xcb_get_property_value(reply), xcb_get_property_value_length(reply));
-            offset += xcb_get_property_value_length(reply);
-            more = reply->bytes_after != 0;
-        }
-
-        if (reply)
-            free(reply);
-
-        if (!more)
-            break;
-    }
-
-    QList<QByteArray> split = resources.split('\n');
-    for (int i = 0; i < split.size(); ++i) {
-        const QByteArray &r = split.at(i);
-        int value;
-        QByteArray stringValue;
-        if (xResource(r, "Xft.dpi:\t", stringValue)) {
-            if (parseXftInt(stringValue, &value))
-                m_forcedDpi = value;
-        } else if (xResource(r, "Xft.hintstyle:\t", stringValue)) {
-            m_hintStyle = parseXftHintStyle(stringValue);
-        } else if (xResource(r, "Xft.antialias:\t", stringValue)) {
-            if (parseXftInt(stringValue, &value))
-                m_antialiasingEnabled = value;
-        } else if (xResource(r, "Xft.rgba:\t", stringValue)) {
-            m_subpixelType = parseXftRgba(stringValue);
-        }
-    }
-}
-
 QXcbXSettings *QXcbScreen::xSettings() const
 {
     return m_virtualDesktop->xSettings();
+}
+
+QByteArray QXcbScreen::getOutputProperty(xcb_atom_t atom) const
+{
+    QByteArray result;
+
+    auto reply = Q_XCB_REPLY(xcb_randr_get_output_property, xcb_connection(),
+                             m_output, atom, XCB_ATOM_ANY, 0, 100, false, false);
+    if (reply && reply->type == XCB_ATOM_INTEGER && reply->format == 8) {
+        quint8 *data = new quint8[reply->num_items];
+        memcpy(data, xcb_randr_get_output_property_data(reply.get()), reply->num_items);
+        result = QByteArray(reinterpret_cast<const char *>(data), reply->num_items);
+        delete[] data;
+    }
+
+    return result;
+}
+
+QByteArray QXcbScreen::getEdid() const
+{
+    QByteArray result;
+    if (!connection()->hasXRandr())
+        return result;
+
+    // Try a bunch of atoms
+    xcb_atom_t atom = connection()->internAtom("EDID");
+    result = getOutputProperty(atom);
+    if (result.isEmpty()) {
+        atom = connection()->internAtom("EDID_DATA");
+        result = getOutputProperty(atom);
+    }
+    if (result.isEmpty()) {
+        atom = connection()->internAtom("XFree86_DDC_EDID1_RAWDATA");
+        result = getOutputProperty(atom);
+    }
+    return result;
 }
 
 static inline void formatRect(QDebug &debug, const QRect r)

@@ -60,7 +60,7 @@ typedef char *(*PtrXcursorLibraryGetTheme)(void *);
 typedef int (*PtrXcursorLibrarySetTheme)(void *, const char *);
 typedef int (*PtrXcursorLibraryGetDefaultSize)(void *);
 
-#if defined(XCB_USE_XLIB) && QT_CONFIG(library)
+#if QT_CONFIG(xcb_xlib) && QT_CONFIG(library)
 #include <X11/Xlib.h>
 enum {
     XCursorShape = CursorShape
@@ -255,29 +255,29 @@ static const uint8_t * const cursor_bits20[] = {
     forbidden_bits, forbiddenm_bits
 };
 
-static const char * const cursorNames[] = {
-    "left_ptr",
-    "up_arrow",
-    "cross",
-    "wait",
-    "ibeam",
-    "size_ver",
-    "size_hor",
-    "size_bdiag",
-    "size_fdiag",
-    "size_all",
-    "blank",
-    "split_v",
-    "split_h",
-    "pointing_hand",
-    "forbidden",
-    "whats_this",
-    "left_ptr_watch",
-    "openhand",
-    "closedhand",
-    "copy",
-    "move",
-    "link"
+static const std::vector<const char *> cursorNames[] = {
+    { "left_ptr", "default", "top_left_arrow", "left_arrow" },
+    { "up_arrow" },
+    { "cross" },
+    { "wait", "watch", "0426c94ea35c87780ff01dc239897213" },
+    { "ibeam", "text", "xterm" },
+    { "size_ver", "ns-resize", "v_double_arrow", "00008160000006810000408080010102" },
+    { "size_hor", "ew-resize", "h_double_arrow", "028006030e0e7ebffc7f7070c0600140" },
+    { "size_bdiag", "nesw-resize", "50585d75b494802d0151028115016902", "fcf1c3c7cd4491d801f1e1c78f100000" },
+    { "size_fdiag", "nwse-resize", "38c5dff7c7b8962045400281044508d2", "c7088f0f3e6c8088236ef8e1e3e70000" },
+    { "size_all" },
+    { "blank" },
+    { "split_v", "row-resize", "sb_v_double_arrow", "2870a09082c103050810ffdffffe0204", "c07385c7190e701020ff7ffffd08103c" },
+    { "split_h", "col-resize", "sb_h_double_arrow", "043a9f68147c53184671403ffa811cc5", "14fef782d02440884392942c11205230" },
+    { "pointing_hand", "pointer", "hand1", "e29285e634086352946a0e7090d73106" },
+    { "forbidden", "not-allowed", "crossed_circle", "circle", "03b6e0fcb3499374a867c041f52298f0" },
+    { "whats_this", "help", "question_arrow", "5c6cd98b3f3ebcb1f9c7f1c204630408", "d9ce0ab605698f320427677b458ad60b" },
+    { "left_ptr_watch", "half-busy", "progress", "00000000000000020006000e7e9ffc3f", "08e8e1c95fe2fc01f976f1e063a24ccd" },
+    { "openhand", "fleur", "5aca4d189052212118709018842178c0", "9d800788f1b08800ae810202380a0822" },
+    { "closedhand", "grabbing", "208530c400c041818281048008011002" },
+    { "dnd-copy", "copy" },
+    { "dnd-move", "move" },
+    { "dnd-link", "link" }
 };
 
 QXcbCursorCacheKey::QXcbCursorCacheKey(const QCursor &c)
@@ -308,7 +308,7 @@ QXcbCursor::QXcbCursor(QXcbConnection *conn, QXcbScreen *screen)
     const char *cursorStr = "cursor";
     xcb_open_font(xcb_connection(), cursorFont, strlen(cursorStr), cursorStr);
 
-#if defined(XCB_USE_XLIB) && QT_CONFIG(library)
+#if QT_CONFIG(xcb_xlib) && QT_CONFIG(library)
     static bool function_ptrs_not_initialized = true;
     if (function_ptrs_not_initialized) {
         QLibrary xcursorLib(QLatin1String("Xcursor"), 1);
@@ -509,7 +509,7 @@ xcb_cursor_t QXcbCursor::createNonStandardCursor(int cshape)
     return cursor;
 }
 
-#if defined(XCB_USE_XLIB) && QT_CONFIG(library)
+#if QT_CONFIG(xcb_xlib) && QT_CONFIG(library)
 bool updateCursorTheme(void *dpy, const QByteArray &theme) {
     if (!ptrXcursorLibraryGetTheme
             || !ptrXcursorLibrarySetTheme)
@@ -535,25 +535,16 @@ static xcb_cursor_t loadCursor(void *dpy, int cshape)
     xcb_cursor_t cursor = XCB_NONE;
     if (!ptrXcursorLibraryLoadCursor || !dpy)
         return cursor;
-    switch (cshape) {
-    case Qt::DragCopyCursor:
-        cursor = ptrXcursorLibraryLoadCursor(dpy, "dnd-copy");
-        break;
-    case Qt::DragMoveCursor:
-        cursor = ptrXcursorLibraryLoadCursor(dpy, "dnd-move");
-        break;
-    case Qt::DragLinkCursor:
-        cursor = ptrXcursorLibraryLoadCursor(dpy, "dnd-link");
-        break;
-    default:
-        break;
+
+    for (const char *cursorName: cursorNames[cshape]) {
+        cursor = ptrXcursorLibraryLoadCursor(dpy, cursorName);
+        if (cursor != XCB_NONE)
+            break;
     }
-    if (!cursor) {
-        cursor = ptrXcursorLibraryLoadCursor(dpy, cursorNames[cshape]);
-    }
+
     return cursor;
 }
-#endif // XCB_USE_XLIB / QT_CONFIG(library)
+#endif // QT_CONFIG(xcb_xlib) / QT_CONFIG(library)
 
 xcb_cursor_t QXcbCursor::createFontCursor(int cshape)
 {
@@ -562,10 +553,9 @@ xcb_cursor_t QXcbCursor::createFontCursor(int cshape)
     xcb_cursor_t cursor = XCB_NONE;
 
     // Try Xcursor first
-#if defined(XCB_USE_XLIB) && QT_CONFIG(library)
+#if QT_CONFIG(xcb_xlib) && QT_CONFIG(library)
     if (cshape >= 0 && cshape <= Qt::LastCursor) {
         void *dpy = connection()->xlib_display();
-        // special case for non-standard dnd-* cursors
         cursor = loadCursor(dpy, cshape);
         if (!cursor && !m_gtkCursorThemeInitialized && m_screen->xSettings()->initialized()) {
             QByteArray gtkCursorTheme = m_screen->xSettings()->setting("Gtk/CursorThemeName").toByteArray();
@@ -579,7 +569,7 @@ xcb_cursor_t QXcbCursor::createFontCursor(int cshape)
     if (cursor)
         return cursor;
     if (!cursor && cursorId) {
-        cursor = XCreateFontCursor(DISPLAY_FROM_XCB(this), cursorId);
+        cursor = XCreateFontCursor(static_cast<Display *>(connection()->xlib_display()), cursorId);
         if (cursor)
             return cursor;
     }
@@ -598,7 +588,7 @@ xcb_cursor_t QXcbCursor::createFontCursor(int cshape)
     }
 
     if (cursor && cshape >= 0 && cshape < Qt::LastCursor && connection()->hasXFixes()) {
-        const char *name = cursorNames[cshape];
+        const char *name = cursorNames[cshape].front();
         xcb_xfixes_set_cursor_name(conn, cursor, strlen(name), name);
     }
 
@@ -631,10 +621,9 @@ void QXcbCursor::queryPointer(QXcbConnection *c, QXcbVirtualDesktop **virtualDes
         *pos = QPoint();
 
     xcb_window_t root = c->primaryVirtualDesktop()->root();
-    xcb_query_pointer_cookie_t cookie = xcb_query_pointer(c->xcb_connection(), root);
-    xcb_generic_error_t *err = 0;
-    xcb_query_pointer_reply_t *reply = xcb_query_pointer_reply(c->xcb_connection(), cookie, &err);
-    if (!err && reply) {
+
+    auto reply = Q_XCB_REPLY(xcb_query_pointer, c->xcb_connection(), root);
+    if (reply) {
         if (virtualDesktop) {
             const auto virtualDesktops = c->virtualDesktops();
             for (QXcbVirtualDesktop *vd : virtualDesktops) {
@@ -648,11 +637,8 @@ void QXcbCursor::queryPointer(QXcbConnection *c, QXcbVirtualDesktop **virtualDes
             *pos = QPoint(reply->root_x, reply->root_y);
         if (keybMask)
             *keybMask = reply->mask;
-        free(reply);
         return;
     }
-    free(err);
-    free(reply);
 }
 
 QPoint QXcbCursor::pos() const
@@ -664,7 +650,7 @@ QPoint QXcbCursor::pos() const
 
 void QXcbCursor::setPos(const QPoint &pos)
 {
-    QXcbVirtualDesktop *virtualDesktop = Q_NULLPTR;
+    QXcbVirtualDesktop *virtualDesktop = nullptr;
     queryPointer(connection(), &virtualDesktop, 0);
     xcb_warp_pointer(xcb_connection(), XCB_NONE, virtualDesktop->root(), 0, 0, 0, 0, pos.x(), pos.y());
     xcb_flush(xcb_connection());

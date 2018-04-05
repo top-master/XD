@@ -58,7 +58,7 @@
 #include <private/qlistview_p.h>
 #include <private/qwidgetitemdata_p.h>
 
-#ifndef QT_NO_LISTWIDGET
+QT_REQUIRE_CONFIG(listwidget);
 
 QT_BEGIN_NAMESPACE
 
@@ -95,7 +95,7 @@ public:
 
     int rowCount(const QModelIndex &parent = QModelIndex()) const override;
 
-    QModelIndex index(QListWidgetItem *item) const;
+    QModelIndex index(const QListWidgetItem *item) const;
     QModelIndex index(int row, int column = 0, const QModelIndex &parent = QModelIndex()) const override;
 
     QVariant data(const QModelIndex &index, int role = Qt::DisplayRole) const override;
@@ -119,7 +119,7 @@ public:
         const QList<QListWidgetItem*>::iterator &end,
         Qt::SortOrder order, QListWidgetItem *item);
 
-    void itemChanged(QListWidgetItem *item);
+    void itemChanged(QListWidgetItem *item, const QVector<int> &roles = QVector<int>());
 
     // dnd
     QStringList mimeTypes() const override;
@@ -170,7 +170,5 @@ public:
 };
 
 QT_END_NAMESPACE
-
-#endif // QT_NO_LISTWIDGET
 
 #endif // QLISTWIDGET_P_H

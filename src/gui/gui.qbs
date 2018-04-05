@@ -80,9 +80,11 @@ QtModuleProject {
                 "qguivariantanimation.cpp",
             ]
         }
-        Properties {
-            condition: qbs.targetOS.contains("macos")
-            cpp.frameworks: ["Foundation", "AppKit"]
+        cpp.frameworks: {
+            var result = qbs.targetOS.contains("macos") ? ["Foundation", "AppKit"] : [];
+            if (qbs.targetOS.contains("darwin"))
+                result.push("CoreGraphics");
+            return result;
         }
         Properties {
             condition: qbs.toolchain.contains("mingw") && qbs.architecture === "x86_64"
@@ -529,6 +531,7 @@ QtModuleProject {
                 "qpathsimplifier.cpp",
                 "qpathsimplifier_p.h",
                 "qpdf.cpp",
+                "qpdf.qrc",
                 "qpdf_p.h",
                 "qpdfwriter.cpp",
                 "qpdfwriter.h",
@@ -590,6 +593,22 @@ QtModuleProject {
                 "qhexstring_p.h",
                 "qlayoutpolicy.cpp",
                 "qlayoutpolicy_p.h",
+                "qshaderformat.cpp",
+                "qshaderformat_p.h",
+                "qshadergenerator.cpp",
+                "qshadergenerator_p.h",
+                "qshadergraph.cpp",
+                "qshadergraph_p.h",
+                "qshadergraphloader.cpp",
+                "qshadergraphloader_p.h",
+                "qshaderlanguage.cpp",
+                "qshaderlanguage_p.h",
+                "qshadernode.cpp",
+                "qshadernode_p.h",
+                "qshadernodeport.cpp",
+                "qshadernodeport_p.h",
+                "qshadernodesloader.cpp",
+                "qshadernodesloader_p.h",
                 "qvalidator.cpp",
                 "qvalidator.h",
             ]
@@ -614,6 +633,7 @@ QtModuleProject {
             ]
         }
         Group {
+            condition: QtGuiConfig.standarditemmodel
             name: "itemmodels"
             prefix: "itemmodels/"
             files: [
@@ -853,8 +873,12 @@ testcocoon {
 
 CONFIG += simd optimize_full
 
-!uikit:contains(QT_ARCH, "arm"): CONFIG += no_clang_integrated_as
-!uikit:!contains(QT_ARCH, "arm64"): DEFINES += ENABLE_PIXMAN_DRAWHELPERS
+!uikit:!win32:contains(QT_ARCH, "arm"): CONFIG += no_clang_integrated_as
+!uikit:!win32:!contains(QT_ARCH, "arm64"): DEFINES += ENABLE_PIXMAN_DRAWHELPERS
 
 QMAKE_LIBS += $$QMAKE_LIBS_GUI
+
+
+TRACEPOINT_PROVIDER = $$PWD/qtgui.tracepoints
+CONFIG += qt_tracepoints
 */

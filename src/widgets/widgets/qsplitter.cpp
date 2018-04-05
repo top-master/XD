@@ -38,7 +38,6 @@
 ****************************************************************************/
 
 #include "qsplitter.h"
-#ifndef QT_NO_SPLITTER
 
 #include "qapplication.h"
 #include "qcursor.h"
@@ -47,7 +46,9 @@
 #include "qlayout.h"
 #include "qlist.h"
 #include "qpainter.h"
+#if QT_CONFIG(rubberband)
 #include "qrubberband.h"
+#endif
 #include "qstyle.h"
 #include "qstyleoption.h"
 #include "qtextstream.h"
@@ -1371,7 +1372,7 @@ bool QSplitter::event(QEvent *e)
         if (!d->firstShow)
             break;
         d->firstShow = false;
-        // fall through
+        Q_FALLTHROUGH();
     case QEvent::HideToParent:
     case QEvent::ShowToParent:
     case QEvent::LayoutRequest:
@@ -1818,5 +1819,3 @@ QTextStream& operator>>(QTextStream& ts, QSplitter& splitter)
 QT_END_NAMESPACE
 
 #include "moc_qsplitter.cpp"
-
-#endif // QT_NO_SPLITTER

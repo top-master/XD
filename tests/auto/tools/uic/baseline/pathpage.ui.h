@@ -10,11 +10,8 @@
 #define PATHPAGE_H
 
 #include <QtCore/QVariant>
-#include <QtWidgets/QAction>
 #include <QtWidgets/QApplication>
-#include <QtWidgets/QButtonGroup>
 #include <QtWidgets/QGridLayout>
-#include <QtWidgets/QHeaderView>
 #include <QtWidgets/QLabel>
 #include <QtWidgets/QLineEdit>
 #include <QtWidgets/QListWidget>
@@ -107,11 +104,11 @@ public:
 
     void retranslateUi(QWidget *PathPage)
     {
-        PathPage->setWindowTitle(QApplication::translate("PathPage", "Form", Q_NULLPTR));
-        label_2->setText(QApplication::translate("PathPage", "File filters:", Q_NULLPTR));
-        label->setText(QApplication::translate("PathPage", "Documentation source file paths:", Q_NULLPTR));
-        addButton->setText(QApplication::translate("PathPage", "Add", Q_NULLPTR));
-        removeButton->setText(QApplication::translate("PathPage", "Remove", Q_NULLPTR));
+        PathPage->setWindowTitle(QApplication::translate("PathPage", "Form", nullptr));
+        label_2->setText(QApplication::translate("PathPage", "File filters:", nullptr));
+        label->setText(QApplication::translate("PathPage", "Documentation source file paths:", nullptr));
+        addButton->setText(QApplication::translate("PathPage", "Add", nullptr));
+        removeButton->setText(QApplication::translate("PathPage", "Remove", nullptr));
     } // retranslateUi
 
 };

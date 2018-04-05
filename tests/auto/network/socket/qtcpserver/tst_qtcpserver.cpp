@@ -149,7 +149,7 @@ void tst_QTcpServer::initTestCase_data()
     QTest::addColumn<int>("proxyType");
 
     QTest::newRow("WithoutProxy") << false << 0;
-#ifndef QT_NO_SOCKS5
+#if QT_CONFIG(socks5)
     QTest::newRow("WithSocks5Proxy") << true << int(QNetworkProxy::Socks5Proxy);
 #endif
 
@@ -420,13 +420,20 @@ void tst_QTcpServer::maxPendingConnections()
     QTcpSocket socket2;
     QTcpSocket socket3;
 
+    QSignalSpy spy(&server, SIGNAL(newConnection()));
     QVERIFY(server.listen());
 
     socket1.connectToHost(QHostAddress::LocalHost, server.serverPort());
     socket2.connectToHost(QHostAddress::LocalHost, server.serverPort());
     socket3.connectToHost(QHostAddress::LocalHost, server.serverPort());
 
-    QVERIFY(server.waitForNewConnection(5000));
+    // We must have two and only two connections. First compare waits until
+    // two connections have been made. The second compare makes sure no
+    // more are accepted. Creating connections happens multithreaded so
+    // qWait must be used for that.
+    QTRY_COMPARE(spy.count(), 2);
+    QTest::qWait(100);
+    QCOMPARE(spy.count(), 2);
 
     QVERIFY(server.hasPendingConnections());
     QVERIFY(server.nextPendingConnection());
@@ -938,9 +945,16 @@ void tst_QTcpServer::linkLocal()
         //Windows preallocates link local addresses to interfaces that are down.
         //These may or may not work depending on network driver (they do not work for the Bluetooth PAN driver)
         if (iface.flags() & QNetworkInterface::IsUp) {
+#if defined(Q_OS_WIN)
             // Do not connect to the Teredo Tunneling interface on Windows Xp.
             if (iface.humanReadableName() == QString("Teredo Tunneling Pseudo-Interface"))
                 continue;
+#elif defined(Q_OS_DARWIN)
+            // Do not add "utun" interfaces on macOS: nothing ever gets received
+            // (we don't know why)
+            if (iface.name().startsWith("utun"))
+                continue;
+#endif
             foreach (QNetworkAddressEntry addressEntry, iface.addressEntries()) {
                 QHostAddress addr = addressEntry.ip();
                 if (addr.isInSubnet(localMaskv4, 16)) {
