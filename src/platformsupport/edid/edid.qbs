@@ -23,7 +23,7 @@ QtModuleProject {
         }
 
         Depends { name: project.headersName }
-        Depends { name: "Qt.core-private" }
+        Depends { name: "Qt.core_private" }
 
         cpp.includePaths: project.includePaths.concat(base)
         cpp.defines: base.concat("QT_NO_CAST_FROM_ASCII")

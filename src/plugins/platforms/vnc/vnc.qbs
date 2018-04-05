@@ -8,15 +8,15 @@ QtPlugin {
     pluginClassName: "QVncIntegrationPlugin"
     qbsSearchPaths: [project.qtbaseShadowDir + "/src/gui/qbs"]
 
-    Depends { name: "Qt.core-private" }
-    Depends { name: "Qt.gui-private" }
+    Depends { name: "Qt.core_private" }
+    Depends { name: "Qt.gui_private" }
     Depends { name: "Qt.network" }
-    Depends { name: "Qt.service_support-private" }
-    Depends { name: "Qt.theme_support-private" }
-    Depends { name: "Qt.fb_support-private" }
-    Depends { name: "Qt.eventdispatcher_support-private" }
-    Depends { name: "Qt.fontdatabase_support-private" }
-    Depends { name: "Qt.input_support-private" }
+    Depends { name: "Qt.service_support_private" }
+    Depends { name: "Qt.theme_support_private" }
+    Depends { name: "Qt.fb_support_private" }
+    Depends { name: "Qt.eventdispatcher_support_private" }
+    Depends { name: "Qt.fontdatabase_support_private" }
+    Depends { name: "Qt.input_support_private" }
     cpp.defines: ["QT_NO_FOREACH"]
     files: [
         "main.cpp",

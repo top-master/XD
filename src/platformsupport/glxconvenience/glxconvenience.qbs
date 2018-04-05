@@ -25,9 +25,9 @@ QtModuleProject {
         }
 
         Depends { name: project.headersName }
-        Depends { name: "Qt.core-private" }
-        Depends { name: "Qt.gui-private" }
-        Depends { name: "Libdl"; condition: Qt["core-private"].config.dlopen }
+        Depends { name: "Qt.core_private" }
+        Depends { name: "Qt.gui_private" }
+        Depends { name: "Libdl"; condition: Qt.core_private.config.dlopen }
 
         cpp.includePaths: project.includePaths.concat(base)
         cpp.defines: base.concat("QT_NO_CAST_FROM_ASCII")

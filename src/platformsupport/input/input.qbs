@@ -23,9 +23,9 @@ QtModuleProject {
         }
 
         Depends { name: project.headersName }
-        Depends { name: "Qt.core-private" }
-        Depends { name: "Qt.gui-private" }
-        Depends { name: "Qt.devicediscovery_support-private" }
+        Depends { name: "Qt.core_private" }
+        Depends { name: "Qt.gui_private" }
+        Depends { name: "Qt.devicediscovery_support_private" }
         Depends { name: "Libudev"; condition: Qt.global.privateConfig.libudev }
         Depends { name: "Mtdev"; condition: Qt.global.privateConfig.mtdev }
         Depends { name: "Tslib"; condition: QtGuiPrivateConfig.tslib }

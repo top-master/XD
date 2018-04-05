@@ -20,7 +20,7 @@ CppApplication {
     qbs.profiles: [hostProfile]
 
     Depends { name: "Qt.global" }
-    Depends { name: "Qt.bootstrap-private"; condition: useBootstrapLib }
+    Depends { name: "Qt.bootstrap_private"; condition: useBootstrapLib }
     Depends { name: "Qt.core"; condition: !useBootstrapLib }
     Depends { name: "osversions" }
 

@@ -30,7 +30,7 @@ QtModuleProject {
             cpp.includePaths: project.publicIncludePaths
         }
 
-        Depends { name: "Qt.core-private" }
+        Depends { name: "Qt.core_private" }
         Depends { name: project.headersName }
         Depends { name: "qt_zlib" }
 

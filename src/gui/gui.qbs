@@ -34,7 +34,7 @@ QtModuleProject {
         }
 
         Depends { name: project.headersName }
-        Depends { name: "Qt"; submodules: ["core-private"] }
+        Depends { name: "Qt.core_private" }
         Depends { name: "qt_zlib" }
         Depends { name: "cpufeatures" }
         Depends { name: "opengl" }

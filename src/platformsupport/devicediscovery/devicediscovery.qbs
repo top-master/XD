@@ -18,8 +18,8 @@ QtModuleProject {
         }
 
         Depends { name: project.headersName }
-        Depends { name: "Qt.core-private" }
-        Depends { name: "Glib"; condition: Qt["core-private"].config.glib }
+        Depends { name: "Qt.core_private" }
+        Depends { name: "Glib"; condition: Qt.core_private.config.glib }
 
         cpp.includePaths: project.includePaths.concat(base)
         cpp.defines: base.concat("QT_NO_CAST_FROM_ASCII")
@@ -27,21 +27,21 @@ QtModuleProject {
         files: ["qdevicediscovery_p.h"]
 
         Group {
-            condition: Qt["core-private"].config.evdev
+            condition: Qt.core_private.config.evdev
             files: [
                 "qdevicediscovery_static.cpp",
                 "qdevicediscovery_static_p.h",
             ]
         }
         Group {
-            condition: Qt["core-private"].config.libudev
+            condition: Qt.core_private.config.libudev
             files: [
                 "qdevicediscovery_udev.cpp",
                 "qdevicediscovery_udev_p.h",
             ]
         }
         Group {
-            condition: !(Qt["core-private"].config.evdev || Qt["core-private"].config.libudev)
+            condition: !(Qt.core_private.config.evdev || Qt.core_private.config.libudev)
             files: [
                 "qdevicediscovery_dummy.cpp",
                 "qdevicediscovery_dummy_p.h",

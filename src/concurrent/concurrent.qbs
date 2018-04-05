@@ -27,7 +27,7 @@ QtModuleProject {
         }
 
         Depends { name: project.headersName }
-        Depends { name: "Qt"; submodules: ["core-private"] }
+        Depends { name: "Qt.core_private" }
 
         cpp.defines: base.concat([
             "QT_NO_FOREACH",

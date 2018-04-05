@@ -24,10 +24,10 @@ QtModuleProject {
         }
 
         Depends { name: project.headersName }
-        Depends { name: "Qt.core-private" }
-        Depends { name: "Qt.gui-private" }
+        Depends { name: "Qt.core_private" }
+        Depends { name: "Qt.gui_private" }
         Depends { name: "Qt.dbus" }
-        Depends { name: "Qt.accessibility_support-private" }
+        Depends { name: "Qt.accessibility_support_private" }
         Depends { name: "Atspi" }
 
         cpp.includePaths: project.includePaths

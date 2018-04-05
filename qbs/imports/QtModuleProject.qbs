@@ -4,7 +4,7 @@ import QtUtils
 Project {
     property string simpleName: ""
     property string moduleName: "Qt." + simpleName
-    property string privateName: moduleName + "-private"
+    property string privateName: moduleName + "_private"
     property string tracepointsProductName: moduleName + "_tracepoints"
     property string headersName: name + "Headers"
     property string prefix

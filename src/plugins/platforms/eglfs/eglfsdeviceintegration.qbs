@@ -9,22 +9,22 @@ import qbs
 */
 
 QtModule {
-    condition: Qt["gui-private"].config.eglfs
-    Depends { name: "Qt.core-private" }
-    Depends { name: "Qt.gui-private" }
-    Depends { name: "Qt.devicediscovery_support-private" }
-    Depends { name: "Qt.egl_support-private" }
-    Depends { name: "Qt.eventdispatcher_support-private" }
-    Depends { name: "Qt.fontdatabase_support-private" }
-    Depends { name: "Qt.fb_support-private" }
-    Depends { name: "Qt.service_support-private" }
-    Depends { name: "Qt.theme_support-private" }
-    Depends { name: "Qt.input_support-private"; required: false }
-    Depends { name: "Qt.platformcompositor_support-private"; required: false }
+    condition: Qt.gui_private.config.eglfs
+    Depends { name: "Qt.core_private" }
+    Depends { name: "Qt.gui_private" }
+    Depends { name: "Qt.devicediscovery_support_private" }
+    Depends { name: "Qt.egl_support_private" }
+    Depends { name: "Qt.eventdispatcher_support_private" }
+    Depends { name: "Qt.fontdatabase_support_private" }
+    Depends { name: "Qt.fb_support_private" }
+    Depends { name: "Qt.service_support_private" }
+    Depends { name: "Qt.theme_support_private" }
+    Depends { name: "Qt.input_support_private"; required: false }
+    Depends { name: "Qt.platformcompositor_support_private"; required: false }
     Depends { name: "Egl" }
     Depends { name: "QtPlatformHeaders" }
     Export {
-        Depends { name: "Qt.egl_support-private" }
+        Depends { name: "Qt.egl_support_private" }
     }
 
     cpp.defines: {

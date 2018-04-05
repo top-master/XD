@@ -24,7 +24,7 @@ QtModuleProject {
             cpp.includePaths: project.includePaths.concat(QtDBusHeaders.includePaths)
         }
 
-        Depends { name: "Qt.bootstrap-private" }
+        Depends { name: "Qt.bootstrap_private" }
         Depends { name: "QtDBusHeaders" }
 
         cpp.includePaths: base.concat(project.includePaths, QtDBusHeaders.includePaths)

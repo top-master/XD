@@ -9,11 +9,11 @@ QtPlugin {
     pluginClassName: "QOffscreenIntegrationPlugin"
     qbsSearchPaths: [project.qtbaseShadowDir + "/src/gui/qbs"]
 
-    Depends { name: "Qt.core-private" }
-    Depends { name: "Qt.gui-private" }
-    Depends { name: "Qt.eventdispatcher_support-private" }
-    Depends { name: "Qt.fontdatabase_support-private" }
-    Depends { name: "Qt.glx_support-private"; required: false }
+    Depends { name: "Qt.core_private" }
+    Depends { name: "Qt.gui_private" }
+    Depends { name: "Qt.eventdispatcher_support_private" }
+    Depends { name: "Qt.fontdatabase_support_private" }
+    Depends { name: "Qt.glx_support_private"; required: false }
     cpp.defines: ["QT_NO_FOREACH"]
     files: [
         "main.cpp",
@@ -27,14 +27,14 @@ QtPlugin {
     ]
 
     Group {
-        condition: Qt["glx_support-private"].present
+        condition: Qt.glx_support_private.present
         files: [
             "qoffscreenintegration_x11.cpp",
             "qoffscreenintegration_x11.h",
         ]
     }
     Group {
-        condition: !Qt["glx_support-private"].present
+        condition: !Qt.glx_support_private.present
         files: [
             "qoffscreenintegration_dummy.cpp",
         ]

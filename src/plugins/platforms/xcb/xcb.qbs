@@ -20,8 +20,8 @@ QtModuleProject {
         pluginClassName: "QXcbIntegrationPlugin"
 
         Depends { name: project.moduleName }
-        Depends { name: "Qt.core-private" }
-        Depends { name: "Qt.gui-private" }
+        Depends { name: "Qt.core_private" }
+        Depends { name: "Qt.gui_private" }
         files: [
             "README",
             "qxcbmain.cpp",
@@ -35,15 +35,15 @@ QtModuleProject {
         name: project.moduleName
         simpleName: project.simpleName
 
-        Depends { name: "Qt.core-private" }
-        Depends { name: "Qt.gui-private" }
-        Depends { name: "Qt.edid_support-private" }
-        Depends { name: "Qt.eventdispatcher_support-private" }
-        Depends { name: "Qt.fontdatabase_support-private" }
-        Depends { name: "Qt.service_support-private" }
-        Depends { name: "Qt.theme_support-private" }
+        Depends { name: "Qt.core_private" }
+        Depends { name: "Qt.gui_private" }
+        Depends { name: "Qt.edid_support_private" }
+        Depends { name: "Qt.eventdispatcher_support_private" }
+        Depends { name: "Qt.fontdatabase_support_private" }
+        Depends { name: "Qt.service_support_private" }
+        Depends { name: "Qt.theme_support_private" }
         Depends {
-            name: "Qt.linuxaccessibility_support-private"
+            name: "Qt.linuxaccessibility_support_private"
             required: false
         }
         Depends { name: "QtPlatformHeaders" }

@@ -8,9 +8,9 @@ QtHostTool {
     qbsSearchPaths: [project.qtbaseShadowDir + "/src/corelib/qbs"]
 
     useBootstrapLib: base || !QtCoreConfig.commandlineparser
-    Depends { name: "Qt.bootstrap_dbus-private"; condition: useBootstrapLib }
-    Depends { name: "Qt.core-private"; condition: !useBootstrapLib }
-    Depends { name: "Qt.dbus-private"; condition: !useBootstrapLib }
+    Depends { name: "Qt.bootstrap_dbus_private"; condition: useBootstrapLib }
+    Depends { name: "Qt.core_private"; condition: !useBootstrapLib }
+    Depends { name: "Qt.dbus_private"; condition: !useBootstrapLib }
 
     cpp.defines: base.concat(["QT_NO_CAST_FROM_ASCII", "QT_NO_FOREACH"])
     cpp.cxxFlags: base.concat(Qt.global.privateConfig.dbus_host_cflags)

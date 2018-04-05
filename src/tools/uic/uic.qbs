@@ -11,8 +11,8 @@ QtHostTool {
 
     useBootstrapLib: base || !QtCoreConfig.commandlineparser || !QtCoreConfig.textcodec
         || !QtCoreConfig.xmlstreamreader || !QtCoreConfig.xmlstreamwriter
-    Depends { name: "Qt.bootstrap-private"; condition: useBootstrapLib }
-    Depends { name: "Qt.core-private"; condition: !useBootstrapLib }
+    Depends { name: "Qt.bootstrap_private"; condition: useBootstrapLib }
+    Depends { name: "Qt.core_private"; condition: !useBootstrapLib }
 
     cpp.defines: base.concat(["QT_UIC",
                               "QT_UIC_CPP_GENERATOR",

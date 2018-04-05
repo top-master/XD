@@ -20,10 +20,10 @@ QtModuleProject {
         }
 
         Depends { name: project.headersName }
-        Depends { name: "Qt.core-private" }
-        Depends { name: "Qt.gui-private" }
+        Depends { name: "Qt.core_private" }
+        Depends { name: "Qt.gui_private" }
         //Depends { name: "Xlib"; condition: QtGuiPrivateConfig.xlib }    ### Xlib doesn't exist yet.
-        Depends { name: "Libdl"; condition: Qt["core-private"].config.dlopen }
+        Depends { name: "Libdl"; condition: Qt.core_private.config.dlopen }
 
         cpp.includePaths: project.includePaths.concat(base)
         cpp.defines: base.concat(

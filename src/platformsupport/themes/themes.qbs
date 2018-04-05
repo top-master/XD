@@ -16,8 +16,8 @@ QtModuleProject {
         }
 
         Depends { name: project.headersName }
-        Depends { name: "Qt.core-private" }
-        Depends { name: "Qt.gui-private" }
+        Depends { name: "Qt.core_private" }
+        Depends { name: "Qt.gui_private" }
         Depends {
             name: "Qt.dbus"
             condition: qbs.targetOS.contains("unix") && !qbs.targetOS.contains("darwin")
@@ -34,7 +34,7 @@ QtModuleProject {
 
         Group {
             condition: (qbs.targetOS.contains("unix") && !qbs.targetOS.contains("darwin"))
-                || Qt["gui-private"].config.xcb
+                || Qt.gui_private.config.xcb
             prefix: "genericunix/"
             files: [
                 "qgenericunixthemes_p.h",

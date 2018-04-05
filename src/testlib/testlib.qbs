@@ -30,7 +30,7 @@ QtModuleProject {
         }
 
         Depends { name: project.headersName }
-        Depends { name: "Qt.core-private" }
+        Depends { name: "Qt.core_private" }
 
         cpp.enableExceptions: true
         cpp.includePaths: project.includePaths.concat(base)

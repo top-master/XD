@@ -2,15 +2,15 @@ import qbs
 
 QtPlugin {
     name: "qminimalegl"
-    condition: Qt["gui-private"].config.eglfs
+    condition: Qt.gui_private.config.eglfs
     pluginType: "platforms"
     pluginClassName: "QMinimalEglIntegrationPlugin"
 
-    Depends { name: "Qt.core-private" }
-    Depends { name: "Qt.gui-private" }
-    Depends { name: "Qt.eventdispatcher_support-private" }
-    Depends { name: "Qt.fontdatabase_support-private" }
-    Depends { name: "Qt.egl_support-private" }
+    Depends { name: "Qt.core_private" }
+    Depends { name: "Qt.gui_private" }
+    Depends { name: "Qt.eventdispatcher_support_private" }
+    Depends { name: "Qt.fontdatabase_support_private" }
+    Depends { name: "Qt.egl_support_private" }
     Depends { name: "Egl" }
 
     // Avoid X11 header collision, use generic EGL native types

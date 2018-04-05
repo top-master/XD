@@ -21,8 +21,8 @@ QtModuleProject {
         }
 
         Depends { name: project.headersName }
-        Depends { name: "Qt.core-private" }
-        Depends { name: "Qt.gui-private" }
+        Depends { name: "Qt.core_private" }
+        Depends { name: "Qt.gui_private" }
         Depends { name: "Drm" }
 
         cpp.includePaths: project.includePaths.concat(base)
