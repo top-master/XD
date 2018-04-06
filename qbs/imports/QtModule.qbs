@@ -14,6 +14,7 @@ QtProduct {
     property string upperCaseSimpleName: simpleName.toUpperCase()
     targetName: "Qt" + (!bundle.isBundle ? "5" : "") + project.name.slice(2)
 
+    Depends { name: project.tracepointsProductName; required: false }
     Depends { name: "qt_sse2"; condition: !hostBuild }
 
     property bool hasUiKit: qbs.targetOS.containsAny(["ios", "tvos", "watchos"])

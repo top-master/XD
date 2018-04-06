@@ -54,6 +54,8 @@ QtModuleProject {
         }
     }
 
+    QtModuleTracepoints {}
+
     QtModule {
         property var config: QtCoreConfig
         property var privateConfig: QtCorePrivateConfig

@@ -5,6 +5,7 @@ Project {
     property string simpleName: ""
     property string moduleName: "Qt." + simpleName
     property string privateName: moduleName + "-private"
+    property string tracepointsProductName: moduleName + "_tracepoints"
     property string headersName: name + "Headers"
     property string prefix
     property stringList includePaths: QtUtils.includesForModule(name + "-private", project.buildDirectory + "/include", project.version)

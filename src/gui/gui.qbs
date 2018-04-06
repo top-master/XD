@@ -23,6 +23,8 @@ QtModuleProject {
         }
     }
 
+    QtModuleTracepoints {}
+
     QtModule {
         Export {
             property var config: QtGuiConfig
