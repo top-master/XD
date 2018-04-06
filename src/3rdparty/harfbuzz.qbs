@@ -179,6 +179,8 @@ Project {
                     "hb-ot-shape.cc",
                     "hb-ot-shape.h",
                     "hb-ot-tag.h",
+                    "hb-ot-var.cc",
+                    "hb-ot-var.h",
                     "hb-ot.h",
                  // "hb-ot-shape-complex-arabic-win1256.hh", // disabled with HB_NO_WIN1256
                 ]

@@ -15,7 +15,7 @@ Project {
 
             Properties {
                 condition: useBundledZlib
-                cpp.includePaths: [product.sourceDirectory + "/zlib"]
+                cpp.includePaths: [product.sourceDirectory + "/zlib/src"]
             }
 
             Group {

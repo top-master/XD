@@ -28,8 +28,9 @@ QtModuleProject {
         Depends { name: "Qt.gui-private" }
         Depends { name: "Qt.dbus" }
         Depends { name: "Qt.accessibility_support-private" }
+        Depends { name: "Atspi" }
 
-        cpp.includePaths: project.includePaths.concat(base, "../../3rdparty/atspi2")
+        cpp.includePaths: project.includePaths
         cpp.defines: base.concat("QT_NO_CAST_FROM_ASCII")
         Group {
             files: [

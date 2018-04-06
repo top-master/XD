@@ -278,6 +278,8 @@ QtModuleProject {
                 "qimagepixmapcleanuphooks_p.h",
                 "qimagereader.cpp",
                 "qimagereader.h",
+                "qimagereaderwriterhelpers.cpp",
+                "qimagereaderwriterhelpers_p.h",
                 "qimagewriter.cpp",
                 "qimagewriter.h",
                 "qpaintengine_pic.cpp",

@@ -86,6 +86,8 @@ QtModuleProject {
             "access/qhsts_p.h",
             "access/qhstspolicy.cpp",
             "access/qhstspolicy.h",
+            "access/qhstsstore.cpp",
+            "access/qhstsstore_p.h",
             "access/qnetworkaccessauthenticationmanager.cpp",
             "access/qnetworkaccessauthenticationmanager_p.h",
             "access/qnetworkaccessbackend.cpp",
@@ -293,12 +295,23 @@ QtModuleProject {
             condition: qbs.targetOS.contains("unix")
             files: [
                 "kernel/qhostinfo_unix.cpp",
-                "kernel/qnetworkinterface_unix.cpp",
                 "socket/qlocalserver_unix.cpp",
                 "socket/qlocalsocket_unix.cpp",
                 "socket/qnativesocketengine_unix.cpp",
                 "socket/qnet_unix_p.h",
             ]
+            Group {
+                condition: QtNetworkPrivateConfig.linux_netlink
+                files: [
+                    "kernel/qnetworkinterface_linux.cpp",
+                ]
+            }
+            Group {
+                condition: !QtNetworkPrivateConfig.linux_netlink
+                files: [
+                    "kernel/qnetworkinterface_unix.cpp",
+                ]
+            }
         }
 
         Group {

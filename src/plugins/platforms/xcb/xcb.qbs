@@ -20,6 +20,7 @@ QtModuleProject {
         pluginClassName: "QXcbIntegrationPlugin"
 
         Depends { name: project.moduleName }
+        Depends { name: "Qt.core-private" }
         Depends { name: "Qt.gui-private" }
         files: [
             "README",
@@ -66,7 +67,7 @@ QtModuleProject {
         Depends { name: "cpp" }
 
         cpp.defines: {
-            var defines = ["QT_NO_FOREACH", "QT_BUILD_XCB_PLUGIN"];
+            var defines = base.concat("QT_NO_FOREACH", "QT_BUILD_XCB_PLUGIN");
             if (QtGuiPrivateConfig.xcb_xlib)
                 defines.push("XCB_USE_XLIB");
             if (QtGuiPrivateConfig.xcb_sm)
@@ -76,7 +77,7 @@ QtModuleProject {
             return defines;
         }
         cpp.dynamicLibraries: QtGuiPrivateConfig.system_xcb ? ["xcb-xinerama"] : []
-        cpp.includePaths: base.concat([".", "gl_integrations"])
+        cpp.includePaths: base.concat([".", "gl_integrations", "nativepainting"])
 
         files: [
            "qxcbclipboard.cpp",
@@ -132,6 +133,26 @@ QtModuleProject {
                 "qxcbglintegrationplugin.h",
                 "qxcbnativeinterfacehandler.cpp",
                 "qxcbnativeinterfacehandler.h",
+            ]
+        }
+        Group {
+            condition: QtGuiPrivateConfig.xcb_native_painting
+            name: "native painting"
+            prefix: "nativepainting/"
+            files: [
+                "qbackingstore_x11.cpp",
+                "qbackingstore_x11_p.h",
+                "qcolormap_x11.cpp",
+                "qcolormap_x11_p.h",
+                "qpaintengine_x11.cpp",
+                "qpaintengine_x11_p.h",
+                "qpixmap_x11.cpp",
+                "qpixmap_x11_p.h",
+                "qt_x11_p.h",
+                "qtessellator.cpp",
+                "qtessellator_p.h",
+                "qxcbnativepainting.cpp",
+                "qxcbnativepainting.h",
             ]
         }
     }

@@ -1,10 +1,8 @@
 import qbs
-import QtGuiPrivateConfig
 
 QtPlugin {
-    qbsSearchPaths: [project.qtbaseShadowDir + "/src/gui/qbs"]
     name: "qminimalegl"
-    condition: QtGuiPrivateConfig.eglfs
+    condition: Qt["gui-private"].config.eglfs
     pluginType: "platforms"
     pluginClassName: "QMinimalEglIntegrationPlugin"
 

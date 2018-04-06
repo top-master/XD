@@ -157,6 +157,16 @@ Group {
         files: ["qcollator_posix.cpp"]
     }
 
+
+    Group {
+        name: "datetimeparser"
+        condition: product.privateConfig.datetimeparser
+        files: [
+            "qdatetimeparser.cpp",
+            "qdatetimeparser_p.h",
+        ]
+    }
+
     Group {
         name: "regularexpression"
         condition: product.config.regularexpression

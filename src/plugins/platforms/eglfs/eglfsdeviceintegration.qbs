@@ -9,6 +9,7 @@ import qbs
 */
 
 QtModule {
+    condition: Qt["gui-private"].config.eglfs
     Depends { name: "Qt.core-private" }
     Depends { name: "Qt.gui-private" }
     Depends { name: "Qt.devicediscovery_support-private" }

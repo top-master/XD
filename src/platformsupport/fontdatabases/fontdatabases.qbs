@@ -16,6 +16,7 @@ QtModuleProject {
         Export {
             Depends { name: "cpp" }
             Depends { name: "Qt.core" }
+            Depends { name: "qt_freetype" }
             cpp.includePaths: project.includePaths
         }
 

@@ -10,6 +10,10 @@ QtModuleProject {
         sync.classNames: ({
             "qtest.h": ["QTest"],
         })
+        shadowBuildFiles: [
+            project.qtbaseShadowDir + "/src/testlib/qttestlib-config.h",
+            project.qtbaseShadowDir + "/src/testlib/qttestlib-config_p.h",
+        ]
         Depends { name: "QtCoreHeaders" }
     }
 

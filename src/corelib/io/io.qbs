@@ -163,6 +163,7 @@ Group {
         condition: qbs.targetOS.contains("windows")
         files: [
             "qfilesystemengine_win.cpp",
+            "qfilesystemiterator_win.cpp",
             "qfilesystemwatcher_win.cpp",
             "qfilesystemwatcher_win_p.h",
             "qfsfileengine_win.cpp",
@@ -175,8 +176,6 @@ Group {
                 "qsettings_win.cpp",
                 "qstandardpaths_win.cpp",
                 "qstorageinfo_win.cpp",
-                "qwinoverlappedionotifier.cpp",
-                "qwinoverlappedionotifier_p.h",
                 "qwindowspipereader.cpp",
                 "qwindowspipereader_p.h",
                 "qwindowspipewriter.cpp",
