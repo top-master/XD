@@ -1,4 +1,5 @@
 var FileInfo = require("qbs.FileInfo");
+var ModUtils = require("qbs.ModUtils");
 
 function outputFileName(input, suffix)
 {
@@ -11,7 +12,10 @@ function outputFileName(input, suffix)
 
 function createCommands(product, input, outputs, option)
 {
-    var exe = explicitlyDependsOn["qt.qdbusxml2cpp-tool"][0].filePath;
+    var artifact = explicitlyDependsOn["qt.qdbusxml2cpp-tool"][0];
+    var exe = artifact.qbs.install
+        ? ModUtils.artifactInstalledFilePath(artifact)
+        : artifact.filePath;
     var hppOutput = outputs["hpp"][0];
     var hppArgs = input.Qt.dbus.xml2CppHeaderFlags;
     hppArgs.push(option, hppOutput.fileName + ':', input.filePath); // Can't use filePath on Windows
