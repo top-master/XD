@@ -32,7 +32,7 @@ Group {
         "qwaitcondition.h",
     ]
     Group {
-        condition: QtGlobalConfig.future
+        condition: Qt.global.config.future
         name: "future"
         files: [
             "qexception.cpp",

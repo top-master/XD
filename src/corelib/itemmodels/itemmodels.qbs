@@ -1,7 +1,7 @@
 import qbs
 
 Group {
-    condition: QtCoreConfig.itemmodel
+    condition: config.itemmodel
     name: "item models"
     prefix: path + '/'
     files: [

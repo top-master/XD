@@ -3,7 +3,12 @@ import QtGlobalConfig
 import QtGlobalPrivateConfig
 
 Project {
-    property stringList qtModuleNames: ["corelib", "gui", "network"]
+    property stringList qtModuleNames: [
+        "corelib",
+        "gui",
+        "network",
+        "testlib",
+    ]
     qbsSearchPaths: qtModuleNames.map(function(name) {
         return qtbaseShadowDir + "/src/" + name + "/qbs";
     });
@@ -19,7 +24,6 @@ Project {
         "plugins/plugins.qbs",
         // "printsupport/printsupport.qbs",
         // "sql/sql.qbs",
-        "testlib/testlib.qbs",
         "tools/tools.qbs",
         // "widgets/widgets.qbs",
         "winmain/winmain.qbs",
