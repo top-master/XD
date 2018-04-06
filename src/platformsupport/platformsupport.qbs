@@ -5,7 +5,7 @@ Project {
         "accessibility",
         "clipboard",
         "devicediscovery",
-        // "edid",
+        "edid",
         "eglconvenience",
         "eventdispatchers",
         "fbconvenience",

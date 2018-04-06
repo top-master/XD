@@ -37,6 +37,7 @@ QtModuleProject {
 
         Depends { name: "Qt.core-private" }
         Depends { name: "Qt.gui-private" }
+        Depends { name: "Qt.edid_support-private" }
         Depends { name: "Qt.eventdispatcher_support-private" }
         Depends { name: "Qt.fontdatabase_support-private" }
         Depends { name: "Qt.service_support-private" }
