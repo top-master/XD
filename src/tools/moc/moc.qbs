@@ -55,7 +55,7 @@ QtHostTool {
             inputs: ["objcpp", "cpp", "hpp"]
             explicitlyDependsOn: ["qt.moc-tool"]
             auxiliaryInputs: ["qt_plugin_metadata"]
-            excludedAuxiliaryInputs: ["unmocable"]
+            excludedInputs: ["unmocable"]
             outputFileTags: ["hpp", "cpp", "moc_cpp", "unmocable"]
             outputArtifacts: {
                 if (input.fileTags.contains("unmocable"))
