@@ -20,6 +20,7 @@ Product {
     property string mkspecModule: QtUtils.qmakeMkspecToQbsModule(mkspec)
     property string hostProfile: "qt_hostProfile"
     property string targetProfile: "qt_targetProfile"
+    qbs.profile: hostBuild ? hostProfile : targetProfile    // for aggregate products
     qbs.profiles: [hostBuild ? hostProfile : targetProfile]
 
     aggregate: {
