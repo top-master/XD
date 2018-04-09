@@ -37,7 +37,6 @@ Project {
                 "HAVE_CONFIG_H",
                 "HB_NO_UNICODE_FUNCS",
                 "HB_DISABLE_DEPRECATED",
-                "HB_NDEBUG",
                 "HB_EXTERN=",
                 "HAVE_ATEXIT",
                 "QT_NO_VERSION_TAGGING",
