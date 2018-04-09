@@ -946,8 +946,11 @@ defineTest(qtConfOutput_qbsMultiplexCfg) {
         "function getToolchain(qmakeToolchain, qmakePlatform) {" \
         "    if (qmakePlatform.contains('mingw'))" \
         "        return 'mingw';" \
-        "    if (qmakeToolchain.contains('clang'))" \
+        "    if (qmakeToolchain.contains('clang')) {" \
+        "        if (qmakePlatform.contains('darwin'))" \
+        "            return 'xcode';" \
         "        return 'clang';" \
+        "    }" \
         "    return qmakeToolchain[0];" \
         "}" \
         "function getToolchainInstallPath(qmakeTcInstallPath, qmakeTcPrefix) {" \
