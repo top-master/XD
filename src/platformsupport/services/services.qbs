@@ -5,8 +5,9 @@ QtModuleProject {
     name: "QtServiceSupport"
     simpleName: "service_support"
     internal: true
-    condition: (qbs.targetOS.contains("unix") && !qbs.targetOS.contains("darwin"))
-        || QtGuiPrivateConfig.xcb
+    conditionFunction: (function(qbs) {
+        return (qbs.targetOS.contains("unix") && !qbs.targetOS.contains("darwin"))
+            || QtGuiPrivateConfig.xcb; })
     qbsSearchPaths: [project.qtbaseShadowDir + "/src/gui/qbs"]
 
     QtHeaders {
