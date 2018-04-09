@@ -2,7 +2,7 @@ import qbs
 
 Product {
     name: project.privateName
-    condition: project.conditionFunction()
+    condition: project.conditionFunction(qbs)
 
     Depends { name: "Qt.global" }
 

@@ -4,7 +4,7 @@ import qbs.FileInfo
 Product {
     name: project.headersName
     type: ["hpp_private", "hpp_public", "hpp_forwarding", "hpp_module", "hpp_qpa", "hpp_depends", "hpp"]
-    condition: project.conditionFunction()
+    condition: project.conditionFunction(qbs)
     property bool install: true
 
     Depends { name: "Qt.global" }

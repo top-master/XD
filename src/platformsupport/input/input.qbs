@@ -5,7 +5,7 @@ QtModuleProject {
     name: "QtInputSupport"
     simpleName: "input_support"
     internal: true
-    conditionFunction: (function() {
+    conditionFunction: (function(qbs) {
         return (QtGuiPrivateConfig.freetype || qbs.targetOS.contains("windows")
                 || qbs.targetOS.contains("darwin"))
             && (QtGuiPrivateConfig.tslib || QtGuiPrivateConfig.evdev

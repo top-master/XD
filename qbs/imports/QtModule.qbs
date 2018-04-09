@@ -8,7 +8,7 @@ QtProduct {
     type: [project.internal || Qt.global.config.staticBuild
            ? "staticlibrary" : "dynamiclibrary"]
     version: project.version
-    condition: project.conditionFunction()
+    condition: project.conditionFunction(qbs)
 
     property string simpleName: project.simpleName
     property string upperCaseSimpleName: simpleName.toUpperCase()

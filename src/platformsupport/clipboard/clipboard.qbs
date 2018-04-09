@@ -4,7 +4,7 @@ QtModuleProject {
     name: "QtClipboardSupport"
     simpleName: "clipboard_support"
     internal: true
-    conditionFunction: (function() {
+    conditionFunction: (function(qbs) {
         return qbs.targetOS.contains("darwin");
     })
 

@@ -5,7 +5,7 @@ QtModuleProject {
     name: "QtFontDatabaseSupport"
     simpleName: "fontdatabase_support"
     internal: true
-    conditionFunction: (function() {
+    conditionFunction: (function(qbs) {
         return QtGuiPrivateConfig.freetype || qbs.targetOS.contains("windows") || qbs.targetOS.contains("darwin");
     })
 
