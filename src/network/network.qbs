@@ -25,6 +25,7 @@ QtModuleProject {
         qbsSearchPaths: [project.qtbaseShadowDir + "/src/network/qbs"]
 
         Export {
+            property var config: QtNetworkConfig
             Depends { name: "cpp" }
             Depends { name: "Qt.core" }
             cpp.includePaths: project.publicIncludePaths
