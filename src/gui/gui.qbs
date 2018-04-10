@@ -10,6 +10,9 @@ QtModuleProject {
     })
 
     QtHeaders {
+        sync.classNames: ({
+            "qevent.h": ["QtEvents"],
+        })
         shadowBuildFiles:[
             project.qtbaseShadowDir + "/src/gui/qtgui-config.h",
             project.qtbaseShadowDir + "/src/gui/qtgui-config_p.h",
