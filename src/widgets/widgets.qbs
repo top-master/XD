@@ -73,7 +73,7 @@ QtModuleProject {
         }
 
         Properties {
-            condition: qbs.toolchain.contains("msvc")
+            condition: qbs.toolchain.contains("msvc") && qbs.architecture === "x86"
             cpp.linkerFlags: base.concat("/BASE:0x65000000")
         }
         SrcKernel { }
