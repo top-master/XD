@@ -27,6 +27,9 @@ QtModuleProject {
     }
 
     QtPrivateModule {
+        Export {
+            property var config: QtWidgetsPrivateConfig
+        }
     }
 
     QtModule {

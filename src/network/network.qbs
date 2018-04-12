@@ -19,6 +19,9 @@ QtModuleProject {
     }
 
     QtPrivateModule {
+        Export {
+            property var config: QtNetworkPrivateConfig
+        }
     }
 
     QtModule {
