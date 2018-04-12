@@ -12,6 +12,10 @@ Product {
     Depends { name: "sync" }
     sync.module: project.name
 
+    multiplexByQbsProperties: ["profiles"]
+    qbs.profiles: ["qt_targetProfile"]
+    aggregate: false
+
     Group {
         fileTagsFilter: ["hpp_public", "hpp_forwarding", "hpp_module", "hpp_depends"]
         qbs.install: product.install
