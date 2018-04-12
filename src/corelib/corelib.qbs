@@ -188,11 +188,6 @@ QtModuleProject {
         }
         cpp.includePaths: project.includePaths.concat([".", "../3rdparty/harfbuzz/src"]).concat(base)
 
-        Properties {
-            condition: qbs.toolchain.contains("mingw")
-            cpp.minimumWindowsVersion: "6.0"
-        }
-
         cpp.linkerFlags: base.concat(elfInterpreterProbe.found ? ["-e", "qt_core_boilerplate"] : [])
 
         Probe {

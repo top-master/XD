@@ -56,6 +56,11 @@ Product {
         Android.ndk.appStl: "gnustl_shared"
     }
 
+    Properties {
+        condition: qbs.toolchain.contains("mingw")
+        cpp.minimumWindowsVersion: "6.1"
+    }
+
 // TODO: This belongs into the top-level mkspec module
     cpp.cxxLanguageVersion: {
         if (hostBuild)

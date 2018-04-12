@@ -63,10 +63,6 @@ QtModuleProject {
             return frameworks;
         }
 
-        Properties {
-            condition: qbs.targetOS.contains("windows") && !product.targetsUWP
-            cpp.defines: outer.concat("WINVER=0x0600", "_WIN32_WINNT=0x0600")
-        }
         cpp.defines: base.concat(["QT_NO_USING_NAMESPACE", "QT_NO_FOREACH"])
 
         Depends { name: "moc" }

@@ -44,12 +44,8 @@ QtModuleProject {
         Depends { name: "Qt.gui_private" }
         Depends { name: "uic" }
         Depends { name: project.headersName }
-        cpp.defines: {
-            var result = base.concat(["QT_NO_USING_NAMESPACE"]);
-            if (qbs.toolchain.contains("mingw"))
-                result.push("WINVER=0x600", "_WIN32_WINNT=0x0600");
-            return result;
-        }
+
+        cpp.defines: base.concat(["QT_NO_USING_NAMESPACE"])
         cpp.includePaths: {
             var v = project.includePaths.concat(base);
             if (qbs.targetOS.contains("windows"))
