@@ -1,26 +1,25 @@
 import qbs
-import QtGlobalPrivateConfig
 
 QtPlugin {
     name: "qcocoa"
-    condition: qbs.targetOS.contains("macos") && QtGlobalPrivateConfig.gui
+    condition: qbs.targetOS.contains("macos") && Qt.global.privateConfig.gui
     pluginType: "platforms"
     pluginClassName: "QCocoaIntegrationPlugin"
-    qbsSearchPaths: [project.qtbaseShadowDir + "/src/gui/qbs"]
 
     Depends { name: "Qt.core_private" }
     Depends { name: "Qt.gui_private" }
-    Depends { name: "Qt.widgets_private"; condition: QtGlobalPrivateConfig.widgets }
-    Depends { name: "Qt.printsupport_private"; condition: QtGlobalPrivateConfig.widgets }
+    Depends { name: "Qt.widgets"; condition: Qt.global.privateConfig.widgets }
+    Depends { name: "Qt.widgets_private"; condition: Qt.global.privateConfig.widgets }
+    Depends { name: "Qt.printsupport_private"; condition: Qt.global.privateConfig.widgets }
     Depends { name: "Qt.accessibility_support_private" }
     Depends { name: "Qt.clipboard_support_private" }
     Depends { name: "Qt.theme_support_private" }
     Depends { name: "Qt.fontdatabase_support_private" }
     Depends { name: "Qt.graphics_support_private" }
-    Depends { name: "Qt.cgl_support_private" }
 
+    cpp.includePaths: base.concat(".")
     cpp.requireAppExtensionSafeApi: false
-    cpp.frameworks: ["AppKit", "Carbon", "IOKit"]
+    cpp.frameworks: ["AppKit", "Carbon", "IOKit", "QuartzCore", "OpenGL"]
     cpp.dynamicLibraries: ["cups"]
     cpp.defines: base.filter(function(d) { return d !== "QT_NO_FOREACH" })
     files: [
@@ -40,18 +39,12 @@ QtPlugin {
         "qcocoabackingstore.mm",
         "qcocoaclipboard.h",
         "qcocoaclipboard.mm",
-        "qcocoacolordialoghelper.h",
-        "qcocoacolordialoghelper.mm",
         "qcocoacursor.h",
         "qcocoacursor.mm",
         "qcocoadrag.h",
         "qcocoadrag.mm",
         "qcocoaeventdispatcher.h",
         "qcocoaeventdispatcher.mm",
-        "qcocoafiledialoghelper.h",
-        "qcocoafiledialoghelper.mm",
-        "qcocoafontdialoghelper.h",
-        "qcocoafontdialoghelper.mm",
         "qcocoahelpers.h",
         "qcocoahelpers.mm",
         "qcocoainputcontext.h",
@@ -74,7 +67,11 @@ QtPlugin {
         "qcocoamimetypes.mm",
         "qcocoanativeinterface.h",
         "qcocoanativeinterface.mm",
+        "qcocoansmenu.h",
+        "qcocoansmenu.mm",
         "qcocoaresources.qrc",
+        "qcocoascreen.h",
+        "qcocoascreen.mm",
         "qcocoaservices.h",
         "qcocoaservices.mm",
         "qcocoasystemsettings.h",
@@ -92,18 +89,20 @@ QtPlugin {
         "qnsview.h",
         "qnsview.mm",
         "qnsviewaccessibility.mm",
+        "qnswindow.h",
+        "qnswindow.mm",
         "qnswindowdelegate.h",
         "qnswindowdelegate.mm",
     ]
     Group {
-        condition: QtGuiConfig.opengl
+        condition: Qt.gui.config.opengl
         files: [
             "qcocoaglcontext.h",
             "qcocoaglcontext.mm",
         ]
     }
     Group {
-        condition: QtGlobalPrivateConfig.widgets
+        condition: Qt.global.privateConfig.widgets
         files: [
             "qcocoaprintdevice.h",
             "qcocoaprintdevice.mm",
@@ -114,6 +113,28 @@ QtPlugin {
             "qprintengine_mac.mm",
             "qprintengine_mac_p.h",
         ]
+
+        Group {
+            condition: Qt.global.privateConfig.widgets && Qt.widgets.config.colordialog
+            files: [
+                "qcocoacolordialoghelper.h",
+                "qcocoacolordialoghelper.mm",
+            ]
+        }
+        Group {
+            condition: Qt.global.privateConfig.widgets && Qt.widgets.config.filedialog
+            files: [
+                "qcocoafiledialoghelper.h",
+                "qcocoafiledialoghelper.mm",
+            ]
+        }
+        Group {
+            condition: Qt.global.privateConfig.widgets && Qt.widgets.config.fontdialog
+            files: [
+                "qcocoafontdialoghelper.h",
+                "qcocoafontdialoghelper.mm",
+            ]
+        }
     }
     /*
         !equals(TARGET, $$QT_DEFAULT_QPA_PLUGIN): PLUGIN_EXTENDS = -
