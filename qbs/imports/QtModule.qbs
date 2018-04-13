@@ -42,6 +42,36 @@ QtProduct {
         qbs.installDir: moduleInstallDir
     }
 
+    property path actualProjectSourceDirectory: FileInfo.path(project.qtbaseQbsFilePath)
+    Group {
+        property path productRelativeShadowDirPath:
+            FileInfo.joinPaths(project.qtbaseShadowDir,
+                               FileInfo.relativePath(
+                                          actualProjectSourceDirectory, sourceDirectory));
+
+        files: [
+            productRelativeShadowDirPath + "/qbs/imports/**/*.qbs",
+            productRelativeShadowDirPath + "/qbs/imports/**/*.js",
+        ]
+        qbs.install: true
+        qbs.installSourceBase: productRelativeShadowDirPath + "/qbs/imports/"
+        qbs.installDir: "lib/qbs/imports"
+    }
+    Group {
+        files: [
+            actualProjectSourceDirectory + "/qbs/imports/**/*.qbs",
+            actualProjectSourceDirectory + "/qbs/imports/**/*.js",
+            actualProjectSourceDirectory + "/qbs/imports/*.qbs",
+            actualProjectSourceDirectory + "/qbs/imports/*.js",
+            actualProjectSourceDirectory + "/qbs/modules/**/*.qbs",
+            actualProjectSourceDirectory + "/qbs/modules/**/*.js",
+        ]
+        qbs.install: true
+        qbs.installSourceBase: actualProjectSourceDirectory + "/qbs/"
+        qbs.installDir: "lib/qbs"
+    }
+
+
 // TODO: Create libtool files; see qt_module.prf and qmake source code
 
     cpp.useCxxPrecompiledHeader: Qt.global.privateConfig.precompile_header

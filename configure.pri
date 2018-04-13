@@ -907,7 +907,8 @@ defineTest(qtConfOutput_qbsMetaProject) {
         "import qbs" \
         "Project {" \
         "    qbsSearchPaths: [\"$$searchPath\"]" \
-        "    references: [\"$$qtbaseQbsFile\"]" \
+        "    property path qtbaseQbsFilePath: \"$$qtbaseQbsFile\"" \
+        "    references: [qtbaseQbsFilePath]" \
         "}"
 
     $${currentConfig}.output.qbsMetaProject += $$contents
