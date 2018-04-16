@@ -71,6 +71,12 @@ QtModuleProject {
         Depends { name: project.headersName }
         Depends { name: "Qt.core_private" }
 
+        Group {
+            files: ["dbus.js"]
+            qbs.install: true
+            qbs.installDir: moduleInstallDir
+        }
+
         cpp.enableExceptions: true
         cpp.includePaths: project.includePaths.concat(base)
         cpp.defines: {

@@ -35,10 +35,11 @@ QtProduct {
         condition: createQbsModule
         Exporter.qbs.fileName: simpleName + ".qbs"
     }
+    property string moduleInstallDir: FileInfo.joinPaths("lib/qbs/modules/Qt", simpleName)
     Group {
         fileTagsFilter: ["Exporter.qbs.module"]
         qbs.install: true
-        qbs.installDir: FileInfo.joinPaths("lib/qbs/modules/Qt", simpleName)
+        qbs.installDir: moduleInstallDir
     }
 
 // TODO: Create libtool files; see qt_module.prf and qmake source code
