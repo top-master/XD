@@ -1,4 +1,5 @@
 import qbs
+import qbs.FileInfo
 
 CppApplication {
     property string description     // TODO: Generate a Windows resource, and set this description.
@@ -23,6 +24,15 @@ CppApplication {
     Depends { name: "Qt.bootstrap_private"; condition: useBootstrapLib }
     Depends { name: "Qt.core"; condition: !useBootstrapLib }
     Depends { name: "osversions" }
+
+    property bool createQbsModule: false
+    Depends { name: "Exporter.qbs"; condition: createQbsModule }
+    property string moduleInstallDir: FileInfo.joinPaths("lib", "qbs", "modules", name)
+    Group {
+        fileTagsFilter: ["Exporter.qbs.module"]
+        qbs.install: true
+        qbs.installDir: moduleInstallDir
+    }
 
     Properties {
         condition: qbs.toolchain.contains("gcc") && Qt.global.config.rpath && !useBootstrapLib

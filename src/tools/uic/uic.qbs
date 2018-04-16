@@ -9,6 +9,7 @@ QtHostTool {
     condition: Qt.global.privateConfig.gui && Qt.global.privateConfig.widgets
     qbsSearchPaths: [project.qtbaseShadowDir + "/src/corelib/qbs"]
 
+    createQbsModule: true
     useBootstrapLib: base || !QtCoreConfig.commandlineparser || !QtCoreConfig.textcodec
         || !QtCoreConfig.xmlstreamreader || !QtCoreConfig.xmlstreamwriter
     Depends { name: "Qt.bootstrap_private"; condition: useBootstrapLib }

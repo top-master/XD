@@ -7,6 +7,7 @@ QtHostTool {
     toolFileTag: "qt.qdbuscpp2xml-tool"
     qbsSearchPaths: [project.qtbaseShadowDir + "/src/corelib/qbs"]
 
+    createQbsModule: true
     useBootstrapLib: base || !QtCoreConfig.commandlineparser
     Depends { name: "Qt.bootstrap_dbus_private"; condition: useBootstrapLib }
     Depends { name: "Qt.core_private"; condition: !useBootstrapLib }

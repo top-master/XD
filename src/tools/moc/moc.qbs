@@ -1,10 +1,10 @@
 import qbs
-import qbs.FileInfo
 import "moc.js" as Moc
 
 QtHostTool {
     description: "Qt Meta Object Compiler"
     toolFileTag: "qt.moc-tool"
+    createQbsModule: true
     useBootstrapLib: true
 
     Depends { name: "QtCoreHeaders" }
@@ -31,15 +31,6 @@ QtHostTool {
         ]
     }
 
-    Depends { name: "Exporter.qbs" }
-    property string moduleInstallDir: FileInfo.joinPaths("lib", "qbs", "modules", name)
-    Group {
-        fileTagsFilter: ["Exporter.qbs.module"]
-        qbs.install: true
-        qbs.installDir: moduleInstallDir
-        // ### Excercise for the interested reader: Why does the following line yield the weirdest error?
-        // qbs.installPrefix: hey_ho_lets_go
-    }
     Group {
         files: ["moc.js"]
         qbs.install: true
