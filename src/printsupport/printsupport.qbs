@@ -1,10 +1,14 @@
 import qbs
+import QtGlobalPrivateConfig
 import QtPrintsupportConfig
 import QtPrintsupportPrivateConfig
 
 QtModuleProject {
     name: "QtPrintSupport"
     simpleName: "printsupport"
+    conditionFunction: (function() {
+        return QtGlobalPrivateConfig.widgets;
+    })
 
     QtHeaders {
         shadowBuildFiles:[
