@@ -19,7 +19,7 @@ Project {
         // "android/android.qbs",
         "concurrent/concurrent.qbs",
         "dbus/dbus.qbs",
-        // "opengl/opengl.qbs",
+        "opengl",
         // "openglextensions/openglextensions.qbs",
         "platformheaders/platformheaders.qbs",
         "platformsupport/platformsupport.qbs",

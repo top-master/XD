@@ -1,8 +1,9 @@
 import qbs
+import QtGuiConfig
 
 // TODO See the unix/opengl.prf and win32/opengl.prf and the mkspecs.
 Module {
-    property bool gles2: false
+    property bool gles2: QtGuiConfig.opengles2
     Depends { name: "cpp" }
     Properties {
         condition: qbs.targetOS.contains("windows") && !gles2

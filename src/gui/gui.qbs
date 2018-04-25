@@ -41,7 +41,6 @@ QtModuleProject {
         Depends { name: "qt_zlib" }
         Depends { name: "cpufeatures" }
         Depends { name: "opengl" }
-        opengl.gles2: QtGuiConfig.opengles2
 
         cpp.enableExceptions: true
         cpp.includePaths: project.includePaths.concat(base)
