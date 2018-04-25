@@ -20,7 +20,7 @@ Project {
         "concurrent/concurrent.qbs",
         "dbus/dbus.qbs",
         "opengl",
-        // "openglextensions/openglextensions.qbs",
+        "openglextensions",
         "platformheaders/platformheaders.qbs",
         "platformsupport/platformsupport.qbs",
         "plugins/plugins.qbs",
