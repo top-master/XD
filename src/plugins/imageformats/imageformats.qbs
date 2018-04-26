@@ -5,7 +5,7 @@ Project {
     condition: QtGuiConfig.imageformatplugin
     references: [
         "gif",
-        // "ico",
+        "ico",
         // "jpeg",
     ]
 }
