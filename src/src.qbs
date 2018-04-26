@@ -8,6 +8,7 @@ Project {
         "gui",
         "network",
         "printsupport",
+        "sql",
         "testlib",
         "widgets",
     ]
@@ -24,7 +25,6 @@ Project {
         "platformheaders/platformheaders.qbs",
         "platformsupport/platformsupport.qbs",
         "plugins/plugins.qbs",
-        // "sql/sql.qbs",
         "tools/tools.qbs",
         "winmain/winmain.qbs",
         "xml/xml.qbs",
