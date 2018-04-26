@@ -22,7 +22,7 @@ Project {
         "iaccessible2",
         // "ice.qbs",
         // "libdrm.qbs",
-        // "libjpeg/libjpeg.qbs",
+        "libjpeg/libjpeg.qbs",
         "libpng/libpng.qbs",
         // "libinput.qbs",
         // "libudev.qbs",

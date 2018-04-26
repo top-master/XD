@@ -6,6 +6,6 @@ Project {
     references: [
         "gif",
         "ico",
-        // "jpeg",
+        "jpeg",
     ]
 }
