@@ -4,10 +4,10 @@ Project {
     references: [
         // sqldrivers
         // bearer
+        "imageformats",
         "platforms",
         // platforminputcontexts
         // platformthemes
-        // imageformats
         // generic
     ]
 }
