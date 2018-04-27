@@ -33,6 +33,10 @@ QtModuleProject {
             property var config: QtGuiConfig
             Depends { name: "cpp" }
             Depends { name: "Qt.core" }
+            Depends {
+                name: "QtANGLE"
+                condition: QtGuiConfig.angle
+            }
             cpp.includePaths: project.publicIncludePaths
         }
 
@@ -41,6 +45,10 @@ QtModuleProject {
         Depends { name: "qt_zlib" }
         Depends { name: "cpufeatures" }
         Depends { name: "opengl" }
+        Depends {
+            name: "QtANGLE"
+            condition: QtGuiConfig.angle
+        }
 
         cpp.enableExceptions: true
         cpp.includePaths: project.includePaths.concat(base)
@@ -94,7 +102,7 @@ QtModuleProject {
         }
         Properties {
             condition: qbs.targetOS.contains("windows") && !product.targetsUWP
-            cpp.dynamicLibraries: ["ole32", "gdi32"]
+            cpp.dynamicLibraries: ["ole32", "gdi32", "user32"]
         }
 
         Group {

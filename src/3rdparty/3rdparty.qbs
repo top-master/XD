@@ -3,10 +3,10 @@ import qbs
 Project {
     name: "3rdparty"
     references: [
+        "../angle/angle.qbs",
         "double-conversion.qbs",
         "pcre2.qbs",
         "zlib.qbs",
-        // "../angle/angle.qbs",
         // "dbus-linked.qbs",
         // "egl.qbs",
         // "fontconfig.qbs",

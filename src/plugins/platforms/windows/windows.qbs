@@ -99,7 +99,7 @@ QtPlugin {
         "windows.json",
     ]
     Group {
-        condition: Qt.gui.config.opengl
+        condition: Qt.gui.config.opengl && !Qt.gui.config.dynamicgl && !Qt.gui.config.opengles2
         files: [
             "qwindowsglcontext.cpp",
             "qwindowsglcontext.h",

@@ -24,6 +24,7 @@ QtModuleProject {
 
         Depends { name: project.headersName }
         Depends { name: "opengl" }
+        Depends { name: "Qt.gui" }
 
         cpp.includePaths: project.includePaths.concat(base)
         cpp.defines: base.concat([

@@ -15,6 +15,7 @@ Project {
     }
     property bool isShadowBuild: path !== qtbaseShadowDir
     property string configPath: qtbaseShadowDir + "/src/corelib/global" // TODO: try to get rid of this
+    property string gnuwin32Dir: FileInfo.cleanPath(path + "/../gnuwin32")
     qbsSearchPaths: ["qbs", qtbaseShadowDir + "/qbs"]
 
     property bool debugAndRelease: QtMultiplexConfig.debug_and_release
