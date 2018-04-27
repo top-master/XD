@@ -18,15 +18,15 @@ Module {
         }
         return classFileNames;
     }
+    property bool minimal: false
 
     FileTagger {
         patterns: ["*.h"]
         fileTags: ["hpp_syncable"]
     }
 
-// TODO: Support -minimal equivalent (no camel case headers)
-
     Rule {
+        condition: !product.sync.minimal
         multiplex: true
         Artifact {
             filePath: product.sync.module.toLowerCase() + "version.h"
@@ -95,164 +95,166 @@ Module {
                 }];
             }
 
-            // regular expressions used in parsing
-            var reFwdDecl = /^(class|struct) +(\w+);$/;
-            var reTypedefFn = /^typedef *.*\(\*(Q[^\)]*)\)\(.*\);$/;
-            var reTypedef = /^typedef +(unsigned )?([^ ]*)(<[\w, *]+>)? +(Q[^ ]*);$/;
-            var reQtMacro = / ?Q_[A-Z_]+/;
-            var reDecl = /^(template <class [\w, ]+> )?(class|struct) +(\w+)( ?:)?( ?public [\w<>:,* ]+)?( {)?$/;
-            var reIterator = /^Q_DECLARE_\w+ITERATOR\((\w+)\)$/;
-            var reNamespace = /^namespace \w+( {)?/; //extern "C" could go here too
-
             var classes = [];
-            var excludeFromModuleInclude
+            if (!product.sync.minimal) {
+                // regular expressions used in parsing
+                var reFwdDecl = /^(class|struct) +(\w+);$/;
+                var reTypedefFn = /^typedef *.*\(\*(Q[^\)]*)\)\(.*\);$/;
+                var reTypedef = /^typedef +(unsigned )?([^ ]*)(<[\w, *]+>)? +(Q[^ ]*);$/;
+                var reQtMacro = / ?Q_[A-Z_]+/;
+                var reDecl = /^(template <class [\w, ]+> )?(class|struct) +(\w+)( ?:)?( ?public [\w<>:,* ]+)?( {)?$/;
+                var reIterator = /^Q_DECLARE_\w+ITERATOR\((\w+)\)$/;
+                var reNamespace = /^namespace \w+( {)?/; //extern "C" could go here too
+
+                var excludeFromModuleInclude
                     = input.fileName.contains("_") || input.fileName.contains("qconfig");
 
-            var insideQt = false;
+                var insideQt = false;
 
-            var file = new TextFile(input.filePath, TextFile.ReadOnly);
-            var line = "";
-            var braceDepth = 0;
-            var namespaceDepth = -1;
-            var lineCount = 0; // for debugging
-            while (!file.atEof()) {
-                if (!line.length) {
-                    line = file.readLine();
-                    ++lineCount;
-                }
-
-                // Remove C comments ### allow starting within a line
-                if (line.startsWith("/*")) {
-                    while (!file.atEof()) {
-                        var commentEnd = line.indexOf("*/");
-                        if (commentEnd >= 0) {
-                            line = line.substring(commentEnd + 2);
-                            break;
-                        }
+                var file = new TextFile(input.filePath, TextFile.ReadOnly);
+                var line = "";
+                var braceDepth = 0;
+                var namespaceDepth = -1;
+                var lineCount = 0; // for debugging
+                while (!file.atEof()) {
+                    if (!line.length) {
                         line = file.readLine();
                         ++lineCount;
                     }
-                    continue;
-                }
 
-                // remove C++ comments
-                line = line.replace(/ +\/\/.*$/, '');
-                if (line.length == 0)
-                    continue;
-
-                if (line.startsWith("#")) {
-                    if (line == "#pragma qt_sync_stop_processing")
-                        break;
-
-                    if (line == "#pragma qt_no_master_include") {
-                        excludeFromModuleInclude = true;
-                        line = "";
-                        continue;
-                    }
-
-                    if (/#pragma qt_class\(([^)]*)\)$/.test(line)) {
-                        classes.push(line.match(/#pragma qt_class\(([^)]*)\)$/)[1]);
-                        line = "";
-                        continue;
-                    }
-
-                    // Drop remaining preprocessor commands
-                    while (!file.atEof()) {
-                        if (line.endsWith("\\")) {
+                    // Remove C comments ### allow starting within a line
+                    if (line.startsWith("/*")) {
+                        while (!file.atEof()) {
+                            var commentEnd = line.indexOf("*/");
+                            if (commentEnd >= 0) {
+                                line = line.substring(commentEnd + 2);
+                                break;
+                            }
                             line = file.readLine();
                             ++lineCount;
+                        }
+                        continue;
+                    }
+
+                    // remove C++ comments
+                    line = line.replace(/ +\/\/.*$/, '');
+                    if (line.length == 0)
+                        continue;
+
+                    if (line.startsWith("#")) {
+                        if (line == "#pragma qt_sync_stop_processing")
+                            break;
+
+                        if (line == "#pragma qt_no_master_include") {
+                            excludeFromModuleInclude = true;
+                            line = "";
                             continue;
                         }
-                        line = "";
-                        break;
+
+                        if (/#pragma qt_class\(([^)]*)\)$/.test(line)) {
+                            classes.push(line.match(/#pragma qt_class\(([^)]*)\)$/)[1]);
+                            line = "";
+                            continue;
+                        }
+
+                        // Drop remaining preprocessor commands
+                        while (!file.atEof()) {
+                            if (line.endsWith("\\")) {
+                                line = file.readLine();
+                                ++lineCount;
+                                continue;
+                            }
+                            line = "";
+                            break;
+                        }
+                        continue;
                     }
-                    continue;
-                }
 
-                // Track brace depth
-                var openingBraces = line.match(/\{/g) || [];
-                var closingBraces = line.match(/\}/g) || [];
-                braceDepth += openingBraces.length - closingBraces.length;
-                if (braceDepth < 0)
-                    throw "Error in parsing header " + input.filePath + ", line " + lineCount + ": brace depth fell below 0.";
+                    // Track brace depth
+                    var openingBraces = line.match(/\{/g) || [];
+                    var closingBraces = line.match(/\}/g) || [];
+                    braceDepth += openingBraces.length - closingBraces.length;
+                    if (braceDepth < 0)
+                        throw "Error in parsing header " + input.filePath + ", line " + lineCount + ": brace depth fell below 0.";
 
-                // We only are interested in classes inside the namespace
-                if (line == "QT_BEGIN_NAMESPACE") {
-                    insideQt = true;
+                    // We only are interested in classes inside the namespace
+                    if (line == "QT_BEGIN_NAMESPACE") {
+                        insideQt = true;
+                        line = "";
+                        continue;
+                    }
+
+                    if (!insideQt) {
+                        line = "";
+                        continue;
+                    }
+
+                    // Ignore internal namespaces
+                    if (namespaceDepth >= 0 && braceDepth >= namespaceDepth) {
+                        line = "";
+                        continue;
+                    }
+
+                    if (reNamespace.test(line)) {
+                        namespaceDepth = braceDepth;
+                        if (!line.endsWith("{"))
+                            namespaceDepth += 1;
+                        line = "";
+                        continue;
+                    } else {
+                        namespaceDepth = -1;
+                    }
+
+                    if (line == "QT_END_NAMESPACE") {
+                        insideQt = false;
+                        line = "";
+                        continue;
+                    }
+
+                    // grab iterators
+                    if (reIterator.test(line)) {
+                        var className = "Q";
+                        if (line.contains("MUTABLE"))
+                            className += "Mutable";
+                        className += line.match(reIterator)[1] + "Iterator";
+                        classes.push(className);
+                        line = "";
+                        continue;
+                    }
+
+                    // make parsing easier by removing noise
+                    line = line.replace(reQtMacro, "");
+
+                    // ignore forward declarations ### decide if this is needed (that is, if is really a false positive)
+                    if (reFwdDecl.test(line)) {
+                        line = "";
+                        continue;
+                    }
+
+                    // accept typedefs
+                    if (reTypedefFn.test(line)) {
+                        classes.push(line.match(reTypedefFn)[1]);
+                        line = "";
+                        continue;
+                    }
+
+                    if (reTypedef.test(line)) {
+                        classes.push(line.match(reTypedef)[4]);
+                        line = "";
+                        continue;
+                    }
+
+                    // grab classes
+                    if (reDecl.test(line)) {
+                        classes.push(line.match(reDecl)[3]);
+                        line = "";
+                        continue;
+                    }
+
                     line = "";
-                    continue;
                 }
-
-                if (!insideQt) {
-                    line = "";
-                    continue;
-                }
-
-                // Ignore internal namespaces
-                if (namespaceDepth >= 0 && braceDepth >= namespaceDepth) {
-                    line = "";
-                    continue;
-                }
-
-                if (reNamespace.test(line)) {
-                    namespaceDepth = braceDepth;
-                    if (!line.endsWith("{"))
-                        namespaceDepth += 1;
-                    line = "";
-                    continue;
-                } else {
-                    namespaceDepth = -1;
-                }
-
-                if (line == "QT_END_NAMESPACE") {
-                    insideQt = false;
-                    line = "";
-                    continue;
-                }
-
-                // grab iterators
-                if (reIterator.test(line)) {
-                    var className = "Q";
-                    if (line.contains("MUTABLE"))
-                        className += "Mutable";
-                    className += line.match(reIterator)[1] + "Iterator";
-                    classes.push(className);
-                    line = "";
-                    continue;
-                }
-
-                // make parsing easier by removing noise
-                line = line.replace(reQtMacro, "");
-
-                // ignore forward declarations ### decide if this is needed (that is, if is really a false positive)
-                if (reFwdDecl.test(line)) {
-                    line = "";
-                    continue;
-                }
-
-                // accept typedefs
-                if (reTypedefFn.test(line)) {
-                    classes.push(line.match(reTypedefFn)[1]);
-                    line = "";
-                    continue;
-                }
-
-                if (reTypedef.test(line)) {
-                    classes.push(line.match(reTypedef)[4]);
-                    line = "";
-                    continue;
-                }
-
-                // grab classes
-                if (reDecl.test(line)) {
-                    classes.push(line.match(reDecl)[3]);
-                    line = "";
-                    continue;
-                }
-
-                line = "";
+                file.close();
             }
-            file.close();
 
             var artifacts = [];
             var classFileNames = product.sync.classFileNames;
@@ -315,6 +317,7 @@ Module {
     }
 
     Rule {
+        condition: !product.sync.minimal
         inputsFromDependencies: ["hpp_module"]
         multiplex: true
         Artifact {
@@ -344,6 +347,7 @@ Module {
     }
 
     Rule {
+        condition: !product.sync.minimal
         inputs: ["hpp_module_input", "hpp_depends"]
         multiplex: true
         Artifact {
