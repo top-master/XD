@@ -2,6 +2,7 @@ import qbs
 import qbs.File
 import qbs.FileInfo
 import qbs.TextFile
+import QtGlobalPrivateConfig
 
 // This is a qbs rewrite of syncqt.pl
 Module {
@@ -290,8 +291,8 @@ Module {
         prepare: {
             var cmd = new JavaScriptCommand();
             cmd.description = "syncing " + input.fileName;
-            cmd.developerBuild = product.moduleProperty("configure", "private_tests");
             cmd.sourceCode = function() {
+                var developerBuild = QtGlobalPrivateConfig.private_tests;
                 for (var i in outputs.hpp_to_copy) {
                     var header = outputs.hpp_to_copy[i];
                     if (developerBuild) {
