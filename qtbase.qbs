@@ -81,6 +81,6 @@ Project {
     references: [
         // "examples/examples.qbs",
         "src/src.qbs",
-//        "tests",
+        "tests/tests.qbs",
     ]
 }
