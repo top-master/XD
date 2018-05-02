@@ -44,7 +44,7 @@ QtHostTool {
         Rule {
             name: "QtCoreMocRule"
             inputs: ["objcpp", "cpp", "hpp"]
-            explicitlyDependsOn: ["qt.moc-tool"]
+            explicitlyDependsOnFromDependencies: ["qt.moc-tool"]
             auxiliaryInputs: ["qt_plugin_metadata"]
             excludedInputs: ["unmocable"]
             outputFileTags: ["hpp", "cpp", "moc_cpp", "unmocable"]

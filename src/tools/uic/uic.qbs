@@ -29,7 +29,7 @@ QtHostTool {
 
         Rule {
             inputs: "uic"
-            explicitlyDependsOn: ["qt.uic-tool"]
+            explicitlyDependsOnFromDependencies: ["qt.uic-tool"]
             Artifact {
                 fileTags: "hpp"
                 filePath: FileInfo.joinPaths(input.Qt.core.generatedHeadersDir,

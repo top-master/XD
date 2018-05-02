@@ -30,7 +30,7 @@ QtModuleProject {
             Rule {
                 condition: _notInCycle
                 inputs: ["qt.dbus.adaptor"]
-                explicitlyDependsOn: ["qt.qdbusxml2cpp-tool"]
+                explicitlyDependsOnFromDependencies: ["qt.qdbusxml2cpp-tool"]
 
                 Artifact {
                     filePath: FileInfo.joinPaths(input.Qt.core.generatedHeadersDir,
@@ -50,7 +50,7 @@ QtModuleProject {
             Rule {
                 condition: _notInCycle
                 inputs: ["qt.dbus.interface"]
-                explicitlyDependsOn: ["qt.qdbusxml2cpp-tool"]
+                explicitlyDependsOnFromDependencies: ["qt.qdbusxml2cpp-tool"]
 
                 Artifact {
                     filePath: FileInfo.joinPaths(input.Qt.core.generatedHeadersDir,

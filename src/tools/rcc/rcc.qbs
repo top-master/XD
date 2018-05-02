@@ -27,7 +27,7 @@ QtHostTool {
     Export {
         Rule {
             inputs: ["rcc"]
-            explicitlyDependsOn: ["qt.rcc-tool"]
+            explicitlyDependsOnFromDependencies: ["qt.rcc-tool"]
             Artifact {
                 fileTags: "cpp"
                 filePath: product.buildDirectory + "/.rcc/" + input.baseName + "_rcc.cpp"
