@@ -7,7 +7,7 @@ Project {
         "imageformats",
         "platforms",
         // platforminputcontexts
-        // platformthemes
+        "platformthemes",
         // generic
     ]
 }
