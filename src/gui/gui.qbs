@@ -106,6 +106,10 @@ QtModuleProject {
             cpp.commonCompilerFlags: ["-Wa,-mbig-obj"]
         }
         Properties {
+            condition: qbs.targetOS.contains("windows") && product.targetsUWP
+            cpp.dynamicLibraries: ["WindowsApp"]
+        }
+        Properties {
             condition: qbs.targetOS.contains("windows") && !product.targetsUWP
             cpp.dynamicLibraries: ["ole32", "gdi32", "user32"]
         }

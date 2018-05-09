@@ -1,4 +1,5 @@
 import qbs
+import qbs.FileInfo
 
 Module {
     Depends { name: "cpp" }
@@ -21,5 +22,31 @@ Module {
             }
         }
         return flags;
+    }
+    property string windowsKitDir: cpp.buildEnv["WindowsSdkDir"]
+    property string windowsKitVersion: {
+        var s = cpp.buildEnv["WindowsSDKVersion"];
+        if (s)
+            return s.replace(/\\$/, "");
+        return undefined;
+    }
+    property string windowsKitIncludeDir: FileInfo.joinPaths(windowsKitDir,
+                                                             "Include", windowsKitVersion)
+    Properties {
+        condition: product.targetsUWP
+        cpp.windowsApiFamily: "pc"
+        cpp.includePaths: [
+            "shared",
+            "ucrt",
+            "um",
+            "winrt",
+        ].map(function(s) { return FileInfo.joinPaths(windowsKitIncludeDir, s); })
+    }
+    cpp.dynamicLibraries: {
+        var libs = [];
+        if (product.targetsUWP) {
+            libs.push("runtimeobject");
+        }
+        return libs;
     }
 }

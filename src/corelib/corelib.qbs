@@ -203,7 +203,7 @@ QtModuleProject {
                 dynamicLibraries.push("shell32");
                 dynamicLibraries.push("user32");
                 if (product.targetsUWP) {
-                    dynamicLibraries.push("runtimeobject");
+                    dynamicLibraries.push("ucrt", "OneCore", "WindowsApp");
                 } else {
                     dynamicLibraries.push("advapi32");
                     dynamicLibraries.push("mpr");

@@ -39,14 +39,13 @@ QtModuleProject {
         cpp.includePaths: project.includePaths.concat(base)
         cpp.dynamicLibraries: {
             var dynamicLibraries = [];
-            if (qbs.targetOS.contains("windows") && !product.targetsUWP) {
-                dynamicLibraries.push("advapi32");
-                dynamicLibraries.push("dnsapi");
-                dynamicLibraries.push("iphlpapi");
+            if (qbs.targetOS.contains("windows")) {
                 dynamicLibraries.push("ws2_32");
-            }
-            if (product.targetsUWP) {
-                dynamicLibraries.push("runtimeobject");
+                if (!product.targetsUWP) {
+                    dynamicLibraries.push("advapi32");
+                    dynamicLibraries.push("dnsapi");
+                    dynamicLibraries.push("iphlpapi");
+                }
             }
             if (QtNetworkPrivateConfig.libproxy) {
                 dynamicLibraries.push("proxy");
@@ -64,11 +63,13 @@ QtModuleProject {
             return frameworks;
         }
 
+        property bool useLocalSocketTCP: product.targetsUWP
         Properties {
             condition: QtNetworkConfig.opensslv11
             cpp.defines: outer.concat("OPENSSL_API_COMPAT=0x10100000L")
         }
-        cpp.defines: base.concat(["QT_NO_USING_NAMESPACE", "QT_NO_FOREACH"])
+        cpp.defines: base.concat(["QT_NO_USING_NAMESPACE", "QT_NO_FOREACH"],
+                                 useLocalSocketTCP ? ["QT_LOCALSOCKET_TCP"] : [])
 
         Depends { name: "moc" }
         Properties {
@@ -171,10 +172,6 @@ QtModuleProject {
             "socket/qabstractsocketengine_p.h",
             "socket/qhttpsocketengine.cpp",
             "socket/qhttpsocketengine_p.h",
-            "socket/qlocalserver.h",
-            "socket/qlocalserver_p.h",
-            "socket/qlocalsocket.h",
-            "socket/qlocalsocket_p.h",
             "socket/qsocks5socketengine.cpp",
             "socket/qsocks5socketengine_p.h",
             "socket/qtcpserver.cpp",
@@ -249,6 +246,15 @@ QtModuleProject {
         }
 
         Group {
+            name: "sources_!winrt"
+            condition: !product.targetsUWP
+            files: [
+                "socket/qnativesocketengine.cpp",
+                "socket/qnativesocketengine_p.h",
+            ]
+        }
+
+        Group {
             condition: QtNetworkConfig.networkdiskcache
             files: [
                 "access/qnetworkdiskcache.cpp",
@@ -268,17 +274,6 @@ QtModuleProject {
         Group {
             name: "Qt.core precompiled header"
             files: ["../corelib/global/qt_pch.h"]
-        }
-
-        Group {
-            name: "sources_!winrt"
-            condition: !product.targetsUWP
-            files: [
-                "socket/qlocalserver.cpp",
-                "socket/qlocalsocket.cpp",
-                "socket/qnativesocketengine.cpp",
-                "socket/qnativesocketengine_p.h",
-            ]
         }
 
         Group {
@@ -302,8 +297,6 @@ QtModuleProject {
             condition: qbs.targetOS.contains("unix")
             files: [
                 "kernel/qhostinfo_unix.cpp",
-                "socket/qlocalserver_unix.cpp",
-                "socket/qlocalsocket_unix.cpp",
                 "socket/qnativesocketengine_unix.cpp",
                 "socket/qnet_unix_p.h",
             ]
@@ -331,30 +324,63 @@ QtModuleProject {
 
         Group {
             name: "sources_windows"
-            condition: qbs.targetOS.contains("windows") && !product.targetsUWP
+            condition: qbs.targetOS.contains("windows")
             files: [
-                "kernel/qdnslookup_win.cpp",
                 "kernel/qhostinfo_win.cpp",
-                "kernel/qnetworkinterface_win.cpp",
-                "kernel/qnetworkproxy_win.cpp",
-                "socket/qlocalserver_win.cpp",
-                "socket/qlocalsocket_win.cpp",
-                "socket/qnativesocketengine_win.cpp",
             ]
+            Group {
+                condition: product.targetsUWP
+                files: [
+                    "kernel/qdnslookup_winrt.cpp",
+                    "kernel/qnetworkinterface_winrt.cpp",
+                    "kernel/qnetworkproxy_generic.cpp",
+                    "socket/qnativesocketengine_winrt.cpp",
+                    "socket/qnativesocketengine_winrt_p.h",
+                ]
+            }
+            Group {
+                condition: !product.targetsUWP
+                files: [
+                    "kernel/qdnslookup_win.cpp",
+                    "kernel/qnetworkinterface_win.cpp",
+                    "kernel/qnetworkproxy_win.cpp",
+                    "socket/qnativesocketengine_win.cpp",
+                ]
+            }
         }
 
         Group {
-            name: "sources_winrt"
-            condition: product.targetsUWP
+            condition: QtNetworkConfig.localserver
+            prefix: "socket/"
             files: [
-                "kernel/qdnslookup_winrt.cpp",
-                "kernel/qhostinfo_winrt.cpp",
-                "kernel/qnetworkinterface_winrt.cpp",
-                "socket/qnativesocketengine_winrt.cpp",
-                "ssl/qsslcertificate_winrt.cpp",
-                "ssl/qsslkey_winrt.cpp",
-                "ssl/qsslsocket_winrt.cpp",
+                "qlocalserver.cpp",
+                "qlocalserver.h",
+                "qlocalserver_p.h",
+                "qlocalsocket.cpp",
+                "qlocalsocket.h",
+                "qlocalsocket_p.h",
             ]
+            Group {
+                condition: product.useLocalSocketTCP
+                files: [
+                    "qlocalserver_tcp.cpp",
+                    "qlocalsocket_tcp.cpp",
+                ]
+            }
+            Group {
+                condition: qbs.targetOS.contains("windows") && !product.useLocalSocketTCP
+                files: [
+                    "qlocalserver_win.cpp",
+                    "qlocalsocket_win.cpp",
+                ]
+            }
+            Group {
+                condition: qbs.targetOS.contains("unix") && !product.useLocalSocketTCP
+                files: [
+                    "qlocalserver_unix.cpp",
+                    "qlocalsocket_unix.cpp",
+                ]
+            }
         }
 
         Group {

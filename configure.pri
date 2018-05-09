@@ -948,8 +948,13 @@ defineTest(gatherDataForQbsProfile) {
         qbsCompilerName = $$replace(QMAKE_CXX, $$CROSS_COMPILE, )$$ext
         qbsSysroot = $$[QT_SYSROOT]
     }
-    contains(flags, target_profile):isAbsolutePath($$CROSS_COMPILE) {
-        qbsToolchainInstallPath = $$dirname(CROSS_COMPILE)
+    contains(flags, target_profile) {
+        winrt {
+            # MSVC 2017 and above only. TODO: Support lower versions
+            qbsToolchainInstallPath = $$dirname(qbsToolchainInstallPath)/$$VCPROJ_ARCH
+        } else:isAbsolutePath($$CROSS_COMPILE) {
+            qbsToolchainInstallPath = $$dirname(CROSS_COMPILE)
+        }
     }
     export(qbsCompilerName)
     qbsPlatform = [$$jsList($$QMAKE_PLATFORM)]

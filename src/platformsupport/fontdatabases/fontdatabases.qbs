@@ -135,6 +135,7 @@ QtModuleProject {
         }
         Group {
             condition: product.targetsUWP
+            prefix: "winrt/"
             files: [
                 "qwinrtfontdatabase.cpp",
                 "qwinrtfontdatabase_p.h",
