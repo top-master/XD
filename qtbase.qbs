@@ -65,6 +65,8 @@ Project {
 
     Product {
         name: "extra installs"
+        multiplexByQbsProperties: ["profiles"]
+        qbs.profiles: ["qt_hostProfile"]
         Depends { name: "cpp" }
         Group {
             files: [
