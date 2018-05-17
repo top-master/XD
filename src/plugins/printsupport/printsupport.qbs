@@ -2,13 +2,12 @@ import qbs
 
 Project {
     references: [
-        // "cocoa",
+        "cocoa",
         "cups",
         // "windows",
     ]
 }
 
 /*
-osx:   SUBDIRS += cocoa
 win32: SUBDIRS += windows
 */
