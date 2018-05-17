@@ -4,10 +4,6 @@ Project {
     references: [
         "cocoa",
         "cups",
-        // "windows",
+        "windows",
     ]
 }
-
-/*
-win32: SUBDIRS += windows
-*/
