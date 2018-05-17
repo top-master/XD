@@ -8,6 +8,7 @@ Project {
         "platforms",
         // platforminputcontexts
         "platformthemes",
+        "printsupport",
         // generic
     ]
 }
