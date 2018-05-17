@@ -204,7 +204,6 @@ QtModuleProject {
                 "access/http2/hpack_p.h",
                 "access/http2/hpacktable.cpp",
                 "access/http2/hpacktable_p.h",
-                "access/http2/http2.pri",
                 "access/http2/http2frames.cpp",
                 "access/http2/http2frames_p.h",
                 "access/http2/http2protocol.cpp",
