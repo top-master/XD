@@ -94,11 +94,11 @@ static QCocoaIntegration::Options parseOptions(const QStringList &paramList)
     return options;
 }
 
-QCocoaIntegration *QCocoaIntegration::mInstance = 0;
+QCocoaIntegration *QCocoaIntegration::mInstance = nullptr;
 
 QCocoaIntegration::QCocoaIntegration(const QStringList &paramList)
     : mOptions(parseOptions(paramList))
-    , mFontDb(0)
+    , mFontDb(nullptr)
 #ifndef QT_NO_ACCESSIBILITY
     , mAccessibility(new QCocoaAccessibility)
 #endif
@@ -110,7 +110,7 @@ QCocoaIntegration::QCocoaIntegration(const QStringList &paramList)
     , mServices(new QCocoaServices)
     , mKeyboardMapper(new QCocoaKeyMapper)
 {
-    if (mInstance != 0)
+    if (mInstance)
         qWarning("Creating multiple Cocoa platform integrations is not supported");
     mInstance = this;
 
@@ -186,7 +186,7 @@ QCocoaIntegration::QCocoaIntegration(const QStringList &paramList)
 
 QCocoaIntegration::~QCocoaIntegration()
 {
-    mInstance = 0;
+    mInstance = nullptr;
 
     qt_resetNSApplicationSendEvent();
 
@@ -254,7 +254,7 @@ void QCocoaIntegration::updateScreens()
             if (primary != kCGNullDirectDisplay && primary != dpy)
                 continue;
         }
-        QCocoaScreen* screen = NULL;
+        QCocoaScreen* screen = nullptr;
         foreach (QCocoaScreen* existingScr, mScreens)
             // NSScreen documentation says do not cache the array returned from [NSScreen screens].
             // However in practice, we can identify a screen by its pointer: if resolution changes,
@@ -296,7 +296,7 @@ QCocoaScreen *QCocoaIntegration::screenForNSScreen(NSScreen *nsScreen)
 {
     NSUInteger index = [[NSScreen screens] indexOfObject:nsScreen];
     if (index == NSNotFound)
-        return 0;
+        return nullptr;
 
     if (index >= unsigned(mScreens.count()))
         updateScreens();
@@ -306,7 +306,7 @@ QCocoaScreen *QCocoaIntegration::screenForNSScreen(NSScreen *nsScreen)
             return screen;
     }
 
-    return 0;
+    return nullptr;
 }
 
 bool QCocoaIntegration::hasCapability(QPlatformIntegration::Capability cap) const
@@ -378,6 +378,19 @@ QAbstractEventDispatcher *QCocoaIntegration::createEventDispatcher() const
 {
     return new QCocoaEventDispatcher;
 }
+
+#if QT_CONFIG(vulkan)
+QPlatformVulkanInstance *QCocoaIntegration::createPlatformVulkanInstance(QVulkanInstance *instance) const
+{
+    mCocoaVulkanInstance = new QCocoaVulkanInstance(instance);
+    return mCocoaVulkanInstance;
+}
+
+QCocoaVulkanInstance *QCocoaIntegration::getCocoaVulkanInstance() const
+{
+    return mCocoaVulkanInstance;
+}
+#endif
 
 QCoreTextFontDatabase *QCocoaIntegration::fontDatabase() const
 {
@@ -480,14 +493,14 @@ void QCocoaIntegration::pushPopupWindow(QCocoaWindow *window)
 QCocoaWindow *QCocoaIntegration::popPopupWindow()
 {
     if (m_popupWindowStack.isEmpty())
-        return 0;
+        return nullptr;
     return m_popupWindowStack.takeLast();
 }
 
 QCocoaWindow *QCocoaIntegration::activePopupWindow() const
 {
     if (m_popupWindowStack.isEmpty())
-        return 0;
+        return nullptr;
     return m_popupWindowStack.front();
 }
 

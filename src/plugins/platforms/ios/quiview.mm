@@ -445,8 +445,9 @@ Q_LOGGING_CATEGORY(lcQpaTablet, "qt.qpa.input.tablet")
     }
     if (m_activeTouches.isEmpty())
             return;
-    QWindowSystemInterface::handleTouchEvent<QWindowSystemInterface::SynchronousDelivery>(self.platformWindow->window(), timeStamp, iosIntegration->touchDevice(), m_activeTouches.values());
-    if (!static_cast<QUIWindow *>(self.window).sendingEvent) {
+
+    if ([self.window isKindOfClass:[QUIWindow class]] &&
+            !static_cast<QUIWindow *>(self.window).sendingEvent) {
         // The event is likely delivered as part of delayed touch delivery, via
         // _UIGestureEnvironmentSortAndSendDelayedTouches, due to one of the two
         // _UISystemGestureGateGestureRecognizer instances on the top level window

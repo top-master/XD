@@ -85,6 +85,7 @@
             "force-debug-info": { "type": "boolean", "name": "force_debug_info" },
             "force-pkg-config": { "type": "void", "name": "pkg-config" },
             "framework": "boolean",
+            "gc-binaries": { "type": "boolean", "name": "gc_binaries" },
             "gdb-index": { "type": "boolean", "name": "gdb_index" },
             "gcc-sysroot": "boolean",
             "gcov": "boolean",
@@ -172,14 +173,7 @@
             "label": "D-Bus >= 1.2",
             "test": {
                 "include": "dbus/dbus.h",
-                "main": "(void) dbus_bus_get_private(DBUS_BUS_SYSTEM, (DBusError *)NULL);",
-                "qmake": [
-                    "CONFIG += build_all",
-                    "CONFIG(debug, debug|release): \\",
-                    "    LIBS += $$LIBS_DEBUG",
-                    "else: \\",
-                    "    LIBS += $$LIBS_RELEASE"
-                ]
+                "main": "(void) dbus_bus_get_private(DBUS_BUS_SYSTEM, (DBusError *)NULL);"
             },
             "sources": [
                 { "type": "pkgConfig", "args": "dbus-1 >= 1.2" },
@@ -264,6 +258,36 @@
             "label": "STL compatibility",
             "type": "compile",
             "test": "stl"
+        },
+        "c99": {
+            "label": "C99 support",
+            "type": "compile",
+            "test": {
+                "head": [
+                    "#if __STDC_VERSION__ >= 199901L",
+                    "// Compiler claims to support C99, trust it",
+                    "#else",
+                    "#  error __STDC_VERSION__ must be >= 199901L",
+                    "#endif"
+                ],
+                "lang": "c",
+                "qmake": "CONFIG += c99"
+            }
+        },
+        "c11": {
+            "label": "C11 support",
+            "type": "compile",
+            "test": {
+                "head": [
+                    "#if __STDC_VERSION__ >= 201112L",
+                    "// Compiler claims to support C11, trust it",
+                    "#else",
+                    "#  error __STDC_VERSION__ must be >= 201112L",
+                    "#endif"
+                ],
+                "lang": "c",
+                "qmake": "CONFIG += c11"
+            }
         },
         "c++14": {
             "label": "C++14 support",
@@ -369,6 +393,17 @@
                     "    $$QMAKE_OBJCOPY --only-keep-debug $$QMAKE_RESOLVED_TARGET objcopytest.debug && \\",
                     "    $$QMAKE_OBJCOPY --strip-debug $$QMAKE_RESOLVED_TARGET && \\",
                     "    $$QMAKE_OBJCOPY --add-gnu-debuglink=objcopytest.debug $$QMAKE_RESOLVED_TARGET"
+                ]
+            }
+        },
+        "gc_binaries": {
+            "label": "support for split sections and linker garbage collection",
+            "type": "compile",
+            "test": {
+                "qmake": [
+                    "isEmpty(QMAKE_CFLAGS_SPLIT_SECTIONS): error(\"Nope\")",
+                    "isEmpty(QMAKE_CXXFLAGS_SPLIT_SECTIONS): error(\"Nope\")",
+                    "isEmpty(QMAKE_LFLAGS_GCSECTIONS): error(\"Nope\")"
                 ]
             }
         },
@@ -528,11 +563,11 @@
                         "qbsMetaProject" ]
         },
         "machineTuple": {
-            "condition": "!config.linux || config.android || tests.machineTuple",
+            "condition": "config.linux && !config.android && tests.machineTuple",
             "output": [ "machineTuple" ]
         },
         "commit": {
-            "condition": "features.machineTuple",
+            "condition": "features.machineTuple || true",
             "output": [ "commitOptions", "qbsMultiplexCfg", "qbsTargetProfile" ]
         },
         "android-style-assets": {
@@ -567,6 +602,10 @@
         },
         "compiler-flags": {
             "output": [ "compilerFlags" ]
+        },
+        "gc_binaries": {
+            "condition": "!features.shared && tests.gc_binaries",
+            "output": [ "privateFeature" ]
         },
         "gcc-sysroot": {
             "output": [ "gccSysroot" ],
@@ -796,6 +835,19 @@
             "label": "C++1z",
             "condition": "features.c++14 && tests.c++1z",
             "output": [ "publicFeature", "publicQtConfig" ]
+        },
+        "c89": {
+            "label": "C89"
+        },
+        "c99": {
+            "label": "C99",
+            "condition": "tests.c99",
+            "output": [ "publicFeature" ]
+        },
+        "c11": {
+            "label": "C11",
+            "condition": "features.c99 && tests.c11",
+            "output": [ "publicFeature" ]
         },
         "precompile_header": {
             "label": "Using precompiled headers",
@@ -1263,6 +1315,11 @@ Configure with '-qreal float' to create a build that is binary-compatible with 5
                     "condition": "!features.debug || features.debug_and_release"
                 },
                 "shared",
+                {
+                    "message": "Using C standard",
+                    "type": "firstAvailableFeature",
+                    "args": "c11 c99 c89"
+                },
                 {
                     "message": "Using C++ standard",
                     "type": "firstAvailableFeature",

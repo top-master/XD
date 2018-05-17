@@ -90,8 +90,16 @@ typedef GLXContext (*glXCreateContextAttribsARBProc)(Display*, GLXFBConfig, GLXC
 #define GLX_CONTEXT_ROBUST_ACCESS_BIT_ARB 0x00000004
 #endif
 
+#ifndef GL_RESET_NOTIFICATION_STRATEGY_ARB
+#define GL_RESET_NOTIFICATION_STRATEGY_ARB 0x8256
+#endif
+
 #ifndef GLX_CONTEXT_RESET_NOTIFICATION_STRATEGY_ARB
 #define GLX_CONTEXT_RESET_NOTIFICATION_STRATEGY_ARB 0x8256
+#endif
+
+#ifndef GL_LOSE_CONTEXT_ON_RESET_ARB
+#define GL_LOSE_CONTEXT_ON_RESET_ARB 0x8252
 #endif
 
 #ifndef GLX_LOSE_CONTEXT_ON_RESET_ARB
@@ -157,6 +165,11 @@ static void updateFormatFromContext(QSurfaceFormat &format)
         format.setOption(QSurfaceFormat::StereoBuffers);
 
     if (format.renderableType() == QSurfaceFormat::OpenGL) {
+        GLint value = 0;
+        glGetIntegerv(GL_RESET_NOTIFICATION_STRATEGY_ARB, &value);
+        if (value == GL_LOSE_CONTEXT_ON_RESET_ARB)
+            format.setOption(QSurfaceFormat::ResetNotification);
+
         if (format.version() < qMakePair(3, 0)) {
             format.setOption(QSurfaceFormat::DeprecatedFunctions);
             return;
@@ -164,7 +177,7 @@ static void updateFormatFromContext(QSurfaceFormat &format)
 
         // Version 3.0 onwards - check if it includes deprecated functionality or is
         // a debug context
-        GLint value = 0;
+        value = 0;
         glGetIntegerv(GL_CONTEXT_FLAGS, &value);
         if (!(value & GL_CONTEXT_FLAG_FORWARD_COMPATIBLE_BIT))
             format.setOption(QSurfaceFormat::DeprecatedFunctions);
@@ -302,20 +315,17 @@ void QGLXContext::init(QXcbScreen *screen, QPlatformOpenGLContext *share)
                     contextAttributes << GLX_CONTEXT_PROFILE_MASK_ARB << GLX_CONTEXT_ES2_PROFILE_BIT_EXT;
                 }
 
-                if (supportsRobustness && supportsVideoMemoryPurge) {
-                    QVector<int> contextAttributesWithNvidiaReset = contextAttributes;
+                if (supportsRobustness && m_format.testOption(QSurfaceFormat::ResetNotification)) {
+                    QVector<int> contextAttributesWithRobustness = contextAttributes;
+                    contextAttributesWithRobustness << GLX_CONTEXT_RESET_NOTIFICATION_STRATEGY_ARB << GLX_LOSE_CONTEXT_ON_RESET_ARB;
+                    if (supportsVideoMemoryPurge)
+                        contextAttributesWithRobustness << GLX_GENERATE_RESET_ON_VIDEO_MEMORY_PURGE_NV << GL_TRUE;
 
-                    contextAttributesWithNvidiaReset << GLX_CONTEXT_RESET_NOTIFICATION_STRATEGY_ARB << GLX_LOSE_CONTEXT_ON_RESET_ARB;
-                    contextAttributesWithNvidiaReset << GLX_GENERATE_RESET_ON_VIDEO_MEMORY_PURGE_NV << GL_TRUE;
-
-                    contextAttributesWithNvidiaReset << None;
-                    m_context = glXCreateContextAttribsARB(m_display, config, m_shareContext, true, contextAttributesWithNvidiaReset.data());
-                    if (!m_context && m_shareContext) {
-                        // re-try without a shared glx context
-                        m_context = glXCreateContextAttribsARB(m_display, config, 0, true, contextAttributesWithNvidiaReset.data());
-                        if (m_context)
-                            m_shareContext = 0;
-                    }
+                    contextAttributesWithRobustness << None;
+                    m_context = glXCreateContextAttribsARB(m_display, config, m_shareContext, true,
+                                                           contextAttributesWithRobustness.data());
+                    // Context creation against a shared context may fail specifically due to this request, so try
+                    // without before dropping sharing.
                 }
 
                 if (m_context) {
@@ -539,6 +549,7 @@ bool QGLXContext::makeCurrent(QPlatformSurface *surface)
         m_lost = false;
         if (m_getGraphicsResetStatus && m_getGraphicsResetStatus() != GL_NO_ERROR) {
             m_lost = true;
+            success = false;
             // Drop the surface. Will recreate on the next makeCurrent.
             window->invalidateSurface();
         }
@@ -547,6 +558,11 @@ bool QGLXContext::makeCurrent(QPlatformSurface *surface)
         QGLXPbuffer *pbuffer = static_cast<QGLXPbuffer *>(surface);
         glxDrawable = pbuffer->pbuffer();
         success = glXMakeContextCurrent(m_display, glxDrawable, glxDrawable, m_context);
+        m_lost = false;
+        if (m_getGraphicsResetStatus && m_getGraphicsResetStatus() != GL_NO_ERROR) {
+            m_lost = true;
+            success = false;
+        }
     }
 
     if (success && surfaceClass == QSurface::Window) {
@@ -633,6 +649,8 @@ QFunctionPointer QGLXContext::getProcAddress(const char *procName)
                 extern const QString qt_gl_library_name();
 //                QLibrary lib(qt_gl_library_name());
                 QLibrary lib(QLatin1String("GL"));
+                if (!lib.load())
+                    lib.setFileNameAndVersion(QLatin1String("GL"), 1);
                 glXGetProcAddressARB = (qt_glXGetProcAddressARB) lib.resolve("glXGetProcAddressARB");
 #endif
             }

@@ -520,7 +520,12 @@ public:
         const typename Simd::Float32x4 v_r0 = Simd::v_dup(data->gradient.radial.focal.radius);
         const typename Simd::Float32x4 v_dr = Simd::v_dup(op->radial.dr);
 
+#if defined(__ARM_NEON__)
+        // NEON doesn't have SIMD sqrt, but uses rsqrt instead that can't be taken of 0.
+        const typename Simd::Float32x4 v_min = Simd::v_dup(std::numeric_limits<float>::epsilon());
+#else
         const typename Simd::Float32x4 v_min = Simd::v_dup(0.0f);
+#endif
         const typename Simd::Float32x4 v_max = Simd::v_dup(float(GRADIENT_STOPTABLE_SIZE-1));
         const typename Simd::Float32x4 v_half = Simd::v_dup(0.5f);
 
@@ -685,6 +690,9 @@ static inline uint interpolate_4_pixels(const uint t[], const uint b[], uint dis
     __m128i vb = _mm_loadl_epi64((const __m128i*)b);
     return interpolate_4_pixels_sse2(vt, vb, distx, disty);
 }
+
+static constexpr inline bool hasFastInterpolate4() { return true; }
+
 #elif defined(__ARM_NEON__)
 static Q_ALWAYS_INLINE uint interpolate_4_pixels_neon(uint32x2_t vt32, uint32x2_t vb32, uint distx, uint disty)
 {
@@ -717,6 +725,9 @@ static inline uint interpolate_4_pixels(const uint t[], const uint b[], uint dis
     uint32x2_t vb32 = vld1_u32(b);
     return interpolate_4_pixels_neon(vt32, vb32, distx, disty);
 }
+
+static constexpr inline bool hasFastInterpolate4() { return true; }
+
 #else
 static inline uint interpolate_4_pixels(uint tl, uint tr, uint bl, uint br, uint distx, uint disty)
 {
@@ -731,6 +742,9 @@ static inline uint interpolate_4_pixels(const uint t[], const uint b[], uint dis
 {
     return interpolate_4_pixels(t[0], t[1], b[0], b[1], distx, disty);
 }
+
+static constexpr inline bool hasFastInterpolate4() { return false; }
+
 #endif
 
 #if Q_BYTE_ORDER == Q_BIG_ENDIAN
@@ -1213,11 +1227,15 @@ struct QDitherInfo {
     int y;
 };
 
-typedef const uint *(QT_FASTCALL *ConvertFunc)(uint *buffer, const uint *src, int count,
-                                               const QVector<QRgb> *clut, QDitherInfo *dither);
+typedef const uint *(QT_FASTCALL *FetchAndConvertPixelsFunc)(uint *buffer, const uchar *src, int index, int count,
+                                                             const QVector<QRgb> *clut, QDitherInfo *dither);
+typedef void (QT_FASTCALL *ConvertAndStorePixelsFunc)(uchar *dest, const uint *src, int index, int count,
+                                                      const QVector<QRgb> *clut, QDitherInfo *dither);
+
+typedef void (QT_FASTCALL *ConvertFunc)(uint *buffer, int count, const QVector<QRgb> *clut);
 typedef const QRgba64 *(QT_FASTCALL *ConvertFunc64)(QRgba64 *buffer, const uint *src, int count,
                                                     const QVector<QRgb> *clut, QDitherInfo *dither);
-typedef const uint *(QT_FASTCALL *RbSwapFunc)(uint *buffer, const uint *src, int count);
+typedef void (QT_FASTCALL *RbSwapFunc)(uchar *dst, const uchar *src, int count);
 
 
 struct QPixelLayout
@@ -1239,17 +1257,13 @@ struct QPixelLayout
     BPP bpp;
     RbSwapFunc rbSwap;
     ConvertFunc convertToARGB32PM;
-    ConvertFunc convertFromARGB32PM;
-    ConvertFunc convertFromRGB32;
     ConvertFunc64 convertToARGB64PM;
+    FetchAndConvertPixelsFunc fetchToARGB32PM;
+    ConvertAndStorePixelsFunc storeFromARGB32PM;
+    ConvertAndStorePixelsFunc storeFromRGB32;
 };
 
-typedef const uint *(QT_FASTCALL *FetchPixelsFunc)(uint *buffer, const uchar *src, int index, int count);
-typedef void (QT_FASTCALL *StorePixelsFunc)(uchar *dest, const uint *src, int index, int count);
-
 extern QPixelLayout qPixelLayouts[QImage::NImageFormats];
-extern const FetchPixelsFunc qFetchPixels[QPixelLayout::BPPCount];
-extern StorePixelsFunc qStorePixels[QPixelLayout::BPPCount];
 
 extern MemRotateFunc qMemRotateFunctions[QPixelLayout::BPPCount][3];
 

@@ -190,6 +190,13 @@ void QPainterPrivate::checkEmulation()
     if (pg && pg->coordinateMode() > QGradient::LogicalMode)
         doEmulation = true;
 
+    if (state->brush.style() == Qt::TexturePattern) {
+        if (qHasPixmapTexture(state->brush))
+            doEmulation |= !qFuzzyCompare(state->brush.texture().devicePixelRatioF(), 1.0);
+        else
+            doEmulation |= !qFuzzyCompare(state->brush.textureImage().devicePixelRatioF(), 1.0);
+    }
+
     if (doEmulation && extended->flags() & QPaintEngineEx::DoNotEmulate)
         return;
 
@@ -6656,6 +6663,16 @@ QRectF QPainter::boundingRect(const QRectF &r, const QString &text, const QTextO
     several times to fill (tile) an area with a pixmap, but is
     potentially much more efficient depending on the underlying window
     system.
+
+    drawTiledPixmap() will produce the same visual tiling pattern on
+    high-dpi displays (with devicePixelRatio > 1), compared to normal-
+    dpi displays. Set the devicePixelRatio on the \a pixmap to control
+    the tile size. For example, setting it to 2 halves the tile width
+    and height (on both 1x and 2x displays), and produces high-resolution
+    output on 2x displays.
+
+    The \a position offset is always in the painter coordinate system,
+    indepentent of display devicePixelRatio.
 
     \sa drawPixmap()
 */

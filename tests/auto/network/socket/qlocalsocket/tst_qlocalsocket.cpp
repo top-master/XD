@@ -42,6 +42,10 @@
 #include <unistd.h> // for unlink()
 #endif
 
+#ifdef Q_OS_WIN
+#include <QtCore/qt_windows.h>
+#endif
+
 Q_DECLARE_METATYPE(QLocalSocket::LocalSocketError)
 Q_DECLARE_METATYPE(QLocalSocket::LocalSocketState)
 Q_DECLARE_METATYPE(QLocalServer::SocketOption)
@@ -629,6 +633,14 @@ void tst_QLocalSocket::readBufferOverflow()
     QCOMPARE(client.bytesAvailable(), 0);
 
 #ifdef Q_OS_WIN
+    serverSocket->write(buffer, readBufferSize);
+    QVERIFY(serverSocket->waitForBytesWritten());
+
+    // ensure the read completion routine is called
+    SleepEx(100, true);
+    QVERIFY(client.waitForReadyRead());
+    QCOMPARE(client.read(buffer, readBufferSize), qint64(readBufferSize));
+
     // Test overflow caused by an asynchronous pipe operation.
     client.setReadBufferSize(1);
     serverSocket->write(buffer, 2);
@@ -1213,12 +1225,13 @@ public:
         socket.write("testing\n");
         exec();
     }
+signals:
+    void bytesWrittenReceived();
 public slots:
-   void bytesWritten(qint64) {
+    void bytesWritten(qint64) {
+        emit bytesWrittenReceived();
         exit();
-   }
-
-private:
+    }
 };
 
 /*
@@ -1236,11 +1249,12 @@ void tst_QLocalSocket::bytesWrittenSignal()
     QLocalServer server;
     QVERIFY(server.listen("qlocalsocket_readyread"));
     WriteThread writeThread;
+    QSignalSpy receivedSpy(&writeThread, &WriteThread::bytesWrittenReceived);
     writeThread.start();
     bool timedOut = false;
     QVERIFY(server.waitForNewConnection(3000, &timedOut));
     QVERIFY(!timedOut);
-    QTest::qWait(2000);
+    QVERIFY(receivedSpy.wait(2000));
     QVERIFY(writeThread.wait(2000));
 }
 

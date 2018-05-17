@@ -78,6 +78,16 @@ NSDragOperation qt_mac_mapDropActions(Qt::DropActions actions);
 Qt::DropAction qt_mac_mapNSDragOperation(NSDragOperation nsActions);
 Qt::DropActions qt_mac_mapNSDragOperations(NSDragOperation nsActions);
 
+template <typename T>
+typename std::enable_if<std::is_pointer<T>::value, T>::type
+qt_objc_cast(id object)
+{
+    if ([object isKindOfClass:[typename std::remove_pointer<T>::type class]])
+        return static_cast<T>(object);
+
+    return nil;
+}
+
 QT_MANGLE_NAMESPACE(QNSView) *qnsview_cast(NSView *view);
 
 // Misc
@@ -88,6 +98,12 @@ QPointF qt_mac_flip(const QPointF &pos, const QRectF &reference);
 QRectF qt_mac_flip(const QRectF &rect, const QRectF &reference);
 
 Qt::MouseButton cocoaButton2QtButton(NSInteger buttonNum);
+Qt::MouseButton cocoaButton2QtButton(NSEvent *event);
+
+QEvent::Type cocoaEvent2QtMouseEvent(NSEvent *event);
+
+Qt::MouseButtons cocoaMouseButtons2QtMouseButtons(NSInteger pressedMouseButtons);
+Qt::MouseButtons currentlyPressedMouseButtons();
 
 // strip out '&' characters, and convert "&&" to a single '&', in menu
 // text - since menu text is sometimes decorated with these for Windows

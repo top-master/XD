@@ -41,6 +41,7 @@
 #define QNSVIEW_H
 
 #include <AppKit/AppKit.h>
+#include <MetalKit/MetalKit.h>
 
 #include "private/qcore_mac_p.h"
 
@@ -51,6 +52,7 @@ class QPointF;
 QT_END_NAMESPACE
 
 Q_FORWARD_DECLARE_OBJC_CLASS(QT_MANGLE_NAMESPACE(QNSViewMouseMoveHelper));
+Q_FORWARD_DECLARE_OBJC_CLASS(QT_MANGLE_NAMESPACE(QCocoaNSMenuItem));
 
 @interface QT_MANGLE_NAMESPACE(QNSView) : NSView
 
@@ -85,7 +87,6 @@ Q_FORWARD_DECLARE_OBJC_CLASS(QT_MANGLE_NAMESPACE(QNSViewMouseMoveHelper));
 
 @interface QT_MANGLE_NAMESPACE(QNSView) (QtExtras)
 @property (nonatomic, readonly) QCocoaWindow *platformWindow;
-@property (nonatomic, readonly) BOOL isMenuView;
 @end
 
 QT_NAMESPACE_ALIAS_OBJC_CLASS(QNSView);

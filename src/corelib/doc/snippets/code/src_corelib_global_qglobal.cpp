@@ -387,11 +387,11 @@ CONFIG += no_keywords
 //! [34]
 QString FriendlyConversation::greeting(int type)
 {
-static const char *greeting_strings[] = {
-    QT_TR_NOOP("Hello"),
-    QT_TR_NOOP("Goodbye")
-};
-return tr(greeting_strings[type]);
+    static const char *greeting_strings[] = {
+        QT_TR_NOOP("Hello"),
+        QT_TR_NOOP("Goodbye")
+    };
+    return tr(greeting_strings[type]);
 }
 //! [34]
 
@@ -410,7 +410,7 @@ QString FriendlyConversation::greeting(int type)
 QString global_greeting(int type)
 {
     return qApp->translate("FriendlyConversation",
-           greeting_strings[type]);
+                           greeting_strings[type]);
 }
 //! [35]
 
@@ -434,10 +434,58 @@ QString FriendlyConversation::greeting(int type)
 QString global_greeting(int type)
 {
     return qApp->translate("FriendlyConversation",
-           greeting_strings[type].source,
-           greeting_strings[type].comment);
+                           greeting_strings[type].source,
+                           greeting_strings[type].comment);
 }
 //! [36]
+
+
+//! [qttrnnoop]
+static const char * const StatusClass::status_strings[] = {
+    QT_TR_N_NOOP("There are %n new message(s)"),
+    QT_TR_N_NOOP("There are %n total message(s)")
+};
+
+QString StatusClass::status(int type, int count)
+{
+    return tr(status_strings[type], nullptr, count);
+}
+//! [qttrnnoop]
+
+//! [qttranslatennoop]
+static const char * const greeting_strings[] = {
+    QT_TRANSLATE_N_NOOP("Welcome Msg", "Hello, you have %n message(s)"),
+    QT_TRANSLATE_N_NOOP("Welcome Msg", "Hi, you have %n message(s)")
+};
+
+QString global_greeting(int type, int msgcnt)
+{
+    return translate("Welcome Msg", greeting_strings[type], nullptr, msgcnt);
+}
+//! [qttranslatennoop]
+
+//! [qttranslatennoop3]
+static { const char * const source; const char * const comment; } status_strings[] = {
+    QT_TRANSLATE_N_NOOP3("Message Status", "Hello, you have %n message(s)",
+                         "A login message status"),
+    QT_TRANSLATE_N_NOOP3("Message status", "You have %n new message(s)",
+                         "A new message query status")
+};
+
+QString FriendlyConversation::greeting(int type, int count)
+{
+    return tr(status_strings[type].source,
+              status_strings[type].comment, count);
+}
+
+QString global_greeting(int type, int count)
+{
+    return qApp->translate("Message Status",
+                           status_strings[type].source,
+                           status_strings[type].comment,
+                           count);
+}
+//! [qttranslatennoop3]
 
 
 //! [qttrid]

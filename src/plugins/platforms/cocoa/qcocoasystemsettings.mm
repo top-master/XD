@@ -90,7 +90,9 @@ QPalette * qt_mac_createSystemPalette()
     palette->setColor(QPalette::Disabled, QPalette::Text, qc);
     palette->setColor(QPalette::Disabled, QPalette::WindowText, qc);
     palette->setColor(QPalette::Disabled, QPalette::HighlightedText, qc);
-    palette->setBrush(QPalette::ToolTipBase, QColor(255, 255, 199));
+
+    palette->setBrush(QPalette::ToolTipBase, qt_mac_toQBrush([NSColor controlColor]));
+
     return palette;
 }
 
@@ -129,7 +131,7 @@ QHash<QPlatformTheme::Palette, QPalette*> qt_mac_createRolePalettes()
     QColor qc;
     for (int i = 0; i < mac_widget_colors_count; i++) {
         QPalette &pal = *qt_mac_createSystemPalette();
-        if (mac_widget_colors[i].active != 0) {
+        if (mac_widget_colors[i].active) {
             qc = qt_mac_toQColor(mac_widget_colors[i].active);
             pal.setColor(QPalette::Active, QPalette::Text, qc);
             pal.setColor(QPalette::Inactive, QPalette::Text, qc);

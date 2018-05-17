@@ -28,7 +28,10 @@ Project {
             "xkbcommon/src/xkbcomp",
             "xkbcommon/xkbcommon",
         ]
-        cpp.cFlags: ["-std=gnu99", "-w"]
+
+        // TODO: # Requires GNU C extensions
+        //       CONFIG -= strict_c
+
         cpp.defines: {
             var result = [
                 "DFLT_XKB_CONFIG_ROOT='" + path + "/xkbcommon'",

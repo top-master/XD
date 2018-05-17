@@ -1188,13 +1188,7 @@ void tst_QSslSocket::protocolServerSide_data()
 #if !defined(OPENSSL_NO_SSL2)
     // OpenSSL 1.1 has removed SSL2 support. But there is no OPENSSL_NO_SSL2 macro ...
 #define OPENSSL_NO_SSL2
-#endif
-    // A client using our OpenSSL1.1 backend will negotiate up from TLS 1.0 or 1.1
-    // to TLS 1.2 if the server asks for it, where our older backend fails to compromise.
-    // So some tests that fail for the old pass with the new.
-    const bool willUseTLS12 = true;
-#else
-    const bool willUseTLS12 = false;
+#endif // OPENSSL_NO_SSL2
 #endif // opensslv11
 
 #if !defined(OPENSSL_NO_SSL2) && !defined(QT_SECURETRANSPORT)
@@ -1290,7 +1284,7 @@ void tst_QSslSocket::protocolServerSide_data()
     QTest::newRow("tls1.1orlater-ssl3") << QSsl::TlsV1_1OrLater << QSsl::SslV3 << false;
 #endif
 
-    QTest::newRow("tls1.1orlater-tls1.0") << QSsl::TlsV1_1OrLater << QSsl::TlsV1_0 << willUseTLS12;
+    QTest::newRow("tls1.1orlater-tls1.0") << QSsl::TlsV1_1OrLater << QSsl::TlsV1_0 << false;
     QTest::newRow("tls1.1orlater-tls1.1") << QSsl::TlsV1_1OrLater << QSsl::TlsV1_1 << true;
     QTest::newRow("tls1.1orlater-tls1.2") << QSsl::TlsV1_1OrLater << QSsl::TlsV1_2 << true;
 
@@ -1300,8 +1294,8 @@ void tst_QSslSocket::protocolServerSide_data()
 #if !defined(OPENSSL_NO_SSL3)
     QTest::newRow("tls1.2orlater-ssl3") << QSsl::TlsV1_2OrLater << QSsl::SslV3 << false;
 #endif
-    QTest::newRow("tls1.2orlater-tls1.0") << QSsl::TlsV1_2OrLater << QSsl::TlsV1_0 << willUseTLS12;
-    QTest::newRow("tls1.2orlater-tls1.1") << QSsl::TlsV1_2OrLater << QSsl::TlsV1_1 << willUseTLS12;
+    QTest::newRow("tls1.2orlater-tls1.0") << QSsl::TlsV1_2OrLater << QSsl::TlsV1_0 << false;
+    QTest::newRow("tls1.2orlater-tls1.1") << QSsl::TlsV1_2OrLater << QSsl::TlsV1_1 << false;
     QTest::newRow("tls1.2orlater-tls1.2") << QSsl::TlsV1_2OrLater << QSsl::TlsV1_2 << true;
 
     QTest::newRow("any-tls1.0") << QSsl::AnyProtocol << QSsl::TlsV1_0 << true;
@@ -2844,11 +2838,19 @@ void tst_QSslSocket::qtbug18498_peek()
     client->setObjectName("client");
     client->ignoreSslErrors();
 
-    connect(client, SIGNAL(encrypted()), this, SLOT(exitLoop()));
+    int encryptedCounter = 2;
+    connect(client, &QSslSocket::encrypted, this, [&encryptedCounter, this](){
+        if (!--encryptedCounter)
+            exitLoop();
+    });
+    WebSocket *serversocket = server.socket;
+    connect(serversocket, &QSslSocket::encrypted, this, [&encryptedCounter, this](){
+        if (!--encryptedCounter)
+            exitLoop();
+    });
     connect(client, SIGNAL(disconnected()), this, SLOT(exitLoop()));
 
     client->startClientEncryption();
-    WebSocket *serversocket = server.socket;
     QVERIFY(serversocket);
     serversocket->setObjectName("server");
 
@@ -2914,10 +2916,7 @@ void tst_QSslSocket::qtbug18498_peek2()
     QScopedPointer<QSslSocket> server(listener.socket);
 
     QVERIFY(server->write("HELLO\r\n", 7));
-    QElapsedTimer stopwatch;
-    stopwatch.start();
-    while (client->bytesAvailable() < 7 && stopwatch.elapsed() < 5000)
-        QTest::qWait(100);
+    QTRY_COMPARE(client->bytesAvailable(), 7);
     char c;
     QCOMPARE(client->peek(&c,1), 1);
     QCOMPARE(c, 'H');
@@ -2936,8 +2935,7 @@ void tst_QSslSocket::qtbug18498_peek2()
     bigblock.fill('#', QIODEVICE_BUFFERSIZE + 1024);
     QVERIFY(client->write(QByteArray("head")));
     QVERIFY(client->write(bigblock));
-    while (server->bytesAvailable() < bigblock.length() + 4 && stopwatch.elapsed() < 5000)
-        QTest::qWait(100);
+    QTRY_COMPARE(server->bytesAvailable(), bigblock.length() + 4);
     QCOMPARE(server->read(4), QByteArray("head"));
     QCOMPARE(server->peek(bigblock.length()), bigblock);
     b.reserve(bigblock.length());
@@ -2953,10 +2951,7 @@ void tst_QSslSocket::qtbug18498_peek2()
     QCOMPARE(server->readAll(), bigblock);
 
     QVERIFY(client->write("STARTTLS\r\n"));
-    stopwatch.start();
-    // ### Qt5 use QTRY_VERIFY
-    while (server->bytesAvailable() < 10 && stopwatch.elapsed() < 5000)
-        QTest::qWait(100);
+    QTRY_COMPARE(server->bytesAvailable(), 10);
     QCOMPARE(server->peek(&c,1), 1);
     QCOMPARE(c, 'S');
     b = server->peek(3);
@@ -2989,9 +2984,7 @@ void tst_QSslSocket::qtbug18498_peek2()
     client->startClientEncryption();
 
     QVERIFY(server->write("hello\r\n", 7));
-    stopwatch.start();
-    while (client->bytesAvailable() < 7 && stopwatch.elapsed() < 5000)
-        QTest::qWait(100);
+    QTRY_COMPARE(client->bytesAvailable(), 7);
     QVERIFY(server->mode() == QSslSocket::SslServerMode && client->mode() == QSslSocket::SslClientMode);
     QCOMPARE(client->peek(&c,1), 1);
     QCOMPARE(c, 'h');
@@ -3002,9 +2995,7 @@ void tst_QSslSocket::qtbug18498_peek2()
     QCOMPARE(client->readAll(), QByteArray("ello\r\n"));
 
     QVERIFY(client->write("goodbye\r\n"));
-    stopwatch.start();
-    while (server->bytesAvailable() < 9 && stopwatch.elapsed() < 5000)
-        QTest::qWait(100);
+    QTRY_COMPARE(server->bytesAvailable(), 9);
     QCOMPARE(server->peek(&c,1), 1);
     QCOMPARE(c, 'g');
     QCOMPARE(server->readAll(), QByteArray("goodbye\r\n"));

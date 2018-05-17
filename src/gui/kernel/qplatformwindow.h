@@ -127,7 +127,7 @@ public:
 
     virtual bool setWindowModified(bool modified);
 
-    virtual void windowEvent(QEvent *event);
+    virtual bool windowEvent(QEvent *event);
 
     virtual bool startSystemResize(const QPoint &pos, Qt::Corner corner);
     virtual bool startSystemMove(const QPoint &pos);
@@ -144,6 +144,7 @@ public:
         const QRect &initialGeometry, int defaultWidth, int defaultHeight);
 
     virtual void requestUpdate();
+    bool hasPendingUpdateRequest() const;
     virtual void deliverUpdateRequest();
 
     // Window property accessors. Platform plugins should use these

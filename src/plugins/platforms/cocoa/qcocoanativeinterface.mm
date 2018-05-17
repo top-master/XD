@@ -71,6 +71,10 @@
 
 #include <AppKit/AppKit.h>
 
+#if QT_CONFIG(vulkan)
+#include <MoltenVK/mvk_vulkan.h>
+#endif
+
 QT_BEGIN_NAMESPACE
 
 QCocoaNativeInterface::QCocoaNativeInterface()
@@ -81,20 +85,20 @@ QCocoaNativeInterface::QCocoaNativeInterface()
 void *QCocoaNativeInterface::nativeResourceForContext(const QByteArray &resourceString, QOpenGLContext *context)
 {
     if (!context)
-        return 0;
+        return nullptr;
     if (resourceString.toLower() == "nsopenglcontext")
         return nsOpenGLContextForContext(context);
     if (resourceString.toLower() == "cglcontextobj")
         return cglContextForContext(context);
 
-    return 0;
+    return nullptr;
 }
 #endif
 
 void *QCocoaNativeInterface::nativeResourceForWindow(const QByteArray &resourceString, QWindow *window)
 {
     if (!window->handle())
-        return 0;
+        return nullptr;
 
     if (resourceString == "nsview") {
         return static_cast<QCocoaWindow *>(window->handle())->m_view;
@@ -104,8 +108,13 @@ void *QCocoaNativeInterface::nativeResourceForWindow(const QByteArray &resourceS
 #endif
     } else if (resourceString == "nswindow") {
         return static_cast<QCocoaWindow *>(window->handle())->nativeWindow();
+#if QT_CONFIG(vulkan)
+    } else if (resourceString == "vkSurface") {
+        if (QVulkanInstance *instance = window->vulkanInstance())
+            return static_cast<QCocoaVulkanInstance *>(instance->handle())->createSurface(window);
+#endif
     }
-    return 0;
+    return nullptr;
 }
 
 QPlatformNativeInterface::NativeResourceForIntegrationFunction QCocoaNativeInterface::nativeResourceFunctionForIntegration(const QByteArray &resource)
@@ -143,7 +152,7 @@ QPlatformNativeInterface::NativeResourceForIntegrationFunction QCocoaNativeInter
     if (resource.toLower() == "testcontentborderposition")
         return NativeResourceForIntegrationFunction(QCocoaNativeInterface::testContentBorderPosition);
 
-    return 0;
+    return nullptr;
 }
 
 QPlatformPrinterSupport *QCocoaNativeInterface::createPlatformPrinterSupport()
@@ -152,7 +161,7 @@ QPlatformPrinterSupport *QCocoaNativeInterface::createPlatformPrinterSupport()
     return new QCocoaPrinterSupport();
 #else
     qFatal("Printing is not supported when Qt is configured with -no-widgets");
-    return 0;
+    return nullptr;
 #endif
 }
 
@@ -166,7 +175,7 @@ void *QCocoaNativeInterface::NSPrintInfoForPrintEngine(QPrintEngine *printEngine
 #else
     Q_UNUSED(printEngine);
     qFatal("Printing is not supported when Qt is configured with -no-widgets");
-    return 0;
+    return nullptr;
 #endif
 }
 
@@ -180,10 +189,10 @@ QPixmap QCocoaNativeInterface::defaultBackgroundPixmapForQWizard()
         CFURLRef url = (CFURLRef)CFArrayGetValueAtIndex(urls, 0);
         QCFType<CFBundleRef> bundle = CFBundleCreate(kCFAllocatorDefault, url);
         if (bundle) {
-            url = CFBundleCopyResourceURL(bundle, CFSTR("Background"), CFSTR("png"), 0);
+            url = CFBundleCopyResourceURL(bundle, CFSTR("Background"), CFSTR("png"), nullptr);
             if (url) {
-                QCFType<CGImageSourceRef> imageSource = CGImageSourceCreateWithURL(url, 0);
-                QCFType<CGImageRef> image = CGImageSourceCreateImageAtIndex(imageSource, 0, 0);
+                QCFType<CGImageSourceRef> imageSource = CGImageSourceCreateWithURL(url, nullptr);
+                QCFType<CGImageRef> image = CGImageSourceCreateImageAtIndex(imageSource, 0, nullptr);
                 if (image) {
                     int width = CGImageGetWidth(image);
                     int height = CGImageGetHeight(image);
@@ -213,7 +222,7 @@ void *QCocoaNativeInterface::cglContextForContext(QOpenGLContext* context)
     NSOpenGLContext *nsOpenGLContext = static_cast<NSOpenGLContext*>(nsOpenGLContextForContext(context));
     if (nsOpenGLContext)
         return [nsOpenGLContext CGLContextObj];
-    return 0;
+    return nullptr;
 }
 
 void *QCocoaNativeInterface::nsOpenGLContextForContext(QOpenGLContext* context)
@@ -224,7 +233,7 @@ void *QCocoaNativeInterface::nsOpenGLContextForContext(QOpenGLContext* context)
             return cocoaGLContext->nsOpenGLContext();
         }
     }
-    return 0;
+    return nullptr;
 }
 #endif
 

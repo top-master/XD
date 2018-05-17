@@ -95,7 +95,10 @@ QIOSIntegration::QIOSIntegration()
 
     // Set current directory to app bundle folder
     QDir::setCurrent(QString::fromUtf8([[[NSBundle mainBundle] bundlePath] UTF8String]));
+}
 
+void QIOSIntegration::initialize()
+{
     UIScreen *mainScreen = [UIScreen mainScreen];
     NSMutableArray<UIScreen *> *screens = [[[UIScreen screens] mutableCopy] autorelease];
     if (![screens containsObject:mainScreen]) {
@@ -214,10 +217,7 @@ QPlatformOffscreenSurface *QIOSIntegration::createPlatformOffscreenSurface(QOffs
 
 QAbstractEventDispatcher *QIOSIntegration::createEventDispatcher() const
 {
-    if (isQtApplication())
-        return new QIOSEventDispatcher;
-    else
-        return new QEventDispatcherCoreFoundation;
+    return QIOSEventDispatcher::create();
 }
 
 QPlatformFontDatabase * QIOSIntegration::fontDatabase() const

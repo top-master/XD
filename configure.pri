@@ -408,7 +408,7 @@ defineTest(qtConfTest_x86SimdAlways) {
         qtConfCheckFeature($$f)
         equals($${fpfx}.$${f}.available, true): configs += $$f
     }
-    $${1}.literal_args = $$system_quote(SIMD=$$join(configs, " "))
+    $${1}.literal_args = SIMD=$$join(configs, " ")
     qtConfTest_compile($${1})
 }
 
@@ -694,10 +694,14 @@ defineReplace(printHostPaths) {
 
 defineTest(qtConfOutput_preparePaths) {
     isEmpty(config.input.prefix) {
-        $$qtConfEvaluate("features.developer-build"): \
+        $$qtConfEvaluate("features.developer-build") {
             config.input.prefix = $$QT_BUILD_TREE  # In Development, we use sandboxed builds by default
-        else: \
-            config.input.prefix = /usr/local/Qt-$$[QT_VERSION]
+        } else {
+            win32: \
+                config.input.prefix = C:/Qt/Qt-$$[QT_VERSION]
+            else: \
+                config.input.prefix = /usr/local/Qt-$$[QT_VERSION]
+        }
         have_prefix = false
     } else {
         config.input.prefix = $$absolute_path($$config.input.prefix, $$OUT_PWD)

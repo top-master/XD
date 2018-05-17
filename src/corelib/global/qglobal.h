@@ -1034,8 +1034,8 @@ for (auto _container_ = QtPrivate::qMakeForeachContainer(container); \
 #  endif
 #endif
 
-template <typename T> static inline T *qGetPtrHelper(T *ptr) { return ptr; }
-template <typename Wrapper> static inline typename Wrapper::pointer qGetPtrHelper(const Wrapper &p) { return p.data(); }
+template <typename T> inline T *qGetPtrHelper(T *ptr) { return ptr; }
+template <typename Ptr> inline auto qGetPtrHelper(const Ptr &ptr) -> decltype(ptr.operator->()) { return ptr.operator->(); }
 
 #define Q_DECLARE_PRIVATE(Class) \
     inline Class##Private* d_func() { return reinterpret_cast<Class##Private *>(qGetPtrHelper(d_ptr)); } \
@@ -1062,7 +1062,11 @@ template <typename Wrapper> static inline typename Wrapper::pointer qGetPtrHelpe
 #define QT_TRANSLATE_NOOP3(scope, x, comment) {x, comment}
 #define QT_TRANSLATE_NOOP3_UTF8(scope, x, comment) {x, comment}
 
-#ifndef QT_NO_TRANSLATION // ### This should enclose the NOOPs above
+#ifndef QT_NO_TRANSLATION // ### Qt6: This should enclose the NOOPs above
+
+#define QT_TR_N_NOOP(x) x
+#define QT_TRANSLATE_N_NOOP(scope, x) x
+#define QT_TRANSLATE_N_NOOP3(scope, x, comment) {x, comment}
 
 // Defined in qcoreapplication.cpp
 // The better name qTrId() is reserved for an upcoming function which would

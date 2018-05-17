@@ -788,7 +788,6 @@ QtModuleProject {
                 condition: Qt.global.privateConfig.avx2
                 cpufeatures.x86_avx2: true
                 files: [
-                    "image/qimage_avx2.cpp",
                     "painting/qdrawhelper_avx2.cpp",
                 ]
             }
@@ -827,7 +826,6 @@ QtModuleProject {
                 condition: Qt.global.privateConfig.sse2
                 cpufeatures.x86_sse2: true
                 files: [
-                    "image/qimage_sse2.cpp",
                     "painting/qdrawhelper_sse2.cpp",
                 ]
             }
@@ -835,7 +833,6 @@ QtModuleProject {
                 condition: Qt.global.privateConfig.sse4_1
                 cpufeatures.x86_sse4_1: true
                 files: [
-                    "image/qimage_sse4.cpp",
                     "painting/qdrawhelper_sse4.cpp",
                     "painting/qimagescale_sse4.cpp",
                 ]

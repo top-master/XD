@@ -102,6 +102,26 @@ static inline bool simdEncodeAscii(uchar *&dst, const ushort *&nextAscii, const 
             return false;
         }
     }
+
+    if (end - src >= 8) {
+        // do eight characters at a time
+        __m128i data = _mm_loadu_si128(reinterpret_cast<const __m128i *>(src));
+        __m128i packed = _mm_packus_epi16(data, data);
+        __m128i nonAscii = _mm_cmpgt_epi8(packed, _mm_setzero_si128());
+
+        // store even non-ASCII
+        _mm_storel_epi64(reinterpret_cast<__m128i *>(dst), packed);
+
+        uchar n = ~_mm_movemask_epi8(nonAscii);
+        if (n) {
+            nextAscii = src + qBitScanReverse(n) + 1;
+            n = qCountTrailingZeroBits(n);
+            dst += n;
+            src += n;
+            return false;
+        }
+    }
+
     return src == end;
 }
 
@@ -150,11 +170,52 @@ static inline bool simdDecodeAscii(ushort *&dst, const uchar *&nextAscii, const 
         return false;
 
     }
+
+    if (end - src >= 8) {
+        __m128i data = _mm_loadl_epi64(reinterpret_cast<const __m128i *>(src));
+        uint n = _mm_movemask_epi8(data) & 0xff;
+        if (!n) {
+            // unpack and store
+            _mm_storeu_si128(reinterpret_cast<__m128i *>(dst), _mm_unpacklo_epi8(data, _mm_setzero_si128()));
+        } else {
+            while (!(n & 1)) {
+                *dst++ = *src++;
+                n >>= 1;
+            }
+
+            n = qBitScanReverse(n);
+            nextAscii = src + n + 1;
+            return false;
+        }
+    }
+
     return src == end;
 }
 
 static inline const uchar *simdFindNonAscii(const uchar *src, const uchar *end, const uchar *&nextAscii)
 {
+#ifdef __AVX2__
+    // do 32 characters at a time
+    // (this is similar to simdTestMask in qstring.cpp)
+    const __m256i mask = _mm256_set1_epi8(0x80);
+    for ( ; end - src >= 32; src += 32) {
+        __m256i data = _mm256_loadu_si256(reinterpret_cast<const __m256i *>(src));
+        if (_mm256_testz_si256(mask, data))
+            continue;
+
+        uint n = _mm256_movemask_epi8(data);
+        Q_ASSUME(n);
+
+        // find the next probable ASCII character
+        // we don't want to load 32 bytes again in this loop if we know there are non-ASCII
+        // characters still coming
+        nextAscii = src + qBitScanReverse(n) + 1;
+
+        // return the non-ASCII character
+        return src + qCountTrailingZeroBits(n);
+    }
+#endif
+
     // do sixteen characters at a time
     for ( ; end - src >= 16; src += 16) {
         __m128i data = _mm_loadu_si128(reinterpret_cast<const __m128i*>(src));

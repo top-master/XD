@@ -193,8 +193,7 @@ QSslCipher QSslSocketBackendPrivate::QSslCipher_from_SSL_CIPHER(const SSL_CIPHER
     return ciph;
 }
 
-// static
-inline QSslErrorEntry QSslErrorEntry::fromStoreContext(X509_STORE_CTX *ctx)
+QSslErrorEntry QSslErrorEntry::fromStoreContext(X509_STORE_CTX *ctx)
 {
     return {
         q_X509_STORE_CTX_get_error(ctx),
@@ -246,6 +245,33 @@ int q_X509Callback(int ok, X509_STORE_CTX *ctx)
     // completed.
     return 1;
 }
+
+static void q_loadCiphersForConnection(SSL *connection, QList<QSslCipher> &ciphers,
+                                       QList<QSslCipher> &defaultCiphers)
+{
+    Q_ASSERT(connection);
+
+    STACK_OF(SSL_CIPHER) *supportedCiphers = q_SSL_get_ciphers(connection);
+    for (int i = 0; i < q_sk_SSL_CIPHER_num(supportedCiphers); ++i) {
+        if (SSL_CIPHER *cipher = q_sk_SSL_CIPHER_value(supportedCiphers, i)) {
+            QSslCipher ciph = QSslSocketBackendPrivate::QSslCipher_from_SSL_CIPHER(cipher);
+            if (!ciph.isNull()) {
+                // Unconditionally exclude ADH and AECDH ciphers since they offer no MITM protection
+                if (!ciph.name().toLower().startsWith(QLatin1String("adh")) &&
+                    !ciph.name().toLower().startsWith(QLatin1String("exp-adh")) &&
+                    !ciph.name().toLower().startsWith(QLatin1String("aecdh"))) {
+                    ciphers << ciph;
+
+                    if (ciph.usedBits() >= 128)
+                        defaultCiphers << ciph;
+                }
+            }
+        }
+    }
+}
+
+// Defined in qsslsocket.cpp
+void q_setDefaultDtlsCiphers(const QList<QSslCipher> &ciphers);
 
 long QSslSocketBackendPrivate::setupOpenSslOptions(QSsl::SslProtocol protocol, QSsl::SslOptions sslOptions)
 {
@@ -452,29 +478,27 @@ void QSslSocketPrivate::resetDefaultCiphers()
     QList<QSslCipher> ciphers;
     QList<QSslCipher> defaultCiphers;
 
-    STACK_OF(SSL_CIPHER) *supportedCiphers = q_SSL_get_ciphers(mySsl);
-    for (int i = 0; i < q_sk_SSL_CIPHER_num(supportedCiphers); ++i) {
-        if (SSL_CIPHER *cipher = q_sk_SSL_CIPHER_value(supportedCiphers, i)) {
-            QSslCipher ciph = QSslSocketBackendPrivate::QSslCipher_from_SSL_CIPHER(cipher);
-            if (!ciph.isNull()) {
-                // Unconditionally exclude ADH and AECDH ciphers since they offer no MITM protection
-                if (!ciph.name().toLower().startsWith(QLatin1String("adh")) &&
-                    !ciph.name().toLower().startsWith(QLatin1String("exp-adh")) &&
-                    !ciph.name().toLower().startsWith(QLatin1String("aecdh"))) {
-                    ciphers << ciph;
-
-                    if (ciph.usedBits() >= 128)
-                        defaultCiphers << ciph;
-                }
-            }
-        }
-    }
+    q_loadCiphersForConnection(mySsl, ciphers, defaultCiphers);
 
     q_SSL_CTX_free(myCtx);
     q_SSL_free(mySsl);
 
     setDefaultSupportedCiphers(ciphers);
     setDefaultCiphers(defaultCiphers);
+
+    ciphers.clear();
+    defaultCiphers.clear();
+
+    myCtx = q_SSL_CTX_new(q_DTLS_client_method());
+    if (myCtx) {
+        mySsl = q_SSL_new(myCtx);
+        if (mySsl) {
+            q_loadCiphersForConnection(mySsl, ciphers, defaultCiphers);
+            q_setDefaultDtlsCiphers(defaultCiphers);
+            q_SSL_free(mySsl);
+        }
+        q_SSL_CTX_free(myCtx);
+    }
 }
 
 void QSslSocketPrivate::resetDefaultEllipticCurves()
@@ -1409,7 +1433,7 @@ bool QSslSocketBackendPrivate::importPkcs12(QIODevice *device,
     if (!key->d->fromEVP_PKEY(pkey)) {
         qCWarning(lcSsl, "Unable to convert private key");
         q_OPENSSL_sk_pop_free(reinterpret_cast<OPENSSL_STACK *>(ca),
-                              reinterpret_cast<void (*)(void *)>(q_OPENSSL_sk_free));
+                              reinterpret_cast<void (*)(void *)>(q_X509_free));
         q_X509_free(x509);
         q_EVP_PKEY_free(pkey);
         q_PKCS12_free(p12);
@@ -1424,8 +1448,6 @@ bool QSslSocketBackendPrivate::importPkcs12(QIODevice *device,
         *caCertificates = QSslSocketBackendPrivate::STACKOFX509_to_QSslCertificates(ca);
 
     // Clean up
-    // TODO: verify ASAP, in the past we had sk_pop_free with q_OPENSSL_sk_free
-    // which seems to be blatantly wrong and even crashes with 1.1.
     q_OPENSSL_sk_pop_free(reinterpret_cast<OPENSSL_STACK *>(ca),
                           reinterpret_cast<void (*)(void *)>(q_X509_free));
 

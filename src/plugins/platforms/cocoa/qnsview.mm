@@ -136,7 +136,6 @@
     bool m_scrolling;
     bool m_updatingDrag;
     NSEvent *m_currentlyInterpretedKeyEvent;
-    bool m_isMenuView;
     QSet<quint32> m_acceptedKeyDowns;
     bool m_updateRequested;
 }
@@ -149,19 +148,18 @@
         m_frameStrutButtons = Qt::NoButton;
         m_sendKeyEvent = false;
 #ifndef QT_NO_OPENGL
-        m_glContext = 0;
+        m_glContext = nullptr;
         m_shouldSetGLContextinDrawRect = false;
 #endif
-        currentCustomDragTypes = 0;
+        currentCustomDragTypes = nullptr;
         m_dontOverrideCtrlLMB = false;
         m_sendUpAsRightButton = false;
-        m_inputSource = 0;
+        m_inputSource = nil;
         m_mouseMoveHelper = [[QT_MANGLE_NAMESPACE(QNSViewMouseMoveHelper) alloc] initWithView:self];
         m_resendKeyEvent = false;
         m_scrolling = false;
         m_updatingDrag = false;
-        m_currentlyInterpretedKeyEvent = 0;
-        m_isMenuView = false;
+        m_currentlyInterpretedKeyEvent = nil;
         self.focusRingType = NSFocusRingTypeNone;
         self.cursor = nil;
         m_updateRequested = false;
@@ -296,7 +294,7 @@
         return NO;
     if ([self isTransparentForUserInput])
         return NO;
-    if (!m_platformWindow->windowIsPopupType() && !m_isMenuView)
+    if (!m_platformWindow->windowIsPopupType())
         QWindowSystemInterface::handleWindowActivated([self topLevelWindow]);
     return YES;
 }
@@ -304,8 +302,6 @@
 - (BOOL)acceptsFirstResponder
 {
     if (!m_platformWindow)
-        return NO;
-    if (m_isMenuView)
         return NO;
     if (m_platformWindow->shouldRefuseKeyWindowAndFirstResponder())
         return NO;
@@ -365,6 +361,7 @@
 #include "qnsview_dragging.mm"
 #include "qnsview_keys.mm"
 #include "qnsview_complextext.mm"
+#include "qnsview_menus.mm"
 
 // -----------------------------------------------------
 
@@ -373,11 +370,6 @@
 - (QCocoaWindow*)platformWindow
 {
     return m_platformWindow.data();;
-}
-
-- (BOOL)isMenuView
-{
-    return m_isMenuView;
 }
 
 @end

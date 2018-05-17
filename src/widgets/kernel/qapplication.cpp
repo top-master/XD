@@ -130,6 +130,7 @@ QT_BEGIN_NAMESPACE
     }
 
 Q_CORE_EXPORT void qt_call_post_routines();
+Q_GUI_EXPORT bool qt_sendShortcutOverrideEvent(QObject *o, ulong timestamp, int k, Qt::KeyboardModifiers mods, const QString &text = QString(), bool autorep = false, ushort count = 1);
 
 QApplicationPrivate *QApplicationPrivate::self = 0;
 
@@ -2624,7 +2625,7 @@ QWidget *QApplicationPrivate::pickMouseReceiver(QWidget *candidate, const QPoint
 bool QApplicationPrivate::sendMouseEvent(QWidget *receiver, QMouseEvent *event,
                                          QWidget *alienWidget, QWidget *nativeWidget,
                                          QWidget **buttonDown, QPointer<QWidget> &lastMouseReceiver,
-                                         bool spontaneous)
+                                         bool spontaneous, bool onlyDispatchEnterLeave)
 {
     Q_ASSERT(receiver);
     Q_ASSERT(event);
@@ -2685,11 +2686,17 @@ bool QApplicationPrivate::sendMouseEvent(QWidget *receiver, QMouseEvent *event,
     // We need this quard in case someone opens a modal dialog / popup. If that's the case
     // leaveAfterRelease is set to null, but we shall not update lastMouseReceiver.
     const bool wasLeaveAfterRelease = leaveAfterRelease != 0;
-    bool result;
-    if (spontaneous)
-        result = QApplication::sendSpontaneousEvent(receiver, event);
-    else
-        result = QApplication::sendEvent(receiver, event);
+    bool result = true;
+    // This code is used for sending the synthetic enter/leave events for cases where it is needed
+    // due to other events causing the widget under the mouse to change. However in those cases
+    // we do not want to send the mouse event associated with this call, so this enables us to
+    // not send the unneeded mouse event
+    if (!onlyDispatchEnterLeave) {
+        if (spontaneous)
+            result = QApplication::sendSpontaneousEvent(receiver, event);
+        else
+            result = QApplication::sendEvent(receiver, event);
+    }
 
     if (!graphicsWidget && leaveAfterRelease && event->type() == QEvent::MouseButtonRelease
         && !event->buttons() && QWidget::mouseGrabber() != leaveAfterRelease) {
@@ -2764,9 +2771,10 @@ void QApplicationPrivate::sendSyntheticEnterLeave(QWidget *widget)
     if (widget->data->in_destructor && qt_button_down == widget)
         qt_button_down = 0;
 
-    // Send enter/leave events followed by a mouse move on the entered widget.
+    // A mouse move is not actually sent, but we utilize the sendMouseEvent() call to send the
+    // enter/leave events as appropriate
     QMouseEvent e(QEvent::MouseMove, pos, windowPos, globalPos, Qt::NoButton, Qt::NoButton, Qt::NoModifier);
-    sendMouseEvent(widgetUnderCursor, &e, widgetUnderCursor, tlw, &qt_button_down, qt_last_mouse_receiver);
+    sendMouseEvent(widgetUnderCursor, &e, widgetUnderCursor, tlw, &qt_button_down, qt_last_mouse_receiver, true, true);
 #else // !QT_NO_CURSOR
     Q_UNUSED(widget);
 #endif // QT_NO_CURSOR
@@ -2944,8 +2952,10 @@ bool QApplication::notify(QObject *receiver, QEvent *e)
     d->checkReceiverThread(receiver);
 #endif
 
-    if (receiver->isWindowType())
-        QGuiApplicationPrivate::sendQWindowEventToQPlatformWindow(static_cast<QWindow *>(receiver), e);
+    if (receiver->isWindowType()) {
+        if (QGuiApplicationPrivate::sendQWindowEventToQPlatformWindow(static_cast<QWindow *>(receiver), e))
+            return true; // Platform plugin ate the event
+    }
 
     if(e->spontaneous()) {
         // Capture the current mouse and keyboard states. Doing so here is
@@ -3068,8 +3078,19 @@ bool QApplication::notify(QObject *receiver, QEvent *e)
 
     switch (e->type()) {
         case QEvent::KeyPress: {
-                int key = static_cast<QKeyEvent*>(e)->key();
-                qt_in_tab_key_event = (key == Qt::Key_Backtab
+            QKeyEvent* keyEvent = static_cast<QKeyEvent*>(e);
+            const int key = keyEvent->key();
+            // When a key press is received which is not spontaneous then it needs to
+            // be manually sent as a shortcut override event to ensure that any
+            // matching shortcut is triggered first. This enables emulation/playback
+            // of recorded events to still have the same effect.
+            if (!e->spontaneous() && receiver->isWidgetType()) {
+                if (qt_sendShortcutOverrideEvent(qobject_cast<QWidget *>(receiver), keyEvent->timestamp(),
+                                                 key, keyEvent->modifiers(), keyEvent->text(),
+                                                 keyEvent->isAutoRepeat(), keyEvent->count()))
+                    return true;
+            }
+            qt_in_tab_key_event = (key == Qt::Key_Backtab
                         || key == Qt::Key_Tab
                         || key == Qt::Key_Left
                         || key == Qt::Key_Up
@@ -3637,7 +3658,7 @@ bool QApplication::notify(QObject *receiver, QEvent *e)
                     break;
                 w = w->parentWidget();
             }
-            foreach (QGesture *g, allGestures)
+            for (QGesture *g : qAsConst(allGestures))
                 gestureEvent->setAccepted(g, false);
             gestureEvent->m_accept = false; // to make sure we check individual gestures
         } else {

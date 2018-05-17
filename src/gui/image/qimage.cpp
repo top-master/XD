@@ -2303,8 +2303,7 @@ QRgb QImage::pixel(int x, int y) const
     }
     const QPixelLayout *layout = &qPixelLayouts[d->format];
     uint result;
-    const uint *ptr = qFetchPixels[layout->bpp](&result, s, x, 1);
-    return *layout->convertToARGB32PM(&result, ptr, 1, 0, 0);
+    return *layout->fetchToARGB32PM(&result, s, x, 1, nullptr, nullptr);
 }
 
 /*!
@@ -2405,9 +2404,7 @@ void QImage::setPixel(int x, int y, uint index_or_rgb)
     }
 
     const QPixelLayout *layout = &qPixelLayouts[d->format];
-    uint result;
-    const uint *ptr = layout->convertFromARGB32PM(&result, &index_or_rgb, 1, 0, 0);
-    qStorePixels[layout->bpp](s, ptr, x, 1);
+    layout->storeFromARGB32PM(s, &index_or_rgb, x, 1, nullptr, nullptr);
 }
 
 /*!
@@ -2584,14 +2581,13 @@ bool QImage::allGray() const
 
     uint buffer[BufferSize];
     const QPixelLayout *layout = &qPixelLayouts[d->format];
-    FetchPixelsFunc fetch = qFetchPixels[layout->bpp];
+    const auto fetch = layout->fetchToARGB32PM;
     for (int j = 0; j < d->height; ++j) {
         const uchar *b = constScanLine(j);
         int x = 0;
         while (x < d->width) {
             int l = qMin(d->width - x, BufferSize);
-            const uint *ptr = fetch(buffer, b, x, l);
-            ptr = layout->convertToARGB32PM(buffer, ptr, l, 0, 0);
+            const uint *ptr = fetch(buffer, b, x, l, nullptr, nullptr);
             for (int i = 0; i < l; ++i) {
                 if (!qIsGray(ptr[i]))
                     return false;
@@ -2778,6 +2774,13 @@ QMatrix QImage::trueMatrix(const QMatrix &matrix, int w, int h)
 /*!
     Returns a copy of the image that is transformed using the given
     transformation \a matrix and transformation \a mode.
+
+    The returned image will normally have the same {Image Formats}{format} as
+    the original image. However, a complex transformation may result in an
+    image where not all pixels are covered by the transformed pixels of the
+    original image. In such cases, those background pixels will be assigned a
+    transparent color value, and the transformed image will be given a format
+    with an alpha channel, even if the orginal image did not have that.
 
     The transformation \a matrix is internally adjusted to compensate
     for unwanted translation; i.e. the image produced is the smallest
@@ -3209,9 +3212,7 @@ void QImage::mirrored_inplace(bool horizontal, bool vertical)
 
 inline void rgbSwapped_generic(int width, int height, const QImage *src, QImage *dst, const QPixelLayout* layout)
 {
-    FetchPixelsFunc fetch = qFetchPixels[layout->bpp];
-    StorePixelsFunc store = qStorePixels[layout->bpp];
-    RbSwapFunc func = layout->rbSwap;
+    const RbSwapFunc func = layout->rbSwap;
     if (!func) {
         qWarning("Trying to rb-swap an image format where it doesn't make sense");
         if (src != dst)
@@ -3219,19 +3220,10 @@ inline void rgbSwapped_generic(int width, int height, const QImage *src, QImage 
         return;
     }
 
-    uint buffer[BufferSize];
     for (int i = 0; i < height; ++i) {
         uchar *q = dst->scanLine(i);
         const uchar *p = src->constScanLine(i);
-        int x = 0;
-        while (x < width) {
-            int l = qMin(width - x, BufferSize);
-            const uint *ptr = fetch(buffer, p, x, l);
-            ptr = func(buffer, ptr, l);
-            if (q != (const uchar *)ptr)
-                store(q, ptr, x, l);
-            x += l;
-        }
+        func(q, p, width);
     }
 }
 
@@ -4584,6 +4576,13 @@ static QImage rotated270(const QImage &image)
 /*!
     Returns a copy of the image that is transformed using the given
     transformation \a matrix and transformation \a mode.
+
+    The returned image will normally have the same {Image Formats}{format} as
+    the original image. However, a complex transformation may result in an
+    image where not all pixels are covered by the transformed pixels of the
+    original image. In such cases, those background pixels will be assigned a
+    transparent color value, and the transformed image will be given a format
+    with an alpha channel, even if the orginal image did not have that.
 
     The transformation \a matrix is internally adjusted to compensate
     for unwanted translation; i.e. the image produced is the smallest

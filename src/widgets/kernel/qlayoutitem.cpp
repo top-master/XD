@@ -44,7 +44,9 @@
 #if QT_CONFIG(menubar)
 #include "qmenubar.h"
 #endif
+#if QT_CONFIG(toolbar)
 #include "qtoolbar.h"
+#endif
 #include "qevent.h"
 #include "qstyle.h"
 #include "qvariant.h"
@@ -839,7 +841,7 @@ int QWidgetItemV2::heightForWidth(int width) const
         const QSize &size = q_cachedHfws[offset % HfwCacheMaxSize];
         if (size.width() == width) {
             if (q_hfwCacheSize == HfwCacheMaxSize)
-                q_firstCachedHfw = offset;
+                q_firstCachedHfw = offset % HfwCacheMaxSize;
             return size.height();
         }
     }

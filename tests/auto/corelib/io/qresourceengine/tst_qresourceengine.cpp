@@ -29,6 +29,7 @@
 
 #include <QtTest/QtTest>
 #include <QtCore/QCoreApplication>
+#include <QtCore/QMimeDatabase>
 
 class tst_QResourceEngine: public QObject
 {
@@ -56,6 +57,7 @@ private slots:
     void doubleSlashInRoot();
     void setLocale();
     void lastModified();
+    void resourcesInStaticPlugins();
 
 private:
     const QString m_runtimeResourceRcc;
@@ -118,6 +120,7 @@ void tst_QResourceEngine::checkStructure_data()
                  << QLatin1String("searchpath1")
                  << QLatin1String("searchpath2")
                  << QLatin1String("secondary_root")
+                 << QLatin1String("staticplugin")
                  << QLatin1String("test")
                  << QLatin1String("withoutslashes");
 
@@ -125,9 +128,19 @@ void tst_QResourceEngine::checkStructure_data()
     rootContents.insert(1, QLatin1String("android_testdata"));
 #endif
 
+#if defined(BUILTIN_TESTDATA)
+    rootContents.insert(8, QLatin1String("testqrc"));
+#endif
+
+
     QTest::newRow("root dir")          << QString(":/")
                                        << QString()
-                                       << (QStringList() << "search_file.txt")
+                                       << (QStringList()
+#if defined(BUILTIN_TESTDATA)
+                                           << "parentdir.txt"
+                                           << "runtime_resource.rcc"
+#endif
+                                           << "search_file.txt")
                                        << rootContents
                                        << QLocale::c()
                                        << qlonglong(0);
@@ -334,6 +347,11 @@ void tst_QResourceEngine::checkStructure()
     QFETCH(QLocale, locale);
     QFETCH(qlonglong, contentsSize);
 
+    // We rely on the existence of the root "qt-project.org" in resources. For
+    // static builds on MSVC these resources are only added if they are used.
+    QMimeDatabase db;
+    Q_UNUSED(db);
+
     bool directory = (containedDirs.size() + containedFiles.size() > 0);
     QLocale::setDefault(locale);
 
@@ -502,6 +520,16 @@ void tst_QResourceEngine::lastModified()
         QVERIFY(fi.exists());
         QVERIFY(fi.lastModified().isValid());
     }
+}
+
+Q_IMPORT_PLUGIN(PluginClass)
+void tst_QResourceEngine::resourcesInStaticPlugins()
+{
+    // We built a separate static plugin and attempted linking against
+    // it. That should successfully register the resources linked into
+    // the plugin via moc generated Q_INIT_RESOURCE calls in a
+    // Q_CONSTRUCTOR_FUNCTION.
+    QVERIFY(QFile::exists(":/staticplugin/main.cpp"));
 }
 
 QTEST_MAIN(tst_QResourceEngine)

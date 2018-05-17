@@ -160,10 +160,7 @@ Qt::DropActions qt_mac_mapNSDragOperations(NSDragOperation nsActions)
 */
 QNSView *qnsview_cast(NSView *view)
 {
-    if (![view isKindOfClass:[QNSView class]])
-        return nil;
-
-    return static_cast<QNSView *>(view);
+    return qt_objc_cast<QNSView *>(view);
 }
 
 //
@@ -264,11 +261,92 @@ QRectF qt_mac_flip(const QRectF &rect, const QRectF &reference)
 
 // -------------------------------------------------------------------------
 
+/*!
+  \fn Qt::MouseButton cocoaButton2QtButton(NSInteger buttonNum)
+
+  Returns the Qt::Button that corresponds to an NSEvent.buttonNumber.
+
+  \note AppKit will use buttonNumber 0 to indicate both "left button"
+  and "no button". Only NSEvents that describes mouse press/release
+  events (e.g NSEventTypeOtherMouseDown) will contain a valid
+  button number.
+*/
 Qt::MouseButton cocoaButton2QtButton(NSInteger buttonNum)
 {
     if (buttonNum >= 0 && buttonNum <= 31)
         return Qt::MouseButton(1 << buttonNum);
     return Qt::NoButton;
+}
+
+/*!
+  \fn Qt::MouseButton cocoaButton2QtButton(NSEvent *event)
+
+  Returns the Qt::Button that corresponds to an NSEvent.buttonNumber.
+
+  \note AppKit will use buttonNumber 0 to indicate both "left button"
+  and "no button". Only NSEvents that describes mouse press/release/dragging
+  events (e.g NSEventTypeOtherMouseDown) will contain a valid
+  button number.
+*/
+Qt::MouseButton cocoaButton2QtButton(NSEvent *event)
+{
+    if (event.type == NSMouseMoved)
+        return Qt::NoButton;
+
+    return cocoaButton2QtButton(event.buttonNumber);
+}
+
+/*!
+  \fn QEvent::Type cocoaEvent2QtMouseEvent(NSEvent *event)
+
+  Returns the QEvent::Type that corresponds to an NSEvent.type.
+*/
+QEvent::Type cocoaEvent2QtMouseEvent(NSEvent *event)
+{
+    switch (event.type) {
+    case NSLeftMouseDown:
+    case NSRightMouseDown:
+    case NSOtherMouseDown:
+        return QEvent::MouseButtonPress;
+
+    case NSLeftMouseUp:
+    case NSRightMouseUp:
+    case NSOtherMouseUp:
+        return QEvent::MouseButtonRelease;
+
+    case NSLeftMouseDragged:
+    case NSRightMouseDragged:
+    case NSOtherMouseDragged:
+        return QEvent::MouseMove;
+
+    case NSMouseMoved:
+        return QEvent::MouseMove;
+
+    default:
+        break;
+    }
+
+    return QEvent::None;
+}
+
+/*!
+  \fn Qt::MouseButtons cocoaMouseButtons2QtMouseButtons(NSInteger pressedMouseButtons)
+
+  Returns the Qt::MouseButtons that corresponds to an NSEvent.pressedMouseButtons.
+*/
+Qt::MouseButtons cocoaMouseButtons2QtMouseButtons(NSInteger pressedMouseButtons)
+{
+  return static_cast<Qt::MouseButton>(pressedMouseButtons & Qt::MouseButtonMask);
+}
+
+/*!
+  \fn Qt::MouseButtons currentlyPressedMouseButtons()
+
+  Returns the Qt::MouseButtons that corresponds to an NSEvent.pressedMouseButtons.
+*/
+Qt::MouseButtons currentlyPressedMouseButtons()
+{
+  return cocoaMouseButtons2QtMouseButtons(NSEvent.pressedMouseButtons);
 }
 
 QString qt_mac_removeAmpersandEscapes(QString s)

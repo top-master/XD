@@ -53,6 +53,7 @@
 #include "qxcbsystemtraytracker.h"
 #include "qxcbglintegrationfactory.h"
 #include "qxcbglintegration.h"
+#include "qxcbcursor.h"
 
 #include <QSocketNotifier>
 #include <QAbstractEventDispatcher>
@@ -1610,29 +1611,6 @@ xcb_window_t QXcbConnection::clientLeader()
     return m_clientLeader;
 }
 
-#if QT_CONFIG(xcb_xlib)
-void *QXcbConnection::xlib_display() const
-{
-    return m_xlib_display;
-}
-
-void *QXcbConnection::createVisualInfoForDefaultVisualId() const
-{
-    if (m_defaultVisualId == UINT_MAX)
-        return 0;
-    XVisualInfo info;
-    memset(&info, 0, sizeof info);
-    info.visualid = m_defaultVisualId;
-
-    int count = 0;
-    Display *dpy = static_cast<Display *>(connection()->xlib_display());
-    XVisualInfo *retVisual = XGetVisualInfo(dpy, VisualIDMask, &info, &count);
-    Q_ASSERT(count < 2);
-    return retVisual;
-}
-
-#endif
-
 #if QT_CONFIG(xcb_xinput)
 static inline bool isXIType(xcb_generic_event_t *event, int opCode, uint16_t type)
 {
@@ -2132,17 +2110,22 @@ void QXcbConnection::initializeXRender()
 {
 #if QT_CONFIG(xcb_render)
     const xcb_query_extension_reply_t *reply = xcb_get_extension_data(m_connection, &xcb_render_id);
-    if (!reply || !reply->present)
+    if (!reply || !reply->present) {
+        qCDebug(lcQpaXcb, "XRender extension not present on the X server");
         return;
+    }
 
     auto xrender_query = Q_XCB_REPLY(xcb_render_query_version, m_connection,
                                      XCB_RENDER_MAJOR_VERSION,
                                      XCB_RENDER_MINOR_VERSION);
-    if (!xrender_query || (xrender_query->major_version == 0 && xrender_query->minor_version < 5)) {
-        qWarning("QXcbConnection: Failed to initialize XRender");
+    if (!xrender_query) {
+        qCWarning(lcQpaXcb, "xcb_render_query_version failed");
         return;
     }
+
     has_render_extension = true;
+    m_xrenderVersion.first = xrender_query->major_version;
+    m_xrenderVersion.second = xrender_query->minor_version;
 #endif
 }
 
@@ -2291,6 +2274,20 @@ bool QXcbConnection::xEmbedSystemTrayVisualHasAlphaChannel()
         return false;
     QXcbConnection *connection = static_cast<QXcbIntegration *>(QGuiApplicationPrivate::platformIntegration())->defaultConnection();
     return connection->systemTrayTracker() && connection->systemTrayTracker()->visualHasAlphaChannel();
+}
+
+Qt::MouseButtons QXcbConnection::queryMouseButtons() const
+{
+    int stateMask = 0;
+    QXcbCursor::queryPointer(connection(), 0, 0, &stateMask);
+    return translateMouseButtons(stateMask);
+}
+
+Qt::KeyboardModifiers QXcbConnection::queryKeyboardModifiers() const
+{
+    int stateMask = 0;
+    QXcbCursor::queryPointer(connection(), 0, 0, &stateMask);
+    return keyboard()->translateModifiers(stateMask);
 }
 
 bool QXcbConnection::event(QEvent *e)

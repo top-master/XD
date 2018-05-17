@@ -115,18 +115,15 @@
     }
 #endif
 
-    QWindowPrivate *windowPrivate = qt_window_private(m_platformWindow->window());
-
     if (m_updateRequested) {
-        Q_ASSERT(windowPrivate->updateRequestPending);
-        qCDebug(lcQpaWindow) << "Delivering update request to" << m_platformWindow->window();
+        Q_ASSERT(m_platformWindow->hasPendingUpdateRequest());
         m_platformWindow->deliverUpdateRequest();
         m_updateRequested = false;
     } else {
         m_platformWindow->handleExposeEvent(dirtyRegion);
     }
 
-    if (windowPrivate->updateRequestPending) {
+    if (m_updateRequested && m_platformWindow->hasPendingUpdateRequest()) {
         // A call to QWindow::requestUpdate was issued during event delivery above,
         // but AppKit will reset the needsDisplay state of the view after completing
         // the current display cycle, so we need to defer the request to redisplay.
@@ -134,6 +131,12 @@
         qCDebug(lcQpaDrawing) << "[QNSView drawRect:] issuing deferred setNeedsDisplay due to pending update request";
         dispatch_async(dispatch_get_main_queue (), ^{ [self requestUpdate]; });
     }
+}
+
+- (BOOL)shouldUseMetalLayer:(QSurface::SurfaceType)surfaceType
+{
+    // MetalSurface needs a layer, and so does VulkanSurface (via MoltenVK)
+    return surfaceType == QWindow::MetalSurface || surfaceType == QWindow::VulkanSurface;
 }
 
 - (BOOL)wantsLayer
@@ -144,8 +147,59 @@
     // on and off is not a supported use-case, so this code is effectively
     // returning a constant for the lifetime of our QSNSView, which means
     // we don't care about emitting KVO signals for @"wantsLayer".
-    return qt_mac_resolveOption(false, m_platformWindow->window(),
+    bool layerRequested = qt_mac_resolveOption(false, m_platformWindow->window(),
         "_q_mac_wantsLayer", "QT_MAC_WANTS_LAYER");
+
+    bool layerForSurfaceType = [self shouldUseMetalLayer:m_platformWindow->window()->surfaceType()];
+
+    return layerRequested || layerForSurfaceType;
+}
+
+- (CALayer *)makeBackingLayer
+{
+    bool makeMetalLayer = [self shouldUseMetalLayer:m_platformWindow->window()->surfaceType()];
+    if (makeMetalLayer) {
+        // Check if Metal is supported. If it isn't then it's most likely
+        // too late at this point and the QWindow will be non-functional,
+        // but we can at least print a warning.
+        if (![MTLCreateSystemDefaultDevice() autorelease]) {
+            qWarning() << "QWindow initialization error: Metal is not supported";
+            return [super makeBackingLayer];
+        }
+
+        CAMetalLayer *layer = [CAMetalLayer layer];
+
+        // Set the contentsScale for the layer. This is normally done in
+        // viewDidChangeBackingProperties, however on startup that function
+        // is called before the layer is created here. The layer's drawableSize
+        // is updated from layoutSublayersOfLayer as usual.
+        layer.contentsScale = self.window.backingScaleFactor;
+
+        return layer;
+    }
+
+    return [super makeBackingLayer];
+}
+
+- (NSViewLayerContentsRedrawPolicy)layerContentsRedrawPolicy
+{
+    // We need to set this this excplicitly since the super implementation
+    // returns LayerContentsRedrawNever for custom layers like CAMetalLayer.
+    return NSViewLayerContentsRedrawDuringViewResize;
+}
+
+- (void)updateMetalLayerDrawableSize:(CAMetalLayer *)layer
+{
+    CGSize drawableSize = layer.bounds.size;
+    drawableSize.width *= layer.contentsScale;
+    drawableSize.height *= layer.contentsScale;
+    layer.drawableSize = drawableSize;
+}
+
+- (void)layoutSublayersOfLayer:(CALayer *)layer
+{
+    if ([layer isKindOfClass:CAMetalLayer.class])
+        [self updateMetalLayerDrawableSize:static_cast<CAMetalLayer* >(layer)];
 }
 
 - (void)displayLayer:(CALayer *)layer
@@ -163,8 +217,17 @@
 
 - (void)viewDidChangeBackingProperties
 {
-    if (self.layer)
-        self.layer.contentsScale = self.window.backingScaleFactor;
+    CALayer *layer = self.layer;
+    if (!layer)
+        return;
+
+    layer.contentsScale = self.window.backingScaleFactor;
+
+    // Metal layers must be manually updated on e.g. screen change
+    if ([layer isKindOfClass:CAMetalLayer.class]) {
+        [self updateMetalLayerDrawableSize:static_cast<CAMetalLayer* >(layer)];
+        [self setNeedsDisplay:YES];
+    }
 }
 
 @end

@@ -19,7 +19,15 @@ QtPlugin {
 
     cpp.includePaths: base.concat(".")
     cpp.requireAppExtensionSafeApi: false
-    cpp.frameworks: ["AppKit", "Carbon", "IOKit", "QuartzCore", "OpenGL"]
+    cpp.frameworks: [
+        "AppKit",
+        "Carbon",
+        "CoreServices",
+        "IOKit",
+        "Metal",
+        "OpenGL",
+        "QuartzCore",
+    ]
     cpp.dynamicLibraries: ["cups"]
     cpp.defines: base.filter(function(d) { return d !== "QT_NO_FOREACH" })
     files: [
@@ -99,6 +107,13 @@ QtPlugin {
         files: [
             "qcocoaglcontext.h",
             "qcocoaglcontext.mm",
+        ]
+    }
+    Group {
+        condition: Qt.gui.config.vulkan
+        files: [
+            "qcocoavulkaninstance.h",
+            "qcocoavulkaninstance.mm",
         ]
     }
     Group {

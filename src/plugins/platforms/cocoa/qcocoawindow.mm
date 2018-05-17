@@ -143,7 +143,7 @@ const int QCocoaWindow::NoAlertRequest = -1;
 QCocoaWindow::QCocoaWindow(QWindow *win, WId nativeHandle)
     : QPlatformWindow(win)
     , m_view(nil)
-    , m_nsWindow(0)
+    , m_nsWindow(nil)
     , m_lastReportedWindowState(Qt::WindowNoState)
     , m_windowModality(Qt::NonModal)
     , m_windowUnderMouse(false)
@@ -152,9 +152,9 @@ QCocoaWindow::QCocoaWindow(QWindow *win, WId nativeHandle)
     , m_inSetGeometry(false)
     , m_inSetStyleMask(false)
 #ifndef QT_NO_OPENGL
-    , m_glContext(0)
+    , m_glContext(nullptr)
 #endif
-    , m_menubar(0)
+    , m_menubar(nullptr)
     , m_needsInvalidateShadow(false)
     , m_hasModalSession(false)
     , m_frameStrutEventsEnabled(false)
@@ -222,10 +222,16 @@ QCocoaWindow::~QCocoaWindow()
     if (!isForeignWindow())
         [[NSNotificationCenter defaultCenter] removeObserver:m_view];
 
-    // While it is unlikely that this window will be in the popup stack
-    // during deletetion we clear any pointers here to make sure.
-    if (QCocoaIntegration::instance()) {
-        QCocoaIntegration::instance()->popupWindowStack()->removeAll(this);
+    if (QCocoaIntegration *cocoaIntegration = QCocoaIntegration::instance()) {
+        // While it is unlikely that this window will be in the popup stack
+        // during deletetion we clear any pointers here to make sure.
+        cocoaIntegration->popupWindowStack()->removeAll(this);
+
+#if QT_CONFIG(vulkan)
+        auto vulcanInstance = cocoaIntegration->getCocoaVulkanInstance();
+        if (vulcanInstance)
+            vulcanInstance->destroySurface(m_vulkanSurface);
+#endif
     }
 
     [m_view release];
@@ -316,7 +322,7 @@ void QCocoaWindow::setVisible(bool visible)
     m_inSetVisible = true;
 
     QMacAutoReleasePool pool;
-    QCocoaWindow *parentCocoaWindow = 0;
+    QCocoaWindow *parentCocoaWindow = nullptr;
     if (window()->transientParent())
         parentCocoaWindow = static_cast<QCocoaWindow *>(window()->transientParent()->handle());
 
@@ -368,13 +374,13 @@ void QCocoaWindow::setVisible(bool visible)
                 } else if (window()->modality() != Qt::NonModal) {
                     // show the window as application modal
                     QCocoaEventDispatcher *cocoaEventDispatcher = qobject_cast<QCocoaEventDispatcher *>(QGuiApplication::instance()->eventDispatcher());
-                    Q_ASSERT(cocoaEventDispatcher != 0);
+                    Q_ASSERT(cocoaEventDispatcher);
                     QCocoaEventDispatcherPrivate *cocoaEventDispatcherPrivate = static_cast<QCocoaEventDispatcherPrivate *>(QObjectPrivate::get(cocoaEventDispatcher));
                     cocoaEventDispatcherPrivate->beginModalSession(window());
                     m_hasModalSession = true;
                 } else if ([m_view.window canBecomeKeyWindow]) {
                     QCocoaEventDispatcher *cocoaEventDispatcher = qobject_cast<QCocoaEventDispatcher *>(QGuiApplication::instance()->eventDispatcher());
-                    QCocoaEventDispatcherPrivate *cocoaEventDispatcherPrivate = 0;
+                    QCocoaEventDispatcherPrivate *cocoaEventDispatcherPrivate = nullptr;
                     if (cocoaEventDispatcher)
                         cocoaEventDispatcherPrivate = static_cast<QCocoaEventDispatcherPrivate *>(QObjectPrivate::get(cocoaEventDispatcher));
 
@@ -393,9 +399,12 @@ void QCocoaWindow::setVisible(bool visible)
                     if (!(parentCocoaWindow && window()->transientParent()->isActive()) && window()->type() == Qt::Popup) {
                         removeMonitor();
                         monitor = [NSEvent addGlobalMonitorForEventsMatchingMask:NSLeftMouseDownMask|NSRightMouseDownMask|NSOtherMouseDownMask|NSMouseMovedMask handler:^(NSEvent *e) {
-                            QPointF localPoint = QCocoaScreen::mapFromNative([NSEvent mouseLocation]);
-                            QWindowSystemInterface::handleMouseEvent(window(), window()->mapFromGlobal(localPoint.toPoint()), localPoint,
-                                                                     cocoaButton2QtButton([e buttonNumber]));
+                            const auto button = cocoaButton2QtButton(e);
+                            const auto buttons = currentlyPressedMouseButtons();
+                            const auto eventType = cocoaEvent2QtMouseEvent(e);
+                            const auto globalPoint = QCocoaScreen::mapFromNative(NSEvent.mouseLocation);
+                            const auto localPoint = window()->mapFromGlobal(globalPoint.toPoint());
+                            QWindowSystemInterface::handleMouseEvent(window(), localPoint, globalPoint, buttons, button, eventType);
                         }];
                     }
                 }
@@ -413,7 +422,7 @@ void QCocoaWindow::setVisible(bool visible)
             m_glContext->windowWasHidden();
 #endif
         QCocoaEventDispatcher *cocoaEventDispatcher = qobject_cast<QCocoaEventDispatcher *>(QGuiApplication::instance()->eventDispatcher());
-        QCocoaEventDispatcherPrivate *cocoaEventDispatcherPrivate = 0;
+        QCocoaEventDispatcherPrivate *cocoaEventDispatcherPrivate = nullptr;
         if (cocoaEventDispatcher)
             cocoaEventDispatcherPrivate = static_cast<QCocoaEventDispatcherPrivate *>(QObjectPrivate::get(cocoaEventDispatcher));
         if (isContentView()) {
@@ -481,7 +490,8 @@ NSInteger QCocoaWindow::windowLevel(Qt::WindowFlags flags)
     // Any "special" window should be in at least the same level as its parent.
     if (type != Qt::Window) {
         const QWindow * const transientParent = window()->transientParent();
-        const QCocoaWindow * const transientParentWindow = transientParent ? static_cast<QCocoaWindow *>(transientParent->handle()) : 0;
+        const QCocoaWindow * const transientParentWindow = transientParent ?
+                    static_cast<QCocoaWindow *>(transientParent->handle()) : nullptr;
         if (transientParentWindow)
             windowLevel = qMax([transientParentWindow->nativeWindow() level], windowLevel);
     }
@@ -949,7 +959,7 @@ void QCocoaWindow::windowDidBecomeKey()
         QWindowSystemInterface::handleEnterEvent(m_enterLeaveTargetWindow, windowPoint, screenPoint);
     }
 
-    if (!windowIsPopupType() && !qnsview_cast(m_view).isMenuView)
+    if (!windowIsPopupType())
         QWindowSystemInterface::handleWindowActivated<QWindowSystemInterface::SynchronousDelivery>(window());
 }
 
@@ -967,7 +977,7 @@ void QCocoaWindow::windowDidResignKey()
     NSWindow *keyWindow = [NSApp keyWindow];
     if (!keyWindow || keyWindow == m_view.window) {
         // No new key window, go ahead and set the active window to zero
-        if (!windowIsPopupType() && !qnsview_cast(m_view).isMenuView)
+        if (!windowIsPopupType())
             QWindowSystemInterface::handleWindowActivated<QWindowSystemInterface::SynchronousDelivery>(0);
     }
 }
@@ -1276,18 +1286,13 @@ void QCocoaWindow::recreateWindowIfNeeded()
                 // with a NSWindow contentView pointing to a deallocated NSView.
                 m_view.window.contentView = nil;
             }
-            m_nsWindow = 0;
+            m_nsWindow = nil;
         }
     }
 
-    if (shouldBeContentView) {
-        bool noPreviousWindow = m_nsWindow == 0;
-        QCocoaNSWindow *newWindow = nullptr;
-        if (noPreviousWindow)
-            newWindow = createNSWindow(shouldBePanel);
-
+    if (shouldBeContentView && !m_nsWindow) {
         // Move view to new NSWindow if needed
-        if (newWindow) {
+        if (auto *newWindow = createNSWindow(shouldBePanel)) {
             qCDebug(lcQpaWindow) << "Ensuring that" << m_view << "is content view for" << newWindow;
             [m_view setPostsFrameChangedNotifications:NO];
             [newWindow setContentView:m_view];
@@ -1335,7 +1340,13 @@ void QCocoaWindow::recreateWindowIfNeeded()
 void QCocoaWindow::requestUpdate()
 {
     qCDebug(lcQpaDrawing) << "QCocoaWindow::requestUpdate" << window();
-    [qnsview_cast(m_view) requestUpdate];
+    QPlatformWindow::requestUpdate();
+}
+
+void QCocoaWindow::deliverUpdateRequest()
+{
+    qCDebug(lcQpaDrawing) << "Delivering update request to" << window();
+    QPlatformWindow::deliverUpdateRequest();
 }
 
 void QCocoaWindow::requestActivateWindow()

@@ -2,7 +2,7 @@
 **
 ** Copyright (C) 2016 The Qt Company Ltd.
 ** Copyright (C) 2016 Olivier Goffart <ogoffart@woboq.com>
-** Copyright (C) 2016 Intel Corporation.
+** Copyright (C) 2018 Intel Corporation.
 ** Contact: https://www.qt.io/licensing/
 **
 ** This file is part of the QtCore module of the Qt Toolkit.
@@ -60,6 +60,9 @@
 #endif
 #ifdef Q_OS_WIN
 #include <qt_windows.h>
+#endif
+#ifdef Q_CC_MSVC
+#include <intrin.h>
 #endif
 #if QT_CONFIG(slog2)
 #include <sys/slog2.h>
@@ -208,6 +211,7 @@ static bool isDefaultCategory(const char *category)
 /*!
     Returns true if writing to \c stderr is supported.
 
+    \internal
     \sa stderrHasConsoleAttached()
 */
 static bool systemHasStderr()
@@ -236,6 +240,7 @@ static bool systemHasStderr()
     the output might still end up visible to the user. For this reason, we don't guard
     the stderr output in the default message handler with stderrHasConsoleAttached().
 
+    \internal
     \sa systemHasStderr()
 */
 bool stderrHasConsoleAttached()
@@ -288,6 +293,7 @@ namespace QtPrivate {
     This is normally the case if \c stderr has a console attached, but may be overridden
     by the user by setting the QT_FORCE_STDERR_LOGGING environment variable to \c 1.
 
+    \internal
     \sa stderrHasConsoleAttached()
 */
 bool shouldLogToStderr()
@@ -1836,7 +1842,31 @@ static void qt_message_fatal(QtMsgType, const QMessageLogContext &context, const
     Q_UNUSED(message);
 #endif
 
+#ifdef Q_OS_WIN
+    // std::abort() in the MSVC runtime will call _exit(3) if the abort
+    // behavior is _WRITE_ABORT_MSG - see also _set_abort_behavior(). This is
+    // the default for a debug-mode build of the runtime. Worse, MinGW's
+    // std::abort() implementation (in msvcrt.dll) is basically a call to
+    // _exit(3) too. Unfortunately, _exit() and _Exit() *do* run the static
+    // destructors of objects in DLLs, a violation of the C++ standard (see
+    // [support.start.term]). So we bypass std::abort() and directly
+    // terminate the application.
+
+#  ifdef Q_CC_MSVC
+    if (IsProcessorFeaturePresent(PF_FASTFAIL_AVAILABLE))
+        __fastfail(FAST_FAIL_FATAL_APP_EXIT);
+#  else
+    RaiseFailFastException(nullptr, nullptr, 0);
+#  endif
+
+    // Fallback
+    TerminateProcess(GetCurrentProcess(), STATUS_FATAL_APP_EXIT);
+
+    // Tell the compiler the application has stopped.
+    Q_UNREACHABLE_IMPL();
+#else // !Q_OS_WIN
     std::abort();
+#endif
 }
 
 

@@ -392,6 +392,8 @@ QtModuleProject {
             files: [
                 "ssl/qasn1element.cpp",
                 "ssl/qasn1element_p.h",
+                "ssl/qpassworddigestor.cpp",
+                "ssl/qpassworddigestor.h",
                 "ssl/qssl.cpp",
                 "ssl/qssl.h",
                 "ssl/qssl_p.h",

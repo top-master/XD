@@ -69,7 +69,9 @@
 #if QT_CONFIG(dockwidget)
 #include "qdockarealayout_p.h"
 #endif
+#if QT_CONFIG(toolbar)
 #include "qtoolbararealayout_p.h"
+#endif
 
 QT_REQUIRE_CONFIG(mainwindow);
 
@@ -89,13 +91,16 @@ public:
     QList<int> hoverSeparator;
     QPoint hoverPos;
 
-#if !defined(QT_NO_DOCKWIDGET) && !defined(QT_NO_CURSOR)
+#if QT_CONFIG(dockwidget)
+
+#if QT_CONFIG(cursor)
     QCursor separatorCursor(const QList<int> &path);
     void adjustCursor(const QPoint &pos);
     QCursor oldCursor;
     QCursor adjustedCursor;
     bool hasOldCursor = false;
     bool cursorAdjusted = false;
+#endif
 
     QList<int> movingSeparator;
     QPoint movingSeparatorOrigin, movingSeparatorPos;
@@ -104,13 +109,14 @@ public:
     bool startSeparatorMove(const QPoint &pos);
     bool separatorMove(const QPoint &pos);
     bool endSeparatorMove(const QPoint &pos);
-
+    bool windowEvent(QEvent *e);
 #endif
 
-    bool windowEvent(QEvent *e);
 };
 
-#if !defined(QT_NO_DOCKWIDGET) && !defined(QT_NO_CURSOR)
+#if QT_CONFIG(dockwidget)
+
+#if QT_CONFIG(cursor)
 template <typename Layout>
 QCursor QMainWindowLayoutSeparatorHelper<Layout>::separatorCursor(const QList<int> &path)
 {
@@ -183,6 +189,7 @@ void QMainWindowLayoutSeparatorHelper<Layout>::adjustCursor(const QPoint &pos)
         }
     }
 }
+#endif // QT_CONFIG(cursor)
 
 template <typename Layout>
 bool QMainWindowLayoutSeparatorHelper<Layout>::windowEvent(QEvent *event)
@@ -321,9 +328,7 @@ bool QMainWindowLayoutSeparatorHelper<Layout>::endSeparatorMove(const QPoint &)
     layout()->savedState.clear();
     return true;
 }
-#endif
 
-#if QT_CONFIG(dockwidget)
 class QDockWidgetGroupWindow : public QWidget
 {
     Q_OBJECT
@@ -338,11 +343,15 @@ public:
     bool hasNativeDecos() const;
 
     bool hover(QLayoutItem *widgetItem, const QPoint &mousePos);
+    void updateCurrentGapRect();
     void restore();
     void apply();
 
     QRect currentGapRect;
     QList<int> currentGapPos;
+
+signals:
+    void resized();
 
 protected:
     bool event(QEvent *) override;
@@ -381,7 +390,7 @@ public:
 
     QMainWindowLayoutState(QMainWindow *win);
 
-#ifndef QT_NO_TOOLBAR
+#if QT_CONFIG(toolbar)
     QToolBarAreaLayout toolBarAreaLayout;
 #endif
 
@@ -458,7 +467,7 @@ public:
 
     // toolbars
 
-#ifndef QT_NO_TOOLBAR
+#if QT_CONFIG(toolbar)
     void addToolBarBreak(Qt::ToolBarArea area);
     void insertToolBarBreak(QToolBar *before);
     void removeToolBarBreak(QToolBar *before);

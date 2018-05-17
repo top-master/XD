@@ -152,10 +152,16 @@ public:
 
     QMap<QByteArray, QVariant> backendConfiguration() const;
     void setBackendConfigurationOption(const QByteArray &name, const QVariant &value);
-    void setBackendConfiguration(const QMap<QByteArray, QVariant> &backendConfig = QMap<QByteArray, QVariant>());
+    void setBackendConfiguration(const QMap<QByteArray, QVariant> &backendConfiguration = QMap<QByteArray, QVariant>());
+
+    bool dtlsCookieVerificationEnabled() const;
+    void setDtlsCookieVerificationEnabled(bool enable);
 
     static QSslConfiguration defaultConfiguration();
     static void setDefaultConfiguration(const QSslConfiguration &configuration);
+
+    static QSslConfiguration defaultDtlsConfiguration();
+    static void setDefaultDtlsConfiguration(const QSslConfiguration &configuration);
 
     enum NextProtocolNegotiationStatus {
         NextProtocolNegotiationNone,

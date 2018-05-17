@@ -190,6 +190,7 @@ QtModuleProject {
                 "tools/qsharedpointer.h",
                 "tools/qsharedpointer_impl.h",
                 "tools/qsimd_p.h",
+                "tools/qsimd_x86_p.h",
                 "tools/qsize.h",
                 "tools/qstack.h",
                 "tools/qstring.h",
@@ -223,6 +224,10 @@ QtModuleProject {
             bundle.isBundle: false
         }
 
+        /* TODO:
+           CONFIG += gc_binaries
+           MODULE_CONFIG = gc_binaries
+         */
 /* TODO. Possibly move to more generic place
     QMAKE_CFLAGS += $$QMAKE_CFLAGS_SPLIT_SECTIONS
     QMAKE_CXXFLAGS += $$QMAKE_CXXFLAGS_SPLIT_SECTIONS

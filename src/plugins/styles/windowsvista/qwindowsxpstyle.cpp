@@ -79,7 +79,9 @@
 #if QT_CONFIG(pushbutton)
 #include <qpushbutton.h>
 #endif
+#if QT_CONFIG(toolbar)
 #include <qtoolbar.h>
+#endif
 #include <qlabel.h>
 #include <qvarlengtharray.h>
 #include <qdebug.h>
@@ -492,7 +494,8 @@ bool QWindowsXPStylePrivate::isTransparent(XPThemeData &themeData)
 QRegion QWindowsXPStylePrivate::region(XPThemeData &themeData)
 {
     HRGN hRgn = 0;
-    RECT rect = themeData.toRECT(themeData.rect);
+    const qreal factor = QWindowsStylePrivate::nativeMetricScaleFactor(themeData.widget);
+    RECT rect = themeData.toRECT(QRect(themeData.rect.topLeft() / factor, themeData.rect.size() / factor));
     if (!SUCCEEDED(GetThemeBackgroundRegion(themeData.handle(), bufferHDC(), themeData.partId,
                                             themeData.stateId, &rect, &hRgn))) {
         return QRegion();
@@ -521,7 +524,7 @@ QRegion QWindowsXPStylePrivate::region(XPThemeData &themeData)
         RECT *r = reinterpret_cast<RECT*>(rd->Buffer);
         for (uint i = 0; i < rd->rdh.nCount; ++i) {
             QRect rect;
-            rect.setCoords(r->left, r->top, r->right - 1, r->bottom - 1);
+            rect.setCoords(int(r->left * factor), int(r->top * factor), int((r->right - 1) * factor), int((r->bottom - 1) * factor));
             ++r;
             region |= rect;
         }
@@ -1754,9 +1757,9 @@ case PE_Frame:
             else
                 stateId = FS_INACTIVE;
 
-            int fwidth = frm->lineWidth + frm->midLineWidth;
+            int fwidth = int((frm->lineWidth + frm->midLineWidth) / QWindowsStylePrivate::nativeMetricScaleFactor(widget));
 
-            XPThemeData theme(0, p, themeNumber, 0, stateId);
+            XPThemeData theme(widget, p, themeNumber, 0, stateId);
             if (!theme.isValid())
                 break;
 
@@ -2947,6 +2950,7 @@ void QWindowsXPStyle::drawComplexControl(ComplexControl cc, const QStyleOptionCo
         {
             if (const QStyleOptionTitleBar *tb = qstyleoption_cast<const QStyleOptionTitleBar *>(option))
             {
+                const qreal factor = QWindowsStylePrivate::nativeMetricScaleFactor(widget);
                 bool isActive = tb->titleBarState & QStyle::State_Active;
                 XPThemeData theme(widget, p, QWindowsXPStylePrivate::WindowTheme);
                 if (sub & SC_TitleBarLabel) {
@@ -2973,13 +2977,15 @@ void QWindowsXPStyle::drawComplexControl(ComplexControl cc, const QStyleOptionCo
                         GetThemeColor(theme.handle(), WP_CAPTION, isActive ? CS_ACTIVE : CS_INACTIVE, TMT_TEXTSHADOWCOLOR, &textShadowRef);
                         QColor textShadow = qRgb(GetRValue(textShadowRef), GetGValue(textShadowRef), GetBValue(textShadowRef));
                         p->setPen(textShadow);
-                        p->drawText(ir.x() + 3, ir.y() + 2, ir.width() - 1, ir.height(),
+                        p->drawText(int(ir.x() + 3 * factor), int(ir.y() + 2 * factor),
+                                    int(ir.width() - 1 * factor), ir.height(),
                                     Qt::AlignLeft | Qt::AlignVCenter | Qt::TextSingleLine, tb->text);
                     }
                     COLORREF captionText = GetSysColor(isActive ? COLOR_CAPTIONTEXT : COLOR_INACTIVECAPTIONTEXT);
                     QColor textColor = qRgb(GetRValue(captionText), GetGValue(captionText), GetBValue(captionText));
                     p->setPen(textColor);
-                    p->drawText(ir.x() + 2, ir.y() + 1, ir.width() - 2, ir.height(),
+                    p->drawText(int(ir.x() + 2 * factor), int(ir.y() + 1 * factor),
+                                int(ir.width() - 2 * factor), ir.height(),
                                 Qt::AlignLeft | Qt::AlignVCenter | Qt::TextSingleLine, tb->text);
                 }
                 if (sub & SC_TitleBarSysMenu && tb->titleBarFlags & Qt::WindowSystemMenuHint) {
@@ -3311,12 +3317,12 @@ int QWindowsXPStyle::pixelMetric(PixelMetric pm, const QStyleOption *option, con
         res = 160;
         break;
 
-#ifndef QT_NO_TOOLBAR
+#if QT_CONFIG(toolbar)
     case PM_ToolBarHandleExtent:
         res = int(QStyleHelper::dpiScaled(8.));
         break;
 
-#endif // QT_NO_TOOLBAR
+#endif // QT_CONFIG(toolbar)
     case PM_DockWidgetSeparatorExtent:
     case PM_DockWidgetTitleMargin:
         res = int(QStyleHelper::dpiScaled(4.));

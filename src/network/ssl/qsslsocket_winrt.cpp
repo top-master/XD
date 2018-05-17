@@ -236,9 +236,9 @@ void QSslSocketBackendPrivate::startClientEncryption()
     switch (q->protocol()) {
     case QSsl::AnyProtocol:
     case QSsl::SslV3:
+    case QSsl::TlsV1SslV3:
         protectionLevel = SocketProtectionLevel_Ssl; // Only use this value if weak cipher support is required
         break;
-    case QSsl::TlsV1SslV3:
     case QSsl::TlsV1_0:
         protectionLevel = SocketProtectionLevel_Tls10;
         break;
@@ -646,6 +646,10 @@ HRESULT QSslSocketBackendPrivate::onSslUpgrade(IAsyncAction *action, AsyncStatus
 
     connectionEncrypted = true;
     emit q->encrypted();
+
+    // The write buffer may already have data written to it, so we need to call transmit.
+    // This has to be done in 'q's thread, and not in the current thread (the XAML thread).
+    QMetaObject::invokeMethod(q, [this](){ transmit(); });
 
     if (pendingClose) {
         pendingClose = false;

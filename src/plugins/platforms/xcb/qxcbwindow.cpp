@@ -560,10 +560,6 @@ void QXcbWindow::create()
 
 QXcbWindow::~QXcbWindow()
 {
-    if (m_currentBitmapCursor != XCB_CURSOR_NONE) {
-        xcb_free_cursor(xcb_connection(), m_currentBitmapCursor);
-    }
-
     destroy();
 }
 
@@ -2591,25 +2587,7 @@ bool QXcbWindow::setMouseGrabEnabled(bool grab)
     return result;
 }
 
-void QXcbWindow::setCursor(xcb_cursor_t cursor, bool isBitmapCursor)
-{
-    xcb_connection_t *conn = xcb_connection();
-
-    xcb_change_window_attributes(conn, m_window, XCB_CW_CURSOR, &cursor);
-    xcb_flush(conn);
-
-    if (m_currentBitmapCursor != XCB_CURSOR_NONE) {
-        xcb_free_cursor(conn, m_currentBitmapCursor);
-    }
-
-    if (isBitmapCursor) {
-        m_currentBitmapCursor = cursor;
-    } else {
-        m_currentBitmapCursor = XCB_CURSOR_NONE;
-    }
-}
-
-void QXcbWindow::windowEvent(QEvent *event)
+bool QXcbWindow::windowEvent(QEvent *event)
 {
     switch (event->type()) {
     case QEvent::FocusIn:
@@ -2635,7 +2613,7 @@ void QXcbWindow::windowEvent(QEvent *event)
     default:
         break;
     }
-    QPlatformWindow::windowEvent(event);
+    return QPlatformWindow::windowEvent(event);
 }
 
 bool QXcbWindow::startSystemResize(const QPoint &pos, Qt::Corner corner)

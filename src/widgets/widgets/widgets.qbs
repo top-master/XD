@@ -94,17 +94,8 @@ Group {
         "qtextedit.cpp",
         "qtextedit.h",
         "qtextedit_p.h",
-        "qtoolbar.cpp",
-        "qtoolbar.h",
-        "qtoolbar_p.h",
-        "qtoolbararealayout.cpp",
-        "qtoolbararealayout_p.h",
         "qtoolbarextension.cpp",
         "qtoolbarextension_p.h",
-        "qtoolbarlayout.cpp",
-        "qtoolbarlayout_p.h",
-        "qtoolbarseparator.cpp",
-        "qtoolbarseparator_p.h",
         "qtoolbox.cpp",
         "qtoolbox.h",
         "qtoolbutton.cpp",
@@ -198,6 +189,21 @@ Group {
             "qwidgettextcontrol_p_p.h",
         ]
     }
+    Group {
+        condition: product.config.toolbar
+        files: [
+            "qtoolbar.cpp",
+            "qtoolbar.h",
+            "qtoolbar_p.h",
+            "qtoolbararealayout.cpp",
+            "qtoolbararealayout_p.h",
+            "qtoolbarlayout.cpp",
+            "qtoolbarlayout_p.h",
+            "qtoolbarseparator.cpp",
+            "qtoolbarseparator_p.h",
+        ]
+    }
+
     Group {
         condition: qbs.targetOS.contains("macos")
         files: [

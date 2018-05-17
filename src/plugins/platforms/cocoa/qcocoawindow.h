@@ -53,6 +53,10 @@
 #include "qnswindow.h"
 #include "qt_mac_p.h"
 
+#if QT_CONFIG(vulkan)
+#include <MoltenVK/mvk_vulkan.h>
+#endif
+
 QT_BEGIN_NAMESPACE
 
 #ifndef QT_NO_DEBUG_STREAM
@@ -125,6 +129,8 @@ public:
     bool isForeignWindow() const override;
 
     void requestUpdate() override;
+    void deliverUpdateRequest() override;
+
     void requestActivateWindow() override;
 
     WId winId() const override;
@@ -279,6 +285,10 @@ public: // for QNSView
     };
     QHash<quintptr, BorderRange> m_contentBorderAreas; // identifer -> uppper/lower
     QHash<quintptr, bool> m_enabledContentBorderAreas; // identifer -> enabled state (true/false)
+
+#if QT_CONFIG(vulkan)
+    VkSurfaceKHR m_vulkanSurface = nullptr;
+#endif
 };
 
 #ifndef QT_NO_DEBUG_STREAM

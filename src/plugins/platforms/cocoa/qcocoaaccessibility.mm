@@ -226,7 +226,6 @@ bool shouldBeIgnored(QAccessibleInterface *interface)
     const QAccessible::Role role = interface->role();
     if (role == QAccessible::Border ||      // QFrame
         role == QAccessible::Application || // We use the system-provided application element.
-        role == QAccessible::MenuItem ||    // The system also provides the menu items.
         role == QAccessible::ToolBar ||     // Access the tool buttons directly.
         role == QAccessible::Pane ||        // Scroll areas.
         role == QAccessible::Client)        // The default for QWidget.
@@ -311,7 +310,7 @@ NSString *getTranslatedAction(const QString &qtAction)
     //      NSAccessibilityCancelAction;
     //      NSAccessibilityDeleteAction;
 
-    return 0;
+    return nil;
 }
 
 

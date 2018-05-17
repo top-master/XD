@@ -73,8 +73,6 @@ static QFont qfontForCocoaFont(NSFont *cocoaFont, const QFont &resolveFont)
     return newFont;
 }
 
-@class QT_MANGLE_NAMESPACE(QNSFontPanelDelegate);
-
 @interface QT_MANGLE_NAMESPACE(QNSFontPanelDelegate) : NSObject<NSWindowDelegate, QNSPanelDelegate>
 - (void)restoreOriginalContentView;
 - (void)updateQtFont;
@@ -100,16 +98,17 @@ QT_NAMESPACE_ALIAS_OBJC_CLASS(QNSFontPanelDelegate);
 {
     if ((self = [super init])) {
         mFontPanel = [NSFontPanel sharedFontPanel];
-        mHelper = 0;
-        mStolenContentView = 0;
-        mPanelButtons = 0;
+        mHelper = nullptr;
+        mStolenContentView = nil;
+        mPanelButtons = nil;
         mResultCode = NSModalResponseCancel;
         mDialogIsExecuting = false;
         mResultSet = false;
 
         [mFontPanel setRestorable:NO];
         [mFontPanel setDelegate:self];
-        [[NSFontManager sharedFontManager] setDelegate:self];
+
+        [NSFontManager sharedFontManager].target = self; // Action is changeFont:
 
         [mFontPanel retain];
     }
@@ -120,7 +119,7 @@ QT_NAMESPACE_ALIAS_OBJC_CLASS(QNSFontPanelDelegate);
 {
     [mStolenContentView release];
     [mFontPanel setDelegate:nil];
-    [[NSFontManager sharedFontManager] setDelegate:nil];
+    [NSFontManager sharedFontManager].target = nil;
     [[NSNotificationCenter defaultCenter] removeObserver:self];
 
     [super dealloc];
@@ -136,9 +135,9 @@ QT_NAMESPACE_ALIAS_OBJC_CLASS(QNSFontPanelDelegate);
         [self restoreOriginalContentView];
     } else if (!mStolenContentView) {
         // steal the font panel's contents view
-        mStolenContentView = [mFontPanel contentView];
+        mStolenContentView = mFontPanel.contentView;
         [mStolenContentView retain];
-        [mFontPanel setContentView:0];
+        mFontPanel.contentView = nil;
 
         // create a new content view and add the stolen one as a subview
         mPanelButtons = [[QNSPanelContentsWrapper alloc] initWithPanelDelegate:self];
@@ -160,7 +159,7 @@ QT_NAMESPACE_ALIAS_OBJC_CLASS(QNSFontPanelDelegate);
         // return stolen stuff to its rightful owner
         [mStolenContentView removeFromSuperview];
         [mFontPanel setContentView:mStolenContentView];
-        mStolenContentView = 0;
+        mStolenContentView = nil;
         [mPanelButtons release];
         mPanelButtons = nil;
     }
@@ -192,7 +191,7 @@ QT_NAMESPACE_ALIAS_OBJC_CLASS(QNSFontPanelDelegate);
     // Get selected font
     NSFontManager *fontManager = [NSFontManager sharedFontManager];
     NSFont *selectedFont = [fontManager selectedFont];
-    if (selectedFont == nil) {
+    if (!selectedFont) {
         selectedFont = [NSFont systemFontOfSize:[NSFont systemFontSize]];
     }
     NSFont *panelFont = [fontManager convertFont:selectedFont];
@@ -296,7 +295,7 @@ public:
     void cleanup(QCocoaFontDialogHelper *helper)
     {
         if (mDelegate->mHelper == helper)
-            mDelegate->mHelper = 0;
+            mDelegate->mHelper = nullptr;
     }
 
     bool exec()
@@ -330,7 +329,7 @@ public:
     void setCurrentFont(const QFont &font)
     {
         NSFontManager *mgr = [NSFontManager sharedFontManager];
-        const NSFont *nsFont = 0;
+        NSFont *nsFont = nil;
 
         int weight = 5;
         NSFontTraitMask mask = 0;
@@ -348,7 +347,7 @@ public:
             weight:weight
             size:fontInfo.pointSize()];
 
-        [mgr setSelectedFont:const_cast<NSFont *>(nsFont) isMultiple:NO];
+        [mgr setSelectedFont:nsFont isMultiple:NO];
         mDelegate->mQtFont = font;
     }
 

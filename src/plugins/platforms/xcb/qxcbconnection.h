@@ -423,8 +423,7 @@ public:
     xcb_visualid_t defaultVisualId() const { return m_defaultVisualId; }
 
 #if QT_CONFIG(xcb_xlib)
-    void *xlib_display() const;
-    void *createVisualInfoForDefaultVisualId() const;
+    void *xlib_display() const { return m_xlib_display; }
 #endif
     void sync();
 
@@ -465,7 +464,13 @@ public:
     bool hasXRandr() const { return has_randr_extension; }
     bool hasInputShape() const { return has_input_shape; }
     bool hasXKB() const { return has_xkb; }
-    bool hasXRender() const { return has_render_extension; }
+    bool hasXRender(int major = -1, int minor = -1) const
+    {
+        if (has_render_extension && major != -1 && minor != -1)
+            return m_xrenderVersion >= qMakePair(major, minor);
+
+        return has_render_extension;
+    }
     bool hasXInput2() const { return m_xi2Enabled; }
     bool hasShm() const { return has_shm; }
     bool hasShmFd() const { return has_shm_fd; }
@@ -500,6 +505,9 @@ public:
     QXcbSystemTrayTracker *systemTrayTracker() const;
     static bool xEmbedSystemTrayAvailable();
     static bool xEmbedSystemTrayVisualHasAlphaChannel();
+
+    Qt::MouseButtons queryMouseButtons() const;
+    Qt::KeyboardModifiers queryKeyboardModifiers() const;
 
 #if QT_CONFIG(xcb_xinput)
     void xi2SelectStateEvents();
@@ -685,6 +693,8 @@ private:
     bool has_render_extension = false;
     bool has_shm = false;
     bool has_shm_fd = false;
+
+    QPair<int, int> m_xrenderVersion;
 
     Qt::MouseButtons m_buttonState = 0;
     Qt::MouseButton m_button = Qt::NoButton;
