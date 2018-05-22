@@ -61,8 +61,8 @@ QtModuleProject {
             condition: QtGuiPrivateConfig.system_xcb && QtGuiPrivateConfig.xcb_render
         }
         Depends {
-            name: "Xinput2"
-            condition: QtGuiPrivateConfig.xcb_xlib && QtGuiPrivateConfig.xinput2
+            name: "Xcb_xinput"
+            condition: QtGuiPrivateConfig.xcb_xlib && QtGuiPrivateConfig.xcb_xinput
         }
 
         Depends { name: "cpp" }
@@ -155,6 +155,10 @@ QtModuleProject {
                 "qxcbnativepainting.cpp",
                 "qxcbnativepainting.h",
             ]
+        }
+        Group {
+            condition: QtGuiPrivateConfig.xcb_xinput
+            files: "qxcbconnection_xi2.cpp"
         }
     }
 }
