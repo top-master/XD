@@ -30,7 +30,11 @@ QtPlugin {
             result.push(qtbaseDir + "/src/3rdparty/wintab");
         return result;
     }
-    cpp.defines: ["QT_NO_CAST_FROM_ASCII"]
+    cpp.defines: [
+        "QT_NO_CAST_FROM_ASCII",
+        "LIBEGL_NAME=" + Qt.gui.libEGLName,
+        "LIBGLESV2_NAME=" + Qt.gui.libGLESv2Name,
+    ]
     cpp.dynamicLibraries: {
         var result = ["gdi32", "dwmapi"];
 
@@ -159,17 +163,3 @@ QtPlugin {
         !equals(TARGET, $$QT_DEFAULT_QPA_PLUGIN): PLUGIN_EXTENDS = -
     */
 }
-
-/*
-######################################
-### windows.pri
-QT_FOR_CONFIG += gui
-
-qtConfig(combined-angle-lib) {
-    DEFINES *= LIBEGL_NAME=$${LIBQTANGLE_NAME}
-    DEFINES *= LIBGLESV2_NAME=$${LIBQTANGLE_NAME}
-} else {
-    DEFINES *= LIBEGL_NAME=$${LIBEGL_NAME}
-    DEFINES *= LIBGLESV2_NAME=$${LIBGLESV2_NAME}
-}
-*/

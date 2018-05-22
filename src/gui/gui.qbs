@@ -31,6 +31,8 @@ QtModuleProject {
     QtModule {
         Export {
             property var config: QtGuiConfig
+            property string libEGLName: config.combined_angle_lib ? "QtANGLE" : "libEGL"
+            property string libGLESv2Name: config.combined_angle_lib ? "QtANGLE" : "libGLESv2"
             Depends { name: "cpp" }
             Depends { name: "Qt.core" }
             Depends {
