@@ -30,11 +30,11 @@ QtPlugin {
             result.push(qtbaseDir + "/src/3rdparty/wintab");
         return result;
     }
-    cpp.defines: [
-        "QT_NO_CAST_FROM_ASCII",
-        "LIBEGL_NAME=" + Qt.gui.libEGLName,
-        "LIBGLESV2_NAME=" + Qt.gui.libGLESv2Name,
-    ]
+    cpp.defines: base.filter(function(d) { return !["QT_NO_FOREACH"].contains(d); })
+        .concat(
+            "QT_NO_CAST_FROM_ASCII",
+            "LIBEGL_NAME=" + Qt.gui.libEGLName,
+            "LIBGLESV2_NAME=" + Qt.gui.libGLESv2Name)
     cpp.dynamicLibraries: {
         var result = ["gdi32", "dwmapi"];
 

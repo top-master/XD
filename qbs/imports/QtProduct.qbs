@@ -89,6 +89,8 @@ Product {
         var defines = commonCppDefines.concat([
             "_USE_MATH_DEFINES",
         ]);
+        if (qbs.buildVariant === "release")
+            defines.push("QT_NO_DEBUG");
         if (cpp.platformDefines)
             defines = defines.concat(cpp.platformDefines);
         return defines;
