@@ -6,7 +6,7 @@ QtAutotestProject {
     references: [
         "animation",
         "codecs",
-        // "global",
+        "global",
         // "io",
         // "itemmodels",
         // "json",
