@@ -7,7 +7,7 @@ QtAutotestProject {
         "animation",
         "codecs",
         "global",
-        // "io",
+        "io",
         // "itemmodels",
         // "json",
         // "kernel",

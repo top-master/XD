@@ -2,7 +2,7 @@ import qbs
 
 QtAutotest {
     name: "tst_qpropertyanimation"
-    customCondition: Qt.global.privateConfig.widgets
+    condition: base && Qt.global.privateConfig.widgets
 
     Depends { name: "Qt.core_private" }
     Depends { name: "Qt.global" }

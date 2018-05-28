@@ -14,6 +14,8 @@ Product {
     Depends { name: mkspecModule; condition: mkspecModule !== undefined } // TODO: Explicit comparison should not be needed, but is
 
     property bool targetsUWP: mkspec.startsWith("winrt-")
+    property bool targetsAndroidProper: qbs.targetOS.contains("android")
+                                        && !Qt.global.config.android_embedded
     readonly property bool hasUiKit: qbs.targetOS.containsAny(["ios", "tvos", "watchos"])
     property string mkspec: hostBuild ? QtMultiplexConfig.hostMkspec
                                       : QtMultiplexConfig.targetMkspec

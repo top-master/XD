@@ -1,4 +1,5 @@
 Project {
+    property string sharedTestDir: path + "/shared"
     references: ["auto"]
 }
 

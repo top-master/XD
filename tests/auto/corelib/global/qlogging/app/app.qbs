@@ -2,8 +2,7 @@ import qbs
 
 QtAutotestHelperApp {
     name: "app"
-    type: ["application"]
-    condition: !targetsUWP
+    condition: base && !targetsUWP
     destinationDirectory: project.buildDirectory + "/qloggingtest/app"
     consoleApplication: "true"
     Depends { name: "Qt.core" }
