@@ -10,9 +10,7 @@ QtProduct {
         throw new Error("QtPlugin.pluginClassName needs to be defined.")
     }
     Depends { name: "cpp" }
-    cpp.defines: [
-        "QT_NO_FOREACH"
-    ]
+    cpp.defines: base.concat("QT_NO_FOREACH")
     property string installDir: FileInfo.joinPaths("plugins", pluginType)
     cpp.rpaths: {
         var result = [];
