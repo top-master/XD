@@ -1,6 +1,7 @@
 import qbs
 import qbs.Process
 import qbs.TextFile
+import qbs.Xml
 
 import QtCoreConfig
 import QtCorePrivateConfig
@@ -69,6 +70,62 @@ QtModuleProject {
             Depends { name: product.mkspecModule; condition: product.mkspecModule !== undefined }
 
             property stringList generatedHeadersDir: importingProduct.buildDirectory + "/qt.headers"
+
+            property path resourceSourceBase
+            property string resourcePrefix: "/"
+            property string resourceFileBaseName: importingProduct.targetName
+            Rule {
+                multiplex: true
+                inputs: ["qt.core.resource_data"]
+                Artifact {
+                    filePath: product.Qt.core.resourceFileBaseName + ".qrc"
+                    fileTags: ["qrc"]
+                }
+                prepare: {
+                    var cmd = new JavaScriptCommand();
+                    cmd.description = "generating " + output.fileName;
+                    cmd.sourceCode = function() {
+                        var doc = new Xml.DomDocument("RCC");
+
+                        var rccNode = doc.createElement("RCC");
+                        rccNode.setAttribute("version", "1.0");
+                        doc.appendChild(rccNode);
+
+                        var inputsByPrefix = {}
+                        for (var i = 0; i < inputs["qt.core.resource_data"].length; ++i) {
+                            var inp = inputs["qt.core.resource_data"][i];
+                            var prefix = inp.Qt.core.resourcePrefix;
+                            var inputsList = inputsByPrefix[prefix] || [];
+                            inputsList.push(inp);
+                            inputsByPrefix[prefix] = inputsList;
+                        }
+
+                        for (var prefix in inputsByPrefix) {
+                            var qresourceNode = doc.createElement("qresource");
+                            qresourceNode.setAttribute("prefix", prefix);
+                            rccNode.appendChild(qresourceNode);
+
+                            for (var i = 0; i < inputsByPrefix[prefix].length; ++i) {
+                                var inp = inputsByPrefix[prefix][i];
+                                var fullResPath = inp.filePath;
+                                var baseDir = inp.Qt.core.resourceSourceBase;
+                                var resAlias = baseDir
+                                    ? FileInfo.relativePath(baseDir, fullResPath) : inp.fileName;
+
+                                var fileNode = doc.createElement("file");
+                                fileNode.setAttribute("alias", resAlias);
+                                qresourceNode.appendChild(fileNode);
+
+                                var fileTextNode = doc.createTextNode(fullResPath);
+                                fileNode.appendChild(fileTextNode);
+                            }
+                        }
+
+                        doc.save(output.filePath, 4);
+                    };
+                    return [cmd];
+                }
+            }
 
             /*
               TODO: Make this work

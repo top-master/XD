@@ -26,7 +26,7 @@ QtHostTool {
 
     Export {
         Rule {
-            inputs: ["rcc"]
+            inputs: ["qrc"]
             explicitlyDependsOnFromDependencies: ["qt.rcc-tool"]
             Artifact {
                 fileTags: "cpp"
@@ -47,7 +47,7 @@ QtHostTool {
 
         FileTagger {
             patterns: "*.qrc"
-            fileTags: "rcc"
+            fileTags: "qrc"
         }
     }
 }
