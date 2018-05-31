@@ -1,3 +1,12 @@
+import qbs
+
+Project {
+    references: [
+        "libinput",
+    ]
+}
+
+/*
 TEMPLATE = subdirs
 QT_FOR_CONFIG += gui-private
 
@@ -15,10 +24,7 @@ qtConfig(tuiotouch) {
     SUBDIRS += tuiotouch
 }
 
-qtConfig(libinput) {
-    SUBDIRS += libinput
-}
-
 freebsd {
     SUBDIRS += bsdkeyboard bsdmouse
 }
+*/
