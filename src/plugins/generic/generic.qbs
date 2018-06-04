@@ -2,26 +2,18 @@ import qbs
 
 Project {
     references: [
+        "evdevkeyboard",
+        "evdevmouse",
+        "evdevtablet",
+        "evdevtouch",
         "libinput",
+        "tuiotouch",
     ]
 }
 
 /*
-TEMPLATE = subdirs
-QT_FOR_CONFIG += gui-private
-
-qtConfig(evdev) {
-    SUBDIRS += evdevmouse evdevtouch evdevkeyboard
-    qtConfig(tabletevent): \
-        SUBDIRS += evdevtablet
-}
-
 qtConfig(tslib) {
     SUBDIRS += tslib
-}
-
-qtConfig(tuiotouch) {
-    SUBDIRS += tuiotouch
 }
 
 freebsd {
