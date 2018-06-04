@@ -22,6 +22,5 @@ qtHaveModule(network):qtConfig(bearermanagement): SUBDIRS += bearer
 qtHaveModule(gui) {
     SUBDIRS *= platforms platforminputcontexts platformthemes
     qtConfig(imageformatplugin): SUBDIRS *= imageformats
-    !android:qtConfig(library): SUBDIRS *= generic
 }
 */

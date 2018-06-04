@@ -3,7 +3,7 @@ import QtGuiPrivateConfig
 
 QtPlugin {
     name: "qlibinputplugin"
-    condition: QtGuiPrivateConfig.libinput
+    condition: QtGuiPrivateConfig.libinput && !qbs.targetOS.contains("android")
     pluginType: "generic"
     pluginClassName: "QLibInputPlugin"
     Depends { name: "Qt.core_private" }

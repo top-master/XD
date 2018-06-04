@@ -1,6 +1,8 @@
 import qbs
+import QtCoreConfig
 
 Project {
+    condition: QtCoreConfig.library
     references: [
         "evdevkeyboard",
         "evdevmouse",

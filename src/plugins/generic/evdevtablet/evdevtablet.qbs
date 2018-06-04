@@ -3,7 +3,7 @@ import QtGuiPrivateConfig
 
 QtPlugin {
     name: "qevdevtabletplugin"
-    condition: QtGuiPrivateConfig.evdev
+    condition: QtGuiPrivateConfig.evdev && !qbs.targetOS.contains("android")
     pluginType: "generic"
     pluginClassName: "QEvdevTabletPlugin"
     Depends { name: "Qt.core_private" }

@@ -3,7 +3,7 @@ import QtGuiPrivateConfig
 
 QtPlugin {
     name: "qevdevkeyboardplugin"
-    condition: QtGuiPrivateConfig.evdev
+    condition: QtGuiPrivateConfig.evdev && !qbs.targetOS.contains("android")
     pluginType: "generic"
     pluginClassName: "QEvdevKeyboardPlugin"
     Depends { name: "Qt.core_private" }

@@ -3,7 +3,7 @@ import QtGuiPrivateConfig
 
 QtPlugin {
     name: "qtuiotouchplugin"
-    condition: QtGuiPrivateConfig.tuiotouch
+    condition: QtGuiPrivateConfig.tuiotouch && !qbs.targetOS.contains("android")
     pluginType: "generic"
     pluginClassName: "QTuioTouchPlugin"
     Depends { name: "Qt.core_private" }
