@@ -1876,14 +1876,6 @@ defineTest(qtConfSetupModuleOutputs) {
     qtConfOutputVar(assign, "publicPro", "QT.$${currentModule}.disabled_features", )
     qtConfOutputVar(assign, "privatePro", "QT.$${currentModule}_private.enabled_features", )
     qtConfOutputVar(assign, "privatePro", "QT.$${currentModule}_private.disabled_features", )
-    qtConfOutputSetQbsProp("publicQbs", "enabled_features", \
-                           "[$$jsList($$eval(QT.$${currentModule}.enabled_features))]")
-    qtConfOutputSetQbsProp("publicQbs", "disabled_features", \
-                           "[$$jsList($$eval(QT.$${currentModule}.disabled_features))]")
-    qtConfOutputSetQbsProp("privateQbs", "enabled_features", \
-                           "[$$jsList($$eval(QT.$${currentModule}_private.enabled_features))]")
-    qtConfOutputSetQbsProp("privateQbs", "disabled_features", \
-                           "[$$jsList($$eval(QT.$${currentModule}_private.disabled_features))]")
     !isEmpty($${currentConfig}.module) {
         qtConfOutputVar(assign, "publicPro", "QT.$${currentModule}.QT_CONFIG", )
         qtConfOutputVar(assign, "publicPro", "QT.$${currentModule}.exports", )
@@ -2244,6 +2236,14 @@ for (currentConfig, allConfigs) {
         qtConfOutputSetQbsProp(privateQbs, enabled, false)
     }
 
+    qtConfOutputSetQbsProp("publicQbs", "enabled_features", \
+                           "[$$jsList($$eval(QT.$${currentModule}.enabled_features))]")
+    qtConfOutputSetQbsProp("publicQbs", "disabled_features", \
+                           "[$$jsList($$eval(QT.$${currentModule}.disabled_features))]")
+    qtConfOutputSetQbsProp("privateQbs", "enabled_features", \
+                           "[$$jsList($$eval(QT.$${currentModule}_private.enabled_features))]")
+    qtConfOutputSetQbsProp("privateQbs", "disabled_features", \
+                           "[$$jsList($$eval(QT.$${currentModule}_private.disabled_features))]")
     equals(currentModule, global) {
         qtConfOutputSetQbsProp(privateQbs, targetMkspec, \"$$[QMAKE_XSPEC]\")
         qtConfOutputSetQbsProp(privateQbs, hostMkspec, \"$$[QMAKE_SPEC]\")
