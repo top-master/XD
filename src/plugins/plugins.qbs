@@ -6,8 +6,8 @@ Project {
         // bearer
         "generic",
         "imageformats",
+        "platforminputcontexts",
         "platforms",
-        // platforminputcontexts
         "platformthemes",
         "printsupport",
     ]
@@ -24,7 +24,4 @@ qtHaveModule(gui) {
     qtConfig(imageformatplugin): SUBDIRS *= imageformats
     !android:qtConfig(library): SUBDIRS *= generic
 }
-
-!winrt:!wince:qtHaveModule(printsupport): \
-    SUBDIRS += printsupport
 */
