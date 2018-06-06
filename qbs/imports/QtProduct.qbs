@@ -88,6 +88,7 @@ Product {
     cpp.defines: {
         var defines = commonCppDefines.concat([
             "_USE_MATH_DEFINES",
+            "QT_NO_NARROWING_CONVERSIONS_IN_CONNECT",
         ]);
         if (qbs.buildVariant === "release")
             defines.push("QT_NO_DEBUG");
