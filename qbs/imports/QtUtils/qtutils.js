@@ -14,6 +14,8 @@ function includesForModule(module, base, qtVersion) {
 
 function qmakeMkspecToQbsModule(qmakeMkspec)
 {
+    if (qmakeMkspec.startsWith("win32-msvc"))
+        return "Mkspec.msvc";
     if (qmakeMkspec.startsWith("android-"))
         return "Mkspec.android";
     if (qmakeMkspec.startsWith("linux-"))
