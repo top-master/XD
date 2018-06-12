@@ -10,6 +10,7 @@ import qbs
 
 QtModule {
     condition: Qt.gui_private.config.eglfs
+    type: Qt.global.config.staticBuild ? "staticlibrary" : "dynamiclibrary"
     Depends { name: "Qt.core_private" }
     Depends { name: "Qt.gui_private" }
     Depends { name: "Qt.devicediscovery_support_private" }

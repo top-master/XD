@@ -34,6 +34,7 @@ QtModuleProject {
     QtModule {
         name: project.moduleName
         simpleName: project.simpleName
+        type: Qt.global.config.staticBuild ? "staticlibrary" : "dynamiclibrary"
 
         Depends { name: "Qt.core_private" }
         Depends { name: "Qt.gui_private" }
