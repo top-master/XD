@@ -2,7 +2,7 @@ import qbs
 import QtGuiPrivateConfig
 
 QtModuleProject {
-    name: "Qt5XcbQpa"
+    name: "QtXcbQpa"
     simpleName: "xcbqpa"
     internal: true
     qbsSearchPaths: [project.qtbaseShadowDir + "/src/gui/qbs"]
