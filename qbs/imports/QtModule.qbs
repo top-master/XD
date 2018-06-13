@@ -67,19 +67,6 @@ QtProduct {
         qbs.installSourceBase: productRelativeShadowDirPath + "/qbs/imports/"
         qbs.installDir: "lib/qbs/imports"
     }
-    Group {
-        files: [
-            actualProjectSourceDirectory + "/qbs/imports/**/*.qbs",
-            actualProjectSourceDirectory + "/qbs/imports/**/*.js",
-            actualProjectSourceDirectory + "/qbs/imports/*.qbs",
-            actualProjectSourceDirectory + "/qbs/imports/*.js",
-            actualProjectSourceDirectory + "/qbs/modules/**/*.qbs",
-            actualProjectSourceDirectory + "/qbs/modules/**/*.js",
-        ]
-        qbs.install: true
-        qbs.installSourceBase: actualProjectSourceDirectory + "/qbs/"
-        qbs.installDir: "lib/qbs"
-    }
 
 
 // TODO: Create libtool files; see qt_module.prf and qmake source code

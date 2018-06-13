@@ -1,4 +1,5 @@
 import qbs
+import qbs.FileInfo
 import QtGlobalConfig
 import QtGlobalPrivateConfig
 
@@ -31,6 +32,23 @@ Project {
     ])
     Product {
         name: "Qt.global"
+
+        property path actualProjectSourceDirectory: FileInfo.path(project.qtbaseQbsFilePath)
+        Group {
+            prefix: actualProjectSourceDirectory + "/qbs/"
+            files: [
+                "imports/**/*.qbs",
+                "imports/**/*.js",
+                "imports/*.qbs",
+                "imports/*.js",
+                "modules/**/*.qbs",
+                "modules/**/*.js",
+            ]
+            qbs.install: true
+            qbs.installSourceBase: actualProjectSourceDirectory + "/qbs/"
+            qbs.installDir: "lib/qbs"
+        }
+
         Export {
             property var config: QtGlobalConfig
             property var privateConfig: QtGlobalPrivateConfig
