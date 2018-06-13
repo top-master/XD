@@ -11,7 +11,7 @@ QtProduct {
     condition: project.conditionFunction(qbs)
 
     property string simpleName: project.simpleName
-    property string upperCaseSimpleName: simpleName.toUpperCase()
+    property string upperCaseSimpleName: simpleName.replace("_private", "").toUpperCase()
     targetName: "Qt" + (!bundle.isBundle ? "5" : "") + project.name.slice(2)
 
     Depends { name: project.tracepointsProductName; required: false }
