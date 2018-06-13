@@ -1,5 +1,7 @@
 import qbs
 import qbs.FileInfo
+import QtXmlConfig
+import QtXmlPrivateConfig
 
 QtModuleProject {
     name: "QtXml"
@@ -17,6 +19,7 @@ QtModuleProject {
     }
 
     QtPrivateModule {
+        config: QtXmlPrivateConfig
     }
 
     QtModule {
@@ -29,6 +32,7 @@ QtModuleProject {
         Depends { name: project.headersName }
         Depends { name: "Qt.core_private" }
 
+        config: QtXmlConfig
         cpp.enableExceptions: true
         cpp.includePaths: project.includePaths.concat(base)
         cpp.defines: base.concat([

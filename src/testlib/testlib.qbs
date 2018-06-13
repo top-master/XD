@@ -1,5 +1,6 @@
 import qbs
 import QtTestlibConfig
+import QtTestlibPrivateConfig
 
 QtModuleProject {
     name: "QtTest"
@@ -18,10 +19,12 @@ QtModuleProject {
     }
 
     QtPrivateModule {
+        config: QtTestlibPrivateConfig
     }
 
     QtModule {
         qbsSearchPaths: [project.qtbaseShadowDir + "/src/testlib/qbs"]
+        config: QtTestlibConfig
 
         Export {
             Depends { name: "cpp" }

@@ -27,16 +27,13 @@ QtModuleProject {
     }
 
     QtPrivateModule {
-        Export {
-            property var config: QtWidgetsPrivateConfig
-        }
+        config: QtWidgetsPrivateConfig
     }
 
     QtModule {
         property var privateConfig: QtWidgetsPrivateConfig
-        property var config: QtWidgetsConfig
+        config: QtWidgetsConfig
         Export {
-            property var config: QtWidgetsConfig
             Depends { name: "cpp" }
             Depends { name: "Qt.gui" }
             cpp.includePaths: project.publicIncludePaths

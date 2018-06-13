@@ -12,6 +12,7 @@ Project {
         "sql",
         "testlib",
         "widgets",
+        "xml",
     ]
     qbsSearchPaths: qtModuleNames.map(function(name) {
         return qtbaseShadowDir + "/src/" + name + "/qbs";
@@ -28,7 +29,6 @@ Project {
         "plugins/plugins.qbs",
         "tools/tools.qbs",
         "winmain/winmain.qbs",
-        "xml/xml.qbs",
     ])
     Product {
         name: "Qt.global"

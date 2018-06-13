@@ -19,13 +19,13 @@ QtModuleProject {
     }
 
     QtPrivateModule {
-        property var config: QtSqlPrivateConfig
+        config: QtSqlPrivateConfig
     }
 
     QtModule {
         //pluginTypes: ["sqldrivers"]
+        config: QtSqlConfig
         Export {
-            property var config: QtSqlConfig
             Depends { name: "cpp" }
             Depends { name: "Qt.core" }
             cpp.includePaths: project.publicIncludePaths

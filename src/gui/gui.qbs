@@ -21,16 +21,14 @@ QtModuleProject {
     }
 
     QtPrivateModule {
-        Export {
-            property var config: QtGuiPrivateConfig
-        }
+        config: QtGuiPrivateConfig
     }
 
     QtModuleTracepoints {}
 
     QtModule {
+        config: QtGuiConfig
         Export {
-            property var config: QtGuiConfig
             property string libEGLName: config.combined_angle_lib ? "QtANGLE" : "libEGL"
             property string libGLESv2Name: config.combined_angle_lib ? "QtANGLE" : "libGLESv2"
             Depends { name: "cpp" }

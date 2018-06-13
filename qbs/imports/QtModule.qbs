@@ -10,6 +10,7 @@ QtProduct {
     version: project.version
     condition: project.conditionFunction(qbs)
 
+    property var config
     property string simpleName: project.simpleName
     property string upperCaseSimpleName: simpleName.replace("_private", "").toUpperCase()
     targetName: "Qt" + (!bundle.isBundle ? "5" : "") + project.name.slice(2)
@@ -257,6 +258,7 @@ equals(QT_ARCH, i386):contains(QT_CPU_FEATURES.$$QT_ARCH, sse2):compiler_support
     }
 
     Export {
+        property var config: product.config
         Depends { name: "cpp" }
         cpp.defines: base.concat("QT_" + product.upperCaseSimpleName + "_LIB")
         prefixMapping: base.concat([{

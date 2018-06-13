@@ -49,15 +49,13 @@ QtModuleProject {
     }
 
     QtPrivateModule {
-        Export {
-            property var config: QtCorePrivateConfig
-        }
+        config: QtCorePrivateConfig
     }
 
     QtModuleTracepoints {}
 
     QtModule {
-        property var config: QtCoreConfig
+        config: QtCoreConfig
         property var privateConfig: QtCorePrivateConfig
         Properties {
             condition: createPkgconfigFiles
@@ -69,7 +67,6 @@ QtModuleProject {
         }
 
         Export {
-            property var config: QtCoreConfig
             Depends { name: "cpp" }
             cpp.includePaths: project.publicIncludePaths.concat(generatedHeadersDir)
 

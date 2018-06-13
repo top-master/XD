@@ -19,17 +19,15 @@ QtModuleProject {
     }
 
     QtPrivateModule {
-        Export {
-            property var config: QtPrintsupportPrivateConfig
-        }
+        config: QtPrintsupportPrivateConfig
     }
 
     QtModule {
+        config: QtPrintsupportConfig
         Export {
             Depends { name: "cpp" }
             Depends { name: "Qt.core" }
             cpp.includePaths: project.publicIncludePaths
-            property var config: QtPrintsupportConfig
         }
 
         Depends { name: project.headersName }
