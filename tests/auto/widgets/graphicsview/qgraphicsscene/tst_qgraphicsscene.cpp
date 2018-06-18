@@ -210,7 +210,7 @@ private slots:
     void mouseEventPropagation_focus();
     void mouseEventPropagation_doubleclick();
     void mouseEventPropagation_mouseMove();
-#ifndef QT_NO_DRAGANDDROP
+#if QT_CONFIG(draganddrop)
     void dragAndDrop_simple();
     void dragAndDrop_disabledOrInvisible();
     void dragAndDrop_propagate();
@@ -2204,7 +2204,7 @@ private:
     }
 };
 
-#ifndef QT_NO_DRAGANDDROP
+#if QT_CONFIG(draganddrop)
 void tst_QGraphicsScene::dragAndDrop_simple()
 {
     DndTester *item = new DndTester(QRectF(-10, -10, 20, 20));
@@ -2657,7 +2657,7 @@ void tst_QGraphicsScene::render()
 
 void tst_QGraphicsScene::renderItemsWithNegativeWidthOrHeight()
 {
-#if defined(Q_OS_ANDROID) && !defined(Q_OS_ANDROID_EMBEDDED)
+#if defined(Q_OS_ANDROID) && !defined(Q_OS_ANDROID_EMBEDDED) || defined(Q_OS_WINRT)
     QSKIP("Test only works on platforms with resizable windows");
 #endif
 

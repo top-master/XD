@@ -189,9 +189,11 @@ public:
 
 void tst_QApplication::initTestCase()
 {
+#if QT_CONFIG(process)
     // chdir to our testdata path and execute helper apps relative to that.
     const QString testdataDir = QFileInfo(QFINDTESTDATA("desktopsettingsaware")).absolutePath();
     QVERIFY2(QDir::setCurrent(testdataDir), qPrintable("Could not chdir to " + testdataDir));
+#endif
 }
 
 void tst_QApplication::sendEventsOnProcessEvents()
@@ -888,7 +890,11 @@ bool isPathListIncluded(const QStringList &l, const QStringList &r)
 #define QT_TST_QAPP_DEBUG
 void tst_QApplication::libraryPaths()
 {
+#ifndef BUILTIN_TESTDATA
         const QString testDir = QFileInfo(QFINDTESTDATA("test/test.pro")).absolutePath();
+#else
+        const QString testDir = QFileInfo(QFINDTESTDATA("test.pro")).absolutePath();
+#endif
         QVERIFY(!testDir.isEmpty());
     {
         QApplication::setLibraryPaths(QStringList() << testDir);

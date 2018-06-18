@@ -48,9 +48,9 @@
 #include "qwindowsmime.h"
 #include "qwin10helpers.h"
 
-#include <QtGui/QWindow>
-#include <QtGui/QOpenGLContext>
-#include <QtGui/QScreen>
+#include <QtGui/qwindow.h>
+#include <QtGui/qopenglcontext.h>
+#include <QtGui/qscreen.h>
 #include <qpa/qplatformscreen.h>
 #include <QtFontDatabaseSupport/private/qwindowsfontdatabase_p.h>
 
@@ -277,6 +277,8 @@ QFunctionPointer QWindowsNativeInterface::platformFunction(const QByteArray &fun
         return QFunctionPointer(QWindowsWindow::setTouchWindowTouchTypeStatic);
     else if (function == QWindowsWindowFunctions::setHasBorderInFullScreenIdentifier())
         return QFunctionPointer(QWindowsWindow::setHasBorderInFullScreenStatic);
+    else if (function == QWindowsWindowFunctions::setWindowActivationBehaviorIdentifier())
+        return QFunctionPointer(QWindowsNativeInterface::setWindowActivationBehavior);
     else if (function == QWindowsWindowFunctions::isTabletModeIdentifier())
         return QFunctionPointer(QWindowsNativeInterface::isTabletMode);
     return nullptr;

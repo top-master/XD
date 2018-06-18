@@ -147,18 +147,17 @@
     // on and off is not a supported use-case, so this code is effectively
     // returning a constant for the lifetime of our QSNSView, which means
     // we don't care about emitting KVO signals for @"wantsLayer".
-    bool layerRequested = qt_mac_resolveOption(false, m_platformWindow->window(),
+    bool wantsLayer = qt_mac_resolveOption(true, m_platformWindow->window(),
         "_q_mac_wantsLayer", "QT_MAC_WANTS_LAYER");
 
     bool layerForSurfaceType = [self shouldUseMetalLayer:m_platformWindow->window()->surfaceType()];
 
-    return layerRequested || layerForSurfaceType;
+    return wantsLayer || layerForSurfaceType;
 }
 
 - (CALayer *)makeBackingLayer
 {
-    bool makeMetalLayer = [self shouldUseMetalLayer:m_platformWindow->window()->surfaceType()];
-    if (makeMetalLayer) {
+    if ([self shouldUseMetalLayer:m_platformWindow->window()->surfaceType()]) {
         // Check if Metal is supported. If it isn't then it's most likely
         // too late at this point and the QWindow will be non-functional,
         // but we can at least print a warning.
@@ -183,7 +182,7 @@
 
 - (NSViewLayerContentsRedrawPolicy)layerContentsRedrawPolicy
 {
-    // We need to set this this excplicitly since the super implementation
+    // We need to set this explicitly since the super implementation
     // returns LayerContentsRedrawNever for custom layers like CAMetalLayer.
     return NSViewLayerContentsRedrawDuringViewResize;
 }

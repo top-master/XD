@@ -42,6 +42,7 @@ QtModuleProject {
 
         Depends { name: "Qt.core_private" }
         Depends { name: "Qt.gui_private" }
+        Depends { name: "QtPlatformHeaders" }
         Depends { name: "uic" }
         Depends { name: project.headersName }
 

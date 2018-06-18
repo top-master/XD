@@ -494,6 +494,15 @@ defineTest(qtConfLibrary_inline) {
     !defined($${1}.libs, var):isEmpty($${1}.builds._KEYS_): \
         error("'inline' source in library '$$lib' specifies neither 'libs' nor 'builds'.")
 
+    # library lists are specified as strings in the json sources for
+    # readability, but it's a pain to work with that, so expand it now.
+    eval($${1}.libs = $$eval($${1}.libs))
+    export($${1}.libs)
+    for (b, $${1}.builds._KEYS_) {
+        eval($${1}.builds.$${b} = $$eval($${1}.builds.$${b}))
+        export($${1}.builds.$${b})
+    }
+
     # if multiple libraries provide the same export, it makes sense
     # to make them recognize the same input variables.
     input = $$eval($${2}.alias)
@@ -506,7 +515,7 @@ defineTest(qtConfLibrary_inline) {
         iv = $${input}.libs.$${b}
         vars += $$eval(config.commandline.rev_assignments.$${iv})
         defined(config.input.$${iv}, var) {
-            $${1}.builds.$${b} = $$eval(config.input.$${iv})
+            eval($${1}.builds.$${b} = $$eval(config.input.$${iv}))
             export($${1}.builds.$${b})
             $${1}.builds._KEYS_ *= $${b}
             any = true
@@ -527,28 +536,28 @@ defineTest(qtConfLibrary_inline) {
 
     # direct libs. overwrites inline libs.
     defined(config.input.$${input}.libs, var) {
-        $${1}.libs = $$eval(config.input.$${input}.libs)
+        eval($${1}.libs = $$eval(config.input.$${input}.libs))
         export($${1}.libs)
     }
 
     # prefix. prepends to (possibly overwritten) inline libs.
-    prefix = $$val_escape(config.input.$${input}.prefix)
+    prefix = $$eval(config.input.$${input}.prefix)
     !isEmpty(prefix) {
         $${1}.includedir = $$prefix/include
         export($${1}.includedir)
-        $${1}.libs = "-L$$prefix/lib $$eval($${1}.libs)"
+        $${1}.libs = -L$$prefix/lib $$eval($${1}.libs)
         export($${1}.libs)
     }
 
-    incdir = $$val_escape(config.input.$${input}.incdir)
+    incdir = $$eval(config.input.$${input}.incdir)
     !isEmpty(incdir) {
         $${1}.includedir = $$incdir
         export($${1}.includedir)
     }
 
-    libdir = $$val_escape(config.input.$${input}.libdir)
+    libdir = $$eval(config.input.$${input}.libdir)
     !isEmpty(libdir) {
-        $${1}.libs = "-L$$libdir $$eval($${1}.libs)"
+        $${1}.libs = -L$$libdir $$eval($${1}.libs)
         export($${1}.libs)
     }
 
@@ -562,13 +571,12 @@ defineTest(qtConfLibrary_makeSpec) {
     isEmpty(spec): \
         error("makeSpec source in library '$$eval($${1}.library)' does not specify 'spec'.")
 
-    $${1}.includedir = "$$val_escape(QMAKE_INCDIR_$$spec)"
+    $${1}.includedir = $$eval(QMAKE_INCDIR_$$spec)
     export($${1}.includedir)
-    libs =
+    $${1}.libs =
     for (l, QMAKE_LIBDIR_$$spec): \
-        libs += -L$$l
-    libs += $$eval(QMAKE_LIBS_$$spec)
-    $${1}.libs = "$$val_escape(libs)"
+        $${1}.libs += -L$$l
+    $${1}.libs += $$eval(QMAKE_LIBS_$$spec)
     export($${1}.libs)
 
     # the library definition is always in scope, so no point in exporting it.
@@ -595,13 +603,39 @@ defineTest(qtConfLibrary_pkgConfig) {
     qtRunLoggedCommand("$$pkg_config --modversion $$args", version)|return(false)
     qtRunLoggedCommand("$$pkg_config --libs-only-L $$args", libpaths)|return(false)
     qtRunLoggedCommand("$$pkg_config --libs-only-l $$args", libs)|return(false)
-    qtRunLoggedCommand("$$pkg_config --cflags $$args", $${1}.cflags)|return(false)
     version ~= s/[^0-9.].*$//
     $${1}.version = $$first(version)
     export($${1}.version)
-    libpaths += $$libs
-    $${1}.libs = "$$libpaths"
+    eval($${1}.libs = $$libpaths $$libs)
     export($${1}.libs)
+
+    qtRunLoggedCommand("$$pkg_config --cflags $$args", $${1}.cflags)|return(false)
+    # Split CFLAGS into stuff that goes into DEFINES, INCLUDEPATH, and other stuff.
+    # The compound variable is still set in case something wants to use it outside
+    # regular library exports.
+    defines =
+    includes =
+    ignored =
+    eval(cflags = $$eval($${1}.cflags))
+    for (i, cflags) {
+        contains(i, "-I.*") {
+            i ~= s/^-I//
+            includes += $$i
+        } else: contains(i, "-D.*") {
+            i ~= s/^-D//
+            defines += $$i
+        } else {
+            # Sometimes, pkg-config files include other flags
+            # we really don't need and shouldn't add.
+            ignored += $$i
+        }
+    }
+    !isEmpty(ignored): \
+        qtLog("Note: Dropped compiler flags '$$ignored'.")
+    $${1}.defines = $$defines
+    export($${1}.defines)
+    $${1}.includedir = $$includes
+    export($${1}.includedir)
     return(true)
 }
 
@@ -624,15 +658,15 @@ defineTest(qtConfTest_getPkgConfigVariable) {
 
 defineReplace(qtConfLibraryArgs) {
     NAME = $$upper($$eval($${1}.library))
-    qmake_args = "QMAKE_LIBS_$${NAME} = $$eval($${1}.libs)"
+    qmake_args = "QMAKE_LIBS_$${NAME} = $$val_escape($${1}.libs)"
     for (b, $${1}.builds._KEYS_): \
-        qmake_args += "QMAKE_LIBS_$${NAME}_$$upper($$b) = $$eval($${1}.builds.$${b})"
+        qmake_args += "QMAKE_LIBS_$${NAME}_$$upper($$b) = $$val_escape($${1}.builds.$${b})"
     includedir = $$eval($${1}.includedir)
     !isEmpty(includedir): \
-        qmake_args += "QMAKE_INCDIR_$${NAME} = $$includedir"
-    cflags = $$eval($${1}.cflags)
-    !isEmpty(cflags): \
-        qmake_args += "QMAKE_CFLAGS += $$cflags" "QMAKE_CXXFLAGS += $$cflags"
+        qmake_args += "QMAKE_INCDIR_$${NAME} = $$val_escape(includedir)"
+    defines = $$eval($${1}.defines)
+    !isEmpty(defines): \
+        qmake_args += "QMAKE_DEFINES_$${NAME} = $$val_escape(defines)"
     return($$qmake_args)
 }
 
@@ -680,49 +714,28 @@ defineTest(qtConfExportLibrary) {
     !$$qtConfEvaluate($$eval($${spfx}.export)): return()
 
     output = privatePro
-
-    eval(libs = $$eval($${spfx}.libs))
-    eval(cflags = $$eval($${spfx}.cflags))
-    eval(includes = $$eval($${spfx}.includedir))
-
-    # Split $$cflags into stuff that goes into DEFINES, INCLUDEPATH, and other stuff.
-    defines =
-    ignored =
-    for (i, cflags) {
-        contains(i, "-I.*") {
-            i ~= s/^-I//
-            includes += $$i
-        } else: contains(i, "-D.*") {
-            i ~= s/^-D//
-            defines += $$i
-        } else {
-            # Sometimes, pkg-config files or *-config scripts include other flags
-            # we really don't need and shouldn't add (pg_config is really bad).
-            ignored += $$i
-        }
-    }
-    !isEmpty(ignored): \
-        qtConfAddNote("Dropped compiler flags '$$ignored' when detecting library '$$name'.")
-
     NAME = $$upper($$name)
     qbs_cont = \
         "import qbs" \
         "Module {" \
         "    Depends { name: \"cpp\" }"
     # LIBS is emitted even if empty, as this allows the library to be "seen".
+    libs = $$eval($${spfx}.libs)
     qtConfOutputVar(assign, $$output, QMAKE_LIBS_$$NAME, $$libs)
     ### the libraries are not resolved. this should be fixed also for the qmake build.
     qbs_libs = $$libs
     ### i have no clue what to do about that ...
     for (b, $${spfx}.builds._KEYS_) {
-        eval(blibs = $$eval($${spfx}.builds.$${b}))
+        blibs = $$eval($${spfx}.builds.$${b})
         qtConfOutputVar(assign, $$output, QMAKE_LIBS_$${NAME}_$$upper($$b), $$blibs)
     }
     qbs_cont += "    cpp.dynamicLibraries: $$jsLibList($$libs)"
+    defines = $$eval($${spfx}.defines)
     !isEmpty(defines) {
         qtConfOutputVar(assign, $$output, QMAKE_DEFINES_$$NAME, $$defines)
         qbs_cont += "    cpp.defines: [$$jsList($$defines)]"
     }
+    includes = $$eval($${spfx}.includedir)
     !isEmpty(includes) {
         qtConfOutputVar(assign, $$output, QMAKE_INCDIR_$$NAME, $$includes)
         qbs_cont += "    cpp.includePaths: [$$jsList($$includes)]"
@@ -2053,7 +2066,8 @@ for(ever) {
     isEmpty(configsToProcess): \
         break()
 
-    currentConfig = config.$$take_first(configsToProcess)
+    thisConfig = $$take_first(configsToProcess)
+    currentConfig = config.$$thisConfig
     thisDir = $$eval($${currentConfig}.dir)
     jsonFile = $$thisDir/configure.json
     priFile = $$thisDir/configure.pri
@@ -2084,7 +2098,7 @@ for(ever) {
     subconfigs =
     for(n, $${currentConfig}.subconfigs._KEYS_) {
         subconfig = $$eval($${currentConfig}.subconfigs.$${n})
-        name = $$basename(subconfig)
+        name = $${thisConfig}_$$basename(subconfig)
         ex = $$eval(config.$${name}.dir)
         !isEmpty(ex): \
             error("Basename clash between $$thisDir/$$subconfig and $${ex}.")

@@ -171,7 +171,7 @@ private slots:
     void enabledPropagation();
     void ignoreKeyEventsWhenDisabled_QTBUG27417();
     void properTabHandlingWhenDisabled_QTBUG27417();
-#ifndef QT_NO_DRAGANDDROP
+#if QT_CONFIG(draganddrop)
     void acceptDropsPropagation();
 #endif
     void isEnabledTo();
@@ -416,8 +416,7 @@ private:
 
 bool tst_QWidget::ensureScreenSize(int width, int height)
 {
-    QSize available;
-    available = QDesktopWidget().availableGeometry().size();
+    const QSize available = QGuiApplication::primaryScreen()->availableGeometry().size();
     return (available.width() >= width && available.height() >= height);
 }
 
@@ -1048,7 +1047,7 @@ void tst_QWidget::properTabHandlingWhenDisabled_QTBUG27417()
 }
 
 // Drag'n drop disabled in this build.
-#ifndef QT_NO_DRAGANDDROP
+#if QT_CONFIG(draganddrop)
 void tst_QWidget::acceptDropsPropagation()
 {
     QScopedPointer<QWidget> testWidget(new QWidget);
@@ -2181,8 +2180,6 @@ void tst_QWidget::showFullScreen()
     QSKIP("QTBUG-52974");
 #endif
 
-    if (m_platform == QStringLiteral("wayland"))
-        QSKIP("Wayland: This fails. Figure out why.");
     QWidget plain;
     QHBoxLayout *layout;
     QWidget layouted;
@@ -2724,7 +2721,7 @@ void tst_QWidget::setGeometry()
 
     tlw.setParent(0, Qt::Window|Qt::FramelessWindowHint);
     tr = QRect(0,0,100,100);
-    tr.moveTopLeft(QApplication::desktop()->availableGeometry().topLeft());
+    tr.moveTopLeft(QGuiApplication::primaryScreen()->availableGeometry().topLeft());
     tlw.setGeometry(tr);
     QCOMPARE(tlw.geometry(), tr);
     tlw.showNormal();
@@ -3798,9 +3795,10 @@ void tst_QWidget::optimizedResize_topLevel()
     // a native function call works (it basically has to go through
     // WM_RESIZE in QApplication). This is a corner case, though.
     // See task 243708
-    const QRect frame = topLevel.frameGeometry();
-    MoveWindow(winHandleOf(&topLevel), frame.x(), frame.y(),
-               frame.width() + 10, frame.height() + 10,
+    RECT rect;
+    GetWindowRect(winHandleOf(&topLevel), &rect);
+    MoveWindow(winHandleOf(&topLevel), rect.left, rect.top,
+               rect.right - rect.left + 10, rect.bottom - rect.top + 10,
                true);
     QTest::qWait(100);
 #endif
@@ -3860,7 +3858,7 @@ void tst_QWidget::setMinimumSize()
     QSize nonDefaultSize = defaultSize + QSize(5,5);
     w.setMinimumSize(nonDefaultSize);
     w.showNormal();
-    QVERIFY(QTest::qWaitForWindowActive(&w));
+    QVERIFY(QTest::qWaitForWindowExposed(&w));
     QVERIFY2(w.height() >= nonDefaultSize.height(),
              msgComparisonFailed(w.height(), ">=", nonDefaultSize.height()));
     QVERIFY2(w.width() >= nonDefaultSize.width(),
@@ -3912,7 +3910,7 @@ void tst_QWidget::setFixedSize()
 
     w.setFixedSize(defaultSize + QSize(150, 150));
     w.showNormal();
-    QVERIFY(QTest::qWaitForWindowActive(&w));
+    QVERIFY(QTest::qWaitForWindowExposed(&w));
     if (m_platform == QStringLiteral("xcb"))
         QSKIP("QTBUG-26424");
     QCOMPARE(w.size(), defaultSize + QSize(150,150));
@@ -4518,8 +4516,9 @@ void tst_QWidget::scroll()
 {
     if (m_platform == QStringLiteral("wayland"))
         QSKIP("Wayland: This fails. Figure out why.");
-    const int w = qMin(500, qApp->desktop()->availableGeometry().width() / 2);
-    const int h = qMin(500, qApp->desktop()->availableGeometry().height() / 2);
+    QScreen *screen = QGuiApplication::primaryScreen();
+    const int w = qMin(500, screen->availableGeometry().width() / 2);
+    const int h = qMin(500, screen->availableGeometry().height() / 2);
 
     UpdateWidget updateWidget;
     updateWidget.resize(w, h);
@@ -4647,7 +4646,7 @@ void tst_QWidget::setWindowGeometry_data()
     QList<QList<QRect> > rects;
     const int width = m_testWidgetSize.width();
     const int height = m_testWidgetSize.height();
-    const QRect availableAdjusted = QApplication::desktop()->availableGeometry().adjusted(100, 100, -100, -100);
+    const QRect availableAdjusted = QGuiApplication::primaryScreen()->availableGeometry().adjusted(100, 100, -100, -100);
     rects << (QList<QRect>()
               << QRect(m_availableTopLeft + QPoint(100, 100), m_testWidgetSize)
               << availableAdjusted
@@ -6185,8 +6184,6 @@ QByteArray EventRecorder::msgEventListMismatch(const EventList &expected, const 
 
 void tst_QWidget::childEvents()
 {
-    if (m_platform == QStringLiteral("wayland"))
-        QSKIP("Wayland: This fails. Figure out why.");
     EventRecorder::EventList expected;
 
     // Move away the cursor; otherwise it might result in an enter event if it's
@@ -7430,7 +7427,7 @@ void tst_QWidget::moveWindowInShowEvent_data()
     QTest::addColumn<QPoint>("initial");
     QTest::addColumn<QPoint>("position");
 
-    QPoint p = QApplication::desktop()->availableGeometry().topLeft();
+    QPoint p = QGuiApplication::primaryScreen()->availableGeometry().topLeft();
 
     QTest::newRow("1") << p << (p + QPoint(10, 10));
     QTest::newRow("2") << (p + QPoint(10,10)) << p;
@@ -7455,7 +7452,8 @@ void tst_QWidget::moveWindowInShowEvent()
     };
 
     MoveWindowInShowEventWidget widget;
-    widget.resize(QSize(qApp->desktop()->availableGeometry().size() / 3).expandedTo(QSize(1, 1)));
+    QScreen *screen = QGuiApplication::primaryScreen();
+    widget.resize(QSize(screen->availableGeometry().size() / 3).expandedTo(QSize(1, 1)));
     // move to this position in showEvent()
     widget.position = position;
 
@@ -8105,7 +8103,7 @@ void tst_QWidget::resizeInPaintEvent()
     window.resize(200, 200);
     window.show();
     qApp->setActiveWindow(&window);
-    QVERIFY(QTest::qWaitForWindowActive(&window));
+    QVERIFY(QTest::qWaitForWindowExposed(&window));
     QTRY_VERIFY(widget.numPaintEvents > 0);
 
     widget.reset();
@@ -8645,7 +8643,7 @@ void tst_QWidget::translucentWidget()
     ColorRedWidget label;
     label.setFixedSize(16,16);
     label.setAttribute(Qt::WA_TranslucentBackground);
-    const QPoint labelPos = qApp->desktop()->availableGeometry().topLeft();
+    const QPoint labelPos = QGuiApplication::primaryScreen()->availableGeometry().topLeft();
     label.move(labelPos);
     label.show();
     QVERIFY(QTest::qWaitForWindowExposed(&label));
@@ -8704,7 +8702,7 @@ void tst_QWidget::setClearAndResizeMask()
     centerOnScreen(&topLevel);
     topLevel.show();
     qApp->setActiveWindow(&topLevel);
-    QVERIFY(QTest::qWaitForWindowActive(&topLevel));
+    QVERIFY(QTest::qWaitForWindowExposed(&topLevel));
     QTRY_VERIFY(topLevel.numPaintEvents > 0);
     topLevel.reset();
 
@@ -9970,9 +9968,6 @@ public:
 
 void tst_QWidget::touchEventSynthesizedMouseEvent()
 {
-    if (m_platform == QStringLiteral("wayland"))
-        QSKIP("Wayland: This fails. Figure out why.");
-
     {
         // Simple case, we ignore the touch events, we get mouse events instead
         TouchMouseWidget widget;
@@ -10554,7 +10549,7 @@ void tst_QWidget::keyboardModifiers()
     KeyboardWidget w;
     w.resize(300, 300);
     w.show();
-    QVERIFY(QTest::qWaitForWindowActive(&w));
+    QVERIFY(QTest::qWaitForWindowExposed(&w));
     QTest::mouseClick(&w, Qt::LeftButton, Qt::ControlModifier);
     QCOMPARE(w.m_eventCounter, 1);
     QCOMPARE(int(w.m_modifiers), int(Qt::ControlModifier));

@@ -44,8 +44,11 @@
 #include <qpainter.h>
 #include <qevent.h>
 #include <qdebug.h>
+#if QT_CONFIG(draganddrop)
 #include <qdrag.h>
+#endif
 #include <qclipboard.h>
+#include <qmath.h>
 #if QT_CONFIG(menu)
 #include <qmenu.h>
 #endif
@@ -380,6 +383,8 @@ void QPlainTextDocumentLayout::layoutBlock(const QTextBlock &block)
         line.setLineWidth(availableWidth);
         line.setPosition(QPointF(margin, height));
         height += line.height();
+        if (line.leading() < 0)
+            height += qCeil(line.leading());
         blockMaximumWidth = qMax(blockMaximumWidth, line.naturalTextWidth() + 2*margin);
     }
     tl->endLayout();
@@ -2138,7 +2143,7 @@ void QPlainTextEdit::contextMenuEvent(QContextMenuEvent *e)
 }
 #endif // QT_NO_CONTEXTMENU
 
-#ifndef QT_NO_DRAGANDDROP
+#if QT_CONFIG(draganddrop)
 /*! \reimp
 */
 void QPlainTextEdit::dragEnterEvent(QDragEnterEvent *e)
@@ -2179,7 +2184,7 @@ void QPlainTextEdit::dropEvent(QDropEvent *e)
     d->sendControlEvent(e);
 }
 
-#endif // QT_NO_DRAGANDDROP
+#endif // QT_CONFIG(draganddrop)
 
 /*! \reimp
  */

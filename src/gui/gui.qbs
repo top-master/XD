@@ -41,6 +41,7 @@ QtModuleProject {
         }
 
         Depends { name: project.headersName }
+        Depends { name: "Qt.core" }
         Depends { name: "Qt.core_private" }
         Depends { name: "qt_zlib" }
         Depends { name: "cpufeatures" }
@@ -56,6 +57,10 @@ QtModuleProject {
             "QT_NO_FOREACH",
             "QT_NO_USING_NAMESPACE",
         ])
+
+        // TODO: Either allow multiple auto-generated qrc files per product and move this
+        //       to the respective group or remove this and adapt the name in qbrush.cpp.
+        Qt.core.resourceFileBaseName: "qmake_webgradients"
 
         Group {
             name: "Qt accessibility module"
@@ -118,10 +123,6 @@ QtModuleProject {
                 "qcursor.cpp",
                 "qcursor.h",
                 "qcursor_p.h",
-                "qdnd.cpp",
-                "qdnd_p.h",
-                "qdrag.cpp",
-                "qdrag.h",
                 "qevent.cpp",
                 "qevent.h",
                 "qevent_p.h",
@@ -141,6 +142,8 @@ QtModuleProject {
                 "qinputmethod.cpp",
                 "qinputmethod.h",
                 "qinputmethod_p.h",
+                "qinternalmimedata.cpp",
+                "qinternalmimedata_p.h",
                 "qkeymapper.cpp",
                 "qkeymapper_p.h",
                 "qkeysequence.cpp",
@@ -161,8 +164,6 @@ QtModuleProject {
                 "qplatformcursor.h",
                 "qplatformdialoghelper.cpp",
                 "qplatformdialoghelper.h",
-                "qplatformdrag.cpp",
-                "qplatformdrag.h",
                 "qplatformgraphicsbuffer.cpp",
                 "qplatformgraphicsbuffer.h",
                 "qplatformgraphicsbufferhelper.cpp",
@@ -217,12 +218,8 @@ QtModuleProject {
                 "qsessionmanager.cpp",
                 "qsessionmanager.h",
                 "qsessionmanager_p.h",
-                "qshapedpixmapdndwindow.cpp",
-                "qshapedpixmapdndwindow_p.h",
                 "qshortcutmap.cpp",
                 "qshortcutmap_p.h",
-                "qsimpledrag.cpp",
-                "qsimpledrag_p.h",
                 "qstylehints.cpp",
                 "qstylehints.h",
                 "qsurface.cpp",
@@ -253,6 +250,21 @@ QtModuleProject {
                     "qplatformopenglcontext.cpp",
                     "qopenglcontext.cpp",
                     "qopenglwindow.cpp",
+                ]
+            }
+            Group {
+                condition: QtGuiConfig.draganddrop
+                files: [
+                    "qdnd.cpp",
+                    "qdnd_p.h",
+                    "qdrag.cpp",
+                    "qdrag.h",
+                    "qplatformdrag.cpp",
+                    "qplatformdrag.h",
+                    "qshapedpixmapdndwindow.cpp",
+                    "qshapedpixmapdndwindow_p.h",
+                    "qsimpledrag.cpp",
+                    "qsimpledrag_p.h",
                 ]
             }
             Group {
@@ -589,6 +601,13 @@ QtModuleProject {
                     // Turning on PCH for this file causes internal compiler errors with at least GCC 5.3.1:
                     "qdrawhelper.cpp",
                 ]
+            }
+            Group {
+                files: [
+                    "webgradients.binaryjson",
+                ]
+                fileTags: ["qt.core.resource_data"]
+                Qt.core.resourcePrefix: "qgradient"
             }
         }
 

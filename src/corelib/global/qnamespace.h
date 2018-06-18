@@ -486,6 +486,8 @@ public:
 
         WA_ContentsMarginsRespectsSafeArea = 130,
 
+        WA_StyleSheetTarget = 131,
+
         // Add new attributes before this line
         WA_AttributeCount
     };
@@ -1860,16 +1862,6 @@ public:
     static bool unregisterCallback(Callback, qInternalCallback);
     static bool activateCallbacks(Callback, void **);
 };
-
-#if defined(Q_CLANG_QDOC)
-// Declared here for qdoc; actual declarations in qtextdocument.h
-namespace Qt
-{
-    bool mightBeRichText(const QString&);
-    QString convertFromPlainText(const QString &plain, WhiteSpaceMode mode = WhiteSpacePre);
-    QTextCodec *codecForHtml(const QByteArray &ba);
-}
-#endif // Q_CLANG_QDOC
 
 QT_END_NAMESPACE
 

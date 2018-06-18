@@ -48,7 +48,6 @@
 #include <QtWidgets/QBoxLayout>
 #include <QtWidgets/QStyle>
 #include <QtWidgets/QPushButton>
-#include <QtWidgets/QDesktopWidget>
 #ifndef QT_NO_OPENGL
 #include <QtWidgets/QOpenGLWidget>
 #endif
@@ -206,7 +205,7 @@ private slots:
     void resizeAnchor();
     void viewportUpdateMode();
     void viewportUpdateMode2();
-#ifndef QT_NO_DRAGANDDROP
+#if QT_CONFIG(draganddrop)
     void acceptDrops();
 #endif
     void optimizationFlags();
@@ -2439,8 +2438,8 @@ void tst_QGraphicsView::viewportUpdateMode()
     scene.setBackgroundBrush(Qt::red);
 
     CustomView view;
-    QDesktopWidget desktop;
-    view.setFixedSize(QSize(500, 500).boundedTo(desktop.availableGeometry().size())); // 500 is too big for all common smartphones
+    QScreen *screen = QGuiApplication::primaryScreen();
+    view.setFixedSize(QSize(500, 500).boundedTo(screen->availableGeometry().size())); // 500 is too big for all common smartphones
     view.setScene(&scene);
     QCOMPARE(view.viewportUpdateMode(), QGraphicsView::MinimalViewportUpdate);
 
@@ -2567,7 +2566,7 @@ void tst_QGraphicsView::viewportUpdateMode2()
 #endif
 }
 
-#ifndef QT_NO_DRAGANDDROP
+#if QT_CONFIG(draganddrop)
 void tst_QGraphicsView::acceptDrops()
 {
     QGraphicsView view;

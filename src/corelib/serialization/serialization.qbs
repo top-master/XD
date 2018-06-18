@@ -4,6 +4,14 @@ Group {
     name: "serialization"
     prefix: path + '/'
     files: [
+        "qcborarray.h",
+        "qcborcommon.h",
+        "qcbormap.h",
+        "qcborstream.cpp",
+        "qcborstream.h",
+        "qcborvalue.cpp",
+        "qcborvalue.h",
+        "qcborvalue_p.h",
         "qdatastream.cpp",
         "qdatastream.h",
         "qdatastream_p.h",
@@ -11,6 +19,7 @@ Group {
         "qjson_p.h",
         "qjsonarray.cpp",
         "qjsonarray.h",
+        "qjsoncbor.cpp",
         "qjsondocument.cpp",
         "qjsondocument.h",
         "qjsonobject.cpp",
@@ -29,5 +38,12 @@ Group {
         "qxmlstream_p.h",
         "qxmlutils.cpp",
         "qxmlutils_p.h",
+    ]
+    Group {
+        fileTags: ["hpp"]
+        files: [
+            "qcborarray.cpp",
+            "qcbormap.cpp",
         ]
+    }
 }

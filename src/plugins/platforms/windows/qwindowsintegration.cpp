@@ -76,8 +76,8 @@
 
 #include <QtEventDispatcherSupport/private/qwindowsguieventdispatcher_p.h>
 
-#include <QtCore/QDebug>
-#include <QtCore/QVariant>
+#include <QtCore/qdebug.h>
+#include <QtCore/qvariant.h>
 
 #include <limits.h>
 
@@ -332,7 +332,7 @@ QPlatformWindow *QWindowsIntegration::createPlatformWindow(QWindow *window) cons
         << "\n    Requested: " << requested.geometry << " frame incl.="
         << QWindowsGeometryHint::positionIncludesFrame(window)
         << ' ' << requested.flags
-        << "\n    Obtained : " << obtained.geometry << " margins=" << obtained.frame
+        << "\n    Obtained : " << obtained.geometry << " margins=" << obtained.fullFrameMargins
         << " handle=" << obtained.hwnd << ' ' << obtained.flags << '\n';
 
     if (Q_UNLIKELY(!obtained.hwnd))
@@ -552,7 +552,7 @@ QPlatformDrag *QWindowsIntegration::drag() const
 {
     return &d->m_drag;
 }
-#  endif // !QT_NO_DRAGANDDROP
+#  endif // QT_CONFIG(draganddrop)
 #endif // !QT_NO_CLIPBOARD
 
 QPlatformInputContext * QWindowsIntegration::inputContext() const

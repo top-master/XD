@@ -1,4 +1,5 @@
 import qbs
+import qbs.FileInfo
 import qbs.Process
 import qbs.TextFile
 import qbs.Xml
@@ -252,7 +253,11 @@ QtModuleProject {
             }
             return frameworks;
         }
-        cpp.includePaths: project.includePaths.concat([".", "../3rdparty/harfbuzz/src"]).concat(base)
+        cpp.includePaths: project.includePaths.concat(
+            ".",
+            "../3rdparty/harfbuzz/src",
+            "../3rdparty/tinycbor/src"
+        ).concat(base)
 
         cpp.linkerFlags: base.concat(elfInterpreterProbe.found ? ["-e", "qt_core_boilerplate"] : [])
 

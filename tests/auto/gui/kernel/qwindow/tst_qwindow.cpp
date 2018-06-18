@@ -480,7 +480,7 @@ void tst_QWindow::positioning()
     }
 
     if (isPlatformWayland())
-        QSKIP("Wayland: This fails. Figure out why.");
+        QSKIP("Wayland: This fails. See QTBUG-68660.");
 
     // Some platforms enforce minimum widths for windows, which can cause extra resize
     // events, so set the width to suitably large value to avoid those.
@@ -787,9 +787,6 @@ void tst_QWindow::isExposed()
 #endif
 
     window.hide();
-
-    if (isPlatformWayland())
-        QSKIP("Wayland: This is flaky. Figure out why.");
 
     QCoreApplication::processEvents();
     QTRY_VERIFY(window.received(QEvent::Expose) > 1);
@@ -1846,7 +1843,7 @@ void tst_QWindow::mask()
 void tst_QWindow::initialSize()
 {
     if (isPlatformWayland())
-        QSKIP("Wayland: This fails. Figure out why.");
+        QSKIP("Wayland: This fails. See QTBUG-66818.");
 
     QSize defaultSize(0,0);
     {
@@ -1918,8 +1915,8 @@ void tst_QWindow::modalDialog()
 
 void tst_QWindow::modalDialogClosingOneOfTwoModal()
 {
-    if (isPlatformWayland())
-        QSKIP("Wayland: This fails. Figure out why.");
+    if (!QGuiApplicationPrivate::platformIntegration()->hasCapability(QPlatformIntegration::WindowActivation))
+        QSKIP("QWindow::requestActivate() is not supported.");
 
     QWindow normalWindow;
     normalWindow.setFramePosition(m_availableTopLeft + QPoint(80, 80));

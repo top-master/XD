@@ -567,7 +567,7 @@ void QCocoaWindow::setWindowFlags(Qt::WindowFlags flags)
     Qt::WindowType type = static_cast<Qt::WindowType>(int(flags & Qt::WindowType_Mask));
     if ((type & Qt::Popup) != Qt::Popup && (type & Qt::Dialog) != Qt::Dialog) {
         NSWindowCollectionBehavior behavior = m_view.window.collectionBehavior;
-        if (flags & Qt::WindowFullscreenButtonHint) {
+        if ((flags & Qt::WindowFullscreenButtonHint) || m_view.window.qt_fullScreen) {
             behavior |= NSWindowCollectionBehaviorFullScreenPrimary;
             behavior &= ~NSWindowCollectionBehaviorFullScreenAuxiliary;
         } else {
@@ -1080,7 +1080,7 @@ void QCocoaWindow::windowDidChangeScreen()
         return;
 
     if (QCocoaScreen *cocoaScreen = QCocoaIntegration::instance()->screenForNSScreen(m_view.window.screen))
-        QWindowSystemInterface::handleWindowScreenChanged(window(), cocoaScreen->screen());
+        QWindowSystemInterface::handleWindowScreenChanged<QWindowSystemInterface::SynchronousDelivery>(window(), cocoaScreen->screen());
 }
 
 void QCocoaWindow::windowWillClose()
@@ -1419,7 +1419,7 @@ QCocoaNSWindow *QCocoaWindow::createNSWindow(bool shouldBePanel)
     }
 
     if (targetScreen != window()->screen())
-        QWindowSystemInterface::handleWindowScreenChanged(window(), targetScreen);
+        QWindowSystemInterface::handleWindowScreenChanged<QWindowSystemInterface::SynchronousDelivery>(window(), targetScreen);
 
     nsWindow.restorable = NO;
     nsWindow.level = windowLevel(flags);

@@ -43,7 +43,9 @@
 #include "qaction.h"
 #include "qapplication.h"
 #include "qclipboard.h"
-#include "qdrag.h"
+#if QT_CONFIG(draganddrop)
+#include <qdrag.h>
+#endif
 #include "qdrawutil.h"
 #include "qevent.h"
 #include "qfontmetrics.h"
@@ -1427,7 +1429,7 @@ bool QLineEdit::event(QEvent * e)
         // ### Qt6: move to timerEvent, is here for binary compatibility
         int timerId = ((QTimerEvent*)e)->timerId();
         if (false) {
-#ifndef QT_NO_DRAGANDDROP
+#if QT_CONFIG(draganddrop)
         } else if (timerId == d->dndTimer.timerId()) {
             d->drag();
 #endif
@@ -1515,7 +1517,7 @@ void QLineEdit::mousePressEvent(QMouseEvent* e)
     mark = mark && (d->imHints & Qt::ImhNoPredictiveText);
 #endif // Q_OS_ANDROID
     int cursor = d->xToPos(e->pos().x());
-#ifndef QT_NO_DRAGANDDROP
+#if QT_CONFIG(draganddrop)
     if (!mark && d->dragEnabled && d->control->echoMode() == Normal &&
          e->button() == Qt::LeftButton && d->inSelection(e->pos().x())) {
         if (!d->dndTimer.isActive())
@@ -1534,7 +1536,7 @@ void QLineEdit::mouseMoveEvent(QMouseEvent * e)
     Q_D(QLineEdit);
 
     if (e->buttons() & Qt::LeftButton) {
-#ifndef QT_NO_DRAGANDDROP
+#if QT_CONFIG(draganddrop)
         if (d->dndTimer.isActive()) {
             if ((d->mousePressPos - e->pos()).manhattanLength() > QApplication::startDragDistance())
                 d->drag();
@@ -1581,7 +1583,7 @@ void QLineEdit::mouseReleaseEvent(QMouseEvent* e)
     Q_D(QLineEdit);
     if (d->sendMouseEventToInputContext(e))
         return;
-#ifndef QT_NO_DRAGANDDROP
+#if QT_CONFIG(draganddrop)
     if (e->button() == Qt::LeftButton) {
         if (d->dndTimer.isActive()) {
             d->dndTimer.stop();
@@ -1671,6 +1673,21 @@ void QLineEdit::mouseDoubleClickEvent(QMouseEvent* e)
     inputMask() set on the line edit and enter/return is pressed, the
     editingFinished() signal will only be emitted if the input follows
     the inputMask() and the validator() returns QValidator::Acceptable.
+*/
+
+/*!
+    \fn void QLineEdit::inputRejected()
+
+    This signal is emitted when the user presses a key that is not
+    considered to be acceptable input. For example, if a key press
+    results in a validator's validate() call to return Invalid.
+    Another case is when trying to enter in more characters beyond the
+    maximum length of the line edit.
+
+    Note: This signal will still be emitted in a case where part of
+    the text is accepted but not all of it is. For example, if there
+    is a maximum length set and the clipboard text is longer than the
+    maximum length when it is pasted.
 */
 
 /*!
@@ -2030,7 +2047,7 @@ void QLineEdit::paintEvent(QPaintEvent *)
 }
 
 
-#ifndef QT_NO_DRAGANDDROP
+#if QT_CONFIG(draganddrop)
 /*!\reimp
 */
 void QLineEdit::dragMoveEvent(QDragMoveEvent *e)
@@ -2095,7 +2112,7 @@ void QLineEdit::dropEvent(QDropEvent* e)
     }
 }
 
-#endif // QT_NO_DRAGANDDROP
+#endif // QT_CONFIG(draganddrop)
 
 #ifndef QT_NO_CONTEXTMENU
 /*!

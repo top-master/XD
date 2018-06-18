@@ -1399,6 +1399,7 @@ void QCoreApplication::exit(int returnCode)
   QCoreApplication management of posted events
  *****************************************************************************/
 
+#ifndef QT_NO_QOBJECT
 /*!
     \fn bool QCoreApplication::sendEvent(QObject *receiver, QEvent *event)
 
@@ -1413,6 +1414,24 @@ void QCoreApplication::exit(int returnCode)
 
     \sa postEvent(), notify()
 */
+bool QCoreApplication::sendEvent(QObject *receiver, QEvent *event)
+{
+    if (event)
+        event->spont = false;
+    return notifyInternal2(receiver, event);
+}
+
+/*!
+    \internal
+*/
+bool QCoreApplication::sendSpontaneousEvent(QObject *receiver, QEvent *event)
+{
+    if (event)
+        event->spont = true;
+    return notifyInternal2(receiver, event);
+}
+
+#endif // QT_NO_QOBJECT
 
 /*!
     \since 4.3
@@ -1766,8 +1785,7 @@ void QCoreApplicationPrivate::sendPostedEvents(QObject *receiver, int event_type
     If \a receiver is null, the events of \a eventType are removed for
     all objects. If \a eventType is 0, all the events are removed for
     \a receiver. You should never call this function with \a eventType
-    of 0. If you do call it in this way, be aware that killing events
-    may cause \a receiver to break one or more invariants.
+    of 0.
 
     \threadsafe
 */
@@ -1818,9 +1836,7 @@ void QCoreApplication::removePostedEvents(QObject *receiver, int eventType)
     }
 
     locker.unlock();
-    for (int i = 0; i < events.count(); ++i) {
-        delete events[i];
-    }
+    qDeleteAll(events);
 }
 
 /*!

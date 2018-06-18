@@ -45,14 +45,14 @@
 #include "qwindowsscreen.h"
 
 #include <qpa/qwindowsysteminterface.h>
-#include <QtGui/QGuiApplication>
-#include <QtGui/QScreen>
-#include <QtGui/QTouchDevice>
-#include <QtGui/QWindow>
-#include <QtGui/QCursor>
+#include <QtGui/qguiapplication.h>
+#include <QtGui/qscreen.h>
+#include <QtGui/qtouchdevice.h>
+#include <QtGui/qwindow.h>
+#include <QtGui/qcursor.h>
 
-#include <QtCore/QDebug>
-#include <QtCore/QScopedArrayPointer>
+#include <QtCore/qdebug.h>
+#include <QtCore/qscopedpointer.h>
 
 #include <windowsx.h>
 
@@ -180,24 +180,31 @@ Qt::MouseButtons QWindowsMouseHandler::queryMouseButtons()
 
 void QWindowsMouseHandler::handleExitSizeMove(QWindow *window)
 {
-    // When moving a window by dragging the title bar, no WM_NCLBUTTONUP is
-    // received after WM_NCLBUTTONDOWN, WM_NCMOUSEMOVE (due to internal
-    // mouse capture), which can leave the left mouse button 'pressed'
-    // in QGuiApplication's state. Intercept WM_EXITSIZEMOVE to sync the buttons.
+    // Windows can be moved/resized by:
+    // 1) User moving a window by dragging the title bar: Causes a sequence
+    //    of WM_NCLBUTTONDOWN, WM_NCMOUSEMOVE but no WM_NCLBUTTONUP,
+    //    leaving the left mouse button 'pressed'
+    // 2) User choosing Resize/Move from System menu and using mouse/cursor keys:
+    //    No mouse events are received
+    // 3) Programmatically via QSizeGrip calling QPlatformWindow::startSystemResize/Move():
+    //    Mouse is left in pressed state after press on size grip (inside window),
+    //    no further mouse events are received
+    // For cases 1,3, intercept WM_EXITSIZEMOVE to sync the buttons.
     const Qt::MouseButtons currentButtons = QWindowsMouseHandler::queryMouseButtons();
     const Qt::MouseButtons appButtons = QGuiApplication::mouseButtons();
     if (currentButtons == appButtons)
         return;
     const Qt::KeyboardModifiers keyboardModifiers = QWindowsKeyMapper::queryKeyboardModifiers();
     const QPoint globalPos = QWindowsCursor::mousePosition();
-    const QPoint localPos = window->handle()->mapFromGlobal(globalPos);
+    const QPlatformWindow *platWin = window->handle();
+    const QPoint localPos = platWin->mapFromGlobal(globalPos);
+    const QEvent::Type type = platWin->geometry().contains(globalPos)
+        ? QEvent::MouseButtonRelease : QEvent::NonClientAreaMouseButtonRelease;
     for (Qt::MouseButton button : {Qt::LeftButton, Qt::RightButton, Qt::MiddleButton}) {
         if (appButtons.testFlag(button) && !currentButtons.testFlag(button)) {
             QWindowSystemInterface::handleMouseEvent(window, localPos, globalPos,
-                                                     currentButtons, button,
-                                                     QEvent::NonClientAreaMouseButtonRelease,
-                                                     keyboardModifiers,
-                                                     Qt::MouseEventNotSynthesized);
+                                                     currentButtons, button, type,
+                                                     keyboardModifiers);
         }
     }
 }
@@ -520,11 +527,25 @@ static bool isValidWheelReceiver(QWindow *candidate)
 static void redirectWheelEvent(QWindow *window, const QPoint &globalPos, int delta,
                                Qt::Orientation orientation, Qt::KeyboardModifiers mods)
 {
+    // Redirect wheel event to one of the following, in order of preference:
+    // 1) The window under mouse
+    // 2) The window receiving the event
     // If a window is blocked by modality, it can't get the event.
-    if (isValidWheelReceiver(window)) {
+
+    QWindow *receiver = QWindowsScreen::windowAt(globalPos, CWP_SKIPINVISIBLE);
+    while (receiver && receiver->flags().testFlag(Qt::WindowTransparentForInput))
+        receiver = receiver->parent();
+    bool handleEvent = true;
+    if (!isValidWheelReceiver(receiver)) {
+        receiver = window;
+        if (!isValidWheelReceiver(receiver))
+            handleEvent = false;
+    }
+
+    if (handleEvent) {
         const QPoint point = (orientation == Qt::Vertical) ? QPoint(0, delta) : QPoint(delta, 0);
-        QWindowSystemInterface::handleWheelEvent(window,
-                                                 QWindowsGeometryHint::mapFromGlobal(window, globalPos),
+        QWindowSystemInterface::handleWheelEvent(receiver,
+                                                 QWindowsGeometryHint::mapFromGlobal(receiver, globalPos),
                                                  globalPos, QPoint(), point, mods);
     }
 }
