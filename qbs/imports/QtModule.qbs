@@ -17,6 +17,7 @@ QtProduct {
 
     Depends { name: project.tracepointsProductName; required: false }
     Depends { name: "qt_sse2"; condition: !hostBuild }
+    Depends { name: "qt_common_libs_plugins" }
 
 // TODO: For Windows: qt_targets.prf
 
@@ -101,12 +102,6 @@ QtProduct {
 /*
 integrity:CONFIG(exceptions, exceptions|exceptions_off): \
     MODULE_CONFIG += exceptions
-*/
-
-/* TODO. Relevant for plugins as well (qt_common.prf)
-    if(!host_build|!cross_compile):qtConfig(reduce_exports): CONFIG += hide_symbols
-    unix:qtConfig(reduce_relocations): CONFIG += bsymbolic_functions
-    qtConfig(separate_debug_info): CONFIG += separate_debug_info
 */
 
 // TODO: Generate .pri file. Logic is in qt_module_pri.prf

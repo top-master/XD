@@ -21,6 +21,7 @@ Project {
     QtStaticLibrary {
         name: "bundled_xkbcommon"
         condition: QtGuiPrivateConfig.xcb && !QtGuiPrivateConfig.system_xkbcommon
+        qt_warnings.warningClean: false
         Depends { name: "cpp" }
         cpp.includePaths: [
             "xkbcommon",

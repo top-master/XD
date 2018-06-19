@@ -2,6 +2,7 @@ import qbs
 
 QtProduct {
     type: ["staticlibrary"]
+    Depends { name: "qt_common_libs_plugins" }
     property bool isInternal: true
     property bool install: !isInternal || Qt.global.config.staticBuild
     Group {

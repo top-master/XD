@@ -14,6 +14,7 @@ Project {
     QtStaticLibrary {
         name: "bundled_libjpeg"
         condition: !QtGuiPrivateConfig.system_jpeg
+        qt_warnings.warningClean: false
         property stringList commonDefines: [
             "BITS_IN_JSAMPLE=8",
             "C_ARITH_CODING_SUPPORTED=1",

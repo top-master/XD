@@ -21,6 +21,7 @@ Project {
     QtStaticLibrary {
         name: "bundled_harfbuzz_ng"
         condition: QtGuiPrivateConfig.harfbuzz && !QtGuiPrivateConfig.system_harfbuzz
+        qt_warnings.warningClean: false
         readonly property int openTypeShaper: 1
         readonly property int coretextShaper: 2
         readonly property int fallbackShaper: 4

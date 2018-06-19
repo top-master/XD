@@ -24,6 +24,7 @@ CppApplication {
     Depends { name: "Qt.bootstrap_private"; condition: useBootstrapLib }
     Depends { name: "Qt.core"; condition: !useBootstrapLib }
     Depends { name: "osversions" }
+    Depends { name: "qt_common" }
 
     property bool createQbsModule: false
     Depends { name: "Exporter.qbs"; condition: createQbsModule }
@@ -38,8 +39,6 @@ CppApplication {
         condition: qbs.toolchain.contains("gcc") && Qt.global.config.rpath && !useBootstrapLib
         cpp.rpaths: cpp.rpathOrigin + "/../lib"
     }
-
-    cpp.cxxLanguageVersion: "c++11"
 
     Group {
         fileTagsFilter: "application"

@@ -10,6 +10,8 @@ Product {
     Depends { name: "cpp" }
     Depends { name: "osversions" }
     Depends { name: "Android.ndk"; condition: qbs.targetOS.contains("android") }
+    Depends { name: "qt_common" }
+    Depends { name: "qt_warnings" }
 
     Depends { name: mkspecModule; condition: mkspecModule !== undefined } // TODO: Explicit comparison should not be needed, but is
 
@@ -61,19 +63,6 @@ Product {
     Properties {
         condition: qbs.toolchain.contains("mingw")
         cpp.minimumWindowsVersion: "6.1"
-    }
-
-// TODO: This belongs into the top-level mkspec module
-    cpp.cxxLanguageVersion: {
-        if (hostBuild)
-            return "c++11"; // TODO: What is the correct way to get this information?
-        if (Qt.global.config.c__1z)
-            return "c++1z";
-        if (Qt.global.config.c__14)
-            return "c++14";
-        if (Qt.global.config.c__11)
-            return "c++11";
-        return undefined;
     }
 
     cpp.cxxStandardLibrary: {

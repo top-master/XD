@@ -21,6 +21,7 @@ Project {
     QtStaticLibrary {
         name: "bundled_libpng"
         condition: QtGuiPrivateConfig.png && !QtGuiPrivateConfig.system_png
+        qt_warnings.warningClean: false
         Depends { name: "cpp" }
         Depends { name: "qt_zlib" }
         cpp.defines: ["PNG_ARM_NEON_OPT=0"]

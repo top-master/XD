@@ -20,6 +20,7 @@ Project {
         name: "bundled_freetype"
         targetName: "qtfreetype"
         condition: !QtGuiPrivateConfig.system_freetype
+        qt_warnings.warningClean: false
         Depends { name: "qt_libpng" }
         Depends { name: "qt_zlib" }
         Depends { name: "cpp" }
