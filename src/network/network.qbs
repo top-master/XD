@@ -234,8 +234,13 @@ QtModuleProject {
                 "access/qnetworkreplyhttpimpl.cpp",
                 "access/qnetworkreplyhttpimpl_p.h",
                 "access/qspdyprotocolhandler.cpp",
-                "access/qspdyprotocolhandler_p.h",
             ]
+
+            Group {
+                files: "access/qspdyprotocolhandler_p.h"
+                fileTags: "unmocable"
+                overrideTags: false
+            }
         }
 
         Group {
