@@ -919,7 +919,13 @@ defineTest(qtConfOutput_qbsMetaProject) {
     export($${currentConfig}.output.qbsMetaProject)
 }
 
+defineTest(isAbsolutePath) {
+    contains(1, "/.*|[a-zA-Z]:[/\\\\].*"): return(true)
+    return(false)
+}
+
 defineTest(gatherDataForQbsProfile) {
+    flags = $$2
     QMAKE_CXX =
     QMAKE_PLATFORM =
     QMAKE_COMPILER =
@@ -941,6 +947,9 @@ defineTest(gatherDataForQbsProfile) {
         }
         qbsCompilerName = $$replace(QMAKE_CXX, $$CROSS_COMPILE, )$$ext
         qbsSysroot = $$[QT_SYSROOT]
+    }
+    contains(flags, target_profile):isAbsolutePath($$CROSS_COMPILE) {
+        qbsToolchainInstallPath = $$dirname(CROSS_COMPILE)
     }
     export(qbsCompilerName)
     qbsPlatform = [$$jsList($$QMAKE_PLATFORM)]
@@ -975,11 +984,6 @@ defineTest(qtConfOutput_qbsMultiplexCfg) {
         "    }" \
         "    return qmakeToolchain[0];" \
         "}" \
-        "function getToolchainInstallPath(qmakeTcInstallPath, qmakeTcPrefix) {" \
-        "    if (FileInfo.isAbsolutePath(qmakeTcPrefix))" \
-        "        return FileInfo.path(qmakeTcPrefix);" \
-        "    return qmakeTcInstallPath;" \
-        "}" \
         "function getToolchainPrefix(qmakeTcPrefix) {" \
         "    if (FileInfo.isAbsolutePath(qmakeTcPrefix))" \
         "        return FileInfo.fileName(qmakeTcPrefix);" \
@@ -995,7 +999,7 @@ defineTest(qtConfOutput_qbsMultiplexCfg) {
         "var hostMkspec = \"$$[QMAKE_SPEC]\";" \
         "var targetMkspec = \"$$[QMAKE_XSPEC]\";"
 
-    gatherDataForQbsProfile($$[QMAKE_XSPEC])
+    gatherDataForQbsProfile($$[QMAKE_XSPEC], target_profile)
     contents += \
         "var compilerName = \"$$qbsCompilerName\";" \
         "var platform = getPlatform($$qbsPlatform);" \
@@ -1005,7 +1009,7 @@ defineTest(qtConfOutput_qbsMultiplexCfg) {
     else: contents += \
         "var toolchainPrefix = \"$$qbsToolchainPrefix\""
     contents += \
-        "var toolchainInstallPath = getToolchainInstallPath(\"$$qbsToolchainInstallPath\", \"$$CROSS_COMPILE\");" \
+        "var toolchainInstallPath = \"$$qbsToolchainInstallPath\";" \
         "var sysroot = \"$$qbsSysroot\";" \
         "var ndkRootPath = \"$$qbsNdkRoot\";"
 
