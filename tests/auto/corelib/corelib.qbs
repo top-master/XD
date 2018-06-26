@@ -9,7 +9,7 @@ QtAutotestProject {
         "global",
         "io",
         "itemmodels",
-        // "kernel",
+        "kernel",
         // "mimetypes",
         // "plugin",
         // "statemachine",
