@@ -956,6 +956,12 @@ defineTest(gatherDataForQbsProfile) {
     export(qbsPlatform)
     qbsToolchain = [$$jsList($$QMAKE_COMPILER)]
     export(qbsToolchain)
+    isEmpty(qbsToolchainPrefix) {
+        isAbsolutePath($$CROSS_COMPILE): \
+            qbsToolchainPrefix = $$basename(CROSS_COMPILE)
+        else: \
+            qbsToolchainPrefix = $$CROSS_COMPILE
+    }
     export(qbsToolchainPrefix)
     export(qbsToolchainInstallPath)
     export(qbsSysroot)
@@ -964,7 +970,6 @@ defineTest(gatherDataForQbsProfile) {
 
 defineTest(qtConfOutput_qbsMultiplexCfg) {
     contents = \
-        "var FileInfo = require('qbs.FileInfo');"\
         "function getPlatform(qmakePlatform) {" \
         "    if (qmakePlatform.contains('win32')) " \
         "        return 'windows'; " \
@@ -983,11 +988,6 @@ defineTest(qtConfOutput_qbsMultiplexCfg) {
         "        return 'clang';" \
         "    }" \
         "    return qmakeToolchain[0];" \
-        "}" \
-        "function getToolchainPrefix(qmakeTcPrefix) {" \
-        "    if (FileInfo.isAbsolutePath(qmakeTcPrefix))" \
-        "        return FileInfo.fileName(qmakeTcPrefix);" \
-        "    return qmakeTcPrefix;" \
         "}"
 
     arch = $$jsList($$qtConfEvaluate("tests.architecture.arch"))
@@ -1003,12 +1003,8 @@ defineTest(qtConfOutput_qbsMultiplexCfg) {
     contents += \
         "var compilerName = \"$$qbsCompilerName\";" \
         "var platform = getPlatform($$qbsPlatform);" \
-        "var toolchain = getToolchain($$qbsToolchain, $$qbsPlatform);"
-    isEmpty(qbsToolchainPrefix): contents += \
-        "var toolchainPrefix = getToolchainPrefix(\"$$CROSS_COMPILE\");"
-    else: contents += \
-        "var toolchainPrefix = \"$$qbsToolchainPrefix\""
-    contents += \
+        "var toolchain = getToolchain($$qbsToolchain, $$qbsPlatform);" \
+        "var toolchainPrefix = \"$$qbsToolchainPrefix\";" \
         "var toolchainInstallPath = \"$$qbsToolchainInstallPath\";" \
         "var sysroot = \"$$qbsSysroot\";" \
         "var ndkRootPath = \"$$qbsNdkRoot\";"
