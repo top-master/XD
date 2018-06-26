@@ -6,7 +6,7 @@ QtAutotestProject {
     references: [
         "corelib",
   //      "dbus",
-  //        "other",
+        "other",
     ]
 }
 
