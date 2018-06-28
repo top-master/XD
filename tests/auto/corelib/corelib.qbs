@@ -10,7 +10,7 @@ QtAutotestProject {
         "io",
         "itemmodels",
         "kernel",
-        // "mimetypes",
+        "mimetypes",
         // "plugin",
         // "statemachine",
         // "thread",
