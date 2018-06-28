@@ -12,7 +12,7 @@ QtAutotestProject {
         "kernel",
         "mimetypes",
         // "plugin",
-        // "statemachine",
+        "statemachine",
         // "thread",
         // "tools",
         // "xml",
