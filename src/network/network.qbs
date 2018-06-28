@@ -64,6 +64,10 @@ QtModuleProject {
             return frameworks;
         }
 
+        Properties {
+            condition: QtNetworkConfig.opensslv11
+            cpp.defines: outer.concat("OPENSSL_API_COMPAT=0x10100000L")
+        }
         cpp.defines: base.concat(["QT_NO_USING_NAMESPACE", "QT_NO_FOREACH"])
 
         Depends { name: "moc" }
@@ -233,13 +237,14 @@ QtModuleProject {
                 "access/qhttpthreaddelegate_p.h",
                 "access/qnetworkreplyhttpimpl.cpp",
                 "access/qnetworkreplyhttpimpl_p.h",
-                "access/qspdyprotocolhandler.cpp",
             ]
 
             Group {
-                files: "access/qspdyprotocolhandler_p.h"
-                fileTags: "unmocable"
-                overrideTags: false
+                condition: QtNetworkConfig.ssl
+                files: [
+                    "access/qspdyprotocolhandler.cpp",
+                    "access/qspdyprotocolhandler_p.h"
+                ]
             }
         }
 
@@ -483,6 +488,24 @@ QtModuleProject {
                     condition: qbs.targetOS.contains("darwin")
                     files: [
                         "ssl/qsslsocket_mac_shared.cpp"
+                    ]
+                }
+
+                Group {
+                    condition: QtNetworkConfig.opensslv11
+                    files: [
+                        "ssl/qsslcontext_openssl11.cpp",
+                        "ssl/qsslsocket_openssl11_symbols_p.h",
+                        "ssl/qsslsocket_openssl11.cpp",
+                    ]
+                }
+
+                Group {
+                    condition: !QtNetworkConfig.opensslv11
+                    files: [
+                        "ssl/qsslcontext_opensslpre11.cpp",
+                        "ssl/qsslsocket_opensslpre11_symbols_p.h",
+                        "ssl/qsslsocket_opensslpre11.cpp",
                     ]
                 }
 
