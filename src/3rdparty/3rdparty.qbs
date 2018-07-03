@@ -2,6 +2,7 @@ import qbs
 
 Project {
     name: "3rdparty"
+    qbsSearchPaths: project.qtbaseShadowDir + "/src/plugins/sqldrivers/qbs"
     references: [
         "../angle/angle.qbs",
         "double-conversion.qbs",
@@ -29,6 +30,7 @@ Project {
         // "mtdev.qbs",
         // "pcre/pcre.qbs",
         // "sm.qbs",
+        "sqlite",
         // "tslib.qbs",
         // "x11.qbs",
         // "x11-xcb.qbs",

@@ -11,7 +11,8 @@ QtProduct {
     }
     Depends { name: "cpp" }
     Depends { name: "qt_common_libs_plugins" }
-    cpp.defines: base.concat("QT_NO_FOREACH")
+    cpp.defines: base.concat("QT_NO_FOREACH", "QT_PLUGIN")
+            .concat(Qt.global.config.staticBuild ? ["QT_STATIC_PLUGIN"] : [])
     property string installDir: FileInfo.joinPaths("plugins", pluginType)
     cpp.rpaths: {
         var result = [];
