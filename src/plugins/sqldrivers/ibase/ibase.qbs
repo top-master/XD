@@ -6,6 +6,8 @@ QtSqlPlugin {
     name: "qsqlibase"
     pluginClassName: "QIBaseDriverPlugin"
 
+    Depends { name: "Ibase" }
+
     files: [
         "main.cpp",
         "ibase.json",
@@ -16,5 +18,4 @@ QtSqlPlugin {
 
 /*
 # FIXME: ignores libfb (unix)/fbclient (win32) - but that's for the test anyway
-QMAKE_USE += ibase
 */

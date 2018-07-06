@@ -6,6 +6,8 @@ QtSqlPlugin {
     name: "qsqlpsql"
     pluginClassName: "QPSQLDriverPlugin"
 
+    Depends { name: "Psql" }
+
     files: [
         "README",
         "main.cpp",
@@ -14,5 +16,3 @@ QtSqlPlugin {
         "qsql_psql_p.h",
     ]
 }
-
-// QMAKE_USE += psql

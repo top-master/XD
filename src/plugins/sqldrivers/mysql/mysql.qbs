@@ -6,6 +6,8 @@ QtSqlPlugin {
     name: "qsqlmysql"
     pluginClassName: "QMYSQLDriverPlugin"
 
+    Depends { name: "Mysql" }
+
     files: [
         "README",
         "main.cpp",
@@ -14,5 +16,3 @@ QtSqlPlugin {
         "qsql_mysql_p.h",
     ]
 }
-
-// QMAKE_USE += mysql

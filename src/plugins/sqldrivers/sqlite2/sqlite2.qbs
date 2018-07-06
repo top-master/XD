@@ -6,6 +6,8 @@ QtSqlPlugin {
     name: "qsqlite2"
     pluginClassName: "QSQLite2DriverPlugin"
 
+    Depends { name: "Sqlite2" }
+
     files: [
         "README",
         "smain.cpp",
@@ -20,5 +22,3 @@ QtSqlPlugin {
         return libs;
     }
 }
-
-// QMAKE_USE += sqlite2

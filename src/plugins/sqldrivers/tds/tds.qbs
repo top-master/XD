@@ -6,6 +6,8 @@ QtSqlPlugin {
     name: "qsqltds"
     pluginClassName: "QTDSDriverPlugin"
 
+    Depends { name: "Tds" }
+
     files: [
         "main.cpp",
         "qsql_tds.cpp",
@@ -13,5 +15,3 @@ QtSqlPlugin {
         "tds.json",
     ]
 }
-
-// QMAKE_USE += tds

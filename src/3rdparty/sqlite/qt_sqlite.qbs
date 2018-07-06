@@ -13,8 +13,10 @@ Project {
                 condition: !QtSqldriversPrivateConfig.system_sqlite
                 name: "bundled_sqlite"
             }
-
-            // qtConfig(system-sqlite):QMAKE_USE += sqlite
+            Depends {
+                condition: QtSqldriversPrivateConfig.system_sqlite
+                name: "Sqlite"
+            }
         }
     }
 

@@ -6,6 +6,8 @@ QtSqlPlugin {
     name: "qsqloci"
     pluginClassName: "QOCIDriverPlugin"
 
+    Depends { name: "Oci" }
+
     files: [
         "README",
         "main.cpp",
@@ -19,5 +21,3 @@ QtSqlPlugin {
         cpp.linkerFlags: base.concat("-flat_namespace", "-U", "_environ")
     }
 }
-
-// QMAKE_USE += oci
