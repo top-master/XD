@@ -22,6 +22,8 @@ import "tools/tools.qbs" as SrcTools
 QtModuleProject {
     name: "QtCore"
     simpleName: "core"
+    config: QtCoreConfig
+    privateConfig: QtCorePrivateConfig
 
     property stringList generatedHeaders: [
         project.configPath + "/qconfig.h",
@@ -50,14 +52,11 @@ QtModuleProject {
     }
 
     QtPrivateModule {
-        config: QtCorePrivateConfig
     }
 
     QtModuleTracepoints {}
 
     QtModule {
-        config: QtCoreConfig
-        property var privateConfig: QtCorePrivateConfig
         Properties {
             condition: createPkgconfigFiles
             Exporter.pkgconfig.transformFunction: (function (product, moduleName, propertyName, value) {

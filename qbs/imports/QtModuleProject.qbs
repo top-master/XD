@@ -12,4 +12,6 @@ Project {
     property stringList publicIncludePaths: QtUtils.includesForModule(name, project.buildDirectory + "/include", project.version)
     property var conditionFunction: (function() { return true; })
     property bool internal: false
+    property var config
+    property var privateConfig
 }

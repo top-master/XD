@@ -6,6 +6,8 @@ import QtXmlPrivateConfig
 QtModuleProject {
     name: "QtXml"
     simpleName: "xml"
+    config: QtXmlConfig
+    privateConfig: QtXmlPrivateConfig
     conditionFunction: (function() {
         return Qt.global.privateConfig.xml;
     })
@@ -19,7 +21,6 @@ QtModuleProject {
     }
 
     QtPrivateModule {
-        config: QtXmlPrivateConfig
     }
 
     QtModule {
@@ -32,7 +33,6 @@ QtModuleProject {
         Depends { name: project.headersName }
         Depends { name: "Qt.core_private" }
 
-        config: QtXmlConfig
         cpp.enableExceptions: true
         cpp.includePaths: project.includePaths.concat(base)
         cpp.defines: base.concat([

@@ -6,6 +6,8 @@ import QtSqlPrivateConfig
 QtModuleProject {
     name: "QtSql"
     simpleName: "sql"
+    config: QtSqlConfig
+    privateConfig: QtSqlPrivateConfig
     conditionFunction: (function() {
         return QtGlobalPrivateConfig.sql;
     })
@@ -19,12 +21,10 @@ QtModuleProject {
     }
 
     QtPrivateModule {
-        config: QtSqlPrivateConfig
     }
 
     QtModule {
         //pluginTypes: ["sqldrivers"]
-        config: QtSqlConfig
         Export {
             Depends { name: "cpp" }
             Depends { name: "Qt.core" }

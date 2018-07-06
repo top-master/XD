@@ -16,6 +16,8 @@ import "effects/effects.qbs" as SrcEffects
 QtModuleProject {
     name: "QtWidgets"
     simpleName: "widgets"
+    config: QtWidgetsConfig
+    privateConfig: QtWidgetsPrivateConfig
     conditionFunction: (function() { return QtGlobalPrivateConfig.widgets; })
 
     QtHeaders {
@@ -27,12 +29,9 @@ QtModuleProject {
     }
 
     QtPrivateModule {
-        config: QtWidgetsPrivateConfig
     }
 
     QtModule {
-        property var privateConfig: QtWidgetsPrivateConfig
-        config: QtWidgetsConfig
         Export {
             Depends { name: "cpp" }
             Depends { name: "Qt.gui" }

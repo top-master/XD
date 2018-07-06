@@ -5,6 +5,8 @@ import QtGuiPrivateConfig
 QtModuleProject {
     name: "QtGui"
     simpleName: "gui"
+    config: QtGuiConfig
+    privateConfig: QtGuiPrivateConfig
     conditionFunction: (function() {
         return Qt.global.privateConfig.gui;
     })
@@ -21,13 +23,11 @@ QtModuleProject {
     }
 
     QtPrivateModule {
-        config: QtGuiPrivateConfig
     }
 
     QtModuleTracepoints {}
 
     QtModule {
-        config: QtGuiConfig
         Export {
             property string libEGLName: config.combined_angle_lib ? "QtANGLE" : "libEGL"
             property string libGLESv2Name: config.combined_angle_lib ? "QtANGLE" : "libGLESv2"

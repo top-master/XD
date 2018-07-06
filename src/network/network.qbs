@@ -5,6 +5,8 @@ import QtNetworkPrivateConfig
 QtModuleProject {
     name: "QtNetwork"
     simpleName: "network"
+    config: QtNetworkConfig
+    privateConfig: QtNetworkPrivateConfig
     conditionFunction: (function() { return Qt.global.privateConfig.network; })
 
     QtHeaders {
@@ -19,12 +21,10 @@ QtModuleProject {
     }
 
     QtPrivateModule {
-        config: QtNetworkPrivateConfig
     }
 
     QtModule {
         qbsSearchPaths: [project.qtbaseShadowDir + "/src/network/qbs"]
-        config: QtNetworkConfig
 
         Export {
             Depends { name: "cpp" }

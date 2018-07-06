@@ -10,7 +10,8 @@ QtProduct {
     version: project.version
     condition: project.conditionFunction(qbs)
 
-    property var config
+    property var config: project.config
+    property var privateConfig: project.privateConfig
     property string simpleName: project.simpleName
     property string upperCaseSimpleName: simpleName.replace("_private", "").toUpperCase()
     targetName: "Qt" + (!bundle.isBundle ? "5" : "") + project.name.slice(2)

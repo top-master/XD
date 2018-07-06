@@ -5,6 +5,8 @@ import QtTestlibPrivateConfig
 QtModuleProject {
     name: "QtTest"
     simpleName: "testlib"
+    config: QtTestlibConfig
+    privateConfig: QtTestlibPrivateConfig
     conditionFunction: (function() { return Qt.global.privateConfig.testlib; })
 
     QtHeaders {
@@ -19,12 +21,10 @@ QtModuleProject {
     }
 
     QtPrivateModule {
-        config: QtTestlibPrivateConfig
     }
 
     QtModule {
         qbsSearchPaths: [project.qtbaseShadowDir + "/src/testlib/qbs"]
-        config: QtTestlibConfig
 
         Export {
             Depends { name: "cpp" }

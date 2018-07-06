@@ -4,7 +4,7 @@ Product {
     name: project.privateName
     condition: project.conditionFunction(qbs)
 
-    property var config
+    property var config: project.privateConfig
 
     Depends { name: "Qt.global" }
 

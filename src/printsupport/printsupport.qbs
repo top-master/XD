@@ -6,6 +6,8 @@ import QtPrintsupportPrivateConfig
 QtModuleProject {
     name: "QtPrintSupport"
     simpleName: "printsupport"
+    config: QtPrintsupportConfig
+    privateConfig: QtPrintsupportPrivateConfig
     conditionFunction: (function() {
         return QtGlobalPrivateConfig.widgets;
     })
@@ -19,11 +21,9 @@ QtModuleProject {
     }
 
     QtPrivateModule {
-        config: QtPrintsupportPrivateConfig
     }
 
     QtModule {
-        config: QtPrintsupportConfig
         Export {
             Depends { name: "cpp" }
             Depends { name: "Qt.core" }
