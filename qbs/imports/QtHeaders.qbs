@@ -6,6 +6,9 @@ Product {
     type: ["hpp_private", "hpp_public", "hpp_forwarding", "hpp_module", "hpp_qpa", "hpp_depends", "hpp"]
     condition: project.conditionFunction(qbs)
     property bool install: true
+    property bool consideredBySync: true
+    property var config: project.config
+    property var privateConfig: project.privateConfig
 
     Depends { name: "Qt.global" }
 

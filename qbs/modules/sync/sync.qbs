@@ -95,6 +95,33 @@ Module {
                 }];
             }
 
+            function isFeatureEnabled(name) {
+                var seen = {};
+
+                function featureValueOfQtModule(qtmod) {
+                    if (!qtmod.consideredBySync || seen[qtmod.name])
+                        return undefined;
+                    seen[qtmod.name] = true;
+                    var configs = [qtmod.config, qtmod.privateConfig];
+                    for (var i in configs) {
+                        var cfg = configs[i];
+                        if (cfg && (name in cfg))
+                            return cfg[name];
+                    }
+                    for (var i in qtmod.dependencies) {
+                        var result = featureValueOfQtModule(qtmod.dependencies[i]);
+                        if (typeof result !== "undefined")
+                            return result;
+                    }
+                    return undefined;
+                }
+
+                var result = featureValueOfQtModule(product);
+                if (result === undefined)
+                    throw new Error("Cannot find feature '" + name + "'.");
+                return result;
+            }
+
             var classes = [];
             if (!product.sync.minimal) {
                 // regular expressions used in parsing
@@ -105,6 +132,7 @@ Module {
                 var reDecl = /^(template <class [\w, ]+> )?(class|struct) +(\w+)( ?:)?( ?public [\w<>:,* ]+)?( {)?$/;
                 var reIterator = /^Q_DECLARE_\w+ITERATOR\((\w+)\)$/;
                 var reNamespace = /^namespace \w+( {)?/; //extern "C" could go here too
+                var reRequireConfig = /QT_REQUIRE_CONFIG\s*\(\s*([^]+)\s*\)/;
 
                 var excludeFromModuleInclude
                     = input.fileName.contains("_") || input.fileName.contains("qconfig");
@@ -168,6 +196,14 @@ Module {
                             break;
                         }
                         continue;
+                    }
+
+                    // Required features
+                    var featureMatch = reRequireConfig.exec(line);
+                    if (featureMatch && featureMatch.length >= 2
+                        && !isFeatureEnabled(featureMatch[1])) {
+                        excludeFromModuleInclude = true;
+                        break;
                     }
 
                     // Track brace depth

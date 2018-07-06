@@ -49,6 +49,10 @@ Project {
             qbs.installDir: "lib/qbs"
         }
 
+        property bool consideredBySync: true
+        property var config: QtGlobalConfig
+        property var privateConfig: QtGlobalPrivateConfig
+
         Export {
             property var config: QtGlobalConfig
             property var privateConfig: QtGlobalPrivateConfig
