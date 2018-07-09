@@ -13,207 +13,6 @@ QtModuleProject {
     .concat(project.qtbaseShadowDir + "/include")
     .concat(project.qtbaseShadowDir + "/include/QtCore")
 
-    QtHeaders {
-        name: project.headersName
-        install: false
-        sync.module: "QtCore"
-        sync.prefix: project.simpleName
-        sync.classNames: ({
-            "qglobal.h": ["QtGlobal"],
-            "qendian.h": ["QtEndian"],
-            "qconfig.h": ["QtConfig"],
-            "qplugin.h": ["QtPlugin"],
-            "qalgorithms.h": ["QtAlgorithms"],
-            "qcontainerfwd.h": ["QtContainerFwd"],
-            "qdebug.h": ["QtDebug"],
-            "qnamespace.h": ["Qt"],
-            "qnumeric.h": ["QtNumeric"],
-            "qvariant.h": ["QVariantHash", "QVariantList", "QVariantMap"],
-            "qbytearray.h": ["QByteArrayData"],
-            "qbytearraylist.h": ["QByteArrayList"],
-        })
-
-        files: []
-        excludeFiles: []
-
-        Group {
-            name: "generated headers"
-            prefix: project.qtbaseShadowDir + "/src/corelib/global/"
-            files: [
-                "qconfig.h",
-            ]
-        }
-
-        Group {
-            name: "headers"
-            prefix: project.prefix
-            files: [
-                "codecs/qtextcodec.h",
-                "codecs/qtextcodec_p.h",
-                "codecs/qutfcodec_p.h",
-                "global/qcompilerdetection.h",
-                "global/qendian.h",
-                "global/qendian_p.h",
-                "global/qflags.h",
-                "global/qglobal.h",
-                "global/qglobal_p.h",
-                "global/qglobalstatic.h",
-                "global/qhooks_p.h",
-                "global/qisenum.h",
-                "global/qlibraryinfo.h",
-                "global/qlogging.h",
-                "global/qnamespace.h",
-                "global/qnumeric.h",
-                "global/qnumeric_p.h",
-                "global/qoperatingsystemversion.h",
-                "global/qprocessordetection.h",
-                "global/qsysinfo.h",
-                "global/qsystemdetection.h",
-                "global/qt_windows.h",
-                "global/qtrace_p.h",
-                "global/qtypeinfo.h",
-                "global/qtypetraits.h",
-                "global/qversiontagging.h",
-                "io/qabstractfileengine_p.h",
-                "io/qbuffer.h",
-                "io/qdebug.h",
-                "io/qdebug_p.h",
-                "io/qdir.h",
-                "io/qdiriterator.h",
-                "io/qfile.h",
-                "io/qfile_p.h",
-                "io/qfiledevice.h",
-                "io/qfiledevice_p.h",
-                "io/qfileinfo.h",
-                "io/qfileinfo_p.h",
-                "io/qfilesystemengine_p.h",
-                "io/qfilesystementry_p.h",
-                "io/qfilesystemiterator_p.h",
-                "io/qfilesystemmetadata_p.h",
-                "io/qfsfileengine_iterator_p.h",
-                "io/qfsfileengine_p.h",
-                "io/qiodevice.h",
-                "io/qiodevice_p.h",
-                "io/qloggingcategory.h",
-                "io/qloggingregistry_p.h",
-                "io/qprocess.h",
-                "io/qprocess_p.h",
-                "io/qsettings.h",
-                "io/qstandardpaths.h",
-                "io/qtemporaryfile.h",
-                "io/qtemporaryfile_p.h",
-                "io/qurl.h",
-                "kernel/qcore_mac_p.h",
-                "kernel/qcore_unix_p.h",
-                "kernel/qcoreapplication.h",
-                "kernel/qcoreapplication_p.h",
-                "kernel/qcoreglobaldata_p.h",
-                "kernel/qelapsedtimer.h",
-                "kernel/qfunctions_p.h",
-                "kernel/qmath.h",
-                "kernel/qmetaobject.h",
-                "kernel/qmetaobject_moc_p.h",
-                "kernel/qmetaobject_p.h",
-                "kernel/qmetatype.h",
-                "kernel/qmetatype_p.h",
-                "kernel/qmetatypeswitcher_p.h",
-                "kernel/qobject.h",
-                "kernel/qobjectdefs.h",
-                "kernel/qobjectdefs_impl.h",
-                "kernel/qpointer.h",
-                "kernel/qsystemerror_p.h",
-                "kernel/qtranslator.h",
-                "kernel/qtranslator_p.h",
-                "kernel/qvariant.h",
-                "kernel/qvariant_p.h",
-                "plugin/qfactoryloader_p.h",
-                "plugin/qlibrary.h",
-                "plugin/qlibrary_p.h",
-                "plugin/qplugin.h",
-                "plugin/qsystemlibrary_p.h",
-                "plugin/quuid.h",
-                "serialization/qdatastream.h",
-                "serialization/qjsonarray.h",
-                "serialization/qjsondocument.h",
-                "serialization/qjsonobject.h",
-                "serialization/qjsonvalue.h",
-                "serialization/qtextstream.h",
-                "serialization/qtextstream_p.h",
-                "serialization/qxmlstream.h",
-                "serialization/qxmlutils_p.h",
-                "thread/qatomic.h",
-                "thread/qatomic_bootstrap.h",
-                "thread/qbasicatomic.h",
-                "thread/qgenericatomic.h",
-                "thread/qmutex.h",
-                "thread/qmutexpool_p.h",
-                "thread/qorderedmutexlocker_p.h",
-                "thread/qreadwritelock.h",
-                "thread/qthreadstorage.h",
-                "tools/qalgorithms.h",
-                "tools/qarraydata.h",
-                "tools/qbitarray.h",
-                "tools/qbytearray.h",
-                "tools/qbytearray_p.h",
-                "tools/qbytearraylist.h",
-                "tools/qchar.h",
-                "tools/qcommandlineoption.h",
-                "tools/qcommandlineparser.h",
-                "tools/qcontainerfwd.h",
-                "tools/qcontiguouscache.h",
-                "tools/qcryptographichash.h",
-                "tools/qdatetime.h",
-                "tools/qdatetime_p.h",
-                "tools/qdatetimeparser_p.h",
-                "tools/qeasingcurve.h",
-                "tools/qhash.h",
-                "tools/qhashfunctions.h",
-                "tools/qiterator.h",
-                "tools/qline.h",
-                "tools/qlinkedlist.h",
-                "tools/qlist.h",
-                "tools/qlocale.h",
-                "tools/qlocale_p.h",
-                "tools/qlocale_tools_p.h",
-                "tools/qmap.h",
-                "tools/qmargins.h",
-                "tools/qpair.h",
-                "tools/qpoint.h",
-                "tools/qrect.h",
-                "tools/qrefcount.h",
-                "tools/qregexp.h",
-                "tools/qregularexpression.h",
-                "tools/qringbuffer_p.h",
-                "tools/qscopedpointer.h",
-                "tools/qset.h",
-                "tools/qshareddata.h",
-                "tools/qsharedpointer.h",
-                "tools/qsharedpointer_impl.h",
-                "tools/qsimd_p.h",
-                "tools/qsimd_x86_p.h",
-                "tools/qsize.h",
-                "tools/qstack.h",
-                "tools/qstring.h",
-                "tools/qstringbuilder.h",
-                "tools/qstringiterator_p.h",
-                "tools/qstringlist.h",
-                "tools/qstringmatcher.h",
-                "tools/qtimezone.h",
-                "tools/qtools_p.h",
-                "tools/qvarlengtharray.h",
-                "tools/qvector.h",
-            ]
-        }
-    }
-
-    QtHeaders {
-        name: "QtXmlBootstrapHeaders"
-        install: false
-        sync.module: "QtXml"
-        sync.prefix: "bootstrap"
-        baseDir: "../../xml"
-    }
-
     QtModule {
         hostBuild: true
         simpleName: parent.simpleName + "_private"
@@ -248,12 +47,14 @@ QtModuleProject {
         // Ignore debug_and_release for host tools.
         multiplexByQbsProperties: base.filter(function(name) { return name !== "buildVariants"; })
 
-        Depends { name: project.headersName }
-        Depends { name: "QtXmlBootstrapHeaders" }
+        Depends { name: "QtCoreHeaders" }
+        Depends { name: "QtXmlHeaders" }
         Depends { name: "cpp" }
         Depends { name: "qt_zlib" }
 
         cpp.includePaths: project.includePaths.concat(
+            QtCoreHeaders.includePaths,
+            QtXmlHeaders.includePaths,
             project.qtbaseDir + "/mkspecs/" + Qt.global.privateConfig.hostMkspec)
         commonCppDefines: [
             "QT_BOOTSTRAPPED",
@@ -399,11 +200,15 @@ QtModuleProject {
 
         Export {
             Depends { name: "cpp" }
+            Depends { name: "QtCoreHeaders" }
+            Depends { name: "QtXmlHeaders" }
             prefixMapping: base.concat([{
                 prefix: project.qtbaseShadowDir,
                 replacement: qbs.installPrefix
             }])
             cpp.includePaths: project.includePaths.concat(
+                QtCoreHeaders.includePaths,
+                QtXmlHeaders.includePaths,
                 project.qtbaseDir + "/mkspecs/" + Qt.global.privateConfig.hostMkspec)
             cpp.cxxLanguageVersion: "c++11"
 
