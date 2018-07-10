@@ -20,6 +20,10 @@ Module {
             return "c99";
     }
     cpp.defines: "QT_NO_NARROWING_CONVERSIONS_IN_CONNECT"
+    Properties {
+        condition: !cpp.enableExceptions
+        cpp.defines: outer.concat("QT_NO_EXCEPTIONS")
+    }
 }
 
 // TODO: qtConfig(stack-protector-strong): CONFIG += stack_protector_strong
