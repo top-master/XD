@@ -43,18 +43,20 @@ SOURCES += thread/qatomic.cpp \
            thread/qthreadpool.cpp \
            thread/qthreadstorage.cpp
 
+# Per platform sources are already included in `qmutex.cpp` file
+# (hence `thread/qmutex_win.cpp` is commented-out below).
 win32 {
     SOURCES += \
-        thread/qmutex_win.cpp \
         thread/qthread_win.cpp \
-        thread/qwaitcondition_win.cpp
+        thread/qwaitcondition_win.cpp \
+        #thread/qmutex_win.cpp
 } else {
     darwin {
-        SOURCES += thread/qmutex_mac.cpp
+        #SOURCES += thread/qmutex_mac.cpp
     } else: linux {
-        SOURCES += thread/qmutex_linux.cpp
+        #SOURCES += thread/qmutex_linux.cpp
     } else {
-        SOURCES += thread/qmutex_unix.cpp
+        #SOURCES += thread/qmutex_unix.cpp
     }
     SOURCES += \
         thread/qthread_unix.cpp \

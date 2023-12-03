@@ -1,4 +1,4 @@
-CONFIG *= thread
+CONFIG *= moc thread
 
 #handle defines
 win32 {
@@ -14,6 +14,13 @@ no_keywords:DEFINES += QT_NO_KEYWORDS
 plugin { #Qt plugins
    static:DEFINES += QT_STATICPLUGIN
    DEFINES += QT_PLUGIN
+}
+
+contains(QT_CONFIG, openssl) {
+    DEFINES += QT_OPENSSL
+}
+contains(QT_CONFIG, sql) {
+    DEFINES += QT_SQL
 }
 
 qtestlib {

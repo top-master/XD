@@ -1,3 +1,10 @@
+
+# Workarounds that newer Qt Creator versions load this file even for Windows.
+qtc_run: return()
+# Workarounds that some Qt Creator versions don't set `qtc_run`.
+!mac: !ios: return()
+
+# Actual script.
 equals(TEMPLATE, app) {
     load(sdk)
     # Make the XCTest framework available. This is normally handled automatically

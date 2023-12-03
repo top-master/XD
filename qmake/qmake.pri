@@ -39,6 +39,7 @@ bootstrap { #Qt code
         qdir.cpp \
         qdiriterator.cpp \
         qfiledevice.cpp \
+        qringbuffer.cpp \
         qfile.cpp \
         qabstractfileengine.cpp \
         qfileinfo.cpp \
@@ -61,7 +62,7 @@ bootstrap { #Qt code
         qtextcodec.cpp \
         qutfcodec.cpp \
         qstring.cpp \
-        qstring_compat.cpp \
+        #qstring_compat.cpp \
         qstringlist.cpp \
         qtemporaryfile.cpp \
         qtextstream.cpp \
@@ -146,6 +147,7 @@ bootstrap { #Qt code
             qsystemlibrary.cpp qlocale_win.cpp registry.cpp
         win32-msvc*:LIBS += ole32.lib advapi32.lib
         mingw:LIBS += -lole32 -luuid -ladvapi32 -lkernel32
+        LIBS += -lshell32 # For SHGetSpecialFolderPathW
     }
 
     qnx {
@@ -159,9 +161,15 @@ bootstrap { #Qt code
         QT_NO_THREAD QT_NO_QOBJECT QT_NO_GEOM_VARIANT QT_NO_DATASTREAM \
         QT_CRYPTOGRAPHICHASH_ONLY_SHA1 QT_JSON_READONLY QT_NO_STANDARDPATHS
 
+    isEmpty(MODULE_HEADER_VERSION): MODULE_HEADER_VERSION = $$MODULE_VERSION
     INCLUDEPATH += \
-        $$QT.core.includes $$QT.core_private.includes \
-        $$shadowed(../src/corelib/global)
+        # Old code: $$QT.core.includes $$QT.core_private.includes \
+        $$PWD/../include \
+        $$PWD/../include/QtCore \
+        $$PWD/../include/QtCore/$$MODULE_HEADER_VERSION \
+        $$PWD/../include/QtCore/$$MODULE_HEADER_VERSION/QtCore \
+        $$PWD/../src/corelib/global
+
 } else {
     CONFIG += qt
     QT = core
@@ -173,3 +181,5 @@ bootstrap { #Qt code
 }
 
 PRECOMPILED_HEADER = qmake_pch.h
+
+include(../src/corelib/arch/arch.pri)

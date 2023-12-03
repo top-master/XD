@@ -122,3 +122,6 @@ equals(QMAKE_HOST.os, Windows) {
     QMAKE_SYMBOLIC_LINK     = ln -f -s
     QMAKE_LN_SHLIB          = ln -s
 }
+
+# Qt loads below only for Windows, but we want to be cross-platform.
+load(qt_config)

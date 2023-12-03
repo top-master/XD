@@ -81,7 +81,6 @@ SOURCES += qdbusconnection.cpp \
     qdbusreply.cpp \
     qdbusmetatype.cpp \
     qdbusextratypes.cpp \
-    qdbusmarshaller.cpp \
     qdbuscontext.cpp \
     qdbuspendingcall.cpp \
     qdbuspendingreply.cpp \
@@ -89,5 +88,11 @@ SOURCES += qdbusconnection.cpp \
     qdbusservicewatcher.cpp \
     qdbusunixfiledescriptor.cpp \
     qdbusvirtualobject.cpp
+
+# Already included in `qdbusargument.cpp` file.
+OTHER_FILES += \
+    qdbusmarshaller.cpp \
+    qdbusdemarshaller.cpp \
+    # Termination comment.
 
 load(qt_module)

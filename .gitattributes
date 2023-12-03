@@ -2,3 +2,66 @@
 .gitignore              export-ignore
 .gitattributes          export-ignore
 .commit-template        export-ignore
+
+
+# Disables automatic line ending changes,
+# since we want to specify what extensions are text files.
+#
+* text=false
+
+# Never modify line endings of our console-scripts
+# (while ensuring is tracked line by line instead of "binary").
+#
+*.bat           text eol=crlf
+*.cmd           text eol=crlf
+*.sh            text eol=lf
+
+
+# Enables convertion from "crlf" into "lf"
+# (Specifies text files which should be normalized).
+#
+*.txt           text
+*.md            text
+
+# Native-Code
+*.c             text
+*.cpp           text
+*.cxx           text
+*.c++           text
+*.m             text
+*.mm            text
+*.h             text
+*.hpp           text
+*.hxx           text
+*.h++           text
+
+# Web
+*.css           text
+*.html          text
+*.js            text
+*.json          text
+*.jsx           text
+*.ts            text
+*.tsx           text
+*.xml           text
+
+# Qt-framework
+*.pro           text
+*.pri           text
+*.prf           text
+*.qbs           text
+*.ui            text
+*.qrs           text
+*.qmake.conf    text
+*.qmake.super   text
+*.qmake.cache   text
+
+# Android
+*.java          text
+*.properties    text
+
+# Windows
+*.rc            text eol=lf
+
+# Image formats.
+*.ppm           binary

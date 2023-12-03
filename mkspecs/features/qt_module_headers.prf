@@ -11,6 +11,8 @@
 
 load(qt_build_paths)
 
+isEmpty(MODULE_HEADER_VERSION): MODULE_HEADER_VERSION = $$VERSION
+
 !build_pass:git_build {
     qtPrepareTool(QMAKE_SYNCQT, syncqt, , system)
     minimal_syncqt {
@@ -22,9 +24,9 @@ load(qt_build_paths)
     for(mod, MODULE_INCNAME): \
         QMAKE_SYNCQT += -module $$mod
     QMAKE_SYNCQT += \
-        -version $$VERSION -outdir $$system_quote($$MODULE_BASE_OUTDIR) $$MODULE_SYNCQT_DIR
+        -version $$MODULE_HEADER_VERSION -outdir $$system_quote($$MODULE_BASE_OUTDIR) $$MODULE_SYNCQT_DIR
     !silent: message($$QMAKE_SYNCQT)
-    system($$QMAKE_SYNCQT)|error("Failed to run: $$QMAKE_SYNCQT")
+    system($$QMAKE_SYNCQT)|warning("Failed to run: $$QMAKE_SYNCQT")
 
     !minimal_syncqt {
         include-distclean.commands = \
@@ -75,17 +77,17 @@ split_incpath {
 for(mod, MODULE_INCNAME) {
     mibase = $$ibase/$$mod
     MODULE$${fwd}_INCLUDES += $$mibase
-    MODULE$${fwd}$${prv}_INCLUDES += $$mibase/$$VERSION $$mibase/$$VERSION/$$mod
+    MODULE$${fwd}$${prv}_INCLUDES += $$mibase/$$MODULE_HEADER_VERSION $$mibase/$$MODULE_HEADER_VERSION/$$mod
     split_incpath {
         mbibase = $$bibase/$$mod
         MODULE$${sfwd}_INCLUDES += $$mbibase
         generated_privates: \
-            MODULE$${sfwd}$${prv}_INCLUDES += $$mbibase/$$VERSION $$mbibase/$$VERSION/$$mod
+            MODULE$${sfwd}$${prv}_INCLUDES += $$mbibase/$$MODULE_HEADER_VERSION $$mbibase/$$MODULE_HEADER_VERSION/$$mod
     }
     prefix_build:lib_bundle {
         mfbase = \$\$QT_MODULE_LIB_BASE/$${mod}.framework/Headers
         MODULE_INCLUDES += $$mfbase
-        MODULE$${prv}_INCLUDES += $$mfbase/$$VERSION $$mfbase/$$VERSION/$$mod
+        MODULE$${prv}_INCLUDES += $$mfbase/$$MODULE_HEADER_VERSION $$mfbase/$$MODULE_HEADER_VERSION/$$mod
     }
 }
 MODULE_INCLUDES += $$MODULE_AUX_INCLUDES
