@@ -127,7 +127,9 @@ contains(CONFIG, plugin) {
                 break()
             }
         }
-        isEmpty(PLUGIN_MODULE_NAME): error("No module claims plugin type '$$PLUGIN_TYPE'")
+        isEmpty(PLUGIN_MODULE_NAME): \
+            !qtc_run: \
+                error("No module claims plugin type '$$PLUGIN_TYPE'")
     }
 
     CMAKE_MODULE_NAME = $$cmakeModuleName($$PLUGIN_MODULE_NAME)

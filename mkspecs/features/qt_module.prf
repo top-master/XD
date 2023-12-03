@@ -84,7 +84,8 @@ load(qt_common)
 !no_module_headers: load(qt_module_headers)
 load(qt_module_pris)
 
-INCLUDEPATH *= $$eval(QT.$${MODULE}.includes) $$eval(QT.$${MODULE}_private.includes)
+INCLUDEPATH *= $$eval(QT.$${MODULE}.includes)
+INCLUDEPATH *= $$eval(QT.$${MODULE}_private.includes)
 
 # If Qt was configured with -debug-and-release then build the module the same way
 # - unless this is a host library

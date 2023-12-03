@@ -33,13 +33,15 @@ exists($$_PRO_FILE_PWD_/src/src.pro) {
     }
 }
 
-exists($$_PRO_FILE_PWD_/examples/examples.pro) {
-    sub_examples.subdir = examples
-    sub_examples.target = sub-examples
-    contains(SUBDIRS, sub_src): sub_examples.depends = sub_src
-    examples_need_tools: sub_examples.depends += sub_tools
-    !contains(QT_BUILD_PARTS, examples): sub_examples.CONFIG = no_default_target no_default_install
-    SUBDIRS += sub_examples
+contains(QT_CONFIG, examples) {
+    exists($$_PRO_FILE_PWD_/examples/examples.pro) {
+        sub_examples.subdir = examples
+        sub_examples.target = sub-examples
+        contains(SUBDIRS, sub_src): sub_examples.depends = sub_src
+        examples_need_tools: sub_examples.depends += sub_tools
+        !contains(QT_BUILD_PARTS, examples): sub_examples.CONFIG = no_default_target no_default_install
+        SUBDIRS += sub_examples
+    }
 }
 
 # Some modules still have these

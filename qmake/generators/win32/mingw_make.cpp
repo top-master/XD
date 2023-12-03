@@ -124,22 +124,45 @@ QString MingwMakefileGenerator::installRoot() const
     return QStringLiteral("$(INSTALL_ROOT:@msyshack@%=%)");
 }
 
-void createLdObjectScriptFile(const QString &fileName, const ProStringList &objList)
+void createLdObjectListFile(bool useResponseSyntax, const QString &fileName, const ProStringList &objList)
 {
     QString filePath = Option::output_dir + QDir::separator() + fileName;
     QFile file(filePath);
     if (file.open(QIODevice::WriteOnly | QIODevice::Text)) {
         QTextStream t(&file);
-        t << "INPUT(\n";
-        for (ProStringList::ConstIterator it = objList.constBegin(); it != objList.constEnd(); ++it) {
-            QString path = (*it).toQString();
-            // ### quoting?
-            if (QDir::isRelativePath(path))
-                t << "./" << path << endl;
-            else
+        if (useResponseSyntax) {
+            // The "response file" syntax, since `lld` does not support "linker script" syntax.
+            for (ProStringList::ConstIterator it = objList.constBegin(); it != objList.constEnd(); ++it) {
+                QString path = (*it).toQString();
+                // Note that quoting is not required (since options are read line-per-line).
+                if (QDir::isRelativePath(path))
+                    t << "./";
+                // First, backslashes that are not used for escaping, need to be
+                // escaped themselves, like replace each with a double-backslash,
+                // but in a file-path's case, each can simply be replaced with a
+                // single forward-slash. Then Special-characters and whitespaces
+                // need to be escaped, by prefixing each with a backslash.
+                path.replace(QLatin1Char('\\'), QLatin1String("/"))
+                    .replace(QLatin1Char('"'), QLatin1String("\\\""))
+                    .replace(QLatin1Char('\''), QLatin1String("\\'"))
+                    .replace(QLatin1Char(' '), QLatin1String("\\ "))
+                    .replace(QLatin1Char('\t'), QLatin1String("\\\t"));
+
                 t << path << endl;
+            }
+        } else {
+            // The "linker script" syntax.
+            t << "INPUT(\n";
+            for (ProStringList::ConstIterator it = objList.constBegin(); it != objList.constEnd(); ++it) {
+                QString path = (*it).toQString();
+                // ### quoting?
+                if (QDir::isRelativePath(path))
+                    t << "./" << path << endl;
+                else
+                    t << path << endl;
+            }
+            t << ");\n";
         }
-        t << ");\n";
         t.flush();
         file.close();
     }
@@ -299,12 +322,18 @@ void MingwMakefileGenerator::writeObjectsPart(QTextStream &t)
         createArObjectScriptFile(ar_script_file, var("DEST_TARGET"), project->values("OBJECTS"));
         objectsLinkLine = ar_cmd + " -M < " + escapeFilePath(ar_script_file);
     } else {
-        QString ld_script_file = var("QMAKE_LINK_OBJECT_SCRIPT") + "." + var("TARGET");
+        QString ld_list_file = var("QMAKE_LINK_OBJECT_SCRIPT") + "." + var("TARGET");
         if (!var("BUILD_NAME").isEmpty()) {
-            ld_script_file += "." + var("BUILD_NAME");
+            ld_list_file += "." + var("BUILD_NAME");
         }
-        createLdObjectScriptFile(ld_script_file, project->values("OBJECTS"));
-        objectsLinkLine = escapeFilePath(ld_script_file);
+        const bool useResponseSyntax = project->isActiveConfig("llvm_linker");
+        createLdObjectListFile(useResponseSyntax, ld_list_file, project->values("OBJECTS"));
+        if (useResponseSyntax) {
+            objectsLinkLine = QLatin1Char('@');
+        } else {
+            objectsLinkLine = QString();
+        }
+        objectsLinkLine += escapeFilePath(ld_list_file);
     }
     Win32MakefileGenerator::writeObjectsPart(t);
 }

@@ -77,6 +77,9 @@ src_network.subdir = $$PWD/network
 src_network.target = sub-network
 src_network.depends = src_corelib
 
+src_openssl.file = $$PWD/extras/lib/openssl-1.0.1c/openssl.pro
+src_openssl.target = sub-openssl
+
 src_testlib.subdir = $$PWD/testlib
 src_testlib.target = sub-testlib
 src_testlib.depends = src_corelib   # testlib links only to corelib, but see below for the headers
@@ -127,7 +130,7 @@ src_printsupport.depends = src_corelib src_gui src_widgets src_tools_uic
 
 src_plugins.subdir = $$PWD/plugins
 src_plugins.target = sub-plugins
-src_plugins.depends = src_sql src_xml src_network
+src_plugins.depends = src_xml src_network
 
 src_android.subdir = $$PWD/android
 
@@ -146,7 +149,18 @@ SUBDIRS += src_tools_bootstrap src_tools_moc src_tools_rcc
 SUBDIRS += src_corelib src_tools_qlalr
 TOOLS = src_tools_moc src_tools_rcc src_tools_qlalr
 win32:SUBDIRS += src_winmain
-SUBDIRS += src_network src_sql src_xml src_testlib
+SUBDIRS += src_network src_xml src_testlib
+
+contains(QT_CONFIG, openssl) {
+    src_network.depends += src_openssl
+    SUBDIRS += src_openssl
+}
+
+contains(QT_CONFIG, sql) {
+    src_plugins.depends += src_sql
+    SUBDIRS += src_sql
+}
+
 contains(QT_CONFIG, dbus) {
     force_bootstrap|contains(QT_CONFIG, private_tests): \
         SUBDIRS += src_tools_bootstrap_dbus

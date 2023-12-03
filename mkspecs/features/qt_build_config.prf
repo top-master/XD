@@ -21,7 +21,14 @@
 }
 
 PRECOMPILED_DIR = .pch
-OBJECTS_DIR = .obj
+
+# Qt Creator's per file build (through right-click menu) fails if `OBJECTS_DIR` is set.
+#OBJECTS_DIR=.obj
+
+# QMake has a bug where if `MOC_DIR` is an absolute-path,
+# then even if already included in another C++ file,
+# the moc-generated source-file is added to `SOURCES` anyway
+# (which causes duplicate symbols, or Private-class not defined erros).
 MOC_DIR = .moc
 RCC_DIR = .rcc
 UI_DIR = .uic
@@ -35,13 +42,16 @@ intel_icl {
 QMAKE_DIR_REPLACE_SANE = PRECOMPILED_DIR OBJECTS_DIR MOC_DIR RCC_DIR UI_DIR
 
 # force_independent can be set externally. prefix_build not.
-!exists($$[QT_HOST_DATA]/.qmake.cache): \
-    CONFIG += prefix_build force_independent
+!QTDIR_build {
+    !exists($$[QT_HOST_DATA]/.qmake.cache): \
+        CONFIG *= prefix_build force_independent
+}
 
 !build_pass:!isEmpty(_QMAKE_SUPER_CACHE_):force_independent {
     # When doing a -prefix build of top-level qt5/qt.pro, we need to announce
     # this repo's output dir to the other repos.
-    MODULE_BASE_OUTDIR = $$shadowed($$dirname(_QMAKE_CONF_))
+    QTDIR_build: MODULE_BASE_OUTDIR = $$dirname(_QMAKE_CONF_)
+    else:        MODULE_BASE_OUTDIR = $$shadowed($$dirname(_QMAKE_CONF_))
     !contains(QTREPOS, $$MODULE_BASE_OUTDIR): \
         cache(QTREPOS, add super, MODULE_BASE_OUTDIR)
     # This repo's module pris' location needs to be made known to qmake.
@@ -59,26 +69,27 @@ CONFIG = qt_build_extra $$CONFIG
 # This is much easier and safer than making every single INSTALLS
 # assignment conditional.
 !prefix_build: \
-    CONFIG += qt_clear_installs
+    CONFIG *= qt_clear_installs
 
 cross_compile: \
-    CONFIG += force_bootstrap
+    CONFIG *= force_bootstrap
 
 android|ios|winrt: \
-    CONFIG += builtin_testdata
+    CONFIG *= builtin_testdata
 
-CONFIG += \
+CONFIG *= \
     create_prl link_prl \
     prepare_docs qt_docs_targets \
     no_private_qt_headers_warning QTDIR_build \
     qt_example_installs \
-    # Qt modules get compiled without exceptions enabled by default.
-    # However, testcases should be still built with exceptions.
-    exceptions_off testcase_exceptions
+    exceptions_off testcase_exceptions # <- See Note.
+
+# Note: Qt modules get compiled without exceptions enabled by default.
+# However, testcases should be still built with exceptions.
 
 # Under Windows, this is neither necessary (transitive deps are automatically
 # resolved), nor functional (.res files end up in .prl files and break things).
-unix: CONFIG += explicitlib
+unix: CONFIG *= explicitlib
 
 
 defineTest(qtBuildPart) {
@@ -91,7 +102,7 @@ defineTest(qtBuildPart) {
 defineTest(qtNomakeTools) {
     qtBuildPart(tools): return()
     for (d, 1) {
-        $${d}.CONFIG += no_default_target no_default_install
+        $${d}.CONFIG *= no_default_target no_default_install
         export($${d}.CONFIG)
     }
 }

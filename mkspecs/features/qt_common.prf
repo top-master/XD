@@ -93,5 +93,12 @@ warnings_are_errors:warning_clean {
         equals(MSVC_VER, "11.0")|equals(MSVC_VER, "12.0"): QMAKE_CXXFLAGS_WARN_ON += -WX
     }
     unset(ver)
+} else {
+    # On the other hand, some warnings are not worthy of mention.
+    win32 {
+        # For example, Harfbazz lib has a source that only validates macros,
+        # hence no need for "LNK4221".
+        QMAKE_LIBFLAGS += /ignore:4221
+    }
 }
 

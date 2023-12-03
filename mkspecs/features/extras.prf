@@ -1,0 +1,17 @@
+#
+# Provides extra/optional features to your project which maybe are
+# allowing static-linking to theme, see LICENSE for more.
+#
+# Usage,
+# add (to your `*.pro` file) `load(extras)` instead of `CONFIG += extras`.
+#
+# old usage was using "extras" environment-variable like:
+# ```
+# include($$(extras)/extras.pri)
+# ```
+#
+
+CONFIG *= extras
+
+extras = $$absolute_path($$PWD/../../src/extras)
+INCLUDEPATH += $$extras/include

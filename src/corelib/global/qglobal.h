@@ -1,5 +1,6 @@
 /****************************************************************************
 **
+** Copyright (C) 2015 The XD Company Ltd.
 ** Copyright (C) 2015 The Qt Company Ltd.
 ** Copyright (C) 2014 Intel Corporation.
 ** Contact: http://www.qt.io/licensing/
@@ -35,11 +36,24 @@
 #ifndef QGLOBAL_H
 #define QGLOBAL_H
 
+/* By not including below headers, this file supports "C" files to include it,
+ * also, some C compilers may not support C++ style comments (`//` starting lines),
+ * hence we should NOT use such comments outside of `#ifdef __cplusplus`.
+ */
 #ifdef __cplusplus
 #  include <cstddef>
+#  include <utility> // For std::move (or qMove) and std::swap
+#  ifndef _POSIX_
+#    define _POSIX_
+#    include <limits.h>
+#    undef _POSIX_
+#  else
+#    include <limits.h>
+#  endif
+#endif /* __cplusplus */
+#ifndef __ASSEMBLER__
+#  include <stddef.h>
 #endif
-
-#include <stddef.h>
 
 /*
    QT_VERSION is (major << 16) + (minor << 8) + patch.
@@ -50,14 +64,11 @@
 */
 #define QT_VERSION_CHECK(major, minor, patch) ((major<<16)|(minor<<8)|(patch))
 
-#if !defined(QT_BUILD_QMAKE) && !defined(QT_BUILD_CONFIGURE)
-#include <QtCore/qconfig.h>
-#include <QtCore/qfeatures.h>
-#endif
 
-// The QT_SUPPORTS macro is deprecated. Don't use it in new code.
-// Instead, use #ifdef/ndef QT_NO_feature.
-// ### Qt6: remove macro
+/* The QT_SUPPORTS macro is deprecated. Don't use it in new code.
+ * Instead, use #ifdef/ndef QT_NO_feature.
+ * ### Qt6: remove macro
+ */
 #ifdef _MSC_VER
 #  define QT_SUPPORTS(FEATURE) (!defined QT_NO_##FEATURE)
 #else
@@ -75,6 +86,12 @@
 #include <QtCore/qsystemdetection.h>
 #include <QtCore/qprocessordetection.h>
 #include <QtCore/qcompilerdetection.h>
+
+/* TRACE/qmake build: don't depend on configure executable. */
+#if !defined(QT_BUILD_CONFIGURE)
+#include <QtCore/qconfig.h>
+#include <QtCore/qfeatures.h>
+#endif
 
 #if defined (__ELF__)
 #  define Q_OF_ELF
@@ -159,7 +176,7 @@ namespace QT_NAMESPACE {}
 
 #endif /* __cplusplus */
 
-// ### Qt6: remove me.
+/* ### Qt6: remove me. */
 #define QT_BEGIN_HEADER
 #define QT_END_HEADER
 
@@ -956,7 +973,7 @@ for (QForeachContainer<QT_FOREACH_DECLTYPE(container)> _container_((container));
      ++_container_.i, _container_.control ^= 1)                     \
     for (variable = *_container_.i; _container_.control; _container_.control = 0)
 
-#else
+#else // !Q_CC_GNU
 
 struct QForeachContainerBase {};
 
@@ -982,9 +999,9 @@ template <typename T>
 inline const QForeachContainer<T> *qForeachContainer(const QForeachContainerBase *base, const T *)
 { return static_cast<const QForeachContainer<T> *>(base); }
 
-#if defined(Q_CC_DIAB)
+#  if defined(Q_CC_DIAB)
 // VxWorks DIAB generates unresolvable symbols, if container is a function call
-#  define Q_FOREACH(variable,container)                                                             \
+#    define Q_FOREACH(variable,container)                                                             \
     if(0){}else                                                                                     \
     for (const QForeachContainerBase &_container_ = qForeachContainerNew(container);                \
          qForeachContainer(&_container_, (__typeof__(container) *) 0)->condition();       \
@@ -993,17 +1010,17 @@ inline const QForeachContainer<T> *qForeachContainer(const QForeachContainerBase
              qForeachContainer(&_container_, (__typeof__(container) *) 0)->brk;           \
              --qForeachContainer(&_container_, (__typeof__(container) *) 0)->brk)
 
-#else
-#  define Q_FOREACH(variable, container) \
+#  else
+#    define Q_FOREACH(variable, container) \
     for (const QForeachContainerBase &_container_ = qForeachContainerNew(container); \
          qForeachContainer(&_container_, true ? 0 : qForeachPointer(container))->condition();       \
          ++qForeachContainer(&_container_, true ? 0 : qForeachPointer(container))->i)               \
         for (variable = *qForeachContainer(&_container_, true ? 0 : qForeachPointer(container))->i; \
              qForeachContainer(&_container_, true ? 0 : qForeachPointer(container))->brk;           \
              --qForeachContainer(&_container_, true ? 0 : qForeachPointer(container))->brk)
-#endif // MSVC6 || MIPSpro
+#  endif // MSVC6 || MIPSpro
 
-#endif
+#endif // !Q_CC_GNU
 
 #define Q_FOREVER for(;;)
 #ifndef QT_NO_KEYWORDS
@@ -1055,8 +1072,8 @@ Q_CORE_EXPORT QString qtTrId(const char *id, int n = -1);
 #endif // QT_NO_TRANSLATION
 
 /*
-   When RTTI is not available, define this macro to force any uses of
-   dynamic_cast to cause a compile failure.
+   When RTTI (Run Time Type Identification) is not available, we define this macro,
+   to force any uses of dynamic_cast to cause a compile failure.
 */
 
 #if defined(QT_NO_DYNAMIC_CAST) && !defined(dynamic_cast)
@@ -1100,7 +1117,7 @@ template <typename T> struct QEnableIf<true, T> { typedef T Type; };
 
 template <bool B, typename T, typename F> struct QConditional { typedef T Type; };
 template <typename T, typename F> struct QConditional<false, T, F> { typedef F Type; };
-}
+} // namespace QtPrivate
 
 QT_END_NAMESPACE
 

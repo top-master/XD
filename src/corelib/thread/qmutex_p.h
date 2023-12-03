@@ -78,8 +78,8 @@ public:
 class QMutexPrivate : public QMutexData
 {
 public:
-    ~QMutexPrivate();
     QMutexPrivate();
+    ~QMutexPrivate();
 
     bool wait(int timeout = -1);
     void wakeUp() Q_DECL_NOTHROW;

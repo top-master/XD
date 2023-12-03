@@ -1,5 +1,7 @@
 qtPrepareTool(QMAKE_RCC, rcc, _DEP)
 
+# Ensoures `RCC_DIR` is already affixed (if needed).
+load(exclusive_builds_post)
 isEmpty(RCC_DIR):RCC_DIR = .
 isEmpty(QMAKE_MOD_RCC):QMAKE_MOD_RCC = qrc
 
@@ -19,7 +21,7 @@ defineReplace(xml_escape) {
 RESOURCES += qmake_immediate
 for(resource, RESOURCES) {
     # Regular case of user qrc file
-    contains(resource, ".*\.qrc$"): \
+    contains(resource, ".*\\.qrc$"): \
         next()
 
     # Fallback for stand-alone files/directories
@@ -33,9 +35,11 @@ for(resource, RESOURCES) {
         next()
     }
 
-    resource_file = $$RCC_DIR/qmake_$${resource}.qrc
+    RESOURCES -= $$resource
 
     isEmpty(BUILDS)|build_pass {
+        # For cleaner paths uses `$$absolute_path(...)`.
+        resource_file = $$absolute_path($$RCC_DIR/qmake_$${resource}.qrc, $$OUT_PWD)
         # Collection of files, generate qrc file
         prefix = $$eval($${resource}.prefix)
         isEmpty(prefix): \
@@ -64,12 +68,12 @@ for(resource, RESOURCES) {
             "</qresource>" \
             "</RCC>"
 
-        !write_file($$OUT_PWD/$$resource_file, resource_file_content): \
+        write_file($$resource_file, resource_file_content) {
+            RESOURCES += $$resource_file
+        } else {
             error("Aborting.")
+        }
     }
-
-    RESOURCES -= $$resource
-    RESOURCES += $$resource_file
 }
 
 rcc.input = RESOURCES

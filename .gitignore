@@ -1,6 +1,14 @@
 # This file is used to ignore files which are generated in the Qt build system
 # ----------------------------------------------------------------------------
 
+# Personal.
+#
+/todo/
+
+# Intelij IDE.
+#
+/.idea/
+
 examples/*/*/*
 !examples/*/*/*[.]*
 !examples/*/*/README
@@ -116,18 +124,18 @@ config.status
 config.summary
 mkspecs/default
 mkspecs/default-host
-mkspecs/qconfig.pri
-mkspecs/qdevice.pri
-mkspecs/qfeatures.pri
+#!mkspecs/qconfig.pri
+#!mkspecs/qdevice.pri
+#!mkspecs/qfeatures.pri
 mkspecs/qhost.pri
 moc_*.cpp
 qmake/qmake.exe
 qmake/Makefile.bak
 qmake/qmake_pch.pch
-src/corelib/global/qconfig.cpp
-src/corelib/global/qconfig.h
+#!src/corelib/global/qconfig.cpp
+#!src/corelib/global/qconfig.h
 src/corelib/global/qconfig.h.qmake
-src/corelib/global/qfeatures.h
+#!src/corelib/global/qfeatures.h
 src/platformsupport/*_interface.*
 src/platformsupport/*_adaptor.*
 ui_*.h
@@ -278,7 +286,7 @@ work
 #generated module def and version header files
 mkspecs/modules/qt_*.pri
 mkspecs/modules-inst/
-mkspecs/qmodule.pri
+#!mkspecs/qmodule.pri
 
 #unit tests libs/plugins
 tests/auto/corelib/plugin/qlibrary/libmylib.so2

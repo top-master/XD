@@ -45,6 +45,7 @@
 #include <QtConcurrent/QtConcurrent>
 #include <QtCore>
 #include <QtNetwork/QtNetwork>
+// Just to ensure those headers are compatible with moc (not linked to their binary).
 #include <QtSql/QtSql>
 //#include <QtSvg>
 #if defined(WITH_DBUS)

@@ -5,8 +5,11 @@ SUBDIRS += \
     dbus \
     gui \
     network \
-    opengl \
-    sql \
+    opengl
+
+contains(QT_CONFIG, sql): SUBDIRS += sql
+
+SUBDIRS += \
     testlib \
     tools \
     xml \

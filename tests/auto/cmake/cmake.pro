@@ -2,8 +2,9 @@
 # Cause make to do nothing.
 TEMPLATE = subdirs
 
-CMAKE_QT_MODULES_UNDER_TEST = core network xml sql testlib
+CMAKE_QT_MODULES_UNDER_TEST = core network xml testlib
 
+contains(QT_CONFIG, sql): CMAKE_QT_MODULES_UNDER_TEST += sql
 qtHaveModule(dbus): CMAKE_QT_MODULES_UNDER_TEST += dbus
 qtHaveModule(gui): CMAKE_QT_MODULES_UNDER_TEST += gui
 qtHaveModule(openglextensions): CMAKE_QT_MODULES_UNDER_TEST += openglextensions

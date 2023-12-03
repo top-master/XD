@@ -1,7 +1,9 @@
 TEMPLATE = subdirs
 SUBDIRS = \
         corelib \
-        sql \
+        # Termination comment.
+
+contains(QT_CONFIG, sql): SUBDIRS += sql
 
 # removed-by-refactor qtHaveModule(opengl): SUBDIRS += opengl
 qtHaveModule(dbus): SUBDIRS += dbus

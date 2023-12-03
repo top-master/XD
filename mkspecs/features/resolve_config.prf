@@ -22,6 +22,12 @@ CONFIG(static, static|shared) {
     contains(TEMPLATE, ".*lib"): CONFIG += dll
 }
 
+# TRACE/mkspecs improve: any shared lib is a dll,
+# we don't need Original-Qt's `TEMPLATE=dll` requirement.
+equals(TEMPLATE, lib) {
+    shared: CONFIG *= dll
+}
+
 !macx-xcode: \
     addExclusiveBuilds(shared, static)
 

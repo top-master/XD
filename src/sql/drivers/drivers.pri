@@ -1,3 +1,6 @@
+#
+# See "./README.md" file.
+#
 contains(sql-drivers, all):sql-driver += psql mysql odbc oci tds db2 sqlite ibase
 
 contains(sql-drivers, psql):include($$PWD/psql/qsql_psql.pri)

@@ -15,8 +15,8 @@ MOC_INCLUDEPATH = $$QMAKESPEC $$_PRO_FILE_PWD_ $$MOC_INCLUDEPATH $$QMAKE_DEFAULT
 # On Windows, put the includes into a .inc file which moc will read, if the project
 # has too many includes. We do this to overcome a command-line limit on Win < XP
 WIN_INCLUDETEMP=
-win32:count(MOC_INCLUDEPATH, 40, >) {
-    WIN_INCLUDETEMP = $$MOC_DIR/mocinclude.opt
+isEmpty(BUILDS)|build_pass: win32:count(MOC_INCLUDEPATH, 40, >) {
+    WIN_INCLUDETEMP = $$MOC_DIR/mocinclude.tmp
 
     WIN_INCLUDETEMP_CONT =
     for (inc, MOC_INCLUDEPATH): \
@@ -34,7 +34,7 @@ defineReplace(mocCmdBase) {
             incvar += -I$$shell_quote($$inc)
         incvar += $$QMAKE_FRAMEWORKPATH_FLAGS
     }
-    RET += $$QMAKE_MOC $(DEFINES) $$join(QMAKE_COMPILER_DEFINES, " -D", -D) $$incvar $$QMAKE_MOC_OPTIONS
+    RET += $$QMAKE_MOC $(DEFINES) $$incvar $$join(QMAKE_COMPILER_DEFINES, " -D", -D) $$QMAKE_MOC_OPTIONS
     return($$RET)
 }
 
