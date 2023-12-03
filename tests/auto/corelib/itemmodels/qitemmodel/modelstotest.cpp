@@ -115,11 +115,13 @@ ModelsToTest::ModelsToTest()
     tests.append(test("QTreeModel", ReadWrite, HasData));
     tests.append(test("QTreeModelEmpty", ReadWrite, Empty));
 
+#ifndef QT_NO_SQL
     tests.append(test("QSqlQueryModel", ReadOnly, HasData));
     tests.append(test("QSqlQueryModelEmpty", ReadOnly, Empty));
 
     // Fails on remove
     tests.append(test("QSqlTableModel", ReadOnly, HasData));
+#endif
 }
 
 /*!
@@ -176,6 +178,7 @@ QAbstractItemModel *ModelsToTest::createModel(const QString &modelType)
         return model;
     }
 
+#ifndef QT_NO_SQL
     if (modelType == "QSqlQueryModel") {
         QSqlQueryModel *model = new QSqlQueryModel();
         populateTestArea(model);
@@ -192,6 +195,7 @@ QAbstractItemModel *ModelsToTest::createModel(const QString &modelType)
         populateTestArea(model);
         return model;
     }
+#endif // QT_NO_SQL
 
     if (modelType == "QListModelEmpty")
         return (new QListWidget)->model();
@@ -325,6 +329,7 @@ QModelIndex ModelsToTest::populateTestArea(QAbstractItemModel *model)
         return dirModel->index(tempDir.path());
     }
 
+#ifndef QT_NO_SQL
     if (QSqlQueryModel *queryModel = qobject_cast<QSqlQueryModel *>(model)) {
         QSqlQuery q;
         q.exec("CREATE TABLE test(id int primary key, name varchar(30))");
@@ -347,6 +352,7 @@ QModelIndex ModelsToTest::populateTestArea(QAbstractItemModel *model)
         }
         return QModelIndex();
     }
+#endif // QT_NO_SQL
 
     if (QListWidget *listWidget = qobject_cast<QListWidget *>(model->parent())) {
 #ifndef Q_OS_WINCE
@@ -389,13 +395,17 @@ void ModelsToTest::cleanupTestArea(QAbstractItemModel *model)
 {
     if (qobject_cast<QDirModel *>(model)) {
         m_dirModelTempDir.reset();
-    } else if (qobject_cast<QSqlQueryModel *>(model)) {
+    }
+#ifndef QT_NO_SQL
+    if (qobject_cast<QSqlQueryModel *>(model)) {
         QSqlQuery q("DROP TABLE test");
     }
+#endif
 }
 
 void ModelsToTest::setupDatabase()
 {
+#ifndef QT_NO_SQL
     if (!QSqlDatabase::database().isValid()) {
         QSqlDatabase db = QSqlDatabase::addDatabase("QSQLITE");
         db.setDatabaseName(":memory:");
@@ -404,5 +414,6 @@ void ModelsToTest::setupDatabase()
             return;
         }
     }
+#endif
 }
 

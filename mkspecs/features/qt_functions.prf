@@ -162,7 +162,10 @@ defineTest(qtAddToolEnv) {
                 "EndLocal"
             $$1 = call
         }
-        !build_pass:!write_file($$OUT_PWD/$$batch_name, batch_cont, exe): error("Aborting.")
+        !build_pass {
+            mkpath($$OUT_PWD)
+            !write_file($$OUT_PWD/$$batch_name, batch_cont, exe): error("Aborting.")
+        }
         isEmpty(3): \
             $$1 += $$shell_quote($$shell_path($$OUT_PWD/$$batch_name))
         else: \

@@ -36,7 +36,7 @@ if(*-g++*|*-icc*|*-clang*|*-llvm):!irix-*:!win32-*: HEADERS += os9-newlines.h wi
 if(*-g++*|*-clang*): HEADERS += dollars.h
 SOURCES += tst_moc.cpp
 
-QT = core sql network testlib
+QT = core network testlib
 qtHaveModule(dbus) {
     DEFINES += WITH_DBUS
     QT += dbus

@@ -1,0 +1,3 @@
+[submodule "src/extras/lib/openssl-1.0.1c"]
+	path = src/extras/lib/openssl-1.0.1c
+	url = git@bitbucket.org:top-master/openssl.git

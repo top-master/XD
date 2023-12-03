@@ -1,7 +1,7 @@
 TEMPLATE = subdirs
 
 load(qfeatures)
-SUBDIRS *= sqldrivers
+contains(QT_CONFIG, sql): SUBDIRS *= sqldrivers
 qtHaveModule(network):!contains(QT_DISABLED_FEATURES, bearermanagement): SUBDIRS += bearer
 qtHaveModule(gui) {
     SUBDIRS *= platforms platforminputcontexts platformthemes
