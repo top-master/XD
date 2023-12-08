@@ -50,6 +50,8 @@ QMakeMetaInfo::QMakeMetaInfo(QMakeProject *_conf)
 bool
 QMakeMetaInfo::readLib(const QString &meta_file)
 {
+    clear();
+
     if(cache_vars.contains(meta_file)) {
         vars = cache_vars[meta_file];
         return true;
@@ -78,6 +80,13 @@ QMakeMetaInfo::readLib(const QString &meta_file)
     if(ret)
         cache_vars.insert(meta_file, vars);
     return ret;
+}
+
+
+void
+QMakeMetaInfo::clear()
+{
+    vars.clear();
 }
 
 
@@ -121,7 +130,7 @@ QMakeMetaInfo::readLibtoolFile(const QString &f)
     else if(!dirf.isEmpty() && !dirf.endsWith(Option::output_dir))
         dirf += QLatin1Char('/');
     const ProValueMap &v = proj.variables();
-    for (ProValueMap::ConstIterator it = v.begin(); it != v.end(); ++it) {
+    for (ProValueMap::ConstIterator it = v.constBegin(); it != v.constEnd(); ++it) {
         ProStringList lst = it.value();
         if(lst.count() == 1 && (lst.first().startsWith("'") || lst.first().startsWith("\"")) &&
            lst.first().endsWith(QString(lst.first().at(0))))

@@ -50,7 +50,8 @@
 */
 #define QT_VERSION_CHECK(major, minor, patch) ((major<<16)|(minor<<8)|(patch))
 
-#if !defined(QT_BUILD_QMAKE) && !defined(QT_BUILD_CONFIGURE)
+// TRACE/qmake build: don't depend on configure executable.
+#if !defined(QT_BUILD_CONFIGURE)
 #include <QtCore/qconfig.h>
 #include <QtCore/qfeatures.h>
 #endif
@@ -312,6 +313,8 @@ typedef double qreal;
 #  define Q_NETWORK_EXPORT
 #endif
 
+#define Q_VAR_EXPORT(module) Q_##module##_EXPORT
+
 /*
    Some classes do not permit copies to be made of an object. These
    classes contains a private copy constructor and assignment
@@ -549,6 +552,15 @@ template <typename T>
 Q_DECL_CONSTEXPR inline const T &qBound(const T &min, const T &val, const T &max)
 { return qMax(min, qMin(max, val)); }
 
+#define Q_MIN(a, b) ((a < b) ? a : b)
+#define Q_MAX(a, b) ((a < b) ? b : a)
+#define Q_BOUND(min, val, max) Q_MAX(min, Q_MIN(max, val))
+
+template <typename T>
+Q_DECL_CONSTEXPR inline bool qNot(const T &a) { return !a; }
+template <typename T1, typename T2>
+Q_DECL_CONSTEXPR inline bool qNotEqual(const T1 &a, const T2 &b) { return a != b; }
+
 #ifndef Q_FORWARD_DECLARE_OBJC_CLASS
 #  ifdef __OBJC__
 #    define Q_FORWARD_DECLARE_OBJC_CLASS(classname) @class classname
@@ -660,6 +672,12 @@ Q_NORETURN Q_CORE_EXPORT void qTerminate() Q_DECL_NOTHROW;
 #  endif
 #endif
 
+// Usable with Lambda, like `QT_FINALLY([&] { qFree(myVariable) });`.
+#define QT_FINALLY_X(name, callback) auto name = qScopeGuard(callback); \
+    do { Q_UNUSED(name) } while(0)
+#define QT_FINALLY(callback) QT_FINALLY_X(QT_JOIN(_qDefer, __LINE__), callback)
+
+
 Q_CORE_EXPORT bool qSharedBuild() Q_DECL_NOTHROW;
 
 #ifndef Q_OUTOFLINE_TEMPLATE
@@ -720,6 +738,36 @@ Q_CORE_EXPORT void qt_assert_x(const char *where, const char *what, const char *
 #    define Q_ASSERT_X(cond, where, what) do { } while ((false) && (cond))
 #  else
 #    define Q_ASSERT_X(cond, where, what) ((!(cond)) ? qt_assert_x(where, what,__FILE__,__LINE__) : qt_noop())
+#  endif
+#endif
+
+
+inline bool qt_assert_if(bool cond, const char *where, const char *what, const char *file, int line)
+{
+    Q_UNUSED(cond) Q_UNUSED(where) Q_UNUSED(what) Q_UNUSED(file) Q_UNUSED(line)
+    if ( ! cond) {
+        if (where) {
+            qt_assert_x(where, what, file, line);
+        } else {
+            qt_assert(what,file,line);
+        }
+    }
+    return cond;
+}
+
+#if !defined(Q_IF)
+#  ifndef QT_NO_DEBUG
+#    define Q_IF(cond) if (qt_assert_if(((cond)),Q_NULLPTR,#cond,__FILE__,__LINE__))
+#  else
+#    define Q_IF(cond) if (cond)
+#  endif
+#endif
+
+#if !defined(Q_IF_X)
+#  ifndef QT_NO_DEBUG
+#    define Q_IF_X(cond, where, what) if (qt_assert_if(((cond)), where, what,__FILE__,__LINE__))
+#  else
+#    define Q_IF(cond) if (cond)
 #  endif
 #endif
 
@@ -1093,6 +1141,10 @@ Q_CORE_EXPORT int qrand();
          "Compile your code with -fPIC (-fPIE is not enough)."
 #endif
 
+//QEnableIf is like std::enable_if
+template <bool B, typename T = void> struct QEnableIf;
+template <typename T> struct QEnableIf<true, T> { typedef T Type; typedef T type; };
+
 namespace QtPrivate {
 //like std::enable_if
 template <bool B, typename T = void> struct QEnableIf;
@@ -1100,6 +1152,27 @@ template <typename T> struct QEnableIf<true, T> { typedef T Type; };
 
 template <bool B, typename T, typename F> struct QConditional { typedef T Type; };
 template <typename T, typename F> struct QConditional<false, T, F> { typedef F Type; };
+
+template <typename Func1>
+class QFinally {
+    Func1 data;
+public:
+    Q_DECL_CONSTEXPR Q_ALWAYS_INLINE QFinally(Func1 &&f)
+        : data(qMove(f))
+    {}
+
+    Q_ALWAYS_INLINE ~QFinally() {
+        (data)();
+    }
+};
+
+} // namespace QtPrivate
+
+// Under LGPL-3 header permission: uses Qt-6's "qScopeGuard" name.
+template <typename Func1>
+Q_DECL_CONSTEXPR Q_ALWAYS_INLINE QtPrivate::QFinally<Func1 > qScopeGuard(Func1 && f)
+{
+    return QtPrivate::QFinally<Func1 >(qMove(f));
 }
 
 QT_END_NAMESPACE

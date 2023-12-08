@@ -38,6 +38,10 @@
 
 QT_BEGIN_NAMESPACE
 
+namespace QMakeInternal {
+    extern bool build_pass; //defined in qmake/library/qmakeevaluator.cpp
+}
+
 class QMakeProject : private QMakeEvaluator
 {
     QString m_projectFile;
@@ -86,7 +90,34 @@ public:
     using QMakeEvaluator::isActiveConfig;
     using QMakeEvaluator::isHostBuild;
     using QMakeEvaluator::dirSep;
+    using QMakeEvaluator::logicWarning;
+    using QMakeEvaluator::logicWarningAt;
 
+    struct SubdirInfo {
+        inline SubdirInfo()
+            : isFileExpected(false)
+            , isChild(false), isMakefileExternal(false)
+        {}
+        QString input; //user-input in SUBDIRS list
+        QString key;
+        ProString value; //extracted from key
+        QString path; //expanded value
+
+        bool isFileExpected;
+        bool isChild; //true when subdir-name is not same as its directory-name
+        bool isMakefileExternal;
+
+        QString fileName; // example.pro
+        QString directory; // C:/projects/example
+
+        QString makefile;
+        QStringRef buildName() const; //same as "fileName"
+    };
+    void fetchSubdir(SubdirInfo *buffer, const ProString &input, bool logWarnings = false);
+
+public:
+    inline static bool build_pass() { return QMakeInternal::build_pass; }
+    inline static void setBuildPass(bool enabled) { QMakeInternal::build_pass = enabled; }
 private:
     static bool boolRet(VisitReturn vr);
 };

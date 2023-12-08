@@ -58,7 +58,7 @@ static QString nmakePathList(const QStringList &list)
 
 NmakeMakefileGenerator::NmakeMakefileGenerator() : Win32MakefileGenerator(), usePCH(false)
 {
-
+    m_name = QByteArray("NmakeMakefileGenerator");
 }
 
 bool
@@ -627,9 +627,17 @@ void NmakeMakefileGenerator::writeBuildRulesPart(QTextStream &t)
                 // directly embed the manifest in the executable after linking
                 t << "\n\t";
                 writeLinkCommand(t, extraLFlags);
+
                 if (!linkerSupportsEmbedding) {
-                    t << "\n\tmt.exe /nologo /manifest " << escapeFilePath(manifest)
-                      << " /outputresource:$(DESTDIR_TARGET);" << resourceId;
+                    // TRACE/qmake Add X1: we use "idc" instate of "mt" to directly embed the manifest,
+                    // since "mt.exe" sometimes crashs, but users can disable idc usage with: QMAKE_MANIFEST_FLAGS = /MT:YES
+                    const bool mt_exe = project->values("QMAKE_MANIFEST_FLAGS")
+                            .toQStringList().filter(QRegExp("(/|-)MT:NO")).isEmpty();
+                    if(!mt_exe) {
+                        t << "\n\t-$(IDC) $(DESTDIR_TARGET) /manifest " << escapeFilePath(manifest);
+                    } else
+                        t << "\n\tmt.exe /nologo /manifest " << escapeFilePath(manifest)
+                          << " /outputresource:$(DESTDIR_TARGET);" << resourceId;
                 }
             }
         }  else {

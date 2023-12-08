@@ -12,7 +12,9 @@ SOURCES += project.cpp property.cpp main.cpp \
            generators/win32/msvc_vcproj.cpp \
            generators/win32/msvc_vcxproj.cpp \
            generators/win32/msvc_objectmodel.cpp generators/win32/msbuild_objectmodel.cpp \
-           generators/win32/cesdkhandler.cpp
+           generators/win32/cesdkhandler.cpp \
+    $$PWD/library/udebug.cpp \
+    $$PWD/manualskip.cpp
 
 HEADERS += project.h property.h \
            library/qmake_global.h library/ioutils.h library/proitems.h library/qmakevfs.h library/qmakeglobals.h \
@@ -25,7 +27,11 @@ HEADERS += project.h property.h \
            generators/win32/msvc_vcproj.h \
            generators/win32/msvc_vcxproj.h \
            generators/win32/msvc_objectmodel.h generators/win32/msbuild_objectmodel.h \
-           generators/win32/cesdkhandler.h
+           generators/win32/cesdkhandler.h \
+    $$PWD/library/udebug.h \
+    $$PWD/debuger.h \
+    $$PWD/manualskip.h \
+    library/constants.h
 
 bootstrap { #Qt code
    SOURCES+= \
@@ -39,6 +45,7 @@ bootstrap { #Qt code
         qdir.cpp \
         qdiriterator.cpp \
         qfiledevice.cpp \
+        qringbuffer.cpp \
         qfile.cpp \
         qabstractfileengine.cpp \
         qfileinfo.cpp \
@@ -61,7 +68,7 @@ bootstrap { #Qt code
         qtextcodec.cpp \
         qutfcodec.cpp \
         qstring.cpp \
-        qstring_compat.cpp \
+        #qstring_compat.cpp \
         qstringlist.cpp \
         qtemporaryfile.cpp \
         qtextstream.cpp \
@@ -80,7 +87,8 @@ bootstrap { #Qt code
         qjsonparser.cpp \
         qjsonarray.cpp \
         qjsonobject.cpp \
-        qjsonvalue.cpp
+        qjsonvalue.cpp \
+        qdebug.cpp
 
    HEADERS+= \
         qbitarray.h \
@@ -130,7 +138,8 @@ bootstrap { #Qt code
         qjsonwriter.h \
         qjsonarray.h \
         qjsonobject.h \
-        qjsonvalue.h
+        qjsonvalue.h \
+        qdebug.h
 
     unix {
         SOURCES += qfilesystemengine_unix.cpp qfilesystemiterator_unix.cpp qfsfileengine_unix.cpp
@@ -146,6 +155,7 @@ bootstrap { #Qt code
             qsystemlibrary.cpp qlocale_win.cpp registry.cpp
         win32-msvc*:LIBS += ole32.lib advapi32.lib
         mingw:LIBS += -lole32 -luuid -ladvapi32 -lkernel32
+        LIBS += -lshell32 # For SHGetSpecialFolderPathW
     }
 
     qnx {
@@ -160,8 +170,13 @@ bootstrap { #Qt code
         QT_CRYPTOGRAPHICHASH_ONLY_SHA1 QT_JSON_READONLY QT_NO_STANDARDPATHS
 
     INCLUDEPATH += \
-        $$QT.core.includes $$QT.core_private.includes \
-        $$shadowed(../src/corelib/global)
+        # Old code: $$QT.core.includes $$QT.core_private.includes \
+        $$PWD/../include \
+        $$PWD/../include/QtCore \
+        $$PWD/../include/QtCore/$$MODULE_VERSION \
+        $$PWD/../include/QtCore/$$MODULE_VERSION/QtCore \
+        $$PWD/../src/corelib/global
+
 } else {
     CONFIG += qt
     QT = core
@@ -173,3 +188,5 @@ bootstrap { #Qt code
 }
 
 PRECOMPILED_HEADER = qmake_pch.h
+
+include(../src/corelib/arch/arch.pri)

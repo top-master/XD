@@ -57,6 +57,7 @@ QString project_builtin_regx() //calculate the builtin regular expression..
 
 ProjectGenerator::ProjectGenerator() : MakefileGenerator()
 {
+    m_name = QByteArray("ProjectGenerator");
 }
 
 void

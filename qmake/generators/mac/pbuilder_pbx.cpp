@@ -67,7 +67,7 @@ static QString qtSha1(const QByteArray &src)
 
 ProjectBuilderMakefileGenerator::ProjectBuilderMakefileGenerator() : UnixMakefileGenerator()
 {
-
+    m_name = QByteArray("ProjectBuilderMakefileGenerator");
 }
 
 bool

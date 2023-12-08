@@ -38,9 +38,11 @@
 #include "qmakeparser.h"
 #include "qmakevfs.h"
 #include "ioutils.h"
+#include "udebug.h"
 
 #include <qbytearray.h>
 #include <qdir.h>
+#include <QDirIterator>
 #include <qfile.h>
 #include <qfileinfo.h>
 #include <qlist.h>
@@ -72,15 +74,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 
-#ifdef Q_OS_WIN32
-#define QT_POPEN _popen
-#define QT_POPEN_READ "rb"
-#define QT_PCLOSE _pclose
-#else
-#define QT_POPEN popen
-#define QT_POPEN_READ "r"
-#define QT_PCLOSE pclose
-#endif
+#include "../process.h"
 
 using namespace QMakeInternal;
 
@@ -95,15 +89,18 @@ enum ExpandFunc {
     E_UPPER, E_LOWER, E_TITLE, E_FILES, E_PROMPT, E_RE_ESCAPE, E_VAL_ESCAPE,
     E_REPLACE, E_SORT_DEPENDS, E_RESOLVE_DEPENDS, E_ENUMERATE_VARS,
     E_SHADOWED, E_ABSOLUTE_PATH, E_RELATIVE_PATH, E_CLEAN_PATH,
-    E_SYSTEM_PATH, E_SHELL_PATH, E_SYSTEM_QUOTE, E_SHELL_QUOTE, E_GETENV
+    E_SYSTEM_PATH, E_SHELL_PATH, E_SYSTEM_QUOTE, E_SHELL_QUOTE, E_GETENV,
+    E_NUM_ADD
 };
 
 enum TestFunc {
     T_INVALID = 0, T_REQUIRES, T_GREATERTHAN, T_LESSTHAN, T_EQUALS,
     T_EXISTS, T_EXPORT, T_CLEAR, T_UNSET, T_EVAL, T_CONFIG, T_SYSTEM,
     T_DEFINED, T_CONTAINS, T_INFILE,
-    T_COUNT, T_ISEMPTY, T_PARSE_JSON, T_INCLUDE, T_LOAD, T_DEBUG, T_LOG, T_MESSAGE, T_WARNING, T_ERROR, T_IF,
-    T_MKPATH, T_WRITE_FILE, T_TOUCH, T_CACHE
+    T_COUNT, T_ISEMPTY, T_PARSE_JSON, T_INCLUDE, T_LOAD,
+    T_DEBUG, T_LOG, T_MESSAGE, T_WARNING, T_ERROR, T_IF,
+    T_MKPATH, T_WRITE_FILE, T_COPY_FILE, T_COPY_DIR,
+    T_TOUCH, T_CACHE,
 };
 
 void QMakeEvaluator::initFunctionStatics()
@@ -153,6 +150,7 @@ void QMakeEvaluator::initFunctionStatics()
         { "system_quote", E_SYSTEM_QUOTE },
         { "shell_quote", E_SHELL_QUOTE },
         { "getenv", E_GETENV },
+        { "num_add", E_NUM_ADD },
     };
     for (unsigned i = 0; i < sizeof(expandInits)/sizeof(expandInits[0]); ++i)
         statics.expands.insert(ProKey(expandInits[i].name), expandInits[i].func);
@@ -192,6 +190,8 @@ void QMakeEvaluator::initFunctionStatics()
         { "error", T_ERROR },
         { "mkpath", T_MKPATH },
         { "write_file", T_WRITE_FILE },
+        { "copy_file", T_COPY_FILE },
+        { "copy_dir", T_COPY_DIR },
         { "touch", T_TOUCH },
         { "cache", T_CACHE },
     };
@@ -366,12 +366,120 @@ QMakeEvaluator::writeFile(const QString &ctx, const QString &fn, QIODevice::Open
 {
     QString errStr;
     if (!m_vfs->writeFile(fn, mode, exe, contents, &errStr)) {
-        evalError(fL1S("Cannot write %1file %2: %3")
+        evalError(fL1S("Cannot write %1file \"%2\": %3")
                   .arg(ctx, QDir::toNativeSeparators(fn), errStr));
         return ReturnFalse;
     }
     m_parser->discardFileFromCache(fn);
     return ReturnTrue;
+}
+
+QMakeEvaluator::VisitReturn QMakeEvaluator::copyFile(const QString &filePath, const QString &destPath)
+{
+    QString errStr;
+    QString destFile = destPath;
+
+    if(filePath.isEmpty() || destPath.isEmpty()) {
+        errStr = fL1S("file path is eampty");
+        goto posError;
+    }
+
+    //if destination is a directory suffix it with file-name
+    bool isSlashed; {
+        const QChar lastChar = destPath.at(destPath.size() - 1);
+        isSlashed = (lastChar == '/' || lastChar == '\\');
+    }
+    if(isSlashed || QDir(destPath).exists()) {
+        if( ! isSlashed )
+            destFile += QLatin1Char('/');
+        int iSlash = filePath.lastIndexOf(QLatin1Char('/'));
+        destFile.append( filePath.midRef(iSlash+1) );
+        destFile = resolvePath(destFile);
+    }
+    //at last copy the file
+    if ( ! m_vfs->copyFile(filePath, destFile, &errStr) ) {
+posError:
+        this->copyFileWarning(filePath, destFile, errStr);
+        return ReturnFalse;
+    }
+    m_parser->discardFileFromCache(destFile);
+    return ReturnTrue;
+}
+
+void QMakeEvaluator::copyFileWarning(const QString &from, const QString &to, const QString &msg)
+{
+    this->logicWarning(fL1S("Cannot copy file \"%1\" to \"%2\": %3").arg(
+                QDir::toNativeSeparators(from)
+                , QDir::toNativeSeparators(to)
+                , msg
+        ));
+}
+
+QMakeEvaluator::VisitReturn QMakeEvaluator::copyDir(const QString &pathFrom
+        , const QString &pathTo, const QString &nameFilter)
+{
+    QString errStr;
+    const QDir &dir = QDir::current();
+
+    //ensure destination exists
+    if(pathFrom.isEmpty() || pathTo.isEmpty()) {
+        errStr = QLL("path is empty");
+        goto posError;
+    } else if(qNot( dir.mkpath(pathTo) )) {
+        errStr = QLL("create dir failed");
+posError:
+        this->copyDirError(pathFrom, pathTo, errStr);
+        return ReturnFalse;
+    }
+
+    //count root of "pathFrom"
+    int pathFromRoot = pathFrom.size();
+    if(qNot( pathFrom.endsWith(QLatin1Char('/')) ))
+        ++pathFromRoot;
+    //count and store root of "pathTo"
+    QString destFile; {
+        destFile.reserve(pathFrom.size() + pathTo.size() + 128);
+        destFile.append(pathTo);
+        if(qNot( pathTo.endsWith(QLatin1Char('/')) ))
+            destFile.append(QLatin1Char('/'));
+    }
+    const int pathToRoot = destFile.size();
+
+    //iterate through all files
+    QDirIterator it( pathFrom, QStringList() << nameFilter
+            , QDir::Files | QDir::NoDotAndDotDot | QDir::NoSymLinks
+            , QDirIterator::Subdirectories );
+    while (it.hasNext()) {
+        const QString &sourceFile = it.next();
+        //reset to dest-dir root
+        //  then fetch and append destination-file's sub-path from "filePath"
+        destFile.resize(pathToRoot);
+        destFile.append(sourceFile.midRef(pathFromRoot));
+        //ensure destination sub-dir exists
+        int lastSeparator = destFile.lastIndexOf(QLatin1Char('/'));
+        const QString &destDir = QString::fromRawData(destFile.midRef(0, lastSeparator));
+        if(qNot( dir.mkpath(destDir) )) {
+            errStr = QLL("create dir failed");
+            this->copyDirError(pathFrom, destDir, errStr);
+            return ReturnFalse;
+        }
+        //at last copy file to destination-dir
+        if (m_vfs->copyFile(sourceFile, destFile, &errStr)) {
+            m_parser->discardFileFromCache(destFile);
+        } else {
+            this->copyFileWarning(sourceFile, destFile, errStr);
+        }
+    }
+    return ReturnTrue;
+}
+
+void QMakeEvaluator::copyDirError(const QString &from, const QString &to, const QString &msg)
+{
+    this->evalError(fL1S("Cannot copy dir \"%1\" to \"%2\": %3").arg(
+                QDir::toNativeSeparators(from)
+                , QDir::toNativeSeparators(to)
+                , msg
+        ));
 }
 
 #ifndef QT_BOOTSTRAPPED
@@ -460,6 +568,54 @@ void QMakeEvaluator::populateDeps(
         }
 }
 
+class NumberCounter {
+public:
+    inline NumberCounter(QMakeEvaluator *owner_)
+        : owner(owner_)
+        , sum(0)
+    {}
+
+    bool run(const ProStringList &args) {
+        for (iArg = 0; iArg < args.size(); ++iArg) {
+            const ProString &arg = args.at(iArg);
+            const QString &argStr = arg.toQString(owner->m_tmp1);
+
+            //const ProStringList &values = owner->values(owner->map(arg));
+            if(qNot( this->append(argStr) ))
+                return false;
+        }
+        return true;
+    }
+
+    inline bool append(const QString &str) {
+        //prevent float
+        if (str.contains(QLatin1Char('.'))) {
+            owner->evalError(fL1S("num_add(): floats are currently not supported arg(%1) == '%2'")
+                      .arg(str).arg(iArg));
+            return false;
+        }
+        //parse number
+        bool ok;
+        qlonglong num = str.toLongLong(&ok);
+        if (!ok) {
+            owner->evalError(fL1S("num_add(): malformed number arg(%1) == '%2'.")
+                      .arg(str).arg(iArg));
+            return false;
+        }
+
+        sum += num;
+        return true;
+    }
+
+private:
+    QMakeEvaluator *owner;
+    int iArg;
+
+public:
+    qlonglong sum;
+
+};
+
 ProStringList QMakeEvaluator::evaluateBuiltinExpand(
         int func_t, const ProKey &func, const ProStringList &args)
 {
@@ -478,7 +634,8 @@ ProStringList QMakeEvaluator::evaluateBuiltinExpand(
         int end = -1;
         if (func_t == E_SECTION) {
             if (args.count() != 3 && args.count() != 4) {
-                evalError(fL1S("section(var, sep, begin, end) requires three or four arguments."));
+                evalError(fL1S("%1(var) section(var, sep, begin, end) requires"
+                               " three or four arguments.").arg(func.toQString(m_tmp1)));
             } else {
                 var = args[0];
                 sep = args.at(1).toQString();
@@ -743,7 +900,10 @@ ProStringList QMakeEvaluator::evaluateBuiltinExpand(
             ProValueMap vars;
             QString fn = resolvePath(m_option->expandEnvVars(args.at(0).toQString(m_tmp1)));
             fn.detach();
-            if (evaluateFileInto(fn, &vars, LoadProOnly) == ReturnTrue)
+            // TRACE/qmake change: added "LoadPreFiles" to E_FROMFILE.
+            // note: a bit slower but without we got many error print
+            QRequireStack locker(this);
+            if (evaluateFileInto(fn, &vars, LoadProOnly | LoadPreFiles) == ReturnTrue)
                 ret = vars.value(map(args.at(1)));
         }
         break;
@@ -964,7 +1124,9 @@ ProStringList QMakeEvaluator::evaluateBuiltinExpand(
             evalError(fL1S("replace(var, before, after) requires three arguments."));
         } else {
             const QRegExp before(args.at(1).toQString());
-            const QString &after(args.at(2).toQString(m_tmp2));
+            // TRACE/qmake compile: by-ref setter works for all compilers
+            // (by-ref constructing may compile buggy).
+            const QString &after = args.at(2).toQString(m_tmp2);
             foreach (const ProString &val, values(map(args.at(0)))) {
                 QString rstr = val.toQString(m_tmp1);
                 QString copy = rstr; // Force a detach on modify
@@ -1017,9 +1179,13 @@ ProStringList QMakeEvaluator::evaluateBuiltinExpand(
         if (args.count() != 1) {
             evalError(fL1S("shadowed(path) requires one argument."));
         } else {
-            QString rstr = m_option->shadowedPath(resolvePath(args.at(0).toQString(m_tmp1)));
-            if (rstr.isEmpty())
+            const QString &path = resolvePath(args.at(0).toQString(m_tmp1));
+            QString rstr = m_option->shadowedPath(path);
+            if (rstr.isEmpty()) {
+                logicWarning(fL1S("Can not shadow path pointing outside of the project source directory: \"%1\"")
+                             .arg(path));
                 break;
+            }
             ret << (rstr.isSharedWith(m_tmp1) ? args.at(0) : ProString(rstr).setSource(args.at(0)));
         }
         break;
@@ -1030,6 +1196,7 @@ ProStringList QMakeEvaluator::evaluateBuiltinExpand(
             QString rstr = QDir::cleanPath(
                     QDir(args.count() > 1 ? args.at(1).toQString(m_tmp2) : currentDirectory())
                     .absoluteFilePath(args.at(0).toQString(m_tmp1)));
+            // Prevents creating new `ProString` if `QDir` returned one of given two `QString`s.
             ret << (rstr.isSharedWith(m_tmp1)
                         ? args.at(0)
                         : args.count() > 1 && rstr.isSharedWith(m_tmp2)
@@ -1117,6 +1284,28 @@ ProStringList QMakeEvaluator::evaluateBuiltinExpand(
             ret << val;
         }
         break;
+    case E_NUM_ADD:
+        // Usage is as simple as:
+        // ```
+        // sum = $$num_add($$first, -$$second, list)
+        // ```
+        //
+        // But if the operand (second arg) may be already negative,
+        // then another step is necessary to normalize the number:
+        // ```
+        // second_neg = -$$second
+        // ## Because two minus signs equal addition, removes both minuses.
+        // second_neg ~= s/^--//
+        // sum = $$num_add($$first, $$second_neg)
+        // ```
+        if (args.count() < 1 || args.at(0).isEmpty()) {
+            evalError(fL1S("num_add(num, ...) requires in argument multiple numbers or at least one list-variable-key."));
+        } else {
+            NumberCounter counter(this);
+            if(counter.run(args))
+                ret << ProString(QString::number(counter.sum)).setSource(args.first());
+        }
+        break;
     default:
         evalError(fL1S("Function '%1' is not implemented.").arg(func.toQString(m_tmp1)));
         break;
@@ -1133,7 +1322,7 @@ QMakeEvaluator::VisitReturn QMakeEvaluator::evaluateBuiltinConditional(
     switch (func_t) {
     case T_DEFINED: {
         if (args.count() < 1 || args.count() > 2) {
-            evalError(fL1S("defined(function, [\"test\"|\"replace\"|\"var\"])"
+            evalError(fL1S("defined(function, [\"test\"|\"replace\"|\"var\"|\"builtin\"])"
                            " requires one or two arguments."));
             return ReturnFalse;
         }
@@ -1185,6 +1374,7 @@ QMakeEvaluator::VisitReturn QMakeEvaluator::evaluateBuiltinConditional(
             ProValueMap vars;
             QString fn = resolvePath(m_option->expandEnvVars(args.at(0).toQString(m_tmp1)));
             fn.detach();
+            QRequireStack locker(this);
             VisitReturn ok = evaluateFileInto(fn, &vars, LoadProOnly);
             if (ok != ReturnTrue)
                 return ok;
@@ -1379,6 +1569,12 @@ QMakeEvaluator::VisitReturn QMakeEvaluator::evaluateBuiltinConditional(
             *it = statics.fakeValue;
         else
             m_valuemapStack.top()[var] = statics.fakeValue;
+        // TRACE/qmake Debug 1-4: any `unset(...)` reveals its location.
+#ifdef QMAKE_WATCH
+        const QStringRef &varRef = var.toQStringRef();
+        if (xdDebugChanges(varRef))
+            UDebug().printLocation(m_current.pro->fileName(), m_current.line).noQuotes() << varRef << "unset";
+#endif
         return ReturnTrue;
     }
 #if QT_VERSION >= QT_VERSION_CHECK(5, 0, 0)
@@ -1483,12 +1679,21 @@ QMakeEvaluator::VisitReturn QMakeEvaluator::evaluateBuiltinConditional(
                 fputs(msg.toLatin1().constData(), stderr);
 #endif
             } else {
-                m_handler->fileMessage(
-                        (func_t == T_ERROR   ? QMakeHandler::ErrorMessage :
-                         func_t == T_WARNING ? QMakeHandler::WarningMessage :
-                                               QMakeHandler::InfoMessage)
-                        | (m_cumulative ? QMakeHandler::CumulativeEvalMessage : 0),
-                        fL1S("Project %1: %2").arg(function.toQString(m_tmp1).toUpper(), msg));
+                // TRACE/qmake Add: any warning will reveal its location.
+                if(func_t != T_MESSAGE) {
+                    int type = func_t == T_WARNING ? QMakeHandler::EvalWarnLogic
+                                                   : QMakeHandler::EvalError;
+                    if (m_cumulative) {
+                        type |= QMakeHandler::CumulativeEvalMessage;
+                    }
+                    this->message(type, msg);
+                    // TRACE/qmake Add 2-3: warning call stack.
+                    QRequireStack::print();
+                } else {
+                    // Old code; messages are more readable in "General Messages" output-pane.
+                    m_handler->fileMessage(QMakeHandler::InfoMessage, fL1S("Project %1: %2")
+                                           .arg(function.toQString(m_tmp1).toUpper(), msg));
+                }
             }
         }
         return (func_t == T_ERROR && !m_cumulative) ? ReturnError : ReturnTrue;
@@ -1534,7 +1739,7 @@ QMakeEvaluator::VisitReturn QMakeEvaluator::evaluateBuiltinConditional(
         }
         const QString &file = resolvePath(m_option->expandEnvVars(args.at(0).toQString(m_tmp1)));
 
-        // Don't use VFS here:
+        // Don't use VFS (Virtual-File-System) here:
         // - it supports neither listing nor even directories
         // - it's unlikely that somebody would test for files they created themselves
         if (IoUtils::exists(file))
@@ -1578,9 +1783,9 @@ QMakeEvaluator::VisitReturn QMakeEvaluator::evaluateBuiltinConditional(
             if (args.count() >= 3) {
                 foreach (const ProString &opt, split_value_list(args.at(2).toQString(m_tmp2))) {
                     opt.toQString(m_tmp3);
-                    if (m_tmp3 == QLatin1String("append")) {
+                    if (m_tmp3.compare(fL1S("append"), Qt::CaseInsensitive)) {
                         mode = QIODevice::Append;
-                    } else if (m_tmp3 == QLatin1String("exe")) {
+                    } else if (m_tmp3.compare(fL1S("exe"), Qt::CaseInsensitive)) {
                         exe = true;
                     } else {
                         evalError(fL1S("write_file(): invalid flag %1.").arg(m_tmp3));
@@ -1589,9 +1794,40 @@ QMakeEvaluator::VisitReturn QMakeEvaluator::evaluateBuiltinConditional(
                 }
             }
         }
+        // TRACE/qmake.write_file(...): skip in build_pass.
+        if (QMakeInternal::build_pass)
+            return ReturnTrue;
         QString path = resolvePath(args.at(0).toQString(m_tmp1));
         path.detach(); // make sure to not leak m_tmp1 into the map of written files.
         return writeFile(QString(), path, mode, exe, contents);
+    }
+    case T_COPY_FILE: {
+        if (args.count() != 2) {
+            evalError(fL1S("copy_file(source, destination) requires two arguments."));
+            return ReturnFalse;
+        }
+
+        //we use shadowed paths to make arguments relative to $$OUT_PWD instead of $$PWD
+        if(qNot( QMakeInternal::build_pass )) {
+            const QString &sourceFile = resolvePath(args.at(0).toQString(m_tmp1));
+            //note that we do not call "resolvePath()" to keep trailing slash
+            const QString &destPath = args.at(1).toQString(m_tmp2);
+            return copyFile(sourceFile, destPath);
+        }
+        return ReturnTrue;
+    }
+    case T_COPY_DIR: {
+        if (args.count() < 2) {
+            evalError(fL1S("copy_dir(sourceDile, destinationPath, [pattern]) requires two or three arguments."));
+            return ReturnFalse;
+        }
+
+        const QString &sourceDir = resolvePath(args.at(0).toQString(m_tmp1));
+        const QString &destPath = resolvePath(args.at(1).toQString(m_tmp2));
+        const QString &pattern = args.size() == 3 ? args.at(2).toQString(m_tmp3) : QLL("*");
+        if(qNot( QMakeInternal::build_pass ))
+            return copyDir(sourceDir, destPath, pattern);
+        return ReturnTrue;
     }
     case T_TOUCH: {
         if (args.count() != 2) {

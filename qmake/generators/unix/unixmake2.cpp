@@ -45,13 +45,13 @@ QT_BEGIN_NAMESPACE
 
 UnixMakefileGenerator::UnixMakefileGenerator() : MakefileGenerator(), include_deps(false)
 {
-
+    m_name = QByteArray("UnixMakefileGenerator");
 }
 
 void
-UnixMakefileGenerator::writePrlFile(QTextStream &t)
+UnixMakefileGenerator::writePrlFile(const QFileInfo &inf, QTextStream &t)
 {
-    MakefileGenerator::writePrlFile(t);
+    MakefileGenerator::writePrlFile(inf, t);
     // libtool support
     if(project->isActiveConfig("create_libtool") && project->first("TEMPLATE") == "lib") { //write .la
         writeLibtoolFile();
@@ -170,6 +170,7 @@ UnixMakefileGenerator::writeMakeParts(QTextStream &t)
 
     ProStringList &bundledFiles = project->values("QMAKE_BUNDLED_FILES");
 
+    t << "####### generator: qmake/generators/unix/unixmake2.cpp\n\n";
     t << "####### Compiler, tools and options\n\n";
     t << "CC            = " << var("QMAKE_CC") << endl;
     t << "CXX           = " << var("QMAKE_CXX") << endl;
@@ -225,7 +226,14 @@ UnixMakefileGenerator::writeMakeParts(QTextStream &t)
     /* files */
     t << "####### Files\n\n";
     // This is used by the dist target.
+#if 0
     t << "SOURCES       = " << fileVarList("SOURCES") << ' ' << fileVarList("GENERATED_SOURCES") << endl;
+#else
+    // TRACE/qmake Add: qremote support
+    // qremote requires MOC to be run first, which generates header file(s) included by source(s).
+    t << "SOURCES       = " << fileVarList("GENERATED_SOURCES") << ' ' << fileVarList("SOURCES") << endl;
+#endif
+
     if(do_incremental) {
         const ProStringList &objs = project->values("OBJECTS");
         const ProStringList &incrs = project->values("QMAKE_INCREMENTAL");

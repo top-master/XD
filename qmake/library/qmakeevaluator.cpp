@@ -38,10 +38,14 @@
 #include "qmakeparser.h"
 #include "qmakevfs.h"
 #include "ioutils.h"
+#include <qlibraryinfo.h>
+#include "library/constants.h"
+
+#include "udebug.h"
+#include "option.h"
 
 #include <qbytearray.h>
 #include <qdatetime.h>
-#include <qdebug.h>
 #include <qdir.h>
 #include <qfile.h>
 #include <qfileinfo.h>
@@ -72,6 +76,21 @@ using namespace QMakeInternal;
 QT_BEGIN_NAMESPACE
 
 #define fL1S(s) QString::fromLatin1(s)
+
+// TRACE/qmake Add 2-2: warning call stack.
+void QRequireStack::print() {
+    for (int i = QMakeInternal::statics.globalCallStack.size()-1; i >= 0; --i) {
+        const QMakeEvaluator::Location &current = *QMakeInternal::statics.globalCallStack.ptr(i);
+        QByteArray printablePath = current.line ? current.pro->fileName().toLocal8Bit() : QByteArray();
+        int line = current.line != 0xffff ? current.line : -1;
+        fprintf(stderr, "WARNING: %s:%d: from: %s : %d\n",
+                printablePath.constData(), //file name
+                line, //line no
+                printablePath.constData(),
+                line);
+    }
+}
+
 
 // we can't use QThread in qmake
 // this function is a merger of QThread::idealThreadCount from qthread_win.cpp and qthread_unix.cpp
@@ -136,7 +155,8 @@ QMakeBaseEnv::~QMakeBaseEnv()
 }
 
 namespace QMakeInternal {
-QMakeStatics statics;
+    bool build_pass = false;
+    QMakeStatics statics;
 }
 
 void QMakeEvaluator::initStatics()
@@ -849,12 +869,26 @@ QMakeEvaluator::VisitReturn QMakeEvaluator::visitProVariable(
     }
     const ProKey &varName = map(curr.first());
 
+    // TRACE/qmake Debug 1-2: any change to the variable reveals its location even if in mkspec
+#ifdef QMAKE_WATCH
+    QT_FINALLY([&] {
+        ProStringList::debugSkip = false;
+    });
+    ProStringList::debugSkip = true;
+    const bool echo = xdDebugChanges(varName.toQStringRef())
+            && Option::debug_level == 0;
+#   define xd_var(x) if(echo) (UDebug().printLocation(m_current.pro->fileName(), m_current.line).noQuotes() << varName.toQString() << x)
+#else
+#   define xd_var(x)
+#endif
+
     if (tok == TokReplace) {      // ~=
         // DEFINES ~= s/a/b/?[gqi]
 
         ProStringList varVal;
         if (expandVariableReferences(tokPtr, sizeHint, &varVal, true) == ReturnError)
             return ReturnError;
+        xd_var("~=" << varVal.toQStringList());
         const QString &val = varVal.at(0).toQString(m_tmp1);
         if (val.length() < 4 || val.at(0) != QLatin1Char('s')) {
             evalError(fL1S("The ~= operator can handle only the s/// function."));
@@ -891,6 +925,7 @@ QMakeEvaluator::VisitReturn QMakeEvaluator::visitProVariable(
         switch (tok) {
         default: // whatever - cannot happen
         case TokAssign:          // =
+            xd_var(" =" << varVal.toQStringList());
             varVal.removeEmpty();
             // FIXME: add check+warning about accidental value removal.
             // This may be a bit too noisy, though.
@@ -898,15 +933,18 @@ QMakeEvaluator::VisitReturn QMakeEvaluator::visitProVariable(
             debugMsg(2, "assigning");
             break;
         case TokAppendUnique:    // *=
+            xd_var("*=" << varVal.toQStringList());
             valuesRef(varName).insertUnique(varVal);
             debugMsg(2, "appending unique");
             break;
         case TokAppend:          // +=
             varVal.removeEmpty();
+            xd_var("+=" << varVal.toQStringList());
             valuesRef(varName) += varVal;
             debugMsg(2, "appending");
             break;
         case TokRemove:       // -=
+            xd_var("-=" << varVal.toQStringList());
             if (!m_cumulative) {
                 valuesRef(varName).removeEach(varVal);
             } else {
@@ -917,6 +955,11 @@ QMakeEvaluator::VisitReturn QMakeEvaluator::visitProVariable(
         }
     }
     traceMsg("%s := %s", dbgKey(varName), dbgStrList(values(varName)));
+
+#ifdef QMAKE_WATCH
+    if(varName == "QMAKE_WATCH")
+        DebugChangesSettings::instance = DebugChangesSettings(first(varName).toQStringRef());
+#endif
 
     if (varName == statics.strTEMPLATE)
         setTemplate();
@@ -1099,7 +1142,7 @@ bool QMakeEvaluator::prepareProject(const QString &inDir)
     if (m_option->do_cache) {
         QString conffile;
         QString cachefile = m_option->cachefile;
-        if (cachefile.isEmpty())  { //find it as it has not been specified
+        if (cachefile.isEmpty()) { //find it as it has not been specified
             if (m_outputDir.isEmpty())
                 goto no_cache;
             superdir = m_outputDir;
@@ -1142,6 +1185,15 @@ bool QMakeEvaluator::prepareProject(const QString &inDir)
             }
         } else {
             m_buildRoot = QFileInfo(cachefile).path();
+        }
+        // TRACE/qmake Add: warn the user about ".qmake.cache" files and "mkspecs" directory changes.
+        if(!cachefile.isEmpty() && !m_buildRoot.isEmpty()
+           && !QMakeInternal::statics.lastWarnings.contains(cachefile)) {
+            QMakeInternal::statics.lastWarnings << cachefile;
+            QDir dir(m_buildRoot + QLatin1String("/mkspecs"));
+            UDebug().printLocation(cachefile, 1).noQuotes()
+                << (dir.exists() ? "the \"mkspecs\" directory beside a \".qmake.cache\" file will be searched before any other \"mkspecs\" directory" : "")
+                << Constants::superfile_reason;
         }
         m_conffile = QDir::cleanPath(conffile);
         m_cachefile = QDir::cleanPath(cachefile);
@@ -1259,6 +1311,13 @@ bool QMakeEvaluator::loadSpec()
     m_qmakespec = QDir::cleanPath(qmakespec);
 
     if (!m_superfile.isEmpty()) {
+        // TRACE/qmake Add: warn the user about ".qmake.super" files.
+        if(!QMakeInternal::statics.lastWarnings.contains(m_superfile)) {
+            QMakeInternal::statics.lastWarnings << m_superfile;
+            UDebug().printLocation(m_superfile, 1).noQuotes()
+                    << Constants::superfile_reason;
+        }
+
         valuesRef(ProKey("_QMAKE_SUPER_CACHE_")) << ProString(m_superfile);
         if (evaluateFile(
                 m_superfile, QMakeHandler::EvalConfigFile, LoadProOnly|LoadHidden) != ReturnTrue)
@@ -1420,7 +1479,7 @@ QMakeEvaluator::VisitReturn QMakeEvaluator::visitProFile(
     m_profileStack.push(pro);
     valuesRef(ProKey("PWD")) = ProStringList(ProString(currentDirectory()));
     if (flags & LoadPreFiles) {
-        setupProject();
+        this->setupProject();
 
         for (ProValueMap::ConstIterator it = m_extraVars.constBegin();
              it != m_extraVars.constEnd(); ++it)
@@ -1761,6 +1820,8 @@ QMakeEvaluator::VisitReturn QMakeEvaluator::evaluateConditionalFunction(
 
     skipExpression(tokPtr);
     evalError(fL1S("'%1' is not a recognized test function.").arg(func.toQString(m_tmp1)));
+    // TRACE/qmake Add 2-4: warning call stack.
+    QRequireStack::print();
     return ReturnFalse;
 }
 
@@ -1788,6 +1849,8 @@ QMakeEvaluator::VisitReturn QMakeEvaluator::evaluateExpandFunction(
 
     skipExpression(tokPtr);
     evalError(fL1S("'%1' is not a recognized replace function.").arg(func.toQString(m_tmp1)));
+    // TRACE/qmake Add 2-5: warning call stack.
+    QRequireStack::print();
     return ReturnFalse;
 }
 
@@ -1835,6 +1898,11 @@ static bool isFunctParam(const ProKey &variableName)
 ProValueMap *QMakeEvaluator::findValues(const ProKey &variableName, ProValueMap::Iterator *rit)
 {
     ProValueMapStack::Iterator vmi = m_valuemapStack.end();
+    // TRACE/qmake improve: don't fetch begin in a loop #1
+    // (qmake is single thread, hence begin does not change anyway).
+    ProValueMapStack::Iterator begin = m_valuemapStack.begin();
+
+    // Loops until `begin` (unless `variableName` has function parameter syntax).
     for (bool first = true; ; first = false) {
         --vmi;
         ProValueMap::Iterator it = (*vmi).find(variableName);
@@ -1844,7 +1912,7 @@ ProValueMap *QMakeEvaluator::findValues(const ProKey &variableName, ProValueMap:
             *rit = it;
             return &(*vmi);
         }
-        if (vmi == m_valuemapStack.begin())
+        if (vmi == begin)
             break;
         if (first && isFunctParam(variableName))
             break;
@@ -1852,35 +1920,52 @@ ProValueMap *QMakeEvaluator::findValues(const ProKey &variableName, ProValueMap:
     return 0;
 }
 
+// Note: this throws if stack-count is zero, which's never the case.
 ProStringList &QMakeEvaluator::valuesRef(const ProKey &variableName)
 {
-    ProValueMap::Iterator it = m_valuemapStack.top().find(variableName);
-    if (it != m_valuemapStack.top().end()) {
+    ProStringList *r = Q_NULLPTR;
+    // Skip end to get top stak i.e. `m_valuemapStack.top()`.
+    ProValueMapStack::Iterator vmi = --m_valuemapStack.end();
+    // Searches in top stack.
+    ProValueMap::Iterator it = (*vmi).find(variableName);
+    if (it != (*vmi).end()) {
         if (it->constBegin() == statics.fakeValue.constBegin())
             it->clear();
-        return *it;
+        r = &*it;
+        goto posEndFunc;
     }
+    // Search in all other stacks, except for test/replace function params.
     if (!isFunctParam(variableName)) {
-        ProValueMapStack::Iterator vmi = m_valuemapStack.end();
-        if (--vmi != m_valuemapStack.begin()) {
+        if (vmi != m_valuemapStack.begin()) { //if not only one stack
             do {
-                --vmi;
+                --vmi; // Skips top stack.
                 ProValueMap::ConstIterator it = (*vmi).constFind(variableName);
                 if (it != (*vmi).constEnd()) {
                     ProStringList &ret = m_valuemapStack.top()[variableName];
                     if (it->constBegin() != statics.fakeValue.constBegin())
                         ret = *it;
-                    return ret;
+                    r = &ret;
+                    goto posEndFunc;
                 }
             } while (vmi != m_valuemapStack.begin());
         }
     }
-    return m_valuemapStack.top()[variableName];
+    // If not found, creates variable in top stack.
+    r = &m_valuemapStack.top()[variableName];
+
+posEndFunc:
+    // TRACE/qmake Debug 1-3: reveal runtime changes to project variables.
+#ifdef QMAKE_WATCH
+    ProStringList::debugList[r] = variableName;
+#endif
+    return *r;
 }
 
 ProStringList QMakeEvaluator::values(const ProKey &variableName) const
 {
     ProValueMapStack::ConstIterator vmi = m_valuemapStack.constEnd();
+    // TRACE/qmake improve: don't fetch begin in a loop #2
+    ProValueMapStack::ConstIterator begin = m_valuemapStack.constBegin();
     for (bool first = true; ; first = false) {
         --vmi;
         ProValueMap::ConstIterator it = (*vmi).constFind(variableName);
@@ -1889,7 +1974,7 @@ ProStringList QMakeEvaluator::values(const ProKey &variableName) const
                 break;
             return *it;
         }
-        if (vmi == m_valuemapStack.constBegin())
+        if (vmi == begin)
             break;
         if (first && isFunctParam(variableName))
             break;
@@ -2050,13 +2135,24 @@ void QMakeEvaluator::message(int type, const QString &msg) const
                 m_current.line != 0xffff ? m_current.line : -1);
 }
 
+void QMakeEvaluator::messageAt(int type, const QString &msg, const QString &filePath, int lineNumber) const
+{
+    if ( ! m_skipLevel)
+        m_handler->message(type, msg, filePath, lineNumber);
+}
+
 #ifdef PROEVALUATOR_DEBUG
 void QMakeEvaluator::debugMsgInternal(int level, const char *fmt, ...) const
 {
     va_list ap;
 
     if (level <= m_debugLevel) {
-        fprintf(stderr, "DEBUG %d: ", level);
+        // TRACE/qmake improve: ensures debug-logs are more visible #2
+        // old code:
+        // ```
+        // fprintf(stderr, "DEBUG %d: ", level);
+        // ```
+        fprintf(stderr, "WARNING: ");
         va_start(ap, fmt);
         vfprintf(stderr, fmt, ap);
         va_end(ap);
@@ -2069,11 +2165,16 @@ void QMakeEvaluator::traceMsgInternal(const char *fmt, ...) const
     va_list ap;
 
     if (!m_current.pro)
-        fprintf(stderr, "DEBUG 1: ");
+        // TRACE/qmake improve: ensures debug-logs are more visible #3,
+        // old code:
+        // ```
+        // fprintf(stderr, "DEBUG 1: ");
+        // ```
+        fprintf(stderr, "WARNING: ");
     else if (m_current.line <= 0)
-        fprintf(stderr, "DEBUG 1: %s: ", qPrintable(m_current.pro->fileName()));
+        fprintf(stderr, "WARNING: %s: ", qPrintable(m_current.pro->fileName()));
     else
-        fprintf(stderr, "DEBUG 1: %s:%d: ", qPrintable(m_current.pro->fileName()), m_current.line);
+        fprintf(stderr, "WARNING: %s:%d: ", qPrintable(m_current.pro->fileName()), m_current.line);
     va_start(ap, fmt);
     vfprintf(stderr, fmt, ap);
     va_end(ap);

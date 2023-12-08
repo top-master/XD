@@ -370,6 +370,41 @@ static QString ProStringList_join(const ProStringList &this_, const QChar *sep, 
     return res;
 }
 
+#ifdef QMAKE_WATCH
+bool ProStringList::debugSkip = false;
+QMap<ProStringList *, ProKey> ProStringList::debugList;
+const char *ProStringList::debugFilePath = 0;
+int ProStringList::debugFileLine = -1;
+
+void ProStringList::printDebug(const ProStringList &v, int type)
+{
+    if(v.isEmpty())
+        return;
+    ProKey key = debugList.value(this);
+    if(!debugSkip && !key.isEmpty() && xdDebugChanges(key.toQStringRef())) {
+        UDebug dbg;
+        dbg << key.toQStringRef().toLocal8Bit().constData()
+            << reinterpret_cast<const char *>(&type)
+            << v.toQStringList();
+        dbg.printStack(dbg.toString(), 3);
+    }
+}
+
+void ProStringList::printDebug(const ProString &v, int type)
+{
+    if(v.isEmpty())
+        return;
+    ProKey key = debugList.value(this);
+    if(!key.isEmpty() && xdDebugChanges(key.toQStringRef())) {
+        UDebug dbg;
+        dbg << key.toQStringRef().toLocal8Bit().constData()
+            << reinterpret_cast<const char *>(&type)
+            << v.toQStringRef().toUtf8().data();
+        dbg.printStack(dbg.toString(), 3);
+    }
+}
+#endif //QMAKE_WATCH
+
 QString ProStringList::join(const QString &sep) const
 {
     return ProStringList_join(*this, sep.constData(), sep.size());

@@ -488,6 +488,19 @@ bool Option::postProcessProject(QMakeProject *project)
         Option::mkfile::cachefile_depth =
                 Option::output_dir.mid(project->buildRoot().length()).count('/');
 
+    // TRACE/qmake Add: support empty TARGET,
+    // note: but we may remove this Qt4 support later, in which case,
+    // then the user should never set `TARGET` manually to nothing,
+    // and should never expect it gets the `*.pro` file's basename as default value.
+#if 1
+    ProStringList &target = project->values(ProKey("TARGET"));
+    if(target.isEmpty() && (project->projectFile() != QLatin1String("-"))) {
+        ProString str(QFileInfo(project->projectFile()).baseName());
+        UDebug().printLocation(project->projectFile(), 1) << "Project removes \"TARGET\" variable auto repaired to:" << str.toQStringRef();
+        target = str;
+    }
+#endif
+
     return true;
 }
 
@@ -559,7 +572,12 @@ void debug_msg_internal(int level, const char *fmt, ...)
 {
     if(Option::debug_level < level)
         return;
-    fprintf(stderr, "DEBUG %d: ", level);
+    // TRACE/qmake improve: ensures debug-logs are more visible #1,
+    // at least in Qt Creator IDE's "Issues" section, old code:
+    // ```
+    // fprintf(stderr, "DEBUG %d: ", level);
+    // ```
+    fprintf(stderr, "WARNING: ");
     {
         va_list ap;
         va_start(ap, fmt);
@@ -587,9 +605,11 @@ void EvalHandler::message(int type, const QString &msg, const QString &fileName,
 {
     QString pfx;
     if ((type & QMakeHandler::CategoryMask) == QMakeHandler::WarningMessage) {
-        int code = (type & QMakeHandler::CodeMask);
-        if ((code == QMakeHandler::WarnLanguage && !(Option::warn_level & WarnParser))
-            || (code == QMakeHandler::WarnDeprecated && !(Option::warn_level & WarnDeprecated)))
+        // TRACE/qmake improve: QMakeHandler warn flags should match `Option::warn_level`.
+        Q_STATIC_ASSERT(QMakeHandler::WarnLanguage == ::WarnParser);
+        Q_STATIC_ASSERT(QMakeHandler::WarnLogic == ::WarnLogic);
+        Q_STATIC_ASSERT(QMakeHandler::WarnDeprecated == ::WarnDeprecated);
+        if(qNot( (type & QMakeHandler::CodeMask) & Option::warn_level ))
             return;
         pfx = QString::fromLatin1("WARNING: ");
     }

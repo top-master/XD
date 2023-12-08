@@ -87,13 +87,15 @@ struct SourceDependChildren;
 struct SourceFile {
     SourceFile() : deps(0), type(QMakeSourceFileInfo::TYPE_UNKNOWN),
                    mocable(0), traversed(0), exists(1),
-                   moc_checked(0), dep_checked(0), included_count(0) { }
+                   moc_checked(0), dep_checked(0), included_count(0)
+    { }
     ~SourceFile();
     QMakeLocalFileName file;
     SourceDependChildren *deps;
     QMakeSourceFileInfo::SourceFileType type;
     uint mocable : 1, traversed : 1, exists : 1;
     uint moc_checked : 1,  dep_checked : 1;
+    uint unused : 3;
     uchar included_count;
 };
 struct SourceDependChildren {
@@ -245,8 +247,9 @@ QMakeSourceFileInfo::included(const QString &file)
     if (!files)
         return 0;
 
-    if(SourceFile *node = files->lookupFile(QMakeLocalFileName(file)))
+    if(SourceFile *node = files->lookupFile(QMakeLocalFileName(file))) {
         return node->included_count;
+    }
     return 0;
 }
 
@@ -504,6 +507,7 @@ static int scanPastString(char *buffer, int buffer_len, int offset, int *lines)
     return offset;
 }
 
+// TRACE/qmake mark: resolve "#include" directives
 bool QMakeSourceFileInfo::findDeps(SourceFile *file)
 {
     if(file->dep_checked || file->type == TYPE_UNKNOWN)
@@ -609,6 +613,8 @@ bool QMakeSourceFileInfo::findDeps(SourceFile *file)
                         if (buffer_len >= x + 9 && buffer[x] == 'i' &&
                             !strncmp(buffer + x, "impldecl", 8)) {
                             for (x += 8; x < buffer_len && buffer[x] != '='; ++x) {} // skip
+                            if (x >= buffer_len)
+                                break;
                             while (++x < buffer_len && (buffer[x] == '\t' || buffer[x] == ' ')) {} // skip
                             char quote = 0;
                             if (x < buffer_len && (buffer[x] == '\'' || buffer[x] == '"')) {
@@ -814,6 +820,7 @@ bool QMakeSourceFileInfo::findDeps(SourceFile *file)
             if(!includes)
                 includes = new SourceFiles;
             SourceFile *dep = includes->lookupFile(inc);
+
             if(!dep) {
                 bool exists = false;
                 QMakeLocalFileName lfn(inc);
@@ -837,6 +844,7 @@ bool QMakeSourceFileInfo::findDeps(SourceFile *file)
                             }
                         }
                     }
+                    //at last search INCLUDEPATH
                     if(!exists) { //heuristic lookup
                         lfn = findFileForDep(QMakeLocalFileName(inc), file->file);
                         if((exists = !lfn.isNull()))
@@ -857,6 +865,7 @@ bool QMakeSourceFileInfo::findDeps(SourceFile *file)
                     dep->exists = exists;
                 }
             }
+
             if(dep && dep->file != file->file) {
                 dep->included_count++;
                 if(dep->exists) {
@@ -883,6 +892,7 @@ static bool isCWordChar(char c) {
         || (c >= '0' && c <= '9');
 }
 
+// TRACE/qmake mark 2: scan header files for "Q_OBJECT" macro.
 bool QMakeSourceFileInfo::findMocs(SourceFile *file)
 {
     if(file->moc_checked)

@@ -92,6 +92,10 @@ bin/moc*
 bin/makeqpf*
 bin/pixeltool*
 bin/qmake*
+# Windows.
+!bin/qmake.exe
+# Linux.
+!bin/qmake
 bin/qdoc*
 bin/qt3to4*
 bin/qttracereplay*

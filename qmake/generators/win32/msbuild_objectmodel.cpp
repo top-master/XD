@@ -628,6 +628,8 @@ void VCXProjectWriter::write(XmlOutput &xml, VCProject &tool)
             << tagValue("Platform", tool.SingleProjects.at(i).PlatformName)
             << closetag();
         isWinRT = isWinRT || tool.SingleProjects.at(i).Configuration.WinRT;
+        // TRACE/qmake BugFix: operation on 'isWinPhone' may be undefined,
+        // old code `isWinPhone = isWinPhone = tool.SingleProjects.at(i).Configuration.WinPhone;`.
         isWinPhone = isWinPhone || tool.SingleProjects.at(i).Configuration.WinPhone;
     }
 

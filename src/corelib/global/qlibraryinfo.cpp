@@ -62,7 +62,7 @@ extern void qDumpCPUFeatures(); // in qsimd.cpp
 
 struct QLibrarySettings
 {
-    QLibrarySettings();
+    QLibrarySettings() { load(); }
     void load();
 
     QScopedPointer<QSettings> settings;
@@ -111,11 +111,6 @@ public:
 
 static const char platformsSection[] = "Platforms";
 
-QLibrarySettings::QLibrarySettings()
-{
-    load();
-}
-
 void QLibrarySettings::load()
 {
     // If we get any settings here, those won't change when the application shows up.
@@ -162,7 +157,9 @@ QSettings *QLibraryInfoPrivate::findConfiguration()
         return new QSettings(qtconfig, QSettings::IniFormat);
 #ifdef QT_BUILD_QMAKE
     qtconfig = qmake_libraryInfoFile();
-    if (QFile::exists(qtconfig))
+    // TRACE/qmake BugFix 1: qmake should find its way in the bin folder,
+    // even without `bin/qt.conf` file, instead of crashing.
+    // if (QFile::exists(qtconfig)) // old code
         return new QSettings(qtconfig, QSettings::IniFormat);
 #else
 #ifdef Q_OS_DARWIN
@@ -374,7 +371,12 @@ QLibraryInfo::isDebugBuild()
 static const struct {
     char key[19], value[13];
 } qtConfEntries[] = {
+    // TRACE/qmake BugFix 2: qmake should know its in the bin folder.
+#ifdef QT_BUILD_QMAKE
+    { "Prefix", ".." },
+#else
     { "Prefix", "." },
+#endif
     { "Documentation", "doc" }, // should be ${Data}/doc
     { "Headers", "include" },
     { "Libraries", "lib" },
@@ -402,6 +404,7 @@ static const struct {
     { "HostPrefix", "" },
 #endif
 };
+
 
 /*!
   Returns the location specified by \a loc.
@@ -485,8 +488,11 @@ QLibraryInfo::rawLocation(LibraryLocation loc, PathGroup group)
         }
 #endif
 
-        if(!key.isNull()) {
-            QSettings *config = QLibraryInfoPrivate::configuration();
+        // TRACE/corelib BugFix: check `config` for null.
+        QSettings *config = Q_NULLPTR;
+        if ( ! key.isNull()
+            && (config = QLibraryInfoPrivate::configuration())
+        ) {
             config->beginGroup(QLatin1String(
 #ifdef QT_BUILD_QMAKE
                    group == DevicePaths ? "DevicePaths" :

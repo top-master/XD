@@ -43,6 +43,8 @@
 #include <qstringlist.h>
 #include <qfile.h>
 
+#include <udebug.h>
+
 QT_BEGIN_NAMESPACE
 
 #define QMAKE_VERSION_STR "3.0"
@@ -205,6 +207,9 @@ private:
 
 inline QString fixEnvVariables(const QString &x) { return Option::fixString(x, Option::FixEnvVars); }
 inline QStringList splitPathList(const QString &paths) { return paths.isEmpty() ? QStringList() : paths.split(Option::globals->dirlist_sep); }
+
+// TRACE/qmage Add: missing header declaration.
+QString qmake_libraryInfoFile();
 
 QT_END_NAMESPACE
 

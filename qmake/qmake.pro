@@ -9,6 +9,18 @@ DEFINES += \
     QT_BUILD_QMAKE \
     PROEVALUATOR_FULL
 
+## Uncomment below to build with watch mode,
+## which will log a warning for each change of variables (in qmake scripts),
+## where "QMAKE_WATCH" filters what gets logged by variable-name.
+#DEFINES += QMAKE_WATCH
+contains(DEFINES, QMAKE_WATCH) {
+    win*: LIBS += -lDbgHelp
+    !CONFIG(debug, debug|release) {
+        !build_pass: warning(QMAKE_WATCH should not be enabled for release)
+    }
+}
+DEFINES += PROJECT_FOLDER=\\\"$$replace(PWD,\\,/)\\\"
+
 VPATH += \
     ../src/corelib/global \
     ../src/corelib/tools \

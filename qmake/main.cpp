@@ -47,6 +47,9 @@
 #include <sys/types.h>
 #include <sys/stat.h>
 
+#include "manualskip.h"
+#include <qlibraryinfo.h>
+
 QT_BEGIN_NAMESPACE
 
 #ifdef Q_OS_WIN
@@ -403,7 +406,127 @@ int runQMake(int argc, char **argv)
 
 QT_END_NAMESPACE
 
+namespace QMakeInternal {
+    extern bool build_pass; //defined in qmake/library/qmakeevaluator.cpp
+}
+
+// Ensures Debug-Logs are not used unless Debugger is attached.
+static void MsgHandler(QtMsgType t, const char* str) {
+    Q_UNUSED(t)
+    if(QMakeInternal::build_pass)
+        return;
+
+    // TRACE/qmake BugFix 16: replaced Debug-Logs with Console-Prints,
+    // because maybe there is a Debug-Listener that does not act so fast, or,
+    // maybe it has crashed and is under debug, in which case,
+	// any debug print from this/any program will block this/that program,
+	// until said Listener runs normally again or is closed.
+#if defined(QT_DEBUG) && defined(Q_OS_WIN) && 0
+    if(IsDebuggerPresent()) {
+        qWinMsgHandler(t, str);
+        return;
+    }
+#endif
+    //use default console prints
+    fprintf(stderr, "%s\n", str);
+    //if we do not flush we may get an unexpected "\n" after every 4,095 bytes
+    fflush(stderr);
+}
+
 int main(int argc, char **argv)
 {
+    qInstallMsgHandler(MsgHandler);
+    UDebug::init();
+
+    if(skipOnKey(QLatin1String("at start up!"))) {
+        return 0;
+    }
+
     return QT_PREPEND_NAMESPACE(runQMake)(argc, argv);
 }
+
+inline QString findMacroRoot() {
+    QString s = QString::fromLocal8Bit((const char *)__FILE__);
+    s.chop(8); //size of "main.cpp" is 8
+    return QDir::toNativeSeparators(s);
+}
+inline QString findBuildRoot() {
+    QString s = QString::fromLocal8Bit((const char *)PROJECT_FOLDER);
+    s = QDir::toNativeSeparators(s);
+    const QChar separatpr = QDir::separator();
+    if ( ! s.endsWith(separatpr)) {
+        s += separatpr;
+    }
+    return s;
+}
+inline QString validRoot() {
+    //see "qmake_libraryInfoFile()" for more
+    return QDir::toNativeSeparators( QLibraryInfo::location(QLibraryInfo::BinariesPath) + QLatin1String("/../src/tools/qmake"));
+}
+
+#ifdef WIN32
+static const Qt::CaseSensitivity fileCaseSensitivity = Qt::CaseInsensitive;
+#else
+static const Qt::CaseSensitivity fileCaseSensitivity = Qt::CaseSensitive;
+#endif
+
+QString xdTranslatePath(const char *filePath_)
+{
+    const QString &filePath = QDir::toNativeSeparators(QString::fromLocal8Bit(filePath_));
+
+    static QString macroRoot = findMacroRoot();
+    static QString buildRoot = findBuildRoot();
+    static QString root = validRoot();
+    if (filePath.startsWith(macroRoot, fileCaseSensitivity)) {
+        return root.append(filePath.midRef(macroRoot.length() - 1));
+    }
+    if (filePath.startsWith(buildRoot, fileCaseSensitivity)) {
+        return root.append(filePath.midRef(buildRoot.length() - 1));
+    }
+    return filePath;
+}
+
+#ifdef QMAKE_WATCH
+DebugChangesSettings DebugChangesSettings::instance;
+
+DebugChangesSettings::DebugChangesSettings(const QStringRef &QMAKE_WATCH_)
+    : name(QMAKE_WATCH_.toLatin1())
+    , caseSensitivity(Qt::CaseInsensitive)
+    , operation(&DebugChangesSettings::equals)
+    , build_pass(false)
+{
+posFindOperation:
+    if(name.isEmpty()) {
+        operation = &DebugChangesSettings::alwaysTrue;
+        return;
+    }
+
+    char c = *(name.constEnd()-1);
+    switch (c) {
+    case '>': operation = &DebugChangesSettings::startsWith;
+        break;
+    case '<': operation = &DebugChangesSettings::endsWith;
+        break;
+    case '?': operation = &DebugChangesSettings::contains;
+        break;
+    case '!': operation = &DebugChangesSettings::equals;
+        break;
+    case '=': caseSensitivity = Qt::CaseSensitive;
+        break;
+    case '*': build_pass = true;
+        break;
+    default:
+        return;
+    }
+
+    name.chop(1);
+    goto posFindOperation;
+}
+
+bool xdDebugChanges(const QStringRef &key)
+{
+    if(!DebugChangesSettings::instance.build_pass && QMakeProject::build_pass())
+        return false;
+    return DebugChangesSettings::instance.matchs(key);
+}
+#endif

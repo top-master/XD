@@ -35,6 +35,7 @@
 #define QMAKE_GLOBAL_H
 
 #include <qglobal.h>
+#include "debuger.h"
 
 #if defined(QMAKE_AS_LIBRARY)
 #  if defined(QMAKE_LIBRARY)

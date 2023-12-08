@@ -44,15 +44,7 @@
 
 QT_BEGIN_NAMESPACE
 
-#ifdef Q_OS_WIN32
-#define QT_POPEN _popen
-#define QT_POPEN_READ "rb"
-#define QT_PCLOSE _pclose
-#else
-#define QT_POPEN popen
-#define QT_POPEN_READ "r"
-#define QT_PCLOSE pclose
-#endif
+#include "../process.h"
 
 struct ReplaceExtraCompilerCacheKey;
 
@@ -73,7 +65,12 @@ public:
     // We can't make it visible to VCFilter in VS2008 except by making it public or directly friending it.
     enum ReplaceFor { NoShell, LocalShell, TargetShell };
 
+    inline const char *name() { return (const char *)m_name; }
+
 protected:
+    QByteArray m_name;
+    QMakeProject *project;
+
     enum TARG_MODE { TARG_UNIX_MODE, TARG_MAC_MODE, TARG_WIN_MODE } target_mode;
 
     ProStringList createObjectList(const ProStringList &sources);
@@ -132,7 +129,6 @@ protected:
     QMakeLocalFileName fixPathForFile(const QMakeLocalFileName &, bool);
     QMakeLocalFileName findFileForDep(const QMakeLocalFileName &, const QMakeLocalFileName &);
     QFileInfo findFileInfo(const QMakeLocalFileName &);
-    QMakeProject *project;
 
     //escape
     virtual QString escapeFilePath(const QString &path) const { return path; }
@@ -188,7 +184,11 @@ protected:
 
     void filterIncludedFiles(const char *);
     void processSources() {
-        filterIncludedFiles("SOURCES");
+        // TRACE/qmake BugFix: user should never add files #included in other files to SOURCES
+        // because this does not support macros:
+        // ```
+        // filterIncludedFiles("SOURCES");
+        // ```
         filterIncludedFiles("GENERATED_SOURCES");
     }
 
@@ -200,7 +200,7 @@ protected:
     QString prlFileName(bool fixify=true);
     void writePrlFile();
     bool processPrlFile(QString &);
-    virtual void writePrlFile(QTextStream &);
+    virtual void writePrlFile(const QFileInfo &, QTextStream &);
 
     //make sure libraries are found
     virtual bool findLibraries(bool linkPrl, bool mergeLflags);

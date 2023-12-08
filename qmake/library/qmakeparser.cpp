@@ -294,6 +294,39 @@ void QMakeParser::finalizeHashStr(ushort *buf, uint len)
     buf[-2] = (ushort)(hash >> 16);
 }
 
+static inline QString getLastWord(const ushort *lineStart, const ushort *cur) {
+    const ushort *begin = cur;
+    ushort c;
+    //find last space to skip current word
+    while (begin > lineStart) {
+        c = *begin;
+        if(c == ' ' || c == '\t' )
+            break;
+        --begin;
+    }
+    if(begin > lineStart) {
+        //skip multi space
+        while (begin > lineStart) {
+            c = *begin;
+            if(c != ' ' && c != '\t' )
+                break;
+            --begin;
+        }
+        //find start of last word
+        cur = begin;
+        while (begin > lineStart) {
+            c = *begin;
+            if(c == ' ' || c == '\t' ) {
+                ++begin;
+                break;
+            }
+            --begin;
+        }
+        return QString::fromRawData((const QChar *)begin, cur - begin + 1);
+    }
+    return QString();
+}
+
 void QMakeParser::read(ProFile *pro, const QString &in, int line, SubGrammar grammar)
 {
     m_proFile = pro;
@@ -420,6 +453,9 @@ void QMakeParser::read(ProFile *pro, const QString &in, int line, SubGrammar gra
         putTok(tokPtr, TokValueTerminator); \
     } while (0)
 
+    // TRACE/qmake improve: remember line starts #1.
+    const ushort *start;
+
     const ushort *end; // End of this line
     const ushort *cptr; // Start of next line
     bool lineCont;
@@ -434,6 +470,9 @@ void QMakeParser::read(ProFile *pro, const QString &in, int line, SubGrammar gra
     }
 
     forever {
+        // TRACE/qmake improve: remember line starts #2,
+		// Stores current line start.
+        start = cur;
         ushort c;
 
         // First, skip leading whitespace
@@ -495,15 +534,27 @@ void QMakeParser::read(ProFile *pro, const QString &in, int line, SubGrammar gra
             --end;
         }
 
+
             // Finally, do the tokenization
             ushort tok, rtok;
             int tlen;
+            int tokenIndex = 0;
           newWord:
+
+            // Skips any space and tab
+            // (qmake supports only UTF8 and Latin1).
             do {
                 if (cur == end)
                     goto lineEnd;
                 c = *cur++;
             } while (c == ' ' || c == '\t');
+
+            // TRACE/qmake improve: remember line starts #3,
+            // moves current-line's start to be at line's first token/word.
+			if (tokenIndex == 0) {	
+                start = cur - 1;
+            }
+
             forever {
                 if (c == '$') {
                     if (*cur == '$') { // may be EOF, EOL, WS, '#' or '\\' if past end
@@ -683,9 +734,13 @@ void QMakeParser::read(ProFile *pro, const QString &in, int line, SubGrammar gra
                     } else if (c == '(') {
                         FLUSH_LHS_LITERAL();
                         if (wordCount != 1) {
-                            if (wordCount)
-                                parseError(fL1S("Extra characters after test expression."));
-                            else
+                            if (wordCount) {
+                                QString msg = fL1S("Extra characters after test expression.");
+                                QString lastWord = getLastWord(start, cur);
+                                if(lastWord.size() <= 2 && lastWord.startsWith(QLatin1Char('&')))
+                                    msg += fL1S(" may be you wanted to use and operator \":\" instate of \"&\"");
+                                parseError(msg);
+                            } else
                                 parseError(fL1S("Opening parenthesis without prior test name."));
                             ptr = buf; // Put empty function name
                         }

@@ -123,6 +123,7 @@ Q_DECLARE_TYPEINFO(QLatin1String, Q_MOVABLE_TYPE);
 
 // Qt 4.x compatibility
 typedef QLatin1String QLatin1Literal;
+typedef QLatin1Literal QLL;
 
 
 typedef QTypedArrayData<ushort> QStringData;
@@ -547,6 +548,7 @@ public:
     static QString fromUtf16(const ushort *, int size = -1);
     static QString fromUcs4(const uint *, int size = -1);
     static QString fromRawData(const QChar *, int size);
+    static inline QString fromRawData(const QStringRef &);
 
 #if defined(Q_COMPILER_UNICODE_STRINGS)
     static QString fromUtf16(const char16_t *str, int size = -1)
@@ -1409,6 +1411,10 @@ public:
     QStringRef right(int n) const Q_REQUIRED_RESULT;
     QStringRef mid(int pos, int n = -1) const Q_REQUIRED_RESULT;
 
+    inline void chop(int n) { if(n > 0) m_size = qMax(m_size - n, 0); }
+    inline void resize(int size)
+        { if(m_string) m_size = qBound(0, size, m_string->size() - m_position); }
+
     void truncate(int pos) Q_DECL_NOTHROW { m_size = qBound(0, pos, m_size); }
 
     bool startsWith(const QString &s, Qt::CaseSensitivity cs = Qt::CaseSensitive) const;
@@ -1492,6 +1498,9 @@ public:
     double toDouble(bool *ok = Q_NULLPTR) const;
 };
 Q_DECLARE_TYPEINFO(QStringRef, Q_PRIMITIVE_TYPE);
+
+inline QString QString::fromRawData(const QStringRef &other)
+{ return QString::fromRawData(other.constData(), other.size()); }
 
 inline QStringRef &QStringRef::operator=(const QString *aString)
 { m_string = aString; m_position = 0; m_size = aString?aString->size():0; return *this; }

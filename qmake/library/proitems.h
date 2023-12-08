@@ -68,6 +68,11 @@ class ProKey;
 class ProStringList;
 class ProFile;
 
+/**
+ * Raw-text passed by qmake-script.
+ *
+ * Tags; Copyable, Movable.
+ */
 class ProString {
 public:
     ProString();
@@ -80,6 +85,7 @@ public:
     ProString &setSource(const ProString &other) { m_file = other.m_file; return *this; }
     ProString &setSource(const ProFile *pro) { m_file = pro; return *this; }
     const ProFile *sourceFile() const { return m_file; }
+    const QString fileName() const;
 
     ProString &prepend(const ProString &other);
     ProString &append(const ProString &other, bool *pending = 0);
@@ -226,14 +232,45 @@ inline bool operator!=(const QString &that, const ProString &other)
 QTextStream &operator<<(QTextStream &t, const ProString &str);
 
 class ProStringList : public QVector<ProString> {
+    typedef QVector<ProString> super;
 public:
+#if defined(QMAKE_WATCH)
+    static bool debugSkip;
+    static QMap<ProStringList *, ProKey> debugList;
+    static const char *debugFilePath;
+    static int debugFileLine;
+    void printDebug(const ProStringList &v, int type);
+    void printDebug(const ProString &v, int type);
+    inline ProStringList &operator=(const ProStringList &v)
+        { printDebug(v, '='); return reinterpret_cast<ProStringList &>(super::operator =(v)); }
+    inline ProStringList &operator+=(const ProStringList &v)
+        { printDebug(v, '+'); return reinterpret_cast<ProStringList &>(super::operator +=(v)); }
+    inline ProStringList &operator+=(const ProString &v)
+        { printDebug(v, '+'); return reinterpret_cast<ProStringList &>(super::operator +=(v)); }
+    inline ProStringList &operator<<(const ProString &str)
+        { printDebug(str, ('<' << 8) + '<'); super::operator<<(str); return *this; }
+    inline ProStringList &operator<<(const ProStringList &v)
+        { printDebug(v, ('<' << 8) + '<'); return reinterpret_cast<ProStringList &>(super::operator <<(v)); }
+
+    inline void append(const ProString &v)
+        { printDebug(v, isEmpty() ? '=' : '+'); super::append(v); }
+
+    inline void insert(int i, const ProString &v)
+        { printDebug(v, isEmpty() ? '=' : '*'); return super::insert(i, v); }
+    inline void insert(int i, int n, const ProString &v)
+        { printDebug(v, isEmpty() ? '=' : '*'); return super::insert(i, n, v); }
+    inline iterator insert(iterator before, const ProString &v)
+        { printDebug(v, isEmpty() ? '=' : '*'); return super::insert(before, v); }
+    inline iterator insert(iterator before, int n, const ProString &v)
+        { printDebug(v, isEmpty() ? '=' : '*'); return super::insert(before, n, v); }
+#else
+    ProStringList &operator<<(const ProString &str)
+        { super::operator<<(str); return *this; }
+#endif
     ProStringList() {}
     ProStringList(const ProString &str) { *this << str; }
     explicit ProStringList(const QStringList &list);
     QStringList toQStringList() const;
-
-    ProStringList &operator<<(const ProString &str)
-        { QVector<ProString>::operator<<(str); return *this; }
 
     int length() const { return size(); }
 
@@ -259,7 +296,239 @@ Q_DECLARE_TYPEINFO(ProStringList, Q_MOVABLE_TYPE);
 inline ProStringList operator+(const ProStringList &one, const ProStringList &two)
     { ProStringList ret = one; ret += two; return ret; }
 
+#if !defined(QMAKE_WATCH)
 typedef QHash<ProKey, ProStringList> ProValueMap;
+#else
+
+class ProValueMap
+{
+    typedef QHash<ProKey, ProStringList *> Hash;
+    Hash list;
+
+public:
+    ~ProValueMap() {
+        if(list.isDetached())
+            clear();
+    }
+
+    class const_iterator;
+    class iterator : private Hash::iterator
+    {
+        friend class const_iterator;
+
+        friend class ProValueMap;
+        inline iterator(Hash::iterator it)
+            : Hash::iterator(it) {}
+    public:
+        typedef std::bidirectional_iterator_tag iterator_category;
+        typedef qptrdiff difference_type;
+        typedef ProStringList value_type;
+        typedef ProStringList *pointer;
+        typedef ProStringList &reference;
+
+        inline iterator() { }
+        explicit inline iterator(void *node) : Hash::iterator(node) { }
+
+        inline const ProKey &key() const { return Hash::iterator::key(); }
+        inline ProStringList &value() const { return *Hash::iterator::value(); }
+        inline ProStringList &operator*() const { return *Hash::iterator::value(); }
+        inline ProStringList *operator->() const { return Hash::iterator::value(); }
+        inline bool operator==(const iterator &o) const { return Hash::iterator::operator ==(o); }
+        inline bool operator!=(const iterator &o) const { return Hash::iterator::operator !=(o); }
+
+        inline iterator &operator++() {
+            Hash::iterator::operator ++();
+            return *this;
+        }
+        inline iterator operator++(int) {
+            iterator r = *this;
+            Hash::iterator::operator ++();
+            return r;
+        }
+        inline iterator &operator--() {
+            Hash::iterator::operator --();
+            return *this;
+        }
+        inline iterator operator--(int) {
+            iterator r = *this;
+            Hash::iterator::operator --();
+            return r;
+        }
+        inline iterator operator+(int j) const
+        { iterator r = *this; if (j > 0) while (j--) ++r; else while (j++) --r; return r; }
+        inline iterator operator-(int j) const { return operator+(-j); }
+        inline iterator &operator+=(int j) { return *this = *this + j; }
+        inline iterator &operator-=(int j) { return *this = *this - j; }
+
+#ifndef QT_STRICT_ITERATORS
+    public:
+        inline bool operator==(const const_iterator &o) const
+            { return Hash::iterator::operator ==(o); }
+        inline bool operator!=(const const_iterator &o) const
+            { return Hash::iterator::operator !=(o); }
+#endif
+    };
+
+    class const_iterator : private Hash::const_iterator
+    {
+        friend class iterator;
+
+        friend class ProValueMap;
+        inline const_iterator(Hash::const_iterator it)
+            : Hash::const_iterator(it) {}
+    public:
+        typedef std::bidirectional_iterator_tag iterator_category;
+        typedef qptrdiff difference_type;
+        typedef ProStringList value_type;
+        typedef const ProStringList *pointer;
+        typedef const ProStringList &reference;
+
+        inline const_iterator() { }
+        explicit inline const_iterator(void *node)
+            : Hash::const_iterator(node) { }
+#ifdef QT_STRICT_ITERATORS
+        explicit inline const_iterator(const iterator &o) : Hash::const_iterator(o) {}
+#else
+        inline const_iterator(const iterator &o) : Hash::const_iterator(o) {}
+#endif
+
+        inline const ProKey &key() const { return Hash::const_iterator::key(); }
+        inline const ProStringList &value() const { return *Hash::const_iterator::value(); }
+        inline const ProStringList &operator*() const { return *Hash::const_iterator::value(); }
+        inline const ProStringList *operator->() const { return Hash::const_iterator::value(); }
+        inline bool operator==(const const_iterator &o) const { return Hash::const_iterator::operator ==(o); }
+        inline bool operator!=(const const_iterator &o) const { return Hash::const_iterator::operator !=(o); }
+
+        inline const_iterator &operator++() {
+            Hash::const_iterator::operator ++();
+            return *this;
+        }
+        inline const_iterator operator++(int) {
+            const_iterator r = *this;
+            Hash::const_iterator::operator ++();
+            return r;
+        }
+        inline const_iterator &operator--() {
+            Hash::const_iterator::operator --();
+            return *this;
+        }
+        inline const_iterator operator--(int) {
+            const_iterator r = *this;
+            Hash::const_iterator::operator --();
+            return r;
+        }
+        inline const_iterator operator+(int j) const
+        { const_iterator r = *this; if (j > 0) while (j--) ++r; else while (j++) --r; return r; }
+        inline const_iterator operator-(int j) const { return operator+(-j); }
+        inline const_iterator &operator+=(int j) { return *this = *this + j; }
+        inline const_iterator &operator-=(int j) { return *this = *this - j; }
+
+#ifdef QT_STRICT_ITERATORS
+    private:
+        inline bool operator==(const iterator &o) const { return operator==(const_iterator(o)); }
+        inline bool operator!=(const iterator &o) const { return operator!=(const_iterator(o)); }
+#endif
+    };
+
+    typedef iterator Iterator;
+    typedef const_iterator ConstIterator;
+
+    inline iterator find(const ProKey &v) { return list.find(v); }
+    inline const_iterator find(const ProKey &v) const { return list.find(v); }
+    inline const_iterator constFind(const ProKey &v) const { return list.constFind(v); }
+
+    inline iterator begin() { return list.begin(); }
+    inline iterator end() { return list.end(); }
+    inline const_iterator constBegin() const { return list.constBegin(); }
+    inline const_iterator constEnd() const { return list.constEnd(); }
+    inline iterator erase(iterator it) {
+        if(ProStringList *ptr = &it.value()) {
+            ProStringList::debugList.remove(ptr);
+            delete ptr;
+        }
+
+        return list.erase(it);
+    }
+    int remove(const ProKey &key) {
+        int count = 0;
+        Hash::iterator it = list.find(key);
+        while(it != list.constEnd()) {
+            it = this->erase(it);
+            ++count;
+            if(it.key() != key)
+                break;
+        }
+        return count;
+    }
+    void clear() {
+        Hash::iterator it = list.begin();
+        Hash::iterator end = list.end();
+        while (it != end) {
+            ProStringList *ptr = it.value();
+            ProStringList::debugList.remove(ptr);
+            delete ptr;
+            ++it;
+        }
+        list.clear();
+    }
+
+    inline bool contains(const ProKey &v) const { return list.contains(v); }
+
+    const ProStringList value(const ProKey &key) const
+    {
+        const ProStringList *ptr = list.value(key);
+        return ptr ? *ptr : ProStringList();
+    }
+
+    inline const ProStringList operator[](const ProKey &key) const { return value(key); }
+
+    inline ProStringList &operator[](const ProKey &key) { return *ensureKey(key); }
+
+    iterator insert(const ProKey &key, const ProStringList &value) {
+        iterator it = ensureKey(key);
+        if(it != list.constEnd())
+            it.value().operator =(value);
+        return it;
+    }
+
+    inline ProValueMap() {}
+    inline ProValueMap(const ProValueMap &other) { operator =(other); }
+
+    ProValueMap &operator=(const ProValueMap &other) {
+        this->clear();
+
+        Hash::const_iterator it = other.list.constBegin();
+        while(it != other.list.constEnd()) {
+            this->insertClone(it.key(), *it.value());
+            ++it;
+        }
+        return *this;
+    }
+
+private:
+    iterator ensureKey(const ProKey &key) {
+        Hash::iterator it = list.find(key);
+        if(it == list.constEnd()) {
+            ProStringList *ptr = new ProStringList();
+            it = list.insert(key, ptr);
+            if(it != list.constEnd())
+                ProStringList::debugList[ptr] = key;
+            else
+                delete ptr;
+        }
+        return it;
+    }
+    iterator insertClone(const ProKey &key, const ProStringList &value) {
+        ProStringList *ptr = new ProStringList(value);
+        Hash::iterator it = list.insert(key, ptr);
+        if(it != list.constEnd())
+            ProStringList::debugList[ptr] = key;
+        else
+            delete ptr;
+        return it;
+    }
+};
+#endif //QMAKE_WATCH
 
 // These token definitions affect both ProFileEvaluator and ProWriter
 enum ProToken {
@@ -393,6 +662,8 @@ struct ProFunctionDefs {
     QHash<ProKey, ProFunctionDef> testFunctions;
     QHash<ProKey, ProFunctionDef> replaceFunctions;
 };
+
+inline const QString ProString::fileName() const { return m_file ? m_file->fileName() : QString(); }
 
 QT_END_NAMESPACE
 

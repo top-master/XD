@@ -38,6 +38,7 @@ QT_BEGIN_NAMESPACE
 
 VcxprojGenerator::VcxprojGenerator() : VcprojGenerator()
 {
+    m_name = QByteArray("VcxprojGenerator");
 }
 
 VCProjectWriter *VcxprojGenerator::createProjectWriter()

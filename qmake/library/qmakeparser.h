@@ -56,16 +56,26 @@ public:
 
         SourceMask = 0xf0,
         SourceParser = 0,
+        SourceEvaluator = 0x10,
 
         CodeMask = 0xf,
-        WarnLanguage = 0,
-        WarnDeprecated,
+        WarnLanguage = 1, //QMakeWarn::WarnParser
+        WarnLogic = 2, //QMakeWarn::WarnLogic
+        WarnDeprecated = 4, //QMakeWarn::WarnDeprecated
 
         ParserWarnLanguage = SourceParser | WarningMessage | WarnLanguage,
+        ParserWarnLogic = SourceParser | WarningMessage | WarnLogic,
         ParserWarnDeprecated = SourceParser | WarningMessage | WarnDeprecated,
 
         ParserIoError = ErrorMessage | SourceParser,
-        ParserError
+        ParserError,
+
+        // Used by `QMakeHandler`.
+        EvalWarnLanguage = SourceEvaluator |  WarningMessage | WarnLanguage,
+        EvalWarnLogic = SourceEvaluator |  WarningMessage | WarnLogic,
+        EvalWarnDeprecated = SourceEvaluator | WarningMessage | WarnDeprecated,
+
+        EvalError = SourceEvaluator | ErrorMessage
     };
     virtual void message(int type, const QString &msg,
                          const QString &fileName = QString(), int lineNo = 0) = 0;
@@ -166,6 +176,8 @@ private:
         message(QMakeParserHandler::ParserError, msg);
         m_proFile->setOk(false);
     }
+    void logicWarning(const QString &msg) const
+            { message(QMakeParserHandler::ParserWarnLogic, msg); }
     void languageWarning(const QString &msg) const
             { message(QMakeParserHandler::ParserWarnLanguage, msg); }
     void deprecationWarning(const QString &msg) const

@@ -34,6 +34,7 @@
 #ifndef QMAKEEVALUATOR_P_H
 #define QMAKEEVALUATOR_P_H
 
+#include "qmakeevaluator.h"
 #include "proitems.h"
 
 #include <qregexp.h>
@@ -91,11 +92,33 @@ struct QMakeStatics {
     QHash<ProKey, int> functions;
     QHash<ProKey, ProKey> varMap;
     ProStringList fakeValue;
+
+    // TRACE/qmake Add: warn the user once about ".qmake.super" and ".qmake.cache" files.
+    QStringList lastWarnings;
+    // TRACE/qmake Add 2-0: warning call stack.
+    QStack<QMakeEvaluator::Location> globalCallStack;
 };
 
+extern bool build_pass; //defined in qmake/library/qmakeevaluator.cpp
 extern QMakeStatics statics;
 
-}
+} //namespace QMakeInternal
+
+// TRACE/qmake Add 2-1: warning call stack.
+class QRequireStack
+{
+public:
+    inline QRequireStack(QMakeEvaluator *parent) Q_DECL_NOTHROW
+        : m_wasAdded(parent->m_current.line)
+    { if(m_wasAdded) QMakeInternal::statics.globalCallStack.push(parent->m_current);  }
+    inline ~QRequireStack() { if(m_wasAdded) QMakeInternal::statics.globalCallStack.pop(); }
+
+    static void print();
+
+private:
+    Q_DISABLE_COPY(QRequireStack)
+    bool m_wasAdded;
+};
 
 QT_END_NAMESPACE
 
