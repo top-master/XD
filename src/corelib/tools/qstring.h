@@ -1,5 +1,6 @@
 /****************************************************************************
 **
+** Copyright (C) 2015 The XD Company Ltd.
 ** Copyright (C) 2015 The Qt Company Ltd.
 ** Contact: http://www.qt.io/licensing/
 **
@@ -77,16 +78,22 @@ class QRegularExpressionMatch;
 class QString;
 class QStringList;
 class QTextCodec;
+class QLatin1Literal;
 class QStringRef;
 template <typename T> class QVector;
 
-class QLatin1String
+class Q_CORE_EXPORT QLatin1String
 {
 public:
     Q_DECL_CONSTEXPR inline QLatin1String() Q_DECL_NOTHROW : m_size(0), m_data(Q_NULLPTR) {}
     Q_DECL_CONSTEXPR inline explicit QLatin1String(const char *s) Q_DECL_NOTHROW : m_size(s ? int(strlen(s)) : 0), m_data(s) {}
     Q_DECL_CONSTEXPR inline explicit QLatin1String(const char *s, int sz) Q_DECL_NOTHROW : m_size(sz), m_data(s) {}
     inline explicit QLatin1String(const QByteArray &s) Q_DECL_NOTHROW : m_size(int(qstrnlen(s.constData(), s.size()))), m_data(s.constData()) {}
+    Q_DECL_CONSTEXPR inline Q_IMPLICIT QLatin1String(const QLatin1String &other) Q_DECL_NOTHROW : m_size(other.m_size), m_data(other.m_data) {}
+    Q_DECL_CONSTEXPR inline Q_IMPLICIT QLatin1String(const QLatin1Literal &other) Q_DECL_NOTHROW;
+
+    Q_DECL_CONSTEXPR inline QLatin1String &operator=(const QLatin1String &other) Q_DECL_NOTHROW
+    { m_data = other.m_data; m_size = other.m_size; return *this; }
 
     Q_DECL_CONSTEXPR const char *latin1() const Q_DECL_NOTHROW { return m_data; }
     Q_DECL_CONSTEXPR int size() const Q_DECL_NOTHROW { return m_size; }
@@ -115,14 +122,34 @@ public:
     inline QT_ASCII_CAST_WARN bool operator>=(const QByteArray &s) const;
 #endif // !defined(QT_NO_CAST_FROM_ASCII) && !defined(QT_RESTRICTED_CAST_FROM_ASCII)
 
+    inline bool isNull() const Q_DECL_NOTHROW { return !m_data; }
+    inline bool isEmpty() const Q_DECL_NOTHROW { return m_size <= 0 || ! m_data; }
+
+    inline bool startsWith(const char c) const Q_DECL_NOTHROW { return m_data && m_data[0] == c; }
+    inline bool endsWith(const char c) const Q_DECL_NOTHROW { return m_data && m_data[m_size-1] == c; }
+
 private:
+    friend class QLatin1Literal;
     int m_size;
     const char *m_data;
 };
 Q_DECLARE_TYPEINFO(QLatin1String, Q_MOVABLE_TYPE);
 
 // Qt 4.x compatibility
-typedef QLatin1String QLatin1Literal;
+class Q_CORE_EXPORT QLatin1Literal : public QLatin1String
+{
+public:
+    template <int N> explicit QLatin1Literal(const char (&str)[N]) Q_DECL_NOTHROW
+        : QLatin1String(str, N - 1) {}
+
+};
+Q_DECLARE_TYPEINFO(QLatin1Literal, Q_MOVABLE_TYPE);
+
+typedef QLatin1Literal QLL;
+
+Q_DECL_CONSTEXPR inline QLatin1String::QLatin1String(const QLatin1Literal &other) Q_DECL_NOTHROW
+    : m_size(other.m_size), m_data(other.m_data)
+{}
 
 
 typedef QTypedArrayData<ushort> QStringData;
@@ -504,6 +531,20 @@ public:
 
     const ushort *utf16() const;
 
+    template <typename T = void>
+    inline const wchar_t *wcharCast() const
+    {
+        if (sizeof(QEnableIf<sizeof(ushort) == sizeof(wchar_t), bool >::type)) {}
+        return reinterpret_cast<const wchar_t *>(utf16());
+    }
+
+    template <typename T = void>
+    inline wchar_t *wcharCast() {
+        if (sizeof(QEnableIf<sizeof(ushort) == sizeof(wchar_t), bool >::type)) {}
+        detach();
+        return reinterpret_cast<wchar_t *>(d->data());
+    }
+
 #if defined(Q_COMPILER_REF_QUALIFIERS) && !defined(QT_COMPILING_QSTRING_COMPAT_CPP)
     QByteArray toLatin1() const & Q_REQUIRED_RESULT
     { return toLatin1_helper(*this); }
@@ -547,6 +588,7 @@ public:
     static QString fromUtf16(const ushort *, int size = -1);
     static QString fromUcs4(const uint *, int size = -1);
     static QString fromRawData(const QChar *, int size);
+    static inline QString fromRawData(const QStringRef &);
 
 #if defined(Q_COMPILER_UNICODE_STRINGS)
     static QString fromUtf16(const char16_t *str, int size = -1)
@@ -564,7 +606,7 @@ public:
     { return toLatin1(); }
 #endif
 
-    inline int toWCharArray(wchar_t *array) const;
+    inline int toWCharArray(wchar_t *array, int charLimit = -1) const;
     static inline QString fromWCharArray(const wchar_t *string, int size = -1) Q_REQUIRED_RESULT;
 
     QString &setRawData(const QChar *unicode, int size);
@@ -827,6 +869,7 @@ private:
     static QByteArray toUtf8_helper(const QString &);
     static QByteArray toLocal8Bit_helper(const QChar *data, int size);
     static int toUcs4_helper(const ushort *uc, int length, uint *out);
+    static int toWCharArray_helper(const QChar *data, int length, void *array);
     static qlonglong toIntegral_helper(const QChar *data, int len, bool *ok, int base);
     static qulonglong toIntegral_helper(const QChar *data, uint len, bool *ok, int base);
     void replace_helper(uint *indices, int nIndices, int blen, const QChar *after, int alen);
@@ -949,16 +992,22 @@ QT_WARNING_PUSH
 QT_WARNING_DISABLE_MSVC(4127)   // "conditional expression is constant"
 QT_WARNING_DISABLE_INTEL(111)   // "statement is unreachable"
 
-inline int QString::toWCharArray(wchar_t *array) const
-{
+Q_ALWAYS_INLINE int QString::toWCharArray_helper(const QChar *data, int length, void *array) {
     if (sizeof(wchar_t) == sizeof(QChar)) {
-        memcpy(array, d->data(), sizeof(QChar) * size());
-        return size();
+        memcpy(array, data, sizeof(QChar) * length);
+        return length;
     }
-    return toUcs4_helper(d->data(), size(), reinterpret_cast<uint *>(array));
+    return toUcs4_helper(reinterpret_cast<const ushort *>(data), length, reinterpret_cast<uint *>(array));
 }
 
 QT_WARNING_POP
+
+inline int QString::toWCharArray(wchar_t *array, int charLimit) const
+{
+    int l = this->length();
+    return QString::toWCharArray_helper(reinterpret_cast<const QChar *>(d->data()),
+                                        (charLimit < 0 ? l : Q_MIN(l, charLimit)), array);
+}
 
 inline QString QString::fromWCharArray(const wchar_t *string, int size)
 {
@@ -992,6 +1041,7 @@ public:
     { return operator=(QChar::fromLatin1(c)); }
 #endif
     inline QCharRef &operator=(const QCharRef &c) { return operator=(QChar(c)); }
+    Q_DEFAULT_COPY_INIT(QCharRef)
     inline QCharRef &operator=(ushort rc) { return operator=(QChar(rc)); }
     inline QCharRef &operator=(short rc) { return operator=(QChar(rc)); }
     inline QCharRef &operator=(uint rc) { return operator=(QChar(rc)); }
@@ -1409,6 +1459,10 @@ public:
     QStringRef right(int n) const Q_REQUIRED_RESULT;
     QStringRef mid(int pos, int n = -1) const Q_REQUIRED_RESULT;
 
+    inline void chop(int n) { if(n > 0) m_size = qMax(m_size - n, 0); }
+    inline void resize(int size)
+        { if(m_string) m_size = qBound(0, size, m_string->size() - m_position); }
+
     void truncate(int pos) Q_DECL_NOTHROW { m_size = qBound(0, pos, m_size); }
 
     bool startsWith(const QString &s, Qt::CaseSensitivity cs = Qt::CaseSensitive) const;
@@ -1443,6 +1497,8 @@ public:
     QByteArray toUtf8() const Q_REQUIRED_RESULT;
     QByteArray toLocal8Bit() const Q_REQUIRED_RESULT;
     QVector<uint> toUcs4() const Q_REQUIRED_RESULT;
+    inline int toWCharArray(wchar_t *array) const
+        { if ( ! m_string) return 0; return QString::toWCharArray_helper(unicode(), size(), array); }
 
     inline void clear() { m_string = Q_NULLPTR; m_position = m_size = 0; }
     QString toString() const;
@@ -1492,6 +1548,9 @@ public:
     double toDouble(bool *ok = Q_NULLPTR) const;
 };
 Q_DECLARE_TYPEINFO(QStringRef, Q_PRIMITIVE_TYPE);
+
+inline QString QString::fromRawData(const QStringRef &other)
+{ return QString::fromRawData(other.constData(), other.size()); }
 
 inline QStringRef &QStringRef::operator=(const QString *aString)
 { m_string = aString; m_position = 0; m_size = aString?aString->size():0; return *this; }

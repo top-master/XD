@@ -1,5 +1,6 @@
 /****************************************************************************
 **
+** Copyright (C) 2015 The XD Company Ltd.
 ** Copyright (C) 2015 The Qt Company Ltd.
 ** Contact: http://www.qt.io/licensing/
 **
@@ -50,6 +51,7 @@ QT_BEGIN_NAMESPACE
 
 class Q_CORE_EXPORT QDebug
 {
+protected:
     friend class QMessageLogger;
     friend class QDebugStateSaverPrivate;
     struct Stream {
@@ -115,6 +117,8 @@ public:
     bool autoInsertSpaces() const { return stream->space; }
     void setAutoInsertSpaces(bool b) { stream->space = b; }
 
+    inline QDebug &quotes() { stream->unsetFlag(Stream::NoQuotes); return *this; }
+    inline QDebug &noQuotes() { stream->setFlag(Stream::NoQuotes); return *this; }
     inline QDebug &quote() { stream->unsetFlag(Stream::NoQuotes); return *this; }
     inline QDebug &noquote() { stream->setFlag(Stream::NoQuotes); return *this; }
     inline QDebug &maybeQuote(char c = '"') { if (!(stream->testFlag(Stream::NoQuotes))) stream->ts << c; return *this; }
@@ -152,6 +156,25 @@ public:
 
     inline QDebug &operator<<(QTextStreamManipulator m)
     { stream->ts << m; return *this; }
+
+    inline bool messageEnabled() const { return stream->message_output; }
+    inline QDebug &setMessageEnabled(bool e = true) { stream->message_output = e; return *this; }
+    inline QDebug &hide() { stream->message_output = false; return *this; }
+    inline QDebug &show() { stream->message_output = true; return *this; }
+    inline QString toString() const { QString r = stream->buffer; stream->buffer = QString(); return r; }
+    inline QString *data() { return &stream->buffer; }
+
+    /// Prints message only if enabled, but always clears message-buffer.
+    ///
+    /// If using QDebug directly, we call flush before emiting to prevent output mix.
+    void flush();
+    /// Enable and flush output.
+    inline void raise() {
+        stream->message_output = true;
+        flush();
+    }
+
+    inline const QMessageLogContext &context() const { return stream->context; }
 };
 
 Q_DECLARE_SHARED(QDebug)
@@ -162,6 +185,10 @@ class Q_CORE_EXPORT QDebugStateSaver
 public:
     QDebugStateSaver(QDebug &dbg);
     ~QDebugStateSaver();
+
+    bool hadQuotes() const Q_DECL_NOTHROW;
+    bool hadSpace() const Q_DECL_NOTHROW;
+
 private:
     Q_DISABLE_COPY(QDebugStateSaver)
     QScopedPointer<QDebugStateSaverPrivate> d;

@@ -1,5 +1,6 @@
 /****************************************************************************
 **
+** Copyright (C) 2015 The XD Company Ltd.
 ** Copyright (C) 2015 The Qt Company Ltd.
 ** Copyright (C) 2014 Intel Corporation
 ** Contact: http://www.qt.io/licensing/
@@ -53,6 +54,10 @@ QT_END_NAMESPACE
 
 #include "qconfig.cpp"
 #include "archdetect.cpp"
+
+#ifdef Q_OS_WIN
+#  include <qt_windows.h>
+#endif
 
 QT_BEGIN_NAMESPACE
 
@@ -155,6 +160,17 @@ void QLibrarySettings::load()
     }
 }
 
+#ifndef QT_BUILD_QMAKE
+static inline QSettings *findConfigurationAt(const QString &folder)
+{
+    QDir pwd(folder);
+    const QString qtconfig = pwd.filePath(QLatin1String("qt.conf"));
+    if (QFile::exists(qtconfig))
+        return new QSettings(qtconfig, QSettings::IniFormat);
+    return Q_NULLPTR;
+}
+#endif
+
 QSettings *QLibraryInfoPrivate::findConfiguration()
 {
     QString qtconfig = QStringLiteral(":/qt/etc/qt.conf");
@@ -181,12 +197,27 @@ QSettings *QLibraryInfoPrivate::findConfiguration()
     }
 #endif
     if (QCoreApplication::instance()) {
-        QDir pwd(QCoreApplication::applicationDirPath());
-        qtconfig = pwd.filePath(QLatin1String("qt.conf"));
-        if (QFile::exists(qtconfig))
-            return new QSettings(qtconfig, QSettings::IniFormat);
+        QSettings *result = findConfigurationAt(QCoreApplication::applicationDirPath());
+        if (result) {
+            return result;
+        }
     }
-#endif
+
+    // Try finding by QtCore lib's binary folder.
+#if defined(Q_OS_WIN) && !defined(Q_OS_WINRT) && !defined(Q_OS_WINCE)
+    const QString selfName = QLatin1String("Qt" QT_STRINGIFY(QT_VERSION_MAJOR) "Core" QT_DEBUG_SCOPE("d"));
+    QString path = QLibraryInfo::pathFromLibrary(selfName);
+    // Keeps only folder-path.
+    int i = path.lastIndexOf(QLatin1Char('/'));
+    if (i >= 0)
+        path.truncate(i + 1);
+    // Check.
+    if (QSettings *result = findConfigurationAt(path)) {
+        return result;
+    }
+#endif // Q_OS_WIN
+
+#endif // !QT_BUILD_QMAKE
     return 0;     //no luck
 }
 
@@ -485,8 +516,11 @@ QLibraryInfo::rawLocation(LibraryLocation loc, PathGroup group)
         }
 #endif
 
-        if(!key.isNull()) {
-            QSettings *config = QLibraryInfoPrivate::configuration();
+        // TRACE/corelib BugFix: check `config` for null.
+        QSettings *config = Q_NULLPTR;
+        if ( ! key.isNull()
+            && (config = QLibraryInfoPrivate::configuration())
+        ) {
             config->beginGroup(QLatin1String(
 #ifdef QT_BUILD_QMAKE
                    group == DevicePaths ? "DevicePaths" :
@@ -547,7 +581,16 @@ QLibraryInfo::rawLocation(LibraryLocation loc, PathGroup group)
         }
 #else
         if (loc == PrefixPath) {
-            if (QCoreApplication::instance()) {
+            if (QSettings *config = QLibraryInfoPrivate::configuration()) {
+                QFileInfo info(config->fileName());
+                if (info.exists()) {
+                    baseDir = info.absolutePath();
+                }
+            }
+
+            if ( ! baseDir.isEmpty()) {
+                // Nothing to do (just avoiding a `goto`).
+            } else if (QCoreApplication::instance()) {
 #ifdef Q_OS_DARWIN
                 CFBundleRef bundleRef = CFBundleGetMainBundle();
                 if (bundleRef) {
@@ -603,8 +646,64 @@ QStringList QLibraryInfo::platformPluginArguments(const QString &platformName)
         key += QLatin1String("Arguments");
         return settings->value(key).toStringList();
     }
+#else
+    Q_UNUSED(platformName)
 #endif // !QT_BUILD_QMAKE && !QT_NO_SETTINGS
     return QStringList();
+}
+
+/*!
+  Finds absolute file-path based on given library's \a name,
+  or returns null string on failure.
+
+  WARNING: works only for **already-loaded** libraries.
+
+  \sa QDir::toNativeSeparators()
+
+  \internal
+
+  \since 5.6
+ */
+QString QLibraryInfo::pathFromLibrary(const QString &nameArg) {
+#if defined(Q_OS_WIN) && !defined(Q_OS_WINRT) && !defined(Q_OS_WINCE)
+    const QStringRef &nameRef = nameArg.size() <= MAX_PATH
+            ? QStringRef(&nameArg)
+            : nameArg.leftRef(MAX_PATH);
+    wchar_t name[MAX_PATH + 1];
+    int nameLength = nameRef.toWCharArray(name);
+    if (nameLength <= 0) {
+        return QString();
+    } else {
+        name[nameLength] = 0;
+    }
+    HMODULE hLib = ::LoadLibraryW(name);
+    if ( ! hLib) {
+        return QString();
+    }
+    QT_FINALLY([&] { ::FreeLibrary(hLib); });
+    // Access OS's API container lib.
+    HMODULE hLibPsapi = ::LoadLibraryA("psapi");
+    if ( ! hLibPsapi) {
+        return QString();
+    }
+    QT_FINALLY([&] { ::FreeLibrary(hLibPsapi); });
+    // Access OS's API.
+    typedef DWORD (WINAPI *GetModuleFileNameExFunc)(HANDLE, HMODULE, LPTSTR, DWORD);
+    GetModuleFileNameExFunc getModuleFileNameEx
+            = reinterpret_cast<GetModuleFileNameExFunc>(::GetProcAddress(hLibPsapi, "GetModuleFileNameExW"));
+    if ( ! getModuleFileNameEx) {
+        return QString();
+    }
+    // Get library's full path.
+    wchar_t buf[MAX_PATH];
+    const DWORD length = getModuleFileNameEx(INVALID_HANDLE_VALUE, hLib, buf, sizeof(buf) / sizeof(wchar_t));
+    if (length > 0) {
+        QString path = QString::fromWCharArray(buf, length);
+        return QDir::cleanPath(path);
+    }
+#endif // Q_OS_WIN
+
+    return QString();
 }
 
 /*!

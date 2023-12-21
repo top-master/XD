@@ -1,5 +1,6 @@
 /****************************************************************************
 **
+** Copyright (C) 2015 The XD Company Ltd.
 ** Copyright (C) 2015 The Qt Company Ltd.
 ** Copyright (C) 2015 Intel Corporation
 ** Contact: http://www.qt.io/licensing/
@@ -55,7 +56,7 @@
 
 #ifndef QT_NO_EXCEPTIONS
 #  include <string>
-#  include <exception>
+#  include <QtCore/qexception.h>
 #endif
 
 #if !defined(Q_OS_WINCE)
@@ -966,7 +967,7 @@ Q_STATIC_ASSERT_X(QT_POINTER_SIZE == sizeof(void *), "QT_POINTER_SIZE defined in
     \sa QT_VERSION_STR
 */
 
-const char *qVersion() Q_DECL_NOTHROW
+Q_EXTERN_C const char *qVersion() Q_DECL_NOTHROW
 {
     return QT_VERSION_STR;
 }
@@ -979,6 +980,57 @@ bool qSharedBuild() Q_DECL_NOTHROW
     return false;
 #endif
 }
+
+QT_WARNING_PUSH
+QT_WARNING_DISABLE_MSVC(4297)
+
+Q_EXTERN_C void qThrowNullPointer()
+{
+    const char *msg = "Required Pointer, but null given.";
+#ifndef QT_NO_EXCEPTIONS
+    QNullPointerException ex(msg);
+    throw ex;
+#else
+    qFatal("%s", msg);
+#endif
+}
+
+Q_EXTERN_C void qThrowOutOfMemory()
+{
+    // Always calls older method, because there may be a debug-breakpoint.
+    qBadAlloc();
+#if defined(QT_NO_EXCEPTIONS)
+    const char *msg = "Failed to allocate memory.";
+    qFatal("%s", msg);
+#endif
+}
+
+Q_EXTERN_C void qThrowAtomicMismatch()
+{
+    const char *msg = "Atomic-locked data was changed unexpectedly!";
+#ifndef QT_NO_EXCEPTIONS
+    QAtomicMismatchException ex(msg);
+    throw ex;
+#else
+    qFatal("%s", msg);
+#endif
+}
+
+/// Usage-exception means the API's documentation was not followed correctly.
+///
+/// @note Such mistakes are not worth a unique class (i.e.
+/// there is no `QUsageException` named class).
+Q_EXTERN_C void qThrowRequirement(int type, const char *message)
+{
+#ifndef QT_NO_EXCEPTIONS
+    QRequirementError err(QRequirementError::Type(type), message);
+    throw err;
+#else
+    qFatal("RequirementError(%d): %s", type, message);
+#endif
+}
+
+QT_WARNING_POP
 
 /*****************************************************************************
   System detection routines
@@ -1005,6 +1057,7 @@ bool qSharedBuild() Q_DECL_NOTHROW
     the application is compiled under Windows or \macos.
 
     \sa QLibraryInfo
+    \sa #Q_FS_CASE
 */
 
 /*!
@@ -1879,6 +1932,7 @@ const QSysInfo::MacVersion QSysInfo::MacintoshVersion = QSysInfo::macVersion();
 
 QT_BEGIN_INCLUDE_NAMESPACE
 #include "qt_windows.h"
+#include <WinSock2.h>
 QT_END_INCLUDE_NAMESPACE
 
 #  ifndef QT_BOOTSTRAPPED
@@ -3023,7 +3077,10 @@ void qt_assert(const char *assertion, const char *file, int line) Q_DECL_NOTHROW
 */
 void qt_assert_x(const char *where, const char *what, const char *file, int line) Q_DECL_NOTHROW
 {
-    qFatal("ASSERT failure in %s: \"%s\", file %s, line %d", where, what, file, line);
+    if (where)
+        qFatal("ASSERT failure in %s: \"%s\", file %s, line %d", where, what, file, line);
+    else
+        qFatal("ASSERT: \"%s\" in file %s, line %d", what, file, line);
 }
 
 
@@ -3498,6 +3555,52 @@ int qrand()
     // this is also valid for QT_NO_THREAD
     return rand();
 #endif
+}
+
+#define hexEncoded reinterpret_cast<quint8 *>(&hexEncoded_)
+quint16 qHex(quint8 byteValue)
+{
+    quint16 hexEncoded_;
+    // Handles the first 4 bits from left to right.
+    int j = (byteValue >> 4) & 0xf; //move 4 bits to right and get intersection with "0xf"
+    if (j <= 9)
+        hexEncoded[0] = (j + '0');
+     else
+        hexEncoded[0] = (j + 'A' - 10);
+    // Then handles the last 4 bits, which you would see at bottom right of
+    // programmer calculator App's bit-preview, if you type input param in it
+    j = byteValue & 0xf; //get intersection with "0xf"
+    if (j <= 9)
+        hexEncoded[1] = (j + '0');
+     else
+        hexEncoded[1] = (j + 'A' - 10);
+    return hexEncoded_;
+}
+
+/// @warning Ignores characters out-of-range.
+quint8 qHexDecode(quint16 hexEncoded_)
+{
+    quint8 tmp = 0;
+    if(hexEncoded[0] <= '9')
+        tmp = (hexEncoded[0] - '0') << 4;
+    else if (hexEncoded[0] >= 'A' && hexEncoded[0] <= 'F')
+        tmp = (hexEncoded[0] - 'A' + 10) << 4;
+    else if (hexEncoded[0] >= 'a' && hexEncoded[0] <= 'f') //to support LowerCased hex
+        tmp = (hexEncoded[0] - 'a' + 10) << 4;
+    // Just ignore Wrong input, instead of:
+    // ```
+    // else throw std::invalid_argument("Value out of Hexadecimal range.");
+    // ```
+
+    if (hexEncoded[1] <= '9')
+        tmp |= hexEncoded[1] - '0';
+    else if (hexEncoded[1] >= 'A' && hexEncoded[1] <= 'F')
+        tmp |= hexEncoded[1] - 'A' + 10;
+    else if (hexEncoded[1] >= 'a' && hexEncoded[1] <= 'f')
+        tmp |= hexEncoded[1] - 'a' + 10;
+    // else throw ...;
+
+    return tmp;
 }
 
 /*!

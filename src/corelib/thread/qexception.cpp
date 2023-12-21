@@ -1,5 +1,6 @@
 /****************************************************************************
 **
+** Copyright (C) 2015 The XD Company Ltd.
 ** Copyright (C) 2015 The Qt Company Ltd.
 ** Contact: http://www.qt.io/licensing/
 **
@@ -34,7 +35,8 @@
 #include "qexception.h"
 #include "QtCore/qshareddata.h"
 
-#ifndef QT_NO_QFUTURE
+#include "QtCore/qcoreapplication.h"
+
 #ifndef QT_NO_EXCEPTIONS
 
 QT_BEGIN_NAMESPACE
@@ -149,6 +151,157 @@ QUnhandledException *QUnhandledException::clone() const
     return new QUnhandledException(*this);
 }
 
+QExceptionWithMessage::~QExceptionWithMessage() Q_DECL_NOTHROW
+{
+    // Nothing to do (but required).
+}
+
+void QExceptionWithMessage::raise() const
+{
+    QExceptionWithMessage e = *this;
+    throw e;
+}
+
+QExceptionWithMessage *QExceptionWithMessage::clone() const
+{
+    return new QExceptionWithMessage(*this);
+}
+
+const char *QExceptionWithMessage::what() const Q_DECL_NOTHROW
+{
+    if (Q_UNLIKELY(m_messageCache.isNull())) {
+        QExceptionWithMessage *that = const_cast<QExceptionWithMessage *>(this);
+        if (m_message.size() > 0) {
+            that->m_messageCache = m_message.toLocal8Bit();
+        } else {
+            that->m_messageCache = QByteArray("Unknown error.");
+        }
+    }
+    return m_messageCache.constData();
+}
+
+void QExceptionWithMessage::setWhat(const char *msg) Q_DECL_NOTHROW
+{
+    m_messageCache = QByteArray(msg);
+    m_message = QString();
+}
+
+const QString &QExceptionWithMessage::message() const Q_DECL_NOTHROW
+{
+    if (Q_UNLIKELY(m_message.isNull())) {
+        QExceptionWithMessage *that = const_cast<QExceptionWithMessage *>(this);
+        if (m_messageCache.size() > 0) {
+            that->m_message = QString::fromLocal8Bit(m_messageCache);
+        } else {
+            that->m_message = QLL("Unknown error.");
+        }
+    }
+    return m_message;
+}
+
+void QExceptionWithMessage::setMessage(const QString &msg) Q_DECL_NOTHROW
+{
+    m_message = msg;
+    m_messageCache = QByteArray();
+}
+
+QNullPointerException::~QNullPointerException() Q_DECL_NOTHROW
+{
+    // Nothing to do (but required).
+}
+
+void QNullPointerException::raise() const
+{
+    QNullPointerException e = *this;
+    throw e;
+}
+
+QNullPointerException *QNullPointerException::clone() const
+{
+    return new QNullPointerException(*this);
+}
+
+QAtomicMismatchException::~QAtomicMismatchException() Q_DECL_NOTHROW
+{
+    // Nothing to do (but required).
+}
+
+void QAtomicMismatchException::raise() const
+{
+    QAtomicMismatchException e = *this;
+    throw e;
+}
+
+QAtomicMismatchException *QAtomicMismatchException::clone() const
+{
+    return new QAtomicMismatchException(*this);
+}
+
+
+QRequirementError::~QRequirementError() Q_DECL_NOTHROW
+{
+    // Nothing to do (but required).
+}
+
+void QRequirementError::raise() const
+{
+    QRequirementError e = *this;
+    throw e;
+}
+
+QRequirementError *QRequirementError::clone() const
+{
+    return new QRequirementError(*this);
+}
+
+void QRequirementError::setWhat(const char *msg) noexcept
+{
+    super::setWhat(msg);
+    this->prefixMessage();
+}
+
+void QRequirementError::setMessage(const QString &msg) noexcept
+{
+    super::setMessage(msg);
+    this->prefixMessage();
+}
+
+void QRequirementError::prefixMessage() Q_DECL_NOTHROW
+{
+    QT_TRY {
+        QString msg;
+        msg.reserve(super::message().size() + 256);
+        switch (m_type) {
+        case QRequirementErrorType::NonEmpty:
+            msg += QCoreApplication::tr("Non empty value is required.");
+            break;
+        case QRequirementErrorType::Field:
+            msg += QCoreApplication::tr("Required field is invalid or not set.");
+            break;
+        case QRequirementErrorType::Usage:
+            msg += QCoreApplication::tr("Invalid API usage is detected.");
+            break;
+        case QRequirementErrorType::Unexpected:
+            msg += QCoreApplication::tr("Unexpected API error.");
+            break;
+        case QRequirementErrorType::TypeMismatch:
+            msg += QCoreApplication::tr("Type expectation mismatch.");
+            break;
+        case QRequirementErrorType::JsonCast:
+            msg += QCoreApplication::tr("Failed to cast from value/type to Json.");
+            break;
+        default:
+            break;
+        }
+
+        msg += QLL(QT_NEW_LINE);
+        msg += m_message;
+        m_message = msg;
+    } QT_CATCH(...) {
+        // Errors are forgiven if you was trying to atone for previous error.
+    }
+}
+
 #ifndef Q_QDOC
 
 namespace QtPrivate {
@@ -219,4 +372,3 @@ bool ExceptionStore::hasThrown() const { return exceptionHolder.base->hasThrown;
 QT_END_NAMESPACE
 
 #endif // QT_NO_EXCEPTIONS
-#endif // QT_NO_QFUTURE

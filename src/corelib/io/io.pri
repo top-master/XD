@@ -24,6 +24,8 @@ HEADERS +=  \
         io/qnoncontiguousbytedevice_p.h \
         io/qprocess.h \
         io/qprocess_p.h \
+        io/qstacktrace.h \
+        io/qstacktrace_p.h \
         io/qtextstream.h \
         io/qtextstream_p.h \
         io/qtemporarydir.h \
@@ -73,6 +75,7 @@ SOURCES += \
         io/qlockfile.cpp \
         io/qnoncontiguousbytedevice.cpp \
         io/qprocess.cpp \
+        io/qstacktrace.cpp \
         io/qstorageinfo.cpp \
         io/qtextstream.cpp \
         io/qtemporarydir.cpp \

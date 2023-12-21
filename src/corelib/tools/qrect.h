@@ -115,6 +115,7 @@ public:
     Q_DECL_RELAXED_CONSTEXPR inline void setWidth(int w) Q_DECL_NOTHROW;
     Q_DECL_RELAXED_CONSTEXPR inline void setHeight(int h) Q_DECL_NOTHROW;
     Q_DECL_RELAXED_CONSTEXPR inline void setSize(const QSize &s) Q_DECL_NOTHROW;
+    Q_DECL_RELAXED_CONSTEXPR inline void setSize(int w, int h) Q_DECL_NOTHROW;
 
     QRect operator|(const QRect &r) const Q_DECL_NOTHROW;
     QRect operator&(const QRect &r) const Q_DECL_NOTHROW;
@@ -401,6 +402,12 @@ Q_DECL_RELAXED_CONSTEXPR inline void QRect::setSize(const QSize &s) Q_DECL_NOTHR
     y2 = (s.height() + y1 - 1);
 }
 
+Q_DECL_RELAXED_CONSTEXPR inline void QRect::setSize(int aw, int ah) Q_DECL_NOTHROW
+{
+    x2 = (aw  + x1 - 1);
+    y2 = (ah + y1 - 1);
+}
+
 inline bool QRect::contains(int ax, int ay, bool aproper) const Q_DECL_NOTHROW
 {
     return contains(QPoint(ax, ay), aproper);
@@ -563,6 +570,7 @@ public:
     Q_DECL_RELAXED_CONSTEXPR inline void setWidth(qreal w) Q_DECL_NOTHROW;
     Q_DECL_RELAXED_CONSTEXPR inline void setHeight(qreal h) Q_DECL_NOTHROW;
     Q_DECL_RELAXED_CONSTEXPR inline void setSize(const QSizeF &s) Q_DECL_NOTHROW;
+    Q_DECL_RELAXED_CONSTEXPR inline void setSize(qreal w, qreal h) Q_DECL_NOTHROW;
 
     QRectF operator|(const QRectF &r) const Q_DECL_NOTHROW;
     QRectF operator&(const QRectF &r) const Q_DECL_NOTHROW;
@@ -793,6 +801,12 @@ Q_DECL_RELAXED_CONSTEXPR inline void QRectF::setSize(const QSizeF &s) Q_DECL_NOT
 {
     w = s.width();
     h = s.height();
+}
+
+Q_DECL_RELAXED_CONSTEXPR inline void QRectF::setSize(qreal aw, qreal ah) Q_DECL_NOTHROW
+{
+    w = aw;
+    h = ah;
 }
 
 inline bool QRectF::contains(qreal ax, qreal ay) const Q_DECL_NOTHROW

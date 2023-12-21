@@ -1,0 +1,5 @@
+
+Read terms and conditions from GPL-2.0.txt file, and
+mentioning this file's name instead of
+the GPL-2.0.txt file's name just means that,
+the refering Document allows *later* versions of said terms.

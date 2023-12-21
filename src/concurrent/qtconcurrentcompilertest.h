@@ -42,14 +42,16 @@ QT_BEGIN_NAMESPACE
 
 namespace QtPrivate {
 
+// TRACE/QObject bugfix: renamed to `qInlineTest` from `test` #2,
+
 template<class T>
 class HasResultType {
     typedef char Yes;
     typedef void *No;
-    template<typename U> static Yes test(int, const typename U::result_type * = 0);
-    template<typename U> static No test(double);
+    template<typename U> static Yes qInlineTest(int, const typename U::result_type * = 0);
+    template<typename U> static No qInlineTest(double);
 public:
-    enum { Value = (sizeof(test<T>(0)) == sizeof(Yes)) };
+    enum { Value = (sizeof(qInlineTest<T>(0)) == sizeof(Yes)) };
 };
 
 }

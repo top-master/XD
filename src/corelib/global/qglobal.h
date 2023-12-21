@@ -55,6 +55,7 @@
 #  include <stddef.h>
 #endif
 
+
 /*
    QT_VERSION is (major << 16) + (minor << 8) + patch.
 */
@@ -80,9 +81,17 @@
 
 /* These two macros makes it possible to turn the builtin line expander into a
  * string literal. */
+#define QT_STRINGIFY_IMPL(x) #x
+#define QT_STRINGIFY(x) QT_STRINGIFY_IMPL(x)
+/* Backward compatible. */
 #define QT_STRINGIFY2(x) #x
-#define QT_STRINGIFY(x) QT_STRINGIFY2(x)
 
+/* These two macros makes it possible to merge two non-string keywords. */
+#define QT_JOIN_IMPL(A, B) A ## B
+#define QT_JOIN(A, B) QT_JOIN_IMPL(A, B)
+#define QT_LOCATION __FILE__ ":" QT_STRINGIFY(__LINE__)
+
+/* Detection may use `QT_JOIN` or `QT_STRINGIFY`. */
 #include <QtCore/qsystemdetection.h>
 #include <QtCore/qprocessordetection.h>
 #include <QtCore/qcompilerdetection.h>
@@ -166,6 +175,13 @@ namespace QT_NAMESPACE {}
 
 #endif /* user namespace */
 
+#  if __cplusplus >= 201703L
+//   Since C++17 we get error if `register` is used.
+#    define Q_REGISTER
+#  else
+#    define Q_REGISTER register
+#  endif
+
 #else /* __cplusplus */
 
 # define QT_BEGIN_NAMESPACE
@@ -184,6 +200,69 @@ namespace QT_NAMESPACE {}
 #  define QT_LARGEFILE_SUPPORT 64
 #endif
 
+/* Console compatible line-fade. */
+#ifdef Q_OS_WIN
+#  define QT_NEW_LINE "\r\n"
+#else
+#  define QT_NEW_LINE "\n"
+#endif
+
+/*
+   The window system, must be one of: (Q_WS_x)
+
+     MACX     - Mac OS X
+     MAC9     - Mac OS 9
+     QWS      - Qt for Embedded Linux
+     WIN32    - Windows
+     X11      - X Window System
+     S60      - Symbian S60
+     PM       - unsupported
+     WIN16    - unsupported
+*/
+
+#if defined(Q_OS_MSDOS)
+#  define Q_WS_WIN16
+#  error "Qt requires Win32 and does not work with Windows 3.x"
+#elif defined(_WIN32_X11_)
+#  define Q_WS_X11
+#elif defined(Q_OS_WIN32)
+#  define Q_WS_WIN32
+#  if defined(Q_OS_WIN64)
+#    define Q_WS_WIN64
+#  endif
+#elif defined(Q_OS_WINCE)
+#  define Q_WS_WIN32
+#  define Q_WS_WINCE
+#  if defined(Q_OS_WINCE_WM)
+#    define Q_WS_WINCE_WM
+#  endif
+#elif defined(Q_OS_OS2)
+#  define Q_WS_PM
+#  error "Qt does not work with OS/2 Presentation Manager or Workplace Shell"
+#elif defined(Q_OS_UNIX)
+#  if defined(Q_OS_MAC) && !defined(__USE_WS_X11__) && !defined(Q_WS_QWS) && !defined(Q_WS_QPA)
+#    define Q_WS_MAC
+#    define Q_WS_MACX
+#    if defined(Q_OS_MAC64)
+#      define Q_WS_MAC64
+#    elif defined(Q_OS_MAC32)
+#      define Q_WS_MAC32
+#    endif
+#  elif defined(Q_OS_SYMBIAN)
+#    if !defined(QT_NO_S60)
+#      define Q_WS_S60
+#    endif
+#  elif !defined(Q_WS_QWS) && !defined(Q_WS_QPA)
+#    define Q_WS_X11
+#  endif
+#endif
+
+#if defined(Q_WS_WIN16) || defined(Q_WS_WIN32) || defined(Q_WS_WINCE)
+#  define Q_WS_WIN
+#endif
+
+
+/* Intentionally not supporting C-language *if* namespace set. */
 QT_BEGIN_NAMESPACE
 
 /*
@@ -329,6 +408,8 @@ typedef double qreal;
 #  define Q_NETWORK_EXPORT
 #endif
 
+#define Q_VAR_EXPORT(module) Q_##module##_EXPORT
+
 /*
    Some classes do not permit copies to be made of an object. These
    classes contains a private copy constructor and assignment
@@ -337,6 +418,9 @@ typedef double qreal;
 #define Q_DISABLE_COPY(Class) \
     Class(const Class &) Q_DECL_EQ_DELETE;\
     Class &operator=(const Class &) Q_DECL_EQ_DELETE;
+
+#define Q_DISABLE_COPY_INIT(Class) \
+    Class(const Class &) Q_DECL_EQ_DELETE;
 
 /*
    No, this is not an evil backdoor. QT_BUILD_INTERNAL just exports more symbols
@@ -367,11 +451,24 @@ typedef double qreal;
  * in a namespace, qVersion isn't callable anyway.
  */
 #if !defined(QT_NAMESPACE) && defined(__cplusplus) && !defined(Q_QDOC)
-extern "C"
-#endif
-Q_CORE_EXPORT const char *qVersion() Q_DECL_NOTHROW;
+#  define Q_EXTERN_C extern "C"
+#else
+#  define Q_EXTERN_C
+#endif /* __cplusplus */
+#define Q_CORE_EXPORT_C Q_EXTERN_C Q_CORE_EXPORT
 
-#if defined(__cplusplus)
+Q_CORE_EXPORT_C const char *qVersion() Q_DECL_NOTHROW;
+
+typedef void (*QErrorFunc)(void);
+
+/*! Similar to qBadAlloc(), but raises even if `QT_NO_EXCEPTIONS` is defined. */
+Q_CORE_EXPORT_C void qThrowNullPointer();
+Q_CORE_EXPORT_C void qThrowOutOfMemory();
+Q_CORE_EXPORT_C void qThrowAtomicMismatch();
+// C++ should use qThrow(...) instead.
+Q_CORE_EXPORT_C void qThrowRequirement(int type, const char *message Q_CPP_EXPR(= Q_NULLPTR));
+
+#ifdef __cplusplus /* __cplusplus begin (search for "__cplusplus end"). */
 
 #ifndef Q_CONSTRUCTOR_FUNCTION
 # define Q_CONSTRUCTOR_FUNCTION0(AFUNC) \
@@ -566,6 +663,15 @@ template <typename T>
 Q_DECL_CONSTEXPR inline const T &qBound(const T &min, const T &val, const T &max)
 { return qMax(min, qMin(max, val)); }
 
+#define Q_MIN(a, b) ((a < b) ? a : b)
+#define Q_MAX(a, b) ((a < b) ? b : a)
+#define Q_BOUND(min, val, max) Q_MAX(min, Q_MIN(max, val))
+
+template <typename T>
+Q_DECL_CONSTEXPR inline bool qNot(const T &a) { return !a; }
+template <typename T1, typename T2>
+Q_DECL_CONSTEXPR inline bool qNotEqual(const T1 &a, const T2 &b) { return a != b; }
+
 #ifndef Q_FORWARD_DECLARE_OBJC_CLASS
 #  ifdef __OBJC__
 #    define Q_FORWARD_DECLARE_OBJC_CLASS(classname) @class classname
@@ -658,15 +764,20 @@ inline void qt_noop(void) {}
 #  endif
 #endif
 
+/// \def QT_CATCHES
+/// Same as #QT_CATCH, but supports chaining,
+/// to prevent variable not declared error (in `QT_NO_EXCEPTIONS` case).
 #ifdef QT_NO_EXCEPTIONS
 #  define QT_TRY if (true)
 #  define QT_CATCH(A) else
+#  define QT_CATCHES(A, CODE) else if (false) { }
 #  define QT_THROW(A) qt_noop()
 #  define QT_RETHROW qt_noop()
 #  define QT_TERMINATE_ON_EXCEPTION(expr) do { expr; } while (0)
 #else
 #  define QT_TRY try
 #  define QT_CATCH(A) catch (A)
+#  define QT_CATCHES(A, CODE) catch (A) { CODE }
 #  define QT_THROW(A) throw A
 #  define QT_RETHROW throw
 Q_NORETURN Q_CORE_EXPORT void qTerminate() Q_DECL_NOTHROW;
@@ -677,13 +788,29 @@ Q_NORETURN Q_CORE_EXPORT void qTerminate() Q_DECL_NOTHROW;
 #  endif
 #endif
 
+// Usable with Lambda, like `QT_FINALLY([&] { qFree(myVariable); });`.
+#define QT_FINALLY_X(name, callback) auto name = qScopeGuard(callback); \
+    do { Q_UNUSED(name) } while(0)
+#define QT_FINALLY(callback) QT_FINALLY_X(QT_JOIN(_qDefer, __LINE__), callback)
+
+
 Q_CORE_EXPORT bool qSharedBuild() Q_DECL_NOTHROW;
 
 #ifndef Q_OUTOFLINE_TEMPLATE
 #  define Q_OUTOFLINE_TEMPLATE
 #endif
+// Usable after template arguments, like
+// ```
+// template <typename T>
+// Q_INLINE_TEMPLATE void myFunc(T arg)
+// { ... }
+// ```
 #ifndef Q_INLINE_TEMPLATE
 #  define Q_INLINE_TEMPLATE inline
+#endif
+
+#ifndef Q_TYPENAME
+#  define Q_TYPENAME typename
 #endif
 
 /*
@@ -696,7 +823,12 @@ Q_CORE_EXPORT bool qSharedBuild() Q_DECL_NOTHROW;
 */
 
 #if !defined(QT_NO_DEBUG) && !defined(QT_DEBUG)
-#  define QT_DEBUG
+#  define QT_DEBUG 1
+#endif
+#ifdef QT_DEBUG
+#  define QT_DEBUG_SCOPE(x) x
+#else
+#  define QT_DEBUG_SCOPE(x)
 #endif
 
 #ifndef qPrintable
@@ -741,25 +873,101 @@ Q_CORE_EXPORT void qt_assert_x(const char *where, const char *what, const char *
 #endif
 
 
-#ifdef Q_COMPILER_STATIC_ASSERT
-#define Q_STATIC_ASSERT(Condition) static_assert(bool(Condition), #Condition)
-#define Q_STATIC_ASSERT_X(Condition, Message) static_assert(bool(Condition), Message)
-#else
+Q_ALWAYS_INLINE bool qt_assert_if(bool cond, const char *where, const char *what, const char *file, int line)
+{
+    Q_UNUSED(cond) Q_UNUSED(where) Q_UNUSED(what) Q_UNUSED(file) Q_UNUSED(line)
+    if (Q_UNLIKELY( ! cond)) {
+        qt_assert_x(where, what, file, line);
+    }
+    return cond;
+}
+
+/// @def Q_IF(cond)
+/// Same as #Q_ASSERT(cond), but usable like if-condition even for release.
+///
+#if !defined(Q_IF)
+#  ifndef QT_NO_DEBUG
+#    define Q_IF(cond) if (Q_LIKELY(qt_assert_if(((cond)),Q_NULLPTR,#cond,__FILE__,__LINE__)))
+#  else
+#    define Q_IF(cond) if (Q_LIKELY(cond))
+#  endif
+#endif
+
+/// @def Q_IF_X(cond, where, what)
+/// Same as #Q_IF(cond), but accepts location.
+///
+#if !defined(Q_IF_X)
+#  ifndef QT_NO_DEBUG
+#    define Q_IF_X(cond, where, what) if (Q_LIKELY(qt_assert_if(((cond)), where, what,__FILE__,__LINE__)))
+#  else
+#    define Q_IF_X(cond, where, what) if (Q_LIKELY(cond))
+#  endif
+#endif
+
+
 // Intentionally undefined
 template <bool Test> class QStaticAssertFailure;
+// Only `true` to get compile error on `false`.
 template <> class QStaticAssertFailure<true> {};
+// Otherwise would do:
+// ```
+// template <> class QStaticAssertFailure<false> {};
+// ```
 
-#define Q_STATIC_ASSERT_PRIVATE_JOIN(A, B) Q_STATIC_ASSERT_PRIVATE_JOIN_IMPL(A, B)
-#define Q_STATIC_ASSERT_PRIVATE_JOIN_IMPL(A, B) A ## B
-#ifdef __COUNTER__
-#define Q_STATIC_ASSERT(Condition) \
-    enum {Q_STATIC_ASSERT_PRIVATE_JOIN(q_static_assert_result, __COUNTER__) = sizeof(QStaticAssertFailure<!!(Condition)>)}
+#ifdef Q_COMPILER_STATIC_ASSERT
+#  define Q_STATIC_ASSERT(Condition) static_assert(bool(Condition), #Condition)
+#  define Q_STATIC_ASSERT_X(Condition, Message) static_assert(bool(Condition), Message)
 #else
-#define Q_STATIC_ASSERT(Condition) \
-    enum {Q_STATIC_ASSERT_PRIVATE_JOIN(q_static_assert_result, __LINE__) = sizeof(QStaticAssertFailure<!!(Condition)>)}
-#endif /* __COUNTER__ */
-#define Q_STATIC_ASSERT_X(Condition, Message) Q_STATIC_ASSERT(Condition)
+   // WARNING: Q_STATIC_ASSERT may do nothing if inline method is never called.
+#  ifdef __COUNTER__
+#    define Q_STATIC_ASSERT(Condition) \
+     enum {QT_JOIN(q_static_assert_result, __COUNTER__) = sizeof(QStaticAssertFailure<!!(Condition)>)}
+#  else
+#    define Q_STATIC_ASSERT(Condition) \
+     enum {QT_JOIN(q_static_assert_result, __LINE__) = sizeof(QStaticAssertFailure<!!(Condition)>)}
+#  endif /* __COUNTER__ */
+#  define Q_STATIC_ASSERT_X(Condition, Message) Q_STATIC_ASSERT(Condition)
 #endif
+
+/// Helper to disable access to "value_" parameter and "TYPE" template argument if
+/// condition "dummy" is not met.
+///
+/// Use #Q_STATIC_VALUE_CONDITION macro instead.
+template <int dummy, typename TYPE = void>
+class QStaticValueConditon {
+public:
+    typedef TYPE type;
+
+    template <typename T>
+    inline static T value(const T &value_) { return value_; }
+
+    enum { result = dummy }; //conditon result
+};
+
+#define Q_STATIC_VALUE_CONDITION(CONDITION, RESULT) \
+    QStaticValueConditon< sizeof(::QStaticAssertFailure<!!(CONDITION)>) >::value(RESULT)
+
+#define Q_VALUE_COMPARE(CURRENT, REQUIRED) Q_STATIC_VALUE_CONDITION(CURRENT == REQUIRED, CURRENT)
+/// Helper to inject given @p X parameter without change.
+/// @see QNumber
+#define Q_VALUE_RETURN(X) X
+
+#define Q_STATIC_TYPE_CONDITION(CONDITION, TYPE) \
+    QStaticValueConditon< sizeof(::QStaticAssertFailure<!!(CONDITION)>) , TYPE >::type
+
+/// Ensures @p TYPE can hold at least @p MIN and @p MAX.
+#define Q_BOUND_T(MIN, MAX, TYPE) Q_STATIC_TYPE_CONDITION( \
+        (std::numeric_limits<TYPE>::min)() <= MIN \
+        && (std::numeric_limits<TYPE>::max)() >= MAX, TYPE)
+
+/// Ensures @p TYPE can hold at least @p MIN.
+#define Q_MIN_T(MIN, TYPE) \
+    Q_STATIC_TYPE_CONDITION( (std::numeric_limits<TYPE>::min)() <= MIN, TYPE)
+
+/// Ensures @p TYPE can hold at least @p MAX.
+#define Q_MAX_T(MAX, TYPE) \
+    Q_STATIC_TYPE_CONDITION( (std::numeric_limits<TYPE>::max)() >= MAX, TYPE)
+
 
 Q_CORE_EXPORT void qt_check_pointer(const char *, int);
 Q_CORE_EXPORT void qBadAlloc();
@@ -896,6 +1104,19 @@ Q_CORE_EXPORT QT_DEPRECATED void *qMemSet(void *dest, int c, size_t n);
 Q_CORE_EXPORT void *qMallocAligned(size_t size, size_t alignment) Q_ALLOC_SIZE(1);
 Q_CORE_EXPORT void *qReallocAligned(void *ptr, size_t size, size_t oldsize, size_t alignment) Q_ALLOC_SIZE(2);
 Q_CORE_EXPORT void qFreeAligned(void *ptr);
+
+template <typename T>
+Q_ALWAYS_INLINE void *qReallocAlignedT(void *ptr, size_t size, size_t oldsize)
+{
+    size_t alignment = qMax<int>(sizeof(void*), Q_ALIGNOF(T));
+    return qReallocAligned(ptr, size, oldsize, alignment);
+}
+
+template <typename T>
+Q_ALWAYS_INLINE void *qMallocAlignedT(size_t size)
+{
+    return qReallocAlignedT<T>(Q_NULLPTR, size, 0);
+}
 
 
 /*
@@ -1084,6 +1305,15 @@ Q_CORE_EXPORT QString qtTrId(const char *id, int n = -1);
   { return T::dynamic_cast_will_always_fail_because_rtti_is_disabled; }
 #endif
 
+// Helpers to suppress warnings about default copy-constructor and copy-assign.
+#ifdef Q_COMPILER_DEFAULT_MEMBERS
+#  define Q_DEFAULT_COPY_INIT(CLASS) CLASS(const CLASS &) = default;
+#  define Q_DEFAULT_COPY_ASSIGN(CLASS) CLASS &operator =(const CLASS &) = default;
+#else
+#  define Q_DEFAULT_COPY_INIT(CLASS)
+#  define Q_DEFAULT_COPY_ASSIGN(CLASS)
+#endif
+
 class QByteArray;
 Q_CORE_EXPORT QByteArray qgetenv(const char *varName);
 Q_CORE_EXPORT bool qputenv(const char *varName, const QByteArray& value);
@@ -1102,6 +1332,24 @@ inline int qIntCast(float f) { return int(f); }
 Q_CORE_EXPORT void qsrand(uint seed);
 Q_CORE_EXPORT int qrand();
 
+inline int qRandom(int minimum, int maximum) {
+    maximum -= minimum;
+    if(maximum > 0)
+        return (qrand() % (maximum + 1)) + minimum; //plus 1 to include maximum
+    return minimum;
+}
+
+template <typename T>
+Q_DECL_CONSTEXPR inline const T &qRandomF(const T &maximum)
+{ return float(qrand()) / (std::numeric_limits<short>::max)() * maximum; } //from zero to max
+
+template <typename T>
+Q_DECL_CONSTEXPR inline const T &qRandomF(const T &minimum, const T &maximum)
+{ return (float(qrand()) / (std::numeric_limits<short>::max)() * (maximum - minimum)) + minimum; }
+
+Q_CORE_EXPORT quint16 qHex(quint8 byteValue);
+Q_CORE_EXPORT quint8 qHexDecode(quint16 hexEncoded);
+
 #define QT_MODULE(x)
 
 #if !defined(QT_BOOTSTRAPPED) && defined(QT_REDUCE_RELOCATIONS) && defined(__ELF__) && \
@@ -1110,6 +1358,10 @@ Q_CORE_EXPORT int qrand();
          "Compile your code with -fPIC (-fPIE is not enough)."
 #endif
 
+//QEnableIf is like std::enable_if
+template <bool B, typename T = void> struct QEnableIf;
+template <typename T> struct QEnableIf<true, T> { typedef T Type; typedef T type; };
+
 namespace QtPrivate {
 //like std::enable_if
 template <bool B, typename T = void> struct QEnableIf;
@@ -1117,9 +1369,104 @@ template <typename T> struct QEnableIf<true, T> { typedef T Type; };
 
 template <bool B, typename T, typename F> struct QConditional { typedef T Type; };
 template <typename T, typename F> struct QConditional<false, T, F> { typedef F Type; };
+
+template <typename Func1>
+class QFinally {
+    Func1 data;
+public:
+    Q_DECL_CONSTEXPR Q_ALWAYS_INLINE QFinally(Func1 &&f)
+        : data(qMove(f))
+    {}
+
+    Q_ALWAYS_INLINE ~QFinally() {
+        (data)();
+    }
+};
+
 } // namespace QtPrivate
 
+// Under LGPL-3 header permission: uses Qt-6's "qScopeGuard" name.
+template <typename Func1>
+Q_DECL_CONSTEXPR Q_ALWAYS_INLINE QtPrivate::QFinally<Func1 > qScopeGuard(Func1 && f)
+{
+    return QtPrivate::QFinally<Func1 >(qMove(f));
+}
+#endif /* __cplusplus end */
+
+#define Q_PTR_ALIGN_CAST(Pointer, Align, TYPE) Q_PTR_CAST(TYPE, Q_PTR_ALIGN(Pointer, Align))
+
+#ifdef __cplusplus
+// Memory
+#  define Q_PTR_ADD_OFFSET(Pointer, Offset) (reinterpret_cast<void *>(reinterpret_cast<quintptr>(Pointer) + quintptr(Offset)))
+#  define Q_PTR_SUB_OFFSET(Pointer, Offset) (reinterpret_cast<void *>(reinterpret_cast<quintptr>(Pointer) - quintptr(Offset)))
+#  define Q_PTR_ALIGN(Pointer, Align) \
+    (reinterpret_cast<void *>((reinterpret_cast<quintptr>(Pointer) + static_cast<quintptr>((Align) - 1)) & ~static_cast<quintptr>((Align) - 1)))
+#  define Q_PTR_REBASE(Pointer, OldBase, NewBase) \
+    (reinterpret_cast<void *>(reinterpret_cast<quintptr>(Pointer) - reinterpret_cast<quintptr>(OldBase) + reinterpret_cast<quintptr>(NewBase)))
+#  define Q_PTR_CAST(TYPE, Pointer) (reinterpret_cast<TYPE>(reinterpret_cast<void *>(quintptr(Pointer))))
+/// Same as "Q_PTR_CAST(TYPE, Q_PTR_ADD_OFFSET(Pointer, Offset))" combo.
+#  define Q_PTR_TRANSLATE(Pointer, Offset, TYPE) (reinterpret_cast<TYPE>(reinterpret_cast<void *>(reinterpret_cast<quintptr>(Pointer) + quintptr(Offset))))
+
+// Calculate the byte offset of a field in a structure of type "TYPE".
+#  define Q_FIELD_OFFSET(TYPE, FIELD) (reinterpret_cast<void *>(reinterpret_cast<qintptr>(&(Q_PTR_CAST(TYPE *, 1u)->FIELD)) - 1u))
+#  define Q_FIELD_PTR(CLASS_PTR, FIELD)  (reinterpret_cast<void *>(reinterpret_cast<qintptr>(&((CLASS_PTR)->FIELD))))
+
+/// @def Q_FIELDER(TYPE, FIELD, FIELD_PTR)
+/// @brief Gets pointer of field holder from field's pointer.
+///
+/// Needs Holder-type, Field-name and Field-pointer as arguments.
+///
+/// Use only in combination with #Q_DISABLE_COPY(CLASS), like:
+/// ```
+/// class MyOwnerClass {
+/// public:
+///     struct MyFieldType {
+///         inline MyFieldType() {}
+///
+///         MyOwnerClass &owner() { return *Q_FIELDER(MyOwnerClass, m_myField, this); }
+///
+///     private:
+///         Q_DISABLE_COPY(MyFieldType)
+///     } m_myField;
+/// };
+/// ```
+#  define Q_FIELDER(TYPE, FIELD, FIELD_PTR) (static_cast<TYPE *>(Q_PTR_SUB_OFFSET(FIELD_PTR, Q_FIELD_OFFSET(TYPE, FIELD))))
+
+#define Q_FIELDER_OFFSET(TYPE, FIELD) Q_PTR_SUB_OFFSET(0u, Q_FIELD_OFFSET(TYPE, FIELD))
+
+/// Calculates the size of a field in a structure of type "TYPE",
+/// both without knowing or stating the type of the field.
+#  define Q_FIELD_SIZE(TYPE, FIELD) (sizeof((static_cast<TYPE *>(0))->FIELD))
+#else /* __cplusplus */
+/* Memory */
+#  define Q_PTR_ADD_OFFSET(Pointer, Offset) ((void *)((quintptr)(Pointer) + (quintptr)(Offset)))
+#  define Q_PTR_SUB_OFFSET(Pointer, Offset) ((void *)((quintptr)(Pointer) - (quintptr)(Offset)))
+#  define Q_PTR_ALIGN(Pointer, Align) ((void *)(((quintptr)(Pointer) + (Align) - 1) & ~((Align) - 1)))
+#  define Q_PTR_REBASE(Pointer, OldBase, NewBase) \
+    ((void *)((quintptr)(Pointer) - (quintptr)(OldBase) + (quintptr)(NewBase)))
+#  define Q_PTR_CAST(TYPE, Pointer) ((TYPE)((void *)((quintptr)(Pointer))))
+/* Same as "Q_PTR_CAST(TYPE, Q_PTR_ADD_OFFSET(Pointer, Offset))" */
+#  define Q_PTR_TRANSLATE(Pointer, Offset, TYPE) ((TYPE)((void *)((quintptr)(Pointer) + (quintptr)(Offset))))
+
+/* Calculate the byte offset of a field in a structure of type "TYPE". */
+#  ifndef offsetof
+#    define Q_FIELD_OFFSET(TYPE, FIELD)    ((void *)((qintptr)&(Q_PTR_CAST(TYPE *, 1u)->FIELD)) - 1u)
+#  else
+#    define Q_FIELD_OFFSET offsetof
+#  endif
+#  define Q_FIELD_PTR(CLASS_PTR, FIELD)  ((void *)(qintptr)&((CLASS_PTR)->FIELD))
+/* Get pointer of field holder from fields pointer: needs Holder-type, Field-name and Field-pointer. */
+#  define Q_FIELDER(TYPE, FIELD, Pointer) ((TYPE *)(Q_PTR_SUB_OFFSET(Pointer, Q_FIELD_OFFSET(TYPE, FIELD))))
+
+/* And this Calculate the size of a field in a structure of type "TYPE",
+ * both without knowing or stating the type of the field
+ */
+#  define Q_FIELD_SIZE(TYPE, FIELD) (sizeof(((TYPE *)0)->FIELD))
+#endif /* __cplusplus */
+
 QT_END_NAMESPACE
+
+#ifdef __cplusplus
 
 // We need to keep QTypeInfo, QSysInfo, QFlags, qDebug & family in qglobal.h for compatibility with Qt 4.
 // Be careful when changing the order of these files.

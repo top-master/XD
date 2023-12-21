@@ -1,5 +1,6 @@
 /****************************************************************************
 **
+** Copyright (C) 2015 The XD Company Ltd.
 ** Copyright (C) 2015 The Qt Company Ltd.
 ** Contact: http://www.qt.io/licensing/
 **
@@ -170,16 +171,16 @@ private:
 #  define qWarning QT_NO_QDEBUG_MACRO
 #endif
 
+Q_CORE_EXPORT QString qt_message(QtMsgType msgType, const char *msg, va_list ap);
 Q_CORE_EXPORT void qt_message_output(QtMsgType, const QMessageLogContext &context,
                                      const QString &message);
 
 Q_CORE_EXPORT void qErrnoWarning(int code, const char *msg, ...);
 Q_CORE_EXPORT void qErrnoWarning(const char *msg, ...);
 
-#if QT_DEPRECATED_SINCE(5, 0)// deprecated. Use qInstallMessageHandler instead!
 typedef void (*QtMsgHandler)(QtMsgType, const char *);
-Q_CORE_EXPORT QT_DEPRECATED QtMsgHandler qInstallMsgHandler(QtMsgHandler);
-#endif
+/// Deprecated. Use qInstallMessageHandler instead!
+Q_CORE_EXPORT QtMsgHandler qInstallMsgHandler(QtMsgHandler);
 
 typedef void (*QtMessageHandler)(QtMsgType, const QMessageLogContext &, const QString &);
 Q_CORE_EXPORT QtMessageHandler qInstallMessageHandler(QtMessageHandler);
