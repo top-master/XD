@@ -1,5 +1,6 @@
 /****************************************************************************
 **
+** Copyright (C) 2015 The XD Company Ltd.
 ** Copyright (C) 2015 The Qt Company Ltd.
 ** Contact: http://www.qt.io/licensing/
 **
@@ -157,6 +158,8 @@ public:
                              const char * disambiguation, Encoding, int n = -1)
         { return translate(context, key, disambiguation, n); }
 #endif
+
+    static bool waitForDebugger(int timeout = -1);
 
 #ifndef QT_NO_QOBJECT
     static void flush();

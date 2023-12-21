@@ -1,5 +1,6 @@
 /****************************************************************************
 **
+** Copyright (C) 2015 The XD Company Ltd.
 ** Copyright (C) 2015 The Qt Company Ltd.
 ** Contact: http://www.qt.io/licensing/
 **
@@ -36,6 +37,15 @@
 #ifndef QSYSINFO_H
 #define QSYSINFO_H
 
+#if defined(Q_OS_WIN)
+#  define Q_FS_DIR_SEPARATOR '\\'
+#  define Q_FS_DIR_LIST_SEPARATOR ';'
+#else
+#  define Q_FS_DIR_SEPARATOR '/'
+#  define Q_FS_DIR_LIST_SEPARATOR ':'
+#endif
+
+
 QT_BEGIN_NAMESPACE
 
 /*
@@ -46,7 +56,15 @@ class QString;
 class Q_CORE_EXPORT QSysInfo {
 public:
     enum Sizes {
-        WordSize = (sizeof(void *)<<3)
+        WordSize = (sizeof(void *)<<3),
+
+        /// If user tries to allocate Heap-memory more than this, then
+        /// allocator should call qBadAlloc() before even trying to allocate.
+        ///
+        /// Calculation: We typically need an extra bit for
+        /// @ref qNextPowerOfTwo when determining the next allocation size.
+        ///
+        MaxAllocSize = (1 << (std::numeric_limits<int>::digits - 1)) - 1
     };
 
 #if defined(QT_BUILD_QMAKE)

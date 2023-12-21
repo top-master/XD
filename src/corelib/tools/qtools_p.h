@@ -46,6 +46,7 @@
 //
 
 #include "QtCore/qglobal.h"
+#include "QtCore/qsysinfo.h"
 #include <limits>
 
 QT_BEGIN_NAMESPACE
@@ -80,9 +81,14 @@ Q_DECL_CONSTEXPR inline int fromOct(uint c) Q_DECL_NOTHROW
 }
 }
 
-// We typically need an extra bit for qNextPowerOfTwo when determining the next allocation size.
 enum {
-    MaxAllocSize = (1 << (std::numeric_limits<int>::digits - 1)) - 1
+    // TRACE/corelib improve: expose when `qBadAlloc()` gets called #1.
+    /// For some reason Qt didn't want to expose when @ref qBadAlloc is called,
+    /// and this is only here for backward-compatibility.
+    ///
+    /// @deprecated Use @ref QSysInfo::MaxAllocSize instead.
+    ///
+    MaxAllocSize = QSysInfo::MaxAllocSize
 };
 
 // implemented in qbytearray.cpp

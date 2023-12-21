@@ -1,7 +1,8 @@
 /****************************************************************************
 **
-** Copyright (C) 2013 Samuel Gaist <samuel.gaist@edeltech.ch>
+** Copyright (C) 2015 The XD Company Ltd.
 ** Copyright (C) 2015 The Qt Company Ltd.
+** Copyright (C) 2013 Samuel Gaist <samuel.gaist@edeltech.ch>
 ** Contact: http://www.qt.io/licensing/
 **
 ** This file is part of the QtCore module of the Qt Toolkit.
@@ -37,6 +38,7 @@
 #include "qstringlist.h"
 #include "qvector.h"
 #include "qfileinfo.h"
+#include <qelapsedtimer.h>
 #include "qcorecmdlineargs_p.h"
 #ifndef QT_NO_QOBJECT
 #include "qmutex.h"
@@ -1059,5 +1061,21 @@ void QCoreApplicationPrivate::removePostedTimerEvent(QObject *object, int timerI
     }
 }
 #endif // QT_NO_QOBJECT
+
+bool QCoreApplication::waitForDebugger(int timeout)
+{
+    QElapsedTimer timer;
+    timer.start();
+
+    while ( ! timer.hasExpired(timeout)) {
+        // Defined in `Kernel32.dll`.
+        if (IsDebuggerPresent()) {
+            return true;
+        }
+        ::Sleep(500);
+    }
+
+    return false;
+}
 
 QT_END_NAMESPACE

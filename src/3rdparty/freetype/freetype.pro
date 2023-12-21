@@ -8,6 +8,11 @@ CONFIG += \
 
 load(qt_helper_lib)
 
+win32 {
+    # Disables warning LNK4006, like for _otv_module_class.
+    QMAKE_LIBFLAGS += /ignore:4006
+}
+
 SOURCES += \
     $$PWD/src/autofit/afangles.c \
     $$PWD/src/autofit/afdummy.c \

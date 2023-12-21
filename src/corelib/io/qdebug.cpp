@@ -1,5 +1,6 @@
 /****************************************************************************
 **
+** Copyright (C) 2015 The XD Company Ltd.
 ** Copyright (C) 2015 The Qt Company Ltd.
 ** Copyright (C) 2014 Intel Corporation.
 ** Contact: http://www.qt.io/licensing/
@@ -142,14 +143,26 @@ using QtMiscUtils::fromHex;
 QDebug::~QDebug()
 {
     if (!--stream->ref) {
+        flush();
+        delete stream;
+    }
+}
+
+void QDebug::flush()
+{
+    if(!stream->buffer.isEmpty()) {
         if (stream->space && stream->buffer.endsWith(QLatin1Char(' ')))
             stream->buffer.chop(1);
         if (stream->message_output) {
-            qt_message_output(stream->type,
-                              stream->context,
-                              stream->buffer);
+            QT_TRY {
+                qt_message_output(stream->type,
+                                  stream->context,
+                                  stream->buffer);
+            } QT_CATCH(std::bad_alloc&) {
+                // Probably out of memory, not much we can do.
+            }
         }
-        delete stream;
+        stream->buffer.clear();
     }
 }
 
@@ -797,6 +810,11 @@ public:
             m_dbg.stream->ts << ' ';
     }
 
+    enum {
+        NoQuotes = QDebug::Stream::NoQuotes
+    };
+
+public:
     QDebug &m_dbg;
 
     // QDebug state
@@ -828,6 +846,19 @@ QDebugStateSaver::QDebugStateSaver(QDebug &dbg)
 QDebugStateSaver::~QDebugStateSaver()
 {
     d->restoreState();
+}
+
+bool QDebugStateSaver::hadQuotes() const Q_DECL_NOTHROW
+{
+    if (d->m_dbg.context().version > 1) {
+        return ! (d->m_flags & QDebugStateSaverPrivate::NoQuotes);
+    }
+    return false;
+}
+
+bool QDebugStateSaver::hadSpace() const Q_DECL_NOTHROW
+{
+    return d->m_spaces;
 }
 
 #ifndef QT_NO_QOBJECT

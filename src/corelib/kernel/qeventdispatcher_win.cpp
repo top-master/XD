@@ -1,5 +1,6 @@
 /****************************************************************************
 **
+** Copyright (C) 2015 The XD Company Ltd.
 ** Copyright (C) 2015 The Qt Company Ltd.
 ** Contact: http://www.qt.io/licensing/
 **
@@ -45,6 +46,10 @@
 #include "qcoreapplication_p.h"
 #include <private/qthread_p.h>
 #include <private/qmutexpool_p.h>
+
+#include <WinSock2.h>
+#include <WinUser.h>
+
 
 QT_BEGIN_NAMESPACE
 
@@ -450,7 +455,7 @@ static inline UINT inputTimerMask()
     UINT result = QS_TIMER | QS_INPUT | QS_RAWINPUT;
     // QTBUG 28513, QTBUG-29097, QTBUG-29435: QS_TOUCH, QS_POINTER became part of
     // QS_INPUT in Windows Kit 8. They should not be used when running on pre-Windows 8.
-#if WINVER > 0x0601
+#if WINVER >= 0x0602
     if (QSysInfo::WindowsVersion < QSysInfo::WV_WINDOWS8)
         result &= ~(QS_TOUCH | QS_POINTER);
 #endif //  WINVER > 0x0601

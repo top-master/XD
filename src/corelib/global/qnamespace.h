@@ -1221,6 +1221,15 @@ public:
         CaseSensitive
     };
 
+    /// @def Q_FS_CASE
+    /// If file-system is case-sensitive, expands to Qt::CaseSensitive, and
+    /// otherwise expands to Qt::CaseInsensitive.
+#ifdef Q_OS_WIN
+#  define Q_FS_CASE QT_PREPEND_NAMESPACE(Qt::CaseInsensitive)
+#else
+#  define Q_FS_CASE QT_PREPEND_NAMESPACE(Qt::CaseSensitive)
+#endif
+
     enum Corner {
         TopLeftCorner = 0x00000,
         TopRightCorner = 0x00001,

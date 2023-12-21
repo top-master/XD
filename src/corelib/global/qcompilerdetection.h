@@ -1,5 +1,6 @@
 /****************************************************************************
 **
+** Copyright (C) 2015 The XD Company Ltd.
 ** Copyright (C) 2015 The Qt Company Ltd.
 ** Copyright (C) 2014 Intel Corporation
 ** Contact: http://www.qt.io/licensing/
@@ -77,6 +78,9 @@
 #  endif
 
 #elif defined(_MSC_VER)
+#  ifdef __clang__
+#    define Q_CC_CLANG ((__clang_major__ * 100) + __clang_minor__)
+#  endif
 #  define Q_CC_MSVC (_MSC_VER)
 #  define Q_CC_MSVC_NET
 #  define Q_OUTOFLINE_TEMPLATE inline
@@ -91,7 +95,9 @@
 #  define Q_UNREACHABLE_IMPL() __assume(0)
 #  define Q_NORETURN __declspec(noreturn)
 #  define Q_DECL_DEPRECATED __declspec(deprecated)
-#  define Q_DECL_DEPRECATED_X(text) __declspec(deprecated(text))
+#  ifndef Q_CC_CLANG
+#    define Q_DECL_DEPRECATED_X(text) __declspec(deprecated(text))
+#  endif
 #  define Q_DECL_EXPORT __declspec(dllexport)
 #  define Q_DECL_IMPORT __declspec(dllimport)
 #  if _MSC_VER >= 1800
@@ -104,6 +110,12 @@
 #  if defined(__INTEL_COMPILER)
 #    define Q_DECL_VARIABLE_DEPRECATED
 #    define Q_CC_INTEL  __INTEL_COMPILER
+#  endif
+/* MSVC does not support SSE/MMX on x64 */
+#  if (defined(Q_CC_MSVC) && defined(_M_X64))
+#    undef QT_HAVE_SSE
+#    undef QT_HAVE_MMX
+#    undef QT_HAVE_3DNOW
 #  endif
 
 /* only defined for MSVC since that's the only compiler that actually optimizes for this */
@@ -127,6 +139,9 @@
    so check for it before that */
 #elif defined(__ARMCC__) || defined(__CC_ARM)
 #  define Q_CC_RVCT
+#  if __TARGET_ARCH_ARM >= 6
+#    define QT_HAVE_ARMV6
+#  endif
 /* work-around for missing compiler intrinsics */
 #  define __is_empty(X) false
 #  define __is_pod(X) false
@@ -158,10 +173,14 @@
 #      define Q_DECL_DEPRECATED_X(text) __attribute__ ((__deprecated__(text)))
 #    endif
 #  elif defined(__clang__)
-/* Clang also masquerades as GCC */
+/* Clang also masquerades as GCC 4.2.1 */
 #    if defined(__apple_build_version__)
 #      /* http://en.wikipedia.org/wiki/Xcode#Toolchain_Versions */
-#      if __apple_build_version__ >= 7000053
+#      if __apple_build_version__ >= 8020041
+#        define Q_CC_CLANG 309
+#      elif __apple_build_version__ >= 8000038
+#        define Q_CC_CLANG 308
+#      elif __apple_build_version__ >= 7000053
 #        define Q_CC_CLANG 306
 #      elif __apple_build_version__ >= 6000051
 #        define Q_CC_CLANG 305
@@ -228,6 +247,8 @@
 #  define Q_REQUIRED_RESULT __attribute__ ((__warn_unused_result__))
 #  define Q_DECL_PURE_FUNCTION __attribute__((pure))
 #  define Q_DECL_CONST_FUNCTION __attribute__((const))
+#  define Q_DECL_COLD_FUNCTION __attribute__((cold))
+
 #  if !defined(QT_MOC_CPP)
 #    define Q_PACKED __attribute__ ((__packed__))
 #    ifndef __ARM_EABI__
@@ -294,6 +315,7 @@
 /* Apply to all versions prior to Compaq C++ V6.0-000 - observed on
    DEC C++ V5.5-004. */
 #  if __DECCXX_VER < 60060000
+#    define Q_TYPENAME
 #    define Q_BROKEN_TEMPLATE_SPECIALIZATION
 #  endif
 /* avoid undefined symbol problems with out-of-line template members */
@@ -408,6 +430,9 @@
 #      define Q_NO_TEMPLATE_FRIENDS
 #    endif
 #    if !defined(_BOOL)
+#      error "Compiler not supported"
+#    endif
+#    if defined(__SUNPRO_CC_COMPAT) && (__SUNPRO_CC_COMPAT <= 4)
 #      error "Compiler not supported"
 #    endif
 /* 4.2 compiler or older */
@@ -1001,6 +1026,16 @@
 /*
  * C++11 keywords and expressions
  */
+#ifdef __cplusplus
+#  define Q_CPP_EXPR(x) x
+#  define Q_C_EXPR(x)
+#  define Q_LANG_EXPR(x, c) x
+#else
+#  define Q_CPP_EXPR(x)
+#  define Q_C_EXPR(x) x
+#  define Q_LANG_EXPR(cpp, x) x
+#endif // __cplusplus
+
 #ifdef Q_COMPILER_NULLPTR
 # define Q_NULLPTR         nullptr
 #else
@@ -1068,6 +1103,9 @@
 #ifndef Q_DECL_NOTHROW
 # define Q_DECL_NOTHROW Q_DECL_NOEXCEPT
 #endif
+#ifndef Q_THROWS
+#  define Q_THROWS(x) Q_DECL_NOEXCEPT_EXPR(false)
+#endif
 
 #if defined(Q_COMPILER_ALIGNOF)
 #  undef Q_ALIGNOF
@@ -1078,6 +1116,14 @@
 #  undef Q_DECL_ALIGN
 #  define Q_DECL_ALIGN(n)   alignas(n)
 #endif
+
+#if defined(__cplusplus) && defined(__has_cpp_attribute)
+// Clang's `[[nodiscard]]` has issue: https://bugs.llvm.org/show_bug.cgi?id=33518
+#  if __has_cpp_attribute(nodiscard) && (!defined(Q_CC_CLANG) || __cplusplus > 201402L)
+#      undef Q_REQUIRED_RESULT
+#      define Q_REQUIRED_RESULT [[nodiscard]]
+#    endif
+#endif /* __cplusplus */
 
 /*
  * Fallback macros to certain compiler features
@@ -1147,6 +1193,9 @@
 #ifndef Q_DECL_CONST_FUNCTION
 #  define Q_DECL_CONST_FUNCTION Q_DECL_PURE_FUNCTION
 #endif
+#ifndef Q_DECL_COLD_FUNCTION
+#  define Q_DECL_COLD_FUNCTION
+#endif
 #ifndef QT_MAKE_UNCHECKED_ARRAY_ITERATOR
 #  define QT_MAKE_UNCHECKED_ARRAY_ITERATOR(x) (x)
 #endif
@@ -1186,7 +1235,7 @@
 #  define QT_WARNING_DISABLE_MSVC(number)
 #  define QT_WARNING_DISABLE_CLANG(text)
 #  define QT_WARNING_DISABLE_GCC(text)
-#elif defined(Q_CC_MSVC) && _MSC_VER >= 1500
+#elif defined(Q_CC_MSVC) && _MSC_VER >= 1500 && !defined(Q_CC_CLANG)
 #  undef QT_DO_PRAGMA                           /* not needed */
 #  define QT_WARNING_PUSH                       __pragma(warning(push))
 #  define QT_WARNING_POP                        __pragma(warning(pop))
@@ -1228,7 +1277,7 @@
 #endif
 
 #ifdef Q_COMPILER_RVALUE_REFS
-#define qMove(x) std::move(x)
+#define qMove(x) (QT_WARNING_PUSH QT_WARNING_SUPPRESS_MOVE std::move(x) QT_WARNING_POP)
 #else
 #define qMove(x) (x)
 #endif
@@ -1236,6 +1285,12 @@
 #define Q_UNREACHABLE() \
     do {\
         Q_ASSERT_X(false, "Q_UNREACHABLE()", "Q_UNREACHABLE was reached");\
+        Q_UNREACHABLE_IMPL();\
+    } while (0)
+
+#define Q_UNREACHABLE_X(where, what) \
+    do {\
+        Q_ASSERT_X(false, where, "Q_UNREACHABLE: " what);\
         Q_UNREACHABLE_IMPL();\
     } while (0)
 
@@ -1267,4 +1322,92 @@
 #  undef QT_COMPILER_SUPPORTS_MIPS_DSPR2
 #endif
 
-#endif // QCOMPILERDETECTION_H
+#if defined(Q_CC_CLANG) || defined(Q_CC_GCC)
+#  define Q_COMPILER_RESTRICTIVE
+#endif
+
+#if defined(Q_CC_CLANG)
+#  if Q_CC_CLANG >= 1100
+#    define QT_WARNING_SUPPRESS_OVERRIDE \
+    QT_WARNING_DISABLE_CLANG("-Winconsistent-missing-override") \
+    QT_WARNING_DISABLE_CLANG("-Wsuggest-override")
+#  elif Q_CC_CLANG >= 306
+#    define QT_WARNING_SUPPRESS_OVERRIDE QT_WARNING_DISABLE_CLANG("-Winconsistent-missing-override")
+#  endif
+#elif defined(Q_CC_GNU) && Q_CC_GNU >= 501
+#  define QT_WARNING_SUPPRESS_OVERRIDE QT_WARNING_DISABLE_GCC("-Wsuggest-override")
+#else
+#  define QT_WARNING_SUPPRESS_OVERRIDE
+#endif
+
+#if defined(Q_CC_CLANG)
+#  define QT_WARNING_SUPPRESS_ATTRIBUTES \
+    QT_WARNING_DISABLE_CLANG("-Wattributes") \
+    QT_WARNING_DISABLE_CLANG("-Wignored-attributes")
+#elif defined(Q_CC_GNU) && !defined(Q_CC_INTEL) && Q_CC_GNU >= 600
+#  define QT_WARNING_SUPPRESS_ATTRIBUTES \
+    QT_WARNING_DISABLE_GCC("-Wattributes") \
+    QT_WARNING_DISABLE_GCC("-Wignored-attributes")
+#else
+#  define QT_WARNING_SUPPRESS_ATTRIBUTES
+#endif
+
+#if defined(Q_CC_CLANG)
+#  define QT_WARNING_SUPPRESS_UNUSED \
+    QT_WARNING_DISABLE_CLANG("-Wunused-private-field") \
+    QT_WARNING_DISABLE_CLANG("-Wunused-const-variable") \
+    QT_WARNING_DISABLE_CLANG("-Wunused-variable") \
+    QT_WARNING_DISABLE_CLANG("-Wunused-function") \
+    QT_WARNING_DISABLE_CLANG("-Wunused-parameter")
+#elif defined(Q_CC_GNU)
+#  define QT_WARNING_SUPPRESS_UNUSED \
+    QT_WARNING_DISABLE_GCC("-Wunused-private-field") \
+    QT_WARNING_DISABLE_GCC("-Wunused-const-variable") \
+    QT_WARNING_DISABLE_GCC("-Wunused-variable") \
+    QT_WARNING_DISABLE_GCC("-Wunused-function") \
+    QT_WARNING_DISABLE_GCC("-Wunused-parameter")
+#elif defined(Q_CC_MSVC)
+  /* Details:
+   * 4100: unreferenced formal parameter.
+   * 4101: unreferenced local variable.
+   * 4102: unreferenced label.
+   * 4505: unreferenced local function has been removed.
+   * 4514: unreferenced inline function has been removed.
+   * 5245: unreferenced function with internal linkage has been removed.
+   */
+#  define QT_WARNING_SUPPRESS_UNUSED \
+    QT_WARNING_DISABLE_MSVC(4100) \
+    QT_WARNING_DISABLE_MSVC(4101) \
+    QT_WARNING_DISABLE_MSVC(4102) \
+    QT_WARNING_DISABLE_MSVC(4505) \
+    QT_WARNING_DISABLE_MSVC(4514) \
+    QT_WARNING_DISABLE_MSVC(5245)
+#else
+#  define QT_WARNING_SUPPRESS_UNUSED
+#endif
+
+#if defined(Q_CC_CLANG)
+#  define QT_WARNING_SUPPRESS_MOVE \
+    QT_WARNING_DISABLE_CLANG("-Wpessimizing-move")
+#elif defined(Q_CC_GNU) && !defined(Q_CC_INTEL) && Q_CC_GNU >= 900
+#  define QT_WARNING_SUPPRESS_MOVE \
+    QT_WARNING_DISABLE_GCC("-Wpessimizing-move")
+#else
+#  define QT_WARNING_SUPPRESS_MOVE
+#endif
+
+/* Using some helpers under LGPL3's header exception. */
+#include "qcompilerdetection_lgpl3.h"
+
+/// @def QT_UNDERLYING_TYPE(x)
+/// @brief Similar to `std::underlying_type<T>`, but more cross-platform.
+#if defined(__cplusplus)
+#  if QT_HAS_BUILTIN(__underlying_type)
+#    define QT_UNDERLYING_TYPE(x) __underlying_type(x)
+#  endif
+#endif
+#ifndef QT_UNDERLYING_TYPE
+#  define QT_UNDERLYING_TYPE(x) x
+#endif
+
+#endif /* QCOMPILERDETECTION_H */

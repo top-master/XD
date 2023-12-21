@@ -145,6 +145,7 @@ public:
     inline operator bool() const { return a.testBit(i); }
     inline bool operator!() const { return !a.testBit(i); }
     QBitRef& operator=(const QBitRef& val) { a.setBit(i, val); return *this; }
+    Q_DEFAULT_COPY_INIT(QBitRef)
     QBitRef& operator=(bool val) { a.setBit(i, val); return *this; }
 };
 

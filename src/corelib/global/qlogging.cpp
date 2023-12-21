@@ -1,5 +1,6 @@
 /****************************************************************************
 **
+** Copyright (C) 2015 The XD Company Ltd.
 ** Copyright (C) 2015 The Qt Company Ltd.
 ** Copyright (C) 2014 Olivier Goffart <ogoffart@woboq.com>
 ** Copyright (C) 2014 Intel Corporation.
@@ -275,6 +276,18 @@ static QString qt_message(QtMsgType msgType, const QMessageLogContext &context, 
     qt_message_print(msgType, context, buf);
     return buf;
 }
+/*!
+    \internal
+*/
+QString qt_message(QtMsgType msgType, const char *msg, va_list ap)
+{
+    QMessageLogContext ctx;
+    return qt_message(msgType, ctx, msg, ap);
+}
+
+#define xdDebug(x) \
+    fprintf(stderr, x "\n"); \
+    fflush(stderr)
 
 #undef qDebug
 /*!
@@ -1526,6 +1539,9 @@ static void android_default_message_handler(QtMsgType type,
 
 /*!
     \internal
+
+    \note Intentionally NOT exported, to encourage storing the
+    previous handler when installing new one.
 */
 static void qDefaultMessageHandler(QtMsgType type, const QMessageLogContext &context,
                                    const QString &buf)
@@ -1563,6 +1579,9 @@ static void qDefaultMessageHandler(QtMsgType type, const QMessageLogContext &con
 
 /*!
     \internal
+
+    \note Intentionally NOT exported, to encourage storing the
+    previous handler when installing new one.
 */
 static void qDefaultMsgHandler(QtMsgType type, const char *buf)
 {
@@ -1618,6 +1637,8 @@ static void qt_message_print(QtMsgType msgType, const QMessageLogContext &contex
         ungrabMessageHandler();
     } else {
         fprintf(stderr, "%s\n", message.toLocal8Bit().constData());
+        // TRACE/corelib #logs; manually flush.
+        fflush(stderr);
     }
 }
 
@@ -1636,15 +1657,20 @@ static void qt_message_fatal(QtMsgType, const QMessageLogContext &context, const
 
     int ret = _CrtDbgReportW(_CRT_ERROR, contextFileL, context.line, _CRT_WIDE(QT_VERSION_STR),
                              reinterpret_cast<const wchar_t *>(message.utf16()));
-    if ((ret == 0) && (reportMode & _CRTDBG_MODE_WNDW))
+    if ((ret == 0) && (reportMode & _CRTDBG_MODE_WNDW)) {
+        xdDebug("qFatal: ignoring as CrtDbgHook requested.");
         return; // ignore
-    else if (ret == 1)
+    } else if (ret == 1) {
+        xdDebug("qFatal: triggering debug break (or exit).");
         _CrtDbgBreak();
+    }
 #else
     Q_UNUSED(context);
     Q_UNUSED(message);
+    Q_UNUSED(&convert_to_wchar_t_elided);
 #endif
 
+    xdDebug("qFatal: exiting.");
 #if (defined(Q_OS_UNIX) || defined(Q_CC_MINGW))
     abort(); // trap; generates core dump
 #else

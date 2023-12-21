@@ -243,6 +243,27 @@ template <> struct QConcatenable<QLatin1String> : private QAbstractConcatenable
     }
 };
 
+// Required for `QString result = QLL("raw text") + myQStringVariable` syntax.
+template <> struct QConcatenable<QLatin1Literal> : private QAbstractConcatenable
+{
+    typedef QLatin1Literal type;
+    typedef QString ConvertTo;
+    enum { ExactSize = true };
+    static int size(const QLatin1Literal a) { return a.size(); }
+    static inline void appendTo(const QLatin1Literal a, QChar *&out)
+    {
+        appendLatin1To(a.latin1(), a.size(), out);
+        out += a.size();
+    }
+    static inline void appendTo(const QLatin1Literal a, char *&out)
+    {
+        if (const char *data = a.data()) {
+            memcpy(out, data, a.size());
+            out += a.size();
+        }
+    }
+};
+
 template <> struct QConcatenable<QString> : private QAbstractConcatenable
 {
     typedef QString type;

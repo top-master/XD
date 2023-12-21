@@ -21,6 +21,7 @@ SUBDIRS=\
     qelapsedtimer \
     qexplicitlyshareddatapointer \
     qfreelist \
+    qfunction \
     qhash \
     qhash_strictiterators \
     qhashfunctions \

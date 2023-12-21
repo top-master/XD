@@ -68,6 +68,7 @@ SOURCES += \
            ../../corelib/tools/qcommandlineoption.cpp \
            ../../corelib/tools/qcryptographichash.cpp \
            ../../corelib/tools/qdatetime.cpp \
+           ../../corelib/tools/qelapsedtimer.cpp \
            ../../corelib/tools/qhash.cpp \
            ../../corelib/tools/qlist.cpp \
            ../../corelib/tools/qlinkedlist.cpp \
@@ -100,18 +101,22 @@ SOURCES += \
 
 unix:SOURCES += ../../corelib/io/qfilesystemengine_unix.cpp \
                 ../../corelib/io/qfilesystemiterator_unix.cpp \
-                ../../corelib/io/qfsfileengine_unix.cpp
+                ../../corelib/io/qfsfileengine_unix.cpp \
+                ../../corelib/tools/qelapsedtimer_unix.cpp \
 
 win32:SOURCES += ../../corelib/io/qfilesystemengine_win.cpp \
                  ../../corelib/io/qfilesystemiterator_win.cpp \
                  ../../corelib/io/qfsfileengine_win.cpp \
                  ../../corelib/kernel/qcoreapplication_win.cpp \
                  ../../corelib/plugin/qsystemlibrary.cpp \
+                 ../../corelib/tools/qelapsedtimer_win.cpp \
 
 mac {
     SOURCES += \
         ../../corelib/kernel/qcoreapplication_mac.cpp \
-        ../../corelib/kernel/qcore_mac.cpp
+        ../../corelib/kernel/qcore_mac.cpp \
+        ../../corelib/tools/qelapsedtimer_mac.cpp \
+
     OBJECTIVE_SOURCES += \
         ../../corelib/kernel/qcore_mac_objc.mm
 

@@ -1,6 +1,7 @@
 /****************************************************************************
 **
 ** Copyright (C) 2012 Klarälvdalens Datakonsult AB, a KDAB Group company, info@kdab.com, author Marc Mutz <marc.mutz@kdab.com>
+** Copyright (C) 2015 The XD Company Ltd.
 ** Contact: http://www.qt.io/licensing/
 **
 ** This file is part of the QtCore module of the Qt Toolkit.
@@ -98,12 +99,12 @@
 //  - Use Qt macros for long long type differences on Windows.
 //  - Enclose in QtPrivate namespace.
 
-#include "QtCore/qglobal.h"
+#include "qglobal.h"
 
 #ifndef QTYPETRAITS_H
 #define QTYPETRAITS_H
 
-#include <utility>                  // For pair
+#include <utility>    // For pair
 
 QT_BEGIN_NAMESPACE
 
@@ -203,8 +204,15 @@ template <class T> struct remove_const;
 template <class T> struct remove_volatile;
 template <class T> struct remove_cv;
 template <class T> struct remove_reference;
+template <class T> struct add_const;
 template <class T> struct add_reference;
 template <class T> struct remove_pointer;
+template <class T> struct remove_relating;
+template <class T> struct resolve;
+template <class T> struct add_const_ref;
+template <class T> struct const_derefable;
+template <class T> struct mutable_derefable;
+
 template <class T, class U> struct is_same;
 #if !defined(_MSC_VER) && !(defined(__GNUC__) && __GNUC__ <= 3)
 template <class From, class To> struct is_convertible;
@@ -238,6 +246,9 @@ template<> struct is_integral<unsigned __int64> : true_type { };
 template<> struct is_integral<long long> : true_type { };
 template<> struct is_integral<unsigned long long> : true_type { };
 #endif
+// Qt types.
+template<> struct is_integral<qreal> : true_type { };
+// Ignores `const` and `volatile`.
 template <class T> struct is_integral<const T> : is_integral<T> { };
 template <class T> struct is_integral<volatile T> : is_integral<T> { };
 template <class T> struct is_integral<const volatile T> : is_integral<T> { };
@@ -414,6 +425,11 @@ template<typename T> struct remove_cv {
 template<typename T> struct remove_reference { typedef T type; };
 template<typename T> struct remove_reference<T&> { typedef T type; };
 
+// Same as std::add_const
+template<typename T> struct add_const { typedef T const type; };
+template<typename T> struct add_const<T const> { typedef T const type; };
+
+// Same as std::reference_wrapper.
 template <typename T> struct add_reference { typedef T& type; };
 template <typename T> struct add_reference<T&> { typedef T& type; };
 
@@ -422,8 +438,33 @@ template<typename T> struct remove_pointer { typedef T type; };
 template<typename T> struct remove_pointer<T*> { typedef T type; };
 template<typename T> struct remove_pointer<T* const> { typedef T type; };
 template<typename T> struct remove_pointer<T* volatile> { typedef T type; };
-template<typename T> struct remove_pointer<T* const volatile> {
-  typedef T type; };
+template<typename T> struct remove_pointer<T* const volatile> { typedef T type; };
+
+//combo of "remove_pointer" and "remove_reference"
+template<typename T> struct remove_relating {
+  typedef typename remove_reference<typename remove_pointer<T >::type >::type type;
+};
+//get raw type without anything using "resolve"
+template<typename T> struct resolve {
+  typedef typename QtPrivate::remove_cv<typename QtPrivate::remove_relating<T>::type>::type type;
+};
+
+/// Combines QtPrivate::add_const and QtPrivate::add_reference,
+/// but first runs QtPrivate::remove_const and QtPrivate::remove_reference.
+template <typename T> struct add_const_ref {
+  typedef typename add_reference<typename add_const<typename remove_reference<typename remove_const<T >::type >::type >::type >::type type;
+};
+
+template <typename T> struct const_derefable {
+private:
+  typedef typename add_const<typename remove_reference<T >::type>::type U;
+public:
+  typedef typename if_<is_pointer<U >::value, U, typename add_reference<U >::type >::type type;
+};
+
+template <typename T> struct mutable_derefable {
+  typedef typename remove_const<typename const_derefable<T>::type >::type type;
+};
 
 // Specified by TR1 [4.6] Relationships between types
 template<typename T, typename U> struct is_same : public false_type { };
@@ -475,7 +516,7 @@ struct not_c
 // Checks whether a type is unsigned (T must be convertible to unsigned int):
 template <typename T>
 struct is_unsigned
-    : integral_constant<bool, (T(0) < T(-1))> {};
+    : integral_constant<bool, (T(0) <= T((std::numeric_limits<T>::min)()))> {};
 
 // Checks whether a type is signed (T must be convertible to int):
 template <typename T>
@@ -528,6 +569,24 @@ public:
 
 
 } // namespace QtPrivate
+
+
+/// Changes given @p x type where adds `const` only if missing, also
+/// adds `&` if said type is not a pointer, and only if `&` is missing.
+#define Q_DEREFABLE_T(x) typename QtPrivate::const_derefable<x>::type
+
+/// Same as #Q_DEREFABLE_T(x), but removes `const`.
+#define Q_DEREFABLE_MUTABLE_T(x) typename QtPrivate::mutable_derefable<x>::type
+
+
+/// Same as `std::as_const`, but supported by more compilers.
+template <typename T>
+Q_DECL_CONSTEXPR Q_ALWAYS_INLINE_T Q_TYPENAME QtPrivate::add_const<T>::type &qAsConst(T &arg) Q_DECL_NOEXCEPT
+    { return arg; }
+// Prevents rvalue casts.
+template <typename T>
+Q_INLINE_TEMPLATE void qAsConst(const T &&) Q_DECL_EQ_DELETE;
+
 
 QT_END_NAMESPACE
 #endif  // QTYPETRAITS_H

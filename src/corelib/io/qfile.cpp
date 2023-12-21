@@ -343,7 +343,16 @@ QFile::setFileName(const QString &name)
     file names that the user chooses. File names hard-coded into the
     application should only use 7-bit ASCII filename characters.
 
+    @warning In Darwin platforms "encode" also means shortening the path, using
+    general Canonical Decomposition algorithm, note that
+    due to path length limits, some platforms shorten paths, for example
+    Windows's shorten syntax may convert from "C:\Program Files" to "C:\PROGRA~1"
+    which seems to mean first folder with "PROGRA" prefix
+    however, Windows is case-insensitive, otherwise
+    converting from lower-case to upper-case would be wrong "Canonical Decomposition".
+
     \sa decodeName()
+    \sa QString::NormalizationForm_D
 */
 
 /*!

@@ -1,5 +1,6 @@
 /****************************************************************************
 **
+** Copyright (C) 2015 The XD Company Ltd.
 ** Copyright (C) 2015 The Qt Company Ltd.
 ** Contact: http://www.qt.io/licensing/
 **
@@ -39,26 +40,14 @@
 #pragma qt_sync_stop_processing
 #endif
 
-#if defined(Q_CC_MINGW)
-// mingw's windows.h does not set _WIN32_WINNT, resulting breaking compilation
-#  ifndef WINVER
-#    define WINVER 0x501
-#  endif
-#  ifndef _WIN32_WINNT
-#    define _WIN32_WINNT 0x0501
-#  endif
-#endif
+#include "qt_windows_prefix.h"
 
-#ifndef NOMINMAX
-#  define NOMINMAX
-#endif
-#include <windows.h>
-
-#if defined(_WIN32_IE) && _WIN32_IE < 0x0501
-#  undef _WIN32_IE
-#endif
-#if !defined(_WIN32_IE)
-#  define _WIN32_IE 0x0501
+#ifndef _WINSOCKAPI_
+#  define _WINSOCKAPI_    // stops windows.h including winsock.h
+#  include <windows.h>
+#  undef _WINSOCKAPI_
+#else
+#  include <windows.h>
 #endif
 
 #ifdef _WIN32_WCE
