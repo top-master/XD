@@ -241,8 +241,8 @@ config.tests/unix/sse2/sse2
 # ---------------------
 
 debug
-include/*
-include/*/*
+#!include/*
+#!include/*/*
 lib/*
 imports/*
 !lib/fonts
