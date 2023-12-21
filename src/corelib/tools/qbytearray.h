@@ -1,5 +1,6 @@
 /****************************************************************************
 **
+** Copyright (C) 2015 The XD Company Ltd.
 ** Copyright (C) 2015 The Qt Company Ltd.
 ** Contact: http://www.qt.io/licensing/
 **
@@ -108,6 +109,7 @@ class QString;
 class QDataStream;
 template <typename T> class QList;
 
+/// @sa QByteArray::data_ptr()
 typedef QArrayData QByteArrayData;
 
 template<int N> struct QStaticByteArrayData
@@ -163,6 +165,14 @@ private:
     typedef QTypedArrayData<char> Data;
 
 public:
+    enum {
+        /// Maximum content in bytes (i.e. null termination is not counted and
+        /// should be near 1GB by default).
+        ///
+        /// Implementation: Defined as enum to force inlining.
+        MaxSize = QSysInfo::MaxAllocSize - sizeof(QByteArray::Data)
+    };
+
     enum Base64Option {
         Base64Encoding = 0,
         Base64UrlEncoding = 1,
@@ -235,6 +245,7 @@ public:
     QByteArray left(int len) const Q_REQUIRED_RESULT;
     QByteArray right(int len) const Q_REQUIRED_RESULT;
     QByteArray mid(int index, int len = -1) const Q_REQUIRED_RESULT;
+    inline QByteArray midRef(int index, int len = -1) const Q_REQUIRED_RESULT;
 
     bool startsWith(const QByteArray &a) const;
     bool startsWith(char c) const;
@@ -427,8 +438,8 @@ public:
     inline std::string toStdString() const;
 
     inline int count() const { return d->size; }
-    int length() const { return d->size; }
-    bool isNull() const;
+    inline int length() const { return d->size; }
+    Q_ALWAYS_INLINE bool isNull() const { return d == const_cast<QArrayData*>(QArrayData::shared_null); }
 
     inline QByteArray(QByteArrayDataPtr dd)
         : d(static_cast<Data *>(dd.ptr))
@@ -519,6 +530,18 @@ inline void QByteArray::squeeze()
     }
 }
 
+inline QByteArray QByteArray::midRef(int index, int len) const
+{
+    int lenOwn = length();
+    if (index < 0)
+        index = 0;
+    else if (index >= lenOwn)
+        return QByteArray();
+    return QByteArray::fromRawData(
+                constData() + index,
+                qBound(0, len < 0 ? lenOwn : len, lenOwn - index));
+}
+
 class Q_CORE_EXPORT QByteRef {
     QByteArray &a;
     int i;
@@ -534,6 +557,7 @@ public:
     inline QByteRef &operator=(const QByteRef &c)
         { if (i >= a.d->size) a.expand(i); else a.detach();
           a.d->data()[i] = c.a.d->data()[c.i];  return *this; }
+    Q_DEFAULT_COPY_INIT(QByteRef)
     inline bool operator==(char c) const
     { return a.d->data()[i] == c; }
     inline bool operator!=(char c) const

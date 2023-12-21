@@ -91,17 +91,18 @@ class QFlags
     struct Private;
     typedef int (Private::*Zero);
 public:
-#if defined(Q_CC_MSVC) || defined(Q_QDOC)
+#if defined(Q_QDOC) || (defined(Q_CC_MSVC) && !defined(Q_CC_CLANG))
     // see above for MSVC
     // the definition below is too complex for qdoc
     typedef int Int;
 #else
     typedef typename QtPrivate::if_<
-            QtPrivate::is_unsigned<Enum>::value,
+            QtPrivate::is_unsigned<QT_UNDERLYING_TYPE(Enum) >::value,
             unsigned int,
             signed int
         >::type Int;
-#endif
+#endif // !Q_QDOC
+
     typedef Enum enum_type;
     // compiler-generated copy/move ctor/assignment operators are fine!
 #ifdef Q_QDOC
@@ -139,6 +140,28 @@ public:
     Q_DECL_CONSTEXPR inline bool operator!() const Q_DECL_NOTHROW { return !i; }
 
     Q_DECL_CONSTEXPR inline bool testFlag(Enum f) const Q_DECL_NOTHROW { return (i & Int(f)) == Int(f) && (Int(f) != 0 || i == Int(f) ); }
+
+    /// Same as testFlag(), but does not support @p f being zero, to increase speed.
+    inline bool includes(Int f) const {
+        Q_ASSERT_X(f != 0, "QFlags", "zero not supported use testFlag instead.");
+        return (i & f) == f /*|| f == i*/;
+    }
+    /// WARNING: does not support @p f being zero, to increase speed.
+    inline bool excludes(Int f) const { return (i & f) != f /*&& f != i*/; }
+    inline bool match(Int f) const { return f == i; }
+    /// WARNING: does not support @p f being zero, to increase speed.
+    inline bool intersects(int f) const { return (i & f) != 0; } //can use this when "f" has multiple bits
+
+    inline void append(Int bits) { i |= bits; }
+    inline void remove(Int bits) { i &= ~bits; }
+    inline void replace(Int before, Int after) { i &= ~before; i |= after; }
+    inline Int take(Int f) {
+        Int r = (i & f);
+        if (r == f) {
+            i &= ~f; return r;
+        } return 0;
+    }
+
 private:
 #ifdef Q_COMPILER_INITIALIZER_LISTS
     Q_DECL_CONSTEXPR static inline Int initializer_list_helper(typename std::initializer_list<Enum>::const_iterator it,

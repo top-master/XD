@@ -42,19 +42,27 @@ QT_BEGIN_NAMESPACE
 QT_WARNING_PUSH
 QT_WARNING_DISABLE_GCC("-Wmissing-field-initializers")
 
+// TRACE/QArrayData/null-terminate 1: ensured global instances are followed by null-termination,
+// but Qt-Creator's debugger has bug and keeps showing wrong values,
+// while memory view shows all zero.
+#define ZERO_TERMINATION { { Q_BASIC_ATOMIC_INITIALIZER(0) }, 0, 0, 0, (std::numeric_limits<int>::max)() }
+
 const QArrayData QArrayData::shared_null[2] = {
     { Q_REFCOUNT_INITIALIZE_STATIC, 0, 0, 0, sizeof(QArrayData) }, // shared null
-    /* zero initialized terminator */};
+    ZERO_TERMINATION };
 
-static const QArrayData qt_array[3] = {
+static const QArrayData global_empty[2] = {
     { Q_REFCOUNT_INITIALIZE_STATIC, 0, 0, 0, sizeof(QArrayData) }, // shared empty
+    ZERO_TERMINATION };
+
+static const QArrayData global_unsharable_empty[2] = {
     { { Q_BASIC_ATOMIC_INITIALIZER(0) }, 0, 0, 0, sizeof(QArrayData) }, // unsharable empty
-    /* zero initialized terminator */};
+    ZERO_TERMINATION };
 
 QT_WARNING_POP
 
-static const QArrayData &qt_array_empty = qt_array[0];
-static const QArrayData &qt_array_unsharable_empty = qt_array[1];
+static const QArrayData &qt_array_empty = global_empty[0];
+static const QArrayData &qt_array_unsharable_empty = global_unsharable_empty[0];
 
 QArrayData *QArrayData::allocate(size_t objectSize, size_t alignment,
         size_t capacity, AllocationOptions options) Q_DECL_NOTHROW

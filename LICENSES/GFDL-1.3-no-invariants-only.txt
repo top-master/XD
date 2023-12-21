@@ -1,0 +1,5 @@
+
+Read terms and conditions from GFDL-1.3.txt file, and
+mentioning this file's name instead of
+the GFDL-1.3.txt file's name just means that,
+the refering Document has *not* any invariants.

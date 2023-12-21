@@ -1483,6 +1483,9 @@ QByteArray::QByteArray(const char *data, int size)
         if (size < 0)
             size = int(strlen(data));
         if (!size) {
+            // TRACE/QArrayData/null-terminate 2: can't null-terminate here,
+            // because that would need allocating real heap-memory (more than `0`),
+            // hence good that global/shared instances are already null-terminated.
             d = Data::allocate(0);
         } else {
             d = Data::allocate(uint(size) + 1u);
@@ -3387,8 +3390,6 @@ QByteArray QByteArray::rightJustified(int width, char fill, bool truncate) const
     return result;
 }
 
-bool QByteArray::isNull() const { return d == QArrayData::sharedNull(); }
-
 static qlonglong toIntegral_helper(const char *data, bool *ok, int base, qlonglong)
 {
     return QLocaleData::bytearrayToLongLong(data, base, ok);
@@ -4051,7 +4052,7 @@ QByteArray QByteArray::fromRawData(const char *data, int size)
     Data *x;
     if (!data) {
         x = Data::sharedNull();
-    } else if (!size) {
+    } else if (size <= 0) {
         x = Data::allocate(0);
     } else {
         x = Data::fromRawData(data, size);

@@ -540,12 +540,15 @@ inline const QMetaObject *QMetaObject::superClass() const
 { return d.superdata; }
 
 namespace QtPrivate {
-    /* Trait that tells is a the Object has a Q_OBJECT macro */
+    // TRACE/QObject bugfix: renamed to `qInlineTest` from `test` #1,
+    // since there are global `test` named things in some platforms.
+
+    /* Trait that tells us Object has a Q_OBJECT macro with true as "Value" */
     template <typename Object> struct HasQ_OBJECT_Macro {
         template <typename T>
-        static char test(int (T::*)(QMetaObject::Call, int, void **));
-        static int test(int (Object::*)(QMetaObject::Call, int, void **));
-        enum { Value =  sizeof(test(&Object::qt_metacall)) == sizeof(int) };
+        static char qInlineTest(int (T::*)(QMetaObject::Call, int, void **));
+        static int qInlineTest(int (Object::*)(QMetaObject::Call, int, void **));
+        enum { Value =  sizeof(qInlineTest(&Object::qt_metacall)) == sizeof(int) };
     };
 }
 

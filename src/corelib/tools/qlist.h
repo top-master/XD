@@ -227,6 +227,7 @@ public:
         // can't remove it in Qt 5, since doing so would make the type trivial,
         // which changes the way it's passed to functions by value.
         inline iterator(const iterator &o) Q_DECL_NOTHROW : i(o.i){}
+        Q_DEFAULT_COPY_ASSIGN(iterator)
 #endif
         inline T &operator*() const { return i->t(); }
         inline T *operator->() const { return &i->t(); }

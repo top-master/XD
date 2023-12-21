@@ -148,6 +148,8 @@ bootstrap { #Qt code
         win32-msvc*:LIBS += ole32.lib advapi32.lib
         mingw:LIBS += -lole32 -luuid -ladvapi32 -lkernel32
         LIBS += -lshell32 # For SHGetSpecialFolderPathW
+        LIBS += -lDbgHelp # For QStackTrace
+
     }
 
     qnx {

@@ -1,5 +1,6 @@
 /****************************************************************************
 **
+** Copyright (C) 2015 The XD Company Ltd.
 ** Copyright (C) 2015 The Qt Company Ltd.
 ** Contact: http://www.qt.io/licensing/
 **
@@ -1831,6 +1832,7 @@ QFileInfoList QDir::drives()
 }
 
 /*!
+    \fn QDir::separator()
     Returns the native directory separator: "/" under Unix
     and "\\" under Windows.
 
@@ -1842,14 +1844,6 @@ QFileInfoList QDir::drives()
 
     \sa listSeparator()
 */
-QChar QDir::separator()
-{
-#if defined(Q_OS_WIN)
-    return QLatin1Char('\\');
-#else
-    return QLatin1Char('/');
-#endif
-}
 
 /*!
     \fn QDir::listSeparator()

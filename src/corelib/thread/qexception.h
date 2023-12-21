@@ -1,5 +1,6 @@
 /****************************************************************************
 **
+** Copyright (C) 2015 The XD Company Ltd.
 ** Copyright (C) 2015 The Qt Company Ltd.
 ** Contact: http://www.qt.io/licensing/
 **
@@ -36,10 +37,11 @@
 
 #include <QtCore/qglobal.h>
 
-#ifndef QT_NO_QFUTURE
-
 #include <QtCore/qatomic.h>
 #include <QtCore/qshareddata.h>
+#include <QtCore/qstring.h>
+#include <QtCore/qbytearray.h>
+#include <QtCore/qvariant.h>
 
 #ifndef QT_NO_EXCEPTIONS
 #  include <exception>
@@ -47,6 +49,36 @@
 
 QT_BEGIN_NAMESPACE
 
+
+class QRequirementErrorType {
+    int m_value;
+public:
+    enum {
+        /// Non empty value is required.
+        NonEmpty,
+        /// Required field is invalid or not set.
+        Field,
+        /// Invalid API usage is detected.
+        Usage,
+        /// Unexpected API error.
+        Unexpected,
+        /// Type expectation mismatch.
+        TypeMismatch,
+        /// Failed to cast from value/type to Json.
+        JsonCast,
+    };
+
+    inline QRequirementErrorType(int valueArg)
+        : m_value(valueArg)
+    {}
+
+    inline operator int() const { return m_value; }
+};
+
+Q_ALWAYS_INLINE void qThrow(QRequirementErrorType type, const char *msg = Q_NULLPTR)
+{
+    qThrowRequirement(int(type), msg);
+}
 
 #ifndef QT_NO_EXCEPTIONS
 
@@ -76,6 +108,85 @@ public:
     ;
     void raise() const Q_DECL_OVERRIDE;
     QUnhandledException *clone() const Q_DECL_OVERRIDE;
+};
+
+class Q_CORE_EXPORT QExceptionWithMessage : public QException
+{
+public:
+    inline explicit QExceptionWithMessage(const char *msg = Q_NULLPTR) Q_DECL_NOTHROW
+        : m_messageCache(msg)
+    {}
+    inline explicit QExceptionWithMessage(const QString &msg) Q_DECL_NOTHROW
+        : m_message(msg)
+    {}
+    virtual ~QExceptionWithMessage() Q_DECL_NOTHROW;
+
+    void raise() const Q_DECL_OVERRIDE;
+    QExceptionWithMessage *clone() const Q_DECL_OVERRIDE;
+    const char *what() const Q_DECL_NOTHROW Q_DECL_OVERRIDE;
+    virtual void setWhat(const char *msg) Q_DECL_NOTHROW;
+
+    virtual const QString &message() const Q_DECL_NOTHROW;
+    virtual void setMessage(const QString &) Q_DECL_NOTHROW;
+
+protected:
+    QString m_message;
+    /// Used by what() to speed-up conversion to `const char *` type.
+    QByteArray m_messageCache;
+};
+
+/// Use qThrowNullPointer() instead.
+class Q_CORE_EXPORT QNullPointerException : public QExceptionWithMessage
+{
+public:
+    inline explicit QNullPointerException(const char *msg = Q_NULLPTR) : QExceptionWithMessage(msg) {}
+    ~QNullPointerException() Q_DECL_NOTHROW;
+    void raise() const Q_DECL_OVERRIDE;
+    QNullPointerException *clone() const Q_DECL_OVERRIDE;
+};
+
+/// Use qThrowAtomicMismatch() instead.
+class Q_CORE_EXPORT QAtomicMismatchException : public QExceptionWithMessage
+{
+public:
+    inline explicit QAtomicMismatchException(const char *msg = Q_NULLPTR) : QExceptionWithMessage(msg) {}
+    ~QAtomicMismatchException() Q_DECL_NOTHROW;
+    void raise() const Q_DECL_OVERRIDE;
+    QAtomicMismatchException *clone() const Q_DECL_OVERRIDE;
+};
+
+/// Use qThrowRequirement() instead (like
+/// if including QVariant header is undesired).
+class Q_CORE_EXPORT QRequirementError : public QExceptionWithMessage
+{
+    typedef QExceptionWithMessage super;
+    void prefixMessage() Q_DECL_NOTHROW;
+public:
+
+    typedef QRequirementErrorType Type;
+
+    inline explicit QRequirementError(Type type_, const char *msg = Q_NULLPTR, const QVariant &context_ = QVariant())
+        : super(msg)
+        , m_type(type_)
+        , m_context(context_)
+    {
+        this->prefixMessage();
+    }
+    ~QRequirementError() Q_DECL_NOTHROW;
+    void raise() const Q_DECL_OVERRIDE;
+    QRequirementError *clone() const Q_DECL_OVERRIDE;
+
+    void setWhat(const char *msg) Q_DECL_NOTHROW Q_DECL_OVERRIDE;
+    void setMessage(const QString &) Q_DECL_NOTHROW Q_DECL_OVERRIDE;
+
+    inline Type type() const { return m_type; }
+    inline const QVariant &context() const { return m_context; }
+
+private:
+    Type m_type;
+
+protected:
+    QVariant m_context;
 };
 
 namespace QtPrivate {
@@ -122,6 +233,4 @@ public:
 
 QT_END_NAMESPACE
 
-#endif // QT_NO_QFUTURE
-
-#endif
+#endif // QTCORE_QEXCEPTION_H

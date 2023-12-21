@@ -1,5 +1,6 @@
 /****************************************************************************
 **
+** Copyright (C) 2015 The XD Company Ltd.
 ** Copyright (C) 2015 The Qt Company Ltd.
 ** Contact: http://www.qt.io/licensing/
 **
@@ -65,9 +66,16 @@ void *qRealloc(void *ptr, size_t size)
     return ::realloc(ptr, size);
 }
 
+/// @param alignment Momory-alignment based on Type for which memory will be used, but
+/// should NOT be less than size of raw-pointer, for example,
+/// if memory gets used to store an array of `MyClass` (or just `MyClass`), then
+/// this parameter can be calculated, like
+/// `qMax<int>(sizeof(void*), Q_ALIGNOF(MyClass))`, or,
+/// simply use @ref qMallocAlignedT instead.
+///
 void *qMallocAligned(size_t size, size_t alignment)
 {
-    return qReallocAligned(0, size, 0, alignment);
+    return qReallocAligned(Q_NULLPTR, size, 0, alignment);
 }
 
 void *qReallocAligned(void *oldptr, size_t newsize, size_t oldsize, size_t alignment)

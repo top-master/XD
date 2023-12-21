@@ -123,5 +123,10 @@ equals(QMAKE_HOST.os, Windows) {
     QMAKE_LN_SHLIB          = ln -s
 }
 
+win32 {
+    mingw: QMAKE_LIBS_CORE *= -ldbghelp
+    else:  QMAKE_LIBS_CORE *= dbghelp.lib
+}
+
 # Qt loads below only for Windows, but we want to be cross-platform.
 load(qt_config)

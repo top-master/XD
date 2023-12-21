@@ -1,5 +1,6 @@
 /****************************************************************************
 **
+** Copyright (C) 2015 The XD Company Ltd.
 ** Copyright (C) 2015 The Qt Company Ltd.
 ** Contact: http://www.qt.io/licensing/
 **
@@ -176,16 +177,9 @@ public:
 
     static QFileInfoList drives();
 
-    Q_DECL_CONSTEXPR static inline QChar listSeparator() Q_DECL_NOTHROW
-    {
-#if defined(Q_OS_WIN)
-        return QLatin1Char(';');
-#else
-        return QLatin1Char(':');
-#endif
-    }
+    Q_DECL_CONSTEXPR static inline QChar listSeparator() Q_DECL_NOTHROW { return QLatin1Char(Q_FS_DIR_LIST_SEPARATOR); }
 
-    static QChar separator(); // ### Qt6: Make it inline
+    Q_DECL_CONSTEXPR static inline QChar separator() Q_DECL_NOTHROW { return QLatin1Char(Q_FS_DIR_SEPARATOR); }
 
     static bool setCurrent(const QString &path);
     static inline QDir current() { return QDir(currentPath()); }

@@ -145,6 +145,7 @@ public:
     inline operator QJsonValue() const { return toValue(); }
     QJsonValueRef &operator = (const QJsonValue &val);
     QJsonValueRef &operator = (const QJsonValueRef &val);
+    Q_DEFAULT_COPY_INIT(QJsonValueRef)
 
     QVariant toVariant() const;
     inline QJsonValue::Type type() const { return toValue().type(); }

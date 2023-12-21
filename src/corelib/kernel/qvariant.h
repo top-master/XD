@@ -1,5 +1,6 @@
 /****************************************************************************
 **
+** Copyright (C) 2015 The XD Company Ltd.
 ** Copyright (C) 2015 The Qt Company Ltd.
 ** Contact: http://www.qt.io/licensing/
 **
@@ -375,6 +376,7 @@ class Q_CORE_EXPORT QVariant
             : data(other.data), type(other.type),
               is_shared(other.is_shared), is_null(other.is_null)
         {}
+        Q_DEFAULT_COPY_ASSIGN(Private)
         union Data
         {
             char c;

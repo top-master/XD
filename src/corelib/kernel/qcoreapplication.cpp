@@ -1,5 +1,6 @@
 /****************************************************************************
 **
+** Copyright (C) 2015 The XD Company Ltd.
 ** Copyright (C) 2015 The Qt Company Ltd.
 ** Copyright (C) 2015 Intel Corporation.
 ** Contact: http://www.qt.io/licensing/
@@ -2792,6 +2793,14 @@ void QCoreApplication::setEventDispatcher(QAbstractEventDispatcher *eventDispatc
 }
 
 #endif // QT_NO_QOBJECT
+
+#if !defined(Q_OS_WIN)
+bool QCoreApplication::waitForDebugger(int timeout)
+{
+    // TODO: support other platforms.
+    return false;
+}
+#endif
 
 /*!
     \macro Q_COREAPP_STARTUP_FUNCTION(QtStartUpFunction ptr)
