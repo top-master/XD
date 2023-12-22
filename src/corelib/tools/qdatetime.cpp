@@ -641,7 +641,7 @@ int QDate::weekNumber(int *yearNumber) const
 
 QString QDate::shortMonthName(int month, QDate::MonthNameType type)
 {
-    if (month >= 1 || month <= 12) {
+    if (month >= 1 && month <= 12) {
         switch (type) {
         case QDate::DateFormat:
             return QLocale::system().monthName(month, QLocale::ShortFormat);

@@ -1,5 +1,6 @@
 /****************************************************************************
 **
+** Copyright (C) 2015 The XD Company Ltd.
 ** Copyright (C) 2015 The Qt Company Ltd.
 ** Contact: http://www.qt.io/licensing/
 **
@@ -456,6 +457,15 @@ static __forceinline unsigned long _bit_scan_forward(uint val)
     && !defined(Q_CC_INTEL)
 // Clang is missing the intrinsic for _bit_scan_reverse
 // GCC only added it in version 4.5
+
+// Newer Clang versions added the intrinsic, but we use our own.
+#ifdef _bit_scan_reverse
+#  undef _bit_scan_reverse
+#endif
+#ifdef _bit_scan_forward
+#  undef _bit_scan_forward
+#endif
+
 static inline __attribute__((always_inline))
 unsigned _bit_scan_reverse(unsigned val)
 {
@@ -463,6 +473,7 @@ unsigned _bit_scan_reverse(unsigned val)
     asm("bsr %1, %0" : "=r" (result) : "r" (val));
     return result;
 }
+
 static inline __attribute__((always_inline))
 unsigned _bit_scan_forward(unsigned val)
 {

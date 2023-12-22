@@ -242,10 +242,10 @@ public:
     int count(const char *a) const;
     int count(const QByteArray &a) const;
 
-    QByteArray left(int len) const Q_REQUIRED_RESULT;
-    QByteArray right(int len) const Q_REQUIRED_RESULT;
-    QByteArray mid(int index, int len = -1) const Q_REQUIRED_RESULT;
-    inline QByteArray midRef(int index, int len = -1) const Q_REQUIRED_RESULT;
+    Q_REQUIRED_RESULT QByteArray left(int len) const;
+    Q_REQUIRED_RESULT QByteArray right(int len) const;
+    Q_REQUIRED_RESULT QByteArray mid(int index, int len = -1) const;
+    Q_REQUIRED_RESULT inline QByteArray midRef(int index, int len = -1) const;
 
     bool startsWith(const QByteArray &a) const;
     bool startsWith(char c) const;

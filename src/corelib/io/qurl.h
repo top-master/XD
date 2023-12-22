@@ -61,12 +61,14 @@ class QUrlTwoFlags
 {
     int i;
     typedef int QUrlTwoFlags:: *Zero;
+    typedef Q_TYPENAME QFlags<E1>::Int IntE1;
+    typedef Q_TYPENAME QFlags<E2>::Int IntE2;
 public:
     Q_DECL_CONSTEXPR inline QUrlTwoFlags(E1 f) : i(f) {}
     Q_DECL_CONSTEXPR inline QUrlTwoFlags(E2 f) : i(f) {}
     Q_DECL_CONSTEXPR inline QUrlTwoFlags(QFlag f) : i(f) {}
-    Q_DECL_CONSTEXPR inline QUrlTwoFlags(QFlags<E1> f) : i(f.operator int()) {}
-    Q_DECL_CONSTEXPR inline QUrlTwoFlags(QFlags<E2> f) : i(f.operator int()) {}
+    Q_DECL_CONSTEXPR inline QUrlTwoFlags(QFlags<E1> f) : i(f.operator IntE1()) {}
+    Q_DECL_CONSTEXPR inline QUrlTwoFlags(QFlags<E2> f) : i(f.operator IntE2()) {}
     Q_DECL_CONSTEXPR inline QUrlTwoFlags(Zero = 0) : i(0) {}
 
     inline QUrlTwoFlags &operator&=(int mask) { i &= mask; return *this; }
