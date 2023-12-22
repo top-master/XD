@@ -1,5 +1,6 @@
 /****************************************************************************
 **
+** Copyright (C) 2015 The XD Company Ltd.
 ** Copyright (C) 2015 The Qt Company Ltd.
 ** Contact: http://www.qt.io/licensing/
 **
@@ -1959,7 +1960,7 @@ Qt::DropActions QAbstractItemModel::supportedDropActions() const
 Qt::DropActions QAbstractItemModel::supportedDragActions() const
 {
     Q_D(const QAbstractItemModel);
-    if (d->supportedDragActions != -1)
+    if (int(d->supportedDragActions) != -1)
         return d->supportedDragActions;
     return supportedDropActions();
 }

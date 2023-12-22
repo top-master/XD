@@ -514,6 +514,7 @@ void HB_MyanmarAttributes(HB_Script script, const HB_UChar16 *text, hb_uint32 fr
 {
     int end = from + len;
     const HB_UChar16 *uc = text + from;
+    HB_UNUSED(uc); // Debug purpose only.
     hb_uint32 i = 0;
     HB_UNUSED(script);
     attributes += from;

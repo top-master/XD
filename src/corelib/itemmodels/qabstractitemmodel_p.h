@@ -1,5 +1,6 @@
 /****************************************************************************
 **
+** Copyright (C) 2015 The XD Company Ltd.
 ** Copyright (C) 2015 The Qt Company Ltd.
 ** Contact: http://www.qt.io/licensing/
 **
@@ -128,6 +129,7 @@ public:
     struct Change {
         Change() : first(-1), last(-1) {}
         Change(const Change &c) : parent(c.parent), first(c.first), last(c.last), needsAdjust(c.needsAdjust) {}
+        Q_DEFAULT_COPY_ASSIGN(Change)
         Change(const QModelIndex &p, int f, int l) : parent(p), first(f), last(l), needsAdjust(false) {}
         QModelIndex parent;
         int first, last;

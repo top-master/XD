@@ -2906,6 +2906,7 @@ QString QLocaleData::longLongToString(const QChar zero, const QChar group,
         num_str = qulltoa(l, base, zero);
 
     uint cnt_thousand_sep = 0;
+    Q_UNUSED(cnt_thousand_sep) // Debug purpose only.
     if (flags & ThousandsGroup && base == 10) {
         for (int i = num_str.length() - 3; i > 0; i -= 3) {
             num_str.insert(i, group);
@@ -2989,6 +2990,7 @@ QString QLocaleData::unsLongLongToString(const QChar zero, const QChar group,
     QString num_str = qulltoa(l, base, zero);
 
     uint cnt_thousand_sep = 0;
+    Q_UNUSED(cnt_thousand_sep) // Debug purpose only.
     if (flags & ThousandsGroup && base == 10) {
         for (int i = num_str.length() - 3; i > 0; i -=3) {
             num_str.insert(i, group);
@@ -3070,6 +3072,7 @@ bool QLocaleData::numberToCLocale(const QChar *str, int len,
     }
 
     int group_cnt = 0; // counts number of group chars
+    Q_UNUSED(group_cnt) // Debug purpose only.
     int decpt_idx = -1;
     int last_separator_idx = -1;
     int start_of_digits_idx = -1;

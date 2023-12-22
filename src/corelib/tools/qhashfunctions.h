@@ -1,5 +1,6 @@
 /****************************************************************************
 **
+** Copyright (C) 2015 The XD Company Ltd.
 ** Copyright (C) 2015 The Qt Company Ltd.
 ** Copyright (C) 2015 Klarälvdalens Datakonsult AB, a KDAB Group company, info@kdab.com, author Marc Mutz <marc.mutz@kdab.com>
 ** Contact: http://www.qt.io/licensing/
@@ -47,6 +48,7 @@
 #if defined(Q_CC_MSVC)
 #pragma warning( push )
 #pragma warning( disable : 4311 ) // disable pointer truncation warning
+                                  // (required for `qHash(const T *, ...)`).
 #pragma warning( disable : 4127 ) // conditional expression is constant
 #endif
 

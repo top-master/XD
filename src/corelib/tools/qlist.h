@@ -221,8 +221,8 @@ public:
         typedef T *pointer;
         typedef T &reference;
 
-        inline iterator() Q_DECL_NOTHROW : i(Q_NULLPTR) {}
-        inline iterator(Node *n) Q_DECL_NOTHROW : i(n) {}
+        Q_DECL_CONSTEXPR inline iterator() Q_DECL_NOTHROW : i(Q_NULLPTR) {}
+        Q_DECL_CONSTEXPR inline iterator(Node *n) Q_DECL_NOTHROW : i(n) {}
 #if QT_VERSION < QT_VERSION_CHECK(6,0,0)
         // can't remove it in Qt 5, since doing so would make the type trivial,
         // which changes the way it's passed to functions by value.
@@ -280,6 +280,7 @@ public:
         // can't remove it in Qt 5, since doing so would make the type trivial,
         // which changes the way it's passed to functions by value.
         inline const_iterator(const const_iterator &o) Q_DECL_NOTHROW : i(o.i) {}
+        Q_DEFAULT_COPY_ASSIGN(const_iterator)
 #endif
 #ifdef QT_STRICT_ITERATORS
         inline explicit const_iterator(const iterator &o) Q_DECL_NOTHROW : i(o.i) {}
