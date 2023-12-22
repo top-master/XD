@@ -1049,7 +1049,8 @@ int QMetaType::registerNormalizedType(const NS(QByteArray) &normalizedTypeName,
             // Set new/additional flags in case of old library/app.
             // Ensures that older code works in conjunction with new Qt releases
             // requiring the new flags.
-            if (flags != previousFlags) {
+            Q_STATIC_ASSERT(sizeof(int) >= sizeof(TypeFlags::Int));
+            if (int(flags) != previousFlags) {
                 QCustomTypeInfo &inf = ct->data()[idx - User];
                 inf.flags |= flags;
                 if (metaObject)

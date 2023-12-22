@@ -226,6 +226,12 @@ Q_CORE_EXPORT QDebug operator<<(QDebug debug, QDir::Filters filters);
 Q_CORE_EXPORT QDebug operator<<(QDebug debug, const QDir &dir);
 #endif
 
+#if defined(QT_BUILD_INTERNAL) && defined(QT_BUILD_CORE_LIB)
+    // Being more strict if building for internal testing.
+    Q_STATIC_ASSERT(QtPrivate::is_signed<QDir::Filters::Int>::value);
+    Q_STATIC_ASSERT(QtPrivate::is_signed<QDir::SortFlags::Int>::value);
+#endif
+
 QT_END_NAMESPACE
 
 #endif // QDIR_H

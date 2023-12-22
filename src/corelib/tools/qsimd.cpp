@@ -1,5 +1,6 @@
 /****************************************************************************
 **
+** Copyright (C) 2015 The XD Company Ltd.
 ** Copyright (C) 2015 The Qt Company Ltd.
 ** Copyright (C) 2012 Intel Corporation.
 ** Contact: http://www.qt.io/licensing/
@@ -226,7 +227,7 @@ static void cpuidFeatures07_00(uint &ebx, uint &ecx)
 #endif
 }
 
-#ifdef Q_OS_WIN
+#if defined(Q_OS_WIN) && (!defined(Q_CC_CLANG) || Q_CC_CLANG < 1500)
 // fallback overload in case this intrinsic does not exist: unsigned __int64 _xgetbv(unsigned int);
 inline quint64 _xgetbv(__int64) { return 0; }
 #endif

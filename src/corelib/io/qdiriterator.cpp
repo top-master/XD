@@ -145,10 +145,10 @@ public:
     \internal
 */
 QDirIteratorPrivate::QDirIteratorPrivate(const QFileSystemEntry &entry, const QStringList &nameFilters,
-                                         QDir::Filters filters, QDirIterator::IteratorFlags flags, bool resolveEngine)
+                                         QDir::Filters filtersArg, QDirIterator::IteratorFlags flags, bool resolveEngine)
     : dirEntry(entry)
       , nameFilters(nameFilters.contains(QLatin1String("*")) ? QStringList() : nameFilters)
-      , filters(QDir::NoFilter == filters ? QDir::AllEntries : filters)
+      , filters(filtersArg == QDir::NoFilter ? QDir::AllEntries : filtersArg)
       , iteratorFlags(flags)
 {
 #ifndef QT_NO_REGEXP

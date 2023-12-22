@@ -1,5 +1,6 @@
 /****************************************************************************
 **
+** Copyright (C) 2015 The XD Company Ltd.
 ** Copyright (C) 2015 The Qt Company Ltd.
 ** Copyright (C) 2015 Klarälvdalens Datakonsult AB, a KDAB Group company, info@kdab.com, author Marc Mutz <marc.mutz@kdab.com>
 ** Contact: http://www.qt.io/licensing/
@@ -737,7 +738,7 @@ template <class Key, class T>
 Q_INLINE_TEMPLATE typename QHash<Key, T>::iterator QHash<Key, T>::insert(const Key &akey,
                                                                          const T &avalue)
 {
-    detach();
+    this->detach();
 
     uint h;
     Node **node = findNode(akey, &h);
@@ -914,6 +915,7 @@ Q_OUTOFLINE_TEMPLATE bool QHash<Key, T>::operator==(const QHash &other) const
     if (d == other.d)
         return true;
 
+    // If size is same, should ignore order and keys, and just compare values.
     const_iterator it = begin();
 
     while (it != end()) {
