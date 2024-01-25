@@ -35,6 +35,7 @@
 #include "option.h"
 #include "project.h"
 #include "meta.h"
+#include "lib-flag-iterator.h"
 #include <qtextstream.h>
 #include <qstring.h>
 #include <qhash.h>
@@ -45,8 +46,10 @@
 
 QT_BEGIN_NAMESPACE
 
-Win32MakefileGenerator::Win32MakefileGenerator() : MakefileGenerator()
+Win32MakefileGenerator::Win32MakefileGenerator()
+    : MakefileGenerator()
 {
+    m_name = QByteArray("Win32MakefileGenerator");
 }
 
 ProString Win32MakefileGenerator::fixLibFlag(const ProString &lib)
@@ -59,6 +62,7 @@ ProString Win32MakefileGenerator::fixLibFlag(const ProString &lib)
     return escapeFilePath(Option::fixPathToTargetOS(lib.toQString(), false));
 }
 
+// No longer used.
 MakefileGenerator::LibFlagType
 Win32MakefileGenerator::parseLibFlag(const ProString &flag, ProString *arg)
 {
@@ -89,66 +93,101 @@ Win32MakefileGenerator::findLibraries(bool linkPrl, bool mergeLflags)
     if (impexts.isEmpty())
         impexts = project->values("QMAKE_EXTENSION_STATICLIB");
     QList<QMakeLocalFileName> dirs;
+    { // TRACE/qmake BugFix 26: qmake now searchs for "*.prl" files in the "QMAKE_LIBDIR" dir list.
+        // TODO: Fix for unix as well.
+        ProStringList &libpaths = project->values("QMAKE_LIBDIR");
+        for(ProStringList::Iterator libpathit = libpaths.begin(); libpathit != libpaths.end(); ++libpathit)
+            dirs.append(QMakeLocalFileName(libpathit->toQString()));
+    }
   static const char * const lflags[] = { "QMAKE_LIBS", "QMAKE_LIBS_PRIVATE", 0 };
   for (int i = 0; lflags[i]; i++) {
     ProStringList &l = project->values(lflags[i]);
-    for (ProStringList::Iterator it = l.begin(); it != l.end();) {
-        const ProString &opt = *it;
-        ProString arg;
-        LibFlagType type = parseLibFlag(opt, &arg);
-        if (type == LibFlagPath) {
-            QMakeLocalFileName lp(arg.toQString());
-            if (dirs.contains(lp)) {
-                it = l.erase(it);
-                continue;
-            }
-            dirs.append(lp);
-            (*it) = "-L" + lp.real();
-        } else if (type == LibFlagLib) {
-            QString lib = arg.toQString();
+    // TRACE/qmake improve: shared lib-flag parsing with `QMAKE_CURRENT_PRL_LIBS`,
+    // (using `LibFlagIterator` helper).
+    LibFlagIterator it = LibFlagIterator(*project, l, &dirs);
+    while (it.next()) {
+        if (it.isFolder()) {
+            continue;
+        } else if (it.isLibrary()) {
+            // Replaces flag with full-file-path, if file exists
+            // (i.e. calls `setCurrent(...)` instead of `setCurrentValue(...)`),
+            // also, processes `*.prl` files.
+            QString lib = it.currentValue();
             ProString verovr =
                     project->first(ProKey("QMAKE_" + lib.toUpper() + "_VERSION_OVERRIDE"));
+
+            // TRACE/qmake/prl-load 1-1: Searches for .prl files prefixed with "lib" first, and
+            // that unless the mkspec (like MSVC) has empty `QMAKE_PREFIX_STATICLIB`.
+            QString libPrefix = project->first(ProKey("QMAKE_PREFIX_STATICLIB")).toQString();
+            bool isWithPrefix = libPrefix.length() > 0;
+            if (lib.isEmpty()) {
+                goto found;
+            }
+        posRetry:
             for (QList<QMakeLocalFileName>::Iterator dir_it = dirs.begin();
                  dir_it != dirs.end(); ++dir_it) {
-                QString cand = (*dir_it).real() + Option::dir_sep + lib;
+                QString cand = (*dir_it).real();
+                cand += Option::dir_sep;
+                if (isWithPrefix) {
+                    cand += libPrefix;
+                }
+                cand += lib;
                 if (linkPrl && processPrlFile(cand)) {
-                    (*it) = cand;
+                    it.setCurrent(cand);
                     goto found;
                 }
-                QString libBase = (*dir_it).local() + '/' + lib + verovr;
+                // Retry for local-path, and version.
+                QString libBase = (*dir_it).local();
+                libBase += '/';
+                if (isWithPrefix) {
+                    libBase += libPrefix;
+                }
+                libBase += lib;
+                libBase += verovr;
                 for (ProStringList::ConstIterator extit = impexts.begin();
                      extit != impexts.end(); ++extit) {
                     if (exists(libBase + '.' + *extit)) {
-                        (*it) = cand + verovr + '.' + *extit;
+                        it.setCurrent(cand + verovr + '.' + *extit);
                         goto found;
                     }
                 }
             }
+            if (isWithPrefix) {
+                isWithPrefix = false;
+                goto posRetry;
+            }
             // We assume if it never finds it that it's correct
           found: ;
-        } else if (linkPrl && type == LibFlagFile) {
-            QString lib = opt.toQString();
+        } else if (linkPrl && it.isFile()) {
+            QString lib = it.currentValue();
             if (fileInfo(lib).isAbsolute()) {
                 if (processPrlFile(lib))
-                    (*it) = lib;
+                    it.setCurrent(lib);
             } else {
                 for (QList<QMakeLocalFileName>::Iterator dir_it = dirs.begin();
                      dir_it != dirs.end(); ++dir_it) {
                     QString cand = (*dir_it).real() + Option::dir_sep + lib;
                     if (processPrlFile(cand)) {
-                        (*it) = cand;
+                        it.setCurrent(cand);
                         break;
                     }
                 }
             }
         }
 
+        // TRACE/qmake/prl-load 4: Appends temporary-variable to `QMAKE_LIBS`.
         ProStringList &prl_libs = project->values("QMAKE_CURRENT_PRL_LIBS");
-        for (int prl = 0; prl < prl_libs.size(); ++prl)
-            it = l.insert(++it, prl_libs.at(prl));
+        LibFlagIterator prl = LibFlagIterator(*project, prl_libs);
+        while (prl.next()) {
+            it.setNext(prl.current());
+            // Skip above sat.
+            it.next();
+        }
+        // TRACE/qmake/prl-load 5: Finally, removes temporary-variable.
         prl_libs.clear();
-        ++it;
     }
+
+    // Merge them into a logical order
     if (mergeLflags) {
         ProStringList lopts;
         for (int lit = 0; lit < l.size(); ++lit) {
@@ -170,8 +209,12 @@ Win32MakefileGenerator::findLibraries(bool linkPrl, bool mergeLflags)
 
 void Win32MakefileGenerator::processVars()
 {
-    if (project->first("TEMPLATE").endsWith("aux"))
-        return;
+    // TRACE/qmake improve: aux-template may need some variables,
+    // else would do:
+    // ```
+    // if (project->first("TEMPLATE").endsWith("aux"))
+    //     return;
+    // ```
 
     project->values("QMAKE_ORIG_TARGET") = project->values("TARGET");
     if (project->isEmpty("QMAKE_PROJECT_NAME"))
@@ -547,8 +590,18 @@ void Win32MakefileGenerator::writeStandardParts(QTextStream &t)
     t << endl;
 
     t << "####### Files\n\n";
+#if 0
     t << "SOURCES       = " << valList(escapeFilePaths(project->values("SOURCES")))
       << " " << valList(escapeFilePaths(project->values("GENERATED_SOURCES"))) << endl;
+#else
+    // TRACE/qmake/remote Makefile: ensured moc runs before building `SOURCES`,
+    // to generate "*_remote.h" header, which's included by `SOURCES`.
+    t << "SOURCES       = " << valList(escapeFilePaths(project->values("GENERATED_SOURCES")))
+      << " " << valList(escapeFilePaths(project->values("SOURCES"))) << endl;
+#endif
+
+    // TRACE/qmake BugFix: we remove other entries from common directory-variables #2
+    // for example, below `var("DESTDIR")` call would add #1 said space.
 
     // do this here so we can set DEST_TARGET to be the complete path to the final target if it is needed.
     QString orgDestDir = var("DESTDIR");
@@ -586,10 +639,11 @@ void Win32MakefileGenerator::writeStandardParts(QTextStream &t)
                   << escapeFilePath(Option::fixPathToTargetOS((*dlldir).toQString(), false)) << endl;
             }
         }
-        t << endl;
-
-        writeRcFilePart(t);
     }
+    
+    // TRACE/qmake improve: aux should generate .res from .rc file (if set).
+    t << endl;
+    writeRcFilePart(t);
 
     writeMakeQmake(t);
 
@@ -646,7 +700,7 @@ void Win32MakefileGenerator::writeObjectsPart(QTextStream &t)
     t << "OBJECTS       = " << valList(escapeDependencyPaths(project->values("OBJECTS"))) << endl;
 }
 
-void Win32MakefileGenerator::writeImplicitRulesPart(QTextStream &t)
+void Win32MakefileGenerator::writeImplicitRulesPart(QTextStream &)
 {
 }
 

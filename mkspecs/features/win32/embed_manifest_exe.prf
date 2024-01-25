@@ -1,0 +1,25 @@
+isXD : !contains(QMAKE_MANIFEST_FLAGS, /MT:NO) {
+if(win32-msvc2005*|win32-msvc2008*|win32-msvc2010*):equals(TEMPLATE, "app") {
+    exists(QMAKE_MANIFEST) {
+        PATH = $$replace(QMAKE_MANIFEST,/,\\)
+    } else {
+        MANIFEST_DIR = $$OBJECTS_DIR
+        isEmpty(MANIFEST_DIR):MANIFEST_DIR = .
+
+        PATH = $$TARGET
+        PATH ~= s,\\\\ , ,q    # Remove space escaping (PATH is quoted)
+        PATH ~= s,\\\\,/,g     # Change to single type separators
+        PATH ~= s,^(.*/)+,,    # Remove all paths
+        PATH = $$replace(MANIFEST_DIR,/,\\)\\$${PATH}.intermediate.manifest
+    }
+
+    QMAKE_LFLAGS += /MANIFEST $$quote(/MANIFESTFILE:\"$${PATH}\")
+
+    !isEmpty(QMAKE_POST_LINK):QMAKE_POST_LINK = $$escape_expand(\\n\\t)$$QMAKE_POST_LINK
+    QMAKE_POST_LINK = $$quote(mt.exe -nologo -manifest \"$${PATH}\" -outputresource:$(DESTDIR_TARGET);1)$$QMAKE_POST_LINK
+
+    QMAKE_CLEAN += \"$${PATH}\"
+
+    QMAKE_MANIFEST_FLAGS += /MT:NO #prvent "qmake.exe" from repeating manifest command...
+}
+} #isXD

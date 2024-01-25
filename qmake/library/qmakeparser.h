@@ -1,5 +1,6 @@
 /****************************************************************************
 **
+** Copyright (C) 2015 The XD Company Ltd.
 ** Copyright (C) 2015 The Qt Company Ltd.
 ** Contact: http://www.qt.io/licensing/
 **
@@ -56,19 +57,46 @@ public:
 
         SourceMask = 0xf0,
         SourceParser = 0,
+        SourceEvaluator = 0x10,
 
         CodeMask = 0xf,
-        WarnLanguage = 0,
-        WarnDeprecated,
+        WarnLanguage = 1, //QMakeWarn::WarnParser
+        WarnLogic = 2, //QMakeWarn::WarnLogic
+        WarnDeprecated = 4, //QMakeWarn::WarnDeprecated
 
         ParserWarnLanguage = SourceParser | WarningMessage | WarnLanguage,
+        ParserWarnLogic = SourceParser | WarningMessage | WarnLogic,
         ParserWarnDeprecated = SourceParser | WarningMessage | WarnDeprecated,
 
         ParserIoError = ErrorMessage | SourceParser,
-        ParserError
+        ParserError  = ErrorMessage | SourceParser | WarnLanguage,
+
+        // Used by `QMakeHandler`.
+        EvalWarnLanguage = SourceEvaluator |  WarningMessage | WarnLanguage,
+        EvalWarnLogic = SourceEvaluator |  WarningMessage | WarnLogic,
+        EvalWarnDeprecated = SourceEvaluator | WarningMessage | WarnDeprecated,
+
+        EvalError = SourceEvaluator | ErrorMessage
     };
     virtual void message(int type, const QString &msg,
                          const QString &fileName = QString(), int lineNo = 0) = 0;
+};
+
+class QMAKE_EXPORT QMakeLocation
+{
+public:
+    inline QMakeLocation()
+        : pro(Q_NULLPTR), line(0)
+    {}
+    inline QMakeLocation(ProFile *_pro, ushort _line)
+        : pro(_pro), line(_line)
+    {}
+
+    inline void clear() { pro = Q_NULLPTR; line = 0; }
+
+public:
+    ProFile *pro;
+    ushort line;
 };
 
 class ProFileCache;
@@ -101,6 +129,11 @@ public:
     static QString formatProBlock(const QString &block);
 #endif
 
+    inline QMakeLocation location() const
+        { return QMakeLocation(m_proFile, m_lineNo); }
+    inline void setLocation(const QMakeLocation &newValue)
+        { m_proFile = newValue.pro; m_lineNo = newValue.line; }
+
 private:
     enum ScopeNesting {
         NestNone = 0,
@@ -111,6 +144,7 @@ private:
     struct BlockScope {
         BlockScope() : start(0), braceLevel(0), special(false), inBranch(false), nest(NestNone) {}
         BlockScope(const BlockScope &other) { *this = other; }
+        Q_DEFAULT_COPY_ASSIGN(BlockScope)
         ushort *start; // Where this block started; store length here
         int braceLevel; // Nesting of braces in scope
         bool special; // Single-line conditionals inside loops, etc. cannot have else branches
@@ -166,6 +200,8 @@ private:
         message(QMakeParserHandler::ParserError, msg);
         m_proFile->setOk(false);
     }
+    void logicWarning(const QString &msg) const
+            { message(QMakeParserHandler::ParserWarnLogic, msg); }
     void languageWarning(const QString &msg) const
             { message(QMakeParserHandler::ParserWarnLanguage, msg); }
     void deprecationWarning(const QString &msg) const
@@ -173,6 +209,12 @@ private:
 
     // Current location
     ProFile *m_proFile;
+    /// Line being parsed
+    ///
+    /// @warning Does NOT affect error/warning trace,
+    /// we use @ref m_markLine and @ref TokLine for that.
+    ///
+    /// @see putLineMarker
     int m_lineNo;
 
     QStack<BlockScope> m_blockstack;

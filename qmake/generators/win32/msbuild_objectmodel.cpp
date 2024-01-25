@@ -42,6 +42,9 @@
 
 QT_BEGIN_NAMESPACE
 
+QT_WARNING_PUSH
+QT_WARNING_SUPPRESS_UNUSED
+
 // XML Tags ---------------------------------------------------------
 const char _CLCompile[]                         = "ClCompile";
 const char _ItemGroup[]                         = "ItemGroup";
@@ -253,6 +256,8 @@ const char _WarningLevel[]                      = "WarningLevel";
 const char _WholeProgramOptimization[]          = "WholeProgramOptimization";
 const char _WindowsMetadataFile[]               = "WindowsMetadataFile";
 const char _XMLDocumentationFileName[]          = "XMLDocumentationFileName";
+
+QT_WARNING_POP
 
 
 // XmlOutput stream functions ------------------------------
@@ -628,6 +633,8 @@ void VCXProjectWriter::write(XmlOutput &xml, VCProject &tool)
             << tagValue("Platform", tool.SingleProjects.at(i).PlatformName)
             << closetag();
         isWinRT = isWinRT || tool.SingleProjects.at(i).Configuration.WinRT;
+        // TRACE/qmake BugFix: operation on 'isWinPhone' may be undefined,
+        // old code `isWinPhone = isWinPhone = tool.SingleProjects.at(i).Configuration.WinPhone;`.
         isWinPhone = isWinPhone || tool.SingleProjects.at(i).Configuration.WinPhone;
     }
 
@@ -1207,7 +1214,7 @@ static inline QString toString(midlCharOption option)
 static inline QString toString(midlErrorCheckOption option)
 {
     switch (option) {
-    case midlAlignNotSet:
+    case midlEnableCustom:
         break;
     case midlDisableAll:
         return "None";

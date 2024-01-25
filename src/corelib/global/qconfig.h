@@ -140,8 +140,24 @@
 # define QT_NO_NIS
 #endif
 
-#if !defined(Q_OS_UNIX) && !defined(QT_NO_CODECS)
-# define QT_NO_CODECS
+// XD prefers supporting text-codecs rather than disabling (if that's undesired
+// do `QT_CONFIG -= codecs` and rebuild XD, or undef `QT_CODECS` manually).
+#if defined(QT_CODECS)
+#  if defined(QT_NO_CODECS)
+#    undef QT_NO_CODECS
+#  endif
+#elif !defined(QT_NO_CODECS)
+#  define QT_NO_CODECS
+#endif
+
+// The QT_NO_CODECS config implies QT_NO_BIG_CODECS.
+#if defined(QT_NO_CODECS)
+#  if !defined(QT_NO_BIG_CODECS)
+#    define QT_NO_BIG_CODECS
+#  endif
+#  if defined(QT_BIG_CODECS)
+#    undef QT_BIG_CODECS
+#  endif
 #endif
 
 #if !defined(Q_OS_UNIX) || defined(QT_BOOTSTRAPPED)

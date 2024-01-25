@@ -664,7 +664,7 @@ void tst_qmakelib::addControlStructs()
                "VAR = $$func()\n"
                "OKE = 1"
             << "VAR = UNDEF\nOKE = UNDEF"
-            << "Project ERROR: error"
+            << TST_ERROR_PREFIX(2) "error"
             << false;
 
     QTest::newRow("error() from replace function (replacement)")
@@ -672,7 +672,7 @@ void tst_qmakelib::addControlStructs()
                "VAR = $$func()\n"
                "OKE = 1"
             << "VAR = UNDEF\nOKE = UNDEF"
-            << "Project ERROR: error"
+            << TST_ERROR_PREFIX(2) "error"
             << false;
 
     QTest::newRow("error() from replace function (LHS)")
@@ -680,7 +680,7 @@ void tst_qmakelib::addControlStructs()
                "$$func() = 1\n"
                "OKE = 1"
             << "VAR = UNDEF\nOKE = UNDEF"
-            << "Project ERROR: error"
+            << TST_ERROR_PREFIX(2) "error"
             << false;
 
     QTest::newRow("error() from replace function (loop variable)")
@@ -688,7 +688,7 @@ void tst_qmakelib::addControlStructs()
                "for($$func()) {\nVAR = $$BLAH\nbreak()\n}\n"
                "OKE = 1"
             << "VAR = UNDEF\nOKE = UNDEF"
-            << "Project ERROR: error"
+            << TST_ERROR_PREFIX(2) "error"
             << false;
 
     QTest::newRow("error() from replace function (built-in test arguments)")
@@ -696,7 +696,7 @@ void tst_qmakelib::addControlStructs()
                "message($$func()): VAR = 1\n"
                "OKE = 1"
             << "VAR = UNDEF\nOKE = UNDEF"
-            << "Project ERROR: error"
+            << TST_ERROR_PREFIX(2) "error"
             << false;
 
     QTest::newRow("error() from replace function (built-in replace arguments)")
@@ -704,7 +704,7 @@ void tst_qmakelib::addControlStructs()
                "VAR = $$upper($$func())\n"
                "OKE = 1"
             << "VAR = UNDEF\nOKE = UNDEF"
-            << "Project ERROR: error"
+            << TST_ERROR_PREFIX(2) "error"
             << false;
 
     QTest::newRow("error() from replace function (custom test arguments)")
@@ -713,7 +713,7 @@ void tst_qmakelib::addControlStructs()
                "custom($$func()): VAR = 1\n"
                "OKE = 1"
             << "VAR = UNDEF\nOKE = UNDEF"
-            << "Project ERROR: error"
+            << TST_ERROR_PREFIX(2) "error"
             << false;
 
     QTest::newRow("error() from replace function (custom replace arguments)")
@@ -722,21 +722,21 @@ void tst_qmakelib::addControlStructs()
                "VAR = $$custom($$func(1))\n"
                "OKE = 1"
             << "VAR = UNDEF\nOKE = UNDEF"
-            << "Project ERROR: error"
+            << TST_ERROR_PREFIX(2) "error"
             << false;
 
     QTest::newRow("REQUIRES = error()")
             << "REQUIRES = error(error)\n"
                "OKE = 1"
             << "OKE = UNDEF"
-            << "Project ERROR: error"
+            << TST_ERROR_PREFIX(1) "error"
             << false;
 
     QTest::newRow("requires(error())")
             << "requires(error(error))\n"
                "OKE = 1"
             << "OKE = UNDEF"
-            << "Project ERROR: error"
+            << TST_ERROR_PREFIX(1) "error"
             << false;
 }
 
@@ -892,10 +892,13 @@ void tst_qmakelib::addReplaceFunctions(const QString &qindir)
             << ""
             << true;
 
+    // TRACE/qmake change: added "LoadPreFiles" to E_FROMFILE #2,
+    // hence logs any error without casting to warning,
+    // but as before does not fail itself.
     QTest::newRow("$$fromfile(): bad file")
             << "VAR = $$fromfile(" + qindir + "/fromfile/badfile.prx, DEFINES)"
             << "VAR ="
-            << "Project ERROR: fail!"
+            << (qindir + "/fromfile/badfile.prx:1: fail!")
             << true;
 
     QTest::newRow("$$fromfile(): bad number of arguments")
@@ -1122,11 +1125,13 @@ void tst_qmakelib::addReplaceFunctions(const QString &qindir)
             << ""
             << true;
 
+    // TRACE/qmake/test note: Invalid argument count is worth an error (to force fixing),
+    // but for backward compatibility, logs both errors without failing.
     QTest::newRow("$$section(): bad number of arguments")
             << "VAR = $$section(1, 2) \\\n$$section(1, 2, 3, 4, 5)"
             << "VAR ="
-            << "##:1: section(var, sep, begin, end) requires three or four arguments.\n"
-               "##:2: section(var, sep, begin, end) requires three or four arguments."
+            << TST_ERROR_PREFIX(1) "section(var, sep, begin, end) requires three or four arguments.\n"
+               TST_ERROR_PREFIX(2) "section(var, sep, begin, end) requires three or four arguments."
             << true;
 
     QTest::newRow("$$find()")
@@ -1403,10 +1408,11 @@ void tst_qmakelib::addReplaceFunctions(const QString &qindir)
             << ""
             << true;
 
+    // TRACE/qmake/built-in shadowed: now warns if path is already outside of the project #2.
     QTest::newRow("$$shadowed(): outside source dir")
             << "VAR = $$shadowed(/some/random/path)"
             << "VAR ="
-            << ""
+            << TST_WARNING_PREFIX(1) "Can not shadow path pointing outside of the project source directory: \"/some/random/path\""
             << true;
 
     QTest::newRow("$$shadowed(): bad number of arguments")
@@ -1696,7 +1702,7 @@ void tst_qmakelib::addTestFunctions(const QString &qindir)
     QTest::newRow("infile(): bad file")
             << "infile(" + qindir + "/fromfile/badfile.prx, DEFINES): OK = 1\nOKE = 1"
             << "OK = UNDEF\nOKE = UNDEF"
-            << "Project ERROR: fail!"
+            << qindir + "/fromfile/badfile.prx:1: fail!"
             << false;
 
     QTest::newRow("infile(): bad number of arguments")
@@ -1712,12 +1718,15 @@ void tst_qmakelib::addTestFunctions(const QString &qindir)
             << ""
             << true;
 
+    // TODO: qmake/built-in eval: should NOT increase file's line-number by `$$escape_expand(\\\\n)`,
+    // and maybe should instead separately mention which line of eval's input lines (in case of error).
+
     // The sparator semantics are *very* questionable.
     // The return value semantics are rather questionable.
     QTest::newRow("eval()")
             << "eval(FOO = one, two$$escape_expand(\\\\n)BAR = blah$$escape_expand(\\\\n)error(fail)$$escape_expand(\\\\n)BAZ = nope)"
             << "FOO = one two\nBAR = blah\nBAZ = UNDEF"
-            << "Project ERROR: fail"
+            << TST_ERROR_PREFIX(3) "fail"
             << true;
 
     QTest::newRow("if(): true")
@@ -2126,7 +2135,36 @@ void tst_qmakelib::addTestFunctions(const QString &qindir)
     QTest::newRow("include(): fail")
             << "include(include/nope.pri): OK = 1"
             << "OK = UNDEF"
-            << "Cannot read " + m_indir + "/include/nope.pri: No such file or directory"
+            << "##:1: Cannot read "
+               + QDir::toNativeSeparators(m_indir + "/include/nope.pri")
+               + ": No such file or directory"
+            << true;
+
+    // TRACE/qmake/built-ins include: IO errors should log right location #3,
+    // hence tested here.
+    QTest::newRow("include(): fail: right line-number")
+            << "\n\ninclude(include/nope.pri): \\\n    OK = 1"
+            << "OK = UNDEF"
+            << "##:3: Cannot read "
+               + QDir::toNativeSeparators(m_indir + "/include/nope.pri")
+               + ": No such file or directory"
+            << true;
+
+    // TRACE/qmake/parser BugFix: line-continuation should update evaluator's line-number #2,
+    // hence tested here.
+    QTest::newRow("include(): fail: right line-number after continuation")
+            << "if(true):\\\ninclude(include/nope.pri): OK = 1"
+            << "OK = UNDEF"
+            << "##:2: Cannot read "
+               + QDir::toNativeSeparators(m_indir + "/include/nope.pri")
+               + ": No such file or directory"
+            << true;
+    QTest::newRow("include(): fail: right line-number after continuation with comments")
+            << "#L1\n#L2\nif(true): \\#L3\n    include(include/nope.pri): OK = 1"
+            << "OK = UNDEF"
+            << "##:4: Cannot read "
+               + QDir::toNativeSeparators(m_indir + "/include/nope.pri")
+               + ": No such file or directory"
             << true;
 
     QTest::newRow("include(): silent fail")
@@ -2191,19 +2229,19 @@ void tst_qmakelib::addTestFunctions(const QString &qindir)
     QTest::newRow("warning()")
             << "warning('World, be warned!'): OK = 1\nOKE = 1"
             << "OK = 1\nOKE = 1"
-            << "Project WARNING: World, be warned!"
+            << TST_WARNING_PREFIX(1) "World, be warned!"
             << true;
 
     QTest::newRow("error()")
             << "error('World, you FAIL!'): OK = 1\nOKE = 1"
             << "OK = UNDEF\nOKE = UNDEF"
-            << "Project ERROR: World, you FAIL!"
+            << TST_ERROR_PREFIX(1) "World, you FAIL!"
             << false;
 
     QTest::newRow("if(error())")
             << "if(error(\\'World, you FAIL!\\')): OK = 1\nOKE = 1"
             << "OK = UNDEF\nOKE = UNDEF"
-            << "Project ERROR: World, you FAIL!"
+            << TST_ERROR_PREFIX(1) "World, you FAIL!"
             << false;
 
     QTest::newRow("system()")
@@ -2322,9 +2360,9 @@ void tst_qmakelib::addTestFunctions(const QString &qindir)
             << "write_file(" + vpath + "): OK = 1"
             << "OK = UNDEF"
 #ifdef Q_OS_WIN
-            << "##:1: Cannot write file " + QDir::toNativeSeparators(m_outdir) + ": Access is denied."
+            << "##:1: Cannot write file \"" + QDir::toNativeSeparators(m_outdir) + "\": Access is denied."
 #else
-            << "##:1: Cannot write file " + m_outdir + ": Is a directory"
+            << "##:1: Cannot write file \"" + m_outdir + "\": Is a directory"
 #endif
             << true;
 
@@ -2580,6 +2618,12 @@ void tst_qmakelib::proEval()
     QFETCH(QString, out);
     QFETCH(QString, msgs);
     QFETCH(bool, ok);
+
+#if 0
+    if (QTest::currentDataTag() == QLL("include(): fail: right line-number after continuation")) {
+        qt_noop();
+    }
+#endif
 
     QString infile = m_indir + "/test.pro";
     bool verified = true;

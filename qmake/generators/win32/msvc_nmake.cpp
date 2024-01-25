@@ -58,7 +58,7 @@ static QString nmakePathList(const QStringList &list)
 
 NmakeMakefileGenerator::NmakeMakefileGenerator() : Win32MakefileGenerator(), usePCH(false)
 {
-
+    m_name = QByteArray("NmakeMakefileGenerator");
 }
 
 bool
@@ -503,8 +503,15 @@ void NmakeMakefileGenerator::writeImplicitRulesPart(QTextStream &t)
                 if (duplicate.isNull()) {
                     duplicate = dit.filePath();
                 } else {
-                    warn_msg(WarnLogic, "%s conflicts with %s", qPrintable(duplicate),
-                             qPrintable(dit.filePath()));
+                    QString duplicatePath = duplicate;
+                    QString existingPath = dit.filePath();
+                    if ( ! Option::forceLinuxFormatLogs) {
+                        duplicatePath = QDir::toNativeSeparators(duplicatePath);
+                        existingPath = QDir::toNativeSeparators(existingPath);
+                    }
+                    warn_msg( WarnLogic, "\"%s\" conflicts with \"%s\""
+                            , qPrintable(duplicatePath)
+                            , qPrintable(existingPath));
                     duplicatesFound = true;
                 }
             }
@@ -554,10 +561,27 @@ void NmakeMakefileGenerator::writeBuildRulesPart(QTextStream &t)
     t << "all: " << escapeDependencyPath(fileFixify(Option::output.fileName()))
       << ' ' << depVar("ALL_DEPS") << " $(DESTDIR_TARGET)\n\n";
     t << "$(DESTDIR_TARGET): " << depVar("PRE_TARGETDEPS") << " $(OBJECTS) " << depVar("POST_TARGETDEPS");
-    if (templateName == "aux") {
-        t << "\n\n";
-        return;
+
+    // TRACE/qmake improve: allow aux to run pre/post link commands,
+    // else would do:
+    // ```
+    // if (templateName == "aux") {
+    //     t << "\n\n";
+    //     return;
+    // }
+    // ```
+    // instead of:
+    const bool isAux = templateName == "aux";
+
+    // TRACE/qmake MSVC: improve error logs by haveing separate target for aux,
+    // else `QMAKE_POST_LINK` related logs confusingly mention something like
+    // the "release\my-target.dll" path (whatever `$(DESTDIR_TARGET)` expands to).
+    if (isAux) {
+        // Intentionally starting with white-space.
+        t << " aux\n\n";
+        t << "aux: FORCE";
     }
+
 
     if(!project->isEmpty("QMAKE_PRE_LINK"))
         t << "\n\t" <<var("QMAKE_PRE_LINK");
@@ -565,7 +589,7 @@ void NmakeMakefileGenerator::writeBuildRulesPart(QTextStream &t)
         t << "\n\t$(LIBAPP) $(LIBFLAGS) " << var("QMAKE_LINK_O_FLAG") << "$(DESTDIR_TARGET) @<<\n\t  "
           << "$(OBJECTS)"
           << "\n<<";
-    } else {
+    } else if ( ! isAux ) {
         const bool embedManifest = ((templateName == "app" && project->isActiveConfig("embed_manifest_exe"))
                                     || (templateName == "lib" && project->isActiveConfig("embed_manifest_dll")
                                         && !(project->isActiveConfig("plugin") && project->isActiveConfig("no_plugin_manifest"))
@@ -627,9 +651,17 @@ void NmakeMakefileGenerator::writeBuildRulesPart(QTextStream &t)
                 // directly embed the manifest in the executable after linking
                 t << "\n\t";
                 writeLinkCommand(t, extraLFlags);
+
                 if (!linkerSupportsEmbedding) {
-                    t << "\n\tmt.exe /nologo /manifest " << escapeFilePath(manifest)
-                      << " /outputresource:$(DESTDIR_TARGET);" << resourceId;
+                    // TRACE/qmake Add X1: we use "idc" instead of "mt" to directly embed the manifest #1,
+                    // since "mt.exe" sometimes crashs, but users can disable idc usage with: QMAKE_MANIFEST_FLAGS = /MT:YES
+                    const bool mt_exe = project->values("QMAKE_MANIFEST_FLAGS")
+                            .toQStringList().filter(QRegExp("(/|-)MT:NO")).isEmpty();
+                    if(!mt_exe) {
+                        t << "\n\t-$(IDC) $(DESTDIR_TARGET) /manifest " << escapeFilePath(manifest);
+                    } else
+                        t << "\n\tmt.exe /nologo /manifest " << escapeFilePath(manifest)
+                          << " /outputresource:$(DESTDIR_TARGET);" << resourceId;
                 }
             }
         }  else {

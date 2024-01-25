@@ -128,5 +128,40 @@ win32 {
     else:  QMAKE_LIBS_CORE *= dbghelp.lib
 }
 
+# TRACE/qmake improve: let `spec_pre.prf` know build directory's path #3,
+# which's used here for clearing the right `QMAKE_SKIP_FILE` file,
+# where the `.pro.user` extension ensures the file is ignored by Git/VCS.
+defineTest(requireSkipFile) {
+    # Maybe already done.
+    !isEmpty(QMAKE_SKIP_FILE): return(true)
+    # Maybe not supported.
+    fake_pass: return(false)
+    dir = $$props(OUT_PWD)
+    isEmpty(dir): return(false)
+
+    # Actual logic.
+    QMAKE_SKIP_FILE = $$dir/.qmake.pro.user
+
+    # Ensures not user edited.
+    exists($$QMAKE_SKIP_FILE) {
+        tmp = $$fromfile($$QMAKE_SKIP_FILE, Auto_Delete_This)
+        !equals(tmp, yes) {
+            win32: QMAKE_SKIP_FILE ~= s,/,\\,gi
+            error("Auto-delete is disabled, manually remove file at:" $$QMAKE_SKIP_FILE)
+        }
+    }
+    # Removes existing content.
+    tmp = \
+        $$LITERAL_HASH \
+        "$$LITERAL_HASH WARNING: any change to this file will be lost in next QMake run." \
+        $$LITERAL_HASH \
+        "Auto_Delete_This = yes"
+    write_file($$QMAKE_SKIP_FILE, tmp)
+    export(QMAKE_SKIP_FILE)
+    return(true)
+}
+
+requireSkipFile()
+
 # Qt loads below only for Windows, but we want to be cross-platform.
 load(qt_config)

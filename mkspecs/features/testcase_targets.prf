@@ -1,10 +1,16 @@
 
 # Let every project have a standard GNU `check' target
 !contains(QMAKE_EXTRA_TARGETS, check) {
-    contains(TEMPLATE, subdirs): \
+    contains(TEMPLATE, subdirs) {
         prepareRecursiveTarget(check)
-    else: \
-        check.depends = first # `make check' implies build
+        # TRACE/testlib note: the `TEMPLATE=subdirs` Makefile's check target generates sub-Makefiles
+        # (if not already exist), hence there is no need for:
+        # ```
+        # check.depends *= first
+        # ```
+    } else {
+        check.depends *= first # `make check' implies build
+    }
     QMAKE_EXTRA_TARGETS += check
 }
 
@@ -12,8 +18,8 @@
 !contains(QMAKE_EXTRA_TARGETS, benchmark) {
     contains(TEMPLATE, subdirs): \
         prepareRecursiveTarget(benchmark)
-    else: \
-        benchmark.depends = first # `make benchmark' implies build
+
+    benchmark.depends *= first # `make benchmark' implies build
     QMAKE_EXTRA_TARGETS += benchmark
 }
 

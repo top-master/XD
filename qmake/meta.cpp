@@ -50,6 +50,8 @@ QMakeMetaInfo::QMakeMetaInfo(QMakeProject *_conf)
 bool
 QMakeMetaInfo::readLib(const QString &meta_file)
 {
+    clear();
+
     if(cache_vars.contains(meta_file)) {
         vars = cache_vars[meta_file];
         return true;
@@ -81,15 +83,24 @@ QMakeMetaInfo::readLib(const QString &meta_file)
 }
 
 
+void
+QMakeMetaInfo::clear()
+{
+    vars.clear();
+}
+
+
 QString
 QMakeMetaInfo::findLib(const QString &lib)
 {
     QString ret;
     QString extns[] = { Option::prl_ext, /*Option::pkgcfg_ext, Option::libtool_ext,*/ QString() };
+    // Argument may already have .prl extension.
     for(int extn = 0; !extns[extn].isNull(); extn++) {
         if(lib.endsWith(extns[extn]))
             ret = QFile::exists(lib) ? lib : QString();
     }
+    // Try suffixing library path with .prl extension.
     if(ret.isNull()) {
         for(int extn = 0; !extns[extn].isNull(); extn++) {
             if(QFile::exists(lib + extns[extn])) {
@@ -121,7 +132,7 @@ QMakeMetaInfo::readLibtoolFile(const QString &f)
     else if(!dirf.isEmpty() && !dirf.endsWith(Option::output_dir))
         dirf += QLatin1Char('/');
     const ProValueMap &v = proj.variables();
-    for (ProValueMap::ConstIterator it = v.begin(); it != v.end(); ++it) {
+    for (ProValueMap::ConstIterator it = v.constBegin(); it != v.constEnd(); ++it) {
         ProStringList lst = it.value();
         if(lst.count() == 1 && (lst.first().startsWith("'") || lst.first().startsWith("\"")) &&
            lst.first().endsWith(QString(lst.first().at(0))))

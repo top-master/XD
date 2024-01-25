@@ -1,0 +1,135 @@
+
+# Ensures basic helpers are defined.
+load(exclusive_builds)
+# Ensrues `addExclusiveBuilds(...)` is called.
+load(resolve_config)
+
+
+# Recursively combines a list of exclusive builds into combinations
+# of non-exclusive builds (separated by a ':' character), eg the
+# list [debug, release, static, shared] will result in the four
+# combinations [debug:static, debug:shared, release:static,
+# release:shared].
+!defined(combineExclusiveBuilds, test): defineReplace(combineExclusiveBuilds) {
+    permutationBuilds = $$1
+    existingBuilds = $$2
+
+    isEmpty(permutationBuilds): \
+        # Exit-condition, no more recursing
+        return($$existingBuilds)
+
+    # Choose the first build of the permutations and use the set of exclusive
+    # builds associated with that build as the list of existing builds. This
+    # partitions the permutations into one set of exclusive builds + the rest
+    # of the unknown permutations.
+    newExistingBuilds = $$eval($$first(permutationBuilds).exclusive)
+    permutationBuilds -= $$newExistingBuilds
+
+    # Recursively compute the combination of these two sets
+    recursiveCombination = $$combineExclusiveBuilds($$permutationBuilds, $$newExistingBuilds)
+
+    isEmpty(existingBuilds): \
+        # No need to combine further
+        return($$recursiveCombination)
+
+    result =
+    for(existingBuild, existingBuilds) {
+        for(combination, recursiveCombination): \
+            result += "$${existingBuild}:$${combination}"
+    }
+    return($$result)
+}
+
+
+# affixFromBuilds(buildModes)
+!defined(affixFromBuilds, replace): defineReplace(affixFromBuilds) {
+    affixes =
+    # Keeps spaces.
+    fix_output_dirs {
+        for(build, $$1) {
+            affixes = $$affixes$$eval($${build}.dir_affix)-
+        }
+        chop(affixes, 1)
+        return($$affixes)
+    }
+
+    # Replaces spaces with '-' character.
+    for(build, $$1): \
+        affixes += $$eval($${build}.dir_affix)
+    return($$join(affixes, -))
+}
+
+# defineBuildTargets(void)
+#
+# Converts current `QMAKE_EXCLUSIVE_BUILDS` into `QMAKE_EXTRA_TARGETS`.
+!defined(defineBuildTargets, test): defineTest(defineBuildTargets) {
+    buildCombinations = $$combineExclusiveBuilds($$QMAKE_EXCLUSIVE_BUILDS)
+
+    for(combination, buildCombinations) {
+        builds = $$split(combination, :)
+        key =
+        config =
+        target =
+        priority =
+        for(build, builds) {
+            key = $${key}$$eval($${build}.name)
+            config *= $$eval($${build}.CONFIG) $${build} $$eval($${build}.name)Build
+            target += $$eval($${build}.target)
+
+            # If a build has been prioritized through CONFIG we prefer that
+            CONFIG($$build, $$join($${build}.exclusive, |)): \
+                priority += 1
+        }
+
+        $${key}.name = $$key
+        $${key}.target = $$join(target, -)
+        $${key}.CONFIG = $$config
+        $${key}.builds = $$builds
+        export($${key}.name)
+        export($${key}.target)
+        export($${key}.CONFIG)
+        export($${key}.builds)
+
+        BUILDS.$$size(priority) += $$key
+
+        # Add makefile targets for each exclusive build that will aggregate all targets
+        # that include the exclusive build. This matches the targets in the SUBDIR files
+        # so that you can recursivly build a single exclusive build.
+        !build_pass:count(builds, 1, >) {
+            for(build, builds) {
+                $${build}.depends += $$eval($${key}.target)
+                export($${build}.depends)
+                QMAKE_EXTRA_TARGETS *= $$build
+            }
+        }
+    }
+    #export(buildCombinations)
+    export(QMAKE_EXTRA_TARGETS)
+
+    BUILDS =
+    priority =
+    for(ever) {
+        # Keep the order in BUILDS matching the priority from CONFIG, so that the first
+        # entry in BUILDS will be the first/default target when not CONFIG(build_all).
+        BUILDS = $$eval(BUILDS.$$size(priority)) $$BUILDS
+        count(BUILDS, $$size(buildCombinations), >=): break()
+        priority += 1
+    }
+    export(BUILDS)
+
+    !build_pass {
+        # The builds are sorted by priority based on the current config
+        # so choosing the first one gives us the most appropriate build.
+        BUILD_PASS = $$first(BUILDS)
+        export(BUILD_PASS)
+    }
+}
+
+
+# Auto executes on load.
+defineBuildTargets()
+
+# Path suffix for current `BUILD_PASS`, which by default is a combination of
+# one exclusive build-type (like `debug` vs `release`) with
+# one non-exclusive build-mode (like shared or static).
+DIR_AFFIX = $$affixFromBuilds($${BUILD_PASS}.builds)
