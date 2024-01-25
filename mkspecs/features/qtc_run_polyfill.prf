@@ -1,0 +1,23 @@
+
+# WARNING: newer Qt Creator versions may load all subdirs, and
+# that even if disabled by condition.
+
+# Not all Qt-Creator versions set `qtc_run`, else would do:
+# ```
+# !qtc_run: return()
+# ```
+# instead of:
+defined(has_feature): return()
+
+CONFIG *= \
+    qtc_run \
+    build_pass
+
+
+defineTest(has_feature) { return(false) }
+defineTest(copy_file) { }
+defineTest(copy_dir) { }
+defineTest(chop) { }
+
+defineReplace(props) { }
+defineReplace(chop) { }

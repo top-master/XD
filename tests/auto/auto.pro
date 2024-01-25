@@ -47,3 +47,6 @@ qtHaveModule(dbus) {
 } else {
     SUBDIRS -= dbus
 }
+
+isEmpty(QT_SOURCE_TREE): \
+    error("The root .qmake.conf file needs to be loaded for Test-cases that are in Qt-source-tree.")

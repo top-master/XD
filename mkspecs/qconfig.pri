@@ -1,9 +1,12 @@
 
+# See `./README.md` for few details.
+
 # TRACE/mkspecs note: By default `release` is added to `CONFIG`,
 # but with the command-line `CONFIG+=debug`, `release` will be considered removed,
 # basically, the last in list overrides any previous, meaning,
 # any project's `.pro` file can override said command-line (to force always `release`).
 CONFIG += release shared rtti no_plugin_manifest directwrite qpa
+CONFIG += compat_verbose
 host_build {
     QT_ARCH = i386
     QT_TARGET_ARCH = i386
@@ -25,6 +28,9 @@ QT_CONFIG += \
 
 ## SQL support can be disabled by commenting:
 QT_CONFIG += sql
+
+## Qt would disable text-codecs for Windows, XD keeps it always if possible.
+QT_CONFIG += codecs
 
 #versioning 
 QT_VERSION = 5.6.3

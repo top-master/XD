@@ -47,6 +47,9 @@
 #include <sys/types.h>
 #include <sys/stat.h>
 
+#include "manualskip.h"
+#include <qlibraryinfo.h>
+
 QT_BEGIN_NAMESPACE
 
 #ifdef Q_OS_WIN
@@ -403,7 +406,109 @@ int runQMake(int argc, char **argv)
 
 QT_END_NAMESPACE
 
+namespace QMakeInternal {
+    extern bool build_pass; //defined in qmake/library/qmakeevaluator.cpp
+}
+
 int main(int argc, char **argv)
 {
+    UDebug::init([&] (QtMsgType, const char *) {
+#ifdef QMAKE_WATCH
+        return DebugChangesSettings::instance.isVerbose || ! QMakeInternal::build_pass;
+#else
+        return ! QMakeInternal::build_pass;
+#endif
+    });
+
+    if(skipOnKey(QLatin1String("at start up!"))) {
+        return 0;
+    }
+
     return QT_PREPEND_NAMESPACE(runQMake)(argc, argv);
 }
+
+inline QString findMacroRoot() {
+    QString s = QString::fromLocal8Bit((const char *)__FILE__);
+    s.chop(8); //size of "main.cpp" is 8
+    return QDir::toNativeSeparators(s);
+}
+inline QString findBuildRoot() {
+    QString s = QString::fromLocal8Bit((const char *)PROJECT_FOLDER);
+    s = QDir::toNativeSeparators(s);
+    const QChar separatpr = QDir::separator();
+    if ( ! s.endsWith(separatpr)) {
+        s += separatpr;
+    }
+    return s;
+}
+inline QString validRoot() {
+    // See "qmake_libraryInfoFile()" for more.
+    return QDir::toNativeSeparators( QLibraryInfo::location(QLibraryInfo::BinariesPath) + QLatin1String("/../qmake"));
+}
+
+QString xdTranslatePath(const QString &filePath_)
+{
+    const QString &filePath = QDir::toNativeSeparators(filePath_);
+
+    static const QString macroRoot = findMacroRoot();
+    static const QString buildRoot = findBuildRoot();
+    static const QString root = validRoot();
+    if (filePath.startsWith(macroRoot, qFileCaseSensitivity)) {
+        QString path = root;
+        return path.append(filePath.midRef(macroRoot.length() - 1));
+    }
+    if (filePath.startsWith(buildRoot, qFileCaseSensitivity)) {
+        QString path = root;
+        return path.append(filePath.midRef(buildRoot.length() - 1));
+    }
+    return filePath;
+}
+
+#ifdef QMAKE_WATCH
+DebugChangesSettings DebugChangesSettings::instance;
+
+DebugChangesSettings::DebugChangesSettings(const QStringRef &QMAKE_WATCH_)
+    : name(QMAKE_WATCH_.toLatin1())
+    , caseSensitivity(Qt::CaseInsensitive)
+    , operation(&DebugChangesSettings::equals)
+    // Intentionally disabled here (because `'*'` can enable it).
+    , isVerbose(false)
+{
+posFindOperation:
+    if(name.isEmpty()) {
+        operation = &DebugChangesSettings::alwaysTrue;
+        return;
+    }
+
+    char c = *(name.constEnd()-1);
+    switch (c) {
+    case '>': operation = &DebugChangesSettings::startsWith;
+        break;
+    case '<': operation = &DebugChangesSettings::endsWith;
+        break;
+    case '?': operation = &DebugChangesSettings::contains;
+        break;
+    case '!': operation = &DebugChangesSettings::equals;
+        break;
+    case '=': caseSensitivity = Qt::CaseSensitive;
+        break;
+    case '*': isVerbose = true;
+        break;
+    default:
+        return;
+    }
+
+    name.chop(1);
+    goto posFindOperation;
+}
+
+bool xdDebugChanges(const QStringRef &key)
+{
+    // Skips logging for `build_pass`,
+    // unless `QMAKE_WATCH` var is `unset` or ends with `*` character.
+    if (DebugChangesSettings::instance.isVerbose || ! QMakeProject::build_pass()) {
+        return DebugChangesSettings::instance.matchs(key);
+    }
+    return false;
+}
+#endif // QMAKE_WATCH

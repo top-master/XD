@@ -35,10 +35,10 @@
 
 #include "qmakeevaluator.h"
 #include "ioutils.h"
+#include "udebug.h"
 
 #include <qbytearray.h>
 #include <qdatetime.h>
-#include <qdebug.h>
 #include <qdir.h>
 #include <qfile.h>
 #include <qfileinfo.h>
@@ -62,15 +62,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 
-#ifdef Q_OS_WIN32
-#define QT_POPEN _popen
-#define QT_POPEN_READ "rb"
-#define QT_PCLOSE _pclose
-#else
-#define QT_POPEN popen
-#define QT_POPEN_READ "r"
-#define QT_PCLOSE pclose
-#endif
+#include "../process.h"
 
 QT_BEGIN_NAMESPACE
 
@@ -235,12 +227,27 @@ void QMakeGlobals::setDirectories(const QString &input_dir, const QString &outpu
 
 QString QMakeGlobals::shadowedPath(const QString &fileName) const
 {
+    // Empty means right in `$$OUT_PWD` (at least in shadowing context).
+    if (fileName.isEmpty()
+        || (fileName.length() == 1 && fileName.at(0) == QLatin1Char('.'))
+    ) {
+        return build_root;
+    }
     if (source_root.isEmpty())
         return fileName;
+    // Intentionally NOT using `qFileCaseSensitivity` to prevent surprises
+    // (i.e. ensuring scripts written in Windows work on Linux/Mac).
     if (fileName.startsWith(source_root)
         && (fileName.length() == source_root.length()
             || fileName.at(source_root.length()) == QLatin1Char('/'))) {
         return build_root + fileName.mid(source_root.length());
+    }
+    // TRACE/qmake/built-ins shadowed(...): return input-path if already shadowed (instead of empty).
+    if (fileName.startsWith(build_root)
+        && (fileName.length() == build_root.length()
+            || fileName.at(build_root.length()) == QLatin1Char('/'))
+    ) {
+        return fileName;
     }
     return QString();
 }

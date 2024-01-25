@@ -43,7 +43,7 @@ class UnixMakefileGenerator : public MakefileGenerator
     bool include_deps;
     QString libtoolFileName(bool fixify=true);
     void writeLibtoolFile();     // for libtool
-    void writePrlFile(QTextStream &);
+    void writePrlFile(const QFileInfo &, QTextStream &);
 
 public:
     UnixMakefileGenerator();

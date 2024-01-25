@@ -45,7 +45,10 @@ class MakefileGenerator;
 class MetaMakefileGenerator
 {
 protected:
-    MetaMakefileGenerator(QMakeProject *p, const QString &n, bool op=true) : project(p), own_project(op), name(n) { }
+    MetaMakefileGenerator(QMakeProject *p, const QString &n, bool op=true)
+        : project(p), own_project(op), name(n)
+    {}
+
     QMakeProject *project;
     bool own_project;
     QString name;

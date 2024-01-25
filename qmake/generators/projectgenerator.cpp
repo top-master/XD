@@ -57,6 +57,7 @@ QString project_builtin_regx() //calculate the builtin regular expression..
 
 ProjectGenerator::ProjectGenerator() : MakefileGenerator()
 {
+    m_name = QByteArray("ProjectGenerator");
 }
 
 void
@@ -70,6 +71,8 @@ ProjectGenerator::init()
     project->evaluateFeatureFile("default_post.prf");
     project->evaluateConfigFeatures();
     project->values("CONFIG").clear();
+    // TRACE/qmake BugFix: skip updating globals if `QMAKE_GENERATE_PROJECT` mode #3
+    // but NOT in generator itself.
     Option::postProcessProject(project);
 
     ProValueMap &v = project->variables();

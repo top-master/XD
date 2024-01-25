@@ -51,5 +51,12 @@ equals(QMAKE_HOST.os, Windows) {
     QMAKE_SH            = sh
 }
 
-CONFIG = file_copies qt warn_on release link_prl
+CONFIG = isXD isXd isxD isxd qt file_copies warn_on release link_prl $$CONFIG
 QT = core gui
+
+load(qtc_run_polyfill)
+
+# TRACE/qmake improve: fake-loads set `fake_pass` in `CONFIG` #1,
+# where fake-load happens if script's pre-included from build directory
+# (if ever, like for `.qmake.[super|conf|cache]` files).
+equals(true, $$props(is_fake_pass)): CONFIG += fake_pass

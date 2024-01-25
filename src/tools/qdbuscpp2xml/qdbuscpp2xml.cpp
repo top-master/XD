@@ -93,7 +93,7 @@ int qDBusParametersForMethod(const FunctionDef &mm, QVector<int>& metaTypes, QSt
     QList<QByteArray> parameterTypes;
 
     foreach (const ArgumentDef &arg, mm.arguments)
-        parameterTypes.append(arg.normalizedType);
+        parameterTypes.append(arg.normalizedType());
 
     return qDBusParametersForMethod(parameterTypes, metaTypes, errorMsg);
 }
@@ -112,7 +112,7 @@ static QString addFunction(const FunctionDef &mm, bool isSignal = false) {
                   .arg(QLatin1String(mm.name));
 
     // check the return type first
-    int typeId = QMetaType::type(mm.normalizedType.constData());
+    int typeId = QMetaType::type(mm.type.toNormalized().constData());
     if (typeId != QMetaType::Void) {
         if (typeId) {
             const char *typeName = QDBusMetaType::typeToSignature(typeId);
@@ -123,11 +123,11 @@ static QString addFunction(const FunctionDef &mm, bool isSignal = false) {
                     // do we need to describe this argument?
                     if (QDBusMetaType::signatureToType(typeName) == QVariant::Invalid)
                         xml += QString::fromLatin1("      <annotation name=\"org.qtproject.QtDBus.QtTypeName.Out0\" value=\"%1\"/>\n")
-                            .arg(typeNameToXml(mm.normalizedType.constData()));
+                            .arg(typeNameToXml(mm.type.toNormalized().constData()));
             } else {
                 return QString();
             }
-        } else if (!mm.normalizedType.isEmpty()) {
+        } else if (!mm.type.toNormalized().isEmpty()) {
             return QString();           // wasn't a valid type
         }
     }
@@ -241,7 +241,7 @@ static QString generateInterfaceXml(const ClassDef *mo)
 
     if (flags & (QDBusConnection::ExportScriptableSignals | QDBusConnection::ExportNonScriptableSignals)) {
         foreach (const FunctionDef &mm, mo->signalList) {
-            if (mm.wasCloned)
+            if (mm.isUnreal())
                 continue;
             if (!mm.isScriptable && !(flags & QDBusConnection::ExportNonScriptableSignals))
                 continue;

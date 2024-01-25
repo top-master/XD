@@ -5,4 +5,5 @@ xcodebuild {
     QMAKE_DIR_REPLACE =
 }
 
+# Redirects to one-for-all-platforms script.
 load(exclusive_builds_post)

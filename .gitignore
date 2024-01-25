@@ -9,6 +9,12 @@
 #
 /.idea/
 
+# QtCreator IDE.
+#
+*.pro.user*
+*.qmlproject.user*
+*~*.TMP
+
 examples/*/*/*
 !examples/*/*/*[.]*
 !examples/*/*/README
@@ -73,8 +79,6 @@ Makefile*
 !qmake/Makefile.unix
 *.prl
 *.app
-*.pro.user*
-*.qmlproject.user*
 *.gcov
 *.gcda
 *.gcno
@@ -92,6 +96,11 @@ bin/moc*
 bin/makeqpf*
 bin/pixeltool*
 bin/qmake*
+bin/*.rar
+# Windows.
+!bin/qmake.exe
+# Linux.
+!bin/qmake
 bin/qdoc*
 bin/qt3to4*
 bin/qttracereplay*
@@ -245,7 +254,7 @@ debug
 #!include/*/*
 lib/*
 imports/*
-!lib/fonts
+!lib/fonts/
 !lib/README
 plugins/*/*
 release

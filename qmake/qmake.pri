@@ -12,7 +12,9 @@ SOURCES += project.cpp property.cpp main.cpp \
            generators/win32/msvc_vcproj.cpp \
            generators/win32/msvc_vcxproj.cpp \
            generators/win32/msvc_objectmodel.cpp generators/win32/msbuild_objectmodel.cpp \
-           generators/win32/cesdkhandler.cpp
+           generators/win32/cesdkhandler.cpp \
+    $$PWD/library/udebug.cpp \
+    $$PWD/manualskip.cpp
 
 HEADERS += project.h property.h \
            library/qmake_global.h library/ioutils.h library/proitems.h library/qmakevfs.h library/qmakeglobals.h \
@@ -25,7 +27,11 @@ HEADERS += project.h property.h \
            generators/win32/msvc_vcproj.h \
            generators/win32/msvc_vcxproj.h \
            generators/win32/msvc_objectmodel.h generators/win32/msbuild_objectmodel.h \
-           generators/win32/cesdkhandler.h
+           generators/win32/cesdkhandler.h \
+    $$PWD/library/udebug.h \
+    $$PWD/debuger.h \
+    $$PWD/manualskip.h \
+    library/constants.h
 
 bootstrap { #Qt code
    SOURCES+= \
@@ -81,7 +87,11 @@ bootstrap { #Qt code
         qjsonparser.cpp \
         qjsonarray.cpp \
         qjsonobject.cpp \
-        qjsonvalue.cpp
+        qjsonvalue.cpp \
+        $$PWD/../src/corelib/thread/qexception.cpp \
+        qsharedpointer.cpp \ # Used by QStackTrace.
+        qstacktrace.cpp \
+        qdebug.cpp
 
    HEADERS+= \
         qbitarray.h \
@@ -131,7 +141,10 @@ bootstrap { #Qt code
         qjsonwriter.h \
         qjsonarray.h \
         qjsonobject.h \
-        qjsonvalue.h
+        qjsonvalue.h \
+        qstacktrace.h \
+        qstacktrace_p.h \
+        qdebug.h
 
     unix {
         SOURCES += qfilesystemengine_unix.cpp qfilesystemiterator_unix.cpp qfsfileengine_unix.cpp

@@ -8,7 +8,11 @@ win32 {
       QMAKE_DLL_PATHS += $$[QT_INSTALL_BINS/get]
    }
 }
-CONFIG(release, debug|release):DEFINES += QT_NO_DEBUG
+
+## TRACE/mkspecs BugFix: moved QT_NO_DEBUG from `qt.prf` to "mkspecs/features/default_post.prf" file #2,
+## old code:
+#CONFIG(release, debug|release):DEFINES += QT_NO_DEBUG
+
 contains(QT_CONFIG, force_asserts):DEFINES += QT_FORCE_ASSERTS
 no_keywords:DEFINES += QT_NO_KEYWORDS
 plugin { #Qt plugins
