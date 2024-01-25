@@ -37,6 +37,17 @@
 #include <QProcessEnvironment>
 #include <QtTest/QtTest>
 
+
+#define TST_LOCATION_PREFIX(line) "##:" QT_STRINGIFY(line) ": "
+#ifdef QT_HAS_XD
+#  define TST_WARNING_PREFIX(line) "WARNING: " TST_LOCATION_PREFIX(line)
+#  define TST_ERROR_PREFIX(line) TST_LOCATION_PREFIX(line)
+#else
+#  define TST_WARNING_PREFIX(line) "Project WARNING: "
+#  define TST_ERROR_PREFIX(line) "Project ERROR: "
+#endif
+
+
 class tst_qmakelib : public QObject
 {
     Q_OBJECT

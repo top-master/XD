@@ -47,4 +47,3 @@ QMAKE_QT_CONFIG = $$[QT_HOST_DATA/get]/mkspecs/qconfig.pri
 }
 
 load(qt_functions)
-

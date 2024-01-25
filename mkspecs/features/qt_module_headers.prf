@@ -26,7 +26,7 @@ isEmpty(MODULE_HEADER_VERSION): MODULE_HEADER_VERSION = $$VERSION
     QMAKE_SYNCQT += \
         -version $$MODULE_HEADER_VERSION -outdir $$system_quote($$MODULE_BASE_OUTDIR) $$MODULE_SYNCQT_DIR
     !silent: message($$QMAKE_SYNCQT)
-    system($$QMAKE_SYNCQT)|warning("Failed to run: $$QMAKE_SYNCQT")
+    system($$QMAKE_SYNCQT)|once(syncqt_warn): warning("Failed to run: $$QMAKE_SYNCQT")
 
     !minimal_syncqt {
         include-distclean.commands = \

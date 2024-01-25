@@ -104,7 +104,9 @@ class QMAKE_EXPORT ProValueMapStack : public QLinkedList<ProValueMap>
 {
 public:
     inline void push(const ProValueMap &t) { append(t); }
-    inline ProValueMap pop() { return takeLast(); }
+    // TRACE/qmake improve: seems we never use return value,
+    // old code: `inline ProValueMap pop() { return takeLast(); }`
+    inline void pop() { return removeLast(); }
     ProValueMap &top() { return last(); }
     const ProValueMap &top() const { return last(); }
 };
@@ -124,6 +126,7 @@ public:
 
     static void initStatics();
     static void initFunctionStatics();
+
     QMakeEvaluator(QMakeGlobals *option, QMakeParser *parser, QMakeVfs *vfs,
                    QMakeHandler *handler);
     ~QMakeEvaluator();
@@ -200,10 +203,17 @@ public:
                                  LoadFlags flags);
     VisitReturn evaluateConfigFeatures();
     void message(int type, const QString &msg) const;
+    void messageAt(int type, const QString &msg, const QString &filePath, int lineNumber = -1) const;
     void evalError(const QString &msg) const
             { message(QMakeHandler::EvalError, msg); }
+    void logicWarning(const QString &msg) const
+            { message(QMakeHandler::EvalWarnLogic, msg); }
+    void logicWarningAt(const QString &msg, const QString &filePath, int lineNumber = -1) const
+            { messageAt(QMakeHandler::EvalWarnLogic, msg, filePath, lineNumber); }
     void languageWarning(const QString &msg) const
             { message(QMakeHandler::EvalWarnLanguage, msg); }
+    void languageWarningAt(const QString &msg, const QString &filePath, int lineNumber = -1) const
+            { messageAt(QMakeHandler::EvalWarnLanguage, msg, filePath, lineNumber); }
     void deprecationWarning(const QString &msg) const
             { message(QMakeHandler::EvalWarnDeprecated, msg); }
 
@@ -216,6 +226,9 @@ public:
 
     VisitReturn evaluateExpandFunction(const ProKey &function, const ushort *&tokPtr, ProStringList *ret);
     VisitReturn evaluateConditionalFunction(const ProKey &function, const ushort *&tokPtr);
+
+    // See warning in doc-comments.
+    VisitReturn evaluateConditionalHook(int hookId, const ProKey &actualFunc, const ProStringList &args);
 
     ProStringList evaluateBuiltinExpand(int func_t, const ProKey &function, const ProStringList &args);
     VisitReturn evaluateBuiltinConditional(int func_t, const ProKey &function, const ProStringList &args);
@@ -238,6 +251,12 @@ public:
 
     VisitReturn writeFile(const QString &ctx, const QString &fn, QIODevice::OpenMode mode,
                           bool exe, const QString &contents);
+
+    VisitReturn copyFile(const QString &filePath, const QString &destPath);
+    void copyFileWarning(const QString &from, const QString &to, const QString &msg);
+    VisitReturn copyDir(const QString &pathFrom, const QString &pathTo,
+                        const QString &nameFilter = QLatin1String("*", 1));
+    void copyDirError(const QString &from, const QString &to, const QString &msg);
 #ifndef QT_BOOTSTRAPPED
     void runProcess(QProcess *proc, const QString &command) const;
 #endif
@@ -269,13 +288,7 @@ public:
     enum { m_debugLevel = 0 };
 #endif
 
-    struct Location {
-        Location() : pro(0), line(0) {}
-        Location(ProFile *_pro, ushort _line) : pro(_pro), line(_line) {}
-        void clear() { pro = 0; line = 0; }
-        ProFile *pro;
-        ushort line;
-    };
+    typedef QMakeLocation Location;
 
     Location m_current; // Currently evaluated location
     QStack<Location> m_locationStack; // All execution location changes
@@ -287,7 +300,9 @@ public:
 
     int m_listCount;
     bool m_valuemapInited;
+    /// Whether we're building for hosting-system itself, or this is a cross-compile.
     bool m_hostBuild;
+    bool m_isFakePass;
     QString m_qmakespec;
     QString m_qmakespecName;
     QString m_superfile;
@@ -312,9 +327,11 @@ public:
     QMakeHandler *m_handler;
     QMakeVfs *m_vfs;
 };
+
 Q_DECLARE_TYPEINFO(QMakeEvaluator::Location, Q_PRIMITIVE_TYPE);
 
 Q_DECLARE_OPERATORS_FOR_FLAGS(QMakeEvaluator::LoadFlags)
+
 
 QT_END_NAMESPACE
 

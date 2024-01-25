@@ -45,7 +45,12 @@ enum Target {
     StaticLib
 };
 
+#if QT_VERSION <= 0x040804
+struct QUuid;
+#else
 class QUuid;
+#endif
+
 struct VcsolutionDepend;
 class VcprojGenerator : public Win32MakefileGenerator
 {

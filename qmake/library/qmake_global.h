@@ -35,6 +35,7 @@
 #define QMAKE_GLOBAL_H
 
 #include <qglobal.h>
+#include "../debuger.h"
 
 #if defined(QMAKE_AS_LIBRARY)
 #  if defined(QMAKE_LIBRARY)
@@ -60,4 +61,6 @@
 #  define PROEVALUATOR_DEBUG
 #endif
 
-#endif
+#define qFileCaseSensitivity Q_FS_CASE
+
+#endif // QMAKE_GLOBAL_H

@@ -120,6 +120,19 @@ public:
 
     inline bool isSharedWith(const QVector<T> &other) const { return d == other.d; }
 
+    inline bool isValidIndex(int i) { return quint32(i) < quint32(d->size); } //same as "i >= 0 && i < d->size" but faster
+
+    /// WARNING: use "dataAt" only if `isValidIndex(i)` returns \c true for \p i or use find().
+    inline T *dataAt(int i) { detach(); return d->data() + i; }
+    /// @copydoc dataAt(int i)
+    inline const T *dataAt(int i) const { return d->data() + i; }
+    /// @copydoc dataAt(int i) const
+    inline const T *constDataAt(int i) const { return d->data() + i; }
+    /// WARNING: same as dataAt(...), but without calling "detach()", hence it's faster.
+    inline T *ptr(int i) { return d->data() + i; }
+    /// @copydoc ptr(int i)
+    inline const T *ptr(int i) const { return d->data() + i; }
+
     inline T *data() { detach(); return d->begin(); }
     inline const T *data() const { return d->begin(); }
     inline const T *constData() const { return d->begin(); }

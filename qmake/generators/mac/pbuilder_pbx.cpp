@@ -67,7 +67,7 @@ static QString qtSha1(const QByteArray &src)
 
 ProjectBuilderMakefileGenerator::ProjectBuilderMakefileGenerator() : UnixMakefileGenerator()
 {
-
+    m_name = QByteArray("ProjectBuilderMakefileGenerator");
 }
 
 bool
@@ -527,6 +527,7 @@ ProjectBuilderMakefileGenerator::writeMakeParts(QTextStream &t)
 {
     ProStringList tmp;
     bool did_preprocess = false;
+    Q_UNUSED(did_preprocess)
 
     //HEADER
     const int pbVersion = pbuilderVersion();
