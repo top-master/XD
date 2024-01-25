@@ -15,4 +15,14 @@ debug_and_release {
         DEFINES += RELEASE_BUILD
 }
 
-TESTDATA += testdata/*
+# Ensures `DESTDIR` gets affixed now, if ever (see `mkspecs/README.md`).
+load(exclusive_builds_post)
+# Makes absolute for later copy calls.
+DESTDIR = $$shadowed($$DESTDIR)
+
+# TRACE/qmake rules: XD forbids building inside of qtbase (sub-)folder #2,
+# hence the "testdata" gets copied to beside of `tst_qmake` executable.
+isEmpty(BUILDS)|build_pass {
+    copy_dir($$PWD/testdata, $$DESTDIR/testdata)
+    TESTDATA += $$DESTDIR/testdata/*
+}

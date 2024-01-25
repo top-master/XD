@@ -32,8 +32,8 @@
 ****************************************************************************/
 
 #include "msvc_vcproj.h"
-#include "option.h"
-#include "xmloutput.h"
+#include "../../../qmake/option.h"
+#include "../../generators/xmloutput.h"
 #include <qdir.h>
 #include <qdiriterator.h>
 #include <qcryptographichash.h>
@@ -206,6 +206,7 @@ VcprojGenerator::VcprojGenerator()
       is64Bit(false),
       projectWriter(0)
 {
+    m_name = QByteArray("VcprojGenerator");
 }
 
 VcprojGenerator::~VcprojGenerator()
@@ -563,8 +564,12 @@ ProStringList VcprojGenerator::collectDependencies(QMakeProject *proj, QHash<QSt
                         }
                     }
 
+                    // TRACE/qmake Add X1: we use "idc" instead of "mt" to directly embed the manifest #3
+                    const bool mt_exe = project->values("QMAKE_MANIFEST_FLAGS")
+                            .toQStringList().filter(QRegExp("(/|-)MT:NO")).isEmpty();
                     // All ActiveQt Server projects are dependent on idc.exe
-                    if (tmp_proj.values("CONFIG").contains("qaxserver"))
+                    if (tmp_proj.values("CONFIG").contains("qaxserver")
+                            || !mt_exe)
                         newDep->dependencies << "idc.exe";
 
                     // Add all unknown libs to the deps

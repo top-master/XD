@@ -33,6 +33,8 @@
 
 #include "option.h"
 #include "cachekeys.h"
+#include "library/qmakeevaluator_p.h"
+
 #include <qdir.h>
 #include <qregexp.h>
 #include <qhash.h>
@@ -81,6 +83,7 @@ int Option::debug_level = 0;
 QFile Option::output;
 QString Option::output_dir;
 bool Option::recursive = false;
+bool Option::forceLinuxFormatLogs = false;
 
 //QMAKE_*_PROPERTY stuff
 QStringList Option::prop::properties;
@@ -240,6 +243,8 @@ Option::parseCommandLine(QStringList &args, QMakeCmdLineParserState &state)
                     Option::recursive = false;
                     args.removeAt(x);
                     continue;
+                } else if (arg == "--linux-logs") {
+                    Option::forceLinuxFormatLogs = true;
                 } else if (arg == "-o" || arg == "-output") {
                     argState = ArgOutput;
                 } else {
@@ -314,6 +319,10 @@ Option::init(int argc, char **argv)
     Option::prf_ext = ".prf";
     Option::pro_ext = ".pro";
     Option::field_sep = ' ';
+
+    const QByteArray &shellEnv = qgetenv("SHELL");
+    if (shellEnv.startsWith('/'))
+        Option::forceLinuxFormatLogs = true;
 
     if(argc && argv) {
         QString argv0 = argv[0];
@@ -464,6 +473,8 @@ void Option::prepareProject(const QString &pfile)
 
 bool Option::postProcessProject(QMakeProject *project)
 {
+    QMakeProject::setBuildPass(project->isActiveConfig("build_pass"));
+
     Option::cpp_ext = project->values("QMAKE_EXT_CPP").toQStringList();
     Option::h_ext = project->values("QMAKE_EXT_H").toQStringList();
     Option::c_ext = project->values("QMAKE_EXT_C").toQStringList();
@@ -488,7 +499,29 @@ bool Option::postProcessProject(QMakeProject *project)
         Option::mkfile::cachefile_depth =
                 Option::output_dir.mid(project->buildRoot().length()).count('/');
 
-    return true;
+    // TRACE/qmake Add: support empty TARGET,
+    // note: but we may remove this Qt4 support later, in which case,
+    // then the user should never set `TARGET` manually to nothing,
+    // and should never expect it gets the `*.pro` file's basename as default value.
+#if 1
+    ProStringList &target = project->values(ProKey("TARGET"));
+    if(target.isEmpty() && (project->projectFile() != QLatin1String("-"))) {
+        ProString str(QFileInfo(project->projectFile()).baseName());
+        UDebug().printLocation(project->projectFile(), 1) << "Project removes \"TARGET\" variable auto repaired to:" << str.toQStringRef();
+        target = str;
+    }
+#endif
+
+    // TRACE/qmake BugFix: never allow sub-project that can't be read #2,
+    // hence below tries minimal validation.
+    bool isValid = true;
+    if (Q_UNLIKELY(Option::dir_sep.isEmpty())) {
+        isValid = false;
+        Option::dir_sep = project->toEvaluator().m_option->dir_sep;
+    }
+    Q_ASSERT_X(isValid, "Post-process", "Project has invalid state.");
+
+    return isValid;
 }
 
 QString
@@ -559,7 +592,12 @@ void debug_msg_internal(int level, const char *fmt, ...)
 {
     if(Option::debug_level < level)
         return;
-    fprintf(stderr, "DEBUG %d: ", level);
+    // TRACE/qmake improve: ensures debug-logs are more visible #1,
+    // at least in Qt Creator IDE's "Issues" section, old code:
+    // ```
+    // fprintf(stderr, "DEBUG %d: ", level);
+    // ```
+    fprintf(stderr, "WARNING: ");
     {
         va_list ap;
         va_start(ap, fmt);
@@ -583,22 +621,33 @@ void warn_msg(QMakeWarn type, const char *fmt, ...)
     fprintf(stderr, "\n");
 }
 
-void EvalHandler::message(int type, const QString &msg, const QString &fileName, int lineNo)
+void EvalHandler::message(int type, const QString &msg, const QString &fileNameArg, int lineNo)
 {
     QString pfx;
     if ((type & QMakeHandler::CategoryMask) == QMakeHandler::WarningMessage) {
-        int code = (type & QMakeHandler::CodeMask);
-        if ((code == QMakeHandler::WarnLanguage && !(Option::warn_level & WarnParser))
-            || (code == QMakeHandler::WarnDeprecated && !(Option::warn_level & WarnDeprecated)))
+        // TRACE/qmake improve: QMakeHandler warn flags should match `Option::warn_level`.
+        Q_STATIC_ASSERT(QMakeHandler::WarnLanguage == int(::WarnParser));
+        Q_STATIC_ASSERT(QMakeHandler::WarnLogic == int(::WarnLogic));
+        Q_STATIC_ASSERT(QMakeHandler::WarnDeprecated == int(::WarnDeprecated));
+        if(qNot( (type & QMakeHandler::CodeMask) & Option::warn_level ))
             return;
-        pfx = QString::fromLatin1("WARNING: ");
+        pfx = QLL("WARNING: ");
     }
+    const QString &fileName = Option::forceLinuxFormatLogs || fileNameArg.isEmpty()
+            ? fileNameArg
+            : QDir::toNativeSeparators(fileNameArg);
     if (lineNo > 0)
         fprintf(stderr, "%s%s:%d: %s\n", qPrintable(pfx), qPrintable(fileName), lineNo, qPrintable(msg));
     else if (lineNo)
         fprintf(stderr, "%s%s: %s\n", qPrintable(pfx), qPrintable(fileName), qPrintable(msg));
     else
         fprintf(stderr, "%s%s\n", qPrintable(pfx), qPrintable(msg));
+
+    // TRACE/qmake Add: warning call stack #3.
+    QRequireStack::print();
+
+    // TRACE/qmake #logs; manually flush #2.
+    fflush(stderr);
 }
 
 void EvalHandler::fileMessage(int type, const QString &msg)

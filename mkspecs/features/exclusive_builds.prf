@@ -1,4 +1,49 @@
+#
+# Helpers for build-types,
+# which under other are needed for `QMAKE_DIR_REPLACE`.
+#
 
+
+# once(my_unique_key)
+#
+# Returns `true` only "once" for each key,
+# which's possible because `spec_post.prf` runs only once-for-all QMake-passes,
+# where `spec_post.prf` clears old `QMAKE_SKIP_FILE` file's entries.
+#
+defineTest(once) {
+    qtc_run: return(false)
+    requireSkipFile()|return(false)
+
+    QMAKE_SKIP_LIST = $$fromfile($$QMAKE_SKIP_FILE, QMAKE_SKIP_LIST)
+    !contains(QMAKE_SKIP_LIST, $$1) {
+        line = "QMAKE_SKIP_LIST += $$1"
+        write_file($$QMAKE_SKIP_FILE, line, append)
+        QMAKE_SKIP_LIST += $$1
+        export(QMAKE_SKIP_LIST)
+        return(true)
+    }
+    return(false)
+}
+
+# addExclusiveBuildsProper(config_key, builds)
+#
+# Normally called from `addExclusiveBuilds`, like:
+# ```
+# addExclusiveBuildsProper(debug_and_release, debug release)
+# ```
+# Which unique-adds second parameter to `QMAKE_EXCLUSIVE_BUILDS`,
+# and if NOT already set by user, sets all of these:
+# ```
+# debug.name = Debug
+# debug.target = debug
+# debug.dir_affix = debug
+# debug.exclusive = debug release
+# release.name = Release
+# release.target = release
+# release.dir_affix = release
+# release.exclusive = debug release
+# ```
+#
 defineTest(addExclusiveBuildsProper) {
     !$$1:!fix_output_dirs: \
         return(true)
@@ -20,9 +65,10 @@ defineTest(addExclusiveBuildsProper) {
         $${build}.exclusive = $$2
         export($${build}.exclusive)
 
-        QMAKE_EXCLUSIVE_BUILDS += $$build
+        QMAKE_EXCLUSIVE_BUILDS *= $$build
     }
 
+    # Ensures `default_post.prf` loads `exclusive_builds_post`.
     CONFIG *= exclusive_builds
     export(CONFIG)
 
@@ -30,6 +76,7 @@ defineTest(addExclusiveBuildsProper) {
     return(true)
 }
 
+# Normally called like `addExclusiveBuilds(debug, release)`.
 defineTest(addExclusiveBuilds) {
     lessThan(ARGC, 2): \
         error("addExclusiveBuilds() requires at least two arguments")
@@ -37,6 +84,20 @@ defineTest(addExclusiveBuilds) {
     addExclusiveBuildsProper($$join(ARGS, _and_), $$ARGS)
 }
 
+# affixDir(variableName)
+defineTest(affixDir) {
+    load(exclusive_builds_target) # For `DIR_AFFIX`.
+    # Skips if already done for given variable.
+    contains(QMAKE_DIR_REPLACE_DONE, $$1) {
+        return()
+    }
+    $$1 = $$clean_path($$eval($$1)/$$DIR_AFFIX)
+    export($$1)
+    QMAKE_DIR_REPLACE_DONE *= $$1
+    export(QMAKE_DIR_REPLACE_DONE)
+}
+
 # Default directories to process
+# (the `UI_DIR` is not added for some reason).
 QMAKE_DIR_REPLACE = OBJECTS_DIR MOC_DIR RCC_DIR PRECOMPILED_DIR QGLTF_DIR DESTDIR
 QMAKE_DIR_REPLACE_SANE += QGLTF_DIR

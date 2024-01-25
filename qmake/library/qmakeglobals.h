@@ -119,6 +119,7 @@ public:
 #ifdef PROEVALUATOR_DEBUG
     int debugLevel;
 #endif
+    static bool forceLinuxFormatLogs;
 
     enum ArgumentReturn { ArgumentUnknown, ArgumentMalformed, ArgumentsOk };
     ArgumentReturn addCommandLineArguments(QMakeCmdLineParserState &state,

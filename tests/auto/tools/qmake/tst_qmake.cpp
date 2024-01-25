@@ -47,6 +47,9 @@
 #  define DIR_INFIX ""
 #endif
 
+// TRACE/qmake/tests: never rely on mkspecs' default `RCC_DIR` value #2.
+#define DIR_RCC "/rcc/" DIR_INFIX
+
 class tst_qmake : public QObject
 {
     Q_OBJECT
@@ -106,12 +109,20 @@ void tst_qmake::initTestCase()
 {
     QString binpath = QLibraryInfo::location(QLibraryInfo::BinariesPath);
     QString cmd = QString("%1/qmake").arg(binpath);
+
+    // Tries to find any of these make executables.
 #ifdef Q_CC_MSVC
-    const QString jom = QStandardPaths::findExecutable(QLatin1String("jom.exe"));
-    if (jom.isEmpty()) {
-        test_compiler.setBaseCommands( QLatin1String("nmake"), cmd );
+    // First try XD company's custom make environment.
+    const QString customMake = QStandardPaths::findExecutable(QLatin1String("my_make_x86.bat"));
+    if ( ! customMake.isEmpty()) {
+        test_compiler.setBaseCommands( customMake, cmd );
     } else {
-        test_compiler.setBaseCommands( jom, cmd );
+        const QString jom = QStandardPaths::findExecutable(QLatin1String("jom.exe"));
+        if ( ! jom.isEmpty()) {
+            test_compiler.setBaseCommands( jom, cmd );
+        } else {
+            test_compiler.setBaseCommands( QLatin1String("nmake"), cmd );
+        }
     }
 #elif defined(Q_CC_MINGW)
     test_compiler.setBaseCommands( "mingw32-make", cmd );
@@ -120,13 +131,20 @@ void tst_qmake::initTestCase()
 #else
     test_compiler.setBaseCommands( "make", cmd );
 #endif
+
+    // TRACE/qmake rules: XD forbids building inside of qtbase (sub-)folder #3,
+    // hence the "testdata" can only be beside `tst_qmake` executable.
+#ifndef QT_HAS_XD
     //Detect the location of the testdata
     QString subProgram  = QLatin1String("testdata/simple_app/main.cpp");
     base_path = QFINDTESTDATA(subProgram);
     if (base_path.lastIndexOf(subProgram) > 0)
         base_path = base_path.left(base_path.lastIndexOf(subProgram));
     else
+#endif
+    {
         base_path = QCoreApplication::applicationDirPath();
+    }
 }
 
 void tst_qmake::cleanupTestCase()
@@ -524,8 +542,8 @@ void tst_qmake::resources()
     QVERIFY(test_compiler.qmake(workDir, "resources"));
 
     {
-        QFile qrcFile(workDir + "/.rcc/" DIR_INFIX "qmake_pro_file.qrc");
-        QVERIFY(qrcFile.exists());
+        QFile qrcFile(workDir + DIR_RCC "qmake_pro_file.qrc");
+        QVERIFY2(qrcFile.exists(), qPrintable(QDir::toNativeSeparators(qrcFile.fileName())));
         QVERIFY(qrcFile.open(QFile::ReadOnly));
         QByteArray qrcXml = qrcFile.readAll();
         QVERIFY(qrcXml.contains("alias=\"resources.pro\""));
@@ -533,7 +551,7 @@ void tst_qmake::resources()
     }
 
     {
-        QFile qrcFile(workDir + "/.rcc/" DIR_INFIX "qmake_subdir.qrc");
+        QFile qrcFile(workDir + DIR_RCC "qmake_subdir.qrc");
         QVERIFY(qrcFile.exists());
         QVERIFY(qrcFile.open(QFile::ReadOnly));
         QByteArray qrcXml = qrcFile.readAll();
@@ -541,7 +559,7 @@ void tst_qmake::resources()
     }
 
     {
-        QFile qrcFile(workDir + "/.rcc/" DIR_INFIX "qmake_qmake_immediate.qrc");
+        QFile qrcFile(workDir + DIR_RCC "qmake_qmake_immediate.qrc");
         QVERIFY(qrcFile.exists());
         QVERIFY(qrcFile.open(QFile::ReadOnly));
         QByteArray qrcXml = qrcFile.readAll();

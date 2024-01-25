@@ -69,13 +69,13 @@ bool QMakeVfs::writeFile(const QString &fn, QIODevice::OpenMode mode, bool exe,
     return true;
 #else
     QFileInfo qfi(fn);
-    if (!QDir::current().mkpath(qfi.path())) {
+    if ( ! QDir::current().mkpath(qfi.path())) {
         *errStr = fL1S("Cannot create parent directory");
         return false;
     }
     QByteArray bytes = contents.toLocal8Bit();
     QFile cfile(fn);
-    if (!(mode & QIODevice::Append) && cfile.open(QIODevice::ReadOnly | QIODevice::Text)) {
+    if ( ! (mode & QIODevice::Append) && cfile.open(QIODevice::ReadOnly | QIODevice::Text)) {
         if (cfile.readAll() == bytes) {
             if (exe) {
                 cfile.setPermissions(cfile.permissions()
@@ -88,7 +88,7 @@ bool QMakeVfs::writeFile(const QString &fn, QIODevice::OpenMode mode, bool exe,
         }
         cfile.close();
     }
-    if (!cfile.open(mode | QIODevice::WriteOnly | QIODevice::Text)) {
+    if ( ! cfile.open(mode | QIODevice::WriteOnly | QIODevice::Text)) {
         *errStr = cfile.errorString();
         return false;
     }
@@ -164,6 +164,35 @@ bool QMakeVfs::exists(const QString &fn)
     m_files[fn] = ex ? m_magicExisting : m_magicMissing;
 #endif
     return ex;
+}
+
+bool QMakeVfs::copyFile(const QString &filename, const QString &destFile, QString *errStr)
+{
+    if(qNot( this->exists(filename) )) {
+        *errStr = fL1S("source-file does not exist");
+        return false;
+    }
+
+#ifndef PROEVALUATOR_FULL
+# ifdef PROEVALUATOR_THREAD_SAFE
+    QMutexLocker locker(&m_mutex);
+# endif
+    QString *contA = &m_files[filename];
+    QString *contB = &m_files[destFile];
+    *contA = *contB;
+#else
+    QFile file(destFile);
+    if(file.exists() && qNot(file.remove())) {
+        *errStr = file.errorString(); //fL1S("can not remove destination file");
+        return false;
+    }
+    file.setFileName(filename);
+    if(qNot( file.copy(destFile) )) {
+        *errStr = file.errorString();
+        return false;
+    }
+    return true;
+#endif
 }
 
 #ifndef PROEVALUATOR_FULL

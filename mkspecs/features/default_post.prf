@@ -32,6 +32,11 @@ QT_BREAKPAD_ROOT_PATH = $$(QT_BREAKPAD_ROOT_PATH)
 force_debug_info|debug: \
     CONFIG += debug_info
 
+
+## TRACE/mkspecs BugFix: moved QT_NO_DEBUG from `qt.prf` to "mkspecs/features/default_post.prf" file #1,
+## since we want "QT_NO_DEBUG" defined even after "CONFIG -= qt" by projects.
+CONFIG(release, debug|release):DEFINES += QT_NO_DEBUG
+
 force_debug_info {
     QMAKE_CFLAGS_RELEASE = $$QMAKE_CFLAGS_RELEASE_WITH_DEBUGINFO
     QMAKE_CXXFLAGS_RELEASE = $$QMAKE_CXXFLAGS_RELEASE_WITH_DEBUGINFO
@@ -74,7 +79,7 @@ staticlib:unix {
     QMAKE_CXXFLAGS += $$QMAKE_CXXFLAGS_STATIC_LIB
 }
 
-dll:mingw:llvm_linker: equals(MAKEFILE_GENERATOR, UNIX) {
+dll:llvm_linker: equals(MAKEFILE_GENERATOR, UNIX) {
     tmp = $$QMAKE_PREFIX_STATICLIB$$TARGET$${TARGET_VERSION_EXT}.$$QMAKE_EXTENSION_STATICLIB
     QMAKE_LFLAGS += -Wl,--out-implib,\"$$DESTDIR/$$tmp\"
 }

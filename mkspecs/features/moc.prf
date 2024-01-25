@@ -1,4 +1,6 @@
 
+load(exclusive_builds_target) # For `DIR_AFFIX`.
+
 #global defaults
 qtPrepareTool(QMAKE_MOC, moc)
 isEmpty(MOC_DIR):MOC_DIR = .
@@ -15,8 +17,11 @@ MOC_INCLUDEPATH = $$QMAKESPEC $$_PRO_FILE_PWD_ $$MOC_INCLUDEPATH $$QMAKE_DEFAULT
 # On Windows, put the includes into a .inc file which moc will read, if the project
 # has too many includes. We do this to overcome a command-line limit on Win < XP
 WIN_INCLUDETEMP=
-isEmpty(BUILDS)|build_pass: win32:count(MOC_INCLUDEPATH, 40, >) {
+isEmpty(BUILDS)|build_pass: win32:count(MOC_INCLUDEPATH, 10, >) {
     WIN_INCLUDETEMP = $$MOC_DIR/mocinclude.tmp
+    !contains(WIN_INCLUDETEMP, ^(.*/)?$$re_escape($$DIR_AFFIX).*) {
+        !qtc_run: error(MOC_DIR is not suffixed by build-type: $$DIR_AFFIX)
+    }
 
     WIN_INCLUDETEMP_CONT =
     for (inc, MOC_INCLUDEPATH): \
@@ -34,7 +39,11 @@ defineReplace(mocCmdBase) {
             incvar += -I$$shell_quote($$inc)
         incvar += $$QMAKE_FRAMEWORKPATH_FLAGS
     }
-    RET += $$QMAKE_MOC $(DEFINES) $$incvar $$join(QMAKE_COMPILER_DEFINES, " -D", -D) $$QMAKE_MOC_OPTIONS
+    RET += $$QMAKE_MOC
+    clang|!win32 {
+        RET += --linux-logs
+    }
+    RET += $(DEFINES) $$incvar $$join(QMAKE_COMPILER_DEFINES, " -D", -D) $$QMAKE_MOC_OPTIONS
     return($$RET)
 }
 

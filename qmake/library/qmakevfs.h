@@ -55,6 +55,7 @@ public:
     bool writeFile(const QString &fn, QIODevice::OpenMode mode, bool exe, const QString &contents, QString *errStr);
     bool readFile(const QString &fn, QString *contents, QString *errStr);
     bool exists(const QString &fn);
+    bool copyFile(const QString &filename, const QString &destPath, QString *errStr);
 
 #ifndef PROEVALUATOR_FULL
     void invalidateCache();

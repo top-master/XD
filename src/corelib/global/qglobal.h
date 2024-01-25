@@ -65,6 +65,13 @@
 */
 #define QT_VERSION_CHECK(major, minor, patch) ((major<<16)|(minor<<8)|(patch))
 
+/*! Used like `#if defined(QT_HAS_XD) && QT_HAS_XD(5, 6, 0)`.
+ *
+ * WARNING: takes same arguments as `QT_VERSION_CHECK` does,
+ * but to fix Qt-creator coloring, not visible in the `#define`.
+ */
+#define QT_HAS_XD QT_VERSION >= QT_VERSION_CHECK
+
 
 /* The QT_SUPPORTS macro is deprecated. Don't use it in new code.
  * Instead, use #ifdef/ndef QT_NO_feature.

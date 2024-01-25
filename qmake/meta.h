@@ -52,14 +52,19 @@ class QMakeMetaInfo
     ProValueMap vars;
     QString meta_type;
     static QHash<QString, ProValueMap> cache_vars;
+    void clear();
 public:
     QMakeMetaInfo(QMakeProject *_conf);
 
-    // These functions expect the path to be normalized
+    /// WARNING: expects the @p lib path to be already normalized.
     static QString findLib(const QString &lib);
+    /// WARNING: expects the @p lib path to be already normalized.
+    static bool libExists(const QString &lib);
+    /// WARNING: expects the @p meta_file path to be result of @ref findLib.
     bool readLib(const QString &meta_file);
 
     QString type() const;
+
     bool isEmpty(const ProKey &v);
     ProStringList &values(const ProKey &v);
     ProString first(const ProKey &v);
@@ -90,6 +95,9 @@ inline ProString QMakeMetaInfo::first(const ProKey &v)
 
 inline ProValueMap &QMakeMetaInfo::variables()
 { return vars; }
+
+inline bool QMakeMetaInfo::libExists(const QString &lib)
+{ return !findLib(lib).isNull(); }
 
 QT_END_NAMESPACE
 

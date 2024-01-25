@@ -39,6 +39,8 @@
 #include "project.h"
 #include "cachekeys.h"
 
+#include "manualskip.h"
+
 #define BUILDSMETATYPE 1
 #define SUBDIRSMETATYPE 2
 
@@ -57,8 +59,24 @@ class BuildsMetaMakefileGenerator : public MetaMakefileGenerator
 private:
     bool init_flag;
     struct Build {
-        QString name, build;
+        QString name; //pro-file name without ".pro"
+        QString build; //build-type like "debug" and "release"
         MakefileGenerator *makefile;
+
+        /// Creates Makefile suffix from subdir-name and build-type.
+        ///
+        /// NOTE: sync code with "QMakeProject::findSubdir(...)".
+        QString makefileSuffix() {
+            // TRACE/qmake Bugfix: subdir-name was always suffixed to its Makefile name #3
+
+            QString result = this->name;
+            if(!this->build.isEmpty()) {
+                if(!result.isEmpty())
+                    result += ".";
+                result += this->build;
+            }
+            return result;
+        }
     };
     QList<Build *> makefiles;
     void clearBuilds();
@@ -66,7 +84,9 @@ private:
 
 public:
 
-    BuildsMetaMakefileGenerator(QMakeProject *p, const QString &n, bool op) : MetaMakefileGenerator(p, n, op), init_flag(false) { }
+    BuildsMetaMakefileGenerator(QMakeProject *p, const QString &n, bool op)
+        : MetaMakefileGenerator(p, n, op), init_flag(false)
+    {}
     virtual ~BuildsMetaMakefileGenerator() { clearBuilds(); }
 
     virtual bool init();
@@ -127,6 +147,8 @@ BuildsMetaMakefileGenerator::init()
         }
     }
     if(use_single_build) {
+        // TRACE/qmake Bugfix: subdir-name was always suffixed to its Makefile name #2
+        // the subdir-name is copied to `Build`, for later suffixing on Makefile's name.
         Build *build = new Build;
         build->name = name;
         build->makefile = createMakefileGenerator(project, false);
@@ -173,12 +195,7 @@ BuildsMetaMakefileGenerator::write()
                     if(Option::output.fileName().isEmpty() &&
                        Option::qmake_mode == Option::QMAKE_GENERATE_MAKEFILE)
                         Option::output.setFileName(project->first("QMAKE_MAKEFILE").toQString());
-                    QString build_name = build->name;
-                    if(!build->build.isEmpty()) {
-                        if(!build_name.isEmpty())
-                            build_name += ".";
-                        build_name += build->build;
-                    }
+                    QString build_name = build->makefileSuffix();
                     if(!build->makefile->openOutput(Option::output, build_name)) {
                         fprintf(stderr, "Failure to open file: %s\n",
                                 Option::output.fileName().isEmpty() ? "(stdout)" :
@@ -216,6 +233,8 @@ MakefileGenerator
         debug_msg(1, "Meta Generator: Parsing '%s' for build [%s].",
                   project->projectFile().toLatin1().constData(),build.toLatin1().constData());
 
+        QMakeProject::setBuildPass(true);
+
         //initialize the base
         ProValueMap basevars;
         ProStringList basecfgs = project->values(ProKey(build + ".CONFIG"));
@@ -230,8 +249,13 @@ MakefileGenerator
         build_proj->setExtraVars(basevars);
         build_proj->setExtraConfigs(basecfgs);
 
-        if (build_proj->read(project->projectFile()))
-            return createMakefileGenerator(build_proj);
+        build_proj->read(project->projectFile());
+
+        //done
+        MakefileGenerator *generator = createMakefileGenerator(build_proj);
+
+        QMakeProject::setBuildPass(false);
+        return generator;
     }
     return 0;
 }
@@ -282,57 +306,69 @@ SubdirsMetaMakefileGenerator::init()
         static int recurseDepth = -1;
         ++recurseDepth;
         for(int i = 0; i < subdirs.size(); ++i) {
+            // TRACE/qmake Bugfix: subdir-name was always suffixed to its Makefile name #1,
+            // but when subdir-name (basename of subdir's .pro file) is same as its directory-name then,
+            // the name of the generated Makefile should not get suffixed with subdir-name,
+            // example: for subdir "3rdParty/3rdParty.pro" the Makefile name should NOT be "Makefile.3rdParty"
+            //
+            // Fixed by reusing below method which resolves subdir path.
+            QMakeProject::SubdirInfo subdir;
+            project->fetchSubdir(&subdir, subdirs.at(i), true);
+
+            QFileInfo subdirInfo = qMove(QFileInfo(subdir.path));
+            if(subdirInfo.isDir()) {
+                if(subdir.isFileExpected) {
+                    project->logicWarningAt(QLL("Expected file but got directory for subdir ") + subdir.input, subdir.value.fileName());
+                }
+                subdirInfo = QFileInfo(subdirInfo.filePath() + "/" + subdirInfo.fileName() + Option::pro_ext);
+            }
+
+            if(!subdirInfo.isRelative()) { //we can try to make it relative
+                QString subdir_path = subdirInfo.filePath();
+                if(subdir_path.startsWith(thispwd))
+                    subdirInfo = QFileInfo(subdir_path.mid(thispwd.length()));
+            }
+
             Subdir *sub = new Subdir;
             sub->indent = recurseDepth;
-
-            QFileInfo subdir(subdirs.at(i).toQString());
-            const ProKey fkey(subdirs.at(i) + ".file");
-            if (!project->isEmpty(fkey)) {
-                subdir = project->first(fkey).toQString();
-            } else {
-                const ProKey skey(subdirs.at(i) + ".subdir");
-                if (!project->isEmpty(skey))
-                    subdir = project->first(skey).toQString();
-            }
-            QString sub_name;
-            if(subdir.isDir())
-                subdir = QFileInfo(subdir.filePath() + "/" + subdir.fileName() + Option::pro_ext);
-            else
-                sub_name = subdir.baseName();
-            if(!subdir.isRelative()) { //we can try to make it relative
-                QString subdir_path = subdir.filePath();
-                if(subdir_path.startsWith(thispwd))
-                    subdir = QFileInfo(subdir_path.mid(thispwd.length()));
-            }
 
             //handle sub project
             QMakeProject *sub_proj = new QMakeProject;
             for (int ind = 0; ind < sub->indent; ++ind)
                 printf(" ");
-            sub->input_dir = subdir.absolutePath();
-            if(subdir.isRelative() && old_output_dir != oldpwd) {
-                sub->output_dir = old_output_dir + (subdir.path() != "." ? "/" + subdir.path() : QString());
-                printf("Reading %s [%s]\n", subdir.absoluteFilePath().toLatin1().constData(), sub->output_dir.toLatin1().constData());
+            sub->input_dir = subdirInfo.absolutePath();
+            if(subdirInfo.isRelative() && old_output_dir != oldpwd) {
+                sub->output_dir = old_output_dir;
+                if(subdirInfo.path() != ".")
+                    sub->output_dir += "/" + subdirInfo.path();
+                printf("Reading %s [%s]\n", subdirInfo.absoluteFilePath().toLatin1().constData(), sub->output_dir.toLatin1().constData());
             } else { //what about shadow builds?
                 sub->output_dir = sub->input_dir;
-                printf("Reading %s\n", subdir.absoluteFilePath().toLatin1().constData());
+                printf("Reading %s\n", subdirInfo.absoluteFilePath().toLatin1().constData());
             }
             qmake_setpwd(sub->input_dir);
             Option::output_dir = sub->output_dir;
-            bool tmpError = !sub_proj->read(subdir.fileName());
+            bool tmpError = !sub_proj->read(subdirInfo.fileName());
+            if (skipOnKey(QStringLiteral("at Reading %1").arg(subdirInfo.absoluteFilePath()))) goto pos_breakReading;
             if (!sub_proj->isEmpty("QMAKE_FAILED_REQUIREMENTS")) {
                 fprintf(stderr, "Project file(%s) not recursed because all requirements not met:\n\t%s\n",
-                        subdir.fileName().toLatin1().constData(),
+                        subdirInfo.fileName().toLatin1().constData(),
                         sub_proj->values("QMAKE_FAILED_REQUIREMENTS").join(' ').toLatin1().constData());
+                pos_breakReading:
                 delete sub;
                 delete sub_proj;
                 Option::output_dir = old_output_dir;
                 qmake_setpwd(oldpwd);
                 continue;
-            } else {
-                hasError |= tmpError;
+            } else if (tmpError) {
+                // TRACE/qmake BugFix: never allow sub-project that can't be read #1,
+                // for example. sub `.pro` file can't be read if it does NOT exist,
+                // see "QMakeParser::read(ProFile *, ParseFlags)".
+                hasError = true;
+                goto pos_breakReading;
             }
-            sub->makefile = MetaMakefileGenerator::createMetaGenerator(sub_proj, sub_name);
+            sub->makefile = MetaMakefileGenerator::createMetaGenerator(
+                        sub_proj, subdir.buildName().toString());
             if(0 && sub->makefile->type() == SUBDIRSMETATYPE) {
                 subs.append(sub);
             } else {
@@ -415,14 +451,17 @@ QT_END_INCLUDE_NAMESPACE
 MakefileGenerator *
 MetaMakefileGenerator::createMakefileGenerator(QMakeProject *proj, bool noIO)
 {
-    Option::postProcessProject(proj);
-
     MakefileGenerator *mkfile = NULL;
     if(Option::qmake_mode == Option::QMAKE_GENERATE_PROJECT) {
+        Q_ASSERT(proj->projectFile().isEmpty());
         mkfile = new ProjectGenerator;
         mkfile->setProjectFile(proj);
         return mkfile;
     }
+
+    // TRACE/qmake BugFix: skip updating globals if `QMAKE_GENERATE_PROJECT` mode #2,
+    // hence moved below past `QMAKE_GENERATE_PROJECT` handling.
+    Option::postProcessProject(proj);
 
     ProString gen = proj->first("MAKEFILE_GENERATOR");
     if(gen.isEmpty()) {
@@ -456,19 +495,29 @@ MetaMakefileGenerator::createMakefileGenerator(QMakeProject *proj, bool noIO)
         mkfile->setNoIO(noIO);
         mkfile->setProjectFile(proj);
     }
+
     return mkfile;
 }
 
 MetaMakefileGenerator *
 MetaMakefileGenerator::createMetaGenerator(QMakeProject *proj, const QString &name, bool op, bool *success)
 {
-    Option::postProcessProject(proj);
+    // TRACE/qmake BugFix: skip updating globals if `QMAKE_GENERATE_PROJECT` mode #1,
+    // since said mode creates project, the project-file is never read, hence
+    // project's empty and would make most global variables of `Option` invalid.
+    if (Option::qmake_mode == Option::QMAKE_GENERATE_PROJECT) {
+        Q_ASSERT(proj->projectFile().isEmpty());
+    } else {
+        Option::postProcessProject(proj);
+    }
 
     MetaMakefileGenerator *ret = 0;
-    if ((Option::qmake_mode == Option::QMAKE_GENERATE_MAKEFILE ||
-         Option::qmake_mode == Option::QMAKE_GENERATE_PRL)) {
-        if (proj->first("TEMPLATE").endsWith("subdirs"))
+    if (Option::qmake_mode == Option::QMAKE_GENERATE_MAKEFILE
+            || Option::qmake_mode == Option::QMAKE_GENERATE_PRL) {
+        if (proj->first("TEMPLATE").endsWith("subdirs")) {
+            // TRACE/qmake naming: stores pro file's base-name for later usage as `Makefile` name's suffix.
             ret = new SubdirsMetaMakefileGenerator(proj, name, op);
+        }
     }
     if (!ret)
         ret = new BuildsMetaMakefileGenerator(proj, name, op);

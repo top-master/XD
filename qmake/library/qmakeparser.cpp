@@ -1,5 +1,6 @@
 /****************************************************************************
 **
+** Copyright (C) 2015 The XD Company Ltd.
 ** Copyright (C) 2015 The Qt Company Ltd.
 ** Contact: http://www.qt.io/licensing/
 **
@@ -38,6 +39,7 @@
 using namespace QMakeInternal;
 
 #include <qfile.h>
+#include <qdir.h>
 #ifdef PROPARSER_THREAD_SAFE
 # include <qthreadpool.h>
 #endif
@@ -247,9 +249,22 @@ bool QMakeParser::read(ProFile *pro, ParseFlags flags)
     QString content;
     QString errStr;
     if (!m_vfs->readFile(pro->fileName(), &content, &errStr)) {
-        if (m_handler && ((flags & ParseReportMissing) || m_vfs->exists(pro->fileName())))
+        // TRACE/qmake BugFix: never allow sub-project that can't be read #3,
+        // hence it is worth an error log (if enabled or file exists).
+        if (m_handler && ((flags & ParseReportMissing) || m_vfs->exists(pro->fileName()))) {
+            // TRACE/qmake/built-ins include: IO errors should log right location #2,
+            // hence below is first trying `m_proFile` and `m_lineNo`.
+            QString causeFile = m_proFile->fileName();
+            int causeLine = m_lineNo;
+            if (causeFile.isEmpty()) {
+                causeFile = pro->fileName();
+                causeLine = 1;
+            }
+            const QString &path = QDir::toNativeSeparators(pro->fileName());
             m_handler->message(QMakeParserHandler::ParserIoError,
-                               fL1S("Cannot read %1: %2").arg(pro->fileName(), errStr));
+                               fL1S("Cannot read %1: %2").arg(path, errStr),
+                               causeFile, causeLine);
+        }
         return false;
     }
     read(pro, content, 1, FullGrammar);
@@ -292,6 +307,39 @@ void QMakeParser::finalizeHashStr(ushort *buf, uint len)
     uint hash = ProString::hash((const QChar *)buf, len);
     buf[-3] = (ushort)hash;
     buf[-2] = (ushort)(hash >> 16);
+}
+
+static inline QString getLastWord(const ushort *lineStart, const ushort *cur) {
+    const ushort *begin = cur;
+    ushort c;
+    //find last space to skip current word
+    while (begin > lineStart) {
+        c = *begin;
+        if(c == ' ' || c == '\t' )
+            break;
+        --begin;
+    }
+    if(begin > lineStart) {
+        //skip multi space
+        while (begin > lineStart) {
+            c = *begin;
+            if(c != ' ' && c != '\t' )
+                break;
+            --begin;
+        }
+        //find start of last word
+        cur = begin;
+        while (begin > lineStart) {
+            c = *begin;
+            if(c == ' ' || c == '\t' ) {
+                ++begin;
+                break;
+            }
+            --begin;
+        }
+        return QString::fromRawData((const QChar *)begin, cur - begin + 1);
+    }
+    return QString();
 }
 
 void QMakeParser::read(ProFile *pro, const QString &in, int line, SubGrammar grammar)
@@ -420,9 +468,12 @@ void QMakeParser::read(ProFile *pro, const QString &in, int line, SubGrammar gra
         putTok(tokPtr, TokValueTerminator); \
     } while (0)
 
+    // TRACE/qmake improve: remember line starts #1.
+    const ushort *start;
+
     const ushort *end; // End of this line
     const ushort *cptr; // Start of next line
-    bool lineCont;
+    bool lineCont = false;
     int indent;
 
     if (context == CtxPureValue) {
@@ -434,6 +485,9 @@ void QMakeParser::read(ProFile *pro, const QString &in, int line, SubGrammar gra
     }
 
     forever {
+        // TRACE/qmake improve: remember line starts #2,
+		// Stores current line start.
+        start = cur;
         ushort c;
 
         // First, skip leading whitespace
@@ -479,6 +533,7 @@ void QMakeParser::read(ProFile *pro, const QString &in, int line, SubGrammar gra
         }
 
         // Then look for line continuations. Yep - no escaping here as well.
+        // And skip trailing whitespaces.
         forever {
             // We don't have to check for underrun here, as we already determined
             // that the line is non-empty.
@@ -495,15 +550,29 @@ void QMakeParser::read(ProFile *pro, const QString &in, int line, SubGrammar gra
             --end;
         }
 
+
             // Finally, do the tokenization
             ushort tok, rtok;
             int tlen;
+            int tokenIndex;
+            // Set on separate line to prevent C++ `goto` warning.
+            tokenIndex = 0;
           newWord:
+
+            // Skips any space and tab
+            // (qmake supports only UTF8 and Latin1).
             do {
                 if (cur == end)
                     goto lineEnd;
                 c = *cur++;
             } while (c == ' ' || c == '\t');
+
+            // TRACE/qmake improve: remember line starts #3,
+            // moves current-line's start to be at line's first token/word.
+			if (tokenIndex == 0) {	
+                start = cur - 1;
+            }
+
             forever {
                 if (c == '$') {
                     if (*cur == '$') { // may be EOF, EOL, WS, '#' or '\\' if past end
@@ -683,9 +752,13 @@ void QMakeParser::read(ProFile *pro, const QString &in, int line, SubGrammar gra
                     } else if (c == '(') {
                         FLUSH_LHS_LITERAL();
                         if (wordCount != 1) {
-                            if (wordCount)
-                                parseError(fL1S("Extra characters after test expression."));
-                            else
+                            if (wordCount) {
+                                QString msg = fL1S("Extra characters after test expression.");
+                                QString lastWord = getLastWord(start, cur);
+                                if(lastWord.size() <= 2 && lastWord.startsWith(QLatin1Char('&')))
+                                    msg += fL1S(" may be you wanted to use and operator \":\" instate of \"&\"");
+                                parseError(msg);
+                            } else
                                 parseError(fL1S("Opening parenthesis without prior test name."));
                             ptr = buf; // Put empty function name
                         }
@@ -817,6 +890,8 @@ void QMakeParser::read(ProFile *pro, const QString &in, int line, SubGrammar gra
                     needSep = TokNewStr;
                     ptr += (context == CtxTest) ? 4 : 2;
                     xprPtr = ptr;
+                    // TRACE/qmake/parser BugFix: line-continuation should update evaluator's line-number #1.
+                    m_markLine = m_lineNo + 1;
                 }
             } else {
                 cur = cptr;
