@@ -257,6 +257,7 @@ tmp
 doc-build
 doc/html/*
 doc/qt*/*
+!doc/qt-creator/*
 doc/qch
 doc-build
 .rcc
