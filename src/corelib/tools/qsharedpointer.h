@@ -39,7 +39,7 @@
 #include <QtCore/qshareddata.h>
 
 #ifndef Q_QDOC
-# include <QtCore/qsharedpointer_impl.h>
+# include "qsharedpointer_impl.h"
 #else
 
 QT_BEGIN_NAMESPACE
