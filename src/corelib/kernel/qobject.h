@@ -1,5 +1,6 @@
 /****************************************************************************
 **
+** Copyright (C) 2015 The XD Company Ltd.
 ** Copyright (C) 2015 The Qt Company Ltd.
 ** Copyright (C) 2013 Olivier Goffart <ogoffart@woboq.com>
 ** Contact: http://www.qt.io/licensing/
@@ -57,7 +58,6 @@ class QTimerEvent;
 class QChildEvent;
 struct QMetaObject;
 class QVariant;
-class QObjectPrivate;
 class QObject;
 class QThread;
 class QWidget;
@@ -85,6 +85,10 @@ Q_CORE_EXPORT QObject *qt_qFindChild_helper(const QObject *parent, const QString
 class Q_CORE_EXPORT QObjectData {
 public:
     virtual ~QObjectData() = 0;
+
+    static inline const QObjectData *get(const QObject *o);
+    static inline QObjectData *get(QObject *o);
+
     QObject *q_ptr;
     QObject *parent;
     QObjectList children;
@@ -96,13 +100,17 @@ public:
     uint sendChildEvents : 1;
     uint receiveChildEvents : 1;
     uint isWindow : 1; //for QWindow
-    uint unused : 25;
+
+    /// 0="normal QObject" 1="has both parent and QSharedPointer".
+    uint hasParentStrongRef : 1;
+
+    uint unused : 24;
     int postedEvents;
     QDynamicMetaObjectData *metaObject;
     QMetaObject *dynamicMetaObject() const;
 };
 
-
+class QObjectPrivate;
 class Q_CORE_EXPORT QObject
 {
     Q_OBJECT
@@ -455,6 +463,7 @@ protected:
     friend class QCoreApplicationPrivate;
     friend class QWidget;
     friend class QThreadData;
+    friend class QObjectData;
 
 private:
     Q_DISABLE_COPY(QObject)
@@ -568,6 +577,11 @@ private:
     bool m_inhibited;
 };
 
+#ifndef Q_MOC_RUN
+QObjectData *QObjectData::get(QObject *o) { return o->d_ptr.data(); }
+const QObjectData *QObjectData::get(const QObject *o) { return o->d_ptr.data(); }
+
+
 QSignalBlocker::QSignalBlocker(QObject *o) Q_DECL_NOTHROW
     : m_o(o),
       m_blocked(o && o->blockSignals(true)),
@@ -604,7 +618,7 @@ QSignalBlocker &QSignalBlocker::operator=(QSignalBlocker &&other) Q_DECL_NOTHROW
     }
     return *this;
 }
-#endif
+#endif // Q_COMPILER_RVALUE_REFS
 
 QSignalBlocker::~QSignalBlocker()
 {
@@ -623,6 +637,7 @@ void QSignalBlocker::unblock() Q_DECL_NOTHROW
     if (m_o) m_o->blockSignals(m_blocked);
     m_inhibited = true;
 }
+#endif // Q_MOC_RUN
 
 namespace QtPrivate {
     inline QObject & deref_for_methodcall(QObject &o) { return  o; }

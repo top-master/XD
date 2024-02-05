@@ -1,6 +1,7 @@
 CONFIG += testcase console
 CONFIG += parallel_test
-TARGET = ../tst_qobject
+TARGET = tst_qobject
+DESTDIR  = ../
 QT = core-private network testlib
 SOURCES = ../tst_qobject.cpp
 

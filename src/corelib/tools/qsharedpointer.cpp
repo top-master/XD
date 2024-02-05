@@ -1,5 +1,6 @@
 /****************************************************************************
 **
+** Copyright (C) 2015 The XD Company Ltd.
 ** Copyright (C) 2015 The Qt Company Ltd.
 ** Contact: http://www.qt.io/licensing/
 **
@@ -1295,7 +1296,27 @@
 #include <qset.h>
 #include <qmutex.h>
 
-#if !defined(QT_NO_QOBJECT)
+
+void QtSharedPointer::ExternalRefCountData::destruct(bool debug) {
+    if (debug) {
+        Q_ASSERT_X(!weakref && strongref <= 0, "~QSharedPointer", weakref ? "has weakref" : "has strongref");
+    }
+    if (previous) {
+        // Sync with `~QObject`.
+        previous->strongref.store(0);
+        if (!previous->weakref.deref()) {
+            delete previous;
+        }
+    }
+}
+
+void QtSharedPointer::ExternalRefCountData::fakeDestroyer(QtSharedPointer::ExternalRefCountData *that, bool)
+{
+    if (static_cast<QtSharedPointer::ExternalRefCountWithFakeDestroyer *>(that)->isSafetyChecked)
+        QtSharedPointer::internalSafetyCheckRemove(that, false);
+}
+
+#ifndef QT_NO_QOBJECT
 #include "private/qobject_p.h"
 
 QT_BEGIN_NAMESPACE
@@ -1304,9 +1325,121 @@ QT_BEGIN_NAMESPACE
     \internal
     This function is called for a just-created QObject \a obj, to enable
     the use of QSharedPointer and QWeakPointer in the future.
+
+    When QSharedPointer is active in a QObject, the object must not be deleted
+    directly: the lifetime is managed by the QSharedPointer object. In that case,
+    the deleteLater() and parent-child relationship in QObject only decrease
+    the strong reference count, instead of deleting the object.
  */
-void QtSharedPointer::ExternalRefCountData::setQObjectShared(const QObject *, bool)
-{}
+void QtSharedPointer::ExternalRefCountData::
+    attachToObject(const QObject *obj, ExternalRefCountData **counterPtrArg)
+{
+    Q_ASSERT(obj);
+    QObjectPrivate *d = QObjectPrivate::get(const_cast<QObject *>(obj));
+    // Makes arguments easier to use.
+    ExternalRefCountData *&counterPtr = *counterPtrArg;
+    ExternalRefCountData::DestroyerFn &destroyer = counterPtr->destroyer;
+    // Destroyer is never null, except for QWeakPointer,
+    // which is not allowed to call this method.
+    Q_ASSERT(destroyer);
+
+posLoadExisting:
+    ExternalRefCountData *existing_counter = d->sharedRefcount.load();
+    if (existing_counter) {
+        // TRACE/QSharedPointer/multi-create: try to use existing ref counter,
+        // and skip "qFatal()" when we do not assign any new destroyer.
+        ExternalRefCountData::DestroyerFn &existing_destroyer = existing_counter->destroyer;
+        if (destroyer == &ExternalRefCountData::fakeDestroyer
+            // Or if both destroyers are trival.
+            || (destroyer == existing_destroyer
+                && (destroyer == &ExternalRefCountWithCustomDeleter<QObject, NormalDeleter>::deleter
+                    || destroyer == &ExternalRefCountWithCustomDeleter<QObject, ObjectDeleter>::deleter
+                )
+            )
+        ) {
+            // Replaces input with existing counter if possible.
+            if (existing_destroyer == &ExternalRefCountData::fakeDestroyer) {
+                existing_counter->strongref.ref();
+                existing_counter->weakref.ref();
+            } else if ( ! existing_counter->tryIncrementStrong()) {
+                goto posFailed;
+            }
+            // Safety-check existing if new counter was.
+            if (counterPtr->isSafetyChecked.load()
+                && existing_counter->isSafetyChecked.testAndSetRelaxed(0, 1)
+            ) {
+                internalSafetyCheckAdd(existing_counter, obj);
+            }
+            // Prevents Q_ASSERT of input's `~ExternalRefCountData()`.
+            counterPtr->weakref = 0;
+            counterPtr->strongref = 0;
+            delete counterPtr;
+            counterPtr = existing_counter;
+            return;
+        }
+
+        // Handles fake QSharedPointer existing before real QSharedPointer.
+        if (existing_destroyer == &ExternalRefCountData::fakeDestroyer) {
+            goto posReplaceExisting;
+        }
+
+        // Handles QWeakPointer existing before QSharedPointer.
+        if (existing_counter->isQWeakPointer()) {
+            // Just replace without warning,
+            // because QSharedPointer is being created from QObject directly,
+            goto posReplaceExisting;
+        }
+
+posFailed:
+        // You are only once allowed to create "QSharedPointer" from "QObject",
+        // later you need to copy that "QSharedPointer" instance which exists,
+        // except if existing is fake, in which case below is never called.
+        qFatal("QSharedPointer: pointer %p already has reference counting", obj);
+    }
+
+posReplaceExisting:
+    // Replaces QObject's counter, which's possible because,
+    // QObject keeps counter undeleted until QObject's deleted.
+    if ( ! d->sharedRefcount.testAndSetRelaxed(existing_counter, counterPtr)) {
+        goto posLoadExisting;
+    }
+    // Bind.
+    if (existing_counter) {
+        // New-counter toke QObject's "extra weak-ref" to existing-counter.
+        counterPtr->previous = existing_counter;
+        // Now try to give existing-counter strong-ref to new-counter.
+        if (existing_counter->strongref.load() > 0) {
+            int oldStrong = counterPtr->strongref.fetchAndAddRelaxed(1);
+            int oldWeak = counterPtr->weakref.fetchAndAddRelaxed(1);
+            existing_counter->next = counterPtr;
+            if (existing_counter->strongref.load() <= 0) {
+                // Undo if existing-counter is no longer strong.
+                counterPtr->strongref.store(oldStrong);
+                counterPtr->weakref.store(oldWeak);
+                existing_counter = Q_NULLPTR;
+            }
+        }
+    }
+    if (counterPtr->isSafetyChecked) {
+        internalSafetyCheckAdd(counterPtr, existing_counter
+            ? static_cast<const void *>(counterPtr)
+            : static_cast<const void *>(obj)
+        );
+    }
+    // Extra weak-ref for QObject, which ensures QObject deletes new-counter,
+    // instead of QSharedPointer or QWeakPointer,
+    // unless shared-QObject is deleted by user manually (which's a bug).
+    counterPtr->weakref.ref();
+
+    // TRACE/QObject/parent-ref 2: handles creating strong-ref after parent,
+    // by converting parent-QObject to strong-ref as well.
+    if (d->parent
+        && destroyer != &ExternalRefCountData::fakeDestroyer // If real.
+    ) {
+        d->hasParentStrongRef = counterPtr->tryIncrementStrong();
+    }
+}
+
 
 /*!
     \internal
@@ -1337,9 +1470,11 @@ QtSharedPointer::ExternalRefCountData *QtSharedPointer::ExternalRefCountData::ge
     ExternalRefCountData *x = new ExternalRefCountData(Qt::Uninitialized);
     x->strongref.store(-1);
     x->weakref.store(2);  // the QWeakPointer that called us plus the QObject itself
-    if (!d->sharedRefcount.testAndSetRelease(0, x)) {
+    ExternalRefCountData *existing = Q_NULLPTR;
+    if ( ! d->sharedRefcount.testAndSetRelease(Q_NULLPTR, x, existing)) {
         delete x;
-        x = d->sharedRefcount.loadAcquire();
+        Q_ASSERT(existing);
+        x = existing; // d->sharedRefcount.loadAcquire()
         x->weakref.ref();
     }
     return x;
@@ -1369,7 +1504,7 @@ QWeakPointer<QObject> QtSharedPointer::weakPointerFromVariant_internal(const QVa
 
 QT_END_NAMESPACE
 
-#endif
+#endif //not QT_NO_QOBJECT
 
 
 
@@ -1496,13 +1631,25 @@ void QtSharedPointer::internalSafetyCheckAdd(const void *d_ptr, const volatile v
 
     //qDebug("Adding d=%p value=%p", d_ptr, ptr);
 
-    const void *other_d_ptr = kp->dataPointers.value(ptr, 0);
-    if (other_d_ptr) {
+    const void *existing_d_ptr = kp->dataPointers.value(ptr, 0);
+    if (existing_d_ptr) {
+        // TRACE/QSharedPointer/multi-create: Skips "qFatal()" if new destroyer is fake,
+        // otherwise, even if existing is fake as well, the
+        // later QSharedPointer(s) should construct from existing instead of
+        // from raw-pointer directly.
+        ExternalRefCountData *d = reinterpret_cast<ExternalRefCountData *>(const_cast<void *>(d_ptr));
+        ExternalRefCountData::DestroyerFn &destroyer = d->destroyer;
+        if(destroyer == &ExternalRefCountData::fakeDestroyer)
+        {
+            d->isSafetyChecked = false;
+            return;
+        }
+
 #  ifdef BACKTRACE_SUPPORTED
-        printBacktrace(knownPointers()->dPointers.value(other_d_ptr).backtrace);
+        printBacktrace(knownPointers()->dPointers.value(existing_d_ptr).backtrace);
 #  endif
         qFatal("QSharedPointer: internal self-check failed: pointer %p was already tracked "
-               "by another QSharedPointer object %p", ptr, other_d_ptr);
+               "by another QSharedPointer object %p", ptr, existing_d_ptr);
     }
 
     Data data;
@@ -1519,7 +1666,7 @@ void QtSharedPointer::internalSafetyCheckAdd(const void *d_ptr, const volatile v
 /*!
     \internal
 */
-void QtSharedPointer::internalSafetyCheckRemove(const void *d_ptr)
+void QtSharedPointer::internalSafetyCheckRemove(const void *d_ptr, bool silentMode)
 {
     KnownPointers *const kp = knownPointers();
     if (!kp)
@@ -1529,6 +1676,9 @@ void QtSharedPointer::internalSafetyCheckRemove(const void *d_ptr)
 
     QHash<const void *, Data>::iterator it = kp->dPointers.find(d_ptr);
     if (it == kp->dPointers.end()) {
+        if (silentMode) {
+            return;
+        }
         qFatal("QSharedPointer: internal self-check inconsistency: pointer %p was not tracked. "
                "To use QT_SHAREDPOINTER_TRACK_POINTERS, you have to enable it throughout "
                "in your code.", d_ptr);
