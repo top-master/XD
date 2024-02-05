@@ -1,5 +1,6 @@
 /****************************************************************************
 **
+** Copyright (C) 2015 The XD Company Ltd.
 ** Copyright (C) 2015 The Qt Company Ltd.
 ** Copyright (C) 2013 Olivier Goffart <ogoffart@woboq.com>
 ** Contact: http://www.qt.io/licensing/
@@ -211,6 +212,7 @@ QObjectPrivate::QObjectPrivate(int version)
     // QObjectData initialization
     q_ptr = 0;
     parent = 0;                                 // no parent yet. It is set by setParent()
+    hasParentStrongRef = false;
     isWidget = false;                           // assume not a widget object
     blockSig = false;                           // not blocking signals
     wasDeleted = false;                         // double-delete catcher
@@ -905,12 +907,28 @@ QObject::~QObject()
 
         // indicate to all QWeakPointers that this QObject has now been deleted
         sharedRefcount->strongref.store(0);
-        if (!sharedRefcount->weakref.deref())
+        if ( ! sharedRefcount->weakref.deref()) {
             delete sharedRefcount;
+            d->sharedRefcount.store(Q_NULLPTR);
+        }
     }
 
     if (!d->isWidget && d->isSignalConnected(0)) {
-        emit destroyed(this);
+        QT_TRY {
+            emit destroyed(this);
+        } QT_CATCH(...) {
+            // All connections (signal/slot) are still remaining, and hence
+            // either never `throw` if triggered by `destroyed(...)`,
+            // or the program should `exit` on throw, else may crash undefinedly.
+            qWarning("Detected an unexpected exception in ~QObject while emitting destroyed().");
+
+            QT_WARNING_PUSH
+            QT_WARNING_DISABLE_MSVC(4297)
+
+            QT_RETHROW;
+
+            QT_WARNING_POP
+        }
     }
 
     if (d->declarativeData) {
@@ -1953,17 +1971,33 @@ void QObject::setParent(QObject *parent)
 void QObjectPrivate::deleteChildren()
 {
     Q_ASSERT_X(!isDeletingChildren, "QObjectPrivate::deleteChildren()", "isDeletingChildren already set, did this function recurse?");
+    // Combined with `currentChildBeingDeleted`,
+    // prevents childs from reporting their delete.
     isDeletingChildren = true;
     // delete children objects
     // don't use qDeleteAll as the destructor of the child might
     // delete siblings
     for (int i = 0; i < children.count(); ++i) {
-        currentChildBeingDeleted = children.at(i);
-        children[i] = 0;
-        delete currentChildBeingDeleted;
+        Q_REGISTER QObject *child = children.at(i);
+        if ( ! child) {
+            // Maybe previous child deleted it's sibling, otherwise,
+            // multi-thread support is NOT QObject's responsibility.
+            continue;
+        }
+        currentChildBeingDeleted = child;
+        children[i] = Q_NULLPTR;
+        // TRACE/QObject/parent-ref 3: detaches child from parent's strong-ref.
+        Q_REGISTER QObjectPrivate *childData = QObjectPrivate::get(child);
+        if (childData->hasParentStrongRef) {
+            childData->setParent_helper(Q_NULLPTR);
+        } else {
+            delete child;
+        }
     }
+
+    // Cleanup.
     children.clear();
-    currentChildBeingDeleted = 0;
+    currentChildBeingDeleted = Q_NULLPTR;
     isDeletingChildren = false;
 }
 
@@ -1972,16 +2006,40 @@ void QObjectPrivate::setParent_helper(QObject *o)
     Q_Q(QObject);
     if (o == parent)
         return;
+
+    QtSharedPointer::ExternalRefCountData *sharedRefcount =
+            this->sharedRefcount.load();
+
+    // Unbind from previous parent.
     if (parent) {
         QObjectPrivate *parentD = parent->d_func();
-        if (parentD->isDeletingChildren && wasDeleted
-            && parentD->currentChildBeingDeleted == q) {
+        // No need to check own `wasDeleted`.
+        const bool isDisowned = (parentD->wasDeleted || parentD->isDeletingChildren)
+                && parentD->currentChildBeingDeleted == q;
+
+        // TRACE/QObject/parent-ref 4: Ends parent's strong-referencing.
+        if (o == Q_NULLPTR && this->hasParentStrongRef
+            && ! (this->wasDeleted || this->isDeletingChildren) // Prevents infinite loop.
+        ) {
+            this->hasParentStrongRef = false;
+            const bool isShared = QtSharedPointer::ExternalRefCountData::derefStrong(sharedRefcount, isDisowned);
+            if ( ! isShared || sharedRefcount->strongref.load() <= 0) {
+                if (isDisowned) {
+                    // Above deleted QObject, hence App may crash if we don't:
+                    return;
+                } else {
+                    qWarning("QObject: Was detached from strong-referencing parent-QObject. The program is malformed and may leak-memory.");
+                }
+            }
+        }
+
+        if (isDisowned) {
             // don't do anything since QObjectPrivate::deleteChildren() already
             // cleared our entry in parentD->children.
         } else {
             const int index = parentD->children.indexOf(q);
-            if (parentD->isDeletingChildren) {
-                parentD->children[index] = 0;
+            if (parentD->wasDeleted || parentD->isDeletingChildren) {
+                parentD->children[index] = Q_NULLPTR;
             } else {
                 parentD->children.removeAt(index);
                 if (sendChildEvents && parentD->receiveChildEvents) {
@@ -1991,14 +2049,23 @@ void QObjectPrivate::setParent_helper(QObject *o)
             }
         }
     }
+    // Bind to new parent.
     parent = o;
     if (parent) {
         // object hierarchies are constrained to a single thread
         if (threadData != parent->d_func()->threadData) {
             qWarning("QObject::setParent: Cannot set parent, new parent is in a different thread");
-            parent = 0;
+            parent = Q_NULLPTR;
             return;
         }
+        // TRACE/QObject/parent-ref 1: handles setting parent after strong-ref,
+        // by treating Parent-object as a strong-ref as well,
+        // because else "parent" would delete the child-object ignorantly,
+        // leaving us with invalid QSharedPointer instances.
+        if ( ! this->hasParentStrongRef && sharedRefcount) {
+            this->hasParentStrongRef = sharedRefcount->tryIncrementStrong();
+        }
+
         parent->d_func()->children.append(q);
         if(sendChildEvents && parent->d_func()->receiveChildEvents) {
             if (!isWidget) {
@@ -2007,7 +2074,7 @@ void QObjectPrivate::setParent_helper(QObject *o)
             }
         }
     }
-    if (!wasDeleted && !isDeletingChildren && declarativeData && QAbstractDeclarativeData::parentChanged)
+    if ( ! (wasDeleted || isDeletingChildren) && declarativeData && QAbstractDeclarativeData::parentChanged)
         QAbstractDeclarativeData::parentChanged(declarativeData, q, o);
 }
 
@@ -4642,14 +4709,21 @@ QMetaObject::Connection QObject::connectImpl(const QObject *sender, void **signa
         return QMetaObject::Connection();
     }
 
+    // TRACE/QObject bugfix: now warns if caller passes slot in place of signal.
     int signal_index = -1;
     void *args[] = { &signal_index, signal };
-    for (; senderMetaObject && signal_index < 0; senderMetaObject = senderMetaObject->superClass()) {
+    for (; senderMetaObject; senderMetaObject = senderMetaObject->superClass()) {
         senderMetaObject->static_metacall(QMetaObject::IndexOfMethod, 0, args);
-        if (signal_index >= 0 && signal_index < QMetaObjectPrivate::get(senderMetaObject)->signalCount)
+        if (signal_index >= 0) {
+            if (signal_index >= QMetaObjectPrivate::get(senderMetaObject)->signalCount) {
+                senderMetaObject = Q_NULLPTR;
+            }
             break;
+        }
     }
-    if (!senderMetaObject) {
+
+    // If sender's method is NOT a Signal.
+    if ( ! senderMetaObject) {
         qWarning("QObject::connect: signal not found in %s", sender->metaObject()->className());
         slotObj->destroyIfLastRef();
         return QMetaObject::Connection(0);

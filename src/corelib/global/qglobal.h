@@ -417,6 +417,12 @@ typedef double qreal;
 
 #define Q_VAR_EXPORT(module) Q_##module##_EXPORT
 
+#if defined(QT_BUILD_CORE_LIB)
+#  define Q_CORE_EXTERN
+#else
+#  define Q_CORE_EXTERN extern
+#endif
+
 /*
    Some classes do not permit copies to be made of an object. These
    classes contains a private copy constructor and assignment

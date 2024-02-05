@@ -1,5 +1,6 @@
 /****************************************************************************
 **
+** Copyright (C) 2015 The XD Company Ltd.
 ** Copyright (C) 2015 The Qt Company Ltd.
 ** Contact: http://www.qt.io/licensing/
 **
@@ -305,6 +306,9 @@ namespace QTest {
         sourceCode.clear();
         sourceCode.reserve(8192);
 
+        sourceCode += "// Auto-generated with QExternalTest class,\n"
+                      "// DO NOT EDIT!\n";
+
         sourceCode += programHeader;
 
         // Add Qt header includes
@@ -334,62 +338,32 @@ namespace QTest {
             sourceCode += "#include <QtWebKit/QtWebKit>\n";
         if (qtModules & QExternalTest::Phonon)
             sourceCode += "#include <Phonon/Phonon>\n";
-        sourceCode +=
-            "#include <stdlib.h>\n"
-            "#include <stddef.h>\n";
 
-        sourceCode +=
-            "\n"
-            "void q_external_test_user_code()\n"
-            "{\n"
-            "#include \"user_code.cpp\"\n"
-            "}\n"
-            "\n"
-            "#ifdef Q_OS_WIN\n"
-            "#include <windows.h>\n"
-            "#if defined(Q_CC_MSVC) && !defined(Q_OS_WINCE)\n"
-            "#include <crtdbg.h>\n"
-            "#endif\n"
-            "static void q_test_setup()\n"
-            "{\n"
-            "    SetErrorMode(SEM_FAILCRITICALERRORS | SEM_NOGPFAULTERRORBOX | SEM_NOOPENFILEERRORBOX);\n"
-            "}\n"
-            "static int __cdecl CrtDbgHook(int /*reportType*/, char * /*message*/, int * /*returnValue*/)\n"
-            "{\n"
-            "    return TRUE;\n"
-            "}\n"
-            "#else\n"
-            "static void q_test_setup() { }\n"
-            "#endif\n"
-            "int main(int argc, char **argv)\n"
-            "{\n"
-            "#if defined(Q_CC_MSVC) && defined(QT_DEBUG) && defined(_DEBUG) && defined(_CRT_ERROR) && !defined(Q_OS_WINCE)\n"
-            "    _CrtSetReportHook2(_CRT_RPTHOOK_INSTALL, CrtDbgHook);\n"
-            "#endif\n";
+        sourceCode += "\n";
 
         switch (appType) {
         applicationless:
         case QExternalTest::Applicationless:
             sourceCode +=
-                "    (void)argc; (void)argv;\n";
+                "#define EXTERNAL_TESTS_APP (void)argc; (void)argv;\n";
             break;
 
         coreapplication:
         case QExternalTest::QCoreApplication:
             sourceCode +=
-                "    QCoreApplication app(argc, argv);\n";
+                "#define EXTERNAL_TESTS_APP QCoreApplication app(argc, argv);\n";
             break;
 
         guiapplication:
         case QExternalTest::QGuiApplication:
             sourceCode +=
-                "    QGuiApplication app(argc, argv);\n";
+                "#define EXTERNAL_TESTS_APP QGuiApplication app(argc, argv);\n";
             break;
 
         widgetsapplication:
         case QExternalTest::QApplication:
             sourceCode +=
-                "    QApplication app(argc, argv);\n";
+                "#define EXTERNAL_TESTS_APP QApplication app(argc, argv);\n";
             break;
 
         case QExternalTest::AutoApplication:
@@ -402,11 +376,14 @@ namespace QTest {
             goto coreapplication;
         }
 
-        sourceCode +=
-            "    q_test_setup();\n"
-            "    q_external_test_user_code();\n"
-            "    return 0;\n"
-            "}\n";
+        // Adds "main(...)" function.
+        const QString &root = QString::fromLocal8Bit(EXTERNAL_TESTS_FOLDER);
+        QFile file;
+        file.setFileName(root + QLL("/externaltests-launcher.cpp"));
+        file.open(QFile::ReadOnly);
+        QByteArray launcherCode = file.readAll();
+        launcherCode.replace("\r\n", "\n");
+        sourceCode += launcherCode;
 
         QFile sourceFile(temporaryDirPath + QLatin1String("/project.cpp"));
         if (!sourceFile.open(QIODevice::WriteOnly | QIODevice::Truncate | QIODevice::Text)) {
@@ -467,7 +444,11 @@ namespace QTest {
             "HEADERS  +=\n"
             "SOURCES  += project.cpp\n"
             "QT       -= core gui\n"
-            "INCLUDEPATH += . ");
+            "INCLUDEPATH += . \n"
+#ifdef PROJECT_FOLDER
+            "INCLUDEPATH += \"" PROJECT_FOLDER "\"\n"
+#endif
+        );
 
         QString workingDir = QDir::currentPath();
         if (extraProgramSources.count() > 0)
@@ -640,7 +621,9 @@ namespace QTest {
 
         make.setProcessChannelMode(channelMode);
 
+        // Tries to find any of these make executables.
         static const char makes[] =
+            "my_make_x86.bat\0" // XD company's custom make environment.
             "jom.exe\0" //preferred for visual c++ or mingw
             "nmake.exe\0" //for visual c++
             "mingw32-make.exe\0" //for mingw
@@ -666,6 +649,12 @@ namespace QTest {
         exitCode = make.exitCode();
         std_out += make.readAllStandardOutput();
         std_err += make.readAllStandardError();
+
+        static bool didWarn = false;
+        if ( ! didWarn && make.program() != QLL("my_make_x86.bat")) {
+            didWarn = true;
+            qWarning("QExternalTest: Failed to find custom-build environment.");
+        }
 
         return ok;
 #endif // !QT_NO_PROCESS
