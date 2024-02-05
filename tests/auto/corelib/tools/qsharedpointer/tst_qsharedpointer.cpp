@@ -1,5 +1,6 @@
 /****************************************************************************
 **
+** Copyright (C) 2015 The XD Company Ltd.
 ** Copyright (C) 2015 The Qt Company Ltd.
 ** Copyright (C) 2012 Intel Corporation.
 ** Contact: http://www.qt.io/licensing/
@@ -47,6 +48,7 @@
 
 #include <stdlib.h>
 #include <time.h>
+#include <iostream>
 
 QT_BEGIN_NAMESPACE
 namespace QtSharedPointer {
@@ -71,8 +73,12 @@ private slots:
     void functionCallDownCast();
     void upCast();
     void qobjectWeakManagement();
+    void treatParentQObjectAsStrongRef();
     void noSharedPointerFromWeakQObject();
     void sharedPointerFromQObjectWithWeak();
+    void sharedPointerFromQObjectWithFakeQSharedPointer();
+    void sharedPointerFromFakeQSharedPointer();
+    void fakeFromRawPointerWithRealQSharedPointer();
     void weakQObjectFromSharedPointer();
     void objectCast();
     void differentPointers();
@@ -97,6 +103,7 @@ private slots:
     void map();
     void hash();
     void qvariantCast();
+    void qvariantCastQRef();
     void sharedFromThis();
 
     void threadStressTest_data();
@@ -786,6 +793,47 @@ void tst_QSharedPointer::qobjectWeakManagement()
     safetyCheck();
 }
 
+void tst_QSharedPointer::treatParentQObjectAsStrongRef()
+{
+    // TRACE/QObject/parent-ref 5: unit test changes.
+
+    {
+        QSharedPointer<QObject> shared;
+        shared = QSharedPointer<QObject>();
+        QVERIFY(shared.isNull());
+        QVERIFY(!shared.data());
+    }
+
+    {
+        QObject *obj, *parent;
+        obj = new QObject;
+        parent = new QObject;
+        obj->setParent(parent);
+
+        QSharedPointer<QObject> shared(obj);
+
+        // now, ignores wrong deletes.
+        delete parent;
+        QVERIFY(!shared.isNull());
+    }
+    safetyCheck();
+
+    {
+        // same as above, but set the parent after QSharedPointer is created
+        QObject *obj, *parent;
+        obj = new QObject;
+        QSharedPointer<QObject> shared(obj);
+
+        parent = new QObject;
+        obj->setParent(parent);
+
+        // now, ignores wrong deletes.
+        delete parent;
+        QVERIFY(!shared.isNull());
+    }
+    safetyCheck();
+}
+
 void tst_QSharedPointer::noSharedPointerFromWeakQObject()
 {
     // you're not allowed to create a QSharedPointer from an unmanaged QObject
@@ -813,11 +861,82 @@ void tst_QSharedPointer::sharedPointerFromQObjectWithWeak()
     QWeakPointer<QObject> weak = ptr;
     {
         QSharedPointer<QObject> shared(ptr);
-        QVERIFY(!weak.isNull());
+        QVERIFY( ! weak.isNull());
+        QVERIFY( ! shared.isFake());
         QCOMPARE(shared.data(), ptr);
         QCOMPARE(weak.data(), ptr);
     }
     QVERIFY(weak.isNull());
+}
+
+void tst_QSharedPointer::sharedPointerFromQObjectWithFakeQSharedPointer()
+{
+    // NOTE: QObject type is handled specially,
+    // but for other types, similar test may cause crash.
+
+    // Dummy.
+    QObject *ptr = new QObject;
+    QSharedPointer<QObject> fake = QSharedPointer<QObject>::fromStack(ptr);
+    QVERIFY(fake.isFake());
+    // With real strong-ref going out of scope before fake.
+    {
+        QSharedPointer<QObject> shared(ptr);
+        QVERIFY( ! fake.isNull());
+        QVERIFY( ! shared.isFake());
+        QCOMPARE(shared.data(), ptr);
+        QCOMPARE(fake.data(), ptr);
+    }
+
+    // Atual test.
+    QVERIFY( ! fake.isNull());
+    // With fake currently being replaced with real strong-ref.
+    QVERIFY( ! fake.isFake());
+}
+
+void tst_QSharedPointer::sharedPointerFromFakeQSharedPointer()
+{
+    // Note that below the `copy` does NOT construct from raw-pointer directly,
+    // but such "from raw-pointer" case can be found in `invalidConstructs()` test.
+
+    // Dummy.
+    Data *ptr = new Data;
+    QSharedPointer<Data> fake = QSharedPointer<Data>::fromStack(ptr);
+    QVERIFY(fake.isFake());
+    // With real strong-ref following fake.
+    QSharedPointer<Data> copy(fake);
+    QVERIFY( ! fake.isNull());
+    QVERIFY(copy.isFake());
+    QCOMPARE(copy.data(), ptr);
+    QCOMPARE(fake.data(), ptr);
+    // With fake going out of scope before real.
+    fake.clear();
+    QVERIFY(fake.isNull());
+
+    // Actual test.
+    QVERIFY( ! copy.isNull());
+    QVERIFY(copy.isFake());
+    // With considering each null as fake (like `QString::isEmpty()`).
+    QVERIFY(fake.isFake());
+}
+
+void tst_QSharedPointer::fakeFromRawPointerWithRealQSharedPointer()
+{
+    // Two ref-counters with the same raw pointer,
+    // where second is fake and does NOT outlive original real-ref.
+
+    // Dummy.
+    Data *rawPtr = new Data;
+    QSharedPointer<Data> shared(rawPtr);
+    QVERIFY( ! shared.isFake());
+    // With fake-shared-pointer from raw-pointer.
+    QSharedPointer<Data> fake = QSharedPointer<Data>::fromStack(rawPtr);
+    QVERIFY( ! fake.isNull());
+    // With fake going out of scope before real.
+    fake.clear();
+
+    // Actual test.
+    QVERIFY( ! shared.isNull());
+    QVERIFY( ! shared.isFake());
 }
 
 void tst_QSharedPointer::weakQObjectFromSharedPointer()
@@ -1959,12 +2078,35 @@ void tst_QSharedPointer::invalidConstructs_data()
            "QSharedPointer<Data> ptr1 = QSharedPointer<Data>(aData);\n"
            "QSharedPointer<Data> ptr2 = QSharedPointer<Data>(aData);\n";
 
+#if 0
+    // TRACE/QObject/parent-ref 6: excluded from "invalidConstructs" test,
+    // because if destroyer of `ptr2` is binary-same as destroyer of `ptr1`,
+    // then QSharedPonter no longer raises (which's the case for `QObject`).
+
     // two QObjects with the same pointer
     QTest::newRow("same-pointer-to-qobject")
         << &QTest::QExternalTest::tryRunFail
         << "QObject *anObj = new QObject;\n"
            "QSharedPointer<QObject> ptr1 = QSharedPointer<QObject>(anObj);\n"
            "QSharedPointer<QObject> ptr2 = QSharedPointer<QObject>(anObj);\n";
+#endif
+
+    // Two ref-counters with the same raw pointer,
+    // where first is fake.
+    QTest::newRow("real-shared-pointer from raw-pointer, out-living previous fake-shared-pointer")
+        << &QTest::QExternalTest::tryRunFail
+        << "Data *rawPtr = new Data;\n"
+           "QSharedPointer<Data> fake = QSharedPointer<Data>::fromStack(rawPtr);\n"
+           "QSharedPointer<Data> shared(rawPtr);\n";
+
+    // Repeats above but exits to be sure failure happens where expected.
+    QTest::newRow("Initial shared-pointer should NOT cause crash.")
+        << &QTest::QExternalTest::tryRun
+        << "Data *rawPtr = new Data;\n"
+           "QSharedPointer<Data> fake = QSharedPointer<Data>::fromStack(rawPtr);\n"
+           "NO_OPTIMIZE exit(0);\n"
+           "// Crash happens here, but shouldn't be reached.\n"
+           "QSharedPointer<Data> shared(rawPtr);\n";
 
     // re-creation:
     QTest::newRow("re-creation")
@@ -2031,15 +2173,7 @@ void tst_QSharedPointer::invalidConstructs()
     QTest::QExternalTest test;
     test.setQtModules(QTest::QExternalTest::QtCore);
     test.setProgramHeader(
-        "#define QT_SHAREDPOINTER_TRACK_POINTERS\n"
-        "#define QT_DEBUG\n"
-        "#include <QtCore/qsharedpointer.h>\n"
-        "#include <QtCore/qcoreapplication.h>\n"
-        "\n"
-        "struct Data { int i; };\n"
-        "struct DerivedData: public Data { int j; };\n"
-        "\n"
-        "class ForwardDeclared;\n"
+        "#include <external-build/prepare-test.cpp>\n"
         );
 
     QFETCH(QString, code);
@@ -2049,29 +2183,32 @@ void tst_QSharedPointer::invalidConstructs()
             || !test.tryRunFail("exit(1);")
             || !test.tryRun("QSharedPointer<Data> baseptr; QSharedPointer<DerivedData> ptr;")) {
             sane = false;
-            qWarning("Sanity checking failed\nCode:\n%s\n",
-                     qPrintable(test.errorReport()));
+            qDebug("External test output:");
+            std::cerr << qPrintable(test.errorReport()) << std::endl;
+            QFAIL("Sanity checking of your make-environment failed, see output above.");
         }
     }
-    if (!sane)
-        QFAIL("External testing failed sanity checking, cannot proceed");
+    if ( ! sane) {
+        QSKIP("Only tested if environment passes sanity checking.");
+    }
 
     QFETCH(TestFunction, testFunction);
 
     QByteArray body = code.toLatin1();
 
     bool result = (test.*testFunction)(body);
-    if (!result || qgetenv("QTEST_EXTERNAL_DEBUG").toInt() > 0) {
+    if ( ! result) {
+        // Separates logs to support test-log parsers.
+        qDebug("External test code:\n%s\n# With output:\n", body.constData());
+        std::cerr << qPrintable(test.errorReport()) << std::endl;
+        QFAIL("External code testing failed, see output above.");
+    } else if (qgetenv("QTEST_EXTERNAL_DEBUG").toInt() > 0) {
         qDebug("External test output:");
 #ifdef Q_CC_MSVC
         // MSVC prints errors to stdout
-        printf("%s\n", test.standardOutput().constData());
+        std::cerr << test.standardOutput().constData() << std::endl;
 #endif
-        printf("%s\n", test.standardError().constData());
-    }
-    if (!result) {
-        qWarning("External code testing failed\nCode:\n%s\n", body.constData());
-        QFAIL("Fail");
+        std::cerr << test.standardError().constData() << std::endl;
     }
 }
 
@@ -2099,6 +2236,77 @@ void tst_QSharedPointer::qvariantCast()
     }
     // Intentionally does not compile.
 //     QSharedPointer<int> sop = qSharedPointerFromVariant<int>(v);
+
+    v = QVariant::fromValue(sp.toWeakRef());
+
+    {
+        QWeakPointer<QObject> other = qWeakPointerFromVariant<QObject>(v);
+        QCOMPARE(other.data()->objectName(), QString::fromLatin1("A test name"));
+    }
+    {
+        QWeakPointer<QIODevice> other = qWeakPointerFromVariant<QIODevice>(v);
+        QCOMPARE(other.data()->objectName(), QString::fromLatin1("A test name"));
+    }
+    {
+        QWeakPointer<QFile> other = qWeakPointerFromVariant<QFile>(v);
+        QCOMPARE(other.data()->objectName(), QString::fromLatin1("A test name"));
+    }
+    {
+        QWeakPointer<QThread> other = qWeakPointerFromVariant<QThread>(v);
+        QVERIFY(!other);
+    }
+
+    // Intentionally does not compile.
+//     QWeakPointer<int> sop = qWeakPointerFromVariant<int>(v);
+
+    QFile file;
+    QWeakPointer<QFile> tracking = &file;
+    tracking.data()->setObjectName("A test name");
+    v = QVariant::fromValue(tracking);
+
+    {
+        QWeakPointer<QObject> other = qWeakPointerFromVariant<QObject>(v);
+        QCOMPARE(other.data()->objectName(), QString::fromLatin1("A test name"));
+    }
+    {
+        QWeakPointer<QIODevice> other = qWeakPointerFromVariant<QIODevice>(v);
+        QCOMPARE(other.data()->objectName(), QString::fromLatin1("A test name"));
+    }
+    {
+        QWeakPointer<QFile> other = qWeakPointerFromVariant<QFile>(v);
+        QCOMPARE(other.data()->objectName(), QString::fromLatin1("A test name"));
+    }
+    {
+        QWeakPointer<QThread> other = qWeakPointerFromVariant<QThread>(v);
+        QVERIFY(!other);
+    }
+}
+
+void tst_QSharedPointer::qvariantCastQRef()
+{
+    QRef<QFile> sp = QRef<QFile>::create();
+    sp->setObjectName("A test name");
+    QVariant v = QVariant::fromValue(sp);
+    QVERIFY(v.value<QRef<QFile> >().data() != 0);
+
+    {
+        QRef<QObject> other = qSharedPointerFromVariant<QObject>(v);
+        QCOMPARE(other->objectName(), QString::fromLatin1("A test name"));
+    }
+    {
+        QRef<QIODevice> other = qSharedPointerFromVariant<QIODevice>(v);
+        QCOMPARE(other->objectName(), QString::fromLatin1("A test name"));
+    }
+    {
+        QRef<QFile> other = qSharedPointerFromVariant<QFile>(v);
+        QCOMPARE(other->objectName(), QString::fromLatin1("A test name"));
+    }
+    {
+        QRef<QThread> other = qSharedPointerFromVariant<QThread>(v);
+        QVERIFY(!other);
+    }
+    // Intentionally does not compile.
+//     QRef<int> sop = qSharedPointerFromVariant<int>(v);
 
     v = QVariant::fromValue(sp.toWeakRef());
 

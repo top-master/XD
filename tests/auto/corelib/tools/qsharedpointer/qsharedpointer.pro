@@ -16,3 +16,9 @@ TESTDATA += forwarddeclared.cpp forwarddeclared.h
 
 include(externaltests.pri)
 DEFINES += QT_DISABLE_DEPRECATED_BEFORE=0
+
+# Used by `QExternalTest`.
+DEFINES += PROJECT_FOLDER=\\\"$$replace(PWD,\\\\,/)\\\"
+
+OTHER_FILES += \
+    $$PWD/external-build/prepare-test.cpp

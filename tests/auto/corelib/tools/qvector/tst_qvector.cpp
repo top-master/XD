@@ -36,6 +36,8 @@
 #include <QThread>
 #include <QSemaphore>
 #include <qvector.h>
+#include <QSharedPointer>
+#include <QObject>
 
 struct Movable {
     Movable(char input = 'j')
@@ -234,6 +236,7 @@ private slots:
     void fromListCustom() const;
     void fromStdVector() const;
     void indexOf() const;
+    void indexOf_QSharedPointer() const;
     void insertInt() const;
     void insertMovable() const;
     void insertCustom() const;
@@ -1402,6 +1405,57 @@ void tst_QVector::indexOf() const
     QVERIFY(myvec.indexOf("A") == 3);
     QVERIFY(myvec.indexOf("A", 3) == 3);
     QVERIFY(myvec.indexOf("A", 4) == -1);
+}
+
+void tst_QVector::indexOf_QSharedPointer() const
+{
+    typedef QSharedPointer<QObject > ObjPtr;
+    QObject *objA = new QObject();
+    QObject *objB = new QObject();
+    QObject *objC = new QObject();
+    QObject *objD = new QObject();
+    QVector<ObjPtr > list;
+    {
+        ObjPtr strongRefA = ObjPtr(objA);
+        list.append(strongRefA);
+        ObjPtr strongRefB = ObjPtr(objB);
+        list.append(strongRefB);
+        ObjPtr strongRefBCopy = strongRefB;
+        list.append(strongRefBCopy);
+        ObjPtr strongRefC = ObjPtr(objC);
+        list.append(strongRefC);
+        ObjPtr fakeRefC = ObjPtr::fromStack(objC);
+        list.append(fakeRefC);
+        ObjPtr strongRefD = ObjPtr(objD);
+        list.append(strongRefD);
+
+        // Same for copy.
+        QCOMPARE(list.indexOf(strongRefB), 1);
+        QCOMPARE(list.indexOf(strongRefBCopy), 1);
+        QCOMPARE(list.lastIndexOf(strongRefB), 2);
+        QCOMPARE(list.lastIndexOf(strongRefBCopy), 2);
+
+        // Same for fake.
+        QCOMPARE(list.indexOf(strongRefC), 3);
+        QCOMPARE(list.indexOf(fakeRefC), 3);
+        QCOMPARE(list.lastIndexOf(strongRefC), 4);
+        QCOMPARE(list.lastIndexOf(fakeRefC), 4);
+    }
+
+    // Same for Fake.
+    ObjPtr fakeRefB = ObjPtr::fromStack(objB);
+    ObjPtr fakeRefBCopy = ObjPtr::fromStack(objB);
+    ObjPtr fakeRefCRepeat = ObjPtr::fromStack(objC);
+    QCOMPARE(list.indexOf(fakeRefB), 1);
+    QCOMPARE(list.indexOf(fakeRefBCopy), 1);
+    QCOMPARE(list.indexOf(fakeRefCRepeat), 3);
+    QCOMPARE(list.lastIndexOf(fakeRefB), 2);
+    QCOMPARE(list.lastIndexOf(fakeRefBCopy), 2);
+    QCOMPARE(list.lastIndexOf(fakeRefCRepeat), 4);
+
+    // Same for RValue.
+    QCOMPARE(list.lastIndexOf(ObjPtr(objD)), 5);
+    QCOMPARE(list.lastIndexOf(ObjPtr::fromStack(objD)), 5);
 }
 
 template <typename T>

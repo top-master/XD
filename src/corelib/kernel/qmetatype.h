@@ -205,6 +205,7 @@ inline Q_DECL_CONSTEXPR int qMetaTypeId();
 
 #define QT_FOR_EACH_AUTOMATIC_TEMPLATE_SMART_POINTER(F) \
     F(QSharedPointer) \
+    F(QRef) \
     F(QWeakPointer) \
     F(QPointer)
 
@@ -1436,6 +1437,11 @@ QT_WARNING_POP
 
     template<typename T>
     struct IsSharedPointerToTypeDerivedFromQObject<QSharedPointer<T> > : IsPointerToTypeDerivedFromQObject<T*>
+    {
+    };
+
+    template<typename T>
+    struct IsSharedPointerToTypeDerivedFromQObject<QRef<T> > : IsPointerToTypeDerivedFromQObject<T*>
     {
     };
 

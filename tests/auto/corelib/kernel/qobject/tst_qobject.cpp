@@ -1,5 +1,6 @@
 /****************************************************************************
 **
+** Copyright (C) 2015 The XD Company Ltd.
 ** Copyright (C) 2015 The Qt Company Ltd.
 ** Copyright (C) 2015 Olivier Goffart <ogoffart@woboq.com>
 ** Contact: http://www.qt.io/licensing/
@@ -203,7 +204,10 @@ protected:
     Q_INVOKABLE QT_MOC_COMPAT void invoke2(int){}
     Q_SCRIPTABLE QT_MOC_COMPAT void sinvoke2(){}
 private:
-    Q_INVOKABLE void invoke3(int hinz = 0, int kunz = 0){Q_UNUSED(hinz) Q_UNUSED(kunz)}
+    Q_INVOKABLE void invoke3(int hinz = 0, int kunz = 0)
+    {
+        Q_UNUSED(hinz) Q_UNUSED(kunz)
+    }
     Q_SCRIPTABLE void sinvoke3(){}
 
     int recursionCount;
