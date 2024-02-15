@@ -1,5 +1,6 @@
 /****************************************************************************
 **
+** Copyright (C) 2015 The XD Company Ltd.
 ** Copyright (C) 2015 The Qt Company Ltd.
 ** Contact: http://www.qt.io/licensing/
 **
@@ -58,7 +59,7 @@ class QRegularExpression;
 #define QVERIFY(statement) \
 do {\
     if (!QTest::qVerify((statement), #statement, "", __FILE__, __LINE__))\
-        return;\
+        if (!QTest::isContinuous()) return;\
 } while (0)
 
 #define QFAIL(message) \
@@ -71,17 +72,17 @@ do {\
 do {\
     if (statement) {\
         if (!QTest::qVerify(true, #statement, (description), __FILE__, __LINE__))\
-            return;\
+            if (!QTest::isContinuous()) return;\
     } else {\
         if (!QTest::qVerify(false, #statement, (description), __FILE__, __LINE__))\
-            return;\
+            if (!QTest::isContinuous()) return;\
     }\
 } while (0)
 
 #define QCOMPARE(actual, expected) \
 do {\
     if (!QTest::qCompare(actual, expected, #actual, #expected, __FILE__, __LINE__))\
-        return;\
+        if (!QTest::isContinuous()) return;\
 } while (0)
 
 
@@ -94,18 +95,18 @@ do {\
                 expression;\
                 QTest::qFail("Expected exception of type " #exceptiontype " to be thrown" \
                              " but no exception caught", __FILE__, __LINE__);\
-                return;\
+                if (!QTest::isContinuous())  return;\
             } QT_CATCH (const exceptiontype &) {\
             }\
-        } QT_CATCH (const std::exception &e) {\
+        } QT_CATCHES (const std::exception &e, \
             QByteArray msg = QByteArray() + "Expected exception of type " #exceptiontype \
                              " to be thrown but std::exception caught with message: " + e.what(); \
             QTest::qFail(msg.constData(), __FILE__, __LINE__);\
-            return;\
-        } QT_CATCH (...) {\
+            if (!QTest::isContinuous()) return;\
+        ) QT_CATCH (...) {\
             QTest::qFail("Expected exception of type " #exceptiontype " to be thrown" \
                          " but unknown exception caught", __FILE__, __LINE__);\
-            return;\
+            if (!QTest::isContinuous()) return;\
         }\
     } while (0)
 
@@ -207,7 +208,7 @@ do {\
 #define QTEST(actual, testElement)\
 do {\
     if (!QTest::qTest(actual, testElement, #actual, #testElement, __FILE__, __LINE__))\
-        return;\
+        if (!QTest::isContinuous()) return;\
 } while (0)
 
 #define QWARN(msg)\
@@ -263,6 +264,12 @@ namespace QTest
 
     Q_TESTLIB_EXPORT int qExec(QObject *testObject, int argc = 0, char **argv = Q_NULLPTR);
     Q_TESTLIB_EXPORT int qExec(QObject *testObject, const QStringList &arguments);
+
+    /// @warning Reverts to @c false after each test-case-method, hence
+    /// consider setting to @c true in the `init()` slot.
+    Q_TESTLIB_EXPORT void setContinuous(bool enabled);
+    /// @returns @c false by default.
+    Q_TESTLIB_EXPORT bool isContinuous();
 
     Q_TESTLIB_EXPORT void setMainSourcePath(const char *file, const char *builddir = Q_NULLPTR);
 
@@ -427,10 +434,13 @@ namespace QTest
         return qCompare(actual, *static_cast<const T *>(QTest::qElementData(elementName,
                        qMetaTypeId<T>())), actualStr, expected, file, line);
     }
-}
+} // namespace QTest
 
 #undef QTEST_COMPARE_DECL
 
 QT_END_NAMESPACE
+
+// TRACE/testlib assert: provides more helpers by default.
+#include <QtTest/qtestexpectation.h>
 
 #endif

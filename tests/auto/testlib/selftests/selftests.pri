@@ -16,6 +16,7 @@ SUBPROGRAMS = \
      datatable \
      datetime \
      differentexec \
+     expectation \
      exceptionthrow \
      expectfail \
      failcleanup \

@@ -1,5 +1,6 @@
 /****************************************************************************
 **
+** Copyright (C) 2015 The XD Company Ltd.
 ** Copyright (C) 2015 The Qt Company Ltd.
 ** Contact: http://www.qt.io/licensing/
 **
@@ -67,6 +68,11 @@ template<> inline char *toString(const QString &str)
 }
 
 template<> inline char *toString(const QLatin1String &str)
+{
+    return toString(QString(str));
+}
+
+template<> inline char *toString(const QLatin1Literal &str)
 {
     return toString(QString(str));
 }
@@ -210,6 +216,19 @@ inline bool qCompare(QString const &t1, QLatin1String const &t2, const char *act
 }
 template<>
 inline bool qCompare(QLatin1String const &t1, QString const &t2, const char *actual,
+                    const char *expected, const char *file, int line)
+{
+    return qCompare(QString(t1), t2, actual, expected, file, line);
+}
+
+template<>
+inline bool qCompare(QString const &t1, QLatin1Literal const &t2, const char *actual,
+                    const char *expected, const char *file, int line)
+{
+    return qCompare(t1, QString(t2), actual, expected, file, line);
+}
+template<>
+inline bool qCompare(QLatin1Literal const &t1, QString const &t2, const char *actual,
                     const char *expected, const char *file, int line)
 {
     return qCompare(QString(t1), t2, actual, expected, file, line);
