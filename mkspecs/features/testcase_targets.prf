@@ -16,10 +16,17 @@
 
 # ... and the same for benchmarks, too.
 !contains(QMAKE_EXTRA_TARGETS, benchmark) {
-    contains(TEMPLATE, subdirs): \
+    contains(TEMPLATE, subdirs) {
         prepareRecursiveTarget(benchmark)
+        # TRACE/testlib note: the `TEMPLATE=subdirs` Makefile's benchmark target generates sub-Makefiles
+        # (if not already exist), hence there is no need for:
+        # ```
+        # benchmark.depends *= first
+        # ```
+    } else {
+        benchmark.depends *= first # `make benchmark' implies build
+    }
 
-    benchmark.depends *= first # `make benchmark' implies build
     QMAKE_EXTRA_TARGETS += benchmark
 }
 

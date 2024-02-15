@@ -50,6 +50,10 @@
 
 #include <stdlib.h>
 
+
+QT_WARNING_PUSH
+QT_WARNING_SUPPRESS_UNUSED
+
 QT_BEGIN_NAMESPACE
 
 
@@ -213,8 +217,11 @@ public:
 #endif
 };
 
+
 QT_END_NAMESPACE
 
 Q_DECLARE_METATYPE(QTestEventList)
+
+QT_WARNING_POP
 
 #endif

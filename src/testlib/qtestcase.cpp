@@ -1437,6 +1437,7 @@ namespace QTest
 {
     static QObject *currentTestObject = 0;
     static QString mainSourcePath;
+    static bool globalIsContinuous = false;
 
     class TestFunction {
     public:
@@ -2056,6 +2057,9 @@ static void qInvokeTestMethodDataEntry(char *slot)
         /* Benchmarking: for each accumulation iteration*/
         bool invokeOk;
         do {
+            // Reverts un-sticky per-test-method options.
+            QTest::setContinuous(false);
+            // Executes before-each handlers (which prepare per-test-method needs).
             invokeMethod(QTest::currentTestObject, "init()");
             if (QTestResult::skipCurrentTest() || QTestResult::currentTestFailed())
                 break;
@@ -2068,10 +2072,16 @@ static void qInvokeTestMethodDataEntry(char *slot)
                     QTestResult::currentDataTag()
                     ? QTestResult::currentDataTag() : "");
 
-            invokeOk = QMetaObject::invokeMethod(QTest::currentTestObject, slot,
-                                                 Qt::DirectConnection);
-            if (!invokeOk)
-                QTestResult::addFailure("Unable to execute slot", __FILE__, __LINE__);
+            QT_TRY {
+                invokeOk = QMetaObject::invokeMethod(QTest::currentTestObject, slot,
+                                                     Qt::DirectConnection);
+                if (!invokeOk)
+                    QTestResult::addFailure("Unable to execute slot", __FILE__, __LINE__);
+            } QT_CATCHES(QTestFailure &error,
+                error.log();
+            ) QT_CATCHES(const QExceptionWithMessage &error,
+                QTest::qFail(error.what(), (const char *)__FILE__, (int)__LINE__);
+            )
 
             isBenchmark = QBenchmarkTestMethodData::current->isBenchmark();
 
@@ -3504,6 +3514,16 @@ void QTest::qSleep(int ms)
 QObject *QTest::testObject()
 {
     return currentTestObject;
+}
+
+void QTest::setContinuous(bool enabled)
+{
+    globalIsContinuous = enabled;
+}
+
+bool QTest::isContinuous()
+{
+    return globalIsContinuous;
 }
 
 /*! \internal

@@ -2,6 +2,7 @@ TEMPLATE=subdirs
 SUBDIRS=\
    qpainterpath \
    qpainterpathstroker \
+   qfixed \
    qcolor \
    qbrush \
    qregion \
