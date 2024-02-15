@@ -24,6 +24,8 @@ HEADERS = qbenchmark.h \
     qtestassert.h \
     qtestcase.h \
     qtestdata.h \
+    qtestexpectation.h \
+    qtestexpectation_p.h \
     qtestevent.h \
     qtesteventloop.h \
     qtest_global.h \
@@ -35,12 +37,16 @@ HEADERS = qbenchmark.h \
     qtestspontaneevent.h \
     qtestsystem.h \
     qtesttouch.h \
-    qtestblacklist_p.h
+    qtestblacklist_p.h \
+    qnetdevicepair.h \
+    # List termination comment.
 
-SOURCES = qtestcase.cpp \
+SOURCES = \
+    qtestcase.cpp \
     qtestlog.cpp \
     qtesttable.cpp \
     qtestdata.cpp \
+    qtestexpectation.cpp \
     qtestresult.cpp \
     qasciikey.cpp \
     qplaintestlogger.cpp \
@@ -59,7 +65,9 @@ SOURCES = qtestcase.cpp \
     qtestmouse.cpp \
     qtestxunitstreamer.cpp \
     qxunittestlogger.cpp \
-    qtestblacklist.cpp
+    qtestblacklist.cpp \
+    qnetdevicepair.cpp \
+    # List termination comment.
 
 DEFINES *= QT_NO_CAST_TO_ASCII \
     QT_NO_CAST_FROM_ASCII \
