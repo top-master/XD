@@ -163,9 +163,13 @@ public:
 private:
     void initArgs(const QMetaMethod &member, const QObject *obj)
     {
+        Q_UNUSED(obj)
         args.reserve(member.parameterCount());
         for (int i = 0; i < member.parameterCount(); ++i) {
+            // QMetaMethod triggers `RegisterMethodArgumentMetaType` if needed.
             int tp = member.parameterType(i);
+            /* Else would do:
+            ```
             if (tp == QMetaType::UnknownType && obj) {
                 void *argv[] = { &tp, &i };
                 QMetaObject::metacall(const_cast<QObject*>(obj),
@@ -174,6 +178,7 @@ private:
                 if (tp == -1)
                     tp = QMetaType::UnknownType;
             }
+            ``` */
             if (tp == QMetaType::UnknownType) {
                 qWarning("QSignalSpy: Unable to handle parameter '%s' of type '%s' of method '%s',"
                          " use qRegisterMetaType to register it.",
