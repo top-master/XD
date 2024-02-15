@@ -24,7 +24,7 @@
 
 #include <QtTest/qtest.h> // Minimal version of `#include <QtTest/QtTest>`.
 
-#include <QtGui/private/qfixed_p.h>
+#include <QtGui/qfixed.h>
 
 Q_DECLARE_METATYPE(int);
 
