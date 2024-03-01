@@ -290,6 +290,9 @@ void QRequirementError::prefixMessage() Q_DECL_NOTHROW
         case QRequirementErrorType::JsonCast:
             msg += QCoreApplication::tr("Failed to cast from value/type to Json.");
             break;
+        case QRequirementErrorType::DeadLock:
+            msg += QCoreApplication::tr("Tried to lock from same thread twice.");
+            break;
         default:
             break;
         }

@@ -333,6 +333,10 @@ class Q_AUTOTEST_EXPORT QComboBoxPrivate : public QWidgetPrivate
 public:
     QComboBoxPrivate();
     ~QComboBoxPrivate();
+
+    static inline QComboBoxPrivate *get(QComboBox *w) { return w->d_func(); }
+    static inline const QComboBoxPrivate *get(const QComboBox *w) { return w->d_func(); }
+
     void init();
     QComboBoxPrivateContainer* viewContainer();
     void updateLineEditGeometry();

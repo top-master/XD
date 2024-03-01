@@ -730,6 +730,25 @@ bool QChar::isPrint(uint ucs4) Q_DECL_NOTHROW
 */
 
 /*!
+    \fn bool QChar::isDirSeparator() const
+    \since 5.6.5
+
+    Returns \c true if the character is a dir separator character
+    (no matter if slash or back-slash),
+    otherwise returns \c false.
+*/
+
+/*!
+    \fn bool QChar::isDirSeparator(uint ucs4)
+    \overload
+    \since 5.6.5
+
+    Returns \c true if the UCS-4-encoded character specified by \a ucs4 is
+    a dir separator character (no matter if slash or back-slash),
+    otherwise returns \c false.
+*/
+
+/*!
     \internal
 */
 bool QT_FASTCALL QChar::isSpace_helper(uint ucs4) Q_DECL_NOTHROW

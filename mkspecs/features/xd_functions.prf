@@ -2,6 +2,10 @@
 # This file defines few useful functions
 # --------------------------------------
 
+# Dependencies (does nothing if already loaded).
+load(qt_functions)
+
+
 xd_command_count = 0
 
 defineReplace(xd_suffix) {
@@ -19,6 +23,8 @@ defineReplace(xd_suffix) {
 defineReplace(xd_module) {
     unset(name)
     name = $$lower($$1)
+    # Convert to public name.
+    name = $$replace(name, -private$,)
 
     # Map "$$QT" config-entries to real file-names.
     !isEmpty(QT.$${name}.module) {
@@ -43,6 +49,12 @@ defineReplace(xd_module) {
     return( $$xd_suffix($$name) )
 }
 
+equals(MAKEFILE_GENERATOR, MSBUILD) {
+    xd_depend_newline = \\$$escape_expand(\\n)
+} else {
+    xd_depend_newline = $$escape_expand(\\n)
+}
+
 #xd_prebuild(prefix, command)
 defineTest(xd_prebuild) {
     #generate target name with number
@@ -53,7 +65,7 @@ defineTest(xd_prebuild) {
     #the qmake generated "MakeFile" should contain "first"
     #   and we depend that on new command
     !contains( first.depends, $$name ) {
-        !isEmpty(first.depends): first.depends += \\$$escape_expand(\\n)
+        !isEmpty(first.depends): first.depends += $$xd_depend_newline
         first.depends += $$name
     }
 
@@ -69,7 +81,7 @@ defineTest(xd_prebuild) {
 #xd_postbuild(command)
 defineTest(xd_postbuild) {
     !isEmpty(QMAKE_POST_LINK): QMAKE_POST_LINK = $$QMAKE_POST_LINK$$escape_expand(\\n\\t)
-    QMAKE_POST_LINK = $${QMAKE_POST_LINK}$$shell_quote(-$$1)
+    QMAKE_POST_LINK = $${QMAKE_POST_LINK}-$$1
 
     export(QMAKE_POST_LINK)
 }
@@ -169,18 +181,23 @@ defineTest(qmakeLater) {
 defineTest(copyModule) {
     # Create destination directory and copy module there
     isEmpty(2) {
-        2 = $$shadowed( $$DESTDIR ) # make absolute for later copy calls
+        2 = $$xd_destdir()
     }
     mkpath($$2)
     copy_file($$[QT_INSTALL_BINS]/$$xd_module($$1), $$2/)
 }
-defineTest(copyModules) {
+
+# copyModuleList(destinationPath, [variableName = QT])
+defineTest(copyModuleList) {
+    isEmpty(2): 2 = QT
     unset(list)
-    for(name, QT) {
+    for(name, $$2) {
+        # Converts to public-name (since "private" has no separate library file).
+        name = $$replace(name, -private$,)
         list *= $$name
     }
     for(name, list) {
-        copyModule($$name)
+        copyModule($$name, $$1)
     }
 }
 
@@ -192,7 +209,7 @@ defineTest(copyPlugin) {
     path = $${path}/q$$xd_suffix($$2)
     # Create destination directory and copy plugin there
     isEmpty(3) {
-        3 = $$shadowed( $$DESTDIR )/$$1 # make absolute for later copy calls
+        3 = $$xd_destdir()/$$1 # Is absolute for later copy calls.
     }
     mkpath($$3)
     copy_file($$path, $$3/)
@@ -211,7 +228,7 @@ defineTest(copyImageDriver) {
 }
 defineTest(copyOpenSSL) {
     isEmpty(1) {
-        1 = $$shadowed( $$DESTDIR ) # make absolute for later copy calls
+        1 = $$xd_destdir() # Is absolute for later copy calls.
     }
     mkpath($$1)
     path = "$$[QT_INSTALL_LIBS]/openssl"
@@ -222,4 +239,16 @@ defineTest(copyOpenSSL) {
     }
     copy_file($$path/libeay32.dll, $$1/)
     copy_file($$path/ssleay32.dll, $$1/)
+}
+
+# Returns `DESTDIR` converted to absolute-path, maybe affixed by build-type
+# (see `mkspecs/README.md`).
+#
+# Result's an absolute-path for possible copy calls.
+defineReplace(xd_destdir) {
+    # Below's loaded after .pro file, but is required now.
+    QMAKE_DIR_FIX = DESTDIR
+    load(exclusive_builds_post)
+    # Make absolute-path.
+    return( $$shadowed( $$DESTDIR ) )
 }

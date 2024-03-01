@@ -83,6 +83,10 @@
 #  endif
 #  define Q_CC_MSVC (_MSC_VER)
 #  define Q_CC_MSVC_NET
+/* TRACE/corelib macro: Support inline-keyword in .c files (for pre MSVC-2015). */
+#  if !defined(__cplusplus) && _MSC_VER < 1900 && !defined(inline)
+#    define inline __inline
+#  endif
 #  define Q_OUTOFLINE_TEMPLATE inline
 #  if _MSC_VER < 1600
 #    define Q_NO_TEMPLATE_FRIENDS
@@ -1394,6 +1398,31 @@
     QT_WARNING_DISABLE_GCC("-Wpessimizing-move")
 #else
 #  define QT_WARNING_SUPPRESS_MOVE
+#endif
+
+#if defined(Q_CC_CLANG)
+#  define QT_WARNING_SUPPRESS_OLDSTYLE \
+    QT_WARNING_DISABLE_CLANG("-Wold-style-cast")
+#elif defined(Q_CC_GNU)
+#  define QT_WARNING_SUPPRESS_OLDSTYLE \
+    QT_WARNING_DISABLE_GCC("-Wold-style-cast")
+#elif defined(Q_CC_MSVC)
+  /* Details:
+   * 4131: old-style declaration.
+   * 4134: Docs missing.
+   * 26473: Don't cast between pointer types where the source type and the target type are the same.
+   * 26474: Don't cast between pointer types when the conversion could be implicit.
+   * 26475: Do not use function style C-casts.
+   * 26493: Don't use C-style casts.
+   */
+#  define QT_WARNING_SUPPRESS_OLDSTYLE \
+    QT_WARNING_DISABLE_MSVC(4131) \
+    QT_WARNING_DISABLE_MSVC(26473) \
+    QT_WARNING_DISABLE_MSVC(26474) \
+    QT_WARNING_DISABLE_MSVC(26475) \
+    QT_WARNING_DISABLE_MSVC(26493)
+#else
+#  define QT_WARNING_SUPPRESS_OLDSTYLE
 #endif
 
 /* Using some helpers under LGPL3's header exception. */

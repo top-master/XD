@@ -88,14 +88,14 @@ void tst_toolsupport::offsets_data()
     {
         QTestData &data = QTest::newRow("sizeof(QObjectData)")
                 << sizeof(QObjectData);
-        data << 28 << 48; // vptr + 3 ptr + 2 int + ptr
+        data << 32 << 56; // vptr + 4 ptr + 2 int + ptr
     }
 
 #if RUN_MEMBER_OFFSET_TEST
     {
         QTestData &data = QTest::newRow("QObjectPrivate::extraData")
                 << pmm_to_offsetof(&QObjectPrivate::extraData);
-        data << 28 << 48;    // sizeof(QObjectData)
+        data << 32 << 56;    // sizeof(QObjectData)
     }
 
     {

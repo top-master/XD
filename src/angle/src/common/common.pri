@@ -26,6 +26,7 @@ winrt|if(msvc:!win32-msvc2005:!win32-msvc2008:!win32-msvc2010) {
 } else {
     DX_DIR = $$(DXSDK_DIR)
     isEmpty(DX_DIR) {
+        qtc_run: return()
         error("Cannot determine DirectX SDK location. Please set DXSDK_DIR environment variable.")
     }
 

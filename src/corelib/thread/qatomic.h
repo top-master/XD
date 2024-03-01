@@ -159,18 +159,28 @@ public:
 template <typename T>
 class QAtomicPointer : public QBasicAtomicPointer<T>
 {
+    typedef QBasicAtomicPointer<T> super;
 public:
 #ifdef QT_BASIC_ATOMIC_HAS_CONSTRUCTORS
-    constexpr QAtomicPointer(T *value = 0) Q_DECL_NOTHROW : QBasicAtomicPointer<T>(value) {}
+    constexpr QAtomicPointer(T *value = 0) Q_DECL_NOTHROW
+        : super(value)
+    {
+    }
 #else
     inline QAtomicPointer(T *value = 0) Q_DECL_NOTHROW
     {
         this->store(value);
     }
 #endif
+
     inline QAtomicPointer(const QAtomicPointer<T> &other) Q_DECL_NOTHROW
     {
         this->storeRelease(other.loadAcquire());
+    }
+
+    inline T *operator=(T *newValue) Q_DECL_NOTHROW {
+        this->storeRelease(newValue);
+        return newValue;
     }
 
     inline QAtomicPointer<T> &operator=(const QAtomicPointer<T> &other) Q_DECL_NOTHROW

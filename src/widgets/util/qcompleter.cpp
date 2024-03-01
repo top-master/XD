@@ -562,7 +562,10 @@ QIndexMapper QSortedModelEngine::indexHint(QString part, const QModelIndex& pare
     const CacheItem::const_iterator it = map.lowerBound(part);
 
     // look backward for first valid hint
-    for(CacheItem::const_iterator it1 = it; it1-- != map.constBegin();) {
+    const CacheItem::const_iterator begin = map.constBegin();
+    for(CacheItem::const_iterator it1 = it; it1 != begin;) {
+        // Skip one to include begin in search.
+        --it1;
         const QMatchData& value = it1.value();
         if (value.isValid()) {
             if (order == Qt::AscendingOrder) {

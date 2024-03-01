@@ -1,0 +1,9 @@
+
+!contains(CONFIG, exceptions) {
+    CONFIG += exceptions
+    once(qremote_warn_exceptions) {
+        tmp = $$_PRO_FILE_
+        win32: tmp ~= s,/,\\,g
+        warning("QRemote requires exceptions to be enabled for: $$tmp")
+    }
+}

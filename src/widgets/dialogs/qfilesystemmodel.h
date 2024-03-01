@@ -1,5 +1,6 @@
 /****************************************************************************
 **
+** Copyright (C) 2015 The XD Company Ltd.
 ** Copyright (C) 2015 The Qt Company Ltd.
 ** Contact: http://www.qt.io/licensing/
 **
@@ -39,6 +40,7 @@
 #include <QtCore/qdir.h>
 #include <QtGui/qicon.h>
 #include <QtCore/qdiriterator.h>
+#include <QtCore/qdatetime.h>
 
 QT_BEGIN_NAMESPACE
 
@@ -133,8 +135,19 @@ public:
     inline QString fileName(const QModelIndex &index) const;
     inline QIcon fileIcon(const QModelIndex &index) const;
     QFile::Permissions permissions(const QModelIndex &index) const;
-    QFileInfo fileInfo(const QModelIndex &index) const;
+    inline QFileInfo fileInfo(const QModelIndex &index) const;
     bool remove(const QModelIndex &index);
+
+    static QString formatSize(qint64 bytes);
+
+    static inline QString formatTime(const QDateTime &time) {
+#ifndef QT_NO_DATESTRING
+        return time.toString(Qt::SystemLocaleDate);
+#else
+        Q_UNUSED(time)
+        return QString();
+#endif
+    }
 
 protected:
     QFileSystemModel(QFileSystemModelPrivate &, QObject *parent = Q_NULLPTR);

@@ -1,5 +1,6 @@
 /****************************************************************************
 **
+** Copyright (C) 2015 The XD Company Ltd.
 ** Copyright (C) 2015 The Qt Company Ltd.
 ** Contact: http://www.qt.io/licensing/
 **
@@ -56,6 +57,11 @@ template <class Key, class T> class QHash;
 template <class Key, class T> class QMap;
 
 #if !defined(QT_NO_DATASTREAM) || defined(QT_BOOTSTRAPPED)
+class QDataStream;
+
+Q_CORE_EXPORT QDataStream &operator<<(QDataStream &out, qint32 i);
+Q_CORE_EXPORT QDataStream &operator>>(QDataStream &in, qint32 &i);
+
 class QDataStreamPrivate;
 class Q_CORE_EXPORT QDataStream
 {
@@ -136,7 +142,8 @@ public:
     QDataStream &operator>>(quint8 &i);
     QDataStream &operator>>(qint16 &i);
     QDataStream &operator>>(quint16 &i);
-    QDataStream &operator>>(qint32 &i);
+    // TRACE/corelib improve: QFlags based enums now can be streamed as `int` #3,
+    // else would write: `QDataStream &operator>>(qint32 &i);`
     QDataStream &operator>>(quint32 &i);
     QDataStream &operator>>(qint64 &i);
     QDataStream &operator>>(quint64 &i);
@@ -150,7 +157,8 @@ public:
     QDataStream &operator<<(quint8 i);
     QDataStream &operator<<(qint16 i);
     QDataStream &operator<<(quint16 i);
-    QDataStream &operator<<(qint32 i);
+    // TRACE/corelib improve: QFlags based enums now can be streamed as `int` #4,
+    // else would write: `QDataStream &operator<<(qint32 i);`
     QDataStream &operator<<(quint32 i);
     QDataStream &operator<<(qint64 i);
     QDataStream &operator<<(quint64 i);
@@ -170,6 +178,11 @@ public:
 private:
     Q_DISABLE_COPY(QDataStream)
 
+    // TRACE/corelib improve: QFlags based enums now can be streamed as `int` #5,
+    // hence need to give access to global methods:
+    friend Q_CORE_EXPORT QDataStream &operator<<(QDataStream &out, qint32 i);
+    friend Q_CORE_EXPORT QDataStream &operator>>(QDataStream &in, qint32 &i);
+
     QScopedPointer<QDataStreamPrivate> d;
 
     QIODevice *dev;
@@ -184,6 +197,8 @@ private:
 /*****************************************************************************
   QDataStream inline functions
  *****************************************************************************/
+
+#ifndef Q_MOC_RUN
 
 inline QIODevice *QDataStream::device() const
 { return dev; }
@@ -220,6 +235,8 @@ inline QDataStream &QDataStream::operator<<(quint32 i)
 
 inline QDataStream &QDataStream::operator<<(quint64 i)
 { return *this << qint64(i); }
+
+#endif // Q_MOC_RUN
 
 template <typename T>
 QDataStream& operator>>(QDataStream& s, QList<T>& l)

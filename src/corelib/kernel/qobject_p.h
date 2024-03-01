@@ -1,5 +1,6 @@
 /****************************************************************************
 **
+** Copyright (C) 2015 The XD Company Ltd.
 ** Copyright (C) 2015 The Qt Company Ltd.
 ** Copyright (C) 2013 Olivier Goffart <ogoffart@woboq.com>
 ** Contact: http://www.qt.io/licensing/
@@ -114,6 +115,9 @@ public:
         QVector<int> runningTimers;
         QList<QPointer<QObject> > eventFilters;
         QString objectName;
+        // TRACE/QObject/remote support 3-1: added `privateDataMap`,
+        // which holds `QRemoteData` if's remote-controller or local-service.
+        QMap<QByteArray, QObjectUserData *> privateDataMap;
     };
 
     typedef void (*StaticMetaCallFunction)(QObject *, QMetaObject::Call, int, void **);
@@ -167,7 +171,11 @@ public:
 
 
     QObjectPrivate(int version = QObjectPrivateVersion);
+    void attachPublic(QObject *, QObject *parent);
+    inline void attachPublic(QObject *q);
     virtual ~QObjectPrivate();
+    void detachSharedRefCount();
+    void emitDestroyed();
     void deleteChildren();
 
     void setParent_helper(QObject *);
@@ -188,11 +196,16 @@ public:
                                    Sender *currentSender,
                                    Sender *previousSender);
 
-    static QObjectPrivate *get(QObject *o) {
+    static inline QObjectPrivate *get(QObject *o) {
+        return o->d_func();
+    }
+    static inline const QObjectPrivate *get(const QObject *o) {
         return o->d_func();
     }
 
-    int signalIndex(const char *signalName, const QMetaObject **meta = 0) const;
+    /// Redirects to QMetaObject::indexOfSignalReal(const char *, const QMetaObject **).
+    Q_ALWAYS_INLINE int signalIndex(const char *signalName, const QMetaObject **meta = Q_NULLPTR) const
+        { return q_ptr->metaObject()->indexOfSignalReal(signalName, meta); }
     inline bool isSignalConnected(uint signalIdx) const;
 
     // To allow abitrary objects to call connectNotify()/disconnectNotify() without making
@@ -215,6 +228,7 @@ public:
                                                const int *types, const QMetaObject *senderMetaObject);
     static QMetaObject::Connection connect(const QObject *sender, int signal_index, QtPrivate::QSlotObjectBase *slotObj, Qt::ConnectionType type);
     static bool disconnect(const QObject *sender, int signal_index, void **slot);
+
 public:
     ExtraData *extraData;    // extra data set by the user
     QThreadData *threadData; // id of the thread that owns the object
@@ -225,16 +239,38 @@ public:
     Sender *currentSender;   // object currently activating the object
     mutable quint32 connectedSignals[2];
 
+    // TRACE/QObject/remote support 3-2: `privateData` getter and setter declared.
+    void setPrivateData(const QByteArray &id, QObjectUserData* data);
+    QObjectUserData* privateData(const QByteArray &id) const;
     union {
         QObject *currentChildBeingDeleted;
         QAbstractDeclarativeData *declarativeData; //extra data used by the declarative module
     };
 
-    // these objects are all used to indicate that a QObject was deleted
-    // plus QPointer, which keeps a separate list
+    /// \brief used by QSharedPointer and QWeakPointer to track a QObject.
+    ///
+    /// Is thread-safe, because only QObject's destructor deletes it,
+    /// but if crashes, the `weakref` was decremented by user (outside of XD).
+    ///
+    /// these objects are all used to indicate that a QObject was deleted
+    /// plus QPointer, which keeps a separate list
     QAtomicPointer<QtSharedPointer::ExternalRefCountData> sharedRefcount;
 };
 
+
+/*! \internal
+
+  Same as attachPublic(QObject *, QObject *), but does not set parent, and instead
+  just copies parent from existing QObjectPrivate (if any).
+*/
+inline void QObjectPrivate::attachPublic(QObject *q)
+{
+    const QObjectPrivate *existing = QObjectPrivate::get(q);
+    attachPublic(q, Q_NULLPTR);
+    if (existing) {
+        this->parent = existing->parent;
+    }
+}
 
 /*! \internal
 

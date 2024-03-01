@@ -1,5 +1,6 @@
 /****************************************************************************
 **
+** Copyright (C) 2015 The XD Company Ltd.
 ** Copyright (C) 2015 The Qt Company Ltd.
 ** Contact: http://www.qt.io/licensing/
 **
@@ -31,9 +32,20 @@
 **
 ****************************************************************************/
 
+#define __STDC_FORMAT_MACROS
+
 #include "qelapsedtimer.h"
 
+#include <QtCore/qdatetime.h>
+#include <QtCore/qtimestamp.h>
+#include <QtCore/qcoreapplication.h>
+
+#include <inttypes.h>
+
+
 QT_BEGIN_NAMESPACE
+
+const qint64 QTimestamp::Month = Q_INT64_C(0x000000009FA52400);
 
 /*!
     \class QElapsedTimer
@@ -256,6 +268,83 @@ bool QElapsedTimer::hasExpired(qint64 timeout) const Q_DECL_NOTHROW
     // if timeout is -1, quint64(timeout) is LLINT_MAX, so this will be
     // considered as never expired
     return quint64(elapsed()) > quint64(timeout);
+}
+
+QString QElapsedTimer::toString(qint64 msec, FormatFlags flags)
+{
+    const bool isPrecise = flags.includes(QElapsedTimer::Precise);
+
+    int milliSec = 0;
+    if (isPrecise) {
+        milliSec = int(msec % QTimestamp::Second);
+    } else {
+        msec += 500;
+    }
+    int seconds = int((msec % QTimestamp::Minute) / QTimestamp::Second);
+    int minutes = int((msec % QTimestamp::Hour) / QTimestamp::Minute);
+    qint64 hours = msec / QTimestamp::Hour;
+
+    char buf[256];
+    qsnprintf(buf, sizeof(buf), isPrecise ? "%" PRId64  ":%02d:%02d.%03d"
+                                          : "%" PRId64  ":%02d:%02d",
+              hours, minutes, seconds, milliSec);
+    // Removes hour if zero (the "0:" prefix).
+    if (buf[1] == ':' && buf[0] == '0') {
+        return QString::fromLatin1(buf + 2);
+    }
+    return QString::fromLatin1(buf);
+}
+
+QString QElapsedTimer::toStringLabel(qint64 msec, FormatFlags flags)
+{
+    QString result = QElapsedTimer::toString(msec, flags);
+    result += QLatin1Char(' ');
+    result += QElapsedTimer::label(msec, flags);
+    return  result;
+}
+
+/*!
+ * Provides a label for given @p msec (elapsed time).
+ *
+ * @param msec Elapsed time in milli-seconds.
+ */
+QString QElapsedTimer::label(qint64 msec, FormatFlags flags)
+{
+    QLatin1String result;
+    if (msec >= QTimestamp::Hour) {
+        result = QLL("hour(s)");
+    } else if (msec >= QTimestamp::Minute) {
+        result = QLL("minute(s)");
+    } else if (msec >= QTimestamp::Second) {
+        result = QLL("second(s)");
+    } else {
+        result = QLL("milli-second(s)");
+    }
+    return result.isNull()
+            ? QString()
+            : flags.includes(QElapsedTimer::ForceEnglish)
+              ? result
+              : QCoreApplication::translate("QElapsedTimer", result.data());
+}
+
+/*!
+  Reduces the \a timeout by \a elapsed, taking into account that -1 is a
+  special value for timeouts.
+  if timeout is -1, however -1 is returned.
+
+  @returns The difference between @p timeout and @p elapsed, if timeout is
+  yet greater, however if @p timeout is `-1`, then `-1` is returned.
+
+  @note This is used in waiter contexts, hence no need to optimize, else
+  could make this @c inline.
+*/
+int QElapsedTimer::timeLeft(int timeout, int elapsed)
+{
+    if (timeout == -1)
+        return -1;
+
+    timeout = timeout - elapsed;
+    return Q_MAX(timeout, 0);
 }
 
 QT_END_NAMESPACE

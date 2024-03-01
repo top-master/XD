@@ -109,7 +109,7 @@ class QString;
 class QDataStream;
 template <typename T> class QList;
 
-/// @sa QByteArray::data_ptr()
+/// @see QByteArray::data_ptr()
 typedef QArrayData QByteArrayData;
 
 template<int N> struct QStaticByteArrayData
@@ -136,6 +136,16 @@ struct QByteArrayDataPtr
 #define Q_STATIC_BYTE_ARRAY_DATA_HEADER_INITIALIZER(size) \
     Q_STATIC_BYTE_ARRAY_DATA_HEADER_INITIALIZER_WITH_OFFSET(size, sizeof(QByteArrayData)) \
     /**/
+
+#define QByteArrayLiteralGlobal_T(name, str, type, id) \
+    enum { QT_JOIN(_qLiteralSize_, id) = sizeof(str) - 1 }; \
+    static const QStaticByteArrayData< QT_JOIN(_qLiteralSize_, id) > QT_JOIN(_qLiteralData_, id) = { \
+    Q_STATIC_BYTE_ARRAY_DATA_HEADER_INITIALIZER( QT_JOIN(_qLiteralSize_, id) ), \
+    str }; \
+    type name(QByteArrayDataPtr({ QT_JOIN(_qLiteralData_, id).data_ptr() }));
+
+/// Similar to #QByteArrayLiteral, but for global-scope.
+#define QByteArrayLiteralGlobal(name, str) QByteArrayLiteralGlobal_T(name, str, const QByteArray, __LINE__)
 
 #if defined(Q_COMPILER_LAMBDA)
 
@@ -255,8 +265,8 @@ public:
     bool endsWith(char c) const;
     bool endsWith(const char *c) const;
 
-    void truncate(int pos);
-    void chop(int n);
+    inline void truncate(int pos) { if (pos < d->size) resize(pos); }
+    inline void chop(int n) { if (n > 0) resize(d->size - n); }
 
 #if defined(Q_COMPILER_REF_QUALIFIERS) && !defined(QT_COMPILING_QSTRING_COMPAT_CPP)
 #  if defined(Q_CC_GNU)
@@ -530,16 +540,13 @@ inline void QByteArray::squeeze()
     }
 }
 
-inline QByteArray QByteArray::midRef(int index, int len) const
+Q_REQUIRED_RESULT inline QByteArray QByteArray::midRef(int index, int len) const
 {
-    int lenOwn = length();
     if (index < 0)
         index = 0;
-    else if (index >= lenOwn)
-        return QByteArray();
     return QByteArray::fromRawData(
                 constData() + index,
-                qBound(0, len < 0 ? lenOwn : len, lenOwn - index));
+                qBound(0, len < 0 ? length() : len, length() - index));
 }
 
 class Q_CORE_EXPORT QByteRef {

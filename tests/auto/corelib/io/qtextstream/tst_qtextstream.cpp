@@ -55,6 +55,11 @@ template<> struct QMetaTypeId<QIODevice::OpenModeFlag>
 { enum { Defined = 1 }; static inline int qt_metatype_id() { return QMetaType::Int; } };
 QT_END_NAMESPACE
 
+QT_WARNING_PUSH
+// Ignores "C4146: unary minus operator applied to unsigned type,
+// result still unsigned".
+QT_WARNING_DISABLE_MSVC(4146)
+
 class tst_QTextStream : public QObject
 {
     Q_OBJECT
@@ -390,8 +395,11 @@ void tst_QTextStream::getSetCheck()
     // void QTextStream::setRealNumberPrecision(int)
     obj1.setRealNumberPrecision(0);
     QCOMPARE(0, obj1.realNumberPrecision());
+
+    QEXPECT_WARN(QString::asprintf("QTextStream::setRealNumberPrecision: Invalid precision (%d)", INT_MIN));
     obj1.setRealNumberPrecision(INT_MIN);
     QCOMPARE(6, obj1.realNumberPrecision()); // Setting a negative precision reverts it to the default value (6).
+
     obj1.setRealNumberPrecision(INT_MAX);
     QCOMPARE(INT_MAX, obj1.realNumberPrecision());
 }
@@ -1387,6 +1395,7 @@ void tst_QTextStream::pos()
         QCOMPARE(stream.pos(), qint64(2607));
         QCOMPARE(strtmp, QString("locations"));
     }
+
     {
         // Shift-JIS device
         for (int i = 0; i < 2; ++i) {
@@ -1397,8 +1406,9 @@ void tst_QTextStream::pos()
                 QVERIFY(file.open(QIODevice::ReadOnly | QIODevice::Text));
 
             QTextStream stream(&file);
-            stream.setCodec("Shift-JIS");
+            QVERIFY2(stream.setCodec("Shift-JIS"), "Codec is missing although QSjisCodec is enabled by default.");
             QVERIFY(stream.codec());
+            QCOMPARE(stream.codec()->name().constData(), "Shift_JIS");
 
             QCOMPARE(stream.pos(), qint64(0));
             for (int i = 0; i <= file.size(); i += 7) {
@@ -1416,12 +1426,23 @@ void tst_QTextStream::pos()
             QCOMPARE(strtmp, QString("AUnicode"));
             QCOMPARE(stream.pos(), qint64(2097));
 
-            stream.seek(43325);
+            qint64 pos = 43325;
+            stream.seek(pos);
             stream >> strtmp;
             QCOMPARE(strtmp, QString("Shift-JIS"));
+            // Keeps the space past "Shift-JIS" un-read.
+            QCOMPARE(stream.pos(), qint64(pos + 9));
+
+            // When reading the Shift-JIS encoded bytes:
+            // "\x20\u0082\u00C5\u008F\u0091\u0082\u00A9\u0082\u00EA\u0082\u00BD"
+            //
+            // Should skip space and auto-decode to expected Japanese phrase:
+            // "\u3067\u66F8\u304B\u308C\u305F" bytes: 6730F8664B308C305F30
+            // ("で書かれた" which's pronounced desukareta or "was written" in english).
             stream >> strtmp;
             QCOMPARE(strtmp, QString::fromUtf8("\343\201\247\346\233\270\343\201\213\343\202\214\343\201\237"));
             QCOMPARE(stream.pos(), qint64(43345));
+
             stream >> strtmp;
             QCOMPARE(strtmp, QString("POD"));
             QCOMPARE(stream.pos(), qint64(43349));
@@ -1470,6 +1491,7 @@ void tst_QTextStream::pos2()
 // ------------------------------------------------------------------------------
 void tst_QTextStream::pos3LargeFile()
 {
+    QTest::setTimeoutMinutes(10);
     {
         QFile file(testFileName);
         file.open(QIODevice::WriteOnly | QIODevice::Text);
@@ -1521,7 +1543,7 @@ void tst_QTextStream::readStdin()
 
     stdinProcess.closeWriteChannel();
 
-    QVERIFY(stdinProcess.waitForFinished(5000));
+    QVERIFY2(stdinProcess.waitForFinished(5000), qPrintable(stdinProcess.errorString()));
 
     int a, b, c;
     stream >> a >> b >> c;
@@ -3077,6 +3099,8 @@ void tst_QTextStream::textModeOnEmptyRead()
 
 
 // ------------------------------------------------------------------------------
+
+QT_WARNING_POP
 
 QTEST_MAIN(tst_QTextStream)
 #include "tst_qtextstream.moc"

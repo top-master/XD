@@ -1,5 +1,6 @@
 /****************************************************************************
 **
+** Copyright (C) 2015 The XD Company Ltd.
 ** Copyright (C) 2015 The Qt Company Ltd.
 ** Contact: http://www.qt.io/licensing/
 **
@@ -59,6 +60,7 @@ const QMapNodeBase *QMapNodeBase::nextNode() const
         }
         n = y;
     }
+    Q_ASSERT_X(n, "QMap", "Reached past end.");
     return n;
 }
 
@@ -77,6 +79,12 @@ const QMapNodeBase *QMapNodeBase::previousNode() const
         }
         n = y;
     }
+    // TRACE/qmap debug: don't allow before-begin to even be reached, since
+    // it's unlikely such invalid iterator is desired, because access to
+    // the `value()` of said iterator may cause crash (if not worst), however
+    // in cases where you reverse-loop, from end to begining, then the
+    // loop's body (inside braces) simply can skip one to include begin in loop.
+    Q_ASSERT_X(n, "QMap", "Reached before begin.");
     return n;
 }
 

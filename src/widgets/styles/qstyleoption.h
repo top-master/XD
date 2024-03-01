@@ -1,5 +1,6 @@
-/****************************************************************************
+    /****************************************************************************
 **
+** Copyright (C) 2015 The XD Company Ltd.
 ** Copyright (C) 2015 The Qt Company Ltd.
 ** Contact: http://www.qt.io/licensing/
 **
@@ -101,6 +102,8 @@ public:
     QStyleOptionFocusRect();
     QStyleOptionFocusRect(const QStyleOptionFocusRect &other) : QStyleOption(Version, Type) { *this = other; }
 
+    Q_DEFAULT_COPY_ASSIGN(QStyleOptionFocusRect)
+
 protected:
     QStyleOptionFocusRect(int version);
 };
@@ -124,6 +127,8 @@ public:
 
     QStyleOptionFrame();
     QStyleOptionFrame(const QStyleOptionFrame &other) : QStyleOption(Version, Type) { *this = other; }
+
+    Q_DEFAULT_COPY_ASSIGN(QStyleOptionFrame)
 
 protected:
     QStyleOptionFrame(int version);
@@ -154,6 +159,8 @@ public:
     inline QStyleOptionTabWidgetFrame(const QStyleOptionTabWidgetFrame &other)
         : QStyleOption(Version, Type) { *this = other; }
 
+    Q_DEFAULT_COPY_ASSIGN(QStyleOptionTabWidgetFrame)
+
 protected:
     QStyleOptionTabWidgetFrame(int version);
 };
@@ -176,6 +183,8 @@ public:
 
     QStyleOptionTabBarBase();
     QStyleOptionTabBarBase(const QStyleOptionTabBarBase &other) : QStyleOption(Version, Type) { *this = other; }
+
+    Q_DEFAULT_COPY_ASSIGN(QStyleOptionTabBarBase)
 
 protected:
     QStyleOptionTabBarBase(int version);
@@ -208,6 +217,8 @@ public:
     QStyleOptionHeader();
     QStyleOptionHeader(const QStyleOptionHeader &other) : QStyleOption(Version, Type) { *this = other; }
 
+    Q_DEFAULT_COPY_ASSIGN(QStyleOptionHeader)
+
 protected:
     QStyleOptionHeader(int version);
 };
@@ -229,6 +240,8 @@ public:
 
     QStyleOptionButton();
     QStyleOptionButton(const QStyleOptionButton &other) : QStyleOption(Version, Type) { *this = other; }
+
+    Q_DEFAULT_COPY_ASSIGN(QStyleOptionButton)
 
 protected:
     QStyleOptionButton(int version);
@@ -267,6 +280,8 @@ public:
     QStyleOptionTab();
     QStyleOptionTab(const QStyleOptionTab &other) : QStyleOption(Version, Type) { *this = other; }
 
+    Q_DEFAULT_COPY_ASSIGN(QStyleOptionTab)
+
 protected:
     QStyleOptionTab(int version);
 };
@@ -297,6 +312,8 @@ public:
     QStyleOptionToolBar();
     QStyleOptionToolBar(const QStyleOptionToolBar &other) : QStyleOption(Version, Type) { *this = other; }
 
+    Q_DEFAULT_COPY_ASSIGN(QStyleOptionToolBar)
+
 protected:
     QStyleOptionToolBar(int version);
 };
@@ -323,6 +340,8 @@ public:
 
     QStyleOptionProgressBar();
     QStyleOptionProgressBar(const QStyleOptionProgressBar &other) : QStyleOption(Version, Type) { *this = other; }
+
+    Q_DEFAULT_COPY_ASSIGN(QStyleOptionProgressBar)
 
 protected:
     QStyleOptionProgressBar(int version);
@@ -354,6 +373,8 @@ public:
     QStyleOptionMenuItem();
     QStyleOptionMenuItem(const QStyleOptionMenuItem &other) : QStyleOption(Version, Type) { *this = other; }
 
+    Q_DEFAULT_COPY_ASSIGN(QStyleOptionMenuItem)
+
 protected:
     QStyleOptionMenuItem(int version);
 };
@@ -372,6 +393,8 @@ public:
 
     QStyleOptionDockWidget();
     QStyleOptionDockWidget(const QStyleOptionDockWidget &other) : QStyleOption(Version, Type) { *this = other; }
+
+    Q_DEFAULT_COPY_ASSIGN(QStyleOptionDockWidget)
 
 protected:
     QStyleOptionDockWidget(int version);
@@ -424,12 +447,23 @@ public:
     QStyleOptionViewItem();
     QStyleOptionViewItem(const QStyleOptionViewItem &other) : QStyleOption(Version, Type) { *this = other; }
 
+    // Improves compiler warnings (if some field can't copy-assign).
+    Q_DEFAULT_COPY_ASSIGN(QStyleOptionViewItem)
+
 protected:
     QStyleOptionViewItem(int version);
 };
 
 Q_DECLARE_OPERATORS_FOR_FLAGS(QStyleOptionViewItem::ViewItemFeatures)
 
+// TRACE/widgets note: QStyleOptionViewItem merged with `V2`, `V3` and `V4` suffixed sub-classes,
+// and that since XD 4, hence there's no need for checking like:
+// ```
+// const QStyleOptionViewItemV2 *v2 = qstyleoption_cast<const QStyleOptionViewItemV2 *>(&option);
+// if (v2) {
+//     // ... Do domething with v2 fields ...
+// }
+// ```
 typedef QStyleOptionViewItem QStyleOptionViewItemV2;
 typedef QStyleOptionViewItem QStyleOptionViewItemV3;
 typedef QStyleOptionViewItem QStyleOptionViewItemV4;
@@ -454,6 +488,8 @@ public:
     QStyleOptionToolBox();
     QStyleOptionToolBox(const QStyleOptionToolBox &other) : QStyleOption(Version, Type) { *this = other; }
 
+    Q_DEFAULT_COPY_ASSIGN(QStyleOptionToolBox)
+
 protected:
     QStyleOptionToolBox(int version);
 };
@@ -473,6 +509,8 @@ public:
     QStyleOptionRubberBand();
     QStyleOptionRubberBand(const QStyleOptionRubberBand &other) : QStyleOption(Version, Type) { *this = other; }
 
+    Q_DEFAULT_COPY_ASSIGN(QStyleOptionRubberBand)
+
 protected:
     QStyleOptionRubberBand(int version);
 };
@@ -490,6 +528,8 @@ public:
 
     QStyleOptionComplex(int version = QStyleOptionComplex::Version, int type = SO_Complex);
     QStyleOptionComplex(const QStyleOptionComplex &other) : QStyleOption(Version, Type) { *this = other; }
+
+    Q_DEFAULT_COPY_ASSIGN(QStyleOptionComplex)
 };
 
 #ifndef QT_NO_SLIDER
@@ -515,6 +555,8 @@ public:
     QStyleOptionSlider();
     QStyleOptionSlider(const QStyleOptionSlider &other) : QStyleOptionComplex(Version, Type) { *this = other; }
 
+    Q_DEFAULT_COPY_ASSIGN(QStyleOptionSlider)
+
 protected:
     QStyleOptionSlider(int version);
 };
@@ -533,6 +575,8 @@ public:
 
     QStyleOptionSpinBox();
     QStyleOptionSpinBox(const QStyleOptionSpinBox &other) : QStyleOptionComplex(Version, Type) { *this = other; }
+
+    Q_DEFAULT_COPY_ASSIGN(QStyleOptionSpinBox)
 
 protected:
     QStyleOptionSpinBox(int version);
@@ -561,6 +605,8 @@ public:
     QStyleOptionToolButton();
     QStyleOptionToolButton(const QStyleOptionToolButton &other) : QStyleOptionComplex(Version, Type) { *this = other; }
 
+    Q_DEFAULT_COPY_ASSIGN(QStyleOptionToolButton)
+
 protected:
     QStyleOptionToolButton(int version);
 };
@@ -583,6 +629,8 @@ public:
     QStyleOptionComboBox();
     QStyleOptionComboBox(const QStyleOptionComboBox &other) : QStyleOptionComplex(Version, Type) { *this = other; }
 
+    Q_DEFAULT_COPY_ASSIGN(QStyleOptionComboBox)
+
 protected:
     QStyleOptionComboBox(int version);
 };
@@ -600,6 +648,8 @@ public:
 
     QStyleOptionTitleBar();
     QStyleOptionTitleBar(const QStyleOptionTitleBar &other) : QStyleOptionComplex(Version, Type) { *this = other; }
+
+    Q_DEFAULT_COPY_ASSIGN(QStyleOptionTitleBar)
 
 protected:
     QStyleOptionTitleBar(int version);
@@ -620,6 +670,9 @@ public:
 
     QStyleOptionGroupBox();
     QStyleOptionGroupBox(const QStyleOptionGroupBox &other) : QStyleOptionComplex(Version, Type) { *this = other; }
+
+    Q_DEFAULT_COPY_ASSIGN(QStyleOptionGroupBox)
+
 protected:
     QStyleOptionGroupBox(int version);
 };
@@ -634,6 +687,9 @@ public:
 
     QStyleOptionSizeGrip();
     QStyleOptionSizeGrip(const QStyleOptionSizeGrip &other) : QStyleOptionComplex(Version, Type) { *this = other; }
+
+    Q_DEFAULT_COPY_ASSIGN(QStyleOptionSizeGrip)
+
 protected:
     QStyleOptionSizeGrip(int version);
 };
@@ -650,6 +706,9 @@ public:
 
     QStyleOptionGraphicsItem();
     QStyleOptionGraphicsItem(const QStyleOptionGraphicsItem &other) : QStyleOption(Version, Type) { *this = other; }
+
+    Q_DEFAULT_COPY_ASSIGN(QStyleOptionGraphicsItem)
+
     static qreal levelOfDetailFromTransform(const QTransform &worldTransform);
 protected:
     QStyleOptionGraphicsItem(int version);
@@ -658,7 +717,7 @@ protected:
 template <typename T>
 T qstyleoption_cast(const QStyleOption *opt)
 {
-    typedef typename QtPrivate::remove_cv<typename QtPrivate::remove_pointer<T>::type>::type Opt;
+    typedef typename QtPrivate::resolve<T>::type Opt;
     if (opt && opt->version >= Opt::Version && (opt->type == Opt::Type
         || int(Opt::Type) == QStyleOption::SO_Default
         || (int(Opt::Type) == QStyleOption::SO_Complex
@@ -670,7 +729,7 @@ T qstyleoption_cast(const QStyleOption *opt)
 template <typename T>
 T qstyleoption_cast(QStyleOption *opt)
 {
-    typedef typename QtPrivate::remove_cv<typename QtPrivate::remove_pointer<T>::type>::type Opt;
+    typedef typename QtPrivate::resolve<T>::type Opt;
     if (opt && opt->version >= Opt::Version && (opt->type == Opt::Type
         || int(Opt::Type) == QStyleOption::SO_Default
         || (int(Opt::Type) == QStyleOption::SO_Complex
@@ -721,7 +780,7 @@ public:
 template <typename T>
 T qstyleoption_cast(const QStyleHintReturn *hint)
 {
-    typedef typename QtPrivate::remove_cv<typename QtPrivate::remove_pointer<T>::type>::type Opt;
+    typedef typename QtPrivate::resolve<T>::type Opt;
     if (hint && hint->version <= Opt::Version &&
         (hint->type == Opt::Type || int(Opt::Type) == QStyleHintReturn::SH_Default))
         return static_cast<T>(hint);
@@ -731,7 +790,7 @@ T qstyleoption_cast(const QStyleHintReturn *hint)
 template <typename T>
 T qstyleoption_cast(QStyleHintReturn *hint)
 {
-    typedef typename QtPrivate::remove_cv<typename QtPrivate::remove_pointer<T>::type>::type Opt;
+    typedef typename QtPrivate::resolve<T>::type Opt;
     if (hint && hint->version <= Opt::Version &&
         (hint->type == Opt::Type || int(Opt::Type) == QStyleHintReturn::SH_Default))
         return static_cast<T>(hint);

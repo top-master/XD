@@ -3674,12 +3674,6 @@ QStyleOptionViewItem QAbstractItemView::viewOptions() const
     return option;
 }
 
-QStyleOptionViewItem QAbstractItemViewPrivate::viewOptionsV1() const
-{
-    Q_Q(const QAbstractItemView);
-    return q->viewOptions();
-}
-
 /*!
     Returns the item view's state.
 
@@ -4125,12 +4119,6 @@ void QAbstractItemViewPrivate::doDelayedItemsLayout(int delay)
         delayedPendingLayout = true;
         delayedLayout.start(delay, q_func());
     }
-}
-
-void QAbstractItemViewPrivate::interruptDelayedItemsLayout() const
-{
-    delayedLayout.stop();
-    delayedPendingLayout = false;
 }
 
 void QAbstractItemViewPrivate::updateGeometry()

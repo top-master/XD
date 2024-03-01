@@ -1085,6 +1085,7 @@ static void testConstructHelper()
     info.destruct(actual2);
     qFreeAligned(storage2);
 
+    QEXPECT_WARN("Meta-type: auto memory-allocation is forbidden.");
     QVERIFY(QMetaType::construct(ID, 0, /*copy=*/0) == 0);
     QMetaType::destruct(ID, 0);
 
@@ -1095,7 +1096,9 @@ static void testConstructHelper()
 template<>
 void testConstructHelper<QMetaType::Void>()
 {
-    /*int size = */ QMetaType::sizeOf(QMetaType::Void);
+    int size = QMetaType::sizeOf(QMetaType::Void);
+    QCOMPARE(size, 0);
+    QEXPECT_WARN("Meta-type: auto memory-allocation is forbidden.");
     void *storage = 0;
     void *actual = QMetaType::construct(QMetaType::Void, storage, /*copy=*/0);
     QCOMPARE(actual, storage);
@@ -1151,6 +1154,7 @@ static void testConstructCopyHelper()
     info.destruct(actual2);
     qFreeAligned(storage2);
 
+    QEXPECT_WARN("Meta-type: auto memory-allocation is forbidden.");
     QVERIFY(QMetaType::construct(ID, 0, expected) == 0);
     QVERIFY(info.construct(0, expected) == 0);
 
@@ -1163,6 +1167,7 @@ void testConstructCopyHelper<QMetaType::Void>()
     typedef MetaEnumToType<QMetaType::Void>::Type Type;
     Type *expected = TestValueFactory<QMetaType::Void>::create();
     /* int size = */QMetaType::sizeOf(QMetaType::Void);
+    QEXPECT_WARN("Meta-type: auto memory-allocation is forbidden.");
     void *storage = 0;
     void *actual = QMetaType::construct(QMetaType::Void, storage, expected);
     QCOMPARE(actual, storage);

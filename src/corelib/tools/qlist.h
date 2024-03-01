@@ -222,7 +222,7 @@ public:
         typedef T &reference;
 
         Q_DECL_CONSTEXPR inline iterator() Q_DECL_NOTHROW : i(Q_NULLPTR) {}
-        Q_DECL_CONSTEXPR inline iterator(Node *n) Q_DECL_NOTHROW : i(n) {}
+        inline iterator(Node *n) Q_DECL_NOTHROW : i(n) {}
 #if QT_VERSION < QT_VERSION_CHECK(6,0,0)
         // can't remove it in Qt 5, since doing so would make the type trivial,
         // which changes the way it's passed to functions by value.

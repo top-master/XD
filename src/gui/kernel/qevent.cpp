@@ -1397,6 +1397,60 @@ QPaintEvent::~QPaintEvent()
 */
 
 
+QUpdateEvent::QUpdateEvent(const QRegion& paintRegion)
+    : QEvent(UpdateRegion), m_region(paintRegion)
+{
+}
+
+QUpdateEvent::~QUpdateEvent()
+{
+}
+
+void QUpdateEvent::setX(int x)
+{
+    QRect r(m_region.boundingRect());
+    if(x < r.left())
+        m_region += QRect(QPoint(x, r.y()),
+                          QPoint((r.left()+r.right())/2, r.bottom()));
+    else if(x > r.right())
+        m_region += QRect(QPoint((r.left()+r.right())/2, r.y()),
+                          QPoint(x, r.bottom()));
+}
+
+void QUpdateEvent::setY(int y)
+{
+    QRect r(m_region.boundingRect());
+    if(y < r.top())
+        m_region += QRect(QPoint(r.x(), y),
+                          QPoint(r.right(), (r.top()+r.bottom())/2));
+    else if(y > r.bottom())
+        m_region += QRect(QPoint(r.x(), (r.top()+r.bottom())/2),
+                          QPoint(r.right(), y));
+}
+
+void QUpdateEvent::setWidth(int left, int right)
+{
+    if(left > right) {
+        int tmp = left;
+        left = right;
+        right = tmp;
+    }
+    QRect r(m_region.boundingRect());
+    m_region += QRect(left, r.y(), right-left+1 , r.height());
+}
+
+void QUpdateEvent::setHeight(int top, int bottom)
+{
+    if(top > bottom) {
+        int tmp = top;
+        top = bottom;
+        bottom = tmp;
+    }
+    QRect r(m_region.boundingRect());
+    m_region += QRect(r.x(), top, r.height() , bottom-top+1);
+}
+
+
 /*!
     \class QMoveEvent
     \brief The QMoveEvent class contains event parameters for move events.

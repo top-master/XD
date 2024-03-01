@@ -193,7 +193,7 @@ public:
 class QListModeViewBase : public QCommonListViewBase
 {
 public:
-    QListModeViewBase(QListView *q, QListViewPrivate *d);
+    inline QListModeViewBase(QListView *q, QListViewPrivate *d);
 
     QVector<int> flowPositions;
     QVector<int> segmentPositions;
@@ -271,6 +271,7 @@ public:
     void setPositionForIndex(const QPoint &position, const QModelIndex &index);
 
 #ifndef QT_NO_DRAGANDDROP
+    void paintDragDrop(QPainter *painter);
     bool filterDragMoveEvent(QDragMoveEvent *);
     bool filterDragLeaveEvent(QDragLeaveEvent *);
     bool filterDropEvent(QDropEvent *e);
@@ -299,6 +300,9 @@ class Q_AUTOTEST_EXPORT QListViewPrivate: public QAbstractItemViewPrivate
 public:
     QListViewPrivate();
     ~QListViewPrivate();
+
+    static inline QListViewPrivate *get(QListView *o) { return o->d_func(); }
+    static inline const QListViewPrivate *get(const QListView *o) { return o->d_func(); }
 
     void clear();
     void prepareItemsLayout();
@@ -438,6 +442,12 @@ public:
 };
 
 // inline implementations
+
+inline QListModeViewBase::QListModeViewBase(QListView *q, QListViewPrivate *d)
+    : QCommonListViewBase(q, d)
+{
+    dd->defaultDropAction = Qt::CopyAction;
+}
 
 inline int QCommonListViewBase::spacing() const { return dd->spacing(); }
 inline bool QCommonListViewBase::isWrapping() const { return dd->isWrapping(); }

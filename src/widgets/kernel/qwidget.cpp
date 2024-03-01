@@ -10917,33 +10917,11 @@ void QWidget::update()
 */
 
 /*!
+    \fn void QWidget::update(const QRect &rect)
     \overload
 
     This version updates a rectangle \a rect inside the widget.
 */
-void QWidget::update(const QRect &rect)
-{
-    if (!isVisible() || !updatesEnabled())
-        return;
-
-    QRect r = rect & QWidget::rect();
-
-    if (r.isEmpty())
-        return;
-
-    if (testAttribute(Qt::WA_WState_InPaintEvent)) {
-        QApplication::postEvent(this, new QUpdateLaterEvent(r));
-        return;
-    }
-
-    if (hasBackingStoreSupport()) {
-        QTLWExtra *tlwExtra = window()->d_func()->maybeTopData();
-        if (tlwExtra && !tlwExtra->inTopLevelResize && tlwExtra->backingStore)
-            tlwExtra->backingStoreTracker->markDirty(r, this);
-    } else {
-        d_func()->repaint_sys(r);
-    }
-}
 
 /*!
     \overload
@@ -10965,12 +10943,19 @@ void QWidget::update(const QRegion &rgn)
         return;
     }
 
+    // TRACE/widgets improve: Allow altering update's region by event,
+    // for example, if scroll happens, sub-class may want to update less or more.
+    QUpdateEvent updateEvent(r);
+    QApplication::sendSpontaneousEvent(this, &updateEvent);
+    if ( ! updateEvent.isAccepted())
+        return;
+
     if (hasBackingStoreSupport()) {
         QTLWExtra *tlwExtra = window()->d_func()->maybeTopData();
         if (tlwExtra && !tlwExtra->inTopLevelResize && tlwExtra->backingStore)
-            tlwExtra->backingStoreTracker->markDirty(r, this);
+            tlwExtra->backingStoreTracker->markDirty(updateEvent.region(), this);
     } else {
-        d_func()->repaint_sys(r);
+        d_func()->repaint_sys(updateEvent.region());
     }
 }
 

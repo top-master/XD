@@ -60,6 +60,10 @@ src_xml.subdir = $$PWD/xml
 src_xml.target = sub-xml
 src_xml.depends = src_corelib
 
+src_remote.subdir   = $$PWD/remote
+src_remote.target   = sub-remote
+src_remote.depends  = src_corelib src_network src_xml
+
 src_dbus.subdir = $$PWD/dbus
 src_dbus.target = sub-dbus
 src_dbus.depends = src_corelib
@@ -203,6 +207,13 @@ contains(QT_CONFIG, concurrent):SUBDIRS += src_concurrent
         }
     }
 }
+
+## TODO: add view for listing and/or managing Remote-objects,
+## but for head-less Ubuntu reasons, may add a separate module,
+## however, for now set after `SUBDIRS += src_gui`.
+#SUBDIRS += src_remote
+
+# Should be after GUI.
 SUBDIRS += src_plugins
 
 nacl: SUBDIRS -= src_network src_testlib

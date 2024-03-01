@@ -450,7 +450,7 @@ public Q_SLOTS:
 
 public:
     inline void update(int x, int y, int w, int h);
-    void update(const QRect&);
+    Q_ALWAYS_INLINE void update(const QRect&);
     void update(const QRegion&);
 
     void repaint(int x, int y, int w, int h);
@@ -815,6 +815,9 @@ inline bool QWidget::updatesEnabled() const
 
 inline void QWidget::update(int ax, int ay, int aw, int ah)
 { update(QRect(ax, ay, aw, ah)); }
+
+Q_ALWAYS_INLINE void QWidget::update(const QRect &rect)
+{ update(QRegion(rect)); }
 
 inline bool QWidget::isVisible() const
 { return testAttribute(Qt::WA_WState_Visible); }

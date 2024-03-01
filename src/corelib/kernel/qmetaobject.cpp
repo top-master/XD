@@ -1,5 +1,6 @@
 /****************************************************************************
 **
+** Copyright (C) 2015 The XD Company Ltd.
 ** Copyright (C) 2015 The Qt Company Ltd.
 ** Copyright (C) 2015 Olivier Goffart <ogoffart@woboq.com>
 ** Contact: http://www.qt.io/licensing/
@@ -35,6 +36,7 @@
 #include "qmetaobject.h"
 #include "qmetatype.h"
 #include "qobject.h"
+#include "qobjectdecor.h"
 #include "qmetaobject_p.h"
 
 #include <qcoreapplication.h>
@@ -203,6 +205,10 @@ private:
     QMetaMethodPrivate();
 };
 
+const char * const QMetaObject::remoteIdRaw = "Q_REMOTE";
+
+QByteArrayLiteralGlobal(QMetaObject::remoteId, "Q_REMOTE")
+
 /*!
     \since 4.5
 
@@ -328,32 +334,47 @@ const char *QMetaObject::className() const
 QObject *QMetaObject::cast(QObject *obj) const
 {
     if (obj) {
-        const QMetaObject *m = obj->metaObject();
+        const QMetaObject *m;
+        // First searches without laziness-resolvement (if lazy-loadable).
+        const QObjectDecor *decor = QObjectDecor::fromDecorable(obj);
+        if (decor) {
+            m = decor->toMetaObject();
+        } else {
+posResolve:
+            // Resolves laziness (if any) and
+            // picks decoratee's QMetaObject for search.
+            QObjectPrivate *d = QObjectPrivate::get(obj);
+            if (d->isDecoratee) {
+                obj = d->q_ptr;
+                if ( ! obj) {
+                    return 0; // Could use Q_UNREACHABLE here.
+                }
+            }
+            m = obj->metaObject();
+        }
+
         do {
             if (m == this)
                 return obj;
         } while ((m = m->d.superdata));
+
+        // Even if nothing found yet, resolves laziness **only if**
+        // this itself is **not** a decor.
+        if (decor && this->indexOfClassInfo("Decor") < 0) {
+            decor = Q_NULLPTR;
+            goto posResolve;
+        }
     }
     return 0;
 }
 
 /*!
+    \fn QMetaObject::cast(const QObject *obj) const
     \internal
 
     Returns \a obj if object \a obj inherits from this
     meta-object; otherwise returns 0.
 */
-const QObject *QMetaObject::cast(const QObject *obj) const
-{
-    if (obj) {
-        const QMetaObject *m = obj->metaObject();
-        do {
-            if (m == this)
-                return obj;
-        } while ((m = m->d.superdata));
-    }
-    return 0;
-}
 
 #ifndef QT_NO_TRANSLATION
 /*!
@@ -450,6 +471,18 @@ int QMetaObject::classInfoOffset() const
     return offset;
 }
 
+/// Returns the sum of all superClasses signal count, excluding own.
+/// \sa signalCount()
+int QMetaObject::signalOffset() const
+{
+    const QMetaObject *m = this;
+    Q_ASSERT(m != Q_NULLPTR);
+    int offset = 0;
+    for (m = m->d.superdata; m; m = m->d.superdata)
+        offset += priv(m->d.data)->signalCount;
+    return offset;
+}
+
 /*!
     \since 4.5
 
@@ -538,6 +571,20 @@ int QMetaObject::classInfoCount() const
         m = m->d.superdata;
     }
     return n;
+}
+
+/// Sum of all superClasses signal count, including own.
+/// \sa signalOffset()
+int QMetaObject::signalCount() const
+{
+    const QMetaObject *m = this;
+    Q_ASSERT(m != Q_NULLPTR);
+    int offset = 0;
+    do {
+        offset += priv(m->d.data)->signalCount;
+        m = m->d.superdata;
+    } while(m);
+    return offset;
 }
 
 // Returns \c true if the method defined by the given meta-object&handle
@@ -691,14 +738,47 @@ QByteArray QMetaObjectPrivate::decodeMethodSignature(
 int QMetaObject::indexOfSignal(const char *signal) const
 {
     const QMetaObject *m = this;
-    int i;
+    int i = local_indexOfSignal(signal, &m);
+    if (Q_LIKELY(i >= 0))
+        i += m->methodOffset();
+    return i;
+}
+
+/*!
+    \internal
+    Returns the signal index used in the internal QObjectPrivate::connectionLists vector.
+
+    It is different from QMetaObject::indexOfSignal():  indexOfSignal is the same as indexOfMethod
+    while QMetaObject::indexOfSignalReal is smaller because it doesn't give index to slots.
+
+    If \a enclosingMetaObject is not 0, it is set to the meta-object where the signal was found.
+*/
+int QMetaObject::indexOfSignalReal(const char *signal, const QMetaObject **enclosingMetaObject) const
+{
+    const QMetaObject *base = this;
+    int relative_index = local_indexOfSignal(signal, &base);
+    if (Q_LIKELY(relative_index >= 0)) {
+        relative_index = QMetaObjectPrivate::originalClone(base, relative_index);
+        relative_index += base->signalOffset();
+        if (enclosingMetaObject)
+            *enclosingMetaObject = base;
+    } else if (enclosingMetaObject) {
+        *enclosingMetaObject = Q_NULLPTR;
+    }
+    return relative_index;
+}
+
+int QMetaObject::local_indexOfSignal(const char *signal, const QMetaObject **ownerMetaObject) const
+{
+    const QMetaObject *m = this;
     Q_ASSERT(priv(m->d.data)->revision >= 7);
     QArgumentTypeArray types;
     QByteArray name = QMetaObjectPrivate::decodeMethodSignature(signal, types);
-    i = QMetaObjectPrivate::indexOfSignalRelative(&m, name, types.size(), types.constData());
-    if (i >= 0)
-        i += m->methodOffset();
-    return i;
+    int i = i = QMetaObjectPrivate::indexOfSignalRelative(&m, name, types.size(), types.constData());
+    if (Q_LIKELY(ownerMetaObject)) {
+        *ownerMetaObject = i >= 0 ? m : Q_NULLPTR;
+    }
+    return i; //return local index
 }
 
 /*!
@@ -738,14 +818,23 @@ int QMetaObjectPrivate::indexOfSignalRelative(const QMetaObject **baseObject,
 int QMetaObject::indexOfSlot(const char *slot) const
 {
     const QMetaObject *m = this;
-    int i;
+    int i = local_indexOfSlot(slot, &m);
+    if (m)
+        i += m->methodOffset();
+    return i;
+}
+
+int QMetaObject::local_indexOfSlot(const char *slot, const QMetaObject **ownerMetaObject) const
+{
+    const QMetaObject *m = this;
     Q_ASSERT(priv(m->d.data)->revision >= 7);
     QArgumentTypeArray types;
     QByteArray name = QMetaObjectPrivate::decodeMethodSignature(slot, types);
-    i = QMetaObjectPrivate::indexOfSlotRelative(&m, name, types.size(), types.constData());
-    if (i >= 0)
-        i += m->methodOffset();
-    return i;
+    int i = QMetaObjectPrivate::indexOfSlotRelative(&m, name, types.size(), types.constData());
+    if (Q_LIKELY(ownerMetaObject)) {
+        *ownerMetaObject = i >= 0 ? m : Q_NULLPTR;
+    }
+    return i; //return local index
 }
 
 // same as indexOfSignalRelative but for slots.
@@ -795,6 +884,7 @@ int QMetaObjectPrivate::indexOfConstructor(const QMetaObject *m, const QByteArra
 }
 
 /*!
+    \fn int QMetaObjectPrivate::signalOffset(const QMetaObject *m)
     \internal
     \since 5.0
 
@@ -804,16 +894,9 @@ int QMetaObjectPrivate::indexOfConstructor(const QMetaObject *m, const QByteArra
     Similar to QMetaObject::methodOffset(), but non-signal methods are
     excluded.
 */
-int QMetaObjectPrivate::signalOffset(const QMetaObject *m)
-{
-    Q_ASSERT(m != 0);
-    int offset = 0;
-    for (m = m->d.superdata; m; m = m->d.superdata)
-        offset += priv(m->d.data)->signalCount;
-    return offset;
-}
 
 /*!
+    \fn int QMetaObjectPrivate::absoluteSignalCount(const QMetaObject *m)
     \internal
     \since 5.0
 
@@ -823,14 +906,6 @@ int QMetaObjectPrivate::signalOffset(const QMetaObject *m)
     Similar to QMetaObject::methodCount(), but non-signal methods are
     excluded.
 */
-int QMetaObjectPrivate::absoluteSignalCount(const QMetaObject *m)
-{
-    Q_ASSERT(m != 0);
-    int n = priv(m->d.data)->signalCount;
-    for (m = m->d.superdata; m; m = m->d.superdata)
-        n += priv(m->d.data)->signalCount;
-    return n;
-}
 
 /*!
     \internal
@@ -1043,23 +1118,53 @@ QMetaMethod QMetaObject::constructor(int index) const
     return result;
 }
 
+QMetaMethod QMetaObject::local_method(int index) const
+{
+    QMetaMethod result;
+    Q_ASSERT(priv(d.data)->revision >= 2);
+    if (index >= 0 && index < priv(d.data)->methodCount) {
+        result.mobj = this;
+        result.handle = priv(d.data)->methodData + 5*index;
+    }
+    return result;
+}
+
 /*!
     Returns the meta-data for the method with the given \a index.
 
     \sa methodCount(), methodOffset(), indexOfMethod()
 */
-QMetaMethod QMetaObject::method(int index) const
+QMetaMethod QMetaObject::method(int index_absolute) const
 {
-    int i = index;
+#if 1
+    // Complex way: less function calls and faster.
+    int i;
+    const QMetaObject *m = this;
+    QMetaMethod result;
+    do {
+        i = index_absolute - m->methodOffset();
+        if(i >= 0) {
+            if(i < priv(m->d.data)->methodCount) {
+                result.mobj = m;
+                result.handle = priv(m->d.data)->methodData + 5*i;
+            }
+            break;
+        }
+        m = m->d.superdata;
+    } while (m);
+#else
+    // Qt way: maybe slower
+    int i = index_absolute;
     i -= methodOffset();
     if (i < 0 && d.superdata)
-        return d.superdata->method(index);
+        return d.superdata->method(index_absolute);
 
     QMetaMethod result;
     if (i >= 0 && i < priv(d.data)->methodCount) {
         result.mobj = this;
         result.handle = priv(d.data)->methodData + 5*i;
     }
+#endif
     return result;
 }
 
@@ -1083,6 +1188,16 @@ QMetaEnum QMetaObject::enumerator(int index) const
     return result;
 }
 
+namespace QMetaMethodOffset {
+enum {
+    Signature = 0,
+    Parameters = 1,
+    Type = 2,
+    Tag = 3,
+    Flags = 4
+};
+}
+
 /*!
     Returns the meta-data for the property with the given \a index.
     If no such property exists, a null QMetaProperty is returned.
@@ -1099,7 +1214,7 @@ QMetaProperty QMetaObject::property(int index) const
     QMetaProperty result;
     if (i >= 0 && i < priv(d.data)->propertyCount) {
         int handle = priv(d.data)->propertyData + 3*i;
-        int flags = d.data[handle + 2];
+        int flags = d.data[handle + QMetaMethodOffset::Type];
         result.mobj = this;
         result.handle = handle;
         result.idx = i;
@@ -1180,6 +1295,20 @@ QMetaClassInfo QMetaObject::classInfo(int index) const
         result.handle = priv(d.data)->classInfoData + 2*i;
     }
     return result;
+}
+
+QByteArray QMetaObject::enumeratorTypeName(const char *enumName) const
+{
+    QByteArray typeName;
+    const char *className = this->className();
+    typeName.reserve(int(strlen(className) + 2 + strlen(enumName)));
+    typeName.append(className);
+    if (this->isRemote()) {
+        typeName.chop(QMetaObject::remoteSuffixLength);
+    }
+    typeName.append("::").append(enumName);
+
+    return typeName;
 }
 
 /*!
@@ -1825,7 +1954,8 @@ int QMetaMethod::parameterType(int index) const
 {
     if (!mobj || index < 0)
         return QMetaType::UnknownType;
-    if (index >= QMetaMethodPrivate::get(this)->parameterCount())
+    const int paramCount = QMetaMethodPrivate::get(this)->parameterCount();
+    if (index >= paramCount)
         return QMetaType::UnknownType;
 
     int type = QMetaMethodPrivate::get(this)->parameterType(index);
@@ -1949,7 +2079,7 @@ int QMetaMethod::attributes() const
 {
     if (!mobj)
         return false;
-    return ((mobj->d.data[handle + 4])>>4);
+    return ((mobj->d.data[handle + QMetaMethodOffset::Flags])>>4);
 }
 
 /*!
@@ -1974,7 +2104,7 @@ int QMetaMethod::revision() const
 {
     if (!mobj)
         return 0;
-    if ((QMetaMethod::Access)(mobj->d.data[handle + 4] & MethodRevisioned)) {
+    if ((QMetaMethod::Access)(mobj->d.data[handle + QMetaMethodOffset::Flags] & MethodRevisioned)) {
         int offset = priv(mobj->d.data)->methodData
                      + priv(mobj->d.data)->methodCount * 5
                      + QMetaMethodPrivate::get(this)->ownMethodIndex();
@@ -1997,7 +2127,7 @@ QMetaMethod::Access QMetaMethod::access() const
 {
     if (!mobj)
         return Private;
-    return (QMetaMethod::Access)(mobj->d.data[handle + 4] & AccessMask);
+    return (QMetaMethod::Access)(mobj->d.data[handle + QMetaMethodOffset::Flags] & AccessMask);
 }
 
 /*!
@@ -2009,7 +2139,7 @@ QMetaMethod::MethodType QMetaMethod::methodType() const
 {
     if (!mobj)
         return QMetaMethod::Method;
-    return (QMetaMethod::MethodType)((mobj->d.data[handle + 4] & MethodTypeMask)>>2);
+    return (QMetaMethod::MethodType)((mobj->d.data[handle + QMetaMethodOffset::Flags] & MethodTypeMask)>>2);
 }
 
 /*!
@@ -2046,6 +2176,22 @@ QMetaMethod QMetaMethod::fromSignalImpl(const QMetaObject *metaObject, void **si
         }
     }
     return result;
+}
+
+bool QMetaMethod::metaInvoke(QObject *object, void **argv)
+{
+    int idx_relative = QMetaMethodPrivate::get(this)->ownMethodIndex();
+
+    Q_ASSERT(QMetaObjectPrivate::get(mobj)->revision >= 6);
+    QObjectPrivate::StaticMetaCallFunction callFunction = mobj->d.static_metacall;
+    if (callFunction) {
+        // Is new "moc" file (i.e. revision >= 6).
+        callFunction(object, QMetaObject::InvokeMetaMethod, idx_relative, argv);
+        return true;
+    } else {
+        // Supportd old "moc" file (i.e. revision < 6).
+        return QMetaObject::metacall(object, QMetaObject::InvokeMetaMethod, idx_relative + mobj->methodOffset(), argv) < 0;
+    }
 }
 
 /*!
@@ -2497,7 +2643,7 @@ int QMetaEnum::keyCount() const
 {
     if (!mobj)
         return 0;
-    return mobj->d.data[handle + 2];
+    return mobj->d.data[handle + QMetaMethodOffset::Type];
 }
 
 
@@ -3587,7 +3733,7 @@ int QMetaObjectPrivate::originalClone(const QMetaObject *mobj, int local_method_
 {
     Q_ASSERT(local_method_index < get(mobj)->methodCount);
     int handle = get(mobj)->methodData + 5 * local_method_index;
-    while (mobj->d.data[handle + 4] & MethodCloned) {
+    while (mobj->d.data[handle + QMetaMethodOffset::Flags] & MethodCloned) {
         Q_ASSERT(local_method_index > 0);
         handle -= 5;
         local_method_index--;

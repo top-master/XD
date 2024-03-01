@@ -117,7 +117,10 @@ public:
     bool shouldForwardEvent(QAbstractItemView::EditTrigger trigger, const QEvent *event) const;
     bool shouldAutoScroll(const QPoint &pos) const;
     void doDelayedItemsLayout(int delay = 0);
-    void interruptDelayedItemsLayout() const;
+    inline void interruptDelayedItemsLayout() const {
+        delayedLayout.stop();
+        delayedPendingLayout = false;
+    }
 
     void updateGeometry();
 
@@ -351,7 +354,10 @@ public:
 
     QModelIndexList selectedDraggableIndexes() const;
 
-    QStyleOptionViewItem viewOptionsV1() const;
+    inline QStyleOptionViewItem viewOptionsV1() const {
+        Q_Q(const QAbstractItemView);
+        return q->viewOptions();
+    }
 
     void doDelayedReset()
     {

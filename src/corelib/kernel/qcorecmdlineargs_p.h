@@ -1,5 +1,6 @@
 /****************************************************************************
 **
+** Copyright (C) 2015 The XD Company Ltd.
 ** Copyright (C) 2015 The Qt Company Ltd.
 ** Contact: http://www.qt.io/licensing/
 **
@@ -51,7 +52,7 @@
 #if defined(Q_OS_WIN)
 #  ifdef Q_OS_WIN32
 #    include <qt_windows.h> // first to suppress min, max macros.
-#    include <shlobj.h>
+#    include <shellapi.h>
 #  else
 #    include "QtCore/qvector.h"
 #    include <qt_windows.h>
@@ -75,13 +76,22 @@ static inline QStringList qWinCmdArgs(const QString &cmdLine)
     return result;
 }
 
-#elif defined(Q_OS_WINCE) // Q_OS_WIN32
+#endif // Q_OS_WIN32
 
 // template implementation of the parsing algorithm
 // this is used from qcoreapplication_win.cpp and the tools (rcc, uic...)
 
-template<typename Char>
-static QVector<Char*> qWinCmdLine(Char *cmdParam, int length, int &argc)
+#ifdef Q_OS_WIN
+#  define QT_TMP_MAYBE_LINUX false
+#else
+#  define QT_TMP_MAYBE_LINUX ture
+#endif
+
+/// Splits given single-line text into command-line's argument-list.
+///
+/// @tparam linuxMode Set to @c true if single-quotes should be treated as quotes.
+template<typename Char, bool quoteEscapable, bool linuxMode = QT_TMP_MAYBE_LINUX>
+static QVector<Char*> qCmdLineParse(Char *cmdParam, int length, int &argc)
 {
     QVector<Char*> argv(8);
     Char *p = cmdParam;
@@ -89,44 +99,50 @@ static QVector<Char*> qWinCmdLine(Char *cmdParam, int length, int &argc)
 
     argc = 0;
 
-    while (*p && p < p_end) {                                // parse cmd line arguments
-        while (QChar((short)(*p)).isSpace())                          // skip white space
+    while (p < p_end && *p) { // parse cmd line arguments
+        // Skips white-spaces before searching.
+        while (p < p_end && QChar((short)(*p)).isSpace())
             p++;
-        if (*p && p < p_end) {                                // arg starts
+        if (p < p_end && *p) {                                // arg starts
             int quote;
             Char *start, *r;
-            if (*p == Char('\"')) {
+            if (*p == Char('\"') || (linuxMode && *p == Char('\''))) {
                 quote = *p;
-                start = ++p;
+                start = ++p; //first char after quote
             } else {
                 quote = 0;
                 start = p;
             }
             r = start;
-            while (*p && p < p_end) {
+            while (p < p_end && *p) {
+                // Maybe reached end-quote (if pending).
                 if (quote) {
                     if (*p == quote) {
                         p++;
                         if (QChar((short)(*p)).isSpace())
                             break;
+                        // Continue without pending end-quote.
                         quote = 0;
                     }
                 }
-                if (*p == '\\') {                // escape char?
+                if (quoteEscapable && *p == '\\') {                // escape char?
                     // testing by looking at argc, argv shows that it only escapes quotes
                     if (p < p_end && (*(p+1) == Char('\"')))
                         p++;
-                } else {
-                    if (!quote && (*p == Char('\"'))) {
+                } else if ( ! quote) {
+                    if (*p == Char('\"') || (linuxMode && *p == Char('\''))) {
+                        // Intentionally NOT updating `start`
+                        // (to support `--option-key="value with space"` syntax).
                         quote = *p++;
                         continue;
-                    } else if (QChar((short)(*p)).isSpace() && !quote)
+                    } else if (QChar((short)(*p)).isSpace())
                         break;
                 }
+                // Store literal but never skip null-termination so we will break later.
                 if (*p)
                     *r++ = *p++;
             }
-            if (*p && p < p_end)
+            if (p < p_end && *p)
                 p++;
             *r = Char('\0');
 
@@ -138,6 +154,15 @@ static QVector<Char*> qWinCmdLine(Char *cmdParam, int length, int &argc)
     argv[argc] = 0;
 
     return argv;
+}
+
+#undef QT_TMP_MAYBE_LINUX
+
+#if defined(Q_OS_WINCE)
+
+template<typename Char>
+static QVector<Char*> qWinCmdLine(Char *cmdParam, int length, int &argc) {
+    return qCmdLineParse<Char, true, flase>(cmdParam, length, argc);
 }
 
 static inline QStringList qWinCmdArgs(QString cmdLine) // not const-ref: this might be modified

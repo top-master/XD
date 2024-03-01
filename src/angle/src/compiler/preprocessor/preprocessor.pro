@@ -2,7 +2,10 @@ CONFIG += static
 contains(QT_CONFIG, dynamicgl): CONFIG += not_installed
 include(../../config.pri)
 
-INCLUDEPATH = $$ANGLE_DIR/src/compiler/preprocessor
+INCLUDEPATH = \
+    $$ANGLE_DIR/src/compiler/preprocessor \
+    $$ANGLE_DIR/src/compiler \
+    # End INCLUDEPATH.
 
 DEFINES += _SECURE_SCL=0
 

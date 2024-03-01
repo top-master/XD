@@ -1,5 +1,6 @@
 /****************************************************************************
 **
+** Copyright (C) 2015 The XD Company Ltd.
 ** Copyright (C) 2015 The Qt Company Ltd.
 ** Contact: http://www.qt.io/licensing/
 **
@@ -83,9 +84,7 @@ public:
 
     bool isValid() const;
 
-    // ### Qt 6: merge overloads
-    QString name() const;
-    QString name(NameFormat format) const;
+    QString name(NameFormat format = QColor::HexRgb) const;
     void setNamedColor(const QString& name);
 
     static QStringList colorNames();
@@ -180,8 +179,22 @@ public:
     QColor toHsv() const;
     QColor toCmyk() const;
     QColor toHsl() const;
+    /// Similar to name(), but without "#" prefix.
+    QByteArray toHex(bool withAlpha = false) const Q_REQUIRED_RESULT;
 
     QColor convertTo(Spec colorSpec) const Q_REQUIRED_RESULT;
+
+    // "front" is overlayed on "this" with its "alpha" as opacity.
+    QColor blendTo(const QColor &front) const;
+    QColor blendToF(const QColor &front) const;
+    // Below two do ignore "alpha" of "other" but use "frontOpacity" instead
+    QColor blendTo(const QColor &front, int frontOpacity) const;
+    QColor blendToF(const QColor &front, qreal frontOpacity) const;
+
+    /// @warning Has no effect on alpha.
+    QColor inverted() const;
+    /// @warning Has no effect on alpha.
+    QColor invertedF() const;
 
     static QColor fromRgb(QRgb rgb);
     static QColor fromRgba(QRgb rgba);
@@ -201,6 +214,8 @@ public:
     static QColor fromHsl(int h, int s, int l, int a = 255);
     static QColor fromHslF(qreal h, qreal s, qreal l, qreal a = 1.0);
 
+    static QColor fromHex(const QByteArray &hex, bool withAlpha = false);
+
     QColor light(int f = 150) const Q_REQUIRED_RESULT;
     QColor lighter(int f = 150) const Q_REQUIRED_RESULT;
     QColor dark(int f = 200) const Q_REQUIRED_RESULT;
@@ -214,6 +229,7 @@ public:
     static bool isValidColor(const QString &name);
 
 private:
+    inline QColor(Qt::Initialization) {}
 
     void invalidate();
     bool setColorFromString(const QString &name);
@@ -278,6 +294,11 @@ inline QColor::QColor(const QColor &acolor)
 
 inline bool QColor::isValid() const
 { return cspec != Invalid; }
+
+inline QColor QColor::blendTo(const QColor &front) const
+{ return blendTo(front, front.alpha()); }
+inline QColor QColor::blendToF(const QColor &front) const
+{ return blendToF(front, front.alphaF()); }
 
 inline QColor QColor::lighter(int f) const
 { return light(f); }

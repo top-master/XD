@@ -1,0 +1,68 @@
+/**
+@file qt_functions.prf
+
+Helpers used by Qt and/or XD for cross-platform Makefile config of QtModules.
+*/
+
+/**
+@fn qtAddTargetEnv(varName, depVarName, isSys)
+
+Same as @ref qtAddToolEnv, but @p depVarName should be in
+the `QT` variable's style, and lists dependencies.
+
+Hence refer there for other arguments docs.
+
+@param depVarName Name of variable which lists dependencies, and
+                   said variable should follow `QT` variable's rules.
+
+For example, to add value into `PATH` environment variable of generated file:
+```
+QT = core gui
+QT.core.depends += myEnv
+QT.myEnv.name = myBin
+QT.myEnv.libs = $$[QT_INSTALL_BINS]
+QT.myEnv.config = no_link
+
+QT_TOOL_NAME = target
+qtAddTargetEnv(myCommand, QT)
+
+warning(Execute generated file like: $$myCommand)
+```
+
+Note that one could do `QT = myEnv core gui` instead of:
+```
+QT = core gui
+QT.core.depends += myEnv
+```
+But that may cause issues, since not everything supports fake modules.
+*/
+
+
+/**
+@fn qtAddToolEnv(varName, envConfigKeys, isSys)
+
+Creates batch-script file which adjusts environment variables, where
+said file's path and adjusts are based on given arguments.
+
+@param varName Target variable which will be set to generated file's
+execution command-line, which differs based on @p isSys, and may be prefixed by
+the `call` command for Windows OS.
+
+@param envConfigKeys List of qmake-variable prefixes, where each will be
+suffixed by `.name` or `.value` to extract environment-variable names and values.
+
+@param isSys Optional, non-empty means: optimize paths for `system()` call, and
+              not for make-script.
+
+For example to set `PATH`, @ref qtAddTargetEnv may redirect to this like:
+```
+myEnv.name = PATH
+myEnv.value = $${QT_INSTALL_LIBS}
+
+QT_TOOL_NAME = target
+qtAddToolEnv(myCommand, myEnv)
+```
+Which should generate the `target_weapper.bat` file.
+
+@warning If `QT_TOOL_NAME` is non-empty, it will prefix generated file's name.
+*/

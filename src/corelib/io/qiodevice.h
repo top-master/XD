@@ -1,5 +1,6 @@
 /****************************************************************************
 **
+** Copyright (C) 2015 The XD Company Ltd.
 ** Copyright (C) 2015 The Qt Company Ltd.
 ** Contact: http://www.qt.io/licensing/
 **
@@ -111,6 +112,10 @@ public:
     QByteArray readLine(qint64 maxlen = 0);
     virtual bool canReadLine() const;
 
+    qint64 readToBuffer(qint64 maxlen = QByteArray::MaxSize);
+    void clearBuffer();
+    qint64 bufferSize() const;
+
     qint64 write(const char *data, qint64 len);
     qint64 write(const char *data);
     inline qint64 write(const QByteArray &data)
@@ -164,6 +169,24 @@ Q_DECLARE_OPERATORS_FOR_FLAGS(QIODevice::OpenMode)
 #if !defined(QT_NO_DEBUG_STREAM)
 class QDebug;
 Q_CORE_EXPORT QDebug operator<<(QDebug debug, QIODevice::OpenMode modes);
+#endif
+
+// TRACE/corelib: don't rely on destructor to flush #1,
+// since good compilers copy the return-value before C++'s unwinding happens,
+// but release-build(s) of MSVC-2015 may copy after (but debug-build's fine).
+#if !defined(Q_CC_MSVC) || !defined(QT_DEBUG)
+#  define QT_WARN_FLUSH
+#endif
+
+namespace QtPrivate {
+    Q_CORE_EXPORT void qWarnFlushOnce(const char *scope);
+} // namespace QtPrivate
+
+#if defined(QT_WARN_FLUSH)
+Q_DECL_CONSTEXPR Q_ALWAYS_INLINE void qWarnFlushIfNeeded(const char *scope)
+    { QtPrivate::qWarnFlushOnce(scope); }
+#else
+Q_DECL_CONSTEXPR Q_ALWAYS_INLINE void qWarnFlushIfNeeded(const char *) { }
 #endif
 
 QT_END_NAMESPACE
