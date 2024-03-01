@@ -585,8 +585,12 @@ QLibraryInfo::rawLocation(LibraryLocation loc, PathGroup group)
 #else
         if (loc == PrefixPath) {
             if (QSettings *config = QLibraryInfoPrivate::configuration()) {
-                QFileInfo info(config->fileName());
-                if (info.exists()) {
+                const QString &fileName = config->fileName();
+                QFileInfo info(fileName);
+                if (info.exists()
+                    // Skips loaded from resources (like ":/qt/etc/qt.conf").
+                    && ! fileName.startsWith(QLatin1Char(':'))
+                ) {
                     baseDir = info.absolutePath();
                 }
             }

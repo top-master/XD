@@ -42,9 +42,7 @@
 #include <qdatastream.h>
 #ifdef Q_OS_WIN
 #  include <qt_windows.h>
-#  if defined(Q_OS_WINRT)
-#    include <winsock2.h>
-#  endif
+#  include <winsock2.h>
 #endif
 
 #ifdef Q_OS_ANDROID

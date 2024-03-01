@@ -280,6 +280,7 @@ void tst_QTextCodec::toUnicode_codecForHtml()
 
     QByteArray data = file.readAll();
     QTextCodec *codec = QTextCodec::codecForHtml(data);
+    QVERIFY(codec);
     codec->toUnicode(data); // this line crashes
 }
 
@@ -2079,10 +2080,12 @@ void tst_QTextCodec::codecForUtfText()
     QFETCH(int, mib);
 
     QTextCodec *codec = QTextCodec::codecForUtfText(encoded, 0);
-    if (detected)
+    if (detected) {
+        QVERIFY(codec);
         QCOMPARE(codec->mibEnum(), mib);
-    else
+    } else {
         QVERIFY(codec == 0);
+    }
 }
 
 #if defined(Q_OS_UNIX)
@@ -2394,6 +2397,7 @@ void tst_QTextCodec::shiftJis()
 {
     QByteArray backslashTilde("\\~");
     QTextCodec* codec = QTextCodec::codecForName("shift_jis");
+    QVERIFY(codec);
     QString string = codec->toUnicode(backslashTilde);
     QCOMPARE(string.length(), 2);
     QCOMPARE(string.at(0), QChar(QLatin1Char('\\')));

@@ -67,7 +67,7 @@
 
 /*! Used like `#if defined(QT_HAS_XD) && QT_HAS_XD(5, 6, 0)`.
  *
- * WARNING: takes same arguments as `QT_VERSION_CHECK` does,
+ * WARNING: takes same arguments as #QT_VERSION_CHECK macro does,
  * but to fix Qt-creator coloring, not visible in the `#define`.
  */
 #define QT_HAS_XD QT_VERSION >= QT_VERSION_CHECK
@@ -820,6 +820,9 @@ Q_CORE_EXPORT bool qSharedBuild() Q_DECL_NOTHROW;
 // ```
 #ifndef Q_INLINE_TEMPLATE
 #  define Q_INLINE_TEMPLATE inline
+#  define Q_ALWAYS_INLINE_T Q_ALWAYS_INLINE
+#else
+#  define Q_ALWAYS_INLINE_T
 #endif
 
 #ifndef Q_TYPENAME
@@ -877,6 +880,7 @@ Q_NORETURN
 #endif
 Q_CORE_EXPORT void qt_assert_x(const char *where, const char *what, const char *file, int line) Q_DECL_NOTHROW;
 
+// Note to place debug-breakpoint inside `qt_message_fatal` which `Q_ASSERT_X` calls.
 #if !defined(Q_ASSERT_X)
 #  if defined(QT_NO_DEBUG) && !defined(QT_FORCE_ASSERTS)
 #    define Q_ASSERT_X(cond, where, what) do { } while ((false) && (cond))
@@ -1004,13 +1008,13 @@ typedef void (*QFunctionPointer)();
 #  define Q_UNIMPLEMENTED() qWarning("Unimplemented code.")
 #endif
 
-Q_DECL_CONSTEXPR static inline bool qFuzzyCompare(double p1, double p2) Q_REQUIRED_RESULT Q_DECL_UNUSED;
+Q_REQUIRED_RESULT Q_DECL_CONSTEXPR static inline bool qFuzzyCompare(double p1, double p2) Q_DECL_UNUSED;
 Q_DECL_CONSTEXPR static inline bool qFuzzyCompare(double p1, double p2)
 {
     return (qAbs(p1 - p2) * 1000000000000. <= qMin(qAbs(p1), qAbs(p2)));
 }
 
-Q_DECL_CONSTEXPR static inline bool qFuzzyCompare(float p1, float p2) Q_REQUIRED_RESULT Q_DECL_UNUSED;
+Q_REQUIRED_RESULT Q_DECL_CONSTEXPR static inline bool qFuzzyCompare(float p1, float p2) Q_DECL_UNUSED;
 Q_DECL_CONSTEXPR static inline bool qFuzzyCompare(float p1, float p2)
 {
     return (qAbs(p1 - p2) * 100000.f <= qMin(qAbs(p1), qAbs(p2)));
@@ -1019,7 +1023,7 @@ Q_DECL_CONSTEXPR static inline bool qFuzzyCompare(float p1, float p2)
 /*!
   \internal
 */
-Q_DECL_CONSTEXPR static inline bool qFuzzyIsNull(double d) Q_REQUIRED_RESULT Q_DECL_UNUSED;
+Q_REQUIRED_RESULT Q_DECL_CONSTEXPR static inline bool qFuzzyIsNull(double d) Q_DECL_UNUSED;
 Q_DECL_CONSTEXPR static inline bool qFuzzyIsNull(double d)
 {
     return qAbs(d) <= 0.000000000001;
@@ -1028,7 +1032,7 @@ Q_DECL_CONSTEXPR static inline bool qFuzzyIsNull(double d)
 /*!
   \internal
 */
-Q_DECL_CONSTEXPR static inline bool qFuzzyIsNull(float f) Q_REQUIRED_RESULT Q_DECL_UNUSED;
+Q_REQUIRED_RESULT Q_DECL_CONSTEXPR static inline bool qFuzzyIsNull(float f)  Q_DECL_UNUSED;
 Q_DECL_CONSTEXPR static inline bool qFuzzyIsNull(float f)
 {
     return qAbs(f) <= 0.00001f;
@@ -1039,7 +1043,7 @@ Q_DECL_CONSTEXPR static inline bool qFuzzyIsNull(float f)
    check whether the actual value is 0 or close to 0, but whether
    it is binary 0, disregarding sign.
 */
-static inline bool qIsNull(double d) Q_REQUIRED_RESULT Q_DECL_UNUSED;
+Q_REQUIRED_RESULT static inline bool qIsNull(double d) Q_DECL_UNUSED;
 static inline bool qIsNull(double d)
 {
     union U {
@@ -1056,7 +1060,7 @@ static inline bool qIsNull(double d)
    check whether the actual value is 0 or close to 0, but whether
    it is binary 0, disregarding sign.
 */
-static inline bool qIsNull(float f) Q_REQUIRED_RESULT Q_DECL_UNUSED;
+Q_REQUIRED_RESULT static inline bool qIsNull(float f) Q_DECL_UNUSED;
 static inline bool qIsNull(float f)
 {
     union U {
@@ -1118,15 +1122,20 @@ Q_CORE_EXPORT void *qMallocAligned(size_t size, size_t alignment) Q_ALLOC_SIZE(1
 Q_CORE_EXPORT void *qReallocAligned(void *ptr, size_t size, size_t oldsize, size_t alignment) Q_ALLOC_SIZE(2);
 Q_CORE_EXPORT void qFreeAligned(void *ptr);
 
-template <typename T>
-Q_ALWAYS_INLINE void *qReallocAlignedT(void *ptr, size_t size, size_t oldsize)
-{
-    size_t alignment = qMax<int>(sizeof(void*), Q_ALIGNOF(T));
-    return qReallocAligned(ptr, size, oldsize, alignment);
-}
+QT_WARNING_PUSH
+QT_WARNING_SUPPRESS_OLDSTYLE
 
 template <typename T>
-Q_ALWAYS_INLINE void *qMallocAlignedT(size_t size)
+Q_ALWAYS_INLINE T *qReallocAlignedT(void *ptr, size_t size, size_t oldsize)
+{
+    size_t alignment = qMax<int>(sizeof(void*), Q_ALIGNOF(T));
+    return (T *) qReallocAligned(ptr, size, oldsize, alignment);
+}
+
+QT_WARNING_POP
+
+template <typename T>
+Q_ALWAYS_INLINE T *qMallocAlignedT(size_t size)
 {
     return qReallocAlignedT<T>(Q_NULLPTR, size, 0);
 }
@@ -1287,6 +1296,8 @@ template <typename Wrapper> static inline typename Wrapper::pointer qGetPtrHelpe
 #define Q_D(Class) Class##Private * const d = d_func()
 #define Q_Q(Class) Class * const q = q_func()
 
+// TRACE/corelib note: MOC does not support parenthesis if `QT_MOC_MACRO_EXPAND` is enabled,
+// hence `#define QT_TR_NOOP(x) (x)` would cause moc executable to log error.
 #define QT_TR_NOOP(x) x
 #define QT_TR_NOOP_UTF8(x) x
 #define QT_TRANSLATE_NOOP(scope, x) x
@@ -1322,9 +1333,11 @@ Q_CORE_EXPORT QString qtTrId(const char *id, int n = -1);
 #ifdef Q_COMPILER_DEFAULT_MEMBERS
 #  define Q_DEFAULT_COPY_INIT(CLASS) CLASS(const CLASS &) = default;
 #  define Q_DEFAULT_COPY_ASSIGN(CLASS) CLASS &operator =(const CLASS &) = default;
+#  define Q_DEFAULT_MOVE_INIT(CLASS) CLASS(CLASS &&) = default;
 #else
 #  define Q_DEFAULT_COPY_INIT(CLASS)
 #  define Q_DEFAULT_COPY_ASSIGN(CLASS)
+#  define Q_DEFAULT_MOVE_INIT(CLASS)
 #endif
 
 class QByteArray;
@@ -1371,11 +1384,24 @@ Q_CORE_EXPORT quint8 qHexDecode(quint16 hexEncoded);
          "Compile your code with -fPIC (-fPIE is not enough)."
 #endif
 
+// Few forward declarations instead of `#include <QtCore/qnamespace.h>`.
+namespace Qt {
+#if defined(Q_COMPILER_CLASS_ENUM) && defined(Q_COMPILER_CONSTEXPR)
+    enum class Initialization;
+#else
+    enum Initialization;
+#endif
+} // namespace Qt
+
 //QEnableIf is like std::enable_if
 template <bool B, typename T = void> struct QEnableIf;
 template <typename T> struct QEnableIf<true, T> { typedef T Type; typedef T type; };
 
 namespace QtPrivate {
+    // TRACE/QApplication: defines global settings for inline access.
+
+    Q_VAR_EXPORT(CORE) extern int remoteTimeout; //declared at "corelib/kernel/qobject.cpp"
+
 //like std::enable_if
 template <bool B, typename T = void> struct QEnableIf;
 template <typename T> struct QEnableIf<true, T> { typedef T Type; };
@@ -1407,6 +1433,10 @@ Q_DECL_CONSTEXPR Q_ALWAYS_INLINE QtPrivate::QFinally<Func1 > qScopeGuard(Func1 &
 #endif /* __cplusplus end */
 
 #define Q_PTR_ALIGN_CAST(Pointer, Align, TYPE) Q_PTR_CAST(TYPE, Q_PTR_ALIGN(Pointer, Align))
+
+#define Q_PTR_REBASE_CAST(Pointer, OldBase, NewBase, TYPE) Q_PTR_CAST(TYPE, Q_PTR_REBASE(Pointer, OldBase, NewBase))
+
+#define Q_FIELDER_OFFSET(TYPE, FIELD) Q_PTR_SUB_OFFSET(0u, Q_FIELD_OFFSET(TYPE, FIELD))
 
 #ifdef __cplusplus
 // Memory
@@ -1444,8 +1474,6 @@ Q_DECL_CONSTEXPR Q_ALWAYS_INLINE QtPrivate::QFinally<Func1 > qScopeGuard(Func1 &
 /// };
 /// ```
 #  define Q_FIELDER(TYPE, FIELD, FIELD_PTR) (static_cast<TYPE *>(Q_PTR_SUB_OFFSET(FIELD_PTR, Q_FIELD_OFFSET(TYPE, FIELD))))
-
-#define Q_FIELDER_OFFSET(TYPE, FIELD) Q_PTR_SUB_OFFSET(0u, Q_FIELD_OFFSET(TYPE, FIELD))
 
 /// Calculates the size of a field in a structure of type "TYPE",
 /// both without knowing or stating the type of the field.

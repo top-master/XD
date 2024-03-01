@@ -45,7 +45,7 @@
 #ifdef QT_INCLUDE_COMPAT
 #include <QtCore/qcoreevent.h>
 #endif
-#include <QtCore/qscopedpointer.h>
+#include <QtCore/qscopedpointerlazy.h>
 #include <QtCore/qmetatype.h>
 
 #include <QtCore/qobject_impl.h>
@@ -70,6 +70,7 @@ class QRegularExpression;
 #ifndef QT_NO_USERDATA
 class QObjectUserData;
 #endif
+class QObjectDecor;
 struct QDynamicMetaObjectData;
 
 typedef QList<QObject*> QObjectList;
@@ -92,6 +93,7 @@ public:
     QObject *q_ptr;
     QObject *parent;
     QObjectList children;
+    QPointerLazinessResolverAtomicImmutable lazinessResolver;
 
     uint isWidget : 1;
     uint blockSig : 1;
@@ -104,14 +106,43 @@ public:
     /// 0="normal QObject" 1="has both parent and QSharedPointer".
     uint hasParentStrongRef : 1;
 
-    uint unused : 24;
+    // TRACE/XD6 todo: place after `wasDelete`.
+    uint wasDeleteSignaled : 1;
+
+    // TRACE/QObject/remote 1-1: added `isRemote` and other fields.
+
+    /// 0=normal-QObject 1=QObjectRemote (i.e. Q_REMOTE_CONTROLLER).
+    uint isRemote : 1;
+    uint blockRemoteSig : 1;
+    /// 0=normal 1="do not wait for reply".
+    uint blockRemoteSlot : 1;
+    uint blockRemoteReply : 1;
+    /// 0=normal 1=interpretative (a "QObject" which allows on it "reinterpret_cast<RemoteClass *>(obj)").
+    /// e.g. for model coding to simulate an object NOT on localhost or process.
+    uint isReinterpretable : 1;
+
+    /// 0=infinite N=timeout N*500 seconds (min timeout is 500 mili-seconds and max is 2 minutes).
+    uint remoteTimeout : 8;
+    uint remoteTimeoutExpired : 1;
+
+    uint isDecoratee : 1;
+    /// Truthy if q_ptr is a QObjectDecor::decorOwner.
+    uint isDecor : 1;
+    /// Truthy if q_ptr is a QObjectDecor::decorOwner and load is yet pending.
+    uint isLazy : 1;
+
+    uint unused : 6;
+
     int postedEvents;
     QDynamicMetaObjectData *metaObject;
     QMetaObject *dynamicMetaObject() const;
+
+    enum { remoteMiliSecPerTimeout = 500 };
 };
 
 class QObjectPrivate;
-class Q_CORE_EXPORT QObject
+class Q_CORE_EXPORT
+        QObject
 {
     Q_OBJECT
     Q_PROPERTY(QString objectName READ objectName WRITE setObjectName NOTIFY objectNameChanged)
@@ -147,6 +178,9 @@ public:
 
     inline bool signalsBlocked() const Q_DECL_NOTHROW { return d_ptr->blockSig; }
     bool blockSignals(bool b) Q_DECL_NOTHROW;
+
+    inline bool remoteSignalsBlocked() const { return d_ptr->blockRemoteSig; }
+    bool blockRemoteSignals(bool block);
 
     QThread *thread() const;
     void moveToThread(QThread *thread);
@@ -449,7 +483,7 @@ protected:
     QObject(QObjectPrivate &dd, QObject *parent = Q_NULLPTR);
 
 protected:
-    QScopedPointer<QObjectData> d_ptr;
+    QScopedPointerLazyImmutable<QObjectData> d_ptr;
 
     static const QMetaObject staticQtMetaObject;
     friend inline const QMetaObject *qt_getQtMetaObject() Q_DECL_NOEXCEPT;
@@ -464,6 +498,7 @@ protected:
     friend class QWidget;
     friend class QThreadData;
     friend class QObjectData;
+    friend class QObjectDecor;
 
 private:
     Q_DISABLE_COPY(QObject)
@@ -487,12 +522,12 @@ inline QMetaObject::Connection QObject::connect(const QObject *asender, const ch
 inline const QMetaObject *qt_getQtMetaObject() Q_DECL_NOEXCEPT
 { return &QObject::staticQtMetaObject; }
 
-#ifndef QT_NO_USERDATA
+// TRACE/QObject/remote support 1-2: we use user data internally,
+// hence removed `#ifndef QT_NO_USERDATA`.
 class Q_CORE_EXPORT QObjectUserData {
 public:
     virtual ~QObjectUserData();
 };
-#endif
 
 #ifdef Q_QDOC
 T qFindChild(const QObject *o, const QString &name = QString());
@@ -578,9 +613,16 @@ private:
 };
 
 #ifndef Q_MOC_RUN
-QObjectData *QObjectData::get(QObject *o) { return o->d_ptr.data(); }
-const QObjectData *QObjectData::get(const QObject *o) { return o->d_ptr.data(); }
+inline QObjectData *QObjectData::get(QObject *o) { return o->d_ptr.data(); }
+inline const QObjectData *QObjectData::get(const QObject *o) { return o->d_ptr.data(); }
 
+inline QPointerLazinessResolverAtomic &QScopedPointerLazyBase<QObjectData>::lazinessResolver() const {
+    return (const_cast<Self *>(this)->d)->lazinessResolver;
+}
+
+Q_DECL_CONSTEXPR inline bool QScopedPointerLazyBase<QObjectData>::isLoadPending() const {
+    return static_cast<QObjectData *>(const_cast<Self *>(this)->d)->isLazy;
+}
 
 QSignalBlocker::QSignalBlocker(QObject *o) Q_DECL_NOTHROW
     : m_o(o),

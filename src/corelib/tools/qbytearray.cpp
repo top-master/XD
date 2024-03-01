@@ -1343,6 +1343,7 @@ QByteArray &QByteArray::operator=(const char *str)
 */
 
 /*!
+    \fn void QByteArray::truncate(int pos)
 
     Truncates the byte array at index position \a pos.
 
@@ -1353,13 +1354,9 @@ QByteArray &QByteArray::operator=(const char *str)
 
     \sa chop(), resize(), left()
 */
-void QByteArray::truncate(int pos)
-{
-    if (pos < d->size)
-        resize(pos);
-}
 
 /*!
+    \fn void QByteArray::chop(int n)
 
     Removes \a n bytes from the end of the byte array.
 
@@ -1371,13 +1368,6 @@ void QByteArray::truncate(int pos)
 
     \sa truncate(), resize(), left()
 */
-
-void QByteArray::chop(int n)
-{
-    if (n > 0)
-        resize(d->size - n);
-}
-
 
 /*! \fn QByteArray &QByteArray::operator+=(const QByteArray &ba)
 

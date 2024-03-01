@@ -29,6 +29,7 @@ HEADERS +=  \
         tools/qhash.h \
         tools/qhashfunctions.h \
         tools/qiterator.h \
+        tools/qlazinessresolver.h \
         tools/qline.h \
         tools/qlinkedlist.h \
         tools/qlist.h \
@@ -51,14 +52,18 @@ HEADERS +=  \
         tools/qrefcount.h \
         tools/qscopedpointer.h \
         tools/qscopedpointer_p.h \
+        tools/qscopedpointerlazy.h \
+        tools/qscopedpointerlazy_p.h \
         tools/qscopedvaluerollback.h \
         tools/qshareddata.h \
+        tools/qsharedmemorylocker.h \
         tools/qsharedpointer.h \
         tools/qsharedpointer_impl.h \
         tools/qset.h \
         tools/qsimd_p.h \
         tools/qsize.h \
         tools/qstack.h \
+        tools/qstackwrap.h \
         tools/qstring.h \
         tools/qstringalgorithms_p.h \
         tools/qstringbuilder.h \
@@ -76,6 +81,7 @@ HEADERS +=  \
         tools/qunicodetools_p.h \
         tools/qvarlengtharray.h \
         tools/qvector.h \
+        tools/qvectorsorter.h \
         tools/qversionnumber.h
 
 
@@ -95,6 +101,7 @@ SOURCES += \
         tools/qelapsedtimer.cpp \
         tools/qfreelist.cpp \
         tools/qhash.cpp \
+        tools/qlazinessresolver.cpp \
         tools/qline.cpp \
         tools/qlinkedlist.cpp \
         tools/qlist.cpp \
@@ -110,6 +117,7 @@ SOURCES += \
         tools/qrefcount.cpp \
         tools/qringbuffer.cpp \
         tools/qshareddata.cpp \
+        tools/qsharedmemorylocker.cpp \
         tools/qsharedpointer.cpp \
         tools/qsimd.cpp \
         tools/qsize.cpp \

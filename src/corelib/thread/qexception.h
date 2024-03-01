@@ -53,7 +53,7 @@ QT_BEGIN_NAMESPACE
 class QRequirementErrorType {
     int m_value;
 public:
-    enum {
+    enum Raw {
         /// Non empty value is required.
         NonEmpty,
         /// Required field is invalid or not set.
@@ -66,9 +66,11 @@ public:
         TypeMismatch,
         /// Failed to cast from value/type to Json.
         JsonCast,
+        /// Tried to lock from same thread twice.
+        DeadLock,
     };
 
-    inline QRequirementErrorType(int valueArg)
+    inline Q_IMPLICIT QRequirementErrorType(Raw valueArg)
         : m_value(valueArg)
     {}
 
@@ -85,6 +87,7 @@ Q_ALWAYS_INLINE void qThrow(QRequirementErrorType type, const char *msg = Q_NULL
 class Q_CORE_EXPORT QException : public std::exception
 {
 public:
+    inline QException() {} // Rquired to make breakpoint.
     ~QException()
 #ifdef Q_COMPILER_NOEXCEPT
     noexcept

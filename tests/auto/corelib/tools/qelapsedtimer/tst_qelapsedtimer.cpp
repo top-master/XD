@@ -33,8 +33,12 @@
 
 #include <QtCore/QString>
 #include <QtCore/QTime>
+#include <QtCore/QTimestamp>
 #include <QtCore/QElapsedTimer>
 #include <QtTest/QtTest>
+
+
+#define LLS(x) QString(QLL(x))
 
 static const int minResolution = 50; // the minimum resolution for the tests
 
@@ -53,6 +57,8 @@ private Q_SLOTS:
     void validity();
     void basics();
     void elapsed();
+    void toString_data();
+    void toString();
 };
 
 void tst_QElapsedTimer::statics()
@@ -137,6 +143,71 @@ void tst_QElapsedTimer::elapsed()
     QVERIFY(elapsed < 5*minResolution);
     qint64 diff = t2.msecsTo(t1);
     QVERIFY(diff < minResolution);
+}
+
+void tst_QElapsedTimer::toString_data()
+{
+    QTest::addColumn<qint64>("elapsed");
+    QTest::addColumn<QString>("expected");
+    QTest::addColumn<QString>("expectedLabel");
+
+    QTest::newRow("Min milli-second.")
+            << qint64(1 * QTimestamp::MilliSecond)
+            << LLS("00:00") << LLS("00:00.001 milli-second(s)");
+
+    QTest::newRow("Max milli-second.")
+            << qint64(999 * QTimestamp::MilliSecond)
+            << LLS("00:01") << LLS("00:00.999 milli-second(s)");
+
+    QTest::newRow("Min second.")
+            << qint64(1 * QTimestamp::Second)
+            << LLS("00:01") << LLS("00:01.000 second(s)");
+
+    QTest::newRow("Max second.")
+            << qint64(59 * QTimestamp::Second + 999 * QTimestamp::MilliSecond)
+            << LLS("01:00") << LLS("00:59.999 second(s)");
+
+    QTest::newRow("Min minute.")
+            << qint64(1 * QTimestamp::Minute) << LLS("01:00") << LLS("01:00.000 minute(s)");
+
+    QTest::newRow("Max minute.")
+            << qint64(59 * QTimestamp::Minute + 59 * QTimestamp::Second + 999 * QTimestamp::MilliSecond)
+            << LLS("1:00:00") << LLS("59:59.999 minute(s)");
+
+    QTest::newRow("Min hour.")
+            << qint64(1 * QTimestamp::Hour) << LLS("1:00:00") << LLS("1:00:00.000 hour(s)");
+    QTest::newRow("Two hours.")
+            << qint64(2 * QTimestamp::Hour) << LLS("2:00:00") << LLS("2:00:00.000 hour(s)");
+    QTest::newRow("Max hour.")
+            << qint64(QTimestamp::Day - QTimestamp::MilliSecond)
+            << LLS("24:00:00") << LLS("23:59:59.999 hour(s)");
+
+    QTest::newRow("Half of day.")
+            << qint64(12 * QTimestamp::Hour) << LLS("12:00:00") << LLS("12:00:00.000 hour(s)");
+    QTest::newRow("Min day.")
+            << qint64(1 * QTimestamp::Day) << LLS("24:00:00") << LLS("24:00:00.000 hour(s)");
+
+    qint64 time = QTimestamp::Month;
+    time -= QTimestamp::MilliSecond;
+    QTest::newRow("Max day.")
+            << time << LLS("744:00:00") << LLS("743:59:59.999 hour(s)");
+
+    time = Q_INT64_C(3) * QTimestamp::Month;
+    time += 5 * QTimestamp::Minute;
+    time += 7 * QTimestamp::Second;
+    time += 21 * QTimestamp::MilliSecond;
+    QTest::newRow("Months with minutes and seconds.")
+            << time << LLS("2232:05:07") << LLS("2232:05:07.021 hour(s)");
+}
+
+void tst_QElapsedTimer::toString()
+{
+    const QFETCH(qint64, elapsed);
+    const QFETCH(QString, expected);
+    const QFETCH(QString, expectedLabel);
+
+    QCOMPARE(QElapsedTimer::toString(elapsed), expected);
+    QCOMPARE(QElapsedTimer::toStringLabel(elapsed), expectedLabel);
 }
 
 QTEST_MAIN(tst_QElapsedTimer);

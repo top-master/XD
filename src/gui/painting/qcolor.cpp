@@ -1,5 +1,6 @@
 /****************************************************************************
 **
+** Copyright (C) 2015 The XD Company Ltd.
 ** Copyright (C) 2015 The Qt Company Ltd.
 ** Contact: http://www.qt.io/licensing/
 **
@@ -38,6 +39,7 @@
 #include "qvariant.h"
 #include "qdebug.h"
 
+#include <math.h>
 #include <stdio.h>
 #include <limits.h>
 
@@ -261,7 +263,7 @@ QT_BEGIN_NAMESPACE
 #define QCOLOR_INT_RANGE_CHECK(fn, var) \
     do { \
         if (var < 0 || var > 255) { \
-            qWarning(#fn": invalid value %d", var); \
+            qWarning("%s: invalid value %d", fn, var); \
             var = qMax(0, qMin(var, 255)); \
         } \
     } while (0)
@@ -269,7 +271,7 @@ QT_BEGIN_NAMESPACE
 #define QCOLOR_REAL_RANGE_CHECK(fn, var) \
     do { \
         if (var < qreal(0.0) || var > qreal(1.0)) { \
-            qWarning(#fn": invalid value %g", var); \
+            qWarning("%s: invalid value %g", fn, var); \
             var = qMax(qreal(0.0), qMin(var, qreal(1.0)));      \
         } \
     } while (0)
@@ -498,21 +500,12 @@ QColor::QColor(Spec spec)
 */
 
 /*!
-    Returns the name of the color in the format "#RRGGBB"; i.e. a "#"
-    character followed by three two-digit hexadecimal numbers.
-
-    \sa setNamedColor()
-*/
-
-QString QColor::name() const
-{
-    return name(HexRgb);
-}
-
-/*!
     \since 5.2
 
     Returns the name of the color in the specified \a format.
+    
+    Where the default format is "#RRGGBB"; i.e. a "#"
+    character followed by three two-digit hexadecimal numbers.
 
     \sa setNamedColor(), NameFormat
 */
@@ -1586,7 +1579,7 @@ QColor QColor::toRgb() const
             }
 
             // chromatic case
-            const qreal h = ct.ahsv.hue == 36000 ? 0 : ct.ahsv.hue / 6000.;
+            const qreal h = ct.ahsv.hue == 36000 ? 0 : ct.ahsv.hue / qreal(6000.);
             const qreal s = ct.ahsv.saturation / qreal(USHRT_MAX);
             const qreal v = ct.ahsv.value / qreal(USHRT_MAX);
             const int i = int(h);
@@ -1646,7 +1639,7 @@ QColor QColor::toRgb() const
                 color.ct.argb.red = color.ct.argb.green = color.ct.argb.blue = 0;
             } else {
                 // chromatic case
-                const qreal h = ct.ahsl.hue == 36000 ? 0 : ct.ahsl.hue / 36000.;
+                const qreal h = ct.ahsl.hue == 36000 ? 0 : ct.ahsl.hue / qreal(36000.);
                 const qreal s = ct.ahsl.saturation / qreal(USHRT_MAX);
                 const qreal l = ct.ahsl.lightness / qreal(USHRT_MAX);
 
@@ -1814,6 +1807,19 @@ QColor QColor::toHsl() const
     return color;
 }
 
+QByteArray QColor::toHex(bool withAlpha) const
+{
+    QColor c = toRgb();
+
+    QByteArray hex(withAlpha ? 8 : 6, Qt::Uninitialized);
+    quint16 *hexData = reinterpret_cast<quint16 *>(hex.data());
+    hexData[0] = qHex(c.red());
+    hexData[1] = qHex(c.green());
+    hexData[2] = qHex(c.blue());
+    if(withAlpha) hexData[3] = qHex(c.alpha());
+    return hex;
+}
+
 /*!
     Creates and returns a CMYK QColor based on this color.
 
@@ -1874,6 +1880,67 @@ QColor QColor::convertTo(QColor::Spec colorSpec) const
     return QColor(); // must be invalid
 }
 
+/// Overlays @p front on top of "this" with @p alpha as opacity.
+QColor QColor::blendTo(const QColor &front, int frontAlpha) const
+{ //formula: result.setRed( (colorA.red() * factor) / maxFactor + (colorB.red() * (maxFactor - factor)) / maxFactor) );
+    QColor result(Qt::Uninitialized); //Rgb mode does not need initialize
+    result.cspec = Rgb;
+    QCOLOR_INT_RANGE_CHECK("QColor::blendTo", frontAlpha);
+    result.ct.argb.alpha = (255 - (255 - alpha())*(255 - frontAlpha)) * 0x101;
+    result.ct.argb.red   = ((red()   * (255 - frontAlpha) + front.red()   * frontAlpha) / 255) * 0x101;
+    result.ct.argb.green = ((green() * (255 - frontAlpha) + front.green() * frontAlpha) / 255) * 0x101;
+    result.ct.argb.blue  = ((blue()  * (255 - frontAlpha) + front.blue()  * frontAlpha) / 255) * 0x101;
+    result.ct.argb.pad   = 0;
+    return result;
+}
+
+/// Same as @ref blendTo, but with qreal calculation and quality.
+QColor QColor::blendToF(const QColor &front, qreal frontAlpha) const
+{
+    QColor result(Qt::Uninitialized); //Rgb mode does not need initialize
+    result.cspec = Rgb;
+    QCOLOR_REAL_RANGE_CHECK("QColor::blendToF", frontAlpha);
+    result.ct.argb.alpha = (1.0 - (1.0 - alphaF())*(1.0 - frontAlpha)) * USHRT_MAX;
+    //result.ct.argb.red = (red()    * (1.0 - frontAlpha) + front.red()    * frontAlpha) * 0x101; //old code
+#if 1
+    result.ct.argb.red   = (redF()   * (1.0 - frontAlpha) + front.redF()   * frontAlpha) * USHRT_MAX;
+    result.ct.argb.green = (greenF() * (1.0 - frontAlpha) + front.greenF() * frontAlpha) * USHRT_MAX;
+    result.ct.argb.blue  = (blueF()  * (1.0 - frontAlpha) + front.blueF()  * frontAlpha) * USHRT_MAX;
+#else
+    //slower but equal version
+    result.ct.argb.red   = (front.redF()   * frontAlpha / result.alphaF() + redF()   * alphaF() * (1.0 - frontAlpha)) * USHRT_MAX;
+    result.ct.argb.green = (front.greenF() * frontAlpha / result.alphaF() + greenF() * alphaF() * (1.0 - frontAlpha)) * USHRT_MAX;
+    result.ct.argb.blue  = (front.blueF()  * frontAlpha / result.alphaF() + blueF()  * alphaF() * (1.0 - frontAlpha)) * USHRT_MAX;
+#endif
+    result.ct.argb.pad   = 0;
+    return result;
+}
+
+QColor QColor::inverted() const
+{
+    //the operation "a ^ b" can be written as "qAbs(a - b)" but maybe the original is faster
+    QColor color(Qt::Uninitialized); //Rgb mode does not need initialize
+    color.cspec = Rgb;
+    color.ct.argb.alpha = ct.argb.alpha;
+    color.ct.argb.red   = (red()   ^ 0xff) * 0x101;
+    color.ct.argb.green = (green() ^ 0xff) * 0x101;
+    color.ct.argb.blue  = (blue()  ^ 0xff) * 0x101;
+    color.ct.argb.pad   = 0;
+    return color;
+}
+
+QColor QColor::invertedF() const
+{
+    //the operation "a ^ b" is written as "qAbs(a - b)"
+    QColor color(Qt::Uninitialized); //Rgb mode does not need initialize
+    color.cspec = Rgb;
+    color.ct.argb.alpha = ct.argb.alpha;
+    color.ct.argb.red   = qRound(qAbs(redF()   - qreal(1.0)) * USHRT_MAX);
+    color.ct.argb.green = qRound(qAbs(greenF() - qreal(1.0)) * USHRT_MAX);
+    color.ct.argb.blue  = qRound(qAbs(blueF()  - qreal(1.0)) * USHRT_MAX);
+    color.ct.argb.pad   = 0;
+    return color;
+}
 
 /*!
     Static convenience function that returns a QColor constructed from the
@@ -1926,7 +1993,7 @@ QColor QColor::fromRgb(int r, int g, int b, int a)
         return QColor();
     }
 
-    QColor color;
+    QColor color(Qt::Uninitialized); //Rgb mode does not need initialize
     color.cspec = Rgb;
     color.ct.argb.alpha = a * 0x101;
     color.ct.argb.red   = r * 0x101;
@@ -1955,7 +2022,7 @@ QColor QColor::fromRgbF(qreal r, qreal g, qreal b, qreal a)
         return QColor();
     }
 
-    QColor color;
+    QColor color(Qt::Uninitialized); //Rgb mode does not need initialize
     color.cspec = Rgb;
     color.ct.argb.alpha = qRound(a * USHRT_MAX);
     color.ct.argb.red   = qRound(r * USHRT_MAX);
@@ -2122,6 +2189,40 @@ QColor QColor::fromHslF(qreal h, qreal s, qreal l, qreal a)
     color.ct.ahsl.lightness  = qRound(l * USHRT_MAX);
     color.ct.ahsl.pad        = 0;
     return color;
+}
+
+QColor QColor::fromHex(const QByteArray &hex, bool withAlpha)
+{
+    QByteArray::const_iterator it = hex.begin();
+    QByteArray::const_iterator end = hex.end();
+    while (it != end) {
+        const char c = *it;
+        if(c == '#' || c == ' ')
+            ++it;
+        else
+            break;
+    }
+
+    quint8 r = 0, g = 0, b = 0,
+           a = 255;
+    if(it < end) {
+        r = qHexDecode(*reinterpret_cast<const quint16 *>(it));
+        it += 2; //skip red
+        if(it < end) {
+            g = qHexDecode(*reinterpret_cast<const quint16 *>(it));
+            it += 2; //skip green
+            if(it < end) {
+                b = qHexDecode(*reinterpret_cast<const quint16 *>(it));
+                if(withAlpha) {
+                    it += 2; //skip blue
+                    if(it < end)
+                        a = qHexDecode(*reinterpret_cast<const quint16 *>(it));
+                }
+            }
+        }
+    }
+
+    return QColor(r, g, b, a);
 }
 
 

@@ -1,5 +1,6 @@
 /****************************************************************************
 **
+** Copyright (C) 2015 The XD Company Ltd.
 ** Copyright (C) 2015 The Qt Company Ltd.
 ** Contact: http://www.qt.io/licensing/
 **
@@ -98,7 +99,7 @@ private:
     qreal m_opacity;
 };
 
-class Q_AUTOTEST_EXPORT QLineEditPrivate : public QWidgetPrivate
+class Q_WIDGETS_EXPORT QLineEditPrivate : public QWidgetPrivate
 {
     Q_DECLARE_PUBLIC(QLineEdit)
 public:
@@ -137,6 +138,9 @@ public:
     {
     }
 
+    static inline QLineEditPrivate *get(QLineEdit *o) { return o->d_func(); }
+    static inline const QLineEditPrivate *get(const QLineEdit *o) { return o->d_func(); }
+
     QWidgetLineControl *control;
 
 #ifndef QT_NO_CONTEXTMENU
@@ -163,10 +167,6 @@ public:
     {
         return control->text().isEmpty() && control->preeditAreaText().isEmpty()
                 && !((alignment & Qt::AlignHCenter) && q_func()->hasFocus());
-    }
-
-    static inline QLineEditPrivate *get(QLineEdit *lineEdit) {
-        return lineEdit->d_func();
     }
 
     QPoint tripleClick;
@@ -204,6 +204,11 @@ public:
 #endif
     void _q_textChanged(const QString &);
     void _q_clearButtonClicked();
+
+    /// Draws text in "QStyle::SE_LineEditContents" which is
+    /// same as "QWidget::contentsRect()" except that "panel->lineWidth" is
+    /// added as padding to contents rect (i.e. top+, bottom-, laft+ and right-).
+    void drawText(QPainter *, QStyleOptionFrame *panel);
 
     int leftTextMargin; // use effectiveLeftTextMargin() in case of icon.
     int topTextMargin;

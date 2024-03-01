@@ -1,5 +1,6 @@
 /****************************************************************************
 **
+** Copyright (C) 2015 The XD Company Ltd.
 ** Copyright (C) 2015 The Qt Company Ltd.
 ** Contact: http://www.qt.io/licensing/
 **
@@ -1144,11 +1145,16 @@ QTextStream::QTextStream(FILE *fileHandle, QIODevice::OpenMode openMode)
 QTextStream::~QTextStream()
 {
     Q_D(QTextStream);
+
 #if defined (QTEXTSTREAM_DEBUG)
     qDebug("QTextStream::~QTextStream()");
 #endif
-    if (!d->writeBuffer.isEmpty())
+
+    if (!d->writeBuffer.isEmpty()) {
+        // TRACE/corelib: don't rely on destructor to flush #2.
+        qWarnFlushIfNeeded("QTextStream");
         d->flushWriteBuffer();
+    }
 }
 
 /*!
@@ -1250,8 +1256,15 @@ qint64 QTextStream::pos() const
         // Rewind the device to get to the current position Ensure that
         // readBufferOffset is unaffected by fillReadBuffer()
         int oldReadBufferOffset = d->readBufferOffset + d->readConverterSavedStateOffset;
-        while (d->readBuffer.size() < oldReadBufferOffset) {
-            if (!thatd->fillReadBuffer(1))
+
+        // TRACE/corelib performance: now reads everything needed at once,
+        // unlike Qt which would go a single byte forward, note that XD keeps the
+        // old habit of returning -1 if a single byte fails to be read, but
+        // the infinite retry as long as `fillReadBuffer` returns `true`, may be
+        // removed from XD in a future patch.
+        int pendingRead = 0;
+        while ((pendingRead = oldReadBufferOffset - d->readBuffer.size()) > 0) {
+            if (!thatd->fillReadBuffer(pendingRead))
                 return qint64(-1);
         }
         thatd->readBufferOffset = oldReadBufferOffset;
@@ -3055,11 +3068,14 @@ void QTextStream::setCodec(QTextCodec *codec)
 
     \sa QTextCodec::codecForName(), setLocale()
 */
-void QTextStream::setCodec(const char *codecName)
+bool QTextStream::setCodec(const char *codecName)
 {
     QTextCodec *codec = QTextCodec::codecForName(codecName);
-    if (codec)
+    if (codec) {
         setCodec(codec);
+        return true;
+    }
+    return false;
 }
 
 /*!

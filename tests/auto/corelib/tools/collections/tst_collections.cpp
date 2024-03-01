@@ -1178,7 +1178,10 @@ void tst_Collections::vector()
         }
         QCOMPARE(vect3.size(), 496);
         for (i = 0; i < vect3.size(); ++i) {
-            QCOMPARE(vect3.at(i), 50.0);
+            qExpect(vect3.at(i))->toEqualNearly(50.0)
+                ->withContext([i] {
+                    return QLL("At index: ") + QString::number(i);
+                });
         }
 
         QVector<QTime> vect4;

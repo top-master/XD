@@ -28,6 +28,16 @@ equals(TEMPLATE, lib) {
     shared: CONFIG *= dll
 }
 
+# TRACE/mkspecs improve: allow switching to desired build-mode through the command-line,
+# for example, through the `"CONFIG+=force_only_release"` command-line option.
+force_only_release {
+    CONFIG -= release debug_and_release
+    CONFIG *= debug
+} else: force_only_debug {
+    CONFIG -= debug debug_and_release
+    CONFIG *= release
+}
+
 !macx-xcode: \
     addExclusiveBuilds(shared, static)
 
@@ -63,3 +73,5 @@ CONFIG(debug, debug|release) {
         CONFIG *= xcode_dynamic_library_suffix
     }
 }
+
+force_debug_info_full: CONFIG *= force_debug_info

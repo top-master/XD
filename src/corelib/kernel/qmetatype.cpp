@@ -819,6 +819,18 @@ void QMetaType::registerStreamOperators(int idx, SaveOperator saveOp,
     inf.saveOp = saveOp;
     inf.loadOp = loadOp;
 }
+
+bool QMetaType::hasRegisteredStreamOperators(int idx)
+{
+    if (idx < User)
+        return true; //builtin types should not be registered;
+    QVector<QCustomTypeInfo> *ct = customTypes();
+    if ( ! ct)
+        return false;
+    QWriteLocker locker(customTypesLock());
+    QCustomTypeInfo &inf = (*ct)[idx - User];
+    return inf.saveOp != Q_NULLPTR && inf.loadOp != Q_NULLPTR;
+}
 #endif // QT_NO_DATASTREAM
 
 /*!
@@ -1080,6 +1092,7 @@ int QMetaType::registerNormalizedType(const NS(QByteArray) &normalizedTypeName,
                 "\nType flags for type '%s' [%i] don't match. Previously "
                 "registered TypeFlags(0x%x), now registering TypeFlags(0x%x). ";
 
+        // Maybe both `qRegisterMetaEnum` and `Q_DECLARE_METATYPE` were used,
         qFatal(msg, normalizedTypeName.constData(), idx, previousFlags, int(flags));
     }
 
@@ -1702,6 +1715,9 @@ void QMetaType::destroy(int type, void *data)
 {
     QMetaType info(type);
     info.destruct(data);
+    // Deallocates memory without invoking the destructor, where if something like
+    // qMallocAligned was used, then related qFreeAligned method should be
+    // called after below executes.
     operator delete(data);
 }
 
@@ -1786,8 +1802,10 @@ private:
 */
 void *QMetaType::construct(int type, void *where, const void *copy)
 {
-    if (!where)
+    if ( ! where) {
+        qWarning("Meta-type: auto memory-allocation is forbidden.");
         return 0;
+    }
     TypeConstructor constructor(type, where);
     return QMetaTypeSwitcher::switcher<void*>(constructor, type, copy);
 }

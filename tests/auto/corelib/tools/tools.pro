@@ -26,6 +26,7 @@ SUBDIRS=\
     qhash_strictiterators \
     qhashfunctions \
     qlatin1string \
+    lazinessresolver \
     qline \
     qlinkedlist \
     qlist \

@@ -1199,6 +1199,7 @@ QByteArray QFontSubset::toTruetype() const
     glyphs.reserve(numGlyphs);
 
     uint sumAdvances = 0;
+    Q_UNUSED(sumAdvances) // Debug porpuses only.
     for (int i = 0; i < numGlyphs; ++i) {
         glyph_t g = glyph_indices.at(i);
         QPainterPath path;

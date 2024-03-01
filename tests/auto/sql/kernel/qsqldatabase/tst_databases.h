@@ -50,9 +50,7 @@
 
 #if defined(Q_OS_WIN)
 #  include <qt_windows.h>
-#  if defined(Q_OS_WINCE) || defined(Q_OS_WINRT)
-#    include <winsock2.h>
-#  endif
+#  include <winsock2.h>
 #else
 #include <unistd.h>
 #endif

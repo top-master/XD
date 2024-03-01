@@ -1,5 +1,6 @@
 /****************************************************************************
 **
+** Copyright (C) 2015 The XD Company Ltd.
 ** Copyright (C) 2015 The Qt Company Ltd.
 ** Contact: http://www.qt.io/licensing/
 **
@@ -284,6 +285,8 @@ inline quint64 qNextPowerOfTwo(qint64 v)
 {
     return qNextPowerOfTwo(quint64(v));
 }
+
+#include "./qmath-extras.h"
 
 QT_END_NAMESPACE
 

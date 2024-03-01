@@ -1736,7 +1736,7 @@ void QString::resize(int size)
 void QString::reallocData(uint alloc, bool grow)
 {
     if (grow) {
-        if (alloc > (uint(MaxAllocSize) - sizeof(Data)) / sizeof(QChar))
+        if (alloc > (uint(QSysInfo::MaxAllocSize) - sizeof(Data)) / sizeof(QChar))
             qBadAlloc();
         alloc = qAllocMore(alloc * sizeof(QChar), sizeof(Data)) / sizeof(QChar);
     }
@@ -5027,14 +5027,9 @@ modifiable reference.
     \sa chop(), resize(), left(), QStringRef::truncate()
 */
 
-void QString::truncate(int pos)
-{
-    if (pos < d->size)
-        resize(pos);
-}
-
-
 /*!
+    \fn void QString::chop(int n)
+
     Removes \a n characters from the end of the string.
 
     If \a n is greater than or equal to size(), the result is an
@@ -5048,11 +5043,6 @@ void QString::truncate(int pos)
 
     \sa truncate(), resize(), remove()
 */
-void QString::chop(int n)
-{
-    if (n > 0)
-        resize(d->size - n);
-}
 
 /*!
     Sets every character in the string to character \a ch. If \a size

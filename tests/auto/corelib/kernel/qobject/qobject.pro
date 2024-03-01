@@ -3,4 +3,4 @@ CONFIG += ordered
 
 !winrt: SUBDIRS+= signalbug
 
-SUBDIRS += test
+SUBDIRS += qobject

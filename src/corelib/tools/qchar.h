@@ -430,6 +430,7 @@ public:
 
     inline bool isPrint() const Q_DECL_NOTHROW { return QChar::isPrint(ucs); }
     Q_DECL_CONSTEXPR inline bool isSpace() const Q_DECL_NOTHROW { return QChar::isSpace(ucs); }
+    Q_DECL_CONSTEXPR inline bool isDirSeparator() const Q_DECL_NOTHROW { return QChar::isDirSeparator(ucs); }
     inline bool isMark() const Q_DECL_NOTHROW { return QChar::isMark(ucs); }
     inline bool isPunct() const Q_DECL_NOTHROW { return QChar::isPunct(ucs); }
     inline bool isSymbol() const Q_DECL_NOTHROW { return QChar::isSymbol(ucs); }
@@ -521,6 +522,8 @@ public:
         return ucs4 == 0x20 || (ucs4 <= 0x0d && ucs4 >= 0x09)
                 || (ucs4 > 127 && (ucs4 == 0x85 || ucs4 == 0xa0 || QChar::isSpace_helper(ucs4)));
     }
+    static Q_DECL_CONSTEXPR inline bool isDirSeparator(uint ucs4) Q_DECL_NOTHROW Q_DECL_CONST_FUNCTION
+        { return ucs4 == ushort(uchar('/')) || ucs4 == ushort(uchar('\\')); }
     static bool QT_FASTCALL isMark(uint ucs4) Q_DECL_NOTHROW Q_DECL_CONST_FUNCTION;
     static bool QT_FASTCALL isPunct(uint ucs4) Q_DECL_NOTHROW Q_DECL_CONST_FUNCTION;
     static bool QT_FASTCALL isSymbol(uint ucs4) Q_DECL_NOTHROW Q_DECL_CONST_FUNCTION;

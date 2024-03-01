@@ -1,5 +1,6 @@
 /****************************************************************************
 **
+** Copyright (C) 2015 The XD Company Ltd.
 ** Copyright (C) 2015 The Qt Company Ltd.
 ** Contact: http://www.qt.io/licensing/
 **
@@ -46,6 +47,7 @@
 #include "qlabel_p.h"
 #include "private/qstylesheetstyle_p.h"
 #include <qmath.h>
+#include <qtooltip.h>
 
 #ifndef QT_NO_ACCESSIBILITY
 #include <qaccessible.h>
@@ -88,12 +90,14 @@ QLabelPrivate::QLabelPrivate()
       textDirty(false),
       isRichText(false),
       isTextLabel(false),
-      hasShortcut(/*???*/),
+      hasShortcut(false),
 #ifndef QT_NO_CURSOR
       validCursor(false),
       onAnchor(false),
 #endif
       openExternalLinks(false)
+    , isSingleLine(false)
+    , isTextElided(false)
 {
 }
 
@@ -302,6 +306,8 @@ void QLabel::setText(const QString &text)
                     || (d->textformat == Qt::AutoText && Qt::mightBeRichText(d->text));
 
     d->control = oldControl;
+
+    d->updateTextControl();
 
     if (d->needTextControl()) {
         d->ensureTextControl();
@@ -714,12 +720,7 @@ void QLabel::setTextInteractionFlags(Qt::TextInteractionFlags flags)
     else
         setFocusPolicy(Qt::NoFocus);
 
-    if (d->needTextControl()) {
-        d->ensureTextControl();
-    } else {
-        delete d->control;
-        d->control = 0;
-    }
+    d->updateTextControl();
 
     if (d->control)
         d->control->setTextInteractionFlags(d->textInteractionFlags);
@@ -991,6 +992,12 @@ bool QLabel::event(QEvent *e)
                ) {
         d->setLayoutItemMargins(QStyle::SE_LabelLayoutItem);
         d->updateLabel();
+    } else if (type == QEvent::ToolTip) {
+        bool r = QFrame::event(e);
+        if(d->isTextElided && e->isAccepted() == false) {
+            QToolTip::showText(static_cast<QHelpEvent*>(e)->globalPos(), d->text, this);
+        }
+        return r;
     }
 
     return QFrame::event(e);
@@ -1004,8 +1011,7 @@ void QLabel::paintEvent(QPaintEvent *)
     QStyle *style = QWidget::style();
     QPainter painter(this);
     drawFrame(&painter);
-    QRect cr = contentsRect();
-    cr.adjust(d->margin, d->margin, -d->margin, -d->margin);
+    QRect cr = d->contentsRect();
     int align = QStyle::visualAlignment(d->isTextLabel ? d->textDirection()
                                                        : layoutDirection(), QFlag(d->align));
 
@@ -1019,49 +1025,7 @@ void QLabel::paintEvent(QPaintEvent *)
     else
 #endif
     if (d->isTextLabel) {
-        QRectF lr = d->layoutRect().toAlignedRect();
-        QStyleOption opt;
-        opt.initFrom(this);
-#ifndef QT_NO_STYLE_STYLESHEET
-        if (QStyleSheetStyle* cssStyle = qobject_cast<QStyleSheetStyle*>(style)) {
-            cssStyle->styleSheetPalette(this, &opt, &opt.palette);
-        }
-#endif
-        if (d->control) {
-#ifndef QT_NO_SHORTCUT
-            const bool underline = (bool)style->styleHint(QStyle::SH_UnderlineShortcut, 0, this, 0);
-            if (d->shortcutId != 0
-                && underline != d->shortcutCursor.charFormat().fontUnderline()) {
-                QTextCharFormat fmt;
-                fmt.setFontUnderline(underline);
-                d->shortcutCursor.mergeCharFormat(fmt);
-            }
-#endif
-            d->ensureTextLayouted();
-
-            QAbstractTextDocumentLayout::PaintContext context;
-            // Adjust the palette
-            context.palette = opt.palette;
-
-            if (foregroundRole() != QPalette::Text && isEnabled())
-                context.palette.setColor(QPalette::Text, context.palette.color(foregroundRole()));
-
-            painter.save();
-            painter.translate(lr.topLeft());
-            painter.setClipRect(lr.translated(-lr.x(), -lr.y()));
-            d->control->setPalette(context.palette);
-            d->control->drawContents(&painter, QRectF(), this);
-            painter.restore();
-        } else {
-            int flags = align | (d->textDirection() == Qt::LeftToRight ? Qt::TextForceLeftToRight
-                                                                       : Qt::TextForceRightToLeft);
-            if (d->hasShortcut) {
-                flags |= Qt::TextShowMnemonic;
-                if (!style->styleHint(QStyle::SH_UnderlineShortcut, &opt, this))
-                    flags |= Qt::TextHideMnemonic;
-            }
-            style->drawItemText(&painter, lr.toRect(), flags, opt.palette, isEnabled(), d->text, foregroundRole());
-        }
+        d->drawText(&painter);
     } else
 #ifndef QT_NO_PICTURE
     if (d->picture) {
@@ -1090,27 +1054,7 @@ void QLabel::paintEvent(QPaintEvent *)
     } else
 #endif
     if (d->pixmap && !d->pixmap->isNull()) {
-        QPixmap pix;
-        if (d->scaledcontents) {
-            QSize scaledSize = cr.size() * devicePixelRatioF();
-            if (!d->scaledpixmap || d->scaledpixmap->size() != scaledSize) {
-                if (!d->cachedimage)
-                    d->cachedimage = new QImage(d->pixmap->toImage());
-                delete d->scaledpixmap;
-                QImage scaledImage =
-                    d->cachedimage->scaled(scaledSize,
-                                           Qt::IgnoreAspectRatio, Qt::SmoothTransformation);
-                d->scaledpixmap = new QPixmap(QPixmap::fromImage(scaledImage));
-                d->scaledpixmap->setDevicePixelRatio(devicePixelRatioF());
-            }
-            pix = *d->scaledpixmap;
-        } else
-            pix = *d->pixmap;
-        QStyleOption opt;
-        opt.initFrom(this);
-        if (!isEnabled())
-            pix = style->generatedIconPixmap(QIcon::Disabled, pix, &opt);
-        style->drawItemPixmap(&painter, cr, align, pix);
+        d->drawPixmap(&painter, cr, Qt::IgnoreAspectRatio);
     }
 }
 
@@ -1284,6 +1228,8 @@ void QLabelPrivate::clearContents()
     control = 0;
     isTextLabel = false;
     hasShortcut = false;
+    isTextElided = false;
+    isSingleLine = false;
 
 #ifndef QT_NO_PICTURE
     delete picture;
@@ -1557,6 +1503,21 @@ void QLabelPrivate::sendControlEvent(QEvent *e)
     control->processEvent(e, -layoutRect().topLeft(), q);
 }
 
+void QLabelPrivate::updateTextControl() const
+{
+    if (this->needTextControl()) {
+        this->ensureTextControl();
+    } else {
+        delete this->control;
+        this->control = 0;
+
+        // Checks if there is more than one text-line.
+        QTextStream strem(&const_cast<QLabelPrivate *>(this)->text, QIODevice::ReadOnly);
+        strem.readLine();
+        this->isSingleLine = strem.atEnd();
+    }
+}
+
 void QLabelPrivate::_q_linkHovered(const QString &anchor)
 {
     Q_Q(QLabel);
@@ -1621,6 +1582,126 @@ QMenu *QLabelPrivate::createStandardContextMenu(const QPoint &pos)
     return control->createStandardContextMenu(p, q_func());
 }
 #endif
+
+void QLabelPrivate::initStyleOption(QStyleOption *opt)
+{
+    Q_Q(QLabel);
+    opt->initFrom(q);
+#ifndef QT_NO_STYLE_STYLESHEET
+    if (QStyleSheetStyle* cssStyle = qobject_cast<QStyleSheetStyle*>(q->style())) {
+        cssStyle->styleSheetPalette(q, opt, &opt->palette);
+    }
+#endif
+}
+
+void QLabelPrivate::drawText(QPainter *painter)
+{
+    QStyleOption opt;
+    this->initStyleOption(&opt);
+    return drawText(painter, this->layoutRect().toAlignedRect(), &opt);
+}
+
+void QLabelPrivate::drawText(QPainter *painter, const QRect &lr, const QStyleOption *opt)
+{
+    Q_Q(QLabel);
+    QStyle *style = q->style();
+    const QPalette &pal = opt ? opt->palette : q->palette();
+    //p->setRenderHints(QPainter::Antialiasing | QPainter::TextAntialiasing
+    //                  | QPainter::SmoothPixmapTransform | QPainter::HighQualityAntialiasing, true);
+
+    const bool isEnabled = q->isEnabled();
+    if (this->control) {
+#ifndef QT_NO_SHORTCUT
+        const bool underline = (bool)style->styleHint(QStyle::SH_UnderlineShortcut, 0, q, 0);
+        if (this->shortcutId != 0
+            && underline != this->shortcutCursor.charFormat().fontUnderline()) {
+            QTextCharFormat fmt;
+            fmt.setFontUnderline(underline);
+            this->shortcutCursor.mergeCharFormat(fmt);
+        }
+#endif
+        this->ensureTextLayouted();
+
+        QAbstractTextDocumentLayout::PaintContext context;
+
+        // Adjust the palette
+        context.palette = pal;
+
+        if (q->foregroundRole() != QPalette::Text && isEnabled)
+            context.palette.setColor(QPalette::Text, context.palette.color(q->foregroundRole()));
+
+        painter->save();
+        painter->translate(lr.topLeft());
+        painter->setClipRect(lr.translated(-lr.x(), -lr.y()));
+        this->control->setPalette(context.palette);
+        this->control->drawContents(painter, QRectF(), q);
+        painter->restore();
+    } else {
+        //position
+        int align = QStyle::visualAlignment(this->textDirection(), QFlag(this->align));
+        const bool isLeftToRight = this->textDirection() == Qt::LeftToRight;
+        int flags = align | (isLeftToRight ? Qt::TextForceLeftToRight
+                                           : Qt::TextForceRightToLeft);
+        if (this->hasShortcut) {
+            flags |= Qt::TextShowMnemonic;
+            if ( ! style->styleHint(QStyle::SH_UnderlineShortcut, opt, q))
+                flags |= Qt::TextHideMnemonic;
+        }
+
+        // TRACE/widgets/label: text elide support.
+        QString elidedText = this->text;
+        if (this->isSingleLine) {
+            // Ignores Mnemonic (the "&" sign).
+            elidedText = painter->fontMetrics().elidedText(
+                this->text
+                , isLeftToRight ? Qt::ElideRight : Qt::ElideLeft
+                , q->width(), flags
+            );
+            this->isTextElided = qNotEqual(elidedText.constData(), this->text.constData());
+        }
+
+        //p->drawText(lr, flags, elidedText);
+        style->drawItemText(painter, lr, flags, pal, isEnabled, elidedText, q->foregroundRole());
+    }
+}
+
+void QLabelPrivate::drawText(QPainter *painter, const QColor &foregroundOverride)
+{
+    Q_Q(QLabel);
+    QStyleOption opt;
+    this->initStyleOption(&opt);
+    opt.palette.setColor(QPalette::All, q->foregroundRole(), foregroundOverride);
+    return drawText(painter, this->layoutRect().toAlignedRect(), &opt);
+}
+
+void QLabelPrivate::drawPixmap(QPainter *p, const QRect &cr, Qt::AspectRatioMode aspectMode)
+{
+    Q_Q(QLabel);
+    QStyle *style = q->style();
+    int align = QStyle::visualAlignment(q->layoutDirection(), QFlag(this->align));
+
+    QPixmap pix;
+    if (this->scaledcontents) {
+        QSize scaledSize = cr.size() * q->devicePixelRatioF();
+        if (!this->scaledpixmap || this->scaledpixmap->size() != scaledSize) {
+            if (!this->cachedimage)
+                this->cachedimage = new QImage(this->pixmap->toImage());
+            delete this->scaledpixmap;
+            QImage scaledImage = this->cachedimage->scaled(
+                scaledSize, aspectMode, Qt::SmoothTransformation
+            );
+            this->scaledpixmap = new QPixmap(QPixmap::fromImage(scaledImage));
+            this->scaledpixmap->setDevicePixelRatio(q->devicePixelRatioF());
+        }
+        pix = *this->scaledpixmap;
+    } else
+        pix = *this->pixmap;
+    QStyleOption opt;
+    opt.initFrom(q);
+    if (!q->isEnabled())
+        pix = style->generatedIconPixmap(QIcon::Disabled, pix, &opt);
+    style->drawItemPixmap(p, cr, align, pix);
+}
 
 /*!
     \fn void QLabel::linkHovered(const QString &link)

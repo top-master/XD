@@ -1,5 +1,6 @@
 /****************************************************************************
 **
+** Copyright (C) 2015 The XD Company Ltd.
 ** Copyright (C) 2015 The Qt Company Ltd.
 ** Contact: http://www.qt.io/licensing/
 **
@@ -122,6 +123,15 @@ public:
     QRect visualRect(const QModelIndex &index) const Q_DECL_OVERRIDE;
     void scrollTo(const QModelIndex &index, ScrollHint hint = EnsureVisible) Q_DECL_OVERRIDE;
     QModelIndex indexAt(const QPoint &p) const Q_DECL_OVERRIDE;
+
+    QVector<QModelIndex> visibleItems(const QRect &rect) const;
+    inline QVector<QModelIndex> visibleItems() const { return this->visibleItems(this->rect()); }
+
+    inline QModelIndex firstVisible() const { return visibleItems().value(0); }
+    inline QModelIndex lastVisible() const {
+        const QVector<QModelIndex> &items = this->visibleItems();
+        return items.value(items.count() - 1);
+    }
 
     void doItemsLayout() Q_DECL_OVERRIDE;
     void reset() Q_DECL_OVERRIDE;

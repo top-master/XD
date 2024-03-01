@@ -1,5 +1,6 @@
 /****************************************************************************
 **
+** Copyright (C) 2015 The XD Company Ltd.
 ** Copyright (C) 2015 The Qt Company Ltd.
 ** Copyright (C) 2014 Olivier Goffart <ogoffart@woboq.com>
 ** Contact: http://www.qt.io/licensing/
@@ -60,16 +61,27 @@ public:
     QList<QByteArray> parameterTypes() const;
     QList<QByteArray> parameterNames() const;
     const char *tag() const;
+
     enum Access { Private, Protected, Public };
     Access access() const;
+
     enum MethodType { Method, Signal, Slot, Constructor };
     MethodType methodType() const;
+    Q_ALWAYS_INLINE bool isConstructor() const { return methodType() == QMetaMethod::Constructor; }
+    Q_ALWAYS_INLINE bool isMethod() const { return methodType() == QMetaMethod::Method; }
+    Q_ALWAYS_INLINE bool isSignal() const { return methodType() == QMetaMethod::Signal; }
+    Q_ALWAYS_INLINE bool isSlot() const { return methodType() == QMetaMethod::Slot; }
+
     enum Attributes { Compatibility = 0x1, Cloned = 0x2, Scriptable = 0x4 };
     int attributes() const;
     int methodIndex() const;
     int revision() const;
 
     inline const QMetaObject *enclosingMetaObject() const { return mobj; }
+
+    /// \internal
+    /// Raw meta call using Qt::DirectConnection.
+    bool metaInvoke(QObject *object, void** argv);
 
     bool invoke(QObject *object,
                 Qt::ConnectionType connectionType,

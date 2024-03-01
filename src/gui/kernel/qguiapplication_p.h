@@ -75,9 +75,17 @@ public:
     QGuiApplicationPrivate(int &argc, char **argv, int flags);
     ~QGuiApplicationPrivate();
 
+    static inline QGuiApplicationPrivate *get(QGuiApplication *o) {
+        return o->d_func();
+    }
+    static inline const QGuiApplicationPrivate *get(const QGuiApplication *o) {
+        return o->d_func();
+    }
+
     void init();
 
     void createPlatformIntegration();
+    static void onGuiPreRoutine();
     void createEventDispatcher() Q_DECL_OVERRIDE;
     void eventDispatcherReady() Q_DECL_OVERRIDE;
 

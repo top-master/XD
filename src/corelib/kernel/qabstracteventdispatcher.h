@@ -116,6 +116,9 @@ Q_SIGNALS:
 protected:
     QAbstractEventDispatcher(QAbstractEventDispatcherPrivate &,
                              QObject *parent);
+
+private:
+    Q_DISABLE_COPY(QAbstractEventDispatcher)
 };
 
 QT_END_NAMESPACE

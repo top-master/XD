@@ -130,6 +130,8 @@ static QByteArray modifiersTestRowName(const QString &keySequence)
         if (i < size - 1)
             str << ',';
     }
+    // TRACE/corelib: don't rely on destructor to flush #3.
+    str.flush();
     return result;
 }
 

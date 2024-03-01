@@ -330,8 +330,12 @@ Q_STATIC_ASSERT_X(QT_POINTER_SIZE == sizeof(void *), "QT_POINTER_SIZE defined in
 /*!
     \fn QFlags &QFlags::operator^=(QFlags other)
 
-    Performs a bitwise XOR operation with \a other and stores the
+    Performs a bitwise XOR (exclusive-or) operation with \a other and stores the
     result in this QFlags object. Returns a reference to this object.
+
+    For example, if this instance has bits `1001` and \a other has `1010`, then
+    this instance's bits would change to `0011` (only unique `1` bits will be
+    kept, any other bit will be replaced by zero).
 
     \sa operator^(), operator&=(), operator|=()
 */
@@ -1023,7 +1027,7 @@ Q_EXTERN_C void qThrowAtomicMismatch()
 Q_EXTERN_C void qThrowRequirement(int type, const char *message)
 {
 #ifndef QT_NO_EXCEPTIONS
-    QRequirementError err(QRequirementError::Type(type), message);
+    QRequirementError err(QRequirementErrorType::Raw(type), message);
     throw err;
 #else
     qFatal("RequirementError(%d): %s", type, message);

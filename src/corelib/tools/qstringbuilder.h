@@ -243,7 +243,7 @@ template <> struct QConcatenable<QLatin1String> : private QAbstractConcatenable
     }
 };
 
-// Required for `QString result = QLL("raw text") + myQStringVariable` syntax.
+// Required for `QString result = QLL("raw text")` + myQStringVariable` syntax.
 template <> struct QConcatenable<QLatin1Literal> : private QAbstractConcatenable
 {
     typedef QLatin1Literal type;

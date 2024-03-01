@@ -44,7 +44,7 @@
 #include <qpa/qplatformintegration.h>
 #include <qpa/qplatformdrag.h>
 
-#include <QtCore/QAbstractEventDispatcher>
+#include <QtCore/qeventdispatcherdecor.h>
 #include <QtCore/QVariant>
 #include <QtCore/private/qcoreapplication_p.h>
 #include <QtCore/private/qabstracteventdispatcher_p.h>
@@ -1177,6 +1177,16 @@ void QGuiApplicationPrivate::createPlatformIntegration()
     // Load the platform integration
     QString platformPluginPath = QString::fromLocal8Bit(qgetenv("QT_QPA_PLATFORM_PLUGIN_PATH"));
 
+    // TRACE/gui/platform-plugin note: search-paths already include `QLibraryInfo::location(QLibraryInfo::PluginsPath)`,
+    // because by default that's first entry in `QCoreApplication::libraryPaths()`
+    // (which `QFactoryLoader::update()` uses), else would enable:
+#if 0
+    if (platformPluginPath.isEmpty() || ! QDir(platformPluginPath).exists()) {
+        platformPluginPath = QLibraryInfo::location(QLibraryInfo::PluginsPath);
+        platformPluginPath += QLatin1String("/platforms");
+    }
+#endif
+
 
     QByteArray platformName;
 #ifdef QT_QPA_DEFAULT_PLATFORM_NAME
@@ -1240,6 +1250,14 @@ void QGuiApplicationPrivate::createPlatformIntegration()
         forcedWindowIcon = QDir::isAbsolutePath(icon) ? QIcon(icon) : QIcon::fromTheme(icon);
 }
 
+void QGuiApplicationPrivate::onGuiPreRoutine()
+{
+    QEventDispatcherDecor *decor = qobject_cast<QEventDispatcherDecor *>(eventDispatcher);
+    if (decor) {
+        (void) decor->toDecoratee();
+    }
+}
+
 /*!
     Called from QCoreApplication::init()
 
@@ -1248,8 +1266,9 @@ void QGuiApplicationPrivate::createPlatformIntegration()
 */
 void QGuiApplicationPrivate::createEventDispatcher()
 {
-    Q_ASSERT(!eventDispatcher);
+   Q_ASSERT(!eventDispatcher);
 
+#ifndef QEVENTDISPATCHER_DECOR_H
     if (platform_integration == 0)
         createPlatformIntegration();
 
@@ -1257,10 +1276,42 @@ void QGuiApplicationPrivate::createEventDispatcher()
     Q_ASSERT(!eventDispatcher);
 
     eventDispatcher = platform_integration->createEventDispatcher();
+#else
+    QEventDispatcherDecorFunc *decor = new QEventDispatcherDecorFunc();
+    decor->load = [&] (QEventDispatcherDecor *current) {
+        Q_UNUSED(current)
+        QGuiApplication *app = qApp;
+        QGuiApplicationPrivate *d = QGuiApplicationPrivate::get(app);
+        if (platform_integration == 0) {
+            d->createPlatformIntegration();
+
+            // The platform integration should not mess with the event dispatcher
+            Q_ASSERT(eventDispatcher == current);
+        }
+
+        QAbstractEventDispatcher *result = platform_integration->createEventDispatcher();
+        eventDispatcher = result;
+
+        return result;
+    };
+    eventDispatcher = decor;
+    //qAddPreRoutine(onGuiPreRoutine);
+#endif
 }
 
 void QGuiApplicationPrivate::eventDispatcherReady()
 {
+    // Maybe redirect to this later.
+    QEventDispatcherDecor *lazy = qobject_cast<QEventDispatcherDecor *>(eventDispatcher);
+    if (lazy && ! lazy->isDecorLoaded()) {
+        lazy->decorListen([&] (QObject *) {
+            QGuiApplication *app = qApp;
+            QGuiApplicationPrivate *d = QGuiApplicationPrivate::get(app);
+            d->eventDispatcherReady();
+        });
+        return;
+    }
+
     if (platform_integration == 0)
         createPlatformIntegration();
 

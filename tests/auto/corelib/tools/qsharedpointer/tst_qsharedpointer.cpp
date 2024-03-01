@@ -79,6 +79,7 @@ private slots:
     void sharedPointerFromQObjectWithFakeQSharedPointer();
     void sharedPointerFromFakeQSharedPointer();
     void fakeFromRawPointerWithRealQSharedPointer();
+    void fakeWhileAlreadyHavingFake();
     void weakQObjectFromSharedPointer();
     void objectCast();
     void differentPointers();
@@ -937,6 +938,21 @@ void tst_QSharedPointer::fakeFromRawPointerWithRealQSharedPointer()
     // Actual test.
     QVERIFY( ! shared.isNull());
     QVERIFY( ! shared.isFake());
+}
+
+void tst_QSharedPointer::fakeWhileAlreadyHavingFake()
+{
+    // TRACE/corelib BugFix: holding reference followed by `delete` causes crash #2,
+    // however, this test could never reproduce said crash, but `delete` happens.
+
+    // Dummy.
+    QObject *ptr = new QObject;
+    QSharedPointer<QObject> fakeX = QSharedPointer<QObject>::fromStack(ptr);
+    QVERIFY(fakeX.isFake());
+
+    // Actual test.
+    QSharedPointer<QObject> fakeY = QSharedPointer<QObject>::fromStack(ptr);
+    QVERIFY(fakeY.isFake());
 }
 
 void tst_QSharedPointer::weakQObjectFromSharedPointer()

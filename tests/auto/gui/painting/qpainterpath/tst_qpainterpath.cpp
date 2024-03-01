@@ -1170,6 +1170,12 @@ void tst_QPainterPath::testToFillPolygons()
     QCOMPARE(polygons.first().count(QPointF(70, 50)), 0);
 }
 
+#ifdef QT_DEBUG
+#  define EXPECT_WARN_NAN(x) QEXPECT_WARN(QRegularExpression(QLL("QPainterPath::" x ": Adding .* where .* is NaN or Inf, ignoring call")))
+#else
+#  define EXPECT_WARN_NAN(x) do { } while (0)
+#endif
+
 void tst_QPainterPath::testNaNandInfinites()
 {
     QPainterPath path1;
@@ -1183,29 +1189,47 @@ void tst_QPainterPath::testNaNandInfinites()
     // all these operations with NaN/Inf should be ignored
     // can't test operator>> reliably, as we can't create a path with NaN to << later
 
+    EXPECT_WARN_NAN("moveTo");
     path1.moveTo(p1);
+    EXPECT_WARN_NAN("moveTo");
     path1.moveTo(qSNaN(), qQNaN());
+    EXPECT_WARN_NAN("moveTo");
     path1.moveTo(pInf);
 
+    EXPECT_WARN_NAN("lineTo");
     path1.lineTo(p1);
+    EXPECT_WARN_NAN("lineTo");
     path1.lineTo(qSNaN(), qQNaN());
+    EXPECT_WARN_NAN("lineTo");
     path1.lineTo(pInf);
 
+    EXPECT_WARN_NAN("cubicTo");
     path1.cubicTo(p1, p2, p3);
+    EXPECT_WARN_NAN("cubicTo");
     path1.cubicTo(p1, QPointF(1, 1), QPointF(2, 2));
+    EXPECT_WARN_NAN("cubicTo");
     path1.cubicTo(pInf, QPointF(10, 10), QPointF(5, 1));
 
+    EXPECT_WARN_NAN("quadTo");
     path1.quadTo(p1, p2);
+    EXPECT_WARN_NAN("quadTo");
     path1.quadTo(QPointF(1, 1), p3);
+    EXPECT_WARN_NAN("quadTo");
     path1.quadTo(QPointF(1, 1), pInf);
 
+    EXPECT_WARN_NAN("arcTo");
     path1.arcTo(QRectF(p1, p2), 5, 5);
+    EXPECT_WARN_NAN("arcTo");
     path1.arcTo(QRectF(pInf, QPointF(1, 1)), 5, 5);
 
+    EXPECT_WARN_NAN("addRect");
     path1.addRect(QRectF(p1, p2));
+    EXPECT_WARN_NAN("addRect");
     path1.addRect(QRectF(pInf, QPointF(1, 1)));
 
+    EXPECT_WARN_NAN("addEllipse");
     path1.addEllipse(QRectF(p1, p2));
+    EXPECT_WARN_NAN("addEllipse");
     path1.addEllipse(QRectF(pInf, QPointF(1, 1)));
 
     QCOMPARE(path1, path2);

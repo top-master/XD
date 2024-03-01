@@ -1,5 +1,6 @@
 /****************************************************************************
 **
+** Copyright (C) 2015 The XD Company Ltd.
 ** Copyright (C) 2015 The Qt Company Ltd.
 ** Contact: http://www.qt.io/licensing/
 **
@@ -343,7 +344,7 @@ QFile::setFileName(const QString &name)
     file names that the user chooses. File names hard-coded into the
     application should only use 7-bit ASCII filename characters.
 
-    @warning In Darwin platforms "encode" also means shortening the path, using
+    WARNING: In Darwin platforms "encode" also means shortening the path, using
     general Canonical Decomposition algorithm, note that
     due to path length limits, some platforms shorten paths, for example
     Windows's shorten syntax may convert from "C:\Program Files" to "C:\PROGRA~1"

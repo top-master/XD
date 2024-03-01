@@ -2536,6 +2536,7 @@ QString QLocalePrivate::dateTimeToString(const QString &format, const QDateTime 
     }
 
     QString result;
+    result.reserve(48);
 
     int i = 0;
     while (i < format.size()) {

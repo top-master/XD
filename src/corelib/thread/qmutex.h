@@ -101,6 +101,7 @@ private:
 class Q_CORE_EXPORT QMutex : public QBasicMutex {
 public:
     enum RecursionMode { NonRecursive, Recursive };
+
     explicit QMutex(RecursionMode mode = NonRecursive);
     ~QMutex();
 
@@ -118,17 +119,11 @@ private:
 class Q_CORE_EXPORT QMutexLocker
 {
 public:
-    inline explicit QMutexLocker(QBasicMutex *m) QT_MUTEX_LOCK_NOEXCEPT
+    Q_ALWAYS_INLINE explicit QMutexLocker(QBasicMutex *m) QT_MUTEX_LOCK_NOEXCEPT
     {
-        Q_ASSERT_X((reinterpret_cast<quintptr>(m) & quintptr(1u)) == quintptr(0),
-                   "QMutexLocker", "QMutex pointer is misaligned");
-        val = quintptr(m);
-        if (Q_LIKELY(m)) {
-            // call QMutex::lock() instead of QBasicMutex::lock()
-            static_cast<QMutex *>(m)->lock();
-            val |= 1;
-        }
+        this->init(m);
     }
+
     inline ~QMutexLocker() { unlock(); }
 
     inline void unlock() Q_DECL_NOTHROW
@@ -139,14 +134,24 @@ public:
         }
     }
 
-    inline void relock() QT_MUTEX_LOCK_NOEXCEPT
+    inline bool relock() QT_MUTEX_LOCK_NOEXCEPT
     {
         if (val) {
             if ((val & quintptr(1u)) == quintptr(0u)) {
                 mutex()->lock();
                 val |= quintptr(1u);
+                return true;
             }
         }
+        return false;
+    }
+
+    /// @warning Something may directly call @ref QMutex::unlock, and
+    /// you may make the QMutex @c private or @c protected to prevent that, but
+    /// although that's not this helper-class's responsibility we picked the
+    /// name "wasLocked" instead of "isLocked" (to notify users).
+    Q_ALWAYS_INLINE bool wasLocked() const Q_DECL_NOTHROW {
+        return (val & quintptr(1u)) == quintptr(1u);
     }
 
 #if defined(Q_CC_MSVC)
@@ -163,9 +168,28 @@ public:
 #pragma warning( pop )
 #endif
 
+protected:
+
+    inline void init(QBasicMutex *m) QT_MUTEX_LOCK_NOEXCEPT
+    {
+        Q_ASSERT_X((reinterpret_cast<quintptr>(m) & quintptr(1u)) == quintptr(0),
+                   "QMutexLocker", "QMutex pointer is misaligned");
+        val = quintptr(m);
+        if (Q_LIKELY(m)) {
+            // call QMutex::lock() instead of QBasicMutex::lock()
+            static_cast<QMutex *>(m)->lock();
+            val |= 1;
+        }
+    }
+
+    Q_ALWAYS_INLINE explicit QMutexLocker(Qt::Initialization) Q_DECL_NOTHROW
+        : val(0)
+    {
+    }
+
 private:
     Q_DISABLE_COPY(QMutexLocker)
-
+protected:
     quintptr val;
 };
 
