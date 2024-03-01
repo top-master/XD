@@ -50,6 +50,8 @@ public:
     inline ~QBasicTimer() { if (id) stop(); }
 
     inline bool isActive() const { return id != 0; }
+    inline bool isOffline() const { return id == 0; }
+
     inline int timerId() const { return id; }
 
     void start(int msec, QObject *obj);

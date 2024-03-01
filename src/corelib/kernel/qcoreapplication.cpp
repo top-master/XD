@@ -558,6 +558,7 @@ void QCoreApplicationPrivate::checkReceiverThread(QObject *receiver)
 {
     QThread *currentThread = QThread::currentThread();
     QThread *thr = receiver->thread();
+    // Note to place debug-break inside `qt_message_fatal` which `Q_ASSERT_X` calls.
     Q_ASSERT_X(currentThread == thr || !thr,
                "QCoreApplication::sendEvent",
                QString::fromLatin1("Cannot send events to objects owned by a different thread. "
@@ -806,6 +807,12 @@ void QCoreApplicationPrivate::init()
     }
 #endif
 
+    // TRACE/corelib App: init anything possible before `eventDispatcher` #1
+    // because we don't know what `createEventDispatcher()` may need,
+    // for now, we moved `processCommandLineArguments` before `createEventDispatcher`.
+
+    processCommandLineArguments();
+
 #ifndef QT_NO_QOBJECT
     // use the event dispatcher created by the app programmer (if any)
     if (!eventDispatcher)
@@ -828,8 +835,6 @@ void QCoreApplicationPrivate::init()
     extern void qt_core_eval_init(QCoreApplicationPrivate::Type);
     qt_core_eval_init(application_type);
 #endif
-
-    processCommandLineArguments();
 
     qt_call_pre_routines();
     qt_startup_hook();

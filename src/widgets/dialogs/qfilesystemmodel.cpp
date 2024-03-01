@@ -1,5 +1,6 @@
 /****************************************************************************
 **
+** Copyright (C) 2015 The XD Company Ltd.
 ** Copyright (C) 2015 The Qt Company Ltd.
 ** Contact: http://www.qt.io/licensing/
 **
@@ -751,10 +752,10 @@ QString QFileSystemModelPrivate::size(const QModelIndex &index) const
     // Konqueror - "4 KB"
     // Nautilus  - "9 items" (the number of children)
     }
-    return size(n->size());
+    return QFileSystemModel::formatSize(n->size());
 }
 
-QString QFileSystemModelPrivate::size(qint64 bytes)
+QString QFileSystemModel::formatSize(qint64 bytes)
 {
     // According to the Si standard KB is 1000 bytes, KiB is 1024
     // but on windows sizes are calculated by dividing by 1024 so we do what they do.

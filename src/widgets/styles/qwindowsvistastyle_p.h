@@ -53,7 +53,7 @@ QT_BEGIN_NAMESPACE
 #if !defined(QT_NO_STYLE_WINDOWSVISTA)
 
 class QWindowsVistaStylePrivate;
-class QWindowsVistaStyle : public QWindowsXPStyle
+class Q_WIDGETS_EXPORT QWindowsVistaStyle : public QWindowsXPStyle
 {
     Q_OBJECT
 public:

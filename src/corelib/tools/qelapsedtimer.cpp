@@ -33,6 +33,8 @@
 
 #include "qelapsedtimer.h"
 
+#include <QtCore/qdatetime.h>
+
 QT_BEGIN_NAMESPACE
 
 /*!
@@ -256,6 +258,33 @@ bool QElapsedTimer::hasExpired(qint64 timeout) const Q_DECL_NOTHROW
     // if timeout is -1, quint64(timeout) is LLINT_MAX, so this will be
     // considered as never expired
     return quint64(elapsed()) > quint64(timeout);
+}
+
+QString QElapsedTimer::toString(qint64 msec)
+{
+    const QTime format = QTime(0, 0, 0, 0).addSecs( (msec + 500)/1000 );
+    QString time = format.toString(QLL("h:mm:ss"));
+    // Removes hour if zero (the "0:" prefix).
+    if (time.startsWith(QLL("0:"))) {
+        time.remove(0, 2);
+    }
+    return time;
+}
+
+/*!
+  Reduces the \a timeout by \a elapsed, taking into account that -1 is a
+  special value for timeouts.
+  if timeout is -1, however -1 is returned.
+
+  Returns the difference between timeout and elapsed.
+*/
+int QElapsedTimer::timeLeft(int timeout, int elapsed)
+{
+    if (timeout == -1)
+        return -1;
+
+    timeout = timeout - elapsed;
+    return Q_MAX(timeout, 0);
 }
 
 QT_END_NAMESPACE

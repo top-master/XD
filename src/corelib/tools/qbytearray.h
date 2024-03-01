@@ -530,16 +530,13 @@ inline void QByteArray::squeeze()
     }
 }
 
-inline QByteArray QByteArray::midRef(int index, int len) const
+Q_REQUIRED_RESULT inline QByteArray QByteArray::midRef(int index, int len) const
 {
-    int lenOwn = length();
     if (index < 0)
         index = 0;
-    else if (index >= lenOwn)
-        return QByteArray();
     return QByteArray::fromRawData(
                 constData() + index,
-                qBound(0, len < 0 ? lenOwn : len, lenOwn - index));
+                qBound(0, len < 0 ? length() : len, length() - index));
 }
 
 class Q_CORE_EXPORT QByteRef {

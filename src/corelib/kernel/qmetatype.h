@@ -475,6 +475,12 @@ public:
                                         LoadOperator loadOp);
     static void registerStreamOperators(int type, SaveOperator saveOp,
                                         LoadOperator loadOp);
+    template<typename T>
+    static bool hasRegisteredStreamOperators()
+    {
+        return hasRegisteredStreamOperators(qMetaTypeId<T>());
+    }
+    static bool hasRegisteredStreamOperators(int typeId);
 #endif
     static int registerType(const char *typeName, Deleter deleter,
                             Creator creator);
@@ -757,9 +763,9 @@ struct QMetaTypeFunctionHelper {
 
     static void *Construct(void *where, const void *t)
     {
-        if (t)
-            return new (where) T(*static_cast<const T*>(t));
-        return new (where) T;
+        if ( ! t)
+            return new (where) T();
+        return new (where) T(*static_cast<const T*>(t));
     }
 #ifndef QT_NO_DATASTREAM
     static void Save(QDataStream &stream, const void *t)
@@ -1727,15 +1733,23 @@ int qRegisterMetaType(const char *typeName
 
 #ifndef QT_NO_DATASTREAM
 template <typename T>
-void qRegisterMetaTypeStreamOperators(const char *typeName
+int qRegisterMetaTypeStreamOperators(const char *typeName
 #ifndef Q_QDOC
     , T * /* dummy */ = Q_NULLPTR
 #endif
 )
 {
-    qRegisterMetaType<T>(typeName);
-    QMetaType::registerStreamOperators(typeName, QtMetaTypePrivate::QMetaTypeFunctionHelper<T>::Save,
-                                                 QtMetaTypePrivate::QMetaTypeFunctionHelper<T>::Load);
+    int id = qRegisterMetaType<T>(typeName);
+    QMetaType::registerStreamOperators(id, QtMetaTypePrivate::QMetaTypeFunctionHelper<T>::Save,
+                                           QtMetaTypePrivate::QMetaTypeFunctionHelper<T>::Load);
+    return id;
+}
+
+/// Registers Enum Meta-Type as Integer-alias.
+template <typename T>
+int qRegisterMetaEnum(const char *typeName) {
+    Q_STATIC_ASSERT_X(sizeof(T) == sizeof(int), "Can only cast 'enum' to 'int'.");
+    return qRegisterMetaTypeStreamOperators<int>(typeName);
 }
 #endif // QT_NO_DATASTREAM
 

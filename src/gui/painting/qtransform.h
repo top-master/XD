@@ -119,6 +119,8 @@ public:
     QTransform operator*(const QTransform &o) const;
 
     QTransform &operator=(const QTransform &);
+    inline QTransform(const QTransform &other)
+        { this->operator= (other); }
 
     operator QVariant() const;
 

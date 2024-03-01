@@ -5,6 +5,7 @@ SUBDIRS += \
     dbus \
     gui \
     network \
+    remote \
     opengl
 
 contains(QT_CONFIG, sql): SUBDIRS += sql

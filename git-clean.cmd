@@ -7,6 +7,7 @@ git clean -d -x -f ^
     -e /bin/** ^
     -e /lib/** ^
     -e /mkspecs/modules/** ^
-    -e /plugins/**
+    -e /plugins/** ^
+    -e /src/extras/lib/**
 
 pause

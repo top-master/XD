@@ -67,7 +67,7 @@
 
 /*! Used like `#if defined(QT_HAS_XD) && QT_HAS_XD(5, 6, 0)`.
  *
- * WARNING: takes same arguments as `QT_VERSION_CHECK` does,
+ * WARNING: takes same arguments as #QT_VERSION_CHECK macro does,
  * but to fix Qt-creator coloring, not visible in the `#define`.
  */
 #define QT_HAS_XD QT_VERSION >= QT_VERSION_CHECK
@@ -1004,13 +1004,13 @@ typedef void (*QFunctionPointer)();
 #  define Q_UNIMPLEMENTED() qWarning("Unimplemented code.")
 #endif
 
-Q_DECL_CONSTEXPR static inline bool qFuzzyCompare(double p1, double p2) Q_REQUIRED_RESULT Q_DECL_UNUSED;
+Q_REQUIRED_RESULT Q_DECL_CONSTEXPR static inline bool qFuzzyCompare(double p1, double p2) Q_DECL_UNUSED;
 Q_DECL_CONSTEXPR static inline bool qFuzzyCompare(double p1, double p2)
 {
     return (qAbs(p1 - p2) * 1000000000000. <= qMin(qAbs(p1), qAbs(p2)));
 }
 
-Q_DECL_CONSTEXPR static inline bool qFuzzyCompare(float p1, float p2) Q_REQUIRED_RESULT Q_DECL_UNUSED;
+Q_REQUIRED_RESULT Q_DECL_CONSTEXPR static inline bool qFuzzyCompare(float p1, float p2) Q_DECL_UNUSED;
 Q_DECL_CONSTEXPR static inline bool qFuzzyCompare(float p1, float p2)
 {
     return (qAbs(p1 - p2) * 100000.f <= qMin(qAbs(p1), qAbs(p2)));
@@ -1019,7 +1019,7 @@ Q_DECL_CONSTEXPR static inline bool qFuzzyCompare(float p1, float p2)
 /*!
   \internal
 */
-Q_DECL_CONSTEXPR static inline bool qFuzzyIsNull(double d) Q_REQUIRED_RESULT Q_DECL_UNUSED;
+Q_REQUIRED_RESULT Q_DECL_CONSTEXPR static inline bool qFuzzyIsNull(double d) Q_DECL_UNUSED;
 Q_DECL_CONSTEXPR static inline bool qFuzzyIsNull(double d)
 {
     return qAbs(d) <= 0.000000000001;
@@ -1028,7 +1028,7 @@ Q_DECL_CONSTEXPR static inline bool qFuzzyIsNull(double d)
 /*!
   \internal
 */
-Q_DECL_CONSTEXPR static inline bool qFuzzyIsNull(float f) Q_REQUIRED_RESULT Q_DECL_UNUSED;
+Q_REQUIRED_RESULT Q_DECL_CONSTEXPR static inline bool qFuzzyIsNull(float f)  Q_DECL_UNUSED;
 Q_DECL_CONSTEXPR static inline bool qFuzzyIsNull(float f)
 {
     return qAbs(f) <= 0.00001f;
@@ -1039,7 +1039,7 @@ Q_DECL_CONSTEXPR static inline bool qFuzzyIsNull(float f)
    check whether the actual value is 0 or close to 0, but whether
    it is binary 0, disregarding sign.
 */
-static inline bool qIsNull(double d) Q_REQUIRED_RESULT Q_DECL_UNUSED;
+Q_REQUIRED_RESULT static inline bool qIsNull(double d) Q_DECL_UNUSED;
 static inline bool qIsNull(double d)
 {
     union U {
@@ -1056,7 +1056,7 @@ static inline bool qIsNull(double d)
    check whether the actual value is 0 or close to 0, but whether
    it is binary 0, disregarding sign.
 */
-static inline bool qIsNull(float f) Q_REQUIRED_RESULT Q_DECL_UNUSED;
+Q_REQUIRED_RESULT static inline bool qIsNull(float f) Q_DECL_UNUSED;
 static inline bool qIsNull(float f)
 {
     union U {
@@ -1287,6 +1287,8 @@ template <typename Wrapper> static inline typename Wrapper::pointer qGetPtrHelpe
 #define Q_D(Class) Class##Private * const d = d_func()
 #define Q_Q(Class) Class * const q = q_func()
 
+// TRACE/corelib note: MOC does not support parenthesis if `QT_MOC_MACRO_EXPAND` is enabled,
+// hence `#define QT_TR_NOOP(x) (x)` would cause moc executable to log error.
 #define QT_TR_NOOP(x) x
 #define QT_TR_NOOP_UTF8(x) x
 #define QT_TRANSLATE_NOOP(scope, x) x
@@ -1376,6 +1378,10 @@ template <bool B, typename T = void> struct QEnableIf;
 template <typename T> struct QEnableIf<true, T> { typedef T Type; typedef T type; };
 
 namespace QtPrivate {
+    // TRACE/QApplication: defines global settings for inline access.
+
+    Q_VAR_EXPORT(CORE) extern int remoteTimeout; //declared at "corelib/kernel/qobject.cpp"
+
 //like std::enable_if
 template <bool B, typename T = void> struct QEnableIf;
 template <typename T> struct QEnableIf<true, T> { typedef T Type; };

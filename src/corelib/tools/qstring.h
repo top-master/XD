@@ -531,14 +531,12 @@ public:
 
     const ushort *utf16() const;
 
-    template <typename T = void>
     inline const wchar_t *wcharCast() const
     {
         if (sizeof(QEnableIf<sizeof(ushort) == sizeof(wchar_t), bool >::type)) {}
         return reinterpret_cast<const wchar_t *>(utf16());
     }
 
-    template <typename T = void>
     inline wchar_t *wcharCast() {
         if (sizeof(QEnableIf<sizeof(ushort) == sizeof(wchar_t), bool >::type)) {}
         detach();

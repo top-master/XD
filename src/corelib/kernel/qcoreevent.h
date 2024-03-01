@@ -110,6 +110,7 @@ public:
         Polish = 75,                            // widget is polished
         LayoutRequest = 76,                     // widget should be relayouted
         UpdateRequest = 77,                     // widget should be repainted
+        UpdateRegion = 213,                     // widget will be repainted at region given by QUpdateEvent
         UpdateLater = 78,                       // request update() later
 
         EmbeddingControl = 79,                  // ActiveX embedding
@@ -276,6 +277,7 @@ public:
 
         PlatformSurface = 217,                  // Platform surface created or about to be destroyed
 
+        // 213 reserved for Update
         // 512 reserved for Qt Jambi's MetaCall event
         // 513 reserved for Qt Jambi's DeleteOnMainThread event
 

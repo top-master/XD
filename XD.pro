@@ -181,6 +181,7 @@ mkspecs.files -= $$PWD/mkspecs/modules $$PWD/mkspecs/modules-inst
 INSTALLS += mkspecs
 
 OTHER_FILES += \
+    .qmake.conf \
     configure \
     header.BSD \
     header.FDL \

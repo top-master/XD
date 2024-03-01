@@ -198,8 +198,8 @@ struct QMetaObjectPrivate
     static int indexOfConstructor(const QMetaObject *m, const QByteArray &name,
                                   int argc, const QArgumentType *types);
     Q_CORE_EXPORT static QMetaMethod signal(const QMetaObject *m, int signal_index);
-    Q_CORE_EXPORT static int signalOffset(const QMetaObject *m);
-    Q_CORE_EXPORT static int absoluteSignalCount(const QMetaObject *m);
+    static Q_ALWAYS_INLINE int signalOffset(const QMetaObject *m) { return m->signalOffset(); }
+    static Q_ALWAYS_INLINE int absoluteSignalCount(const QMetaObject *m) { return m->signalCount(); }
     Q_CORE_EXPORT static int signalIndex(const QMetaMethod &m);
     static bool checkConnectArgs(int signalArgc, const QArgumentType *signalTypes,
                                  int methodArgc, const QArgumentType *methodTypes);

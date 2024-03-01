@@ -88,6 +88,7 @@ public:
 
     inline int capacity() const { return int(d->alloc); }
     void reserve(int size);
+    T *reserveFront();
     inline void squeeze()
     {
         reallocData(d->size, d->size);
@@ -146,6 +147,13 @@ public:
     void append(T &&t);
 #endif
     inline void append(const QVector<T> &l) { *this += l; }
+
+    /// Appends empty, and returns reference to it.
+    ///
+    /// Unlike @ref append does not need copy-constructor, which's
+    /// specially useful if T has no copy-constructor, or existing is expensive.
+    T &expand();
+
     void prepend(const T &t);
     void insert(int i, const T &t);
     void insert(int i, int n, const T &t);
@@ -414,6 +422,17 @@ void QVector<T>::reserve(int asize)
 }
 
 template <typename T>
+Q_ALWAYS_INLINE T *QVector<T>::reserveFront()
+{
+    const bool isTooSmall = uint(d->size + 1) > d->alloc;
+    if ( ! isDetached() || isTooSmall) {
+        QArrayData::AllocationOptions opt(isTooSmall ? QArrayData::Grow : QArrayData::Default);
+        reallocData(d->size, isTooSmall ? d->size + 1 : d->alloc, opt);
+    }
+    return d->end();
+}
+
+template <typename T>
 void QVector<T>::resize(int asize)
 {
     int newAlloc;
@@ -643,37 +662,33 @@ Q_OUTOFLINE_TEMPLATE T QVector<T>::value(int i, const T &defaultValue) const
 template <typename T>
 void QVector<T>::append(const T &t)
 {
-    const bool isTooSmall = uint(d->size + 1) > d->alloc;
-    if (!isDetached() || isTooSmall) {
-        T copy(t);
-        QArrayData::AllocationOptions opt(isTooSmall ? QArrayData::Grow : QArrayData::Default);
-        reallocData(d->size, isTooSmall ? d->size + 1 : d->alloc, opt);
-
-        if (QTypeInfo<T>::isComplex)
-            new (d->end()) T(qMove(copy));
-        else
-            *d->end() = qMove(copy);
-
-    } else {
-        if (QTypeInfo<T>::isComplex)
-            new (d->end()) T(t);
-        else
-            *d->end() = t;
-    }
+    T *tmp = QVector<T>::reserveFront();
+    if (QTypeInfo<T>::isComplex)
+        new (tmp) T(t);
+    else
+        *tmp = t;
     ++d->size;
+}
+
+template <typename T>
+T &QVector<T>::expand()
+{
+    T *tmp = QVector<T>::reserveFront();
+    if (QTypeInfo<T>::isComplex)
+        new (tmp) T();
+    else
+        *tmp = T();
+    ++d->size;
+    return *tmp;
 }
 
 #ifdef Q_COMPILER_RVALUE_REFS
 template <typename T>
 void QVector<T>::append(T &&t)
 {
-    const bool isTooSmall = uint(d->size + 1) > d->alloc;
-    if (!isDetached() || isTooSmall) {
-        QArrayData::AllocationOptions opt(isTooSmall ? QArrayData::Grow : QArrayData::Default);
-        reallocData(d->size, isTooSmall ? d->size + 1 : d->alloc, opt);
-    }
+    T *tmp = QVector<T>::reserveFront();
 
-    new (d->end()) T(std::move(t));
+    new (tmp) T(std::move(t));
 
     ++d->size;
 }

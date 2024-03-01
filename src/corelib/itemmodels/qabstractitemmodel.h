@@ -62,6 +62,10 @@ public:
     inline Qt::ItemFlags flags() const;
     Q_DECL_CONSTEXPR inline const QAbstractItemModel *model() const Q_DECL_NOTHROW { return m; }
     Q_DECL_CONSTEXPR inline bool isValid() const Q_DECL_NOTHROW { return (r >= 0) && (c >= 0) && (m != Q_NULLPTR); }
+    Q_DECL_CONSTEXPR inline bool isValid(const QAbstractItemModel *owner) const Q_DECL_NOTHROW
+            { return (r >= 0) && (c >= 0) && (m == owner) && (owner != Q_NULLPTR); }
+    Q_DECL_CONSTEXPR inline bool isEmpty(const QAbstractItemModel *owner = Q_NULLPTR) const Q_DECL_NOTHROW
+            { return (r < 0) || (c < 0) || (owner ? (m != owner) : (m == Q_NULLPTR)); }
     Q_DECL_CONSTEXPR inline bool operator==(const QModelIndex &other) const Q_DECL_NOTHROW
         { return (other.r == r) && (other.i == i) && (other.c == c) && (other.m == m); }
     Q_DECL_CONSTEXPR inline bool operator!=(const QModelIndex &other) const Q_DECL_NOTHROW

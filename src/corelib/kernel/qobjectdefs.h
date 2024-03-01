@@ -32,6 +32,9 @@
 **
 ****************************************************************************/
 
+// TRACE/moc remote: prevent inline references to QObject members #3.
+#include "qobject-inline-refs.h"
+
 #ifndef QOBJECTDEFS_H
 #define QOBJECTDEFS_H
 
@@ -110,12 +113,35 @@ class QString;
 # define Q_REVISION(v)
 #endif
 #define Q_OVERRIDE(text) QT_ANNOTATE_CLASS(qt_override, text)
+
+
+/// `Q_DEFAULT` can be used to initialize `Q_REMOTE_CONTROLLER` slot's return-value,
+/// which is useful for `Q_REMOTE` class in case of timeout, example:
+/// ```
+/// class MyService {
+///     Q_REMOTE
+/// public slots:
+///     inline bool isReachable() const Q_DEFAULT(false);
+///
+///     QString test() { return "tested"; } Q_DEFAULT("timeout")
+///     QString status() Q_DEFAULT("timeout") { return "online"; }
+/// };
+/// 
+/// inline bool MyService::isReachable() const { return true; }
+/// ```
+#define Q_DEFAULT(VALUE)
+//ensures PATH is included in header generated for Q_REMOTE
+#define Q_REMOTE_INCLUDE(PATH)
+//tells "moc" to pretend following forward-declaration has Q_REMOTE macro
+#define Q_REMOTE_FORWARD
+
+
 #define QDOC_PROPERTY(text) QT_ANNOTATE_CLASS(qt_qdoc_property, text)
 #define Q_ENUMS(x) QT_ANNOTATE_CLASS(qt_enums, x)
 #define Q_FLAGS(x) QT_ANNOTATE_CLASS(qt_enums, x)
-#define Q_ENUM_IMPL(ENUM) \
-    friend Q_DECL_CONSTEXPR const QMetaObject *qt_getEnumMetaObject(ENUM) Q_DECL_NOEXCEPT { return &staticMetaObject; } \
-    friend Q_DECL_CONSTEXPR const char *qt_getEnumName(ENUM) Q_DECL_NOEXCEPT { return #ENUM; }
+
+// Q_ENUM_IMPL is moved to "qobject-inline-refs.h".
+
 #define Q_ENUM(x) Q_ENUMS(x) Q_ENUM_IMPL(x)
 #define Q_FLAG(x) Q_FLAGS(x) Q_ENUM_IMPL(x)
 #define Q_SCRIPTABLE QT_ANNOTATE_FUNCTION(qt_scriptable)
@@ -352,20 +378,32 @@ struct Q_CORE_EXPORT QMetaObject
     int enumeratorOffset() const;
     int propertyOffset() const;
     int classInfoOffset() const;
+    int signalOffset() const;
 
     int constructorCount() const;
     int methodCount() const;
     int enumeratorCount() const;
     int propertyCount() const;
     int classInfoCount() const;
+    int signalCount() const;
 
     int indexOfConstructor(const char *constructor) const;
     int indexOfMethod(const char *method) const;
     int indexOfSignal(const char *signal) const;
+    int indexOfSignalReal(const char *signal, const QMetaObject **enclosingMetaObject = Q_NULLPTR) const;
     int indexOfSlot(const char *slot) const;
     int indexOfEnumerator(const char *name) const;
     int indexOfProperty(const char *name) const;
     int indexOfClassInfo(const char *name) const;
+
+    // TRACE/QObject/remote support 4: added local-index helpers,
+    // where "local" means same as in "*.moc" file.
+
+    /// Internal; the secound parameter returns holder.
+    int local_indexOfSignal(const char *signal, const QMetaObject **enclosingMetaObject = Q_NULLPTR) const;
+    /// Internal; the secound parameter returns holder.
+    int local_indexOfSlot(const char *slot, const QMetaObject **enclosingMetaObject = Q_NULLPTR) const;
+    QMetaMethod local_method(int index) const;
 
     QMetaMethod constructor(int index) const;
     QMetaMethod method(int index) const;

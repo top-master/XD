@@ -1,5 +1,6 @@
 /****************************************************************************
 **
+** Copyright (C) 2015 The XD Company Ltd.
 ** Copyright (C) 2015 The Qt Company Ltd.
 ** Contact: http://www.qt.io/licensing/
 **
@@ -110,6 +111,10 @@ public:
     qint64 readLine(char *data, qint64 maxlen);
     QByteArray readLine(qint64 maxlen = 0);
     virtual bool canReadLine() const;
+
+    qint64 readToBuffer(qint64 maxlen = QByteArray::MaxSize);
+    void clearBuffer();
+    qint64 bufferSize() const;
 
     qint64 write(const char *data, qint64 len);
     qint64 write(const char *data);

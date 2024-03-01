@@ -1260,7 +1260,9 @@ void tst_QMap::checkMostLeftNode()
     map.remove(204);
     sanityCheckTree(map, __LINE__);
     // erase last item
-    map.erase(map.begin());
+    QMap<int, int>::iterator it = map.erase(map.begin());
+    QVERIFY(it == map.end());
+    QVERIFY((it != map.end()) == false);
     sanityCheckTree(map, __LINE__);
 }
 

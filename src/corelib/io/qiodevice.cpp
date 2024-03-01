@@ -1,5 +1,6 @@
 /****************************************************************************
 **
+** Copyright (C) 2015 The XD Company Ltd.
 ** Copyright (C) 2015 The Qt Company Ltd.
 ** Contact: http://www.qt.io/licensing/
 **
@@ -1237,7 +1238,7 @@ qint64 QIODevice::readLineData(char *data, qint64 maxSize)
            "returns %lld\n", this, data, maxSize, d->pos, d->buffer.size(), readSoFar);
 #endif
     if (lastReadReturn != 1 && readSoFar == 0)
-        return isSequential() ? lastReadReturn : -1;
+        return d->isSequential() ? lastReadReturn : -1;
     return readSoFar;
 }
 
@@ -1261,6 +1262,38 @@ qint64 QIODevice::readLineData(char *data, qint64 maxSize)
 bool QIODevice::canReadLine() const
 {
     return d_func()->buffer.canReadLine();
+}
+
+qint64 QIODevice::readToBuffer(qint64 bytesToBuffer)
+{
+    Q_D(QIODevice);
+    if ((d->openMode & Unbuffered)) {
+        qWarning("QIODevice::readToBuffer: Cannot be called on unbuffered device");
+        return qint64(-1);
+    }
+    // Try to fill QIODevice buffer by a single read.
+    qint64 readFromDevice = readData(d->buffer.reserve(bytesToBuffer), bytesToBuffer);
+//    bool deviceAtEof = (readFromDevice != bytesToBuffer);
+    d->buffer.chop(bytesToBuffer - qMax(Q_INT64_C(0), readFromDevice));
+    if (readFromDevice > 0 && ! isSequential())
+        d->devicePos += readFromDevice;
+    return readFromDevice;
+}
+
+void QIODevice::clearBuffer()
+{
+    Q_D(QIODevice);
+//    if((d->openMode & Unbuffered)) {
+//        qWarning("QIODevice::clearBuffer: The device is Unbuffered");
+//        return;
+//    }
+    d->buffer.clear();
+}
+
+qint64 QIODevice::bufferSize() const
+{
+    Q_D(const QIODevice);
+    return d->buffer.size();
 }
 
 /*!

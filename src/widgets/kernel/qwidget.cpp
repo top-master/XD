@@ -10936,12 +10936,17 @@ void QWidget::update(const QRect &rect)
         return;
     }
 
+    QUpdateEvent updateEvent(r);
+    QApplication::sendSpontaneousEvent(this, &updateEvent);
+    if(Q_UNLIKELY( ! updateEvent.isAccepted()))
+        return;
+
     if (hasBackingStoreSupport()) {
         QTLWExtra *tlwExtra = window()->d_func()->maybeTopData();
         if (tlwExtra && !tlwExtra->inTopLevelResize && tlwExtra->backingStore)
-            tlwExtra->backingStoreTracker->markDirty(r, this);
+            tlwExtra->backingStoreTracker->markDirty(updateEvent.region(), this);
     } else {
-        d_func()->repaint_sys(r);
+        d_func()->repaint_sys(updateEvent.region());
     }
 }
 
@@ -10965,12 +10970,17 @@ void QWidget::update(const QRegion &rgn)
         return;
     }
 
+    QUpdateEvent updateEvent(r);
+    QApplication::sendSpontaneousEvent(this, &updateEvent);
+    if(Q_UNLIKELY( ! updateEvent.isAccepted()))
+        return;
+
     if (hasBackingStoreSupport()) {
         QTLWExtra *tlwExtra = window()->d_func()->maybeTopData();
         if (tlwExtra && !tlwExtra->inTopLevelResize && tlwExtra->backingStore)
-            tlwExtra->backingStoreTracker->markDirty(r, this);
+            tlwExtra->backingStoreTracker->markDirty(updateEvent.region(), this);
     } else {
-        d_func()->repaint_sys(r);
+        d_func()->repaint_sys(updateEvent.region());
     }
 }
 

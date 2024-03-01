@@ -1,5 +1,6 @@
 /****************************************************************************
 **
+** Copyright (C) 2015 The XD Company Ltd.
 ** Copyright (C) 2015 The Qt Company Ltd.
 ** Contact: http://www.qt.io/licensing/
 **
@@ -32,6 +33,7 @@
 ****************************************************************************/
 
 #include "qprogressbar.h"
+#include "qprogressbar_p.h"
 #ifndef QT_NO_PROGRESSBAR
 #include <qlocale.h>
 #include <qevent.h>
@@ -45,32 +47,6 @@
 #include <limits.h>
 
 QT_BEGIN_NAMESPACE
-
-class QProgressBarPrivate : public QWidgetPrivate
-{
-    Q_DECLARE_PUBLIC(QProgressBar)
-
-public:
-    QProgressBarPrivate();
-
-    void init();
-    void initDefaultFormat();
-    inline void resetLayoutItemMargins();
-
-    int minimum;
-    int maximum;
-    int value;
-    Qt::Alignment alignment;
-    uint textVisible : 1;
-    uint defaultFormat: 1;
-    int lastPaintedValue;
-    Qt::Orientation orientation;
-    bool invertedAppearance;
-    QProgressBar::Direction textDirection;
-    QString format;
-    inline int bound(int val) const { return qMax(minimum-1, qMin(maximum, val)); }
-    bool repaintRequired() const;
-};
 
 QProgressBarPrivate::QProgressBarPrivate()
     : minimum(0), maximum(100), value(-1), alignment(Qt::AlignLeft), textVisible(true),

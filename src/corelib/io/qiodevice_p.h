@@ -209,6 +209,9 @@ public:
     QIODevicePrivate();
     virtual ~QIODevicePrivate();
 
+    static inline QIODevicePrivate *get(QIODevice *o) { return o->d_func(); }
+    static inline const QIODevicePrivate *get(const QIODevice *o) { return o->d_func(); }
+
     QIODevice::OpenMode openMode;
     QString errorString;
 

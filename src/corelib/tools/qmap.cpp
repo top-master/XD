@@ -1,5 +1,6 @@
 /****************************************************************************
 **
+** Copyright (C) 2015 The XD Company Ltd.
 ** Copyright (C) 2015 The Qt Company Ltd.
 ** Contact: http://www.qt.io/licensing/
 **
@@ -59,6 +60,7 @@ const QMapNodeBase *QMapNodeBase::nextNode() const
         }
         n = y;
     }
+    Q_ASSERT_X(n, "QMap", "Reached past end.");
     return n;
 }
 
@@ -77,6 +79,7 @@ const QMapNodeBase *QMapNodeBase::previousNode() const
         }
         n = y;
     }
+    Q_ASSERT_X(n, "QMap", "Reached before begin.");
     return n;
 }
 

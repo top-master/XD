@@ -819,6 +819,18 @@ void QMetaType::registerStreamOperators(int idx, SaveOperator saveOp,
     inf.saveOp = saveOp;
     inf.loadOp = loadOp;
 }
+
+bool QMetaType::hasRegisteredStreamOperators(int idx)
+{
+    if (idx < User)
+        return true; //builtin types should not be registered;
+    QVector<QCustomTypeInfo> *ct = customTypes();
+    if ( ! ct)
+        return false;
+    QWriteLocker locker(customTypesLock());
+    QCustomTypeInfo &inf = (*ct)[idx - User];
+    return inf.saveOp != Q_NULLPTR && inf.loadOp != Q_NULLPTR;
+}
 #endif // QT_NO_DATASTREAM
 
 /*!

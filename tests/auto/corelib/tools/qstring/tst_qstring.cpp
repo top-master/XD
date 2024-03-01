@@ -1,5 +1,6 @@
 /****************************************************************************
 **
+** Copyright (C) 2015 The XD Company Ltd.
 ** Copyright (C) 2015 The Qt Company Ltd.
 ** Contact: http://www.qt.io/licensing/
 **
@@ -652,6 +653,7 @@ QString verifyZeroTermination(const QString &str)
     /**/
 
 typedef QList<int> IntList;
+Q_DECLARE_METATYPE(QList<int>)
 
 tst_QString::tst_QString()
 {
@@ -2861,6 +2863,7 @@ void tst_QString::replace_extra()
             ans8 += small;
         }
     }
+	// Replace "bcdef" with "cde" to get "acdeg" (making "str8" same as "ans8").
     str8.replace(str8.constData() + 1, 5, str8.constData() + 2, 3);
     // Pre-test the bit where the diff happens, so it gets displayed:
     QCOMPARE(str8.mid((many - 3) * 5), ans8.mid((many - 3) * 5));
