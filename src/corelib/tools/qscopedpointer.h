@@ -1,5 +1,6 @@
 /****************************************************************************
 **
+** Copyright (C) 2015 The XD Company Ltd.
 ** Copyright (C) 2015 The Qt Company Ltd.
 ** Contact: http://www.qt.io/licensing/
 **
@@ -35,6 +36,8 @@
 #define QSCOPEDPOINTER_H
 
 #include <QtCore/qglobal.h>
+#include <QtCore/qunprotect.h>
+#include <QtCore/qlazinessresolver.h>
 
 #include <stdlib.h>
 
@@ -75,6 +78,11 @@ struct QScopedPointerPodDeleter
     static inline void cleanup(void *pointer) { if (pointer) free(pointer); }
 };
 
+struct QScopedPointerPodDeleterAligned
+{
+    static inline void cleanup(void *pointer) { if (pointer) qFreeAligned(pointer); }
+};
+
 #ifndef QT_NO_QOBJECT
 template <typename T>
 struct QScopedPointerObjectDeleteLater
@@ -86,36 +94,60 @@ class QObject;
 typedef QScopedPointerObjectDeleteLater<QObject> QScopedPointerDeleteLater;
 #endif
 
+template <typename T = void>
+class QScopedPointerBase {
+    typedef QScopedPointerBase<T> Self;
+public:
+    T *d;
+
+    Q_DECL_CONSTEXPR explicit inline QScopedPointerBase(const T *p = Q_NULLPTR)
+        : d(const_cast<T *>(p))
+    {
+    }
+
+    template <typename X>
+    static inline const Self *get(const X *subclass) {
+        return QUnprotect<X, const Self>::cast(subclass);
+    }
+
+    template <typename X>
+    static inline Self *get(X *subclass) {
+        return QUnprotect<X, Self>::cast(subclass);
+    }
+};
+
 template <typename T, typename Cleanup = QScopedPointerDeleter<T> >
-class QScopedPointer
+class QScopedPointer : protected QScopedPointerBase<T>
 {
+    typedef QScopedPointerBase<T> super;
     typedef T *QScopedPointer:: *RestrictedBool;
 public:
-    explicit inline QScopedPointer(T *p = Q_NULLPTR) : d(p)
+    explicit inline QScopedPointer(T *p = Q_NULLPTR)
+        : super(p)
     {
     }
 
     inline ~QScopedPointer()
     {
-        T *oldD = this->d;
+        T *oldD = static_cast<T *>(this->d);
         Cleanup::cleanup(oldD);
     }
 
     inline T &operator*() const
     {
-        Q_ASSERT(d);
-        return *d;
+        Q_ASSERT(this->d);
+        return *static_cast<T *>(this->d);
     }
 
     inline T *operator->() const
     {
-        Q_ASSERT(d);
-        return d;
+        Q_ASSERT(this->d);
+        return static_cast<T *>(this->d);
     }
 
     inline bool operator!() const
     {
-        return !d;
+        return !static_cast<T *>(this->d);
     }
 
 #if defined(Q_QDOC)
@@ -132,39 +164,36 @@ public:
 
     inline T *data() const
     {
-        return d;
+        return static_cast<T *>(this->d);
     }
 
     inline bool isNull() const
     {
-        return !d;
+        return !static_cast<T *>(this->d);
     }
 
     inline void reset(T *other = Q_NULLPTR)
     {
-        if (d == other)
+        T *oldD = static_cast<T *>(this->d);
+        if (oldD == other)
             return;
-        T *oldD = d;
-        d = other;
+        this->d = other;
         Cleanup::cleanup(oldD);
     }
 
     inline T *take()
     {
-        T *oldD = d;
-        d = Q_NULLPTR;
+        T *oldD = static_cast<T *>(this->d);
+        this->d = Q_NULLPTR;
         return oldD;
     }
 
     inline void swap(QScopedPointer<T, Cleanup> &other)
     {
-        qSwap(d, other.d);
+        qSwap(this->d, other.d);
     }
 
     typedef T *pointer;
-
-protected:
-    T *d;
 
 private:
     Q_DISABLE_COPY(QScopedPointer)
@@ -216,12 +245,12 @@ public:
 
     inline T &operator[](int i)
     {
-        return this->d[i];
+        return static_cast<T *>(this->d)[i];
     }
 
     inline const T &operator[](int i) const
     {
-        return this->d[i];
+        return static_cast<T *>(this->d)[i];
     }
 
 private:
@@ -238,6 +267,7 @@ private:
 
     Q_DISABLE_COPY(QScopedArrayPointer)
 };
+
 
 QT_END_NAMESPACE
 

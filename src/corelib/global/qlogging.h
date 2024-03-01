@@ -189,5 +189,11 @@ Q_CORE_EXPORT void qSetMessagePattern(const QString &messagePattern);
 Q_CORE_EXPORT QString qFormatLogMessage(QtMsgType type, const QMessageLogContext &context,
                                         const QString &buf);
 
+namespace QtPrivate {
+
+Q_VAR_EXPORT(CORE) extern bool warnFlush;
+
+} // namespace QtPrivate
+
 QT_END_NAMESPACE
 #endif // QLOGGING_H

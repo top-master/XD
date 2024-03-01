@@ -116,6 +116,7 @@ void QFactoryLoader::update()
     QStringList paths = QCoreApplication::libraryPaths();
     for (int i = 0; i < paths.count(); ++i) {
         const QString &pluginDir = paths.at(i);
+        bool isFirstTry = true;
         // Already loaded, skip it...
         if (d->loadedPaths.contains(pluginDir))
             continue;
@@ -126,10 +127,29 @@ void QFactoryLoader::update()
         if (qt_debug_component())
             qDebug() << "QFactoryLoader::QFactoryLoader() checking directory path" << path << "...";
 
-        if (!QDir(path).exists(QLatin1String(".")))
+    posRetry:
+        QDir dir(path);
+        if ( ! dir.exists()) {
+            if (isFirstTry && d->suffix.length() >= 2
+                && pluginDir.length() > d->suffix.length()
+                && d->suffix.at(0).isDirSeparator()
+                && pluginDir.at(pluginDir.length() - d->suffix.length()).isDirSeparator()
+                && pluginDir.endsWith(d->suffix.midRef(1), Q_FS_CASE)
+            ) {
+                // Probably `QApplication::addLibraryPath(...)` was called with a
+                // wrong path, not knowing that some plugins get loaded only if
+                // put in a specific sub-folder and/or suffix.
+                qWarning("Plugin search-path duplicates auto-suffix: <%s>"
+                         " - Retrying without auto-suffixing said path: <%s>.",
+                         qPrintable(d->suffix), qPrintable(pluginDir));
+                path = pluginDir;
+                isFirstTry = false;
+                goto posRetry;
+            }
             continue;
+        }
 
-        QStringList plugins = QDir(path).entryList(QDir::Files);
+        QStringList plugins = dir.entryList(QDir::Files);
         QLibraryPrivate *library = 0;
 
 #ifdef Q_OS_MAC

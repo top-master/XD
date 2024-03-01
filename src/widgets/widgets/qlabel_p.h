@@ -1,5 +1,6 @@
 /****************************************************************************
 **
+** Copyright (C) 2015 The XD Company Ltd.
 ** Copyright (C) 2015 The Qt Company Ltd.
 ** Contact: http://www.qt.io/licensing/
 **
@@ -60,12 +61,16 @@
 
 QT_BEGIN_NAMESPACE
 
-class Q_AUTOTEST_EXPORT QLabelPrivate : public QFramePrivate
+class Q_WIDGETS_EXPORT QLabelPrivate : public QFramePrivate
 {
     Q_DECLARE_PUBLIC(QLabel)
 public:
     QLabelPrivate();
     ~QLabelPrivate();
+
+    static inline QLabelPrivate *get(QLabel *o) { return o->d_func(); }
+    static inline const QLabelPrivate *get(const QLabel *o) { return o->d_func(); }
+
 
     void init();
     void clearContents();
@@ -90,6 +95,8 @@ public:
     void ensureTextControl() const;
     void sendControlEvent(QEvent *e);
 
+    void updateTextControl() const;
+
     void _q_linkHovered(const QString &link);
 
     QRectF layoutRect() const;
@@ -99,6 +106,15 @@ public:
 #ifndef QT_NO_CONTEXTMENU
     QMenu *createStandardContextMenu(const QPoint &pos);
 #endif
+    inline QRect contentsRect() const { return q_func()->contentsRect().adjusted(margin, margin, -margin, -margin); }
+
+    void initStyleOption(QStyleOption *);
+    void drawText(QPainter *);
+    void drawText(QPainter *, const QRect &layoutRect, const QStyleOption *opt = 0);
+    void drawText(QPainter *, const QColor &foregroundOverride);
+
+    void drawPixmap(QPainter *, const QRect &contentRect,
+                    Qt::AspectRatioMode aspectMode = Qt::IgnoreAspectRatio);
 
     mutable QSize sh;
     mutable QSize msh;
@@ -139,6 +155,8 @@ public:
     uint onAnchor : 1;
 #endif
     uint openExternalLinks : 1;
+    mutable uint isSingleLine : 1;
+    uint isTextElided : 1;
     // <-- space for more bit field values here
 
     friend class QMessageBoxPrivate;

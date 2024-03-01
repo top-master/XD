@@ -1,5 +1,6 @@
 /****************************************************************************
 **
+** Copyright (C) 2015 The XD Company Ltd.
 ** Copyright (C) 2015 The Qt Company Ltd.
 ** Copyright (C) 2014 Olivier Goffart <ogoffart@woboq.com>
 ** Contact: http://www.qt.io/licensing/
@@ -213,6 +214,11 @@ class QDataStream;
 class QMetaTypeInterface;
 struct QMetaObject;
 
+// TRACE/corelib improve: QFlags based enums now can be streamed as `int` #2,
+// hence forward-declarable here:
+Q_CORE_EXPORT QDataStream &operator<<(QDataStream &out, qint32 i);
+Q_CORE_EXPORT QDataStream &operator>>(QDataStream &in, qint32 &i);
+
 namespace QtPrivate
 {
 /*!
@@ -391,7 +397,8 @@ struct ConverterFunctor : public AbstractConverterFunction
     struct IsMetaTypePair;
     template<typename, typename>
     struct MetaTypeSmartPointerHelper;
-}
+
+} // namespace QtPrivate
 
 class Q_CORE_EXPORT QMetaType {
     enum ExtensionFlag { NoExtensionFlags,
@@ -475,6 +482,12 @@ public:
                                         LoadOperator loadOp);
     static void registerStreamOperators(int type, SaveOperator saveOp,
                                         LoadOperator loadOp);
+    static bool hasRegisteredStreamOperators(int typeId);
+    template <typename T>
+    static Q_INLINE_TEMPLATE bool hasRegisteredStreamOperators()
+    {
+        return hasRegisteredStreamOperators(qMetaTypeId<T>());
+    }
 #endif
     static int registerType(const char *typeName, Deleter deleter,
                             Creator creator);
@@ -528,11 +541,22 @@ public:
     explicit QMetaType(const int type);
     inline ~QMetaType();
 
+    template <typename T>
+    static Q_ALWAYS_INLINE_T QMetaType fromType() {
+        const int id = qMetaTypeId<T>();
+        return QMetaType(id);
+    }
+
+    Q_DEFAULT_MOVE_INIT(QMetaType)
+
     inline bool isValid() const;
     inline bool isRegistered() const;
     inline int sizeOf() const;
     inline TypeFlags flags() const;
+    Q_ALWAYS_INLINE int id() const;
     inline const QMetaObject *metaObject() const;
+
+    inline bool isEnum() const;
 
     inline void *create(const void *copy = Q_NULLPTR) const;
     inline void destroy(void *data) const;
@@ -757,9 +781,9 @@ struct QMetaTypeFunctionHelper {
 
     static void *Construct(void *where, const void *t)
     {
-        if (t)
-            return new (where) T(*static_cast<const T*>(t));
-        return new (where) T;
+        if ( ! t)
+            return new (where) T();
+        return new (where) T(*static_cast<const T*>(t));
     }
 #ifndef QT_NO_DATASTREAM
     static void Save(QDataStream &stream, const void *t)
@@ -1704,6 +1728,15 @@ int qRegisterNormalizedMetaType(const QT_PREPEND_NAMESPACE(QByteArray) &normaliz
         QtPrivate::AssociativeContainerConverterHelper<T>::registerConverter(id);
         QtPrivate::MetaTypePairHelper<T>::registerConverter(id);
         QtPrivate::MetaTypeSmartPointerHelper<T>::registerConverter(id);
+#ifndef QT_NO_DATASTREAM
+        // TRACE/corelib improve: QFlags based enums now can be streamed as `int` #1,
+        // hence, data-stream operators for `qint32` should be forward-declarable,
+        // otherwise, QtRemote users would need to manually register the operators.
+        if (flags.includes(QMetaType::IsEnumeration)) {
+            QMetaType::registerStreamOperators(id, QtMetaTypePrivate::QMetaTypeFunctionHelper<qint32>::Save,
+                                                   QtMetaTypePrivate::QMetaTypeFunctionHelper<qint32>::Load);
+        }
+#endif
     }
 
     return id;
@@ -1727,15 +1760,23 @@ int qRegisterMetaType(const char *typeName
 
 #ifndef QT_NO_DATASTREAM
 template <typename T>
-void qRegisterMetaTypeStreamOperators(const char *typeName
+int qRegisterMetaTypeStreamOperators(const char *typeName
 #ifndef Q_QDOC
     , T * /* dummy */ = Q_NULLPTR
 #endif
 )
 {
-    qRegisterMetaType<T>(typeName);
-    QMetaType::registerStreamOperators(typeName, QtMetaTypePrivate::QMetaTypeFunctionHelper<T>::Save,
-                                                 QtMetaTypePrivate::QMetaTypeFunctionHelper<T>::Load);
+    int id = qRegisterMetaType<T>(typeName);
+    QMetaType::registerStreamOperators(id, QtMetaTypePrivate::QMetaTypeFunctionHelper<T>::Save,
+                                           QtMetaTypePrivate::QMetaTypeFunctionHelper<T>::Load);
+    return id;
+}
+
+/// Registers Enum Meta-Type as Integer-alias.
+template <typename T>
+int qRegisterMetaEnum(const char *typeName) {
+    Q_STATIC_ASSERT_X(sizeof(T) == sizeof(int), "Can only cast 'enum' to 'int'.");
+    return qRegisterMetaTypeStreamOperators<qint32>(typeName);
 }
 #endif // QT_NO_DATASTREAM
 
@@ -1822,13 +1863,11 @@ struct QMetaTypeIdQObject<T, QMetaType::IsEnumeration>
         static QBasicAtomicInt metatype_id = Q_BASIC_ATOMIC_INITIALIZER(0);
         if (const int id = metatype_id.loadAcquire())
             return id;
+
         const char *eName = qt_getEnumName(T());
-        const char *cName = qt_getEnumMetaObject(T())->className();
-        QByteArray typeName;
-        typeName.reserve(int(strlen(cName) + 2 + strlen(eName)));
-        typeName.append(cName).append("::").append(eName);
+        const QMetaObject *meta = qt_getEnumMetaObject(T());
         const int newId = qRegisterNormalizedMetaType<T>(
-            typeName,
+            meta->enumeratorTypeName(eName),
             reinterpret_cast<T*>(quintptr(-1)));
         metatype_id.storeRelease(newId);
         return newId;
@@ -2142,6 +2181,11 @@ inline bool QMetaType::isRegistered() const
     return isValid();
 }
 
+inline bool QMetaType::isEnum() const
+{
+    return this->flags().intersects(QMetaType::IsEnumeration);
+}
+
 inline void *QMetaType::create(const void *copy) const
 {
     // ### TODO Qt6 remove the extension
@@ -2182,6 +2226,11 @@ inline QMetaType::TypeFlags QMetaType::flags() const
     if (Q_UNLIKELY(isExtended(FlagsEx)))
         return flagsExtended();
     return QMetaType::TypeFlags(m_typeFlags);
+}
+
+Q_ALWAYS_INLINE int QMetaType::id() const
+{
+    return m_typeId;
 }
 
 inline const QMetaObject *QMetaType::metaObject() const

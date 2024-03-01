@@ -133,6 +133,8 @@ public:
     Qt::MouseEventSource source() const;
     Qt::MouseEventFlags flags() const;
 
+    inline QMouseEvent as(QEvent::Type t) const { return QMouseEvent(t, l, s, b, mouseState, modState); }
+
 protected:
     QPointF l, w, s;
     Qt::MouseButton b;
@@ -393,6 +395,39 @@ protected:
     QRect m_rect;
     QRegion m_region;
     bool m_erased;
+};
+
+class Q_GUI_EXPORT QUpdateEvent : public QEvent
+{
+public:
+    QUpdateEvent(const QRegion& paintRegion);
+    ~QUpdateEvent();
+
+    inline const QRegion &region() const { return m_region; }
+    inline QRegion &region() { return m_region; }
+    inline void setRegion(const QRegion &rgn) { m_region = rgn; }
+
+    /// Includes anything between given @p x axis to region's center,
+    /// into update region.
+    void setX(int x);
+    /// Includes anything between given @p y to region's center,
+    /// into update region.
+    void setY(int y);
+
+    /// Note that "right - left +1" must match width.
+    void setWidth(int left, int right);
+    inline void setWidth(int w) { setWidth(0, w-1); }
+
+    /// Note that "bottom - top +1" must match height.
+    void setHeight(int top, int bottom);
+    inline void setHeight(int h) { setHeight(0, h-1); }
+
+    inline void setRect(const QRect &r) { m_region = r; }
+    inline void setRect(int left, int top, int width, int height)
+        { m_region = QRect(left, top, width, height); }
+
+protected:
+    QRegion m_region;
 };
 
 class Q_GUI_EXPORT QMoveEvent : public QEvent

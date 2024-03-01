@@ -289,7 +289,10 @@ void tst_QEventLoop::exec()
         QEventLoop eventLoop;
         EventLoopExecutor executor(&eventLoop);
 
+        // Hence once the timer finishes, just a warning will be logged.
+        QEXPECT_WARN(QString::asprintf("QEventLoop::exec: instance %p has already called exec()", &eventLoop));
         QTimer::singleShot(EXEC_TIMEOUT, &executor, SLOT(exec()));
+
         int returnCode = eventLoop.exec();
         QCOMPARE(returnCode, 0);
         QCOMPARE(executor.returnCode, -1);
@@ -680,10 +683,9 @@ void tst_QEventLoop::testQuitLock()
 
     eventLoop.exec();
 
-    qDebug() << timerSpy.count();
     // The timer times out more if it has more subjobs to do.
     // We run 10 jobs in sequence here of about 200ms each.
-    QVERIFY(timerSpy.count() > 17);
+    qExpect(timerSpy.count())->toBeGreaterThan(17);
 }
 
 QTEST_MAIN(tst_QEventLoop)

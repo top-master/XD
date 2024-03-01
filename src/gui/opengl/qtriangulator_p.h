@@ -58,18 +58,25 @@ public:
         UnsignedShort
     };
 
+    inline QVertexIndexVector()
+        : t(QVertexIndexVector::UnsignedInt)
+    {
+    }
+
     inline Type type() const { return t; }
 
     inline void setDataUint(const QVector<quint32> &data)
     {
         t = UnsignedInt;
         indices32 = data;
+        indices16.clear();
     }
 
     inline void setDataUshort(const QVector<quint16> &data)
     {
         t = UnsignedShort;
         indices16 = data;
+        indices32.clear();
     }
 
     inline const void* data() const
@@ -95,6 +102,8 @@ public:
 
          return *this;
     }
+
+    Q_DEFAULT_COPY_INIT(QVertexIndexVector)
 
 private:
 

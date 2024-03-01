@@ -1,0 +1,2 @@
+
+// Moved to QtCore.

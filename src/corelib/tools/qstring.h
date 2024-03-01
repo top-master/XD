@@ -139,7 +139,7 @@ Q_DECLARE_TYPEINFO(QLatin1String, Q_MOVABLE_TYPE);
 class Q_CORE_EXPORT QLatin1Literal : public QLatin1String
 {
 public:
-    template <int N> explicit QLatin1Literal(const char (&str)[N]) Q_DECL_NOTHROW
+    template <int N> Q_ALWAYS_INLINE_T explicit QLatin1Literal(const char (&str)[N]) Q_DECL_NOTHROW
         : QLatin1String(str, N - 1) {}
 
 };
@@ -262,10 +262,10 @@ public:
     void resize(int size);
 
     QString &fill(QChar c, int size = -1);
-    void truncate(int pos);
-    void chop(int n);
+    inline void truncate(int pos);
+    inline void chop(int n);
 
-    int capacity() const;
+    inline int capacity() const;
     inline void reserve(int size);
     inline void squeeze();
 
@@ -531,14 +531,12 @@ public:
 
     const ushort *utf16() const;
 
-    template <typename T = void>
     inline const wchar_t *wcharCast() const
     {
         if (sizeof(QEnableIf<sizeof(ushort) == sizeof(wchar_t), bool >::type)) {}
         return reinterpret_cast<const wchar_t *>(utf16());
     }
 
-    template <typename T = void>
     inline wchar_t *wcharCast() {
         if (sizeof(QEnableIf<sizeof(ushort) == sizeof(wchar_t), bool >::type)) {}
         detach();
@@ -915,6 +913,10 @@ inline const QChar QString::operator[](uint i) const
 { Q_ASSERT(i < uint(size())); return d->data()[i]; }
 inline bool QString::isEmpty() const
 { return d->size == 0; }
+inline void QString::truncate(int pos)
+{ if (pos < d->size) resize(pos); }
+inline void QString::chop(int n)
+{ if (n > 0) resize(d->size - n); }
 inline const QChar *QString::unicode() const
 { return reinterpret_cast<const QChar*>(d->data()); }
 inline const QChar *QString::data() const

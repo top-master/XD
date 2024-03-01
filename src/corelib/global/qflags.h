@@ -197,6 +197,9 @@ typedef uint Flags;
 
 #endif /* Q_NO_TYPESAFE_FLAGS */
 
+Q_STATIC_ASSERT_X(quint32(qint32(-1)) == 0xffffffff && qint32(quint32(0xffffffff)) == -1,
+                  "QFlags: binary-cast between 'int' and 'unsigned int' is required for qRegisterMetaEnum.");
+
 QT_END_NAMESPACE
 
 #endif // QFLAGS_H

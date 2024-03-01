@@ -26,6 +26,9 @@ contains(QT_CONFIG, openssl) {
 contains(QT_CONFIG, sql) {
     DEFINES += QT_SQL
 }
+contains(QT_CONFIG, codecs) {
+    DEFINES += QT_CODECS
+}
 
 qtestlib {
     warning("CONFIG+=qtestlib is deprecated. Use QT+=testlib instead.")
@@ -170,7 +173,8 @@ for(ever) {
 !isEmpty(using_privates):!no_private_qt_headers_warning:!build_pass {
     message("This project is using private headers and will therefore be tied to this specific Qt module build version.")
     message("Running this project against other versions of the Qt modules may crash at any arbitrary point.")
-    message("This is not a bug, but a result of using Qt internals. You have been warned!")
+    message("This is not a bug, but a result of using Qt internals.")
+    message("You can disable this warning with "CONFIG += no_private_qt_headers_warning".")
 }
 
 qt_module_deps = $$CLEAN_QT $$CLEAN_QT_PRIVATE

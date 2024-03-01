@@ -2,6 +2,7 @@
 
 HEADERS += \
         kernel/qabstracteventdispatcher.h \
+        kernel/qeventdispatcherdecor.h \
         kernel/qabstractnativeeventfilter.h \
         kernel/qbasictimer.h \
         kernel/qeventloop.h\
@@ -14,6 +15,7 @@ HEADERS += \
         kernel/qmimedata.h \
         kernel/qobject.h \
         kernel/qobject_impl.h \
+        kernel/qobjectdecor.h \
         kernel/qobjectdefs.h \
         kernel/qobjectdefs_impl.h \
         kernel/qsignalmapper.h \
@@ -43,6 +45,7 @@ HEADERS += \
 
 SOURCES += \
         kernel/qabstracteventdispatcher.cpp \
+        kernel/qeventdispatcherdecor.cpp \
         kernel/qabstractnativeeventfilter.cpp \
         kernel/qbasictimer.cpp \
         kernel/qeventloop.cpp \
@@ -53,6 +56,7 @@ SOURCES += \
         kernel/qmetaobjectbuilder.cpp \
         kernel/qmimedata.cpp \
         kernel/qobject.cpp \
+        kernel/qobjectdecor.cpp \
         kernel/qobjectcleanuphandler.cpp \
         kernel/qsignalmapper.cpp \
         kernel/qsocketnotifier.cpp \

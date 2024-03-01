@@ -1336,9 +1336,11 @@ void QtSharedPointer::ExternalRefCountData::
 {
     Q_ASSERT(obj);
     QObjectPrivate *d = QObjectPrivate::get(const_cast<QObject *>(obj));
+
     // Makes arguments easier to use.
     ExternalRefCountData *&counterPtr = *counterPtrArg;
-    ExternalRefCountData::DestroyerFn &destroyer = counterPtr->destroyer;
+    ExternalRefCountData::DestroyerFn destroyer = counterPtr->destroyer;
+
     // Destroyer is never null, except for QWeakPointer,
     // which is not allowed to call this method.
     Q_ASSERT(destroyer);
@@ -1348,7 +1350,7 @@ posLoadExisting:
     if (existing_counter) {
         // TRACE/QSharedPointer/multi-create: try to use existing ref counter,
         // and skip "qFatal()" when we do not assign any new destroyer.
-        ExternalRefCountData::DestroyerFn &existing_destroyer = existing_counter->destroyer;
+        ExternalRefCountData::DestroyerFn existing_destroyer = existing_counter->destroyer;
         if (destroyer == &ExternalRefCountData::fakeDestroyer
             // Or if both destroyers are trival.
             || (destroyer == existing_destroyer

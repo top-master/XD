@@ -94,7 +94,7 @@ public:
 
 #ifndef QT_NO_TEXTCODEC
     void setCodec(QTextCodec *codec);
-    void setCodec(const char *codecName);
+    bool setCodec(const char *codecName);
     QTextCodec *codec() const;
     void setAutoDetectUnicode(bool enabled);
     bool autoDetectUnicode() const;

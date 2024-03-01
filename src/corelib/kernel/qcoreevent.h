@@ -110,6 +110,7 @@ public:
         Polish = 75,                            // widget is polished
         LayoutRequest = 76,                     // widget should be relayouted
         UpdateRequest = 77,                     // widget should be repainted
+        UpdateRegion = 218,                     // widget will be repainted at region given by QUpdateEvent
         UpdateLater = 78,                       // request update() later
 
         EmbeddingControl = 79,                  // ActiveX embedding
@@ -276,6 +277,7 @@ public:
 
         PlatformSurface = 217,                  // Platform surface created or about to be destroyed
 
+        // 218 reserved for Update
         // 512 reserved for Qt Jambi's MetaCall event
         // 513 reserved for Qt Jambi's DeleteOnMainThread event
 
@@ -284,7 +286,7 @@ public:
     };
     Q_ENUM(Type)
 
-    explicit QEvent(Type type);
+    Q_DECL_CONSTEXPR inline explicit QEvent(Type type);
     QEvent(const QEvent &other);
     virtual ~QEvent();
     QEvent &operator=(const QEvent &other);
@@ -323,6 +325,10 @@ private:
     Q_ALWAYS_INLINE
     void setSpontaneous() { spont = true; }
 };
+
+Q_DECL_CONSTEXPR inline QEvent::QEvent(QEvent::Type type)
+    : d(0), t(type), posted(false), spont(false), m_accept(true), reserved(0)
+{}
 
 class Q_CORE_EXPORT QTimerEvent : public QEvent
 {

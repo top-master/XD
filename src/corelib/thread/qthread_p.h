@@ -296,6 +296,9 @@ public:
     { ++threadData->loopLevel; }
     inline ~QScopedLoopLevelCounter()
     { --threadData->loopLevel; }
+
+private:
+    Q_DISABLE_COPY(QScopedLoopLevelCounter)
 };
 
 // thread wrapper for the main() thread

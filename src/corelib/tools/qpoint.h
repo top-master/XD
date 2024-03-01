@@ -57,6 +57,9 @@ public:
     Q_DECL_RELAXED_CONSTEXPR inline int &rx();
     Q_DECL_RELAXED_CONSTEXPR inline int &ry();
 
+    Q_DECL_RELAXED_CONSTEXPR inline void translate(int x, int y);
+    Q_DECL_RELAXED_CONSTEXPR inline QPoint translated(int x, int y) const;
+
     Q_DECL_RELAXED_CONSTEXPR inline QPoint &operator+=(const QPoint &p);
     Q_DECL_RELAXED_CONSTEXPR inline QPoint &operator-=(const QPoint &p);
 
@@ -130,6 +133,11 @@ Q_DECL_RELAXED_CONSTEXPR inline int &QPoint::rx()
 
 Q_DECL_RELAXED_CONSTEXPR inline int &QPoint::ry()
 { return yp; }
+
+Q_DECL_RELAXED_CONSTEXPR inline void QPoint::translate(int ax, int ay)
+{ xp += ax; yp += ay; }
+Q_DECL_RELAXED_CONSTEXPR inline QPoint QPoint::translated(int x, int y) const
+{ return QPoint(xp + x, yp + y); }
 
 Q_DECL_RELAXED_CONSTEXPR inline QPoint &QPoint::operator+=(const QPoint &p)
 { xp+=p.xp; yp+=p.yp; return *this; }
@@ -221,6 +229,9 @@ public:
     Q_DECL_RELAXED_CONSTEXPR inline qreal &rx();
     Q_DECL_RELAXED_CONSTEXPR inline qreal &ry();
 
+    Q_DECL_RELAXED_CONSTEXPR inline void translate(qreal x, qreal y);
+    Q_DECL_RELAXED_CONSTEXPR inline QPointF translated(qreal x, qreal y) const;
+
     Q_DECL_RELAXED_CONSTEXPR inline QPointF &operator+=(const QPointF &p);
     Q_DECL_RELAXED_CONSTEXPR inline QPointF &operator-=(const QPointF &p);
     Q_DECL_RELAXED_CONSTEXPR inline QPointF &operator*=(qreal c);
@@ -308,6 +319,11 @@ Q_DECL_RELAXED_CONSTEXPR inline qreal &QPointF::ry()
 {
     return yp;
 }
+
+Q_DECL_RELAXED_CONSTEXPR inline void QPointF::translate(qreal ax, qreal ay)
+{ xp += ax; yp += ay; }
+Q_DECL_RELAXED_CONSTEXPR inline QPointF QPointF::translated(qreal ax, qreal ay) const
+{ return QPointF(xp + ax, yp + ay); }
 
 Q_DECL_RELAXED_CONSTEXPR inline QPointF &QPointF::operator+=(const QPointF &p)
 {

@@ -1,6 +1,6 @@
 /*
 //
-// Copyright (c) 2002-2014 The ANGLE Project Authors. All rights reserved.
+// Copyright (c) 2002-2019 The ANGLE Project Authors. All rights reserved.
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 //
@@ -14,7 +14,7 @@ IF YOU MODIFY THIS FILE YOU ALSO NEED TO RUN generate_parser.sh.
 
 %top{
 //
-// Copyright (c) 2011-2014 The ANGLE Project Authors. All rights reserved.
+// Copyright (c) 2011-2019 The ANGLE Project Authors. All rights reserved.
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 //
@@ -23,14 +23,39 @@ IF YOU MODIFY THIS FILE YOU ALSO NEED TO RUN generate_parser.sh.
 }
 
 %{
-#include "Tokenizer.h"
+#if defined(_MSC_VER)
+#pragma warning(disable: 4005)
+#endif
 
-#include "DiagnosticsBase.h"
-#include "Token.h"
+#include "preprocessor/Tokenizer.h"
+
+#include "preprocessor/DiagnosticsBase.h"
+#include "preprocessor/Token.h"
 
 #if defined(__GNUC__)
 // Triggered by the auto-generated yy_fatal_error function.
 #pragma GCC diagnostic ignored "-Wmissing-noreturn"
+#elif defined(_MSC_VER)
+#pragma warning(disable: 4244)
+#endif
+#if defined(__clang__)
+// Flex uses `/*FALLTHROUGH*/` instead of dedicated statements.
+#pragma clang diagnostic ignored "-Wimplicit-fallthrough"
+#if defined(__APPLE__)
+// Older clang versions don't have -Wextra-semi-stmt, and detecting Apple clang versions is
+// difficult because they use different yet overlapping version numbers vs. regular clang.
+#pragma clang diagnostic ignored "-Wunknown-warning-option"
+#endif
+// Flex isn't semi-colon clean.
+#pragma clang diagnostic ignored "-Wextra-semi-stmt"
+#pragma clang diagnostic ignored "-Wunreachable-code"
+#endif
+
+// Workaround for flex using the register keyword, deprecated in C++11.
+#ifdef __cplusplus
+#if __cplusplus > 199711L
+#define register
+#endif
 #endif
 
 typedef std::string YYSTYPE;
@@ -93,7 +118,7 @@ FRACTIONAL_CONSTANT  ({DIGIT}*"."{DIGIT}+)|({DIGIT}+".")
 
     /* Block comment */
     /* Line breaks are just counted - not returned. */
-    /* The comment is replaced by a single space. */ 
+    /* The comment is replaced by a single space. */
 "/*" { BEGIN(COMMENT); }
 <COMMENT>[^*\r\n]+
 <COMMENT>"*"
@@ -229,8 +254,6 @@ FRACTIONAL_CONSTANT  ({DIGIT}*"."{DIGIT}+)|({DIGIT}+".")
     return '\n';
 }
 
-\\{NEWLINE} { ++yylineno; }
-
 . {
     yylval->assign(1, yytext[0]);
     return pp::Token::PP_OTHER;
@@ -258,7 +281,7 @@ FRACTIONAL_CONSTANT  ({DIGIT}*"."{DIGIT}+)|({DIGIT}+".")
     {
         yyextra->diagnostics->report(pp::Diagnostics::PP_EOF_IN_COMMENT,
                                      pp::SourceLocation(yyfileno, yylineno),
-                                     "");
+                                     "EOF while in a comment");
     }
     yyterminate();
 }
@@ -308,6 +331,8 @@ void Tokenizer::setMaxTokenSize(size_t maxTokenSize)
 void Tokenizer::lex(Token *token)
 {
     token->type = yylex(&token->text, &token->location, mHandle);
+
+
     if (token->text.size() > mMaxTokenSize)
     {
         mContext.diagnostics->report(Diagnostics::PP_TOKEN_TOO_LONG,

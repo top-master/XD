@@ -1,5 +1,6 @@
 /****************************************************************************
 **
+** Copyright (C) 2015 The XD Company Ltd.
 ** Copyright (C) 2015 The Qt Company Ltd.
 ** Contact: http://www.qt.io/licensing/
 **
@@ -358,6 +359,11 @@ public:
     bool drainOutputPipes();
     void flushPipeWriter();
     qint64 pipeWriterBytesToWrite() const;
+    Q_CORE_EXPORT static bool startDetachedUacPrompt( const QString &programIn
+            , const QStringList &arguments
+            , const QString &workingDir
+            , qint64 *pid, Qt::HANDLE *keepHandle = Q_NULLPTR
+        );
 #endif
 
     static bool startDetached(const QString &program, const QStringList &arguments, const QString &workingDirectory = QString(),

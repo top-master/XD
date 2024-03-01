@@ -38,7 +38,7 @@ public:
     inline QRangeT(Qt::Initialization) {} //warning this does not set "start" and "length" to zero
     inline QRangeT(T start_, T length_) : start(start_), length(length_) {}
 
-    static inline Self fromLimit(T minimum_, T maximum_)
+    inline static Self fromLimit(T minimum_, T maximum_)
         { return QRangeT(minimum_, maximum_ - minimum_); }
 
     T start;

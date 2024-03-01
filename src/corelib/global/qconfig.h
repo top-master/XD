@@ -1,7 +1,7 @@
 #define QT_VERSION_MAJOR    5
 #define QT_VERSION_MINOR    6
-#define QT_VERSION_PATCH    3
-#define QT_VERSION_STR      "5.6.3"
+#define QT_VERSION_PATCH    4
+#define QT_VERSION_STR      "5.6.4"
 
 /* Everything */
 

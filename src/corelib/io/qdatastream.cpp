@@ -1,5 +1,6 @@
 /****************************************************************************
 **
+** Copyright (C) 2015 The XD Company Ltd.
 ** Copyright (C) 2015 The Qt Company Ltd.
 ** Contact: http://www.qt.io/licensing/
 **
@@ -642,19 +643,28 @@ QDataStream &QDataStream::operator>>(qint16 &i)
     returns a reference to the stream.
 */
 
-QDataStream &QDataStream::operator>>(qint32 &i)
+QDataStream &operator>>(QDataStream &that, qint32 &i)
 {
     i = 0;
-    CHECK_STREAM_PRECOND(*this)
-    if (dev->read((char *)&i, 4) != 4) {
+
+    // Same as CHECK_STREAM_PRECOND.
+    if ( ! that.dev) {
+#ifdef QT_DEBUG
+        qWarning("QDataStream: No device");
+#endif
+        return that;
+    }
+
+    // Actual logic.
+    if (that.dev->read((char *)&i, 4) != 4) {
         i = 0;
-        setStatus(ReadPastEnd);
+        that.setStatus(QDataStream::ReadPastEnd);
     } else {
-        if (!noswap) {
+        if ( ! that.noswap) {
             i = qbswap(i);
         }
     }
-    return *this;
+    return that;
 }
 
 /*!
@@ -934,15 +944,25 @@ QDataStream &QDataStream::operator<<(qint16 i)
     reference to the stream.
 */
 
-QDataStream &QDataStream::operator<<(qint32 i)
+QDataStream &operator<<(QDataStream &that, qint32 i)
 {
-    CHECK_STREAM_WRITE_PRECOND(*this)
-    if (!noswap) {
+    // Same as CHECK_STREAM_WRITE_PRECOND.
+    if ( ! that.dev) {
+#ifdef QT_DEBUG
+        qWarning("QDataStream: No device");
+#endif
+        return that;
+    }
+    if (that.q_status != QDataStream::Ok)
+        return that;
+
+    // Actual logic.
+    if ( ! that.noswap) {
         i = qbswap(i);
     }
-    if (dev->write((char *)&i, sizeof(qint32)) != sizeof(qint32))
-        q_status = WriteFailed;
-    return *this;
+    if (that.dev->write((char *)&i, sizeof(qint32)) != sizeof(qint32))
+        that.q_status = QDataStream::WriteFailed;
+    return that;
 }
 
 /*!

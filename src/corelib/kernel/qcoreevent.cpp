@@ -222,6 +222,7 @@ QT_BEGIN_NAMESPACE
     \value UngrabMouse                      Item loses mouse grab (QGraphicsItem, QQuickItem).
     \value UpdateLater                      The widget should be queued to be repainted at a later time.
     \value UpdateRequest                    The widget should be repainted.
+    \value UpdateRegion                     The widget will be repainted only at region given by @ref QUpdateEvent::region, where region is yet editable.
     \value WhatsThis                        The widget should reveal "What's This?" help (QHelpEvent).
     \value WhatsThisClicked                 A link in a widget's "What's This?" help was clicked.
     \value Wheel                            Mouse wheel rolled (QWheelEvent).
@@ -275,11 +276,10 @@ QT_BEGIN_NAMESPACE
 */
 
 /*!
+    \fn QEvent::QEvent(Type type)
+
     Contructs an event object of type \a type.
 */
-QEvent::QEvent(Type type)
-    : d(0), t(type), posted(false), spont(false), m_accept(true)
-{}
 
 /*!
     \internal

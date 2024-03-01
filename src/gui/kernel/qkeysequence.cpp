@@ -944,6 +944,8 @@ QKeySequence QKeySequence::mnemonic(const QString &text)
         return ret;
 
     bool found = false;
+    bool warnDuplicate = true;
+    Q_UNUSED(warnDuplicate) // Not always used.
     int p = 0;
     while (p >= 0) {
         p = text.indexOf(QLatin1Char('&'), p) + 1;
@@ -959,7 +961,8 @@ QKeySequence QKeySequence::mnemonic(const QString &text)
                     return ret;
 #else
                     found = true;
-                } else {
+                } else if (warnDuplicate) {
+                    warnDuplicate = false;
                     qWarning("QKeySequence::mnemonic: \"%s\" contains multiple occurrences of '&'", qPrintable(text));
 #endif
                 }

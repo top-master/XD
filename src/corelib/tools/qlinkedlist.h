@@ -74,7 +74,7 @@ class QLinkedList
     union { QLinkedListData *d; QLinkedListNode<T> *e; };
 
 public:
-    inline QLinkedList() Q_DECL_NOTHROW : d(const_cast<QLinkedListData *>(&QLinkedListData::shared_null)) { }
+    Q_DECL_CONSTEXPR inline QLinkedList() Q_DECL_NOTHROW : d(const_cast<QLinkedListData *>(&QLinkedListData::shared_null)) { }
     inline QLinkedList(const QLinkedList<T> &l) : d(l.d) { d->ref.ref(); if (!d->sharable) detach(); }
 #if defined(Q_COMPILER_INITIALIZER_LISTS)
     inline QLinkedList(std::initializer_list<T> list)

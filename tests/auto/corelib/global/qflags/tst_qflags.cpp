@@ -134,6 +134,10 @@ void tst_QFlags::constExpr()
 
 void tst_QFlags::signedness()
 {
+#if defined(Q_CC_MSVC) && !defined(Q_CC_CLANG)
+    QSKIP("Only tested on non-MSVC compilers,"
+          " since QFlags class always uses {signed int} type for MSVC.");
+#else
     // these are all 'true' on GCC, but since the std says the
     // underlying type is implementation-defined, we need to allow for
     // a different signedness, so we only check that the relative
@@ -143,6 +147,7 @@ void tst_QFlags::signedness()
 
     Q_STATIC_ASSERT((QtPrivate::is_signed<Qt::AlignmentFlag>::value ==
                      QtPrivate::is_signed<Qt::Alignment::Int>::value));
+#endif
 }
 
 #if defined(Q_COMPILER_CLASS_ENUM)

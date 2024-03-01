@@ -141,7 +141,8 @@ static inline QMutex *signalSlotLock(const QObject *o)
         uint(quintptr(o)) % sizeof(_q_ObjectMutexPool)/sizeof(QBasicMutex)]);
 }
 
-// ### Qt >= 5.6, remove qt_add/removeObject
+// TRACE/corelib security: remove reverse engineering support #3,
+// but keep  qt_add and/or qt_removeObject for obfuscation.
 extern "C" Q_CORE_EXPORT void qt_addObject(QObject *)
 {}
 
@@ -191,6 +192,8 @@ void (*QAbstractDeclarativeData::setWidgetParent)(QObject *, QObject *) = 0;
 
 QObjectData::~QObjectData() {}
 
+int QtPrivate::remoteTimeout = 5000; //Q_VAR_EXPORT
+
 QMetaObject *QObjectData::dynamicMetaObject() const
 {
     return metaObject->toDynamicMetaObject(q_ptr);
@@ -214,8 +217,16 @@ QObjectPrivate::QObjectPrivate(int version)
     parent = 0;                                 // no parent yet. It is set by setParent()
     hasParentStrongRef = false;
     isWidget = false;                           // assume not a widget object
+    isRemote = false;
+    isReinterpretable = false;
     blockSig = false;                           // not blocking signals
+    blockRemoteSig = false;
+    blockRemoteSlot = false;
+    blockRemoteReply = false;
+    remoteTimeout = QtPrivate::remoteTimeout / remoteMiliSecPerTimeout;
+    remoteTimeoutExpired = false;
     wasDeleted = false;                         // double-delete catcher
+    wasDeleteSignaled = false;
     isDeletingChildren = false;                 // set by deleteChildren()
     sendChildEvents = true;                     // if we should send ChildInsert and ChildRemove events to parent
     receiveChildEvents = true;
@@ -224,6 +235,9 @@ QObjectPrivate::QObjectPrivate(int version)
     connectedSignals[0] = connectedSignals[1] = 0;
     metaObject = 0;
     isWindow = false;
+    isDecoratee = false;
+    isDecor = false;
+    isLazy = false;
 }
 
 QObjectPrivate::~QObjectPrivate()
@@ -376,7 +390,7 @@ QObjectList QObjectPrivate::senderList() const
  */
 void QObjectPrivate::addConnection(int signal, Connection *c)
 {
-    Q_ASSERT(c->sender == q_ptr);
+    Q_ASSERT(c->sender == q_ptr || this->isDecoratee);
     if (!connectionLists)
         connectionLists = new QObjectConnectionListVector();
     if (signal >= connectionLists->count())
@@ -814,25 +828,12 @@ static bool check_parent_thread(QObject *parent,
 */
 
 QObject::QObject(QObject *parent)
-    : d_ptr(new QObjectPrivate)
+    : d_ptr(Qt::Uninitialized)
 {
-    Q_D(QObject);
-    d_ptr->q_ptr = this;
-    d->threadData = (parent && !parent->thread()) ? parent->d_func()->threadData : QThreadData::current();
-    d->threadData->ref();
-    if (parent) {
-        QT_TRY {
-            if (!check_parent_thread(parent, parent ? parent->d_func()->threadData : 0, d->threadData))
-                parent = 0;
-            setParent(parent);
-        } QT_CATCH(...) {
-            d->threadData->deref();
-            QT_RETHROW;
-        }
-    }
-    qt_addObject(this);
-    if (Q_UNLIKELY(qtHookData[QHooks::AddQObject]))
-        reinterpret_cast<QHooks::AddQObjectCallback>(qtHookData[QHooks::AddQObject])(this);
+    // Redirects to the other constructor, and
+    // even Qt 4.8 did something similar somewhere, hence
+    // seems all compilers support it.
+    new (this) QObject(*(new QObjectPrivate), parent);
 }
 
 /*!
@@ -842,30 +843,46 @@ QObject::QObject(QObjectPrivate &dd, QObject *parent)
     : d_ptr(&dd)
 {
     Q_D(QObject);
-    d_ptr->q_ptr = this;
-    d->threadData = (parent && !parent->thread()) ? parent->d_func()->threadData : QThreadData::current();
-    d->threadData->ref();
+    d->attachPublic(this, parent);
+    // TRACE/corelib security: remove reverse engineering support #1,
+    // where older Qt versions tried to make that easy, and
+    // for example, siad versions would call the no-op function:
+    // ```
+    // qt_addObject(this);
+    // ```
+    // in which reverse engineering entity could inject their spyware, but
+    // newer versions make it look like a feature, by using below hooks, hence
+    // we added `QT_NO_QOBJECT_HOOKS` to disable even the maybe useful hooks.
+#ifndef QT_NO_QOBJECT_HOOKS
+    if (Q_UNLIKELY(qtHookData[QHooks::AddQObject]))
+        reinterpret_cast<QHooks::AddQObjectCallback>(qtHookData[QHooks::AddQObject])(this);
+#endif
+}
+
+void QObjectPrivate::attachPublic(QObject *q, QObject *parent) {
+    this->q_ptr = q;
+    this->threadData = (parent && ! parent->thread())
+            ? parent->d_func()->threadData
+            : QThreadData::current();
+    this->threadData->ref();
     if (parent) {
         QT_TRY {
-            if (!check_parent_thread(parent, parent ? parent->d_func()->threadData : 0, d->threadData))
+            if ( ! check_parent_thread(parent, parent ? parent->d_func()->threadData : 0, this->threadData))
                 parent = 0;
-            if (d->isWidget) {
+            if (this->isWidget) {
                 if (parent) {
-                    d->parent = parent;
-                    d->parent->d_func()->children.append(this);
+                    this->parent = parent;
+                    this->parent->d_func()->children.append(q);
                 }
                 // no events sent here, this is done at the end of the QWidget constructor
             } else {
-                setParent(parent);
+                q->setParent(parent);
             }
         } QT_CATCH(...) {
-            d->threadData->deref();
+            this->threadData->deref();
             QT_RETHROW;
         }
     }
-    qt_addObject(this);
-    if (Q_UNLIKELY(qtHookData[QHooks::AddQObject]))
-        reinterpret_cast<QHooks::AddQObjectCallback>(qtHookData[QHooks::AddQObject])(this);
 }
 
 /*!
@@ -895,41 +912,22 @@ QObject::QObject(QObjectPrivate &dd, QObject *parent)
 QObject::~QObject()
 {
     Q_D(QObject);
-    d->wasDeleted = true;
-    d->blockSig = 0; // unblock signals so we always emit destroyed()
 
-    QtSharedPointer::ExternalRefCountData *sharedRefcount = d->sharedRefcount.load();
-    if (sharedRefcount) {
-        if (sharedRefcount->strongref.load() > 0) {
-            qWarning("QObject: shared QObject was deleted directly. The program is malformed and may crash.");
-            // but continue deleting, it's too late to stop anyway
-        }
+    // TRACE/QObject improve: sub-class's destructor can detach Qt smart-pointers,
+    // before destruction reaches where further usage would cause problems.
+    d->detachSharedRefCount();
 
-        // indicate to all QWeakPointers that this QObject has now been deleted
-        sharedRefcount->strongref.store(0);
-        if ( ! sharedRefcount->weakref.deref()) {
-            delete sharedRefcount;
-            d->sharedRefcount.store(Q_NULLPTR);
-        }
-    }
-
-    if (!d->isWidget && d->isSignalConnected(0)) {
-        QT_TRY {
-            emit destroyed(this);
-        } QT_CATCH(...) {
-            // All connections (signal/slot) are still remaining, and hence
-            // either never `throw` if triggered by `destroyed(...)`,
-            // or the program should `exit` on throw, else may crash undefinedly.
-            qWarning("Detected an unexpected exception in ~QObject while emitting destroyed().");
-
-            QT_WARNING_PUSH
-            QT_WARNING_DISABLE_MSVC(4297)
-
-            QT_RETHROW;
-
-            QT_WARNING_POP
-        }
-    }
+    // TRACE/QObject improve: sub-class's destructor can emit `destroyed(this)` #1,
+    //
+    // Once QObject's destructor is reached QPointer is no-longer valid since
+    // sub-classes are already destructed, and
+    // one of many listeners of `destroyed(...)` may access such sub-classes.
+    //
+    // Hence, we let sub-classes decide whether to keep QPointer non-null until
+    // the `destroyed(this)` signal finishes, which allows said listeners to
+    // check what QPointer was for emitted `this` of `destroyed(this)`
+    // (else said listeners would need to keep raw-pointer beside `QPointer`).
+    d->emitDestroyed();
 
     if (d->declarativeData) {
         if (static_cast<QAbstractDeclarativeDataImpl*>(d->declarativeData)->ownedByQml1) {
@@ -1051,12 +1049,68 @@ QObject::~QObject()
     if (!d->children.isEmpty())
         d->deleteChildren();
 
-    qt_removeObject(this);
+    // TRACE/corelib security: remove reverse engineering support #2,
+    // hence never call the no-op func `qt_removeObject(this);`.
+#ifndef QT_NO_QOBJECT_HOOKS
     if (Q_UNLIKELY(qtHookData[QHooks::RemoveQObject]))
         reinterpret_cast<QHooks::RemoveQObjectCallback>(qtHookData[QHooks::RemoveQObject])(this);
+#endif
 
     if (d->parent)        // remove it from parent object
         d->setParent_helper(0);
+}
+
+void QObjectPrivate::detachSharedRefCount() {
+    this->wasDeleted = true;
+
+    QtSharedPointer::ExternalRefCountData *sharedRefcount = this->sharedRefcount.load();
+    if (sharedRefcount) {
+        if (sharedRefcount->strongref.load() > 0) {
+            qWarning("QObject: shared QObject was deleted directly. The program is malformed and may crash.");
+            // but continue deleting, it's too late to stop anyway
+        }
+
+        // indicate to all QWeakPointers that this QObject has now been deleted
+        sharedRefcount->strongref.store(0);
+        if ( ! sharedRefcount->weakref.deref()) {
+            delete sharedRefcount;
+            this->sharedRefcount.store(Q_NULLPTR);
+        }
+    }
+}
+
+void QObjectPrivate::emitDestroyed() {
+    if (this->wasDeleteSignaled) {
+        return;
+    }
+    this->wasDeleteSignaled = true;
+
+    // Ensures `destroyed(...)` signal is always emitted, and
+    // preventing race-condition with QSignalBlocker is caller's responsibility.
+    bool wasBlockSig = this->blockSig;
+    this->blockSig = 0;
+    QT_FINALLY([&] {
+        this->blockSig = wasBlockSig;
+    });
+
+    if ( ! this->isWidget && this->isSignalConnected(0)) {
+        QT_TRY {
+            QObject *that = this->q_func();
+            emit that->destroyed(that);
+        } QT_CATCH(...) {
+            // All connections (signal/slot) are still remaining, and hence
+            // either never `throw` if triggered by `destroyed(...)`,
+            // or the program should `exit` on throw, else may crash undefinedly.
+            qWarning("Detected an unexpected exception in ~QObject while emitting destroyed().");
+
+            QT_WARNING_PUSH
+            QT_WARNING_DISABLE_MSVC(4297)
+
+            QT_RETHROW;
+
+            QT_WARNING_POP
+        }
+    }
 }
 
 QObjectPrivate::Connection::~Connection()
@@ -1430,6 +1484,14 @@ bool QObject::blockSignals(bool block) Q_DECL_NOTHROW
     Q_D(QObject);
     bool previous = d->blockSig;
     d->blockSig = block;
+    return previous;
+}
+
+bool QObject::blockRemoteSignals(bool block)
+{
+    Q_D(QObject);
+    bool previous = d->blockRemoteSig;
+    d->blockRemoteSig = block;
     return previous;
 }
 
@@ -2202,6 +2264,7 @@ void QObject::removeEventFilter(QObject *obj)
 */
 void QObject::deleteLater()
 {
+    // Sent here and received in `qDeleteInEventHandler(...)` method.
     QCoreApplication::postEvent(this, new QDeferredDeleteEvent());
 }
 
@@ -3846,33 +3909,6 @@ void QMetaObject::activate(QObject *sender, int signal_index, void **argv)
     activate(sender, mo, signal_index - mo->methodOffset(), argv);
 }
 
-/*!
-    \internal
-    Returns the signal index used in the internal connectionLists vector.
-
-    It is different from QMetaObject::indexOfSignal():  indexOfSignal is the same as indexOfMethod
-    while QObjectPrivate::signalIndex is smaller because it doesn't give index to slots.
-
-    If \a meta is not 0, it is set to the meta-object where the signal was found.
-*/
-int QObjectPrivate::signalIndex(const char *signalName,
-                                const QMetaObject **meta) const
-{
-    Q_Q(const QObject);
-    const QMetaObject *base = q->metaObject();
-    Q_ASSERT(QMetaObjectPrivate::get(base)->revision >= 7);
-    QArgumentTypeArray types;
-    QByteArray name = QMetaObjectPrivate::decodeMethodSignature(signalName, types);
-    int relative_index = QMetaObjectPrivate::indexOfSignalRelative(
-            &base, name, types.size(), types.constData());
-    if (relative_index < 0)
-        return relative_index;
-    relative_index = QMetaObjectPrivate::originalClone(base, relative_index);
-    if (meta)
-        *meta = base;
-    return relative_index + QMetaObjectPrivate::signalOffset(base);
-}
-
 /*****************************************************************************
   Properties
  *****************************************************************************/
@@ -4172,15 +4208,33 @@ QObjectUserData* QObject::userData(uint id) const
 
 #endif // QT_NO_USERDATA
 
+// TRACE/QObject/remote support 3-3: `privateData` getter and setter defined.
+/*!\internal
+ */
+void QObjectPrivate::setPrivateData(const QByteArray &id, QObjectUserData *data)
+{
+    if ( ! extraData)
+        extraData = new QObjectPrivate::ExtraData();
+    extraData->privateDataMap.insert(id, data);
+}
+
+/*!\internal
+ */
+QObjectUserData *QObjectPrivate::privateData(const QByteArray &id) const
+{
+    if ( ! extraData)
+        return Q_NULLPTR;
+    return extraData->privateDataMap.value(id);
+}
 
 #ifndef QT_NO_DEBUG_STREAM
 QDebug operator<<(QDebug dbg, const QObject *o)
 {
-    QDebugStateSaver saver(dbg);
-    if (!o)
+    if ( ! o)
         return dbg << "QObject(0x0)";
+    QDebugStateSaver saver(dbg);
     dbg.nospace() << o->metaObject()->className() << '(' << (const void *)o;
-    if (!o->objectName().isEmpty())
+    if ( ! o->objectName().isEmpty())
         dbg << ", name = " << o->objectName();
     dbg << ')';
     return dbg;

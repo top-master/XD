@@ -1546,6 +1546,7 @@ public:
         TitleBarArea    // For move
     };
 
+    // Sync below with "qglobal.h" file's forward-declaration.
 #if defined(Q_COMPILER_CLASS_ENUM) && defined(Q_COMPILER_CONSTEXPR)
     enum class Initialization {
         Uninitialized

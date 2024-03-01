@@ -54,10 +54,11 @@ Q_GLOBAL_STATIC(QSocketEngineHandlerList, socketHandlers)
 
 QSocketEngineHandler::QSocketEngineHandler()
 {
-    if (!socketHandlers())
+    QSocketEngineHandlerList *list = socketHandlers();
+    if ( ! list)
         return;
-    QMutexLocker locker(&socketHandlers()->mutex);
-    socketHandlers()->prepend(this);
+    QMutexLocker locker(&list->mutex);
+    list->prepend(this);
 }
 
 QSocketEngineHandler::~QSocketEngineHandler()

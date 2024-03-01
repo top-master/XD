@@ -47,7 +47,7 @@ QT_BEGIN_NAMESPACE
         inline qreal toReal() const { return val; }
 
         QNUMBER_OPERATORS(MyNumber)
-        QNUMBER_OPERATORS_T(MyNumber, quint32, MyNumber::fromUnsigned)
+        QNUMBER_OPERATOR_T(MyNumber, quint32, MyNumber::fromUnsigned)
     };
     ```
     In such case, even if there is any warning, you only need to
@@ -103,7 +103,7 @@ inline qreal operator/(qreal i, const QNumber<T> &v) { return i / v.value(); }
     \
     Q_DECL_CONSTEXPR inline bool operator!() const { return !val; } \
     \
-    QNUMBER_OPERATORS_T(CLASS, CLASS, Q_VALUE_RETURN)
+    QNUMBER_OPERATOR_T(CLASS, CLASS, Q_VALUE_RETURN)
 
 /// Same as #QNUMBER_OPERATORS, but for custom-type.
 ///
@@ -111,7 +111,7 @@ inline qreal operator/(qreal i, const QNumber<T> &v) { return i / v.value(); }
 /// @param LEFT_CAST Should convert @p RIGHT_CLASS to @p LEFT_CLASS and return that.
 /// @param RIGHT_CLASS The other-type, for which QNumber sub-class needs operators.
 ///
-#  define QNUMBER_OPERATORS_T(LEFT_CLASS, RIGHT_CLASS, LEFT_CAST) \
+#  define QNUMBER_OPERATOR_T(LEFT_CLASS, RIGHT_CLASS, LEFT_CAST) \
     QNUMBER_OPS_ASSIGN_T(LEFT_CLASS, RIGHT_CLASS, LEFT_CAST) \
     \
     inline LEFT_CLASS &operator+=(Q_DEREFABLE_T(RIGHT_CLASS) right) { val += LEFT_CAST(right).value(); return *this; } \
@@ -253,7 +253,7 @@ inline QTextStream &operator>>(QTextStream &s, QNumber<T> &n) {
 }
 #else
 #  define QNUMBER_OPERATORS(CLASS)
-#  define QNUMBER_OPERATORS_T(LEFT_CLASS, RIGHT_CLASS, LEFT_CAST)
+#  define QNUMBER_OPERATOR_T(LEFT_CLASS, RIGHT_CLASS, LEFT_CAST)
 #  define QNUMBER_OPS_COMPARE(CLASS)
 #  define QNUMBER_OPS_COMPARE_T(LEFT_CLASS, RIGHT_CLASS, LEFT_CAST)
 #  define QNUMBER_OPS_COMPARE_GLOBAL(LEFT_CLASS, RIGHT_CLASS)

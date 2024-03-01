@@ -2694,7 +2694,8 @@ static bool PointInRegion(QRegionPrivate *pRegion, int x, int y)
     return false;
 }
 
-static bool RectInRegion(QRegionPrivate *region, int rx, int ry, uint rwidth, uint rheight)
+/// @returns Tri-state @c bool where only zero means @c false.
+static quint8 RectInRegion(QRegionPrivate *region, int rx, int ry, uint rwidth, uint rheight)
 {
     const QRect *pbox;
     const QRect *pboxEnd;

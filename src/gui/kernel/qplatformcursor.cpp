@@ -604,6 +604,7 @@ void QPlatformCursorImage::set(const uchar *data, const uchar *mask,
     int d, m;
 
     int x = -1, w = 0;
+    Q_UNUSED(w) // Debug purposes only.
 
     uchar *cursor_data = cursorImage.bits();
     int bpl = cursorImage.bytesPerLine();

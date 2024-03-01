@@ -74,6 +74,13 @@ public:
     QCoreApplicationPrivate(int &aargc,  char **aargv, uint flags);
     ~QCoreApplicationPrivate();
 
+    static inline QCoreApplicationPrivate *get(QCoreApplication *o) {
+        return o->d_func();
+    }
+    static inline const QCoreApplicationPrivate *get(const QCoreApplication *o) {
+        return o->d_func();
+    }
+
     void init();
 
     QString appName() const;

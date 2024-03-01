@@ -1,3 +1,7 @@
+#
+# See `qt_functions.dox` file.
+#
+
 defineReplace(qtPlatformTargetSuffix) {
     ios:CONFIG(iphonesimulator, iphonesimulator|iphoneos): \
         suffix = _iphonesimulator

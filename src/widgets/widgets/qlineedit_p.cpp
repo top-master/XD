@@ -1,5 +1,6 @@
 /****************************************************************************
 **
+** Copyright (C) 2015 The XD Company Ltd.
 ** Copyright (C) 2015 The Qt Company Ltd.
 ** Contact: http://www.qt.io/licensing/
 **
@@ -306,6 +307,125 @@ void QLineEditPrivate::drag()
 }
 
 #endif // QT_NO_DRAGANDDROP
+
+void QLineEditPrivate::drawText(QPainter *p, QStyleOptionFrame *panel)
+{
+    QLineEditPrivate *d = this;
+    Q_Q(QLineEdit);
+
+    // Intentionally NOT storing `QStyle` (may somehow change).
+    QRect r = q->style()->subElementRect(QStyle::SE_LineEditContents, panel, q);
+    r.setX(r.x() + d->effectiveLeftTextMargin());
+    r.setY(r.y() + d->topTextMargin);
+    r.setRight(r.right() - d->effectiveRightTextMargin());
+    r.setBottom(r.bottom() - d->bottomTextMargin);
+    p->setClipRect(r);
+
+    QFontMetrics fm = q->fontMetrics();
+    Qt::Alignment va = QStyle::visualAlignment(d->control->layoutDirection(), QFlag(d->alignment));
+    switch (va & Qt::AlignVertical_Mask) {
+     case Qt::AlignBottom:
+         d->vscroll = r.y() + r.height() - fm.height() - d->verticalMargin;
+         break;
+     case Qt::AlignTop:
+         d->vscroll = r.y() + d->verticalMargin;
+         break;
+     default:
+         //center
+         d->vscroll = r.y() + (r.height() - fm.height() + 1) / 2;
+         break;
+    }
+    QRect lineRect(r.x() + d->horizontalMargin, d->vscroll, r.width() - 2*d->horizontalMargin, fm.height());
+
+    int minLB = qMax(0, -fm.minLeftBearing());
+    int minRB = qMax(0, -fm.minRightBearing());
+
+    if (d->shouldShowPlaceholderText()) {
+        if (!d->placeholderText.isEmpty()) {
+            const bool focus = panel->state & QStyle::State_HasFocus;
+            QColor col = panel->palette.text().color();
+
+            // Only these values were visible in Windows's sharp view mode
+            // (i.e. maybe activated by CTRL+SHIFT+PRINTSCREEN shortcut).
+            col.setAlpha(focus ? 128 : 200);
+
+            // No need to backup pen (we reset it below).
+            p->setPen(col);
+
+            QString elidedText = fm.elidedText(d->placeholderText, Qt::ElideRight, lineRect.width());
+            p->drawText(lineRect.adjusted(minLB, 0, 0, 0), va, elidedText);
+            if( ! focus) // We would always return if we didn't want text cursor visible.
+                return;
+        }
+    }
+    // XD does not depend on QPainter's state
+    // (hence set below even if that's default).
+    p->setPen(panel->palette.text().color());
+
+    int cix = qRound(d->control->cursorToX());
+
+    // horizontal scrolling. d->hscroll is the left indent from the beginning
+    // of the text line to the left edge of lineRect. we update this value
+    // depending on the delta from the last paint event; in effect this means
+    // the below code handles all scrolling based on the textline (widthUsed,
+    // minLB, minRB), the line edit rect (lineRect) and the cursor position (cix).
+    int widthUsed = qRound(d->control->naturalTextWidth()) + 1 + minRB;
+    if ((minLB + widthUsed) <=  lineRect.width()) {
+        // text fits in lineRect; use hscroll for alignment
+        switch (va & ~(Qt::AlignAbsolute|Qt::AlignVertical_Mask)) {
+        case Qt::AlignRight:
+            d->hscroll = widthUsed - lineRect.width() + 1;
+            break;
+        case Qt::AlignHCenter:
+            d->hscroll = (widthUsed - lineRect.width()) / 2;
+            break;
+        default:
+            // Left
+            d->hscroll = 0;
+            break;
+        }
+        d->hscroll -= minLB;
+    } else if (cix - d->hscroll >= lineRect.width()) {
+        // text doesn't fit, cursor is to the right of lineRect (scroll right)
+        d->hscroll = cix - lineRect.width() + 1;
+    } else if (cix - d->hscroll < 0 && d->hscroll < widthUsed) {
+        // text doesn't fit, cursor is to the left of lineRect (scroll left)
+        d->hscroll = cix;
+    } else if (widthUsed - d->hscroll < lineRect.width()) {
+        // text doesn't fit, text document is to the left of lineRect; align
+        // right
+        d->hscroll = widthUsed - lineRect.width() + 1;
+    } else {
+        //in case the text is bigger than the lineedit, the hscroll can never be negative
+        d->hscroll = qMax(0, d->hscroll);
+    }
+
+    // the y offset is there to keep the baseline constant in case we have script changes in the text.
+    QPoint topLeft = lineRect.topLeft() - QPoint(d->hscroll, d->control->ascent() - fm.ascent());
+
+    // draw text, selections and cursors
+    int flags = QWidgetLineControl::DrawText;
+
+#ifdef QT_KEYPAD_NAVIGATION
+    if (!QApplication::keypadNavigationEnabled() || hasEditFocus())
+#endif
+    if (d->control->hasSelectedText() || (d->cursorVisible && !d->control->inputMask().isEmpty() && !d->control->isReadOnly())){
+        flags |= QWidgetLineControl::DrawSelections;
+        // Palette only used for selections/mask and may not be in sync
+        if (d->control->palette() != panel->palette
+           || d->control->palette().currentColorGroup() != panel->palette.currentColorGroup())
+            d->control->setPalette(panel->palette);
+    }
+
+    // Asian users see an IM selection text as cursor on candidate
+    // selection phase of input method, so the ordinary cursor should be
+    // invisible if we have a preedit string.
+    if (d->cursorVisible /*&& ! d->control->isReadOnly()*/)
+        flags |= QWidgetLineControl::DrawCursor;
+
+    d->control->setCursorWidth(q->style()->pixelMetric(QStyle::PM_TextCursorWidth));
+    d->control->draw(p, topLeft, r, flags);
+}
 
 QLineEditIconButton::QLineEditIconButton(QWidget *parent)
     : QToolButton(parent)

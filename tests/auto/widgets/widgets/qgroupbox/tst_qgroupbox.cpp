@@ -303,6 +303,7 @@ void tst_QGroupBox::enabledChildPropagation()
 void tst_QGroupBox::sizeHint()
 {
     QGroupBox testWidget1(0);
+    QEXPECT_WARN("QKeySequence::mnemonic: \"&0&0&0&0&0&0&0&0&0&0\" contains multiple occurrences of '&'");
     testWidget1.setTitle("&0&0&0&0&0&0&0&0&0&0");
 
     QGroupBox testWidget2(0);

@@ -142,6 +142,8 @@ static QT_PREPEND_NAMESPACE(qint64) qt_gettid()
 
 QT_BEGIN_NAMESPACE
 
+bool QtPrivate::warnFlush = true; // Q_VAR_EXPORT.
+
 #if !defined(Q_CC_MSVC)
 Q_NORETURN
 #endif

@@ -61,8 +61,8 @@ class QPointer
     typedef typename TypeSelector<T>::Type QObjectType;
     QWeakPointer<QObjectType> wp;
 public:
-    inline QPointer() { }
-    inline QPointer(T *p) : wp(p, true) { }
+    Q_DECL_CONSTEXPR inline QPointer() { }
+    Q_DECL_CONSTEXPR inline QPointer(T *p) : wp(p, true) { }
     // compiler-generated copy/move ctor/assignment operators are fine!
     // compiler-generated dtor is fine!
 

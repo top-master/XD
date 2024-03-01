@@ -160,6 +160,7 @@ qint64 QElapsedTimer::nsecsElapsed() const Q_DECL_NOTHROW
 qint64 QElapsedTimer::elapsed() const Q_DECL_NOTHROW
 {
     qint64 elapsed = getTickCount() - t1;
+    // TRACE/corelib note: Intentionally not using Q_INT64_C (for old MSVC).
     return ticksToNanoseconds(elapsed) / 1000000;
 }
 

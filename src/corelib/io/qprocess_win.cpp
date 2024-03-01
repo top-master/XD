@@ -501,7 +501,7 @@ void QProcessPrivate::startProcess()
     success = CreateProcess(0, (wchar_t*)args.utf16(),
                             0, 0, TRUE, dwCreationFlags,
                             environment.isEmpty() ? 0 : envlist.data(),
-                            workingDirectory.isEmpty() ? 0 : (wchar_t*)QDir::toNativeSeparators(workingDirectory).utf16(),
+                            workingDirectory.isEmpty() ? 0 : QDir::toNativeSeparators(workingDirectory).wcharCast(),
                             &startupInfo, pid);
     QString errorString;
     if (!success) {
@@ -815,10 +815,12 @@ bool QProcessPrivate::waitForWrite(int msecs)
     return false;
 }
 
-// Use ShellExecuteEx() to trigger an UAC prompt when CreateProcess()fails
-// with ERROR_ELEVATION_REQUIRED.
-static bool startDetachedUacPrompt(const QString &programIn, const QStringList &arguments,
-                                   const QString &workingDir, qint64 *pid)
+// Calls ShellExecuteEx() to trigger an UAC prompt
+// used when CreateProcess() fails with ERROR_ELEVATION_REQUIRED.
+bool QProcessPrivate::startDetachedUacPrompt(const QString &programIn
+        , const QStringList &arguments
+        , const QString &workingDir
+        , qint64 *pid, Qt::HANDLE *keepHandle)
 {
     typedef BOOL (WINAPI *ShellExecuteExType)(SHELLEXECUTEINFOW *);
 
@@ -832,7 +834,8 @@ static bool startDetachedUacPrompt(const QString &programIn, const QStringList &
     SHELLEXECUTEINFOW shellExecuteExInfo;
     memset(&shellExecuteExInfo, 0, sizeof(SHELLEXECUTEINFOW));
     shellExecuteExInfo.cbSize = sizeof(SHELLEXECUTEINFOW);
-    shellExecuteExInfo.fMask = SEE_MASK_NOCLOSEPROCESS | SEE_MASK_UNICODE | SEE_MASK_FLAG_NO_UI;
+    shellExecuteExInfo.fMask = SEE_MASK_NOCLOSEPROCESS | SEE_MASK_UNICODE | SEE_MASK_FLAG_NO_UI | SEE_MASK_CLASSNAME;
+    shellExecuteExInfo.lpClass = L"exefile";
     shellExecuteExInfo.lpVerb = L"runas";
     const QString program = QDir::toNativeSeparators(programIn);
     shellExecuteExInfo.lpFile = reinterpret_cast<LPCWSTR>(program.utf16());
@@ -846,7 +849,10 @@ static bool startDetachedUacPrompt(const QString &programIn, const QStringList &
         return false;
     if (pid)
         *pid = qint64(GetProcessId(shellExecuteExInfo.hProcess));
-    CloseHandle(shellExecuteExInfo.hProcess);
+    if (keepHandle)
+        *keepHandle = shellExecuteExInfo.hProcess;
+    else
+        CloseHandle(shellExecuteExInfo.hProcess);
     return true;
 }
 
@@ -863,9 +869,12 @@ bool QProcessPrivate::startDetached(const QString &program, const QStringList &a
                                  (ulong)CW_USEDEFAULT, (ulong)CW_USEDEFAULT,
                                  0, 0, 0, 0, 0, 0, 0, 0, 0, 0
                                };
-    success = CreateProcess(0, (wchar_t*)args.utf16(),
-                            0, 0, FALSE, CREATE_UNICODE_ENVIRONMENT | CREATE_NEW_CONSOLE, 0,
-                            workingDir.isEmpty() ? 0 : (wchar_t*)workingDir.utf16(),
+    DWORD createFlags = CREATE_UNICODE_ENVIRONMENT;
+    createFlags |= (GetConsoleWindow() ? CREATE_NEW_CONSOLE : CREATE_NO_WINDOW);
+
+    success = CreateProcess(0, args.wcharCast(),
+                            0, 0, FALSE, createFlags, 0,
+                            workingDir.isEmpty() ? 0 : workingDir.wcharCast(),
                             &startupInfo, &pinfo);
 
     if (success) {
