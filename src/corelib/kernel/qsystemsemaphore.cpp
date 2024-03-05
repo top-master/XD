@@ -235,7 +235,7 @@ void QSystemSemaphore::setKey(const QString &key, int initialValue, AccessMode m
     d->key = key;
     d->initialValue = initialValue;
     // cache the file name so it doesn't have to be generated all the time.
-    d->fileName = d->makeKeyFileName();
+    d->fileName = d->makeKeyFileName(key);
     d->handle(mode);
 }
 
@@ -248,6 +248,34 @@ void QSystemSemaphore::setKey(const QString &key, int initialValue, AccessMode m
 QString QSystemSemaphore::key() const
 {
     return d->key;
+}
+
+void QSystemSemaphore::setNativeKey(const QString &key, int initialValue, QSystemSemaphore::AccessMode mode)
+{
+    if (key == d->fileName && mode == Open)
+        return;
+    d->error = NoError;
+    d->errorString = QString();
+#if !defined(Q_OS_WIN) && !defined(QT_POSIX_IPC)
+    // optimization to not destroy/create the file & semaphore
+    if (key == d->fileName && mode == Create && d->createdSemaphore && d->createdFile) {
+        d->initialValue = initialValue;
+        d->unix_key = -1;
+        d->handle(mode);
+        return;
+    }
+#endif
+    d->cleanHandle();
+    d->key = QString();
+    d->initialValue = initialValue;
+    // cache the file name so it doesn't have to be generated all the time.
+    d->fileName = key;
+    d->handle(mode);
+}
+
+QString QSystemSemaphore::nativeKey()
+{
+    return d->fileName;
 }
 
 /*!

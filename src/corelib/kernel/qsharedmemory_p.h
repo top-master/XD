@@ -53,7 +53,7 @@ namespace QSharedMemoryPrivate
 {
     int createUnixKeyFile(const QString &fileName);
     QString makePlatformSafeKey(const QString &key,
-            const QString &prefix = QLatin1String("qipc_sharedmemory_"));
+            const QString &prefix = QLatin1Literal("qipc_sharedmemory_"));
 }
 #endif
 #else
@@ -106,20 +106,9 @@ class Q_AUTOTEST_EXPORT QSharedMemoryPrivate : public QObjectPrivate
 public:
     QSharedMemoryPrivate();
 
-    void *memory;
-    int size;
-    QString key;
-    QString nativeKey;
-    QSharedMemory::SharedMemoryError error;
-    QString errorString;
-#ifndef QT_NO_SYSTEMSEMAPHORE
-    QSystemSemaphore systemSemaphore;
-    bool lockedByMe;
-#endif
-
     static int createUnixKeyFile(const QString &fileName);
     static QString makePlatformSafeKey(const QString &key,
-            const QString &prefix = QLatin1String("qipc_sharedmemory_"));
+            const QString &prefix = QLatin1Literal("qipc_sharedmemory_"));
 #ifdef Q_OS_WIN
     Qt::HANDLE handle();
 #elif defined(QT_POSIX_IPC)
@@ -136,13 +125,30 @@ public:
     void setErrorString(QLatin1String function);
 
 #ifndef QT_NO_SYSTEMSEMAPHORE
-    bool tryLocker(QSharedMemoryLocker *locker, const QString &function) {
+    inline bool tryLocker(QSharedMemoryLocker *locker, const QString &function) {
         if (!locker->lock()) {
             errorString = QSharedMemory::tr("%1: unable to lock").arg(function);
             error = QSharedMemory::LockError;
             return false;
         }
         return true;
+    }
+
+    /// @returns Exclusive "nativeKey" for system-semaphore since we can NOT share the same key
+    /// also supports Windows "Global\\" prefix by not changing the begin of key.
+    inline QString semaphoreKey() const {
+        const QLL &suffix = QLL("qipc_memorylock_");
+        if(key.length())
+            return makePlatformSafeKey(key, suffix);
+        else if(nativeKey.length()) {
+            QString r;
+            r.reserve(nativeKey.size() + suffix.size());
+            r.append(nativeKey);
+            r.append(QLatin1Char('_'));
+            r.append(QLatin1String(suffix.data(), suffix.size() - 1));
+            return r;
+        }
+        return QString();
     }
 #endif // QT_NO_SYSTEMSEMAPHORE
 
@@ -153,6 +159,20 @@ private:
     int hand;
 #else
     key_t unix_key;
+#endif
+
+public:
+    void *memory;
+    int size;
+    QString key;
+    QString nativeKey;
+
+    QSharedMemory::SharedMemoryError error;
+    QString errorString;
+
+#ifndef QT_NO_SYSTEMSEMAPHORE
+    QSystemSemaphore systemSemaphore;
+    bool lockedByMe;
 #endif
 };
 
