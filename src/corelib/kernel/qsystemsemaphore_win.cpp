@@ -1,5 +1,6 @@
 /****************************************************************************
 **
+** Copyright (C) 2015 The XD Company Ltd.
 ** Copyright (C) 2015 The Qt Company Ltd.
 ** Contact: http://www.qt.io/licensing/
 **
@@ -35,11 +36,14 @@
 #include "qsystemsemaphore_p.h"
 #include "qcoreapplication.h"
 #include <qdebug.h>
+
+#ifndef QT_NO_SYSTEMSEMAPHORE
+
 #include <qt_windows.h>
+#include <Sddl.h> // For ConvertStringSecurityDescriptorToSecurityDescriptorW.
 
 QT_BEGIN_NAMESPACE
 
-#ifndef QT_NO_SYSTEMSEMAPHORE
 
 QSystemSemaphorePrivate::QSystemSemaphorePrivate() :
         semaphore(0), error(QSystemSemaphore::NoError)
@@ -48,7 +52,7 @@ QSystemSemaphorePrivate::QSystemSemaphorePrivate() :
 
 void QSystemSemaphorePrivate::setErrorString(const QString &function)
 {
-    BOOL windowsError = GetLastError();
+    DWORD windowsError = GetLastError();
     if (windowsError == 0)
         return;
 
@@ -74,18 +78,42 @@ void QSystemSemaphorePrivate::setErrorString(const QString &function)
 HANDLE QSystemSemaphorePrivate::handle(QSystemSemaphore::AccessMode)
 {
     // don't allow making handles on empty keys
-    if (key.isEmpty())
+    if (fileName.isEmpty())
         return 0;
 
     // Create it if it doesn't already exists.
     if (semaphore == 0) {
+        if( false == fileName.startsWith(QLL("Global\\"))) {
 #if defined(Q_OS_WINRT)
-        semaphore = CreateSemaphoreEx(0, initialValue, MAXLONG, (wchar_t*)fileName.utf16(), 0, SEMAPHORE_ALL_ACCESS);
+            semaphore = CreateSemaphoreEx(0, initialValue, MAXLONG, fileName.wcharCast(), 0, SEMAPHORE_ALL_ACCESS);
 #else
-        semaphore = CreateSemaphore(0, initialValue, MAXLONG, (wchar_t*)fileName.utf16());
+            semaphore = CreateSemaphore(0, initialValue, MAXLONG, fileName.wcharCast());
 #endif
+        } else {
+            // Create Global-File mapping between service-processes and user-processes
+            //  for more see comments in "QSharedMemoryPrivate::create(...)"
+            SECURITY_ATTRIBUTES attributes;
+            ZeroMemory(&attributes, sizeof(attributes));
+            attributes.nLength = sizeof(attributes);
+            ConvertStringSecurityDescriptorToSecurityDescriptorW(
+                        L"D:P"
+                        L"(A;OICI;GA;;;SY)"
+                        L"(A;OICI;GA;;;BA)"
+                        L"(A;OICI;GA;;;IU)"
+                        , SDDL_REVISION_1
+                        , &attributes.lpSecurityDescriptor
+                        , NULL);
+
+#if defined(Q_OS_WINRT)
+            semaphore = CreateSemaphoreEx(&attributes, initialValue, MAXLONG, fileName.wcharCast(), 0, SEMAPHORE_ALL_ACCESS);
+#else
+            semaphore = CreateSemaphore(&attributes, initialValue, MAXLONG, fileName.wcharCast());
+#endif
+
+            LocalFree(attributes.lpSecurityDescriptor);
+        }
         if (semaphore == NULL)
-            setErrorString(QLatin1String("QSystemSemaphore::handle"));
+            setErrorString(QLatin1Literal("QSystemSemaphore::handle"));
     }
 
     return semaphore;
@@ -95,7 +123,7 @@ void QSystemSemaphorePrivate::cleanHandle()
 {
     if (semaphore && !CloseHandle(semaphore)) {
 #if defined QSYSTEMSEMAPHORE_DEBUG
-        qDebug() << QLatin1String("QSystemSemaphorePrivate::CloseHandle: sem failed");
+        qDebug() << QLatin1Literal("QSystemSemaphorePrivate::CloseHandle: sem failed");
 #endif
     }
     semaphore = 0;
@@ -108,9 +136,9 @@ bool QSystemSemaphorePrivate::modifySemaphore(int count)
 
     if (count > 0) {
         if (0 == ReleaseSemaphore(semaphore, count, 0)) {
-            setErrorString(QLatin1String("QSystemSemaphore::modifySemaphore"));
+            setErrorString(QLatin1Literal("QSystemSemaphore::modifySemaphore"));
 #if defined QSYSTEMSEMAPHORE_DEBUG
-            qDebug() << QLatin1String("QSystemSemaphore::modifySemaphore ReleaseSemaphore failed");
+            qDebug() << QLatin1Literal("QSystemSemaphore::modifySemaphore ReleaseSemaphore failed");
 #endif
             return false;
         }
@@ -120,9 +148,9 @@ bool QSystemSemaphorePrivate::modifySemaphore(int count)
 #else
         if (WAIT_OBJECT_0 != WaitForSingleObject(semaphore, INFINITE)) {
 #endif
-            setErrorString(QLatin1String("QSystemSemaphore::modifySemaphore"));
+            setErrorString(QLatin1Literal("QSystemSemaphore::modifySemaphore"));
 #if defined QSYSTEMSEMAPHORE_DEBUG
-            qDebug() << QLatin1String("QSystemSemaphore::modifySemaphore WaitForSingleObject failed");
+            qDebug() << QLatin1Literal("QSystemSemaphore::modifySemaphore WaitForSingleObject failed");
 #endif
             return false;
         }
@@ -132,6 +160,7 @@ bool QSystemSemaphorePrivate::modifySemaphore(int count)
     return true;
 }
 
-#endif //QT_NO_SYSTEMSEMAPHORE
 
 QT_END_NAMESPACE
+
+#endif // QT_NO_SYSTEMSEMAPHORE
