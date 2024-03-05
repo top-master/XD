@@ -65,9 +65,9 @@ class QSystemSemaphorePrivate
 public:
     QSystemSemaphorePrivate();
 
-    QString makeKeyFileName()
+    static inline QString makeKeyFileName(const QString &key)
     {
-        return QSharedMemoryPrivate::makePlatformSafeKey(key, QLatin1String("qipc_systemsem_"));
+        return QSharedMemoryPrivate::makePlatformSafeKey(key, QLatin1Literal("qipc_systemsem_"));
     }
 
     inline void setError(QSystemSemaphore::SystemSemaphoreError e, const QString &message)

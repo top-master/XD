@@ -1,5 +1,6 @@
 /****************************************************************************
 **
+** Copyright (C) 2015 The XD Company Ltd.
 ** Copyright (C) 2015 The Qt Company Ltd.
 ** Contact: http://www.qt.io/licensing/
 **
@@ -39,6 +40,8 @@
 #include <qdebug.h>
 #ifdef Q_OS_WIN
 #  include <qt_windows.h>
+#elif defined(Q_OS_SYMBIAN)
+#  include <e32const.h>
 #endif
 
 QT_BEGIN_NAMESPACE
@@ -59,20 +62,35 @@ QSharedMemoryPrivate::makePlatformSafeKey(const QString &key,
     if (key.isEmpty())
         return QString();
 
-    QString result = prefix;
-
+    // Removes all special characters but use hash of original to keep exclusive
     QString part1 = key;
-    part1.replace(QRegExp(QLatin1String("[^A-Za-z]")), QString());
-    result.append(part1);
+    part1.replace(QRegExp(QLatin1Literal("[^A-Za-z]")), QString());
 
     QByteArray hex = QCryptographicHash::hash(key.toUtf8(), QCryptographicHash::Sha1).toHex();
-    result.append(QLatin1String(hex));
+
+    QString result;
+    //  plus 32 for possible platform-specific prefix/suffix
+    result.reserve(32 + prefix.size() + part1.size() + hex.size());
+
+    // Appends any platform-specific prefix.
 #ifdef Q_OS_WIN
-    return result;
+    // No extra prefix needed.
 #elif defined(QT_POSIX_IPC)
-    return QLatin1Char('/') + result;
+    result.append(QLatin1Char('/'));
 #else
-    return QDir::tempPath() + QLatin1Char('/') + result;
+    result.append(QDir::tempPath());
+    result.append(QLatin1Char('/'));
+#endif
+
+    result.append(prefix);
+    result.append(part1);
+    result.append(QLatin1String(hex));
+
+    // Platform-specific limitations.
+#ifdef Q_OS_SYMBIAN
+    return result.left(KMaxKernelName);
+#else
+    return result;
 #endif
 }
 #endif // QT_NO_SHAREDMEMORY && QT_NO_SHAREDMEMORY
@@ -239,9 +257,9 @@ bool QSharedMemoryPrivate::initKey()
         return false;
 #ifndef QT_NO_SYSTEMSEMAPHORE
     systemSemaphore.setKey(QString(), 1);
-    systemSemaphore.setKey(key, 1);
+    systemSemaphore.setNativeKey(this->semaphoreKey(), 1);
     if (systemSemaphore.error() != QSystemSemaphore::NoError) {
-        QString function = QLatin1String("QSharedMemoryPrivate::initKey");
+        QString function = QLatin1Literal("QSharedMemoryPrivate::initKey");
         errorString = QSharedMemory::tr("%1: unable to set key on lock").arg(function);
         switch(systemSemaphore.error()) {
         case QSystemSemaphore::PermissionDenied:
@@ -324,27 +342,24 @@ bool QSharedMemory::create(int size, AccessMode mode)
     if (!d->initKey())
         return false;
 
+    const QLatin1String &function = QLL("QSharedMemory::create");
+    if (size <= 0) {
+        d->error = QSharedMemory::InvalidSize;
+        d->errorString = QSharedMemory::tr("%1: create size is less then 0").arg(function);
+        return false;
+    }
+
 #ifndef QT_NO_SYSTEMSEMAPHORE
 #ifndef Q_OS_WIN
     // Take ownership and force set initialValue because the semaphore
     // might have already existed from a previous crash.
-    d->systemSemaphore.setKey(d->key, 1, QSystemSemaphore::Create);
-#endif
+    d->systemSemaphore.setNativeKey(d->semaphoreKey(), 1, QSystemSemaphore::Create);
 #endif
 
-    QString function = QLatin1String("QSharedMemory::create");
-#ifndef QT_NO_SYSTEMSEMAPHORE
     QSharedMemoryLocker lock(this);
     if (!d->key.isNull() && !d->tryLocker(&lock, function))
         return false;
 #endif
-
-    if (size <= 0) {
-        d->error = QSharedMemory::InvalidSize;
-        d->errorString =
-            QSharedMemory::tr("%1: create size is less then 0").arg(function);
-        return false;
-    }
 
     if (!d->create(size))
         return false;
@@ -396,7 +411,7 @@ bool QSharedMemory::attach(AccessMode mode)
         return false;
 #ifndef QT_NO_SYSTEMSEMAPHORE
     QSharedMemoryLocker lock(this);
-    if (!d->key.isNull() && !d->tryLocker(&lock, QLatin1String("QSharedMemory::attach")))
+    if (!d->key.isNull() && !d->tryLocker(&lock, QLatin1Literal("QSharedMemory::attach")))
         return false;
 #endif
 
@@ -436,7 +451,7 @@ bool QSharedMemory::detach()
 
 #ifndef QT_NO_SYSTEMSEMAPHORE
     QSharedMemoryLocker lock(this);
-    if (!d->key.isNull() && !d->tryLocker(&lock, QLatin1String("QSharedMemory::detach")))
+    if (!d->key.isNull() && !d->tryLocker(&lock, QLatin1Literal("QSharedMemory::detach")))
         return false;
 #endif
 
@@ -505,7 +520,7 @@ bool QSharedMemory::lock()
         d->lockedByMe = true;
         return true;
     }
-    QString function = QLatin1String("QSharedMemory::lock");
+    QString function = QLatin1Literal("QSharedMemory::lock");
     d->errorString = QSharedMemory::tr("%1: unable to lock").arg(function);
     d->error = QSharedMemory::LockError;
     return false;
@@ -527,7 +542,7 @@ bool QSharedMemory::unlock()
     d->lockedByMe = false;
     if (d->systemSemaphore.release())
         return true;
-    QString function = QLatin1String("QSharedMemory::unlock");
+    QString function = QLatin1Literal("QSharedMemory::unlock");
     d->errorString = QSharedMemory::tr("%1: unable to unlock").arg(function);
     d->error = QSharedMemory::LockError;
     return false;

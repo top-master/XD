@@ -1,5 +1,6 @@
 /****************************************************************************
 **
+** Copyright (C) 2015 The XD Company Ltd.
 ** Copyright (C) 2015 The Qt Company Ltd.
 ** Contact: http://www.qt.io/licensing/
 **
@@ -41,6 +42,10 @@ QT_BEGIN_NAMESPACE
 
 #ifndef QT_NO_SHAREDMEMORY
 
+#include <Sddl.h> //for ConvertStringSecurityDescriptorToSecurityDescriptorW
+
+//#define QSHAREDMEMORY_DEBUG
+
 QSharedMemoryPrivate::QSharedMemoryPrivate() : QObjectPrivate(),
         memory(0), size(0), error(QSharedMemory::NoError),
            systemSemaphore(QString()), lockedByMe(false), hand(0)
@@ -80,17 +85,19 @@ void QSharedMemoryPrivate::setErrorString(QLatin1String function)
         errorString = QSharedMemory::tr("%1: permission denied").arg(function);
         break;
     default:
-        errorString = QSharedMemory::tr("%1: unknown error %2").arg(function).arg(windowsError);
+        errorString = QSharedMemory::tr("%1: unknown error %2").arg(function).arg(qt_error_string(windowsError));
         error = QSharedMemory::UnknownError;
-#if defined QSHAREDMEMORY_DEBUG
+#ifdef QSHAREDMEMORY_DEBUG
         qDebug() << errorString << "key" << key;
 #endif
+        break;
     }
 }
 
 HANDLE QSharedMemoryPrivate::handle()
 {
     if (!hand) {
+        // Don't allow making handles on empty keys.
         const QLatin1String function("QSharedMemory::handle");
         if (nativeKey.isEmpty()) {
             error = QSharedMemory::KeyError;
@@ -125,12 +132,29 @@ bool QSharedMemoryPrivate::cleanHandle()
 {
     if (hand != 0 && !CloseHandle(hand)) {
         hand = 0;
-        setErrorString(QLatin1String("QSharedMemory::cleanHandle"));
+        setErrorString(QLatin1Literal("QSharedMemory::cleanHandle"));
         return false;
     }
     hand = 0;
     return true;
 }
+
+/// String notation in SDDL format.
+const wchar_t STR_ALLOW_ANYTHING[] =
+        L"D:P" //means use DACL instead of a SACL (we may rarely use SACL's...)
+        //
+        //Following ACE (i.e. access control entry) strings control who gets access.
+        //  Each one is A (allow) and allows for object and contains inheritance (OICI).
+        //  The first two do grant all access (GA - grant all) to System (SY) and Administrators (BA - built-in administratos).
+        //
+        L"(A;OICI;GA;;;SY)" //SDDL_LOCAL_SYSTEM: Local system. The corresponding RID is SECURITY_LOCAL_SYSTEM_RID.
+        L"(A;OICI;GA;;;BA)" //SDDL_BUILTIN_ADMINISTRATORS: Built-in administrators. The corresponding RID is DOMAIN_ALIAS_RID_ADMINS.
+        //
+        //below we allow limited user's to modify the shared-memory created by service
+        //  IU: SDDL_INTERACTIVE: users actually logged-on to a session interactively (with user-name and password).
+        //  This is a group identifier added to the token of a process when it was logged on interactively.
+        //  The corresponding logon type is LOGON32_LOGON_INTERACTIVE. The corresponding RID is SECURITY_INTERACTIVE_RID.
+        L"(A;OICI;GA;;;IU)";
 
 bool QSharedMemoryPrivate::create(int size)
 {
@@ -141,16 +165,53 @@ bool QSharedMemoryPrivate::create(int size)
         return false;
     }
 
-    // Create the file mapping.
 #if defined(Q_OS_WINPHONE)
     Q_UNIMPLEMENTED();
     Q_UNUSED(size)
     hand = 0;
-#elif defined(Q_OS_WINRT)
-    hand = CreateFileMappingFromApp(INVALID_HANDLE_VALUE, 0, PAGE_READWRITE, size, (PCWSTR)nativeKey.utf16());
 #else
-    hand = CreateFileMapping(INVALID_HANDLE_VALUE, 0, PAGE_READWRITE, 0, size, (wchar_t*)nativeKey.utf16());
+
+    if( false == nativeKey.startsWith(QLL("Global\\")) ) {
+        // Create the file mapping.
+#if defined(Q_OS_WINRT)
+        hand = CreateFileMappingFromApp(INVALID_HANDLE_VALUE, 0, PAGE_READWRITE, size, (PCWSTR)nativeKey.wcharCast());
+#else
+        hand = CreateFileMapping(INVALID_HANDLE_VALUE, 0, PAGE_READWRITE, 0, size, nativeKey.wcharCast());
 #endif
+    } else {
+        // Create Global-File mapping between service-processes and user-processes.
+        // note: Below only works for Service-Processes and always returns zero for Normal-User-Processes
+        // since normal-processes don't have the create-global-privilege.
+        //
+        // If you really need normal-processes to create the shared-memory
+        // and not the service then you could have an IPC scheme like below:
+        // 1. your normal-process code sends a message to the service containing the file mapping handle it created,
+        // 2. the service would then call DuplicateHandle(...) to get a reference to it.
+        // 3. but this would require your service to run with the debug-privilege.
+
+        SECURITY_ATTRIBUTES attributes;
+        ZeroMemory(&attributes, sizeof(attributes));
+        attributes.nLength = sizeof(attributes);
+        //below method is taking string in SDDL format
+        ConvertStringSecurityDescriptorToSecurityDescriptorW
+            (
+                STR_ALLOW_ANYTHING
+                , SDDL_REVISION_1
+                , &attributes.lpSecurityDescriptor
+                , NULL
+            );
+
+#if defined(Q_OS_WINRT)
+        hand = CreateFileMappingFromApp(INVALID_HANDLE_VALUE, &attribute, PAGE_READWRITE, size, (PCWSTR)nativeKey.wcharCast());
+#else
+        hand = CreateFileMappingW(INVALID_HANDLE_VALUE, &attributes
+                , PAGE_READWRITE, 0, size, nativeKey.wcharCast());
+#endif
+
+        LocalFree(attributes.lpSecurityDescriptor);
+    }
+#endif // !Q_OS_WINPHONE
+
     setErrorString(function);
 
     // hand is valid when it already exists unlike unix so explicitly check

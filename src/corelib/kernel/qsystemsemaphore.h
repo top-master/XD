@@ -1,5 +1,6 @@
 /****************************************************************************
 **
+** Copyright (C) 2015 The XD Company Ltd.
 ** Copyright (C) 2015 The Qt Company Ltd.
 ** Contact: http://www.qt.io/licensing/
 **
@@ -70,6 +71,9 @@ public:
 
     void setKey(const QString &key, int initialValue = 0, AccessMode mode = Open);
     QString key() const;
+    /// @warning Ensure there is no "QSharedMemory" with the same "nativeKey".
+    void setNativeKey(const QString &key, int initialValue = 0, AccessMode mode = Open);
+    QString nativeKey();
 
     bool acquire();
     bool release(int n = 1);
