@@ -1,5 +1,6 @@
 /****************************************************************************
 **
+** Copyright (C) 2015 The XD Company Ltd.
 ** Copyright (C) 2015 The Qt Company Ltd.
 ** Contact: http://www.qt.io/licensing/
 **
@@ -47,15 +48,22 @@
 
 #include "qsharedmemory.h"
 
+QT_WARNING_PUSH
+QT_WARNING_SUPPRESS_UNUSED
+
 #ifdef QT_NO_SHAREDMEMORY
-# ifndef QT_NO_SYSTEMSEMAPHORE
+#  ifndef QT_NO_SYSTEMSEMAPHORE
+QT_BEGIN_NAMESPACE
+
 namespace QSharedMemoryPrivate
 {
     int createUnixKeyFile(const QString &fileName);
     QString makePlatformSafeKey(const QString &key,
             const QString &prefix = QLatin1Literal("qipc_sharedmemory_"));
 }
-#endif
+
+QT_END_NAMESPACE
+#  endif
 #else
 
 #include "qsystemsemaphore.h"
@@ -67,20 +75,23 @@ namespace QSharedMemoryPrivate
 
 QT_BEGIN_NAMESPACE
 
+class QSharedMemoryLockModeHandler;
+
 #ifndef QT_NO_SYSTEMSEMAPHORE
 /*!
-  Helper class
-  */
-class QSharedMemoryLocker
+  Helper class, former QSharedMemoryLocker was renamed in favor of
+  the public-API version of QSharedMemoryLocker.
+ */
+class QSharedMemoryUnlocker
 {
 
 public:
-    inline QSharedMemoryLocker(QSharedMemory *sharedMemory) : q_sm(sharedMemory)
+    inline QSharedMemoryUnlocker(QSharedMemory *sharedMemory) : q_sm(sharedMemory)
     {
         Q_ASSERT(q_sm);
     }
 
-    inline ~QSharedMemoryLocker()
+    inline ~QSharedMemoryUnlocker()
     {
         if (q_sm)
             q_sm->unlock();
@@ -101,10 +112,14 @@ private:
 
 class Q_AUTOTEST_EXPORT QSharedMemoryPrivate : public QObjectPrivate
 {
+    friend class QSharedMemoryLockModeHandler;
     Q_DECLARE_PUBLIC(QSharedMemory)
 
 public:
     QSharedMemoryPrivate();
+
+    static inline const QSharedMemoryPrivate *get(const QSharedMemory *o) { return o->d_func(); }
+    static inline QSharedMemoryPrivate *get(QSharedMemory *o) { return o->d_func(); }
 
     static int createUnixKeyFile(const QString &fileName);
     static QString makePlatformSafeKey(const QString &key,
@@ -125,7 +140,7 @@ public:
     void setErrorString(QLatin1String function);
 
 #ifndef QT_NO_SYSTEMSEMAPHORE
-    inline bool tryLocker(QSharedMemoryLocker *locker, const QString &function) {
+    inline bool tryLocker(QSharedMemoryUnlocker *locker, const QString &function) {
         if (!locker->lock()) {
             errorString = QSharedMemory::tr("%1: unable to lock").arg(function);
             error = QSharedMemory::LockError;
@@ -176,9 +191,64 @@ public:
 #endif
 };
 
+
+class QSharedMemoryLockModeHandler {
+public:
+    QSharedMemoryPrivate *dd;
+    const QLatin1String function;
+    int lockMode;
+    bool success;
+
+    Q_ALWAYS_INLINE QSharedMemoryLockModeHandler(QSharedMemoryPrivate *smp, QSharedMemory::LockMode mode)
+        : dd(smp)
+        , function(QLL("QSharedMemory::create"))
+        , lockMode(mode)
+        , success(false)
+    {
+    }
+
+#ifndef QT_NO_SYSTEMSEMAPHORE
+
+    Q_NEVER_INLINE ~QSharedMemoryLockModeHandler() {
+        if (lockMode == -1) {
+            // Critical error (see `createOrLock()` docs).
+            return;
+        }
+
+        if ((lockMode == QSharedMemory::AlwaysLock && ! dd->lockedByMe)
+            || ! success
+            || lockMode == QSharedMemory::AlwaysUnlock
+        ) {
+            QString errorString = dd->errorString;
+            QSharedMemory::SharedMemoryError error = dd->error;
+            if (lockMode == QSharedMemory::AlwaysLock) {
+                this->lock();
+            } else {
+                dd->q_func()->unlock();
+            }
+            if (error != QSharedMemory::NoError) {
+                dd->errorString = errorString;
+                dd->error = error;
+            }
+        }
+    }
+
+    bool lock();
+
+#else
+
+    inline bool lock() { return true }
+
+#endif // QT_NO_SYSTEMSEMAPHORE
+
+    Q_ALWAYS_INLINE QSharedMemoryPrivate *operator->() const { return this->dd; }
+};
+
 QT_END_NAMESPACE
 
 #endif // QT_NO_SHAREDMEMORY
+
+QT_WARNING_POP
 
 #endif // QSHAREDMEMORY_P_H
 
