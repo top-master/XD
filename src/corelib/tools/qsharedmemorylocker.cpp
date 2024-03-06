@@ -24,6 +24,8 @@
 
 #include "qsharedmemorylocker.h"
 
+#include <QtCore/private/qsharedmemory_p.h>
+
 
 QSharedMemoryLockerBase::QSharedMemoryLockerBase(QSharedMemory *ptr, const void *owner)
     : o(owner)
@@ -57,30 +59,59 @@ Q_GLOBAL_STATIC(QSharedMemoryLockerList, staticList)
 bool QSharedMemoryLockerBase::connect(QSharedMemoryLockerBase::Constructor constructor, int size)
 {
     bool locked = false;
-    if (memory()) {
+    QSharedMemory *mem = this->memory();
+    if (mem) {
         QSharedMemoryLockerList *list = staticList();
         QMutexLocker _(o ? &list->mutex : Q_NULLPTR);
         if ( ! o || ! list->contains(qMakePair(o, val))) {
-            if (memory()->isAttached()) {
-                locked = memory()->lock();
-                Q_ASSERT(locked, "lock attached failed.");
-            } else if (memory()->create(size)) {
-                locked = memory()->lock();
-                Q_ASSERT(locked, "lock after creation failed.");
-                if (locked)
-                    constructor(memory()->data());
-            } else if(memory()->error() == QSharedMemory::AlreadyExists
-                && memory()->attach())
+            QLatin1String error;
+            if (mem->isAttached()) {
+                locked = mem->lock();
+                if ( ! locked) {
+                    error = QLL("Failed lock already-attached shared-memory.");
+                }
+            } else if (mem->createAndLock(size)) {
+                locked = true;
+                void *data = mem->data();
+                if (data) {
+                    constructor(data);
+                } else {
+                    error = QLL("Failed to access shared-memory after creation.");
+                }
+            } else if(mem->error() == QSharedMemory::AlreadyExists
+                && mem->attach())
             {
-                locked = memory()->lock();
-                Q_ASSERT(locked, "lock already-existing failed.");
-            } else {
-                Q_ASSERT(false, qPrintable(memory()->errorString()));
+                locked = mem->lock();
+                if ( ! locked) {
+                    error = QLL("Failed to lock already-existing shared-memory.");
+                }
             }
             if (locked) {
                 if (o)
                     list->append(qMakePair(o, val));
                 val |= quintptr(1u);
+            } else {
+                // Error reporting.
+                QSharedMemoryPrivate *memD = QSharedMemoryPrivate::get(mem);
+                if ( ! error.isEmpty()) {
+                    QString oldError = memD->errorString;
+                    if (oldError.isEmpty()) {
+                        memD->errorString = error;
+                        memD->error = QSharedMemory::LockError;
+                    } else {
+                        QLL separator("\n");
+                        QString msg;
+                        msg.reserve(oldError.size() + separator.size() + error.size());
+                        msg += error;
+                        msg += separator;
+                        msg += oldError;
+                        memD->errorString = msg;
+                        memD->error = memD->error != QSharedMemory::NoError
+                                ? memD->error
+                                : QSharedMemory::LockError;
+                    }
+                }
+                Q_ASSERT(false, qPrintable(memD->errorString));
             }
         }
     }

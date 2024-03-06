@@ -1,5 +1,6 @@
 /****************************************************************************
 **
+** Copyright (C) 2015 The XD Company Ltd.
 ** Copyright (C) 2015 The Qt Company Ltd.
 ** Contact: http://www.qt.io/licensing/
 **
@@ -55,6 +56,12 @@ public:
         ReadWrite
     };
 
+    enum LockMode {
+        AlwaysUnlock,
+        AlwaysLock,
+        LockedUnlessFailed
+    };
+
     enum SharedMemoryError
     {
         NoError,
@@ -77,7 +84,8 @@ public:
     void setNativeKey(const QString &key);
     QString nativeKey() const;
 
-    bool create(int size, AccessMode mode = ReadWrite);
+    /// @deprecated Use @ref createAndLock or @ref createOrLock instead.
+    bool create(int size, AccessMode mode = ReadWrite, LockMode lockMode = AlwaysUnlock);
     int size() const;
 
     bool attach(AccessMode mode = ReadWrite);
@@ -89,8 +97,19 @@ public:
     const void *data() const;
 
 #ifndef QT_NO_SYSTEMSEMAPHORE
+    /// Same as @ref create, but if successful without unlocking (see @ref unlock).
+    Q_ALWAYS_INLINE bool createAndLock(int size, AccessMode mode = ReadWrite)
+        { return create(size, mode, LockedUnlessFailed); }
+    /// Same as @ref create, but even if failed, always locks the semaphore.
+    ///
+    /// @warning The locking may be skipped if a critical error happens, hence
+    /// the @ref isLocked method's result should be checked as well.
+    Q_ALWAYS_INLINE bool createOrLock(int size, AccessMode mode = ReadWrite)
+        { return create(size, mode, AlwaysLock); }
+
     bool lock();
     bool unlock();
+    bool isLocked() const;
 #endif
 
     SharedMemoryError error() const;

@@ -335,36 +335,33 @@ QString QSharedMemory::nativeKey() const
 
   \sa error()
  */
-bool QSharedMemory::create(int size, AccessMode mode)
+bool QSharedMemory::create(int size, AccessMode mode, LockMode lockMode)
 {
-    Q_D(QSharedMemory);
+    QSharedMemoryLockModeHandler d(this->d_func(), lockMode);
 
-    if (!d->initKey())
-        return false;
-
-    const QLatin1String &function = QLL("QSharedMemory::create");
-    if (size <= 0) {
-        d->error = QSharedMemory::InvalidSize;
-        d->errorString = QSharedMemory::tr("%1: create size is less then 0").arg(function);
+    // Closes any previous memory-handle, and prepares semaphore-key.
+    if ( ! d->initKey()) {
+        // Critical error (see `createOrLock()` docs).
+        d.lockMode = -1;
         return false;
     }
 
-#ifndef QT_NO_SYSTEMSEMAPHORE
-#ifndef Q_OS_WIN
-    // Take ownership and force set initialValue because the semaphore
-    // might have already existed from a previous crash.
-    d->systemSemaphore.setNativeKey(d->semaphoreKey(), 1, QSystemSemaphore::Create);
-#endif
-
-    QSharedMemoryLocker lock(this);
-    if (!d->key.isNull() && !d->tryLocker(&lock, function))
+    if (size <= 0) {
+        d->error = QSharedMemory::InvalidSize;
+        d->errorString = QSharedMemory::tr("%1: create size is less then 0").arg(d.function);
         return false;
-#endif
+    }
+
+    if ( ! d.lock()) {
+        return false;
+    }
 
     if (!d->create(size))
         return false;
 
-    return d->attach(mode);
+    d.success = d->attach(mode);
+
+    return d.success;
 }
 
 /*!
@@ -410,7 +407,7 @@ bool QSharedMemory::attach(AccessMode mode)
     if (isAttached() || !d->initKey())
         return false;
 #ifndef QT_NO_SYSTEMSEMAPHORE
-    QSharedMemoryLocker lock(this);
+    QSharedMemoryUnlocker lock(this);
     if (!d->key.isNull() && !d->tryLocker(&lock, QLatin1Literal("QSharedMemory::attach")))
         return false;
 #endif
@@ -450,7 +447,7 @@ bool QSharedMemory::detach()
         return false;
 
 #ifndef QT_NO_SYSTEMSEMAPHORE
-    QSharedMemoryLocker lock(this);
+    QSharedMemoryUnlocker lock(this);
     if (!d->key.isNull() && !d->tryLocker(&lock, QLatin1Literal("QSharedMemory::detach")))
         return false;
 #endif
@@ -546,6 +543,37 @@ bool QSharedMemory::unlock()
     d->errorString = QSharedMemory::tr("%1: unable to unlock").arg(function);
     d->error = QSharedMemory::LockError;
     return false;
+}
+
+/*!
+  Same as the @ref lock method's result, no matter if @c true or @c false, but
+  is only required whenever you didn't call @ref lock directly
+  (hence don't have said call's result).
+
+  @returns @c true if currently has lock's ownership.
+ */
+bool QSharedMemory::isLocked() const
+{
+    Q_D(const QSharedMemory);
+    return d->lockedByMe;
+}
+
+bool QSharedMemoryLockModeHandler::lock() {
+#  ifndef Q_OS_WIN
+    // Take ownership and force set initialValue because the semaphore
+    // might have already existed from a previous crash.
+    dd->systemSemaphore.setNativeKey(dd->semaphoreKey(), 1, QSystemSemaphore::Create);
+#  endif
+
+    if ( ! dd->key.isNull()) {
+        if ( ! dd->q_func()->lock()) {
+            dd->errorString = QSharedMemory::tr("%1: unable to lock").arg(function);
+            dd->error = QSharedMemory::LockError;
+            return false;
+        }
+    }
+
+    return true;
 }
 #endif // QT_NO_SYSTEMSEMAPHORE
 
