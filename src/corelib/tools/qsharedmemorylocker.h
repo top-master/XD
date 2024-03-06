@@ -72,12 +72,16 @@ public:
     // void reset(QSharedMemory *other = Q_NULLPTR);
     // ```
 
+    /// @warning After calling this, all methods will have undefined-behavior, but
+    /// the result should be safe to use as long as it's non-null.
     inline QSharedMemory *take()
     {
         QSharedMemory *oldD = memory();
         val = 0;
         return oldD;
     }
+
+    inline QString lastError() const { return memory()->errorString(); }
 
 private:
     Q_DISABLE_COPY(QSharedMemoryLockerBase)
@@ -95,7 +99,7 @@ class QSharedMemoryLocker : public QSharedMemoryLockerBase
     typedef T *QSharedMemoryLocker:: *SafeBool;
 #endif
 public:
-    /// Constructs the QSharedMemory of type "T" and locks it, or
+    /// Constructs the class of type "T" at given QSharedMemory and locks it, or
     /// waits until already existing can be locked.
     ///
     /// If @p owner is set, then QSharedMemoryLocker waits only for
@@ -165,6 +169,8 @@ private:
     Q_DISABLE_COPY(QSharedMemoryLocker)
 };
 
+/// @param SharedDataClass Type of the class to share.
+/// @param Dptr Any logic that results to pointer of a QSharedMemory.
 #define Q_DECLARE_SHARED_MEMORY_D(SharedDataClass, Dptr) \
     inline QSharedMemory *ds_func() { return Dptr; } \
     inline const QSharedMemory* ds_func() const { return Dptr; } \
