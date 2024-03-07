@@ -1432,11 +1432,20 @@ Q_DECL_CONSTEXPR Q_ALWAYS_INLINE QtPrivate::QFinally<Func1 > qScopeGuard(Func1 &
 }
 #endif /* __cplusplus end */
 
+/// Combines #Q_PTR_ADD_OFFSET with #Q_PTR_CAST.
+#define Q_PTR_ADD_CAST(Pointer, Offset) Q_PTR_CAST(TYPE, Q_PTR_ADD_OFFSET(Pointer, Offset))
+/// Combines #Q_PTR_SUB_OFFSET with #Q_PTR_CAST.
+#define Q_PTR_SUB_CAST(Pointer, Offset) Q_PTR_CAST(TYPE, Q_PTR_SUB_OFFSET(Pointer, Offset))
+
 #define Q_PTR_ALIGN_CAST(Pointer, Align, TYPE) Q_PTR_CAST(TYPE, Q_PTR_ALIGN(Pointer, Align))
 
 #define Q_PTR_REBASE_CAST(Pointer, OldBase, NewBase, TYPE) Q_PTR_CAST(TYPE, Q_PTR_REBASE(Pointer, OldBase, NewBase))
 
+#define Q_PTR_DISTANCE(Pointer, OtherPointer) Q_PTR_CAST(quintptr, Q_PTR_SUB_OFFSET(Q_MAX(Pointer, OtherPointer), Q_MIN(Pointer, OtherPointer)))
+
 #define Q_FIELDER_OFFSET(TYPE, FIELD) Q_PTR_SUB_OFFSET(0u, Q_FIELD_OFFSET(TYPE, FIELD))
+
+#define Q_FIELD_DISTANCE(TYPE, FIELD, OTHER_FIELD) Q_PTR_DISTANCE(Q_FIELD_OFFSET(TYPE, FIELD), Q_FIELD_OFFSET(TYPE, OTHER_FIELD))
 
 #ifdef __cplusplus
 // Memory

@@ -1444,13 +1444,16 @@ void tst_QVector::indexOf_QSharedPointer() const
 
     // Same for Fake.
     ObjPtr fakeRefB = ObjPtr::fromStack(objB);
-    ObjPtr fakeRefBCopy = ObjPtr::fromStack(objB);
+    ObjPtr fakeRefBCopy = fakeRefB;
+    ObjPtr fakeRefC = ObjPtr::fromStack(objC);
     ObjPtr fakeRefCRepeat = ObjPtr::fromStack(objC);
     QCOMPARE(list.indexOf(fakeRefB), 1);
     QCOMPARE(list.indexOf(fakeRefBCopy), 1);
+    QCOMPARE(list.indexOf(fakeRefC), 3);
     QCOMPARE(list.indexOf(fakeRefCRepeat), 3);
     QCOMPARE(list.lastIndexOf(fakeRefB), 2);
     QCOMPARE(list.lastIndexOf(fakeRefBCopy), 2);
+    QCOMPARE(list.lastIndexOf(fakeRefC), 4);
     QCOMPARE(list.lastIndexOf(fakeRefCRepeat), 4);
 
     // Same for RValue.
