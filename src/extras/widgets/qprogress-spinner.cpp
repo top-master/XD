@@ -85,10 +85,10 @@ void QProgressSpinner::render(QPainter *p, const QRectF &dest,
     const int halfWidth = shortDimension / 2.0f;
     Q_ASSERT(p);
 
-    int lineHeight = (shortDimension * 0.3) - 2;
+    int lineHeight = (shortDimension * 0.40) - 2;
     int lineWidth  = shortDimension > 40
             ? lineHeight * 0.21
-            : lineHeight * 0.33;
+            : lineHeight * 0.40;
     qreal lineWidthHalf = lineWidth / 2.0;
     // Plus one to keep smooth-ness (leave space for border anti-aliasing).
     QRectF lineRect( - lineWidthHalf, - halfWidth + 1,
@@ -104,7 +104,7 @@ void QProgressSpinner::render(QPainter *p, const QRectF &dest,
     qreal degreePerLine = 360 / lineCount;
 
     QColor colorAlpha = color;
-    for (int i = 0; i < lineCount; ++i) {
+    for (int i = 1; i <= lineCount; ++i) {
         // Starts almost invisible, ends at given `angle` fully visible.
         colorAlpha.setAlphaF(i / (lineCount * 1.0f));
         p->setBrush(colorAlpha);
