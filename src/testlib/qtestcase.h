@@ -199,6 +199,17 @@ do {\
         return;\
 } while (0)
 
+// TRACE/testlib UX: provide macro to assert warnings.
+#define QEXPECT_WARN(msg)\
+QTest::ignoreMessage(QtWarningMsg, msg)
+
+#ifdef QT_DEBUG
+#  define QEXPECT_DEBUG(msg)\
+QTest::ignoreMessage(QtDebugMsg, msg)
+#else
+#  define QEXPECT_DEBUG(msg) do { } while (0)
+#endif
+
 #define QFETCH(type, name)\
     type name = *static_cast<type *>(QTest::qData(#name, ::qMetaTypeId<type >()))
 
@@ -262,8 +273,36 @@ namespace QTest
     Q_TESTLIB_EXPORT char *toString(const char *);
     Q_TESTLIB_EXPORT char *toString(const void *);
 
+    class TestProvider {
+    public:
+        Q_TESTLIB_EXPORT virtual ~TestProvider();
+
+        virtual QObject *next() = 0;
+    };
+
+    Q_TESTLIB_EXPORT int qExec(TestProvider &provider, int argc = 0, char **argv = Q_NULLPTR);
     Q_TESTLIB_EXPORT int qExec(QObject *testObject, int argc = 0, char **argv = Q_NULLPTR);
     Q_TESTLIB_EXPORT int qExec(QObject *testObject, const QStringList &arguments);
+
+    /// @returns First argument passed to last @ref setTimeout call, but if that
+    /// was reverted, defaults to QTEST_FUNCTION_TIMEOUT environment-variable
+    /// if set, finally, defaults to 5x60x1000 milli-seconds (5 minutes).
+    Q_TESTLIB_EXPORT int timeout();
+    /// @warning Reverts to defaults of @ref timeout, after each test-case-method,
+    /// hence if required, consider calling this in the `init()` slot instead.
+    ///
+    /// @warning Minimim timeout is around one second, but @ref timeout will be
+    /// returning given @p milliSec value anyway.
+    ///
+    /// @warning If a debugger is attached, no matter if default or custom set, the
+    /// @ref timeout will be ignored if QtTest supports detecting said debugger
+    /// (this is an intentional feature, since tests run slower if under debug).
+    ///
+    Q_TESTLIB_EXPORT void setTimeout(int milliSec);
+    /// Same as @ref setTimeout, but for seconds instead of milli-seconds.
+    inline void setTimeoutSeconds(int seconds) { return setTimeout(seconds * 1000); }
+    /// Same as @ref setTimeout, but for minutes instead of milli-seconds.
+    inline void setTimeoutMinutes(int minutes) { return setTimeout(minutes * 60 * 1000); }
 
     /// @warning Reverts to @c false after each test-case-method, hence
     /// consider setting to @c true in the `init()` slot.
@@ -280,7 +319,9 @@ namespace QTest
     Q_TESTLIB_EXPORT bool qExpectFail(const char *dataIndex, const char *comment, TestFailMode mode,
                            const char *file, int line);
     Q_TESTLIB_EXPORT void qWarn(const char *message, const char *file = Q_NULLPTR, int line = 0);
-    Q_TESTLIB_EXPORT void ignoreMessage(QtMsgType type, const char *message);
+    Q_TESTLIB_EXPORT void ignoreMessage(QtMsgType type, const QString &message);
+    inline void ignoreMessage(QtMsgType type, const char *message) { return ignoreMessage(type, QString::fromLocal8Bit(message)); }
+    inline void ignoreMessage(QtMsgType type, const QByteArray &message) { return ignoreMessage(type, QString::fromLocal8Bit(message)); }
 #ifndef QT_NO_REGULAREXPRESSION
     Q_TESTLIB_EXPORT void ignoreMessage(QtMsgType type, const QRegularExpression &messagePattern);
 #endif
@@ -299,6 +340,11 @@ namespace QTest
     Q_TESTLIB_EXPORT const char *currentTestFunction();
     Q_TESTLIB_EXPORT const char *currentDataTag();
     Q_TESTLIB_EXPORT bool currentTestFailed();
+
+    /// Compares @ref currentDataTag with given @p dataTag.
+    inline bool hasTag(const char *dataTag) {
+        return qstrcmp(currentDataTag(), dataTag) == 0;
+    }
 
     Q_TESTLIB_EXPORT Qt::Key asciiToKey(char ascii);
     Q_TESTLIB_EXPORT char keyToAscii(Qt::Key key);

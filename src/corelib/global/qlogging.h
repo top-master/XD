@@ -192,6 +192,7 @@ Q_CORE_EXPORT QString qFormatLogMessage(QtMsgType type, const QMessageLogContext
 namespace QtPrivate {
 
 Q_VAR_EXPORT(CORE) extern bool warnFlush;
+Q_VAR_EXPORT(CORE) extern bool warnFatal;
 
 } // namespace QtPrivate
 

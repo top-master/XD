@@ -143,6 +143,7 @@ static QT_PREPEND_NAMESPACE(qint64) qt_gettid()
 QT_BEGIN_NAMESPACE
 
 bool QtPrivate::warnFlush = true; // Q_VAR_EXPORT.
+bool QtPrivate::warnFatal = true; // Q_VAR_EXPORT.
 
 #if !defined(Q_CC_MSVC)
 Q_NORETURN
@@ -290,6 +291,9 @@ QString qt_message(QtMsgType msgType, const char *msg, va_list ap)
 #define xdDebug(x) \
     fprintf(stderr, x "\n"); \
     fflush(stderr)
+
+#define qWarnFatal(x) \
+    do { if (QtPrivate::warnFatal) { xdDebug(x); } } while (0)
 
 #undef qDebug
 /*!
@@ -1660,10 +1664,10 @@ static void qt_message_fatal(QtMsgType, const QMessageLogContext &context, const
     int ret = _CrtDbgReportW(_CRT_ERROR, contextFileL, context.line, _CRT_WIDE(QT_VERSION_STR),
                              reinterpret_cast<const wchar_t *>(message.utf16()));
     if ((ret == 0) && (reportMode & _CRTDBG_MODE_WNDW)) {
-        xdDebug("qFatal: ignoring as CrtDbgHook requested.");
+        qWarnFatal("qFatal: ignoring as CrtDbgHook requested.");
         return; // ignore
     } else if (ret == 1) {
-        xdDebug("qFatal: triggering debug break (or exit).");
+        qWarnFatal("qFatal: triggering debug break (or exit).");
         _CrtDbgBreak();
     }
 #else
@@ -1672,7 +1676,7 @@ static void qt_message_fatal(QtMsgType, const QMessageLogContext &context, const
     Q_UNUSED(&convert_to_wchar_t_elided);
 #endif
 
-    xdDebug("qFatal: exiting.");
+    qWarnFatal("qFatal: exiting.");
 #if (defined(Q_OS_UNIX) || defined(Q_CC_MINGW))
     abort(); // trap; generates core dump
 #else
