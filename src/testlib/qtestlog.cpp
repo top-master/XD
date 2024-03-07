@@ -1,5 +1,6 @@
 /****************************************************************************
 **
+** Copyright (C) 2015 The XD Company Ltd.
 ** Copyright (C) 2015 The Qt Company Ltd.
 ** Contact: http://www.qt.io/licensing/
 **
@@ -542,8 +543,12 @@ int QTestLog::verboseLevel()
 void QTestLog::ignoreMessage(QtMsgType type, const char *msg)
 {
     QTEST_ASSERT(msg);
-
     QTest::IgnoreResultList::append(QTest::ignoreResultList, type, QString::fromLocal8Bit(msg));
+}
+
+void QTestLog::ignoreMessage(QtMsgType type, const QString &msg)
+{
+    QTest::IgnoreResultList::append(QTest::ignoreResultList, type, msg);
 }
 
 #ifndef QT_NO_REGULAREXPRESSION

@@ -1,5 +1,6 @@
 /****************************************************************************
 **
+** Copyright (C) 2015 The XD Company Ltd.
 ** Copyright (C) 2015 The Qt Company Ltd.
 ** Contact: http://www.qt.io/licensing/
 **
@@ -75,6 +76,7 @@ public:
     static void addBenchmarkResult(const QBenchmarkResult &result);
 
     static void ignoreMessage(QtMsgType type, const char *msg);
+    static void ignoreMessage(QtMsgType type, const QString &msg);
 #ifndef QT_NO_REGULAREXPRESSION
     static void ignoreMessage(QtMsgType type, const QRegularExpression &expression);
 #endif
@@ -104,6 +106,8 @@ public:
     static int failCount();
     static int skipCount();
     static int blacklistCount();
+    /// Alias for @ref msecsTotalTime.
+    static inline qint64 duration();
 
     static void resetCounters();
 
@@ -121,6 +125,10 @@ private:
 
     static bool printAvailableTags;
 };
+
+
+inline qint64 QTestLog::duration()
+{ return QTestLog::msecsTotalTime(); }
 
 QT_END_NAMESPACE
 
