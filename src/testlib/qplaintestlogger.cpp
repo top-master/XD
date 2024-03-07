@@ -1,5 +1,6 @@
 /****************************************************************************
 **
+** Copyright (C) 2015 The XD Company Ltd.
 ** Copyright (C) 2015 The Qt Company Ltd.
 ** Contact: http://www.qt.io/licensing/
 **
@@ -343,21 +344,47 @@ void QPlainTestLogger::startLogging()
                   ", %s\n", QTestResult::currentTestObjectName(), QLibraryInfo::build());
     }
     outputMessage(buf);
+
+    bool ok = false;
+    const bool oldStyle = qEnvironmentVariableIntValue("QTEST_LOG_OLDSTYLE", &ok) && ok;
+
+    if (oldStyle) {
+        QtPrivate::warnFatal = false;
+    }
 }
 
 void QPlainTestLogger::stopLogging()
 {
     char buf[1024];
+
+    bool ok = false;
+    const bool oldStyle = qEnvironmentVariableIntValue("QTEST_LOG_OLDSTYLE", &ok) && ok;
+
+    QString duration;
+    if ( ! oldStyle) {
+        duration.reserve(64);
+        duration += QLL("Duration: ");
+        duration += QElapsedTimer::toStringLabel(
+                    QTestLog::duration(),
+                    QElapsedTimer::FormatFlags(QElapsedTimer::Precise | QElapsedTimer::ForceEnglish));
+        duration += QLatin1Char('\n');
+    }
+
     if (QTestLog::verboseLevel() < 0) {
-        qsnprintf(buf, sizeof(buf), "Totals: %d passed, %d failed, %d skipped, %d blacklisted\n",
+        qsnprintf(buf, sizeof(buf),
+                  "Totals: %d passed, %d failed, %d skipped, %d blacklisted\n"
+                  "%s",
                   QTestLog::passCount(), QTestLog::failCount(),
-                  QTestLog::skipCount(), QTestLog::blacklistCount());
+                  QTestLog::skipCount(), QTestLog::blacklistCount(),
+                  qPrintable(duration));
     } else {
         qsnprintf(buf, sizeof(buf),
                   "Totals: %d passed, %d failed, %d skipped, %d blacklisted\n"
+                  "%s"
                   "********* Finished testing of %s *********\n",
                   QTestLog::passCount(), QTestLog::failCount(),
                   QTestLog::skipCount(), QTestLog::blacklistCount(),
+                  qPrintable(duration),
                   QTestResult::currentTestObjectName());
     }
     outputMessage(buf);

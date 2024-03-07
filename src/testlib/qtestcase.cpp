@@ -1,6 +1,8 @@
 /****************************************************************************
 **
+** Copyright (C) 2015 The XD Company Ltd.
 ** Copyright (C) 2015 The Qt Company Ltd.
+** Copyright (C) 2012 Digia Plc and/or its subsidiary(-ies).
 ** Contact: http://www.qt.io/licensing/
 **
 ** This file is part of the QtTest module of the Qt Toolkit.
@@ -1439,6 +1441,29 @@ namespace QTest
     static QString mainSourcePath;
     static bool globalIsContinuous = false;
 
+    class WatchDog;
+
+    TestProvider::~TestProvider()
+    {
+        // Nothing to do (but required).
+    }
+
+    class SingleTestProvider : public TestProvider {
+        QObject *data;
+    public:
+        inline explicit SingleTestProvider(QObject *testObject)
+            : data(testObject)
+        {
+        }
+
+        QObject *next() Q_DECL_OVERRIDE
+        {
+            QObject *tmp = this->data;
+            this->data = Q_NULLPTR;
+            return tmp;
+        }
+    };
+
     class TestFunction {
     public:
         TestFunction() : function_(-1), data_(0) {}
@@ -1475,7 +1500,18 @@ namespace QTest
     static int keyDelay = -1;
     static int mouseDelay = -1;
     static int eventDelay = -1;
-    static int timeout = -1;
+    static bool randomOrder = false;
+    static unsigned int seed = 0;
+    static bool seedSet = false;
+
+    // MARK: timeout status.
+    static int timeoutDefault = -1;
+    static QBasicAtomicInt timeoutCustom = Q_BASIC_ATOMIC_INITIALIZER(-1);
+    /// @note Is atomic to handle possible user mistakes (otherwise, no need to
+    /// be atomic, since QtTest has no parallel-run support, however,
+    /// that could be simulated by parallel processes).
+    static QRef<WatchDog> timeoutCounter;
+
     static bool noCrashHandler = false;
 
 /*! \internal
@@ -1529,14 +1565,54 @@ int Q_TESTLIB_EXPORT defaultKeyDelay()
 
 static int defaultTimeout()
 {
+    int timeout = timeoutDefault;
     if (timeout == -1) {
         bool ok = false;
         timeout = qEnvironmentVariableIntValue("QTEST_FUNCTION_TIMEOUT", &ok);
 
         if (!ok || timeout <= 0)
             timeout = 5*60*1000;
+
+        timeoutDefault = timeout;
     }
     return timeout;
+}
+
+void seedRandom()
+{
+    static bool randomSeeded = false;
+    if (!randomSeeded) {
+        if (!QTest::seedSet) {
+            QElapsedTimer timer;
+            timer.start();
+            QTest::seed = timer.msecsSinceReference();
+        }
+        qsrand(QTest::seed);
+        randomSeeded = true;
+    }
+}
+
+int qTestRandomSeed()
+{
+    Q_ASSERT(QTest::seedSet);
+    return QTest::seed;
+}
+
+template<typename T>
+void swap(T * array, int pos, int otherPos)
+{
+    T tmp = array[pos];
+    array[pos] = array[otherPos];
+    array[otherPos] = tmp;
+}
+
+template<typename T>
+static void randomizeList(T * array, int size)
+{
+    for (int i = 0; i != size; i++) {
+        int pos = qrand() % size;
+        swap(array, pos, i);
+    }
 }
 
 static bool isValidSlot(const QMetaMethod &sl)
@@ -1695,6 +1771,9 @@ Q_TESTLIB_EXPORT void qtest_qParseArgs(int argc, char *argv[], bool qml)
          " -functions          : Returns a list of current testfunctions\n"
          " -datatags           : Returns a list of current data tags.\n"
          "                       A global data tag is preceded by ' __global__ '.\n"
+         " -random             : Run testcases within each test in random order\n"
+         " -seed n             : Positive integer to be used as seed for -random. If not specified,\n"
+         "                       the current time will be used as seed.\n"
          " -eventdelay ms      : Set default delay for mouse and keyboard simulation to ms milliseconds\n"
          " -keydelay ms        : Set default delay for keyboard simulation to ms milliseconds\n"
          " -mousedelay ms      : Set default delay for mouse simulation to ms milliseconds\n"
@@ -1880,6 +1959,22 @@ Q_TESTLIB_EXPORT void qtest_qParseArgs(int argc, char *argv[], bool qml)
 #endif
         } else if (strcmp(argv[i], "-eventcounter") == 0) {
             QBenchmarkGlobalData::current->setMode(QBenchmarkGlobalData::EventCounter);
+        } else if (strcmp(argv[i], "-random") == 0) {
+            QTest::randomOrder = true;
+        } else if (strcmp(argv[i], "-seed") == 0) {
+            bool argumentOk = false;
+            if (i + 1 < argc) {
+                char * endpt = 0;
+                long longSeed = strtol(argv[++i], &endpt, 10);
+                argumentOk = (*endpt == '\0' && longSeed >= 0);
+                QTest::seed = longSeed;
+            }
+            if (!argumentOk) {
+                printf("-seed needs an extra positive integer parameter to specify the seed\n");
+                exit(1);
+            } else {
+                QTest::seedSet = true;
+            }
         } else if (strcmp(argv[i], "-minimumvalue") == 0) {
             if (i + 1 >= argc) {
                 fprintf(stderr, "-minimumvalue needs an extra parameter to indicate the minimum time(ms)\n");
@@ -1993,6 +2088,11 @@ Q_TESTLIB_EXPORT void qtest_qParseArgs(int argc, char *argv[], bool qml)
         }
     }
 
+    if (QTest::seedSet && !QTest::randomOrder) {
+        printf("-seed requires -random\n");
+        exit(1);
+    }
+
     bool installedTestCoverage = installCoverageTool(QTestResult::currentAppName(), QTestResult::currentTestObjectName());
     QTestLog::setInstalledTestCoverage(installedTestCoverage);
 
@@ -2058,6 +2158,7 @@ static void qInvokeTestMethodDataEntry(char *slot)
         bool invokeOk;
         do {
             // Reverts un-sticky per-test-method options.
+            QTest::setTimeout(0);
             QTest::setContinuous(false);
             // Executes before-each handlers (which prepare per-test-method needs).
             invokeMethod(QTest::currentTestObject, "init()");
@@ -2140,20 +2241,29 @@ static void qInvokeTestMethodDataEntry(char *slot)
     }
 }
 
+// MARK: timeout implementation.
+
 class WatchDog : public QThread
 {
 public:
+    enum Status {
+        InfiniteWait = -1,
+        Destructing = 0,
+        Progressing = 1,
+    };
+
     WatchDog()
     {
         QMutexLocker locker(&mutex);
-        timeout.store(-1);
+        timeout.store(WatchDog::InfiniteWait);
         start();
+        timer.start();
         waitCondition.wait(&mutex);
     }
     ~WatchDog() {
         {
             QMutexLocker locker(&mutex);
-            timeout.store(0);
+            timeout.store(WatchDog::Destructing);
             waitCondition.wakeAll();
         }
         wait();
@@ -2161,26 +2271,55 @@ public:
 
     void beginTest() {
         QMutexLocker locker(&mutex);
-        timeout.store(defaultTimeout());
+        timeout.store(QTest::timeout());
+        timer.start();
         waitCondition.wakeAll();
     }
 
     void testFinished() {
         QMutexLocker locker(&mutex);
-        timeout.store(-1);
+        timeout.store(WatchDog::InfiniteWait);
         waitCondition.wakeAll();
     }
 
+    enum {
+        WaitStep = 500
+    };
+
+    inline bool isProgressing() const { return timeout.load() >= WatchDog::Progressing; }
+
+    bool updateTimeout() {
+        QMutexLocker locker(&mutex);
+        if (this->isProgressing()) {
+            this->timeout = QTest::timeout();
+            this->waitCondition.wakeAll();
+            return true;
+        }
+        return false;
+    }
+
+protected:
     void run() {
         QMutexLocker locker(&mutex);
         waitCondition.wakeAll();
         while (1) {
-            int t = timeout.load();
-            if (!t)
+            int limit = timeout.load();
+            if (limit == WatchDog::Destructing) {
                 break;
-            if (!waitCondition.wait(&mutex, t)) {
+            }
+            // The `wait` returns `false` on timeout, and `true` on `wakeAll`.
+            if (!waitCondition.wait(&mutex, WatchDog::WaitStep)) {
+                int currentLimit = timeout.load();
+                // Only zero means timeout, hence to handle destruct, which's
+                // zero as well, re-loops on timeout changes.
+                if (currentLimit != limit || timer.timeLeft(limit) != 0) {
+                    continue;
+                }
                 stackTrace();
-                qFatal("Test function timed out");
+                const QString &timeoutLabel = timer.toStringLabel(QElapsedTimer::FormatFlags(
+                    QElapsedTimer::Precise | QElapsedTimer::ForceEnglish
+                ));
+                qFatal("Test function timed out after %s", qPrintable(timeoutLabel));
             }
         }
     }
@@ -2189,6 +2328,13 @@ private:
     QBasicAtomicInt timeout;
     QMutex mutex;
     QWaitCondition waitCondition;
+    QElapsedTimer timer;
+};
+
+struct WatchDogFinalizer {
+    inline ~WatchDogFinalizer() {
+        QTest::timeoutCounter.clear();
+    }
 };
 
 
@@ -2571,18 +2717,24 @@ static void qInvokeTestMethods(QObject *testObject)
 {
     const QMetaObject *metaObject = testObject->metaObject();
     QTEST_ASSERT(metaObject);
-    QTestLog::startLogging();
+    // TRACE/testlib: moved logging start/stop to support `TestProvider` #1
+    // else would do:
+    // ```
+    // QTestLog::startLogging();
+    // ```
     QTestResult::setCurrentTestFunction("initTestCase");
     QTestTable::globalTestTable();
     invokeMethod(testObject, "initTestCase_data()");
 
-    QScopedPointer<WatchDog> watchDog;
+    WatchDogFinalizer watchDogScope; Q_UNUSED(watchDogScope)
+    QRef<WatchDog> watchDog;
     if (!debuggerPresent()
 #ifdef QTESTLIB_USE_VALGRIND
         && QBenchmarkGlobalData::current->mode() != QBenchmarkGlobalData::CallgrindChildProcess
 #endif
        ) {
-        watchDog.reset(new WatchDog);
+        timeoutCounter.reset(new WatchDog);
+        watchDog = timeoutCounter;
     }
 
     if (!QTestResult::skipCurrentTest() && !QTest::currentTestFailed()) {
@@ -2597,6 +2749,8 @@ static void qInvokeTestMethods(QObject *testObject)
         if (!QTestResult::skipCurrentTest() && !previousFailed) {
 
             if (QTest::testFuncs) {
+                if (QTest::randomOrder)
+                    randomizeList(QTest::testFuncs, QTest::testFuncCount);
                 for (int i = 0; i != QTest::testFuncCount; i++) {
                     if (!qInvokeTestMethod(metaObject->method(QTest::testFuncs[i].function()).methodSignature().constData(),
                                                               QTest::testFuncs[i].data(), watchDog.data())) {
@@ -2609,6 +2763,8 @@ static void qInvokeTestMethods(QObject *testObject)
                 QMetaMethod *testMethods = new QMetaMethod[methodCount];
                 for (int i = 0; i != methodCount; i++)
                     testMethods[i] = metaObject->method(i);
+                if (QTest::randomOrder)
+                    randomizeList(testMethods, methodCount);
                 for (int i = 0; i != methodCount; i++) {
                     if (!isValidSlot(testMethods[i]))
                         continue;
@@ -2631,7 +2787,11 @@ static void qInvokeTestMethods(QObject *testObject)
     QTestResult::setCurrentTestFunction(0);
     QTestTable::clearGlobalTestTable();
 
-    QTestLog::stopLogging();
+    // TRACE/testlib: moved logging start/stop to support `TestProvider` #2
+    // else would do:
+    // ```
+    // QTestLog::stopLogging();
+    // ```
 }
 
 #if defined(Q_OS_UNIX)
@@ -2931,7 +3091,7 @@ static void initEnvironment()
     \sa QTEST_MAIN()
 */
 
-int QTest::qExec(QObject *testObject, int argc, char **argv)
+int QTest::qExec(TestProvider &provider, int argc, char **argv)
 {
     initEnvironment();
     QBenchmarkGlobalData benchmarkData;
@@ -2967,8 +3127,10 @@ int QTest::qExec(QObject *testObject, int argc, char **argv)
 
     QTestResult::reset();
 
-    QTEST_ASSERT(testObject);
     QTEST_ASSERT(!currentTestObject);
+    bool isFirstRun = true;
+
+while (QObject *testObject = provider.next()) {
     currentTestObject = testObject;
 
     const QMetaObject *metaObject = testObject->metaObject();
@@ -2992,6 +3154,10 @@ int QTest::qExec(QObject *testObject, int argc, char **argv)
     } // !noCrashHandler
 #endif // Q_OS_WIN) && !Q_OS_WINCE && !Q_OS_WINRT
 
+    if (QTest::randomOrder) {
+        seedRandom();
+    }
+
 #ifdef QTESTLIB_USE_VALGRIND
     if (QBenchmarkGlobalData::current->mode() == QBenchmarkGlobalData::CallgrindParentProcess) {
         if (!qApp)
@@ -3011,8 +3177,23 @@ int QTest::qExec(QObject *testObject, int argc, char **argv)
         if (!noCrashHandler)
             handler.reset(new FatalSignalHandler);
 #endif
+
+        // TRACE/testlib: moved logging start/stop to support `TestProvider` #3
+        // hence:
+        if (isFirstRun) {
+            isFirstRun = false;
+            // Note that Qt4 would pass `QTest::seed` to QTestLogger, but
+            // each XD compatible QTestLogger should fetch manually.
+
+            QTestLog::startLogging();
+        }
         qInvokeTestMethods(testObject);
     }
+} // While testObject
+
+    // TRACE/testlib: moved logging start/stop to support `TestProvider` #4
+    // hence:
+    QTestLog::stopLogging();
 
 #ifndef QT_NO_EXCEPTIONS
      } catch (...) {
@@ -3053,6 +3234,12 @@ int QTest::qExec(QObject *testObject, int argc, char **argv)
     // make sure our exit code is never going above 127
     // since that could wrap and indicate 0 test fails
     return qMin(QTestLog::failCount(), 127);
+}
+
+int QTest::qExec(QObject *testObject, int argc, char **argv)
+{
+    QTEST_ASSERT(testObject);
+    return qExec(SingleTestProvider(testObject), argc, argv);
 }
 
 /*!
@@ -3135,7 +3322,7 @@ void QTest::qWarn(const char *message, const char *file, int line)
     The example above tests that QDir::mkdir() outputs the right warning when invoked
     with an invalid file name.
 */
-void QTest::ignoreMessage(QtMsgType type, const char *message)
+void QTest::ignoreMessage(QtMsgType type, const QString &message)
 {
     QTestLog::ignoreMessage(type, message);
 }
@@ -3514,6 +3701,29 @@ void QTest::qSleep(int ms)
 QObject *QTest::testObject()
 {
     return currentTestObject;
+}
+
+// MARK: timeout API.
+
+int QTest::timeout()
+{
+    int result = QTest::timeoutCustom.load();
+    if (result == -1) {
+        result = QTest::defaultTimeout();
+    }
+    return result;
+}
+
+void QTest::setTimeout(int milliSec)
+{
+    if (milliSec <= 0) {
+        milliSec = -1;
+    }
+    QTest::timeoutCustom.store(milliSec);
+    QRef<WatchDog> counter = QTest::timeoutCounter;
+    if (counter) {
+        counter->updateTimeout();
+    }
 }
 
 void QTest::setContinuous(bool enabled)
