@@ -1,5 +1,6 @@
 /****************************************************************************
 **
+** Copyright (C) 2015 The XD Company Ltd.
 ** Copyright (C) 2015 The Qt Company Ltd.
 ** Contact: http://www.qt.io/licensing/
 **
@@ -31,6 +32,7 @@
 **
 ****************************************************************************/
 
+#include "utils.h"
 #include "preprocessor.h"
 #include "moc.h"
 #include "outputrevision.h"
@@ -75,10 +77,31 @@ static QByteArray combinePath(const QString &infile, const QString &outfile)
 }
 
 
-void error(const char *msg = "Invalid argument")
+void errorArgv(QCommandLineParser &parser, const char *msg = "Invalid argument")
 {
     if (msg)
         fprintf(stderr, "moc: %s\n", msg);
+    parser.showHelp(1);
+}
+
+void errorArgv(const QByteArray &msg)
+{
+    if (!msg.isEmpty())
+        fprintf(stderr, "moc: %s\n", msg.constData());
+    fprintf(stderr, "moc: Usage: moc [options] <header-file>\n"
+            "  -o<file>           write output to file rather than stdout\n"
+            "  -I<dir>            add dir to the include path for header files\n"
+            "  -E                 preprocess only; do not generate meta object code\n"
+            "  -D<macro>[=<def>]  define macro, with optional definition\n"
+            "  -U<macro>          undefine macro\n"
+            "  -i                 do not generate an #include statement\n"
+            "  -p<path>           path prefix for included file\n"
+            "  -f[<file>]         force #include, optional file name\n"
+            "  -nn                do not display notes\n"
+            "  -nw                do not display warnings\n"
+            "  @<file>            read additional options from file\n"
+            "  -v                 display version of moc\n");
+    Moc::onExitStatic(EXIT_FAILURE);
 }
 
 
@@ -152,12 +175,12 @@ static QStringList argumentsFromCommandLineAndFile(const QStringList &arguments)
             QString optionsFile = argument;
             optionsFile.remove(0, 1);
             if (optionsFile.isEmpty()) {
-                error("The @ option requires an input file");
+                errorArgv("The @ option requires an input file");
                 return QStringList();
             }
             QFile f(optionsFile);
             if (!f.open(QIODevice::ReadOnly | QIODevice::Text)) {
-                error("Cannot open options file specified with @");
+                errorArgv("Cannot open options file specified with @");
                 return QStringList();
             }
             while (!f.atEnd()) {
@@ -175,6 +198,7 @@ static QStringList argumentsFromCommandLineAndFile(const QStringList &arguments)
 
 int runMoc(int argc, char **argv)
 {
+    UDebug::init();
     QCoreApplication app(argc, argv);
     QCoreApplication::setApplicationVersion(QString::fromLatin1(QT_VERSION_STR));
 
@@ -196,7 +220,7 @@ int runMoc(int argc, char **argv)
     QString filename;
     QString output;
     QFile in;
-    FILE *out = 0;
+    FILE *out = 0; bool needClose = false;
 
     // Note that moc isn't translated.
     // If you use this code as an example for a translated app, make sure to translate the strings.
@@ -272,6 +296,10 @@ int runMoc(int argc, char **argv)
     noWarningsOption.setDescription(QStringLiteral("Do not display warnings (implies --no-notes)."));
     parser.addOption(noWarningsOption);
 
+    QCommandLineOption linuxLogsOption(QStringLiteral("linux-logs"));
+    linuxLogsOption.setDescription(QStringLiteral("Force Linux format logs (for errors or warnings)."));
+    parser.addOption(linuxLogsOption);
+
     QCommandLineOption ignoreConflictsOption(QStringLiteral("ignore-option-clashes"));
     ignoreConflictsOption.setDescription(QStringLiteral("Ignore all options that conflict with compilers, like -pthread conflicting with moc's -p option."));
     parser.addOption(ignoreConflictsOption);
@@ -289,11 +317,12 @@ int runMoc(int argc, char **argv)
 
     const QStringList files = parser.positionalArguments();
     if (files.count() > 1) {
-        error(qPrintable(QStringLiteral("Too many input files specified: '") + files.join(QStringLiteral("' '")) + QLatin1Char('\'')));
-        parser.showHelp(1);
+        errorArgv(parser, qPrintable(QStringLiteral("Too many input files specified: '") + files.join(QStringLiteral("' '")) + QLatin1Char('\'')));
     } else if (!files.isEmpty()) {
         filename = files.first();
     }
+
+    Moc::forceLinuxFormatLogs = parser.isSet(linuxLogsOption);
 
     const bool ignoreConflictingOptions = parser.isSet(ignoreConflictsOption);
     output = parser.value(outputOption);
@@ -309,7 +338,7 @@ int runMoc(int argc, char **argv)
             foreach (const QString &include, parser.values(forceIncludeOption)) {
                 moc.includeFiles.append(QFile::encodeName(include));
                 defaultInclude = false;
-             }
+            }
         }
         foreach (const QString &include, parser.values(prependIncludeOption))
             moc.includeFiles.prepend(QFile::encodeName(include));
@@ -333,19 +362,21 @@ int runMoc(int argc, char **argv)
             name = name.left(eq);
         }
         if (name.isEmpty()) {
-            error("Missing macro name");
-            parser.showHelp(1);
+            errorArgv(parser, "Missing macro name");
         }
         Macro macro;
+#if QT_MOC_MACRO_EXPAND
         macro.symbols = Preprocessor::tokenize(value, 1, Preprocessor::TokenizeDefine);
         macro.symbols.removeLast(); // remove the EOF symbol
+#else
+        macro.symbols += Symbol(0, PP_IDENTIFIER, value);
+#endif
         pp.macros.insert(name, macro);
     }
     foreach (const QString &arg, parser.values(undefineOption)) {
         QByteArray macro = arg.toLocal8Bit();
         if (macro.isEmpty()) {
-            error("Missing macro name");
-            parser.showHelp(1);
+            errorArgv(parser, "Missing macro name");
         }
         pp.macros.remove(macro);
     }
@@ -370,20 +401,28 @@ int runMoc(int argc, char **argv)
                     moc.includeFiles.append(QFile::encodeName(filename));
             }
         } else {
-            moc.includeFiles.append(combinePath(filename, filename));
+            QFileInfo inFileInfo(QDir::current(), filename);
+            moc.includeFiles.append(QFile::encodeName(inFileInfo.fileName()));
         }
     }
 
     if (filename.isEmpty()) {
-        filename = QStringLiteral("standard input");
+        // TRACE/moc bugfix: the `moc.filename` should be empty for `stdin`.
+        moc.currentFilenames.push("standard input");
         in.open(stdin, QIODevice::ReadOnly);
     } else {
         in.setFileName(filename);
         if (!in.open(QIODevice::ReadOnly)) {
             fprintf(stderr, "moc: %s: No such file\n", qPrintable(filename));
-            return 1;
+            return moc.onExit(EXIT_FAILURE);;
         }
+        // TRACE/moc path: input file's path is NOT encoded with `QFile::encodeName` #1,
+        // because we want it to be complete when used in comments or macro-names, but
+        // we always later encode it before outputing as inlcude-statement, hence
+        // see `linkToParent(...)` helper.
         moc.filename = filename.toLocal8Bit();
+
+        moc.currentFilenames.push(moc.filename);
     }
 
     foreach (const QString &md, parser.values(metadataOption)) {
@@ -392,11 +431,11 @@ int runMoc(int argc, char **argv)
         QString value = md.mid(split + 1);
 
         if (split == -1 || key.isEmpty() || value.isEmpty()) {
-            error("missing key or value for option '-M'");
+            errorArgv("missing key or value for option '-M'");
         } else if (key.indexOf(QLatin1Char('.')) != -1) {
             // Don't allow keys with '.' for now, since we might need this
             // format later for more advanced meta data API
-            error("A key cannot contain the letter '.' for option '-M'");
+            errorArgv("A key cannot contain the letter '.' for option '-M'");
         } else {
             QJsonArray array = moc.metaArgs.value(key);
             array.append(value);
@@ -404,30 +443,39 @@ int runMoc(int argc, char **argv)
         }
     }
 
-    moc.currentFilenames.push(filename.toLocal8Bit());
+    // TRACE/moc improve: stores output-filename for later use.
+    moc.outputFileName = QFile::encodeName(output);
     moc.includes = pp.includes;
 
     // 1. preprocess
+    moc_trace("1. preprocess");
     moc.symbols = pp.preprocessed(moc.filename, &in);
 
     if (!pp.preprocessOnly) {
         // 2. parse
+        moc_trace("2. parse");
         moc.parse();
     }
 
-    // 3. and output meta object code
-
-    if (output.size()) { // output file specified
-#if defined(_MSC_VER) && _MSC_VER >= 1400
-        if (fopen_s(&out, QFile::encodeName(output).constData(), "w"))
-#else
-        out = fopen(QFile::encodeName(output).constData(), "w"); // create output file
-        if (!out)
+#if QT_REMOTE
+    if (moc.requiresRemote && moc.filename.isEmpty()) {
+        errorArgv("The Q_REMOTE macro requires an output file specification "
+                  "(i.e. 'moc input.h -o output.cpp')");
+    }
 #endif
-        {
-            fprintf(stderr, "moc: Cannot create %s\n", QFile::encodeName(output).constData());
-            return 1;
+
+    // 3. and output meta object code
+    moc_trace("3. and output meta object code");
+    if (moc.outputFileName.size()) { // output file specified
+        out = moc.openForOutput(moc.outputFileName);
+        if ( ! out) {
+            // If reaches here while "moc" should really be able to create the file,
+            // then retry with "Projects > Run Configuration > Add > Custom Executable",
+            // looks like yet-another "Qt Creator" related issue.
+            fprintf(stderr, "moc: Cannot create %s\n", moc.outputFileName.constData());
+            return moc.onExit(EXIT_FAILURE);;
         }
+        needClose = true;
     } else { // use stdout
         out = stdout;
     }
@@ -437,14 +485,28 @@ int runMoc(int argc, char **argv)
     } else {
         if (moc.classList.isEmpty())
             moc.note("No relevant classes found. No output generated.");
-        else
+        else {
+#if QT_REMOTE
+            // First generates local object.
             moc.generate(out);
+            if(moc.requiresRemote) {
+                // Then generates remote object.
+                if(!moc.remote_generate()) {
+                    fprintf(stderr, "moc: Cannot create remote %s\n", moc.outputFileName.constData());
+                    return moc.onExit(EXIT_FAILURE);
+                }
+            }
+#else
+            moc.generate(out);
+#endif
+        }
     }
 
-    if (output.size())
-        fclose(out);
+    if (needClose) {
+        moc.closeOutput(out);
+    }
 
-    return 0;
+    return moc.onExit(0);
 }
 
 QT_END_NAMESPACE
