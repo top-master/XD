@@ -32,20 +32,58 @@
 **
 ****************************************************************************/
 
-#include "token.h"
+#ifndef FUNCTIONMAPPER_H
+#define FUNCTIONMAPPER_H
 
-QT_BEGIN_NAMESPACE
+#include "moc.h"
 
-#if defined(DEBUG_MOC)
-const char *tokenTypeName(Token t)
-{
-    switch (t) {
-#define CREATE_CASE(Name) case Name: return #Name;
-    FOR_ALL_TOKENS(CREATE_CASE)
-#undef CREATE_CASE
-    }
-    return "";
-}
-#endif
+class FunctionMapper {
+public:
+    FunctionMapper();
+    virtual ~FunctionMapper();
 
-QT_END_NAMESPACE
+    //returns true when list is modified
+    //  loops reverse through function-list to allow cloning
+    virtual bool mapList(FunctionList *);
+    //returns true when function is modified
+    //  could break "mapList(...)" by setting "*index = 0"
+    virtual bool mapFunction(FunctionDef *, int *index);
+    //should return true when type is modified
+    //  by default does nothing
+    virtual bool mapType(Type *);
+};
+
+class NamespaceMapper : public FunctionMapper {
+    typedef FunctionMapper super;
+public:
+    NamespaceMapper(ClassDef *target, const QByteArray &localName);
+    ~NamespaceMapper();
+
+    bool mapType(Type *) Q_DECL_OVERRIDE;
+
+private:
+    ClassDef *m_target;
+    QByteArray m_localName;
+};
+
+#if QT_REMOTE
+// Maps "QRef" types which also have Q_REMOTE macro
+// from "QRef<MyService>" into "QRef<MyServiceRemote>" type,
+// also includes any header required for the new type.
+class RemoteMapper : public FunctionMapper {
+    typedef FunctionMapper super;
+public:
+    RemoteMapper(Moc *owner);
+    ~RemoteMapper();
+
+    bool mapList(FunctionList *) Q_DECL_OVERRIDE;
+    bool mapFunction(FunctionDef *, int *index) Q_DECL_OVERRIDE;
+    bool mapType(Type *) Q_DECL_OVERRIDE;
+
+private:
+    Moc *moc;
+    FunctionList *m_list;
+};
+#endif // QT_REMOTe
+
+#endif // FUNCTIONMAPPER_H

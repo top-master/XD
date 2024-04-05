@@ -1,5 +1,6 @@
 /****************************************************************************
 **
+** Copyright (C) 2015 The XD Company Ltd.
 ** Copyright (C) 2015 The Qt Company Ltd.
 ** Copyright (C) 2013 Olivier Goffart <ogoffart@woboq.com>
 ** Contact: http://www.qt.io/licensing/
@@ -79,12 +80,11 @@ QT_FOR_EACH_STATIC_TYPE(RETURN_METATYPENAME_STRING)
     return 0;
  }
 
-Generator::Generator(ClassDef *classDef, const QList<QByteArray> &metaTypes, const QHash<QByteArray, QByteArray> &knownQObjectClasses, const QHash<QByteArray, QByteArray> &knownGadgets, FILE *outfile)
-    : out(outfile), cdef(classDef), metaTypes(metaTypes), knownQObjectClasses(knownQObjectClasses)
-    , knownGadgets(knownGadgets)
+Generator::Generator(const Moc &parent, ClassDef *classDef, const QList<QByteArray> &metaTypes, FILE *outfile)
+    : parent(parent),  out(outfile), cdef(classDef), metaTypes(metaTypes)
 {
     if (cdef->superclassList.size())
-        purestSuperClass = cdef->superclassList.first().first;
+        purestSuperClass = cdef->superclassList.first().className;
 }
 
 static inline int lengthOfEscapeSequence(const QByteArray &s, int i)
@@ -126,7 +126,7 @@ int Generator::stridx(const QByteArray &s)
 // Returns the sum of all parameters (including return type) for the given
 // \a list of methods. This is needed for calculating the size of the methods'
 // parameter type/name meta-data.
-static int aggregateParameterCount(const QList<FunctionDef> &list)
+static int aggregateParameterCount(const FunctionList &list)
 {
     int sum = 0;
     for (int i = 0; i < list.count(); ++i)
@@ -145,7 +145,7 @@ bool Generator::registerableMetaType(const QByteArray &propertyType)
         // not 'QState*', 'QLabel*'. The propertyType does contain the '*', so we need
         // to chop it to find the class type in the known QObjects list.
         objectPointerType.chop(1);
-        if (knownQObjectClasses.contains(objectPointerType))
+        if (parent.knownQObjectClasses.contains(objectPointerType))
             return true;
     }
 
@@ -157,7 +157,7 @@ bool Generator::registerableMetaType(const QByteArray &propertyType)
 
     foreach (const QByteArray &smartPointer, smartPointers)
         if (propertyType.startsWith(smartPointer + "<") && !propertyType.endsWith("&"))
-            return knownQObjectClasses.contains(propertyType.mid(smartPointer.size() + 1, propertyType.size() - smartPointer.size() - 1 - 1));
+            return parent.knownQObjectClasses.contains(propertyType.mid(smartPointer.size() + 1, propertyType.size() - smartPointer.size() - 1 - 1));
 
     static const QVector<QByteArray> oneArgTemplates = QVector<QByteArray>()
 #define STREAM_1ARG_TEMPLATE(TEMPLATENAME) << #TEMPLATENAME
@@ -189,28 +189,18 @@ static bool qualifiedNameEquals(const QByteArray &qualifiedName, const QByteArra
     return qualifiedNameEquals(qualifiedName.mid(index+2), name);
 }
 
+/**
+ * Place `inline` QtRemote things at @ref remote_generateClass method's end.
+ */
 void Generator::generateCode()
 {
-    bool isQt = (cdef->classname == "Qt");
-    bool isQObject = (cdef->classname == "QObject");
-    bool isConstructible = !cdef->constructorList.isEmpty();
+    const bool isQt = (cdef->classname == "Qt");
+    const bool isQObject = (cdef->classname == "QObject");
+    const bool isConstructible = !cdef->constructorList.isEmpty();
 
     // filter out undeclared enumerators and sets
-    {
-        QList<EnumDef> enumList;
-        for (int i = 0; i < cdef->enumList.count(); ++i) {
-            EnumDef def = cdef->enumList.at(i);
-            if (cdef->enumDeclarations.contains(def.name)) {
-                enumList += def;
-            }
-            QByteArray alias = cdef->flagAliases.value(def.name);
-            if (cdef->enumDeclarations.contains(alias)) {
-                def.name = alias;
-                enumList += def;
-            }
-        }
-        cdef->enumList = enumList;
-    }
+    cdef->filterEnumList();
+
 
 //
 // Register all strings used in data section
@@ -444,6 +434,14 @@ void Generator::generateCode()
 //
     fprintf(out, "\n       0        // eod\n};\n\n");
 
+#if QT_REMOTE
+    if(Moc::isRemoteGen) {
+        fprintf(out, "static const char * const qt_remote_init_%s = {\n", qualifiedClassNameIdentifier.constData());
+        fprintf(out, "    QMetaRemote::registerRemote<%s>(", cdef->qualified.constData());
+        fprintf(out, "\"%s\")\n};\n\n", cdef->qualified.constData());
+    }
+#endif
+
 //
 // Generate internal qt_static_metacall() function
 //
@@ -457,8 +455,8 @@ void Generator::generateCode()
 // Build extra array
 //
     QList<QByteArray> extraList;
-    QHash<QByteArray, QByteArray> knownExtraMetaObject = knownGadgets;
-    knownExtraMetaObject.unite(knownQObjectClasses);
+    QSet<QByteArray> knownExtraMetaObject = parent.knownGadgets;
+    knownExtraMetaObject.unite(parent.knownQObjectClasses);
 
     for (int i = 0; i < cdef->propertyList.count(); ++i) {
         const PropertyDef &p = cdef->propertyList.at(i);
@@ -475,7 +473,7 @@ void Generator::generateCode()
         QByteArray unqualifiedScope = p.type.left(s);
 
         // The scope may be a namespace for example, so it's only safe to include scopes that are known QObjects (QTBUG-2151)
-        QHash<QByteArray, QByteArray>::ConstIterator scopeIt;
+        QSet<QByteArray>::ConstIterator scopeIt;
 
         QByteArray thisScope = cdef->qualified;
         do {
@@ -531,10 +529,16 @@ void Generator::generateCode()
 
     if (isQObject)
         fprintf(out, "    { Q_NULLPTR, ");
-    else if (cdef->superclassList.size() && (!cdef->hasQGadget || knownGadgets.contains(purestSuperClass)))
+    else if (cdef->superclassList.size() && (!cdef->hasQGadget || parent.knownGadgets.contains(purestSuperClass)))
         fprintf(out, "    { &%s::staticMetaObject, ", purestSuperClass.constData());
-    else
-        fprintf(out, "    { Q_NULLPTR, ");
+    else {
+#if QT_REMOTE
+        if(Moc::isRemoteGen)
+            fprintf(out, "    { &QObjectRemote::staticMetaObject, ");
+        else
+#endif
+            fprintf(out, "    { Q_NULLPTR, ");
+    }
     fprintf(out, "qt_meta_stringdata_%s.data,\n"
             "      qt_meta_data_%s, ", qualifiedClassNameIdentifier.constData(),
             qualifiedClassNameIdentifier.constData());
@@ -552,6 +556,13 @@ void Generator::generateCode()
     if(isQt)
         return;
 
+#ifdef QT_REMOTE
+    // TRACE/moc remote: prevent inline references to QObject members #2,
+    // where non-remote definition of #1 said `staticMetaObjectPtr` is here.
+    fprintf(out, "const QMetaObject *%s::staticMetaObjectPtr = &%s::staticMetaObject;\n\n",
+            cdef->qualified.constData(), cdef->qualified.constData());
+#endif
+
     if (!cdef->hasQObject)
         return;
 
@@ -564,12 +575,12 @@ void Generator::generateCode()
     fprintf(out, "\nvoid *%s::qt_metacast(const char *_clname)\n{\n", cdef->qualified.constData());
     fprintf(out, "    if (!_clname) return Q_NULLPTR;\n");
     fprintf(out, "    if (!strcmp(_clname, qt_meta_stringdata_%s.stringdata0))\n"
-                  "        return static_cast<void*>(const_cast< %s*>(this));\n",
+                 "        return static_cast<void*>(const_cast< %s*>(this));\n",
             qualifiedClassNameIdentifier.constData(), cdef->classname.constData());
     for (int i = 1; i < cdef->superclassList.size(); ++i) { // for all superclasses but the first one
-        if (cdef->superclassList.at(i).second == FunctionDef::Private)
+        if (cdef->superclassList.at(i).access == FunctionDef::Private)
             continue;
-        const char *cname = cdef->superclassList.at(i).first.constData();
+        const char *cname = cdef->superclassList.at(i).className.constBegin();
         fprintf(out, "    if (!strcmp(_clname, \"%s\"))\n        return static_cast< %s*>(const_cast< %s*>(this));\n",
                 cname, cname, cdef->classname.constData());
     }
@@ -583,12 +594,17 @@ void Generator::generateCode()
                     cdef->classname.constData(), QByteArray(j+1, ')').constData());
         }
     }
+    if (cdef->inheritsFrom("QObjectDecor")) {
+        fprintf(out, "    return this->toDecoratee()->qt_metacast(_clname);\n");
+        goto posEndSmartCast;
+    }
     if (!purestSuperClass.isEmpty() && !isQObject) {
         QByteArray superClass = purestSuperClass;
         fprintf(out, "    return %s::qt_metacast(_clname);\n", superClass.constData());
     } else {
         fprintf(out, "    return Q_NULLPTR;\n");
     }
+posEndSmartCast:
     fprintf(out, "}\n");
 
 //
@@ -599,8 +615,30 @@ void Generator::generateCode()
 //
 // Generate internal signal functions
 //
-    for (int signalindex = 0; signalindex < cdef->signalList.size(); ++signalindex)
+    const int signal_count = cdef->signalList.size();
+    for (int signalindex = 0; signalindex < signal_count; ++signalindex)
         generateSignal(&cdef->signalList[signalindex], signalindex);
+
+#if QT_REMOTE
+    if(Moc::isRemoteGen) {
+        for (int i = 0; i < cdef->slotList.size(); ++i)
+            remote_generateSlot(&cdef->slotList[i], i + signal_count);
+
+        // Name of class with Q_REMOTE macro.
+        QByteArray localNameQualified = cdef->qualified;
+        localNameQualified.chop(Moc::REMOTE_SUFFIX.size());
+
+        // TRACE/moc remote: prevent inline references to QObject members #1,
+        // because most clients only build remote-controller's source-file, hence
+        // things like `Q_ENUM_IMPL` could cause "unresolved external symbol" error,
+        // unless they reference `staticMetaObjectPtr` instead of `staticMetaObject`,
+        // which's re-defined in remote-controller's source-file, below:
+        fprintf(out, "\n#ifndef MOC_SERVICE_BUILD\n\n");
+        fprintf(out, "const QMetaObject *%s::staticMetaObjectPtr = &%s::staticMetaObject;\n",
+                     localNameQualified.constData(), cdef->qualified.constData());
+        fprintf(out, "\n#endif // MOC_SERVICE_BUILD\n");
+    }
+#endif // QT_REMOTE
 
 //
 // Generate plugin meta data
@@ -631,27 +669,28 @@ void Generator::generateClassInfos()
     }
 }
 
-void Generator::registerFunctionStrings(const QList<FunctionDef>& list)
+void Generator::registerFunctionStrings(const FunctionList& list)
 {
     for (int i = 0; i < list.count(); ++i) {
         const FunctionDef &f = list.at(i);
 
         strreg(f.name);
-        if (!isBuiltinType(f.normalizedType))
-            strreg(f.normalizedType);
+        if (!isBuiltinType(f.type.toNormalized()))
+            strreg(f.type.toNormalized());
         strreg(f.tag);
 
         int argsCount = f.arguments.count();
         for (int j = 0; j < argsCount; ++j) {
             const ArgumentDef &a = f.arguments.at(j);
-            if (!isBuiltinType(a.normalizedType))
-                strreg(a.normalizedType);
+            const QByteArray &normType = a.normalizedType();
+            if (!isBuiltinType(normType))
+                strreg(normType);
             strreg(a.name);
         }
     }
 }
 
-void Generator::generateFunctions(const QList<FunctionDef>& list, const char *functype, int type, int &paramsIndex)
+void Generator::generateFunctions(const FunctionList& list, const char *functype, int type, int &paramsIndex)
 {
     if (list.isEmpty())
         return;
@@ -660,44 +699,23 @@ void Generator::generateFunctions(const QList<FunctionDef>& list, const char *fu
     for (int i = 0; i < list.count(); ++i) {
         const FunctionDef &f = list.at(i);
 
-        QByteArray comment;
-        unsigned char flags = type;
-        if (f.access == FunctionDef::Private) {
-            flags |= AccessPrivate;
-            comment.append("Private");
-        } else if (f.access == FunctionDef::Public) {
-            flags |= AccessPublic;
-            comment.append("Public");
-        } else if (f.access == FunctionDef::Protected) {
-            flags |= AccessProtected;
-            comment.append("Protected");
-        }
-        if (f.isCompat) {
-            flags |= MethodCompatibility;
-            comment.append(" | MethodCompatibility");
-        }
-        if (f.wasCloned) {
-            flags |= MethodCloned;
-            comment.append(" | MethodCloned");
-        }
-        if (f.isScriptable) {
-            flags |= MethodScriptable;
-            comment.append(" | isScriptable");
-        }
-        if (f.revision > 0) {
-            flags |= MethodRevisioned;
-            comment.append(" | MethodRevisioned");
-        }
+        FunctionDef::MetaData fmd;
+        fmd.set(f, type);
 
-        int argc = f.arguments.count();
+        const int argc = f.arguments.count();
         fprintf(out, "    %4d, %4d, %4d, %4d, 0x%02x /* %s */,\n",
-            stridx(f.name), argc, paramsIndex, stridx(f.tag), flags, comment.constData());
+            stridx(f.name),
+            argc,
+            paramsIndex,
+            stridx(f.tag),
+            fmd.flags,
+            fmd.comment.constData());
 
         paramsIndex += 1 + argc * 2;
     }
 }
 
-void Generator::generateFunctionRevisions(const QList<FunctionDef>& list, const char *functype)
+void Generator::generateFunctionRevisions(const FunctionList& list, const char *functype)
 {
     if (list.count())
         fprintf(out, "\n // %ss: revision\n", functype);
@@ -707,7 +725,7 @@ void Generator::generateFunctionRevisions(const QList<FunctionDef>& list, const 
     }
 }
 
-void Generator::generateFunctionParameters(const QList<FunctionDef>& list, const char *functype)
+void Generator::generateFunctionParameters(const FunctionList& list, const char *functype)
 {
     if (list.isEmpty())
         return;
@@ -721,7 +739,7 @@ void Generator::generateFunctionParameters(const QList<FunctionDef>& list, const
         for (int j = -1; j < argsCount; ++j) {
             if (j > -1)
                 fputc(' ', out);
-            const QByteArray &typeName = (j < 0) ? f.normalizedType : f.arguments.at(j).normalizedType;
+            const QByteArray &typeName = (j < 0) ? f.type.toNormalized() : f.arguments.at(j).normalizedType();
             generateTypeInfo(typeName, /*allowEmptyName=*/f.isConstructor);
             fputc(',', out);
         }
@@ -895,6 +913,11 @@ void Generator::generateEnums(int index)
         for (int j = 0; j < e.values.count(); ++j) {
             const QByteArray &val = e.values.at(j);
             QByteArray code = cdef->qualified.constData();
+#if QT_REMOTE
+            if(Moc::isRemoteGen) {
+                code.chop(Moc::REMOTE_SUFFIX.size());
+            }
+#endif
             if (e.isEnumClass)
                 code += "::" + e.name;
             code += "::" + val;
@@ -920,7 +943,7 @@ void Generator::generateMetacall()
     fprintf(out, "    ");
 
     bool needElse = false;
-    QList<FunctionDef> methodList;
+    FunctionList methodList;
     methodList += cdef->signalList;
     methodList += cdef->slotList;
     methodList += cdef->methodList;
@@ -1082,13 +1105,13 @@ QMultiMap<QByteArray, int> Generator::automaticPropertyMetaTypesHelper()
     return automaticPropertyMetaTypes;
 }
 
-QMap<int, QMultiMap<QByteArray, int> > Generator::methodsWithAutomaticTypesHelper(const QList<FunctionDef> &methodList)
+QMap<int, QMultiMap<QByteArray, int> > Generator::methodsWithAutomaticTypesHelper(const FunctionList &methodList)
 {
     QMap<int, QMultiMap<QByteArray, int> > methodsWithAutomaticTypes;
     for (int i = 0; i < methodList.size(); ++i) {
         const FunctionDef &f = methodList.at(i);
         for (int j = 0; j < f.arguments.count(); ++j) {
-            const QByteArray argType = f.arguments.at(j).normalizedType;
+            const QByteArray argType = f.arguments.at(j).normalizedType();
             if (registerableMetaType(argType) && !isBuiltinType(argType))
                 methodsWithAutomaticTypes[i].insert(argType, j);
         }
@@ -1118,7 +1141,7 @@ void Generator::generateStaticMetacall()
                 const ArgumentDef &a = f.arguments.at(j);
                 if (j)
                     fprintf(out, ",");
-                fprintf(out, "(*reinterpret_cast< %s>(_a[%d]))", a.typeNameForCast.constData(), offset++);
+                fprintf(out, "(*reinterpret_cast< %s>(_a[%d]))", a.typeNameForCast().constData(), offset++);
             }
             if (f.isPrivateSignal) {
                 if (argsCount > 0)
@@ -1136,7 +1159,7 @@ void Generator::generateStaticMetacall()
         isUsed_a = true;
     }
 
-    QList<FunctionDef> methodList;
+    FunctionList methodList;
     methodList += cdef->signalList;
     methodList += cdef->slotList;
     methodList += cdef->methodList;
@@ -1159,22 +1182,28 @@ void Generator::generateStaticMetacall()
         fprintf(out, "        switch (_id) {\n");
         for (int methodindex = 0; methodindex < methodList.size(); ++methodindex) {
             const FunctionDef &f = methodList.at(methodindex);
-            Q_ASSERT(!f.normalizedType.isEmpty());
+            Q_ASSERT(!f.type.name.isEmpty());
             fprintf(out, "        case %d: ", methodindex);
-            if (f.normalizedType != "void")
-                fprintf(out, "{ %s _r = ", noRef(f.normalizedType).constData());
+            // QT_REMOTE: we leave above "case" since the copy follows
+            // (RemoteMapper class duplicates QRef types, adding Remote-suffix).
+            if (f.isCloneRequired && !f.isClone) {
+                fprintf(out, "// Remote-suffixed copy follows.\n");
+                continue;
+            }
+            if (f.type.isNotVoid())
+                fprintf(out, "{ %s _r = ", noRef(f.type.toNormalized()).constData());
             fprintf(out, "_t->");
             if (f.inPrivateClass.size())
                 fprintf(out, "%s->", f.inPrivateClass.constData());
             fprintf(out, "%s(", f.name.constData());
             int offset = 1;
 
-            int argsCount = f.arguments.count();
+            const int argsCount = f.arguments.count();
             for (int j = 0; j < argsCount; ++j) {
                 const ArgumentDef &a = f.arguments.at(j);
                 if (j)
                     fprintf(out, ",");
-                fprintf(out, "(*reinterpret_cast< %s>(_a[%d]))",a.typeNameForCast.constData(), offset++);
+                fprintf(out, "(*reinterpret_cast< %s>(_a[%d]))",a.typeNameForCast().constData(), offset++);
                 isUsed_a = true;
             }
             if (f.isPrivateSignal) {
@@ -1183,9 +1212,9 @@ void Generator::generateStaticMetacall()
                 fprintf(out, "%s", "QPrivateSignal()");
             }
             fprintf(out, ");");
-            if (f.normalizedType != "void") {
+            if (f.type.isNotVoid()) {
                 fprintf(out, "\n            if (_a[0]) *reinterpret_cast< %s*>(_a[0]) = _r; } ",
-                        noRef(f.normalizedType).constData());
+                        noRef(f.type.toNormalized()).constData());
                 isUsed_a = true;
             }
             fprintf(out, " break;\n");
@@ -1193,6 +1222,7 @@ void Generator::generateStaticMetacall()
         fprintf(out, "        default: ;\n");
         fprintf(out, "        }\n");
         fprintf(out, "    }");
+
         needElse = true;
 
         QMap<int, QMultiMap<QByteArray, int> > methodsWithAutomaticTypes = methodsWithAutomaticTypesHelper(methodList);
@@ -1221,19 +1251,27 @@ void Generator::generateStaticMetacall()
         }
 
     }
-    if (!cdef->signalList.isEmpty()) {
+
+    if (!methodList.isEmpty()) {
         Q_ASSERT(needElse); // if there is signal, there was method.
         fprintf(out, " else if (_c == QMetaObject::IndexOfMethod) {\n");
         fprintf(out, "        int *result = reinterpret_cast<int *>(_a[0]);\n");
         fprintf(out, "        void **func = reinterpret_cast<void **>(_a[1]);\n");
         bool anythingUsed = false;
-        for (int methodindex = 0; methodindex < cdef->signalList.size(); ++methodindex) {
-            const FunctionDef &f = cdef->signalList.at(methodindex);
-            if (f.wasCloned || !f.inPrivateClass.isEmpty() || f.isStatic)
+        for (int methodindex = 0; methodindex < methodList.size(); ++methodindex) {
+            const FunctionDef &f = methodList.at(methodindex);
+            if (f.isUnreal() || !f.inPrivateClass.isEmpty() || f.isStatic)
                 continue;
             anythingUsed = true;
             fprintf(out, "        {\n");
-            fprintf(out, "            typedef %s (%s::*_t)(",f.type.rawName.constData() , cdef->classname.constData());
+
+            // Since QRemote does not like references as return-type for slots,
+            // we use `Type::name` instead of `Type::rawName`.
+            fprintf(out, "            typedef %s (%s::*_t)(",
+                    qNot( cdef->isRemote )
+                        ? f.type.rawName.constData()
+                        : f.type.name.constData(),
+                    cdef->classname.constData());
 
             int argsCount = f.arguments.count();
             for (int j = 0; j < argsCount; ++j) {
@@ -1388,7 +1426,7 @@ void Generator::generateStaticMetacall()
                         const FunctionDef &f = cdef->signalList.at(p.notifyId);
                         if (f.arguments.size() == 0)
                             fprintf(out, "                Q_EMIT _t->%s();\n", p.notify.constData());
-                        else if (f.arguments.size() == 1 && f.arguments.at(0).normalizedType == p.type)
+                        else if (f.arguments.size() == 1 && f.arguments.at(0).normalizedType() == p.type)
                             fprintf(out, "                Q_EMIT _t->%s(%s%s);\n",
                                     p.notify.constData(), prefix.constData(), p.member.constData());
                     }
@@ -1450,10 +1488,13 @@ void Generator::generateStaticMetacall()
     fprintf(out, "}\n\n");
 }
 
-void Generator::generateSignal(FunctionDef *def,int index)
+void Generator::generateSignal(FunctionDef *def, int index)
 {
-    if (def->wasCloned || def->isAbstract)
+    if (def->isIgnored())
         return;
+    else if(def->isRemoteClone())
+        --index; //map to original function index
+
     fprintf(out, "\n// SIGNAL %d\n%s %s::%s(",
             index, def->type.name.constData(), cdef->qualified.constData(), def->name.constData());
 
@@ -1467,14 +1508,22 @@ void Generator::generateSignal(FunctionDef *def,int index)
         constQualifier = "const";
     }
 
-    Q_ASSERT(!def->normalizedType.isEmpty());
-    if (def->arguments.isEmpty() && def->normalizedType == "void") {
+    if (def->arguments.isEmpty() && def->type.isVoid()) {
         if (def->isPrivateSignal)
             fprintf(out, "QPrivateSignal");
-
+#if QT_REMOTE
+        fprintf(out, ")%s\n{\n"
+                "    %s::activate(%s, &staticMetaObject, %d, Q_NULLPTR);\n"
+                "}\n",
+                constQualifier,
+                !cdef->hasQRemote ? "QMetaObject" : "QMetaRemote",
+                thisPtr.constData(),
+                index);
+#else
         fprintf(out, ")%s\n{\n"
                 "    QMetaObject::activate(%s, &staticMetaObject, %d, Q_NULLPTR);\n"
                 "}\n", constQualifier, thisPtr.constData(), index);
+#endif
         return;
     }
 
@@ -1492,8 +1541,8 @@ void Generator::generateSignal(FunctionDef *def,int index)
     }
 
     fprintf(out, ")%s\n{\n", constQualifier);
-    if (def->type.name.size() && def->normalizedType != "void") {
-        QByteArray returnType = noRef(def->normalizedType);
+    if (def->type.name.size() && def->type.isNotVoid()) {
+        QByteArray returnType = noRef(def->type.toNormalized());
         if (returnType.endsWith('*')) {
             fprintf(out, "    %s _t0 = 0;\n", returnType.constData());
         } else {
@@ -1502,7 +1551,7 @@ void Generator::generateSignal(FunctionDef *def,int index)
     }
 
     fprintf(out, "    void *_a[] = { ");
-    if (def->normalizedType == "void") {
+    if (def->type.isVoid()) {
         fprintf(out, "Q_NULLPTR");
     } else {
         if (def->returnTypeIsVolatile)
@@ -1517,9 +1566,131 @@ void Generator::generateSignal(FunctionDef *def,int index)
         else
             fprintf(out, ", const_cast<void*>(reinterpret_cast<const void*>(&_t%d))", i);
     fprintf(out, " };\n");
+#if QT_REMOTE
+    fprintf(out, "    %s::activate(%s, &staticMetaObject, %d, _a);\n",
+            !cdef->hasQRemote ? "QMetaObject" : "QMetaRemote", thisPtr.constData(), index);
+#else
     fprintf(out, "    QMetaObject::activate(%s, &staticMetaObject, %d, _a);\n", thisPtr.constData(), index);
-    if (def->normalizedType != "void")
+#endif
+    if (def->type.isNotVoid())
         fprintf(out, "    return _t0;\n");
+    fprintf(out, "}\n");
+}
+
+void Generator::generateNamespace(bool begin)
+{
+    // 'Use' all namespaces.
+    int start = 0;
+    int end;
+    while ((end = cdef->qualified.indexOf("::", start)) != -1) {
+        fprintf(out, begin ? "namespace %s {\n"
+                           : "} // namespace %s\n", cdef->qualified.mid(start, end - start).data());
+        start = end + 2;
+    }
+    //fprintf(out, "// was for %s", cdef->qualified.mid(start).data());
+}
+
+/**
+ * Generator Slot-methods for remote-controller.
+ *
+ * **Note** that a sane remote-slot should at least have `bool` return-type,
+ * but let's support `void` anyway,
+ * because if remote is cast to remote-controller,
+ * then calling right slot would be too complicated.
+ */
+void Generator::remote_generateSlot(FunctionDef *def, int index)
+{
+    #define Q_REMOTE_USE_REQUEST_CAST 0
+    if (def->isIgnored())
+        return;
+    else if(def->isRemoteClone())
+        --index; //map to original function index
+
+    fprintf(out, "\n// SLOT %d\n%s %s::%s(",
+            index, def->type.name.constData(), cdef->qualified.constData(), def->name.constData());
+
+    QByteArray thisPtr = "this";
+    const char *constQualifier = "";
+
+    if (def->isConst) {
+        thisPtr = "const_cast< ";
+        thisPtr += cdef->qualified;
+        thisPtr += " *>(this)";
+        constQualifier = "const";
+    }
+
+    //if no arguments and return type is void
+    if (def->arguments.isEmpty() && def->type.isVoid()) {
+        fprintf(out, ")%s\n{\n"
+                "    QMetaRemote::request(%s, &staticMetaObject, %d, Q_NULLPTR);\n"
+                "}\n", constQualifier, thisPtr.constData(), index);
+        return;
+    }
+
+    for (int j = 0; j < def->arguments.count(); ++j) {
+        const ArgumentDef &a = def->arguments.at(j);
+        if (j)
+            fprintf(out, ", ");
+        fprintf(out, "%s _t%d%s", a.type.name.constData(), j+1, a.rightType.constData());
+    }
+    fprintf(out, ")%s\n{\n", constQualifier);
+
+#if Q_REMOTE_USE_REQUEST_CAST
+    fprintf(out, "    void *_a[] = { Q_NULLPTR");
+#else
+    //create variable for return-value constructed with "Q_DEFAULT(...)" content as arguments
+    if (def->type.name.size() && def->type.isNotVoid()) {
+        QByteArray type = noRef(def->type.toNormalized());
+
+        const char *ctor = type.constData();
+        const char *value = def->defaultValue.constData();
+        if(def->type.referenceType == Type::Pointer) {
+            ctor = ""; //pointers do not have any constructor
+            if(def->defaultValue.isEmpty())
+                value = "Q_NULLPTR";
+        }
+
+        if (Q_UNLIKELY(type == "void")) {
+            fprintf(out, "    int _t0 = int(%s);\n", value);
+        } else {
+            fprintf(out, "    %s _t0 = %s(%s);\n"
+                    , type.constData()
+                    , ctor, value
+                );
+        }
+    }
+    fprintf(out, "    void *_a[] = { ");
+
+    if (def->type.isVoid()) {
+        fprintf(out, "Q_NULLPTR");
+    } else {
+        if (def->returnTypeIsVolatile)
+             fprintf(out, "const_cast<void*>(reinterpret_cast<const volatile void*>(&_t0))");
+        else
+             fprintf(out, "const_cast<void*>(reinterpret_cast<const void*>(&_t0))");
+    }
+#endif
+    for (int i = 0; i < def->arguments.count(); ++i)
+        if (def->arguments.at(i).type.isVolatile)
+            fprintf(out, ", const_cast<void*>(reinterpret_cast<const volatile void*>(&_t%d))", i+1);
+        else
+            fprintf(out, ", const_cast<void*>(reinterpret_cast<const void*>(&_t%d))", i+1);
+    fprintf(out, " };\n");
+
+#if Q_REMOTE_USE_REQUEST_CAST
+    if(def->type.isVoid())
+        fprintf(out, "    QMetaRemote::request(%s, &staticMetaObject, %d, _a);\n",
+                thisPtr.constData(), index);
+    else
+        fprintf(out, "    return QMetaRemote::request_cast<%s>(%s, &staticMetaObject, %d, _a);\n",
+                noRef(def->type.toNormalized()).constData(), thisPtr.constData(), index);
+#else
+    fprintf(out, "    QMetaRemote::request(%s, &staticMetaObject, %d, _a);\n",
+            thisPtr.constData(), index);
+
+    if (def->type.isNotVoid())
+        fprintf(out, "    return _t0;\n");
+#endif
     fprintf(out, "}\n");
 }
 
@@ -1588,6 +1759,99 @@ void Generator::generatePluginMetaData()
         fprintf(out, "using namespace %s;\n", cdef->qualified.left(pos).constData());
     fprintf(out, "QT_MOC_EXPORT_PLUGIN(%s, %s)\n\n",
             cdef->qualified.constData(), cdef->classname.constData());
+}
+
+void Generator::remote_generateClass()
+{
+    generateNamespace(true);
+
+    // Name of class with Q_REMOTE macro.
+    QByteArray localName = cdef->classname;
+    localName.chop(Moc::REMOTE_SUFFIX.size());
+    fprintf(out, "\nclass %s", cdef->classname.data());
+
+    SuperClasses::const_iterator it = cdef->superclassList.cbegin();
+    SuperClasses::const_iterator end = cdef->superclassList.cend();
+    if(it != end) {
+        const Superclass *sc = &*it++; //get and skip first
+        fprintf(out, " : %s %s", FunctionDef::stringFromAccess(sc->access)
+                , sc->className.data());
+        for(; it != end; it++) {
+            sc = &*it;
+            fprintf(out, ", %s %s", FunctionDef::stringFromAccess(sc->access)
+                    , sc->className.data());
+        }
+    } else {
+        fprintf(out, " : public QObjectRemote");
+        //xd("Error class %s has no super class" << cdef->classname.data());
+        //Q_UNREACHABLE();
+    }
+
+    fprintf(out, "\n{\n    Q_REMOTE_CONTROLLER\n"
+                 "public:\n\n");
+
+    const char *robj_name = "QObjectRemote";
+    for (int i = cdef->superclassList.size() - 1; i >= 0; --i) {
+        const QByteArray &cname = cdef->superclassList.at(i).className;
+        if(parent.knownRemoteFiles.contains(cname)) {
+            robj_name = cname.constData();
+            break;
+        }
+    }
+    fprintf(out, "    inline %s(QObject *parent = 0) : %s(parent) {} //ro\n\n", cdef->classname.data(), robj_name);
+
+//    fprintf(out, "    inline QRemoteBound &remote() const { return *const_cast<QRemoteBound *>(reinterpret_cast<const QRemoteBound *>(this)); }\n");
+    fprintf(out, "    static inline QSharedPointer<%s> instance(const QRemoteId &id = QRemoteId(), const QRemoteUserName &user = QRemoteUserName())\n"
+                 "        { return QMetaRemote::remoteInstance(staticMetaObject.className(), id, user).staticCast<%s>(); }\n\n"
+            , cdef->classname.data(), cdef->classname.data());
+
+    fprintf(out, "    typedef %s LocalType;\n", localName.data());
+    fprintf(out, "    typedef %s RemoteType;\n\n", cdef->classname.data());
+
+    fprintf(out, "    static inline RemoteType *fromLocal(LocalType* obj) { return reinterpret_cast<RemoteType (*)>(obj); }\n");
+    FunctionDef::Access access = FunctionDef::Public;
+    fprintf(out, "\nQ_SIGNALS:\n");
+    for (int signalindex = 0; signalindex < cdef->signalList.size(); ++signalindex) {
+        const FunctionDef *def = &cdef->signalList[signalindex];
+        if(def->isIgnored())
+            continue;
+        remote_generateMethod(def, signalindex);
+    }
+
+    fprintf(out, "\npublic Q_SLOTS:\n");
+    access = FunctionDef::Public;
+
+    for (int i = 0; i < cdef->slotList.size(); ++i) {
+        const FunctionDef *def = &cdef->slotList[i];
+        if(def->isIgnored())
+            continue;
+        remote_generateMethod(def, i);
+    }
+
+//    for (int i = 0; i < cdef->methodList.size(); ++i)
+//        remote_generateMethod(&cdef->methodList[i], i);
+
+    fprintf(out, "\nprivate:\n    Q_DISABLE_COPY(%s)\n", cdef->classname.data());
+
+    fprintf(out, "};\n\n");
+
+    generateNamespace(false);
+}
+
+void Generator::remote_generateMethod(const FunctionDef *def, int index)
+{
+    Q_UNUSED(index)
+    fprintf(out, "    %s %s("
+            , def->type.name.constData(), def->name.constData());
+    for (int j = 0; j < def->arguments.count(); j++) {
+        const ArgumentDef &a = def->arguments.at(j);
+        if (j)
+            fprintf(out, ", ");
+
+        fprintf(out, "%s %s%s", a.type.name.constData(), a.name.constData(), a.rightType.constData());
+        //fprintf(out, " /* isScoped: %d rawName: %s */", a.type.isScoped, a.type.rawName.constData());
+    }
+    fprintf(out, ")%s;\n", def->isConst ? " const" : "");
 }
 
 QT_END_NAMESPACE

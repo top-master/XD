@@ -1,5 +1,6 @@
 /****************************************************************************
 **
+** Copyright (C) 2015 The XD Company Ltd.
 ** Copyright (C) 2015 The Qt Company Ltd.
 ** Contact: http://www.qt.io/licensing/
 **
@@ -31,7 +32,7 @@
 **
 ****************************************************************************/
 
-// auto generated
+// auto generated with "moc/util/generate_keywords.pro"
 // DO NOT EDIT.
 
 static const short pp_keyword_trans[][128] = {

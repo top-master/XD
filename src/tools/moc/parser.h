@@ -1,5 +1,6 @@
 /****************************************************************************
 **
+** Copyright (C) 2015 The XD Company Ltd.
 ** Copyright (C) 2015 The Qt Company Ltd.
 ** Contact: http://www.qt.io/licensing/
 **
@@ -43,6 +44,9 @@ class Parser
 {
 public:
     Parser():index(0), displayWarnings(true), displayNotes(true) {}
+    virtual ~Parser();
+
+    static bool forceLinuxFormatLogs;
     Symbols symbols;
     int index;
     bool displayWarnings;
@@ -58,46 +62,89 @@ public:
     QList<IncludePath> includes;
 
     QStack<QByteArray> currentFilenames;
+    /// @return \c true when parser is in input-file
+    /// (which we get from command-line).
+    inline bool isRootFile() const { return currentFilenames.size() <= 1; }
 
     inline bool hasNext() const { return (index < symbols.size()); }
-    inline Token next() { if (index >= symbols.size()) return NOTOKEN; return symbols.at(index++).token; }
-    bool test(Token);
-    void next(Token);
-    void next(Token, const char *msg);
+
+    // MARK: Methods to Move forward or backward.
+
+    /// @return next-token and sets that as current-symbol to be handled.
+    inline Token next();
+    /// Same as next(), but does not move forward if current-symbol mismatches @p possible.
+    /// @return @c true if moved forward.
+    bool test(Token possible);
+    void next(Token expected);
+    void next(Token expected, const char *msg);
+    /// Handles the case that "not" is defined as macro name.
+    void nextIdentifier();
     inline void prev() {--index;}
-    inline Token lookup(int k = 1);
-    inline const Symbol &symbol_lookup(int k = 1) { return symbols.at(index-1+k);}
-    inline Token token() { return symbols.at(index-1).token;}
+
+    // MARK: current-symbol info helpers.
+
+    /// @return current-tokent from current-symbol.
+    inline Token token() const { return symbols.at(index-1).token; }
+    inline const Symbol &symbol() const { return symbols.at(index-1); }
+    /// @return current-symbols index.
+    inline int offset() const { return index - 1; }
+    inline int nextOffset() const { return index; }
+    /// Sets symbol at index "offset" as current-symbol (or current-token).
+    inline void seek(int offset) { index = offset + 1; }
+    /// lookup(1) returns next-token like "next()" would (but without setting that as current-symbol)
+    /// lookup(0) returns current-token (which was returned by last call to "next()")
+    /// lookup(-1) returns last and already handled token
+    inline Token lookup(int distance = 1) const;
+
+    inline const Symbol &symbol_lookup(int distance = 1) const { return symbols.at(index-1+distance); }
     inline QByteArray lexem() { return symbols.at(index-1).lexem();}
     inline QByteArray unquotedLexem() { return symbols.at(index-1).unquotedLexem();}
-    inline const Symbol &symbol() { return symbols.at(index-1);}
+
+    // MARK: notification log prints.
 
     void error(int rollback);
     void error(const char *msg = 0);
+    void errorToken(Token expected);
     void warning(const char * = 0);
     void note(const char * = 0);
 
+    virtual int onExit(int code);
 };
 
-inline bool Parser::test(Token token)
+Token Parser::next() {
+    if(index >= symbols.size())
+        return NOTOKEN;
+    return symbols.at(index++).token;
+}
+
+inline bool Parser::test(Token possible)
 {
-    if (index < symbols.size() && symbols.at(index).token == token) {
-        ++index;
-        return true;
+    // TRACE/moc improve: multiline condition, to be debuggable.
+    if (index < symbols.size()) {
+        const Symbol &symbol = symbols.at(index);
+#ifdef DEBUG_MOC
+        const QByteArray &lexem = symbol.lexem();
+        Q_UNUSED(lexem)
+#endif
+        if (symbol.token == possible) {
+            ++index;
+            return true;
+        }
     }
     return false;
 }
 
-inline Token Parser::lookup(int k)
+inline Token Parser::lookup(int distance) const
 {
-    const int l = index - 1 + k;
+    const int l = index - 1 + distance;
     return l < symbols.size() ? symbols.at(l).token : NOTOKEN;
 }
 
-inline void Parser::next(Token token)
+inline void Parser::next(Token expected)
 {
-    if (!test(token))
-        error();
+    if (!test(expected)) {
+        errorToken(expected);
+    }
 }
 
 inline void Parser::next(Token token, const char *msg)

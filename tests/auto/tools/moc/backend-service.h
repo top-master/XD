@@ -4,7 +4,7 @@
 ** Copyright (C) 2015 The Qt Company Ltd.
 ** Contact: http://www.qt.io/licensing/
 **
-** This file is part of the tools applications of the Qt Toolkit.
+** This file is part of the test suite of the Qt Toolkit.
 **
 ** $QT_BEGIN_LICENSE:LGPL21$
 ** Commercial License Usage
@@ -32,20 +32,55 @@
 **
 ****************************************************************************/
 
-#include "token.h"
+#ifndef BACKEND_SERVICE_H
+#define BACKEND_SERVICE_H
 
-QT_BEGIN_NAMESPACE
-
-#if defined(DEBUG_MOC)
-const char *tokenTypeName(Token t)
-{
-    switch (t) {
-#define CREATE_CASE(Name) case Name: return #Name;
-    FOR_ALL_TOKENS(CREATE_CASE)
-#undef CREATE_CASE
-    }
-    return "";
-}
+#include <QtCore/qglobal.h>
+#if QT_HAS_XD(5, 6, 5)
+#  include <QtRemote/QRemoteObject>
+#else
+// Minimal compile need.
+#  include <QtCore/QObject>
+#  define Q_REMOTE Q_OBJECT
 #endif
 
-QT_END_NAMESPACE
+namespace my_lib {
+
+class BackendService : public QObject {
+    Q_REMOTE
+
+public slots:
+    inline bool login() Q_DEFAULT(false);
+
+    QString statusText() const {
+        return m_didLogin ? QLL("is-logged-in") : QLL("is-not-logged-in");
+    }
+
+
+    // Below `Q_DEFAULT` is for `status()`, just testing distance,
+    // which causes compile-time error if wrong (sat for `QByteArray`).
+    Q_DEFAULT(QLL("did-timeout")) QByteArray statusData() const {
+        return m_didLogin ? "is-logged-in" : "is-not-logged-in";
+    }
+
+    Q_DEFAULT("data-did-timeout")
+
+
+    // No such thing as `private` in QRemote, but if really needed you could do:
+private slots:
+    inline QString mySecretMethod() {
+        if (qobject_cast<QObjectRemote *>(this->sender())) {
+            return QLL("Permission denied");
+        }
+        return QLL("My secret value");
+    }
+
+private:
+    bool m_didLogin;
+};
+
+inline bool BackendService::login() { m_didLogin = true; return true; }
+
+} // namespace my_lib
+
+#endif // BACKEND_SERVICE_H

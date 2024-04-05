@@ -1,5 +1,6 @@
 /****************************************************************************
 **
+** Copyright (C) 2015 The XD Company Ltd.
 ** Copyright (C) 2015 The Qt Company Ltd.
 ** Contact: http://www.qt.io/licensing/
 **
@@ -56,6 +57,9 @@ typedef QByteArray MacroName;
 typedef SubArray MacroName;
 #endif
 typedef QHash<MacroName, Macro> Macros;
+#if !QT_MOC_MACRO_EXPAND
+typedef QVector<MacroName> MacroSafeSet;
+#endif
 
 class QFile;
 
@@ -69,19 +73,29 @@ public:
     Macros macros;
     Symbols preprocessed(const QByteArray &filename, QFile *device);
 
-    void parseDefineArguments(Macro *m);
 
     void skipUntilEndif();
     bool skipBranch();
+
+#if QT_MOC_MACRO_EXPAND
+    void parseDefineArguments(Macro *m);
 
     void substituteUntilNewline(Symbols &substituted);
     static Symbols macroExpandIdentifier(Preprocessor *that, SymbolStack &symbols, int lineNum, QByteArray *macroName);
     static void macroExpand(Symbols *into, Preprocessor *that, const Symbols &toExpand, int &index, int lineNum, bool one,
                                const QSet<QByteArray> &excludeSymbols = QSet<QByteArray>());
+#else // QT_MOC_MACRO_EXPAND
+    void substituteMacro(const MacroName &macro, Symbols &substituted, MacroSafeSet safeset = MacroSafeSet());
+    void substituteUntilNewline(Symbols &substituted, MacroSafeSet safeset = MacroSafeSet());
+#endif // QT_MOC_MACRO_EXPAND
 
     int evaluateCondition();
 
-    enum TokenizeMode { TokenizeCpp, TokenizePreprocessor, PreparePreprocessorStatement, TokenizePreprocessorStatement, TokenizeInclude, PrepareDefine, TokenizeDefine };
+    enum TokenizeMode { TokenizeCpp, TokenizePreprocessor, PreparePreprocessorStatement, TokenizePreprocessorStatement, TokenizeInclude
+#if QT_MOC_MACRO_EXPAND
+	, PrepareDefine, TokenizeDefine
+#endif
+	};
     static Symbols tokenize(const QByteArray &input, int lineNum = 1, TokenizeMode mode = TokenizeCpp);
 
 private:

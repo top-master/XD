@@ -32,20 +32,32 @@
 **
 ****************************************************************************/
 
-#include "token.h"
+#ifndef Q_MOC_CONFIG_H
+#define Q_MOC_CONFIG_H
 
-QT_BEGIN_NAMESPACE
+#include <QtCore/qglobal.h>
 
-#if defined(DEBUG_MOC)
-const char *tokenTypeName(Token t)
-{
-    switch (t) {
-#define CREATE_CASE(Name) case Name: return #Name;
-    FOR_ALL_TOKENS(CREATE_CASE)
-#undef CREATE_CASE
-    }
-    return "";
-}
+#ifndef QT_MOC_NO_REMOTE
+#  define QT_REMOTE 1
+#else
+#  define QT_REMOTE 0
 #endif
 
-QT_END_NAMESPACE
+#ifndef QT_MOC_MACRO_EXPAND
+// TRACE/moc performance: maybe should disable macro expand support by default,
+// by setting below to zero, since moc run's duration gets around 200% or 1400%,
+// for exsample the duration for QtCore expands from "30 sec" to "7 min",
+// that means 14 times slower.
+#  define QT_MOC_MACRO_EXPAND 1
+#elif (QT_MOC_MACRO_EXPAND) != 0 && (QT_MOC_MACRO_EXPAND) != 1
+#  undef QT_MOC_MACRO_EXPAND
+#  define QT_MOC_MACRO_EXPAND 1
+#endif
+
+#ifdef MOC_NO_TOKEN
+#  define MOC_TOKEN_SCOPE(x)
+#else
+#  define MOC_TOKEN_SCOPE(x) x
+#endif
+
+#endif // Q_MOC_CONFIG_H

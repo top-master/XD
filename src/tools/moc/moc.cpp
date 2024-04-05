@@ -1,5 +1,6 @@
 /****************************************************************************
 **
+** Copyright (C) 2015 The XD Company Ltd.
 ** Copyright (C) 2015 The Qt Company Ltd.
 ** Copyright (C) 2016 Olivier Goffart <ogoffart@woboq.com>
 ** Contact: http://www.qt.io/licensing/
@@ -33,18 +34,36 @@
 ****************************************************************************/
 
 #include "moc.h"
+#include "parser/function-parser.h"
+#include "parser/function-mapper.h"
+
 #include "generator.h"
 #include "qdatetime.h"
 #include "utils.h"
 #include "outputrevision.h"
+#include "udebug.h"
 #include <QtCore/qfile.h>
 #include <QtCore/qfileinfo.h>
 #include <QtCore/qdir.h>
 
 // for normalizeTypeInternal
 #include <private/qmetaobject_moc_p.h>
+#include <private/qmetaobject_p.h> //for the flags.
+
+const char STR_QOBJECT[] = "QObject";
+const char STR_REMOTE_OBJECT[] = "QObjectRemote";
 
 QT_BEGIN_NAMESPACE
+
+Moc *Moc::m_instance = Q_NULLPTR;
+
+QByteArray Moc::filename = QByteArray();
+QByteArray Moc::outputFileName = QByteArray();
+#if QT_REMOTE
+bool Moc::requiresRemote = false;
+bool Moc::isRemoteGen = false;
+const QLatin1Literal Moc::REMOTE_SUFFIX = QLL("Remote");
+#endif
 
 // only moc needs this function
 static QByteArray normalizeType(const QByteArray &ba, bool fixScope = false)
@@ -74,6 +93,12 @@ static QByteArray normalizeType(const QByteArray &ba, bool fixScope = false)
     return result;
 }
 
+Moc::~Moc() {
+    if (this == m_instance) {
+        m_instance = Q_NULLPTR;
+    }
+}
+
 bool Moc::parseClassHead(ClassDef *def)
 {
     // figure out whether this is a class declaration, or only a
@@ -87,6 +112,9 @@ bool Moc::parseClassHead(ClassDef *def)
         if (token == SEMIC || token == RANGLE)
             return false;
     } while (token);
+
+    // Stores type, not really required by the way.
+    def->isStruct = (lookup(0) == STRUCT);
 
     if (!test(IDENTIFIER)) // typedef struct { ... }
         return false;
@@ -137,15 +165,22 @@ bool Moc::parseClassHead(ClassDef *def)
             if (test(LPAREN)) {
                 until(RPAREN);
             } else {
-                def->superclassList += qMakePair(type, access);
+                const Superclass &superclass = Superclass(type, access);
+                def->superclassList += superclass;
+                if (superclass.hasName("QObjectDecor")) {
+                    ClassInfoDef info;
+                    info.name = "Decor";
+                    info.value = info.name;
+                    def->classInfoList += info;
+                }
             }
         } while (test(COMMA));
 
         if (!def->superclassList.isEmpty()
-            && knownGadgets.contains(def->superclassList.first().first)) {
+            && knownGadgets.contains(def->superclassList.first().className)) {
             // Q_GADGET subclasses are treated as Q_GADGETs
-            knownGadgets.insert(def->classname, def->qualified);
-            knownGadgets.insert(def->qualified, def->qualified);
+            knownGadgets.insert(def->classname);
+            knownGadgets.insert(def->qualified);
         }
     }
     if (!test(LBRACE))
@@ -157,6 +192,22 @@ bool Moc::parseClassHead(ClassDef *def)
     return foundRBrace;
 }
 
+bool Moc::parseClassForward(ClassBasicDef *def, const ParseState &state)
+{
+    Token type = next();
+    if((type == CLASS || type == STRUCT)
+            && test(IDENTIFIER) && test(SEMIC))
+    {
+        def->isStruct = (type == STRUCT);
+
+        const Symbol &id = symbol_lookup(-1);
+        def->classname = id.lexem();
+        def->qualified = state.namespacePrefix(this->nextOffset(), def->classname);
+        return true;
+    }
+    return false;
+}
+
 Type Moc::parseType()
 {
     Type type;
@@ -164,7 +215,8 @@ Type Moc::parseType()
     bool isVoid = false;
     type.firstToken = lookup();
     for (;;) {
-        switch (next()) {
+        Token t = next();
+        switch (t) {
             case SIGNED:
             case UNSIGNED:
                 hasSignedOrUnsigned = true;
@@ -173,7 +225,9 @@ Type Moc::parseType()
             case VOLATILE:
                 type.name += lexem();
                 type.name += ' ';
-                if (lookup(0) == VOLATILE)
+                if (t == CONST)
+                    type.isConst = true;
+                else if(t == VOLATILE)
                     type.isVolatile = true;
                 continue;
             case Q_MOC_COMPAT_TOKEN:
@@ -206,10 +260,10 @@ Type Moc::parseType()
         case SHORT:
         case INT:
         case LONG:
-            type.name += lexem();
+            type.appendClass(lexem());
             // preserve '[unsigned] long long', 'short int', 'long int', 'long double'
             if (test(LONG) || test(INT) || test(DOUBLE)) {
-                type.name += ' ';
+                type.appendClass(QByteArray::fromRawData(" ", 1));
                 prev();
                 continue;
             }
@@ -218,7 +272,7 @@ Type Moc::parseType()
         case DOUBLE:
         case VOID:
         case BOOL:
-            type.name += lexem();
+            type.appendClass(lexem());
             isVoid |= (lookup(0) == VOID);
             break;
         case NOTOKEN:
@@ -229,10 +283,37 @@ Type Moc::parseType()
         }
         if (test(LANGLE)) {
             if (type.name.isEmpty()) {
-                // '<' cannot start a type
+                // In C/C++ the '<' char cannot start a type.
                 return type;
             }
-            type.name += lexemUntil(RANGLE);
+
+            // Adds template's `<...>` part to `Type::name`,
+            // but additionally emits spaces where required to help old compilers.
+            QByteArray templ = lexemUntil(RANGLE);
+            type.name.reserve(type.name.size() + templ.size() * 1.2);
+            int depth = 0;
+            for (int i = 0; i < templ.size(); ++i) {
+                const char current = templ.at(i);
+                type.name += current;
+                if (current == '(') {
+                    depth++;
+                    continue;
+                } else if (current == ')') {
+                    depth--;
+                    continue;
+                }
+                if (depth == 0 && i+1 < templ.size()) {
+                    const char next = templ.at(i+1);
+                    if (current == '<' && next == ':') {
+                        type.name += ' ';
+                    } else if (current == '>' && next == '>'
+                        // Unless is a binary `>>` operator.
+                        && i+2 < templ.size() && ! is_digit_char(templ.at(i+2))
+                    ) {
+                        type.name += ' ';
+                    }
+                }
+            }
         }
         if (test(SCOPE)) {
             type.name += lexem();
@@ -295,39 +376,6 @@ bool Moc::parseEnum(EnumDef *def)
     return true;
 }
 
-void Moc::parseFunctionArguments(FunctionDef *def)
-{
-    Q_UNUSED(def);
-    while (hasNext()) {
-        ArgumentDef  arg;
-        arg.type = parseType();
-        if (arg.type.name == "void")
-            break;
-        if (test(IDENTIFIER))
-            arg.name = lexem();
-        while (test(LBRACK)) {
-            arg.rightType += lexemUntil(RBRACK);
-        }
-        if (test(CONST) || test(VOLATILE)) {
-            arg.rightType += ' ';
-            arg.rightType += lexem();
-        }
-        arg.normalizedType = normalizeType(QByteArray(arg.type.name + ' ' + arg.rightType));
-        arg.typeNameForCast = normalizeType(QByteArray(noRef(arg.type.name) + "(*)" + arg.rightType));
-        if (test(EQ))
-            arg.isDefault = true;
-        def->arguments += arg;
-        if (!until(COMMA))
-            break;
-    }
-
-    if (!def->arguments.isEmpty()
-        && def->arguments.last().normalizedType == "QPrivateSignal") {
-        def->arguments.removeLast();
-        def->isPrivateSignal = true;
-    }
-}
-
 bool Moc::testFunctionAttribute(FunctionDef *def)
 {
     if (index < symbols.size() && testFunctionAttribute(symbols.at(index).token, def)) {
@@ -360,16 +408,17 @@ bool Moc::testFunctionAttribute(Token tok, FunctionDef *def)
     return false;
 }
 
-bool Moc::testFunctionRevision(FunctionDef *def)
+bool Moc::testFunctionRevisionRaw(int *revision)
 {
     if (test(Q_REVISION_TOKEN)) {
         next(LPAREN);
-        QByteArray revision = lexemUntil(RPAREN);
-        revision.remove(0, 1);
-        revision.chop(1);
+        QByteArray arguments = lexemUntil(RPAREN);
+        //remove LPAREN and RPAREN
+        arguments.remove(0, 1);
+        arguments.chop(1);
         bool ok = false;
-        def->revision = revision.toInt(&ok);
-        if (!ok || def->revision < 0)
+        *revision = arguments.toInt(&ok);
+        if (!ok || *revision < 0)
             error("Invalid revision");
         return true;
     }
@@ -377,437 +426,427 @@ bool Moc::testFunctionRevision(FunctionDef *def)
     return false;
 }
 
+bool Moc::testFunctionRevision(FunctionDef *def)
+{
+    return testFunctionRevisionRaw(&def->revision);
+}
+
+bool Moc::testFunctionDefault(FunctionDef *def)
+{
+    if (test(Q_DEFAULT_TOKEN)) {
+        next(LPAREN);
+        def->defaultValue = lexemUntil(RPAREN);
+        //remove LPAREN and RPAREN
+        def->defaultValue.remove(0, 1);
+        def->defaultValue.chop(1);
+        return true;
+    }
+    return false;
+}
+
 // returns false if the function should be ignored
 bool Moc::parseFunction(FunctionDef *def, bool inMacro)
 {
-    def->isVirtual = false;
-    def->isStatic = false;
-    //skip modifiers and attributes
-    while (test(INLINE) || (test(STATIC) && (def->isStatic = true) == true) ||
-        (test(VIRTUAL) && (def->isVirtual = true) == true) //mark as virtual
-        || testFunctionAttribute(def) || testFunctionRevision(def)) {}
-    bool templateFunction = (lookup() == TEMPLATE);
-    def->type = parseType();
-    if (def->type.name.isEmpty()) {
-        if (templateFunction)
-            error("Template function as signal or slot");
-        else
-            error();
-    }
-    bool scopedFunctionName = false;
-    if (test(LPAREN)) {
-        def->name = def->type.name;
-        scopedFunctionName = def->type.isScoped;
-        def->type = Type("int");
-    } else {
-        Type tempType = parseType();;
-        while (!tempType.name.isEmpty() && lookup() != LPAREN) {
-            if (testFunctionAttribute(def->type.firstToken, def))
-                ; // fine
-            else if (def->type.firstToken == Q_SIGNALS_TOKEN)
-                error();
-            else if (def->type.firstToken == Q_SLOTS_TOKEN)
-                error();
-            else {
-                if (!def->tag.isEmpty())
-                    def->tag += ' ';
-                def->tag += def->type.name;
-            }
-            def->type = tempType;
-            tempType = parseType();
-        }
-        next(LPAREN, "Not a signal or slot declaration");
-        def->name = tempType.name;
-        scopedFunctionName = tempType.isScoped;
-    }
-
-    // we don't support references as return types, it's too dangerous
-    if (def->type.referenceType == Type::Reference) {
-        QByteArray rawName = def->type.rawName;
-        def->type = Type("void");
-        def->type.rawName = rawName;
-    }
-
-    def->normalizedType = normalizeType(def->type.name);
-
-    if (!test(RPAREN)) {
-        parseFunctionArguments(def);
-        next(RPAREN);
-    }
-
-    // support optional macros with compiler specific options
-    while (test(IDENTIFIER))
-        ;
-
-    def->isConst = test(CONST);
-
-    while (test(IDENTIFIER))
-        ;
-
-    if (inMacro) {
-        next(RPAREN);
-        prev();
-    } else {
-        if (test(THROW)) {
-            next(LPAREN);
-            until(RPAREN);
-        }
-        if (test(SEMIC))
-            ;
-        else if ((def->inlineCode = test(LBRACE)))
-            until(RBRACE);
-        else if ((def->isAbstract = test(EQ)))
-            until(SEMIC);
-        else
-            error();
-    }
-
-    if (scopedFunctionName) {
-        QByteArray msg("Function declaration ");
-        msg += def->name;
-        msg += " contains extra qualification. Ignoring as signal or slot.";
-        warning(msg.constData());
-        return false;
-    }
-    return true;
+    FunctionParser parser = FunctionParser(this, def);
+    return parser.parseFunction(inMacro);
 }
 
 // like parseFunction, but never aborts with an error
 bool Moc::parseMaybeFunction(const ClassDef *cdef, FunctionDef *def)
 {
-    def->isVirtual = false;
-    def->isStatic = false;
-    //skip modifiers and attributes
-    while (test(EXPLICIT) || test(INLINE) || (test(STATIC) && (def->isStatic = true) == true) ||
-        (test(VIRTUAL) && (def->isVirtual = true) == true) //mark as virtual
-        || testFunctionAttribute(def) || testFunctionRevision(def)) {}
-    bool tilde = test(TILDE);
-    def->type = parseType();
-    if (def->type.name.isEmpty())
-        return false;
-    bool scopedFunctionName = false;
-    if (test(LPAREN)) {
-        def->name = def->type.name;
-        scopedFunctionName = def->type.isScoped;
-        if (def->name == cdef->classname) {
-            def->isDestructor = tilde;
-            def->isConstructor = !tilde;
-            def->type = Type();
-        } else {
-            def->type = Type("int");
-        }
-    } else {
-        Type tempType = parseType();;
-        while (!tempType.name.isEmpty() && lookup() != LPAREN) {
-            if (testFunctionAttribute(def->type.firstToken, def))
-                ; // fine
-            else if (def->type.name == "Q_SIGNAL")
-                def->isSignal = true;
-            else if (def->type.name == "Q_SLOT")
-                def->isSlot = true;
-            else {
-                if (!def->tag.isEmpty())
-                    def->tag += ' ';
-                def->tag += def->type.name;
+    FunctionParser parser = FunctionParser(this, def);
+    return parser.parseMaybeFunction(cdef);
+}
+
+
+bool Moc::parseUntilClass(Token t, ParseState *state)
+{
+    switch (t) {
+        case NAMESPACE: {
+            int rewind = index;
+            if (test(IDENTIFIER)) {
+                if (test(EQ)) {
+                    // namespace Foo = Bar::Baz;
+                    until(SEMIC);
+                } else if (!test(SEMIC)) {
+                    NamespaceDef def;
+                    def.name = lexem();
+                    // TRACE moc/parse: support Android's "namespace name IDENT(IDENT)"
+                    //next(LBRACE); //old code
+                    if(!test(LBRACE))
+                        until(LBRACE);
+                    def.begin = index - 1;
+                    until(RBRACE);
+                    def.end = index;
+                    index = def.begin + 1;
+                    state->namespaceList += def;
+                    index = rewind;
+                }
             }
-            def->type = tempType;
-            tempType = parseType();
+            break;
         }
-        if (!test(LPAREN))
-            return false;
-        def->name = tempType.name;
-        scopedFunctionName = tempType.isScoped;
-    }
+        case SEMIC:
+        case RBRACE:
+            state->templateClass = false;
+            break;
+        case TEMPLATE:
+            state->templateClass = true;
+            break;
+        case MOC_INCLUDE_BEGIN:
+            // TRACE moc Add: unquoted Lexem If Any.
+            currentFilenames.push(symbol().unquotedLexemIfAny());
+            break;
+        case MOC_INCLUDE_END:
+            currentFilenames.pop();
+            break;
+        case Q_DECLARE_INTERFACE_TOKEN:
+            parseDeclareInterface();
+            break;
+        case Q_DECLARE_METATYPE_TOKEN:
+            parseDeclareMetatype();
+            break;
+        case USING:
+            if (test(NAMESPACE)) {
+                while (test(SCOPE) || test(IDENTIFIER))
+                    ;
+                next(SEMIC);
+            }
+            break;
+        case Q_REMOTE_INCLUDE_TOKEN:
+            next(LPAREN);
+            if (currentFilenames.size() <= 1) {
+                QByteArray path = lexemUntil(RPAREN);
+                //remove LPAREN,QUOTE and QUOTE,RPAREN
+                path.remove(0, 2);
+                path.chop(2);
+                //resolve path relative to input file's directory
+                QFileInfo inFileInfo(QDir::current(), QFile::decodeName(filename));
+                QString decodedPath = QFile::decodeName(path);
+                decodedPath = inFileInfo.dir().absoluteFilePath(decodedPath);
+                //at last encode and append to includes
+                this->remote_include( QFile::encodeName(decodedPath) );
+            } else
+                until(RPAREN);
+            break;
+#if QT_REMOTE
+        case Q_REMOTE_FORWARD_TOKEN: {
+            int lastIndex = this->index;
+            ClassBasicDef cdef;
+            if(parseClassForward(&cdef, *state)) {
+                cdef.isUsed = this->isRootFile();
+                remoteForwards.insert(cdef.classname, cdef);
+            } else {
+                this->index = lastIndex;
+                this->warning("Expected forward declaration.");
+            }
+        } break;
+#endif
+        case CLASS:
+        case STRUCT: {
+            //found class/struct
+            if (this->isRootFile())
+                break; //was outside moc include break to do full parsing
+            //was inside moc include do fast parsing
+            //  although the class is just included by the input-file (which we get from command-line)
+            //  we need for latter to know at least which classes are valid "QObject" sub-classes
+            ClassDef def;
+            if (qNot( parseClassHead(&def) )) {
+                return false;
+            }
 
-    // we don't support references as return types, it's too dangerous
-    if (def->type.referenceType == Type::Reference) {
-        QByteArray rawName = def->type.rawName;
-        def->type = Type("void");
-        def->type.rawName = rawName;
-    }
+            while (def.contains(this->nextOffset()) && hasNext()) {
+                Token t = next();
+                if (t == Q_OBJECT_TOKEN) {
+                    def.hasQObject = true;
+                    break;
+                } else if(t == Q_GADGET_TOKEN) {
+                   def.hasQGadget = true;
+                   break;
+                } else if(t == Q_REMOTE_TOKEN) {
+                    def.hasQObject = true;
+                    def.hasQRemote = true;
+                    break;
+                }
+            }
 
-    def->normalizedType = normalizeType(def->type.name);
+            if (!def.hasQObject && !def.hasQGadget) {
+                return false;
+            }
 
-    if (!test(RPAREN)) {
-        parseFunctionArguments(def);
-        if (!test(RPAREN))
-            return false;
-    }
-    def->isConst = test(CONST);
-    if (scopedFunctionName
-        && (def->isSignal || def->isSlot || def->isInvokable)) {
-        QByteArray msg("parsemaybe: Function declaration ");
-        msg += def->name;
-        msg += " contains extra qualification. Ignoring as signal or slot.";
-        warning(msg.constData());
-        return false;
+            def.qualified = state->namespacePrefix(this->nextOffset(), def.qualified);
+
+            QSet<QByteArray> &classHash = def.hasQObject ? knownQObjectClasses : knownGadgets;
+            classHash.insert(def.classname);
+            classHash.insert(def.qualified);
+
+#if QT_REMOTE
+            if(def.hasQRemote) {
+                knownRemoteFiles.insert(def.classname + Moc::REMOTE_SUFFIX.data(), currentFilenames.last());
+                knownRemoteFiles.insert(def.qualified + Moc::REMOTE_SUFFIX.data(), currentFilenames.last());
+            }
+#endif
+            return false; }
+        default: break;
     }
     return true;
 }
 
+bool Moc::parseQObject(Token *t, const ParseState &state)
+{
+    int remoteMacroOffset = -1;
+
+    //skip if not class/struct or is inside moc file
+    if ((*t != CLASS && *t != STRUCT) || currentFilenames.size() > 1)
+        return false;
+
+    ClassDef def;
+    if (parseClassHead(&def)) {
+        FunctionDef::Access access = FunctionDef::Private;
+        def.qualified = state.namespacePrefix(this->nextOffset(), def.qualified);
+        while (def.contains(this->nextOffset()) && hasNext()) {
+            switch ((*t = next())) {
+            case PRIVATE:
+                access = FunctionDef::Private;
+                if (test(Q_SIGNALS_TOKEN))
+                    error("Signals cannot have access specifier");
+                break;
+            case PROTECTED:
+                access = FunctionDef::Protected;
+                if (test(Q_SIGNALS_TOKEN))
+                    error("Signals cannot have access specifier");
+                break;
+            case PUBLIC:
+                access = FunctionDef::Public;
+                if (test(Q_SIGNALS_TOKEN))
+                    error("Signals cannot have access specifier");
+                break;
+            case STRUCT:
+            case CLASS: {
+                ClassDef nestedDef;
+                if (parseClassHead(&nestedDef)) {
+                    while (nestedDef.contains(this->nextOffset()) && def.contains(this->nextOffset())) {
+                        *t = next();
+                        if (*t >= Q_META_TOKEN_BEGIN && *t < Q_META_TOKEN_END)
+                            error("Meta object features not supported for nested classes");
+                    }
+                    def.classList.insert(nestedDef.classname);
+                }
+            } break;
+            case Q_SIGNALS_TOKEN:
+                parseSignals(&def);
+                break;
+            case Q_SLOTS_TOKEN:
+                switch (lookup(-1)) {
+                case PUBLIC:
+                case PROTECTED:
+                case PRIVATE:
+                    parseSlots(&def, access);
+                    break;
+                default:
+                    error("Missing access specifier for slots");
+                }
+                break;
+#if QT_REMOTE
+            case Q_REMOTE_TOKEN: {
+                //just required to remember QObject has "Q_REMOTE" macro
+                ClassInfoDef infoDef;
+                infoDef.name = "Q_REMOTE";
+                def.classInfoList.prepend(infoDef);
+                def.hasQRemote = true;
+                requiresRemote = true;
+                remoteMacroOffset = this->offset();
+            } //do not break just continue to "Q_OBJECT_TOKEN"
+#endif // QT_REMOTE
+            case Q_OBJECT_TOKEN:
+                def.hasQObject = true;
+                if (state.templateClass)
+                    error("Template classes not supported by Q_OBJECT");
+                if (def.classname != "Qt" && def.classname != STR_QOBJECT && def.superclassList.isEmpty())
+                    error("Class contains Q_OBJECT macro but does not inherit from QObject");
+                break;
+            case Q_GADGET_TOKEN:
+                def.hasQGadget = true;
+                if (state.templateClass)
+                    error("Template classes not supported by Q_GADGET");
+                break;
+            case Q_PROPERTY_TOKEN:
+                parseProperty(&def);
+                break;
+            case Q_PLUGIN_METADATA_TOKEN:
+                parsePluginData(&def);
+                break;
+            case Q_ENUMS_TOKEN:
+            case Q_ENUM_TOKEN:
+                parseEnumOrFlag(&def, false);
+                break;
+            case Q_FLAGS_TOKEN:
+            case Q_FLAG_TOKEN:
+                parseEnumOrFlag(&def, true);
+                break;
+            case Q_DECLARE_FLAGS_TOKEN:
+                parseFlag(&def);
+                break;
+            case Q_CLASSINFO_TOKEN:
+                parseClassInfo(&def);
+                break;
+            case Q_INTERFACES_TOKEN:
+                parseInterfaces(&def);
+                break;
+            case Q_PRIVATE_SLOT_TOKEN:
+                parseSlotInPrivate(&def, access);
+                break;
+            case Q_PRIVATE_PROPERTY_TOKEN:
+                parsePrivateProperty(&def);
+                break;
+            case ENUM: {
+                EnumDef enumDef;
+                if (parseEnum(&enumDef))
+                    def.enumList += enumDef;
+            } break;
+            case SEMIC:
+            case COLON:
+                break;
+            default:
+                FunctionDef funcDef;
+                funcDef.access = access;
+                const int rewind = index--;
+                if (parseMaybeFunction(&def, &funcDef)) {
+                    if (funcDef.isConstructor) {
+                        if ((access == FunctionDef::Public) && funcDef.isInvokable) {
+                            def.constructorList += funcDef;
+                            def.constructorList.clone(&funcDef);
+                        }
+                    } else if (funcDef.isDestructor) {
+                        // don't care about destructors
+                    } else {
+                        def.members += funcDef;
+                        if (access == FunctionDef::Public)
+                            def.publicList += funcDef;
+                        if (funcDef.isSlot) {
+                            def.slotList += funcDef;
+                            def.slotList.clone(&funcDef);
+                            if (funcDef.revision > 0)
+                                ++def.revisionedMethods;
+                        } else if (funcDef.isSignal) {
+                            def.signalList += funcDef;
+                            def.signalList.clone(&funcDef);
+                            if (funcDef.revision > 0)
+                                ++def.revisionedMethods;
+                        } else if (funcDef.isInvokable) {
+                            def.methodList += funcDef;
+                            def.methodList.clone(&funcDef);
+                            if (funcDef.revision > 0)
+                                ++def.revisionedMethods;
+                        }
+                    }
+                } else {
+                    index = rewind;
+                }
+            }
+        }
+
+        next(RBRACE);
+
+        if (!def.hasQObject && !def.hasQGadget && def.signalList.isEmpty() && def.slotList.isEmpty()
+            && def.propertyList.isEmpty() && def.enumDeclarations.isEmpty())
+            return false; // no meta object code required
+
+
+        if (!def.hasQObject && !def.hasQGadget)
+            error("Class declaration lacks Q_OBJECT macro.");
+
+        // Add meta tags to the plugin meta data:
+        if (!def.pluginData.iid.isEmpty())
+            def.pluginData.metaArgs = metaArgs;
+
+        checkSuperClasses(&def);
+        checkProperties(&def);
+
+        //prefix types which are defined inside of local-class braces
+        //  with local-class as namesapce
+        const QByteArray localName = def.classname; {
+            NamespaceMapper handler(&def, localName);
+            handler.mapList(&def.signalList);
+            handler.mapList(&def.slotList);
+        }
+
+        classList += def;
+        QSet<QByteArray> &classHash = def.hasQObject ? knownQObjectClasses : knownGadgets;
+        classHash.insert(def.classname);
+        classHash.insert(def.qualified);
+
+#if QT_REMOTE
+        // Generate Q_REMOTE_CONTROLLER class.
+        if(def.hasQRemote) {
+            def.isRemote = true;
+            //change class-name but keep backup
+            def.classname.append(REMOTE_SUFFIX.data(), REMOTE_SUFFIX.size());
+            def.qualified.append(REMOTE_SUFFIX.data(), REMOTE_SUFFIX.size());
+
+            SuperClasses::iterator it = def.superclassList.begin();
+            SuperClasses::iterator end = def.superclassList.end();
+            //suffix super-classes with "Remote"
+            //  like from "QObject" into "QObjectRemote"
+            it = def.superclassList.begin();
+            for(; it != end; it++) {
+                Superclass *sc = &*it;
+                if(sc->className == STR_REMOTE_OBJECT) {
+                    this->seek(remoteMacroOffset);
+                    this->error("service should not inherit QObjectRemote");
+                }
+                sc->className.append(REMOTE_SUFFIX.data(), REMOTE_SUFFIX.size());
+            }
+            //remove super-classes that do not have Q_REMOTE macro
+            //  but include required header for super-classes which have it
+            SuperClasses newSuperClasses;
+            it = def.superclassList.begin();
+            if(it != end) {
+                if((*it).className == STR_REMOTE_OBJECT)
+                    newSuperClasses += *it++;
+            }
+            for(; it != end; it++) {
+                const Superclass *sc = &*it;
+                RemoteFileMap::iterator iFile = knownRemoteFiles.find(sc->className);
+                if(iFile != knownRemoteFiles.end()) {
+                    this->remote_includeFromLocal(iFile.value());
+                    newSuperClasses += *sc;
+                }
+            }
+            def.superclassList = newSuperClasses;
+
+            // Excludes nested types (enums and inner-classes),
+            // but we allow enums (so about 1KB extra per class).
+            #if 0
+                def.enumDeclarations.clear();
+                def.enumList.clear();
+            #endif
+            def.classList.clear();
+
+            //wraps types which have Q_REMOTE macro into "QRef"
+            //  also includes any header required for the new type
+            RemoteMapper wrapper(this);
+            wrapper.mapList(&def.signalList);
+            wrapper.mapList(&def.slotList);
+
+            //at last register in known Class list and Remote files
+            classList += def;
+            knownRemoteFiles.insert(def.classname, currentFilenames.last());
+            knownRemoteFiles.insert(def.qualified, currentFilenames.last());
+        }
+#endif // QT_REMOTE
+        return true;
+    }
+    return false;
+}
 
 void Moc::parse()
 {
-    QList<NamespaceDef> namespaceList;
-    bool templateClass = false;
+    ParseState state;
     while (hasNext()) {
         Token t = next();
-        switch (t) {
-            case NAMESPACE: {
-                int rewind = index;
-                if (test(IDENTIFIER)) {
-                    if (test(EQ)) {
-                        // namespace Foo = Bar::Baz;
-                        until(SEMIC);
-                    } else if (!test(SEMIC)) {
-                        NamespaceDef def;
-                        def.name = lexem();
-                        next(LBRACE);
-                        def.begin = index - 1;
-                        until(RBRACE);
-                        def.end = index;
-                        index = def.begin + 1;
-                        namespaceList += def;
-                        index = rewind;
-                    }
-                }
-                break;
-            }
-            case SEMIC:
-            case RBRACE:
-                templateClass = false;
-                break;
-            case TEMPLATE:
-                templateClass = true;
-                break;
-            case MOC_INCLUDE_BEGIN:
-                currentFilenames.push(symbol().unquotedLexem());
-                break;
-            case MOC_INCLUDE_END:
-                currentFilenames.pop();
-                break;
-            case Q_DECLARE_INTERFACE_TOKEN:
-                parseDeclareInterface();
-                break;
-            case Q_DECLARE_METATYPE_TOKEN:
-                parseDeclareMetatype();
-                break;
-            case USING:
-                if (test(NAMESPACE)) {
-                    while (test(SCOPE) || test(IDENTIFIER))
-                        ;
-                    next(SEMIC);
-                }
-                break;
-            case CLASS:
-            case STRUCT: {
-                if (currentFilenames.size() <= 1)
-                    break;
 
-                ClassDef def;
-                if (!parseClassHead(&def))
-                    continue;
-
-                while (inClass(&def) && hasNext()) {
-                    switch (next()) {
-                    case Q_OBJECT_TOKEN:
-                        def.hasQObject = true;
-                        break;
-                    case Q_GADGET_TOKEN:
-                        def.hasQGadget = true;
-                        break;
-                    default: break;
-                    }
-                }
-
-                if (!def.hasQObject && !def.hasQGadget)
-                    continue;
-
-                for (int i = namespaceList.size() - 1; i >= 0; --i)
-                    if (inNamespace(&namespaceList.at(i)))
-                        def.qualified.prepend(namespaceList.at(i).name + "::");
-
-                QHash<QByteArray, QByteArray> &classHash = def.hasQObject ? knownQObjectClasses : knownGadgets;
-                classHash.insert(def.classname, def.qualified);
-                classHash.insert(def.qualified, def.qualified);
-
-                continue; }
-            default: break;
-        }
-        if ((t != CLASS && t != STRUCT)|| currentFilenames.size() > 1)
-            continue;
-        ClassDef def;
-        if (parseClassHead(&def)) {
-            FunctionDef::Access access = FunctionDef::Private;
-            for (int i = namespaceList.size() - 1; i >= 0; --i)
-                if (inNamespace(&namespaceList.at(i)))
-                    def.qualified.prepend(namespaceList.at(i).name + "::");
-            while (inClass(&def) && hasNext()) {
-                switch ((t = next())) {
-                case PRIVATE:
-                    access = FunctionDef::Private;
-                    if (test(Q_SIGNALS_TOKEN))
-                        error("Signals cannot have access specifier");
-                    break;
-                case PROTECTED:
-                    access = FunctionDef::Protected;
-                    if (test(Q_SIGNALS_TOKEN))
-                        error("Signals cannot have access specifier");
-                    break;
-                case PUBLIC:
-                    access = FunctionDef::Public;
-                    if (test(Q_SIGNALS_TOKEN))
-                        error("Signals cannot have access specifier");
-                    break;
-                case CLASS: {
-                    ClassDef nestedDef;
-                    if (parseClassHead(&nestedDef)) {
-                        while (inClass(&nestedDef) && inClass(&def)) {
-                            t = next();
-                            if (t >= Q_META_TOKEN_BEGIN && t < Q_META_TOKEN_END)
-                                error("Meta object features not supported for nested classes");
-                        }
-                    }
-                } break;
-                case Q_SIGNALS_TOKEN:
-                    parseSignals(&def);
-                    break;
-                case Q_SLOTS_TOKEN:
-                    switch (lookup(-1)) {
-                    case PUBLIC:
-                    case PROTECTED:
-                    case PRIVATE:
-                        parseSlots(&def, access);
-                        break;
-                    default:
-                        error("Missing access specifier for slots");
-                    }
-                    break;
-                case Q_OBJECT_TOKEN:
-                    def.hasQObject = true;
-                    if (templateClass)
-                        error("Template classes not supported by Q_OBJECT");
-                    if (def.classname != "Qt" && def.classname != "QObject" && def.superclassList.isEmpty())
-                        error("Class contains Q_OBJECT macro but does not inherit from QObject");
-                    break;
-                case Q_GADGET_TOKEN:
-                    def.hasQGadget = true;
-                    if (templateClass)
-                        error("Template classes not supported by Q_GADGET");
-                    break;
-                case Q_PROPERTY_TOKEN:
-                    parseProperty(&def);
-                    break;
-                case Q_PLUGIN_METADATA_TOKEN:
-                    parsePluginData(&def);
-                    break;
-                case Q_ENUMS_TOKEN:
-                case Q_ENUM_TOKEN:
-                    parseEnumOrFlag(&def, false);
-                    break;
-                case Q_FLAGS_TOKEN:
-                case Q_FLAG_TOKEN:
-                    parseEnumOrFlag(&def, true);
-                    break;
-                case Q_DECLARE_FLAGS_TOKEN:
-                    parseFlag(&def);
-                    break;
-                case Q_CLASSINFO_TOKEN:
-                    parseClassInfo(&def);
-                    break;
-                case Q_INTERFACES_TOKEN:
-                    parseInterfaces(&def);
-                    break;
-                case Q_PRIVATE_SLOT_TOKEN:
-                    parseSlotInPrivate(&def, access);
-                    break;
-                case Q_PRIVATE_PROPERTY_TOKEN:
-                    parsePrivateProperty(&def);
-                    break;
-                case ENUM: {
-                    EnumDef enumDef;
-                    if (parseEnum(&enumDef))
-                        def.enumList += enumDef;
-                } break;
-                case SEMIC:
-                case COLON:
-                    break;
-                default:
-                    FunctionDef funcDef;
-                    funcDef.access = access;
-                    int rewind = index--;
-                    if (parseMaybeFunction(&def, &funcDef)) {
-                        if (funcDef.isConstructor) {
-                            if ((access == FunctionDef::Public) && funcDef.isInvokable) {
-                                def.constructorList += funcDef;
-                                while (funcDef.arguments.size() > 0 && funcDef.arguments.last().isDefault) {
-                                    funcDef.wasCloned = true;
-                                    funcDef.arguments.removeLast();
-                                    def.constructorList += funcDef;
-                                }
-                            }
-                        } else if (funcDef.isDestructor) {
-                            // don't care about destructors
-                        } else {
-                            if (access == FunctionDef::Public)
-                                def.publicList += funcDef;
-                            if (funcDef.isSlot) {
-                                def.slotList += funcDef;
-                                while (funcDef.arguments.size() > 0 && funcDef.arguments.last().isDefault) {
-                                    funcDef.wasCloned = true;
-                                    funcDef.arguments.removeLast();
-                                    def.slotList += funcDef;
-                                }
-                                if (funcDef.revision > 0)
-                                    ++def.revisionedMethods;
-                            } else if (funcDef.isSignal) {
-                                def.signalList += funcDef;
-                                while (funcDef.arguments.size() > 0 && funcDef.arguments.last().isDefault) {
-                                    funcDef.wasCloned = true;
-                                    funcDef.arguments.removeLast();
-                                    def.signalList += funcDef;
-                                }
-                                if (funcDef.revision > 0)
-                                    ++def.revisionedMethods;
-                            } else if (funcDef.isInvokable) {
-                                def.methodList += funcDef;
-                                while (funcDef.arguments.size() > 0 && funcDef.arguments.last().isDefault) {
-                                    funcDef.wasCloned = true;
-                                    funcDef.arguments.removeLast();
-                                    def.methodList += funcDef;
-                                }
-                                if (funcDef.revision > 0)
-                                    ++def.revisionedMethods;
-                            }
-                        }
-                    } else {
-                        index = rewind;
-                    }
-                }
-            }
-
-            next(RBRACE);
-
-            if (!def.hasQObject && !def.hasQGadget && def.signalList.isEmpty() && def.slotList.isEmpty()
-                && def.propertyList.isEmpty() && def.enumDeclarations.isEmpty())
-                continue; // no meta object code required
-
-
-            if (!def.hasQObject && !def.hasQGadget)
-                error("Class declaration lacks Q_OBJECT macro.");
-
-            // Add meta tags to the plugin meta data:
-            if (!def.pluginData.iid.isEmpty())
-                def.pluginData.metaArgs = metaArgs;
-
-            checkSuperClasses(&def);
-            checkProperties(&def);
-
-            classList += def;
-            QHash<QByteArray, QByteArray> &classHash = def.hasQObject ? knownQObjectClasses : knownGadgets;
-            classHash.insert(def.classname, def.qualified);
-            classHash.insert(def.qualified, def.qualified);
-        }
+        if(parseUntilClass(t, &state))
+            parseQObject(&t, state);
     }
 }
 
@@ -830,21 +869,23 @@ static void findRequiredContainers(ClassDef *cdef, QSet<QByteArray> *requiredQtC
         }
     }
 
-    QList<FunctionDef> allFunctions = cdef->slotList + cdef->signalList + cdef->methodList;
+    QVector<FunctionDef> allFunctions = cdef->slotList + cdef->signalList + cdef->methodList;
 
     for (int i = 0; i < allFunctions.count(); ++i) {
         const FunctionDef &f = allFunctions.at(i);
         foreach (const ArgumentDef &arg, f.arguments) {
             foreach (const QByteArray &candidate, candidates) {
-                if (arg.normalizedType.contains(candidate + "<"))
+                if (arg.normalizedType().contains(candidate + "<"))
                     requiredQtContainers->insert(candidate);
             }
         }
     }
 }
 
-void Moc::generate(FILE *out)
+QByteArray Moc::printHeader(FILE *out)
 {
+    QDateTime dt = QDateTime::currentDateTime();
+    QByteArray dstr = dt.toString().toLatin1();
     QByteArray fn = filename;
     int i = filename.length()-1;
     while (i>0 && filename[i-1] != '/' && filename[i-1] != '\\')
@@ -852,25 +893,76 @@ void Moc::generate(FILE *out)
     if (i >= 0)
         fn = filename.mid(i);
     fprintf(out, "/****************************************************************************\n"
-            "** Meta object code from reading C++ file '%s'\n**\n" , fn.constData());
-    fprintf(out, "** Created by: The Qt Meta Object Compiler version %d (Qt %s)\n**\n" , mocOutputRevision, QT_VERSION_STR);
+                 "** Meta object code from reading C++ file '%s'\n**\n" , fn.constData());
+    fprintf(out, "** Created: %s\n"
+                 "**      by: The XD Meta Object Compiler version %d (Qt %s)\n"
+                 "**\n" , dstr.constData(), mocOutputRevision, QT_VERSION_STR);
     fprintf(out, "** WARNING! All changes made in this file will be lost!\n"
-            "*****************************************************************************/\n\n");
+                 "*****************************************************************************/\n\n");
+    return fn;
+}
 
-
+void Moc::printInclude(FILE *out)
+{
     if (!noInclude) {
         if (includePath.size() && !includePath.endsWith('/'))
             includePath += '/';
+        if (includePath == "./")
+            includePath = QByteArray();
+
+        // Maybe required info.
+        QFileInfo inputInfo(QFile::decodeName(filename));
+        const QString &inputBaseName = inputInfo.fileName();
+
         for (int i = 0; i < includeFiles.size(); ++i) {
             QByteArray inc = includeFiles.at(i);
+            QByteArray link;
             if (inc[0] != '<' && inc[0] != '"') {
-                if (includePath.size() && includePath != "./")
+                if (includePath.size())
                     inc.prepend(includePath);
-                inc = '\"' + inc + '\"';
+                link = linkToParent(inc, outputFileName);
+                // Prefers quotes (never "<" and ">" syntax, since
+                // path should be either relative or absolute).
+                inc = '\"' + link + '\"';
             }
+
+            // Skip including input-file (if generating remote-controller).
+            if (isRemoteGen && ! inputBaseName.isEmpty()) {
+                if (link.isEmpty()) {
+                    link = linkToParent(QByteArray::fromRawData(
+                        inc.constData(), inc.length() - 2
+                    ), outputFileName);
+                }
+                const QString &linkActual = QFile::decodeName(link);
+                // Link would be same as `completeBaseName` (since remote-controller-file is
+                // placed beside input-file).
+                if (linkActual.compare(inputBaseName, Q_FS_CASE) == 0) {
+                    continue;
+                }
+            }
+
+            // Finally, emit the include-line.
             fprintf(out, "#include %s\n", inc.constData());
         }
     }
+}
+
+void Moc::generate(FILE *out)
+{
+    const QByteArray &fn = printHeader(out);
+
+#if QT_REMOTE
+    if (requiresRemote) {
+        if (isRemoteGen == true) {
+            // Includes remote-controller's header into its source-code (e.g.
+            // file with "*_remote.h" suffix into file with "*_remote.cpp" suffix).
+            fprintf(out, "#include \"%s\"\n\n", linkToParent(remote_headerPath(), outputFileName).data() );
+        }
+    }
+#endif
+
+    printInclude(out);
+
     if (classList.size() && classList.first().classname == "Qt")
         fprintf(out, "#include <QtCore/qobject.h>\n");
 
@@ -880,7 +972,7 @@ void Moc::generate(FILE *out)
         fprintf(out, "#include <QtCore/qplugin.h>\n");
 
     QSet<QByteArray> requiredQtContainers;
-    for (i = 0; i < classList.size(); ++i) {
+    for (int i = 0; i < classList.size(); ++i) {
         findRequiredContainers(&classList[i], &requiredQtContainers);
     }
 
@@ -894,6 +986,19 @@ void Moc::generate(FILE *out)
     }
 
 
+#if QT_REMOTE
+    if (requiresRemote) {
+        if(isRemoteGen == false) {
+            // Includes remote-controller source-code (e.g. file with "*_remote.cpp" suffix)
+            // into service-interface (i.e. file with "moc_*.cpp" or "*.moc" suffix)
+            fprintf(out, "\n#define MOC_SERVICE_BUILD");
+            fprintf(out, "\n#include \"%s\"\n", linkToParent(remote_sourcePath(), outputFileName).data() );
+            fprintf(out, "\n#undef MOC_SERVICE_BUILD\n");
+        }
+    }
+#endif
+
+    fprintf(out, "\n");
     fprintf(out, "#if !defined(Q_MOC_OUTPUT_REVISION)\n"
             "#error \"The header file '%s' doesn't include <QObject>.\"\n", fn.constData());
     fprintf(out, "#elif Q_MOC_OUTPUT_REVISION != %d\n", mocOutputRevision);
@@ -905,30 +1010,179 @@ void Moc::generate(FILE *out)
 
     fprintf(out, "QT_BEGIN_MOC_NAMESPACE\n");
 
-    for (i = 0; i < classList.size(); ++i) {
-        Generator generator(&classList[i], metaTypes, knownQObjectClasses, knownGadgets, out);
+    for (int i = 0; i < classList.size(); ++i) {
+        ClassDef *c = &classList[i];
+#if QT_REMOTE
+        if(c->isRemote != isRemoteGen)
+            continue;
+#endif
+        Generator generator(*this, c, metaTypes, out);
         generator.generateCode();
     }
 
     fprintf(out, "QT_END_MOC_NAMESPACE\n");
 }
 
+FILE *Moc::rawOpenForOutput(const QString &filePath, const QByteArray &pathEncoded) {
+    const bool wasExisting = QFileInfo::exists(filePath);
+
+    const char *path = pathEncoded.constData();
+    FILE *out = 0;
+#if defined(_MSC_VER) && _MSC_VER >= 1400
+    if (fopen_s(&out, path, "w"))
+#else
+    out = fopen(path, "w"); // create output file
+    if (!out)
+#endif
+    {
+        return Q_NULLPTR;
+    }
+
+    if ( ! wasExisting) {
+        createdFiles << MocFile(out, filePath);
+    }
+    return out;
+}
+
+void Moc::closeOutput(FILE *out)
+{
+    bool unmanaged = true;
+
+    const int count = createdFiles.count();
+    for(int i = 0; i < count; ++i) {
+        MocFile entry = createdFiles.at(i);
+        if (entry.raw == out) {
+            entry.close();
+            unmanaged = false;
+        }
+    }
+
+    if (unmanaged) {
+        fclose(out);
+    }
+}
+
+QString filePathExtension(const QByteArray &filename, const QLatin1String &suffix) {
+    QString path;
+    path.reserve(filename.size() * 2 + 22);
+    QFileInfo outFileInfo(QDir::current(), QFile::decodeName(filename));
+    QString dir = outFileInfo.dir().canonicalPath();
+    path.append(dir);
+    path.append(QLatin1Char('/'));
+    path.append(outFileInfo.completeBaseName());
+    path.append(suffix);
+    return path;
+}
+
+QByteArray Moc::remote_headerPath()
+{
+    return QFile::encodeName( filePathExtension(filename, QLatin1Literal("_remote.h")) );
+}
+QByteArray Moc::remote_sourcePath()
+{
+    return QFile::encodeName( filePathExtension(filename, QLatin1Literal("_remote.cpp")) );
+}
+
+void Moc::remote_includeFromLocal(const QByteArray &path)
+{
+    //convert header path from "*.h" to "*_remote.h"
+    const QByteArray &inc = QFile::encodeName( filePathExtension(path, QLatin1Literal("_remote.h")) );
+    remote_include(inc);
+}
+
+void Moc::remote_include(const QByteArray &path)
+{
+    QByteArray inc = path;
+    inc.replace('\\', '/');
+    //add header to output-file if not same as itself and not duplicate
+    if(!remoteIncludes.contains(inc) && inc != outputFileName) {
+        //xd("include" << QFile::decodeName(rfi.value()));
+        remoteIncludes.append(inc);
+    }
+}
+
+bool Moc::remote_generate()
+{
+    outputFileName = remote_headerPath();
+    FILE *remoteOut = openForOutput(outputFileName);
+    if(!remoteOut) return false;
+    //we need to call "generateRemoteHeader" before "generate"
+    //  since it changes "ClassDef"
+    isRemoteGen = true;
+    remote_generateHeader(remoteOut);
+    isRemoteGen = false;
+    closeOutput(remoteOut);
+
+    //generate remote object *.cpp source
+    outputFileName = remote_sourcePath();
+    remoteOut = openForOutput(outputFileName);
+    if(!remoteOut) return false;
+    isRemoteGen = true;
+    generate(remoteOut);
+    isRemoteGen = false;
+    closeOutput(remoteOut);
+
+    return true;
+}
+
+void Moc::remote_generateHeader(FILE *out)
+{
+    const QByteArray &fn = printHeader(out);
+
+    //replace anything but "a" to "z" and "0" to "9" with "_"
+    QByteArray fid = QString::fromUtf8(fn)
+            .replace(QRegExp(QLatin1String("[^a-z0-9]"), Qt::CaseInsensitive), QLatin1String("_")).toUpper().toUtf8();
+    fid.prepend("MOC_");
+    fid.append("_REMOTE");
+
+    // TRACE/moc BugFix 1: added start/end macro to support multiple includes #1.
+    fprintf(out, "\n#ifndef %s", fid.constData());
+    fprintf(out, "\n#define %s\n\n", fid.constData());
+
+    //include Service-Interface header required for "typedef MyService LocalType;"
+    fprintf(out, "#include \"%s\"\n", linkToParent(filename, outputFileName).data());
+    foreach(const QByteArray &inc, this->remoteIncludes) {
+        fprintf(out, "#include \"%s\"\n", linkToParent(inc, outputFileName).data());
+    }
+
+    // We include "qremoteobject" at last to allow user-headers to include Qt-headers with any required-order
+    fprintf(out, "\n#include <QtRemote/qremoteobject.h>\n\n");
+
+    //create list of forward-declarations
+    ForwardList::const_iterator it = this->remoteForwards.constBegin();
+    ForwardList::const_iterator end = this->remoteForwards.constEnd();
+    for (; it != end; ++it) {
+        const ClassBasicDef &forward = it.value();
+        if(forward.isUsed) {
+            fprintf(out, "\n%s %s%s;\n"
+                    , forward.isStruct ? "struct" : "class"
+                    , forward.classname.constData()
+                    , REMOTE_SUFFIX.data()
+                );
+        }
+    }
+
+    //at last generate all Q_REMOTE_CONTROLLER classes
+    for (int i = 0; i < classList.size(); ++i) {
+        ClassDef *c = &classList[i];
+        if(!c->isRemote)
+            continue;
+
+        Generator generator(*this, c, metaTypes, out);
+        generator.remote_generateClass();
+    }
+
+    // TRACE/moc BugFix 1: added start/end macro to support multiple includes #2.
+    fprintf(out, "\n\n#endif //%s\n", fid.constData());
+}
+
 void Moc::parseSlots(ClassDef *def, FunctionDef::Access access)
 {
     int defaultRevision = -1;
-    if (test(Q_REVISION_TOKEN)) {
-        next(LPAREN);
-        QByteArray revision = lexemUntil(RPAREN);
-        revision.remove(0, 1);
-        revision.chop(1);
-        bool ok = false;
-        defaultRevision = revision.toInt(&ok);
-        if (!ok || defaultRevision < 0)
-            error("Invalid revision");
-    }
+    testFunctionRevisionRaw(&defaultRevision);
 
     next(COLON);
-    while (inClass(def) && hasNext()) {
+    while (def->contains(this->nextOffset()) && hasNext()) {
         switch (next()) {
         case PUBLIC:
         case PROTECTED:
@@ -958,31 +1212,19 @@ void Moc::parseSlots(ClassDef *def, FunctionDef::Access access)
             funcDef.revision = defaultRevision;
             ++def->revisionedMethods;
         }
+        def->members += funcDef;
         def->slotList += funcDef;
-        while (funcDef.arguments.size() > 0 && funcDef.arguments.last().isDefault) {
-            funcDef.wasCloned = true;
-            funcDef.arguments.removeLast();
-            def->slotList += funcDef;
-        }
+        def->slotList.clone(&funcDef);
     }
 }
 
 void Moc::parseSignals(ClassDef *def)
 {
     int defaultRevision = -1;
-    if (test(Q_REVISION_TOKEN)) {
-        next(LPAREN);
-        QByteArray revision = lexemUntil(RPAREN);
-        revision.remove(0, 1);
-        revision.chop(1);
-        bool ok = false;
-        defaultRevision = revision.toInt(&ok);
-        if (!ok || defaultRevision < 0)
-            error("Invalid revision");
-    }
+    testFunctionRevisionRaw(&defaultRevision);
 
     next(COLON);
-    while (inClass(def) && hasNext()) {
+    while (def->contains(this->nextOffset()) && hasNext()) {
         switch (next()) {
         case PUBLIC:
         case PROTECTED:
@@ -1014,12 +1256,9 @@ void Moc::parseSignals(ClassDef *def)
             funcDef.revision = defaultRevision;
             ++def->revisionedMethods;
         }
+        def->members += funcDef;
         def->signalList += funcDef;
-        while (funcDef.arguments.size() > 0 && funcDef.arguments.last().isDefault) {
-            funcDef.wasCloned = true;
-            funcDef.arguments.removeLast();
-            def->signalList += funcDef;
-        }
+        def->signalList.clone(&funcDef);
     }
 }
 
@@ -1038,7 +1277,7 @@ void Moc::createPropertyDef(PropertyDef &propDef)
       QValueList<QVariant>, the other template class supported by
       QVariant.
     */
-    type = normalizeType(type);
+    type = Type::normalize(type);
     if (type == "QMap")
         type = "QMap<QString,QVariant>";
     else if (type == "QValueList")
@@ -1292,20 +1531,21 @@ void Moc::parseClassInfo(ClassDef *def)
 {
     next(LPAREN);
     ClassInfoDef infoDef;
-    next(STRING_LITERAL);
+
+    if (skipUnless(STRING_LITERAL)) return;
     infoDef.name = symbol().unquotedLexem();
-    next(COMMA);
+    if (skipUnless(COMMA)) return;
     if (test(STRING_LITERAL)) {
         infoDef.value = symbol().unquotedLexem();
     } else {
         // support Q_CLASSINFO("help", QT_TR_NOOP("blah"))
         next(IDENTIFIER);
-        next(LPAREN);
-        next(STRING_LITERAL);
+        if (skipUnless(LPAREN)) return;
+        if (skipUnless(STRING_LITERAL)) return;
         infoDef.value = symbol().unquotedLexem();
-        next(RPAREN);
+        if (skipUnless(RPAREN)) return;
     }
-    next(RPAREN);
+    if (skipUnless(RPAREN)) return;
     def->classInfoList += infoDef;
 }
 
@@ -1388,12 +1628,9 @@ void Moc::parseSlotInPrivate(ClassDef *def, FunctionDef::Access access)
     next(COMMA);
     funcDef.access = access;
     parseFunction(&funcDef, true);
+    def->members += funcDef;
     def->slotList += funcDef;
-    while (funcDef.arguments.size() > 0 && funcDef.arguments.last().isDefault) {
-        funcDef.wasCloned = true;
-        funcDef.arguments.removeLast();
-        def->slotList += funcDef;
-    }
+    def->slotList.clone(&funcDef);
     if (funcDef.revision > 0)
         ++def->revisionedMethods;
 
@@ -1501,7 +1738,7 @@ bool Moc::until(Token target) {
 
 void Moc::checkSuperClasses(ClassDef *def)
 {
-    const QByteArray firstSuperclass = def->superclassList.value(0).first;
+    const QByteArray firstSuperclass = def->superclassList.value(0).className;
 
     if (!knownQObjectClasses.contains(firstSuperclass)) {
         // enable once we /require/ include paths
@@ -1517,7 +1754,7 @@ void Moc::checkSuperClasses(ClassDef *def)
         return;
     }
     for (int i = 1; i < def->superclassList.count(); ++i) {
-        const QByteArray superClass = def->superclassList.at(i).first;
+        const QByteArray superClass = def->superclassList.at(i).className;
         if (knownQObjectClasses.contains(superClass)) {
             QByteArray msg;
             msg += "Class ";
@@ -1579,7 +1816,7 @@ void Moc::checkProperties(ClassDef *cdef)
             if (f.arguments.size()) // and must not take any arguments
                 continue;
             PropertyDef::Specification spec = PropertyDef::ValueSpec;
-            QByteArray tmp = f.normalizedType;
+            QByteArray tmp = f.type.toNormalized();
             if (p.type == "QByteArray" && tmp == "const char *")
                 tmp = "QByteArray";
             if (tmp.left(6) == "const ")
@@ -1616,6 +1853,188 @@ void Moc::checkProperties(ClassDef *cdef)
     }
 }
 
+int Moc::onExit(int code)
+{
+    if (code != 0) {
+        const int count = createdFiles.count();
+        for(int i = 0; i < count; ++i) {
+            createdFiles.ptr(i)->remove();
+        }
+    }
+    return super::onExit(code);
+}
+
+const char *FunctionDef::stringFromAccess(FunctionDef::Access v)
+{
+    switch (v) {
+    case Private: return "private";
+    case Protected: return "protected";
+    case Public: return "public";
+    }
+    return 0;
+}
+
+bool ClassDef::inheritsFrom(const QByteArray &name)
+{
+    const int count = superclassList.count();
+    for (int i = 0; i < count; ++i) {
+        const Superclass &base = superclassList.at(i);
+        if (base.hasName(name)) {
+            return true;
+        }
+    }
+
+    return false;
+}
+
+FunctionList::iterator ClassDef::findMember(const QByteArray &name)
+{
+    QByteArray key = name;
+    {
+        int pos = key.indexOf('(');
+        if( pos >= 0 )
+            key.chop(key.length() - pos);
+    }
+
+    for (int i = 0; i < members.count(); ++i) {
+        FunctionDef *def = &members[i];
+        if(def->name == key)
+            return members.begin() + i;
+    }
+    return members.end();
+}
+
+void ClassDef::filterEnumList()
+{
+    EnumList enumList;
+    for (int i = 0; i < this->enumList.count(); ++i) {
+        EnumDef def = this->enumList.at(i);
+        if (this->enumDeclarations.contains(def.name)) {
+            enumList += def;
+        }
+        QByteArray alias = this->flagAliases.value(def.name);
+        if (this->enumDeclarations.contains(alias)) {
+            def.name = alias;
+            enumList += def;
+        }
+    }
+    this->enumList = enumList;
+}
+
+QByteArray ParseState::namespacePrefix(int offset, const QByteArray &className) const {
+    QByteArray r = className;
+    for (int i = this->namespaceList.size() - 1; i >= 0; --i) {
+        const NamespaceDef &current = this->namespaceList.at(i);
+        if (current.contains(offset))
+            r.prepend(current.name + "::");
+    }
+    return r;
+}
+
+// only moc needs this function
+QByteArray Type::normalize(const QByteArray &b, bool fixScope)
+{
+#ifdef QT_DEBUG
+    const char *bData = b.constData();
+    Q_UNUSED(bData) // Debug porpuse only.
+#endif
+    const QByteArray &result = normalizeType(b, fixScope);
+    //Q_ASSERT(!result.isEmpty());
+    return result;
+}
+
+bool Type::setClass(const QByteArray &clazz) {
+    if(rawClass.isValid(1)) {
+        QByteArray r;
+        r.reserve(rawName.size() - rawClass.length + clazz.size());
+        r.append(rawName.constData(), rawClass.start);
+        r.append(clazz);
+        r.append(rawName.constData() + rawClass.end(), rawName.size() - rawClass.end());
+
+        if(name == rawName) //update "name" only when unchanged (not hard-coded)
+            name = r;
+        rawName = r;
+        rawClass.length = clazz.size();
+        return true;
+    }
+    return false; //class was never appended or was removed
+}
+
+bool Type::mapTo(ClassDef *target, const QByteArray &localName)
+{
+    bool isChanged = false;
+
+    QByteArray clazz = this->getClass();
+    bool isNested = target->enumList.contains(clazz)
+            || target->classList.contains(clazz);
+    if(isNested) {
+        clazz.prepend("::", 2);
+        clazz.prepend(localName);
+        isChanged = this->setClass(clazz);
+    }
+    return isChanged;
+}
+
+QByteArray ArgumentDef::normalizedType() const
+{
+    return Type::normalize(QByteArray(this->type.name + ' ' + this->rightType));
+}
+
+QByteArray ArgumentDef::typeNameForCast() const
+{
+    return Type::normalize(QByteArray(noRef(this->type.name) + "(*)" + this->rightType));
+}
+
+
+void FunctionDef::MetaData::set(const FunctionDef &f, int type)
+{
+#if MOC_INCLUDE_SIGNATURE
+    sig = f.name + '(';
+    arguments.clear();
+
+    for (int j = 0; j < f.arguments.count(); ++j) {
+        const ArgumentDef &a = f.arguments.at(j);
+        if (j) {
+            sig += ',';
+            arguments += ',';
+        }
+        sig += a.normalizedType();
+        arguments += a.name;
+    }
+    sig += ')';
+#endif
+
+    comment = QByteArray();
+    flags = type;
+    if (f.access == FunctionDef::Private) {
+        flags |= AccessPrivate;
+        comment.append("Private");
+    } else if (f.access == FunctionDef::Public) {
+        flags |= AccessPublic;
+        comment.append("Public");
+    } else if (f.access == FunctionDef::Protected) {
+        flags |= AccessProtected;
+        comment.append("Protected");
+    }
+
+    if (f.isCompat) {
+        flags |= MethodCompatibility;
+        comment.append(" | MethodCompatibility");
+    }
+    if (f.isClone) {
+        flags |= MethodCloned;
+        comment.append(" | MethodCloned");
+    }
+    if (f.isScriptable) {
+        flags |= MethodScriptable;
+        comment.append(" | MethodScriptable");
+    }
+
+    if (f.revision > 0) {
+        flags |= MethodRevisioned;
+        comment.append(" | MethodRevisioned");
+    }
+}
 
 
 QT_END_NAMESPACE
