@@ -1,5 +1,6 @@
 /****************************************************************************
 **
+** Copyright (C) 2015 The XD Company Ltd.
 ** Copyright (C) 2015 The Qt Company Ltd.
 ** Copyright (C) 2014 Olivier Goffart <ogoffart@woboq.org>
 ** Contact: http://www.qt.io/licensing/
@@ -113,6 +114,7 @@ static QByteArray cleaned(const QByteArray &input)
 }
 
 bool Preprocessor::preprocessOnly = false;
+
 void Preprocessor::skipUntilEndif()
 {
     while(index < symbols.size() - 1 && symbols.at(index).token != PP_ENDIF){
@@ -159,7 +161,15 @@ Symbols Preprocessor::tokenize(const QByteArray& input, int lineNum, Preprocesso
     const char *begin = input.constData();
     const char *data = begin;
     while (*data) {
-        if (mode == TokenizeCpp || mode == TokenizeDefine) {
+        /// Needed for debug porpuses only.
+        const qptrdiff indexBegin = data - begin;
+        qptrdiff indexEnd = indexBegin;
+
+        if (mode == TokenizeCpp
+#if QT_MOC_MACRO_EXPAND
+            || mode == TokenizeDefine
+#endif
+		) {
             int column = 0;
 
             const char *lexem = data;
@@ -198,6 +208,7 @@ Symbols Preprocessor::tokenize(const QByteArray& input, int lineNum, Preprocesso
             }
 
             ++column;
+            indexEnd = data - begin;
 
             if (token > SPECIAL_TREATMENT_MARK) {
                 switch (token) {
@@ -275,17 +286,23 @@ Symbols Preprocessor::tokenize(const QByteArray& input, int lineNum, Preprocesso
                         continue;
                     }
                     break;
+#if QT_MOC_MACRO_EXPAND
                 case PP_HASHHASH:
                     if (mode == TokenizeCpp)
                         continue;
                     break;
+#endif // QT_MOC_MACRO_EXPAND
                 case NEWLINE:
                     ++lineNum;
+#if QT_MOC_MACRO_EXPAND
                     if (mode == TokenizeDefine) {
                         mode = TokenizeCpp;
                         // emit the newline token
                         break;
                     }
+#endif // QT_MOC_MACRO_EXPAND
+                    // Otherwise don't add to `symbols`,
+                    // since preprocessor needs line-fade only if line(s) starts with `#` sign.
                     continue;
                 case BACKSLASH:
                 {
@@ -362,6 +379,7 @@ Symbols Preprocessor::tokenize(const QByteArray& input, int lineNum, Preprocesso
                     ++data;
                     continue;
                 }
+
                 int nextindex = pp_keywords[state].next;
                 int next = 0;
                 if (*data == pp_keywords[state].defchar)
@@ -378,14 +396,18 @@ Symbols Preprocessor::tokenize(const QByteArray& input, int lineNum, Preprocesso
             if (pp_keywords[state].ident && is_ident_char(*data))
                 token = pp_keywords[state].ident;
 
+            indexEnd = data - begin;
+
             switch (token) {
             case NOTOKEN:
                 if (*data)
                     ++data;
                 break;
+#if QT_MOC_MACRO_EXPAND
             case PP_DEFINE:
                 mode = PrepareDefine;
                 break;
+#endif // QT_MOC_MACRO_EXPAND
             case PP_IFDEF:
                 symbols += Symbol(lineNum, PP_IF);
                 symbols += Symbol(lineNum, PP_DEFINED);
@@ -442,6 +464,20 @@ Symbols Preprocessor::tokenize(const QByteArray& input, int lineNum, Preprocesso
                     || *data == 'l' || *data == 'L')
                     ++data;
                 break;
+#if QT_MOC_MACRO_EXPAND
+            case PP_AND:
+                Q_FALLTHROUGH();
+            case PP_OR:
+                Q_FALLTHROUGH();
+            case PP_NOT:
+                // Supports `#define and &&` syntax.
+                if (mode == PrepareDefine && is_ident_char(*lexem)) {
+                    Q_FALLTHROUGH();
+                } else {
+                    // Didn't find said syntax.
+                    break;
+                }
+#endif // QT_MOC_MACRO_EXPAND
             case PP_CHARACTER:
                 if (mode == PreparePreprocessorStatement) {
                     // rewind entire token to begin
@@ -452,7 +488,7 @@ Symbols Preprocessor::tokenize(const QByteArray& input, int lineNum, Preprocesso
                 while (is_ident_char(*data))
                     ++data;
                 token = PP_IDENTIFIER;
-
+#if QT_MOC_MACRO_EXPAND
                 if (mode == PrepareDefine) {
                     symbols += Symbol(lineNum, token, input, lexem-begin, data-lexem);
                     // make sure we explicitly add the whitespace here if the next char
@@ -463,6 +499,7 @@ Symbols Preprocessor::tokenize(const QByteArray& input, int lineNum, Preprocesso
                     mode = TokenizeDefine;
                     continue;
                 }
+#endif // QT_MOC_MACRO_EXPAND
                 break;
             case PP_C_COMMENT:
                 if (*data) {
@@ -532,6 +569,8 @@ Symbols Preprocessor::tokenize(const QByteArray& input, int lineNum, Preprocesso
     return symbols;
 }
 
+#if QT_MOC_MACRO_EXPAND
+
 void Preprocessor::macroExpand(Symbols *into, Preprocessor *that, const Symbols &toExpand, int &index,
                                   int lineNum, bool one, const QSet<QByteArray> &excludeSymbols)
 {
@@ -550,10 +589,8 @@ void Preprocessor::macroExpand(Symbols *into, Preprocessor *that, const Symbols 
         Symbols newSyms = macroExpandIdentifier(that, symbols, lineNum, &macro);
 
         if (macro.isEmpty()) {
-            // not a macro
-            Symbol s = symbols.symbol();
-            s.lineNum = lineNum;
-            *into += s;
+            // TRACE/moc bugfix: `macroExpandIdentifier` should provide result, even if not a macro #2.
+            *into += newSyms;
         } else {
             SafeSymbols sf;
             sf.symbols = newSyms;
@@ -579,7 +616,11 @@ Symbols Preprocessor::macroExpandIdentifier(Preprocessor *that, SymbolStack &sym
 
     // not a macro
     if (s.token != PP_IDENTIFIER || !that->macros.contains(s) || symbols.dontReplaceSymbol(s.lexem())) {
-        return Symbols();
+        // TRACE/moc bugfix: `macroExpandIdentifier` should provide result, even if not a macro #1.
+        Symbols syms;
+        syms += s;
+        syms.last().lineNum = lineNum;
+        return syms;
     }
 
     const Macro &macro = that->macros.value(s);
@@ -724,15 +765,46 @@ Symbols Preprocessor::macroExpandIdentifier(Preprocessor *that, SymbolStack &sym
     return expansion;
 }
 
-void Preprocessor::substituteUntilNewline(Symbols &substituted)
+#else // QT_MOC_MACRO_EXPAND
+void Preprocessor::substituteMacro(const MacroName &macro, Symbols &substituted, MacroSafeSet safeset)
+{
+    Symbols saveSymbols = symbols;
+    int saveIndex = index;
+
+    symbols = macros.value(macro).symbols;
+    index = 0;
+
+    safeset += macro;
+    substituteUntilNewline(substituted, safeset);
+
+    symbols = saveSymbols;
+    index = saveIndex;
+}
+#endif // QT_MOC_MACRO_EXPAND
+
+void Preprocessor::substituteUntilNewline(Symbols &substituted
+#if !QT_MOC_MACRO_EXPAND
+, MacroSafeSet safeset
+#endif
+)
 {
     while (hasNext()) {
         Token token = next();
         if (token == PP_IDENTIFIER) {
+#if QT_MOC_MACRO_EXPAND
             macroExpand(&substituted, this, symbols, index, symbol().lineNum, true);
+#else
+            MacroName macro = symbol();
+            if (macros.contains(macro) && !safeset.contains(macro)) {
+                substituteMacro(macro, substituted, safeset);
+                continue;
+            }
+#endif
         } else if (token == PP_DEFINED) {
             bool braces = test(PP_LPAREN);
-            next(PP_IDENTIFIER);
+
+            nextIdentifier();
+
             Symbol definedOrNotDefined = symbol();
             definedOrNotDefined.token = macros.contains(definedOrNotDefined)? PP_MOC_TRUE : PP_MOC_FALSE;
             substituted += definedOrNotDefined;
@@ -1092,24 +1164,31 @@ void Preprocessor::preprocess(const QByteArray &filename, Symbols &preprocessed)
         }
         case PP_DEFINE:
         {
-            next(IDENTIFIER);
+            nextIdentifier();
             QByteArray name = lexem();
             Macro macro;
+#if QT_MOC_MACRO_EXPAND
             macro.isVariadic = false;
             Token t = next();
             if (t == LPAREN) {
                 // we have a function macro
                 macro.isFunction = true;
                 parseDefineArguments(&macro);
-            } else if (t == PP_WHITESPACE){
+            } else if (t == PP_WHITESPACE) {
                 macro.isFunction = false;
             } else {
-                error("Moc: internal error");
+                QByteArray msg("Internal error while parsing: #define ");
+                msg += name;
+                msg += " // Followed by: \"";
+                msg += lexem();
+                msg += '"';
+                error(msg.constData());
             }
+#endif
             int start = index;
             until(PP_NEWLINE);
             macro.symbols.reserve(index - start - 1);
-
+#if QT_MOC_MACRO_EXPAND
             // remove whitespace where there shouldn't be any:
             // Before and after the macro, after a # and around ##
             Token lastToken = HASH; // skip shitespace at the beginning
@@ -1139,6 +1218,10 @@ void Preprocessor::preprocess(const QByteArray &filename, Symbols &preprocessed)
                     error("'##' cannot appear at either end of a macro expansion");
                 }
             }
+#else
+            for (int i = start; i < index - 1; ++i)
+                macro.symbols += symbols.at(i);
+#endif
             macros.insert(name, macro);
             continue;
         }
@@ -1150,9 +1233,13 @@ void Preprocessor::preprocess(const QByteArray &filename, Symbols &preprocessed)
             continue;
         }
         case PP_IDENTIFIER: {
+#if QT_MOC_MACRO_EXPAND
             // substitute macros
             macroExpand(&preprocessed, this, symbols, index, symbol().lineNum, true);
             continue;
+#else
+            break;
+#endif
         }
         case PP_HASH:
             until(PP_NEWLINE);
@@ -1178,6 +1265,8 @@ void Preprocessor::preprocess(const QByteArray &filename, Symbols &preprocessed)
             until(PP_NEWLINE);
             continue;
         case PP_NEWLINE:
+            // Ignores/removes any line-fade NOT already handled above,
+            // because our parsers support line-fade only in `#` scope.
             continue;
         case SIGNALS:
         case SLOTS: {
@@ -1211,6 +1300,7 @@ Symbols Preprocessor::preprocessed(const QByteArray &filename, QFile *file)
     symbols = tokenize(input);
 
 #if 0
+    // Logs tokenize result for debug porpuses.
     for (int j = 0; j < symbols.size(); ++j)
         fprintf(stderr, "line %d: %s(%s)\n",
                symbols[j].lineNum,
@@ -1224,6 +1314,7 @@ Symbols Preprocessor::preprocessed(const QByteArray &filename, QFile *file)
     mergeStringLiterals(&result);
 
 #if 0
+    // Logs preprocess result for debug porpuses.
     for (int j = 0; j < result.size(); ++j)
         fprintf(stderr, "line %d: %s(%s)\n",
                result[j].lineNum,
@@ -1234,6 +1325,7 @@ Symbols Preprocessor::preprocessed(const QByteArray &filename, QFile *file)
     return result;
 }
 
+#if QT_MOC_MACRO_EXPAND
 void Preprocessor::parseDefineArguments(Macro *m)
 {
     Symbols arguments;
@@ -1281,6 +1373,7 @@ void Preprocessor::parseDefineArguments(Macro *m)
     m->arguments = arguments;
     while (test(PP_WHITESPACE)) {}
 }
+#endif // QT_MOC_MACRO_EXPAND
 
 void Preprocessor::until(Token t)
 {

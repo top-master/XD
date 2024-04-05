@@ -1,5 +1,6 @@
 /****************************************************************************
 **
+** Copyright (C) 2015 The XD Company Ltd.
 ** Copyright (C) 2015 The Qt Company Ltd.
 ** Contact: http://www.qt.io/licensing/
 **
@@ -44,36 +45,75 @@ Symbol::LexemStore Symbol::lexemStore;
 
 static const char *error_msg = 0;
 
-#ifdef Q_CC_MSVC
-#define ErrorFormatString "%s(%d): "
-#else
-#define ErrorFormatString "%s:%d: "
-#endif
+bool Parser::forceLinuxFormatLogs = false;
+
+Parser::~Parser() {
+    // Nothing to do (but required).
+}
 
 void Parser::error(int rollback) {
     index -= rollback;
     error();
 }
 void Parser::error(const char *msg) {
-    if (msg || error_msg)
-        fprintf(stderr, ErrorFormatString "Error: %s\n",
+    if (msg || error_msg) {
+        qWarning(ErrorFormatStringByOption("Error: %s"),
                  currentFilenames.top().constData(), symbol().lineNum, msg?msg:error_msg);
-    else
-        fprintf(stderr, ErrorFormatString "Parse error at \"%s\"\n",
-                 currentFilenames.top().constData(), symbol().lineNum, symbol().lexem().data());
-    exit(EXIT_FAILURE);
+    } else {
+        UDebug dbg;
+        dbg.printLocation(QLatin1String(currentFilenames.top().constData()), symbol().lineNum);
+        dbg.nospace() << "moc: Parse error at \""
+                      << symbol().lexem().data() << '"';
+    }
+    xd("moc: exit");
+    this->onExit(EXIT_FAILURE);
+}
+
+void Parser::errorToken(Token expected)
+{
+#if defined(DEBUG_MOC)
+    UDebug dbg; dbg << "Parser expected" << tokenTypeName(expected)
+            << "but got:" << symbol().lexem().data();
+    error( qPrintable(dbg.toString()) );
+#else
+    Q_UNUSED(expected)
+    error();
+#endif
 }
 
 void Parser::warning(const char *msg) {
     if (displayWarnings && msg)
-        fprintf(stderr, ErrorFormatString "Warning: %s\n",
+        fprintf(stderr, ErrorFormatStringByOption("Warning: %s\n"),
                 currentFilenames.top().constData(), qMax(0, index > 0 ? symbol().lineNum : 0), msg);
 }
 
 void Parser::note(const char *msg) {
     if (displayNotes && msg)
-        fprintf(stderr, ErrorFormatString "Note: %s\n",
+        fprintf(stderr, ErrorFormatStringByOption("Note: %s\n"),
                 currentFilenames.top().constData(), qMax(0, index > 0 ? symbol().lineNum : 0), msg);
+}
+
+int Parser::onExit(int code)
+{
+    if (true) // Supresses warnings.
+        exit(code);
+
+    return code;
+}
+
+void Parser::nextIdentifier()
+{
+    Token t = next();
+    const Symbol &definedOrNotDefined = symbol();
+    if(t != PP_IDENTIFIER) {
+        const QByteArray &word = definedOrNotDefined.lexem();
+        if(qNot((t == PP_AND && word == "and")
+                || (t == PP_NOT && word == "not")
+                || (t == PP_OR && word == "or")))
+        {
+            errorToken(PP_IDENTIFIER);
+        }
+    }
 }
 
 QT_END_NAMESPACE

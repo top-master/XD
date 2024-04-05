@@ -21,6 +21,7 @@ HEADERS += using-namespaces.h no-keywords.h task87883.h c-comments.h backslash-n
            cxx11-final-classes.h \
            cxx11-explicit-override-control.h \
            forward-declared-param.h \
+           smart-pointer-arg-register.h \
            parse-defines.h \
            function-with-attributes.h \
            plugin_metadata.h \
@@ -29,7 +30,9 @@ HEADERS += using-namespaces.h no-keywords.h task87883.h c-comments.h backslash-n
            qtbug-35657-gadget.h \
            non-gadget-parent-class.h grand-parent-gadget-class.h \
            related-metaobjects-in-gadget.h \
-           related-metaobjects-name-conflict.h
+           related-metaobjects-name-conflict.h \
+           backend-service.h \
+           # Termination comment.
 
 
 if(*-g++*|*-icc*|*-clang*|*-llvm):!irix-*:!win32-*: HEADERS += os9-newlines.h win-newlines.h
@@ -37,6 +40,7 @@ if(*-g++*|*-clang*): HEADERS += dollars.h
 SOURCES += tst_moc.cpp
 
 QT = core network testlib
+QT += remote # Only XD (5.6.5) has "remote" module support.
 qtHaveModule(dbus) {
     DEFINES += WITH_DBUS
     QT += dbus

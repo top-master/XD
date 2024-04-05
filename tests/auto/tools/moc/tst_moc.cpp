@@ -1,5 +1,6 @@
 /****************************************************************************
 **
+** Copyright (C) 2015 The XD Company Ltd.
 ** Copyright (C) 2015 The Qt Company Ltd.
 ** Copyright (C) 2013 Olivier Goffart <ogoffart@woboq.com>
 ** Contact: http://www.qt.io/licensing/
@@ -74,6 +75,18 @@
 
 #include "non-gadget-parent-class.h"
 #include "grand-parent-gadget-class.h"
+
+#include "backend-service.h"
+#include "backend-service_remote.h"
+#include "smart-pointer-arg-register.h"
+
+
+#include "../../../../src/tools/moc/moc-config.h"
+#if !QT_MOC_MACRO_EXPAND
+#  define QSKIP_MACRO_EXPAND() QSKIP("Only tested if MOC's macro expand support is enabled.")
+#else
+#  define QSKIP_MACRO_EXPAND() do {} while(0)
+#endif
 
 Q_DECLARE_METATYPE(const QMetaObject*);
 
@@ -614,21 +627,32 @@ private slots:
     void autoPropertyMetaTypeRegistration();
     void autoMethodArgumentMetaTypeRegistration();
     void autoSignalSpyMetaTypeRegistration();
+#if QT_MOC_MACRO_EXPAND
     void parseDefines();
+#endif
     void preprocessorOnly();
     void unterminatedFunctionMacro();
     void QTBUG32933_relatedObjectsDontIncludeItself();
     void writeEnumFromUnrelatedClass();
     void relatedMetaObjectsWithinNamespaces();
     void relatedMetaObjectsInGadget();
+#if QT_MOC_MACRO_EXPAND
     void relatedMetaObjectsNameConflict_data();
     void relatedMetaObjectsNameConflict();
+#endif
     void strignLiteralsInMacroExtension();
     void unnamedNamespaceObjectsAndGadgets();
     void veryLongStringData();
     void gadgetHierarchy();
     void optionsFileError_data();
     void optionsFileError();
+
+    void registerMethodArgumentMetaType();
+    void registerStreamOperatorsForEnum_data();
+    void registerStreamOperatorsForEnum();
+    void remoteController_shouldBeGenerated();
+    void remoteController_shouldHaveRightClassInfo();
+    void remoteController_shouldHaveSameMethods();
 
 signals:
     void sigWithUnsignedArg(unsigned foo);
@@ -672,6 +696,12 @@ void tst_Moc::initTestCase()
     QString binpath = QLibraryInfo::location(QLibraryInfo::BinariesPath);
     QString qmake = QString("%1/qmake").arg(binpath);
     m_moc = QString("%1/moc").arg(binpath);
+#ifdef Q_OS_WIN
+    m_moc += QLL(".exe");
+#endif
+    if ( ! QFile::exists(m_moc)) {
+        qFatal("Failed to find moc executable at: %s", qPrintable(m_moc));
+    }
 
     const QString testHeader = QFINDTESTDATA("backslash-newlines.h");
     QVERIFY(!testHeader.isEmpty());
@@ -723,7 +753,7 @@ void tst_Moc::oldStyleCasts()
 #if defined(Q_OS_LINUX) && defined(Q_CC_GNU) && !defined(QT_NO_PROCESS)
     QProcess proc;
     proc.start(m_moc, QStringList(m_sourceDirectory + QStringLiteral("/oldstyle-casts.h")));
-    QVERIFY(proc.waitForFinished());
+    QVERIFY2(proc.waitForFinished(), qPrintable(proc.errorString()));
     QCOMPARE(proc.exitCode(), 0);
     QByteArray mocOut = proc.readAllStandardOutput();
     QVERIFY(!mocOut.isEmpty());
@@ -733,7 +763,7 @@ void tst_Moc::oldStyleCasts()
     args << "-c" << "-x" << "c++" << "-Wold-style-cast" << "-I" << "."
          << "-I" << qtIncludePath << "-o" << "/dev/null" << "-fPIC" << "-";
     proc.start("gcc", args);
-    QVERIFY(proc.waitForStarted());
+    QVERIFY2(proc.waitForStarted(), qPrintable(proc.errorString()));
     proc.write(mocOut);
     proc.closeWriteChannel();
 
@@ -1240,7 +1270,9 @@ void tst_Moc::templateGtGt()
 
 void tst_Moc::defineMacroViaCmdline()
 {
-#if defined(Q_OS_LINUX) && defined(Q_CC_GNU) && !defined(QT_NO_PROCESS)
+#if !defined(QT_NO_PROCESS)
+    QSKIP_MACRO_EXPAND();
+
     QProcess proc;
 
     QStringList args;
@@ -1254,7 +1286,7 @@ void tst_Moc::defineMacroViaCmdline()
     QByteArray mocOut = proc.readAllStandardOutput();
     QVERIFY(!mocOut.isEmpty());
 #else
-    QSKIP("Only tested on linux/gcc");
+    QSKIP("Only tested if QProcess allowed.");
 #endif
 }
 
@@ -1922,6 +1954,7 @@ void tst_Moc::warnings_data()
         << QString()
         << QString("standard input:5: Error: Class declaration lacks Q_OBJECT macro.");
 
+#if QT_MOC_MACRO_EXPAND
     QTest::newRow("Invalid macro definition")
         << QByteArray("#define Foo(a, b, c) a b c #a #b #c a##b##c #d\n Foo(45, 42, 39);")
         << QStringList()
@@ -1942,6 +1975,7 @@ void tst_Moc::warnings_data()
         << 1
         << QString("IGNORE_ALL_STDOUT")
         << QString(":-1: Error: Unexpected character in macro argument list.");
+#endif // QT_MOC_MACRO_EXPAND
 
     QTest::newRow("QTBUG-54815: Crash on invalid input")
         << QByteArray("class M{(})F<{}d000000000000000#0")
@@ -1976,7 +2010,7 @@ void tst_Moc::warnings()
     proc.setProcessEnvironment(env);
 
     proc.start(m_moc, args);
-    QVERIFY(proc.waitForStarted());
+    QVERIFY2(proc.waitForStarted(), qPrintable(proc.errorString()));
 
     QCOMPARE(proc.write(input), qint64(input.size()));
 
@@ -1984,13 +2018,16 @@ void tst_Moc::warnings()
 
     QVERIFY(proc.waitForFinished());
 
-    QCOMPARE(proc.exitCode(), exitCode);
-    QCOMPARE(proc.exitStatus(), QProcess::NormalExit);
-
     // magic value "IGNORE_ALL_STDOUT" ignores stdout
-    if (expectedStdOut != "IGNORE_ALL_STDOUT")
-        QCOMPARE(QString::fromLocal8Bit(proc.readAllStandardOutput()).trimmed(), expectedStdOut);
-    QCOMPARE(QString::fromLocal8Bit(proc.readAllStandardError()).trimmed().remove('\r'), expectedStdErr);
+    if (expectedStdOut != "IGNORE_ALL_STDOUT") {
+        const QString &output = QString::fromLocal8Bit(proc.readAllStandardOutput()).trimmed();
+        qExpect(output)->toStartWith(expectedStdOut);
+    }
+    QString errorOutput = QString::fromLocal8Bit(proc.readAllStandardError()).trimmed().remove('\r');
+    qExpect(errorOutput)->toStartWith(expectedStdErr);
+
+    qExpect(proc.exitCode())->toEqual(exitCode);
+    qExpect(proc.exitStatus())->toEqual(QProcess::NormalExit);
 }
 
 class tst_Moc::PrivateClass : public QObject {
@@ -3124,6 +3161,7 @@ void tst_Moc::autoSignalSpyMetaTypeRegistration()
     QCOMPARE(QMetaType::type("CustomObject12"), qMetaTypeId<CustomObject12>());
 }
 
+#if QT_MOC_MACRO_EXPAND
 void tst_Moc::parseDefines()
 {
     const QMetaObject *mo = &PD_NAMESPACE::PD_CLASSNAME::staticMetaObject;
@@ -3199,6 +3237,7 @@ void tst_Moc::parseDefines()
     index = mo->indexOfSignal("cmdlineSignal(QMap<int,int>)");
     QVERIFY(index != -1);
 }
+#endif // QT_MOC_MACRO_EXPAND
 
 void tst_Moc::preprocessorOnly()
 {
@@ -3329,6 +3368,7 @@ void tst_Moc::relatedMetaObjectsInGadget()
     QCOMPARE(testMo->d.relatedMetaObjects[0], relatedMo);
 }
 
+#if QT_MOC_MACRO_EXPAND
 void tst_Moc::relatedMetaObjectsNameConflict_data()
 {
     typedef QVector<const QMetaObject*> QMetaObjects;
@@ -3381,6 +3421,7 @@ void tst_Moc::relatedMetaObjectsNameConflict()
     // check if no additional metaobjects ara specified
     QCOMPARE(dependency.size(), relatedMetaObjects.size());
 }
+#endif // QT_MOC_MACRO_EXPAND
 
 class StringLiteralsInMacroExtension: public QObject
 {
@@ -3402,6 +3443,8 @@ class StringLiteralsInMacroExtension: public QObject
 
 void tst_Moc::strignLiteralsInMacroExtension()
 {
+    QSKIP_MACRO_EXPAND();
+
     const QMetaObject *mobj = &StringLiteralsInMacroExtension::staticMetaObject;
     QCOMPARE(mobj->classInfoCount(), 5);
 
@@ -3489,6 +3532,8 @@ void tst_Moc::unnamedNamespaceObjectsAndGadgets()
 
 void tst_Moc::veryLongStringData()
 {
+    QSKIP_MACRO_EXPAND();
+
     const QMetaObject *mobj = &VeryLongStringData::staticMetaObject;
     QCOMPARE(mobj->classInfoCount(), 4);
 
@@ -3540,6 +3585,95 @@ void tst_Moc::optionsFileError()
     QVERIFY(err.contains("moc: "));
     QVERIFY(!err.contains("QCommandLineParser"));
 #endif
+}
+
+void tst_Moc::registerMethodArgumentMetaType()
+{
+    QScopedPointer<SmartPointerArgReg> obj(new SmartPointerArgReg);
+    const QMetaObject * const mo = obj->metaObject();
+    const int methodCount = mo->methodCount();
+    for (int iFunc = mo->methodOffset(); iFunc < methodCount; ++iFunc) {
+        const QMetaMethod &method = mo->method(iFunc);
+        const int argCount = method.parameterCount();
+        for (int iArg = 0; iArg < argCount; ++iArg) {
+            QVariant::Type type = QVariant::Type( method.parameterType(iArg) );
+            qExpect(type)->toBeGreaterOrEqual(QVariant::UserType)
+                ->withContext([iArg, iFunc, method] {
+                    return QString::asprintf(
+                        "For iArg-%d of Method %d: %s",
+                        iArg, iFunc, method.methodSignature().constData());
+                });
+        }
+    }
+}
+
+//Q_DECLARE_METATYPE(CXX11Enums::NormalEnum)
+//Q_DECLARE_METATYPE(CXX11Enums::EnumClass)
+//Q_DECLARE_METATYPE(CXX11Enums::TypedEnumClass)
+//Q_DECLARE_METATYPE(CXX11Enums::TypedEnum)
+//Q_DECLARE_METATYPE(CStyleEnums::Baz)
+Q_DECLARE_METATYPE(CStyleEnums::Baz2)
+
+void tst_Moc::registerStreamOperatorsForEnum_data()
+{
+    QTest::addColumn<int>("metaId");
+    QTest::newRow("Normal enum") << qRegisterMetaType< CXX11Enums::NormalEnum >();
+    QTest::newRow("enum class") << qRegisterMetaType< CXX11Enums::EnumClass >();
+    QTest::newRow("Typed enum class") << qRegisterMetaType< CXX11Enums::TypedEnumClass >();
+    QTest::newRow("Typed enum") << qRegisterMetaType< CXX11Enums::TypedEnum >();
+    QTest::newRow("C-style enum") << qRegisterMetaType< CStyleEnums::Baz >();
+    QTest::newRow("C-style Q_ENUMS") << qRegisterMetaType< CStyleEnums::Baz2 >();
+}
+
+void tst_Moc::registerStreamOperatorsForEnum()
+{
+    // Dummy.
+    const QFETCH(int, metaId);
+    QMetaType type(metaId);
+    // With already being detected as enum (that's not actual test).
+    qExpect(type.isEnum())->toBeTruthy()
+        ->withContext([&] {
+            return QString::number(int(type.flags()), 16);
+        });
+
+    // Actual test.
+    qExpect(QMetaType::hasRegisteredStreamOperators(metaId))->toBeTruthy();
+}
+
+void tst_Moc::remoteController_shouldBeGenerated()
+{
+    // The header is already included (else would check).
+    QString controllerSource = m_sourceDirectory + QLL("/backend-service_remote.cpp");
+    QVERIFY2(QFile::exists(controllerSource), qPrintable(controllerSource));
+}
+
+using namespace my_lib;
+
+void tst_Moc::remoteController_shouldHaveRightClassInfo()
+{
+    QObject *obj = new BackendServiceRemote();
+    QT_FINALLY([&] {
+        delete obj;
+    });
+    QVERIFY(QMetaRemote::hasMacro(obj));
+    QVERIFY(QMetaRemote::hasMacro(&BackendServiceRemote::staticMetaObject));
+    qExpect(obj->metaObject())->toBe(&BackendServiceRemote::staticMetaObject);
+    qExpect(&BackendServiceRemote::staticMetaObject)->Not->toBe(&BackendService::staticMetaObject);
+}
+
+void tst_Moc::remoteController_shouldHaveSameMethods()
+{
+    const QMetaObject *remote = &BackendService::staticMetaObject;
+    const QMetaObject *controller = &BackendServiceRemote::staticMetaObject;
+    const int count = qMin(controller->methodCount(), remote->methodCount());
+    for (int i = 0; i < count; ++i) {
+        QMetaMethod remoteMethod = remote->method(i);
+        QMetaMethod controllerMethod = controller->method(i);
+        qExpect(QString::fromLocal8Bit(controllerMethod.methodSignature()))
+            ->toEqual(QString::fromLocal8Bit(remoteMethod.methodSignature()));
+        qExpect(controllerMethod.access())->toEqual(remoteMethod.access());
+    }
+    qExpect(controller->methodCount())->toEqual(remote->methodCount());
 }
 
 QTEST_MAIN(tst_Moc)

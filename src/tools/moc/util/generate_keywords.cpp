@@ -218,7 +218,11 @@ static const Keyword keywords[] = {
     { "goto", "GOTO" },
     { "return", "RETURN" },
     { "Q_OBJECT", "Q_OBJECT_TOKEN" },
+    { "Q_REMOTE", "Q_REMOTE_TOKEN" },
     { "Q_GADGET", "Q_GADGET_TOKEN" },
+    { "Q_DEFAULT", "Q_DEFAULT_TOKEN" },
+    { "Q_REMOTE_INCLUDE", "Q_REMOTE_INCLUDE_TOKEN" },
+    { "Q_REMOTE_FORWARD", "Q_REMOTE_FORWARD_TOKEN" },
     { "Q_PROPERTY", "Q_PROPERTY_TOKEN" },
     { "Q_PLUGIN_METADATA", "Q_PLUGIN_METADATA_TOKEN" },
     { "Q_ENUMS", "Q_ENUMS_TOKEN" },
@@ -367,9 +371,11 @@ void makeTable(const Keyword keywords[])
         newState(states, keywords[i].token, keywords[i].lexem, pre);
 
     // some floats
-    for (c = '0'; c <= '9'; ++c)
+    for (c = '0'; c <= '9'; ++c) {
+        QByteArray lexem = QByteArray(".") + char(c);
         newState(states, pre?"PP_FLOATING_LITERAL":"FLOATING_LITERAL",
-                 QByteArray(".") + char(c), pre);
+                 lexem.constBegin(), pre);
+    }
 
     // simplify table with default transitions
     int transindex = -1;
@@ -455,11 +461,15 @@ void makeTable(const Keyword keywords[])
 
 int main(int argc, char **)
 {
-    printf("// auto generated\n"
+    printf("// auto generated with \"moc/util/generate_keywords.pro\"\n"
            "// DO NOT EDIT.\n\n");
-    if ( argc > 1 )
+    if ( argc > 1 ) {
+        // Generate "pp_keyword_trans" by any command-line argument.
         makeTable(pp_keywords);
-    else
+    } else {
+        // But generates "keyword_trans" by default.
         makeTable(keywords);
+    }
+
     return 0;
 }

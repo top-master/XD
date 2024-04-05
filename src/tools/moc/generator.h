@@ -1,5 +1,6 @@
 /****************************************************************************
 **
+** Copyright (C) 2015 The XD Company Ltd.
 ** Copyright (C) 2015 The Qt Company Ltd.
 ** Contact: http://www.qt.io/licensing/
 **
@@ -40,20 +41,25 @@ QT_BEGIN_NAMESPACE
 
 class Generator
 {
+    const Moc &parent;
     FILE *out;
     ClassDef *cdef;
     QVector<uint> meta_data;
 public:
-    Generator(ClassDef *classDef, const QList<QByteArray> &metaTypes, const QHash<QByteArray, QByteArray> &knownQObjectClasses, const QHash<QByteArray, QByteArray> &knownGadgets, FILE *outfile = 0);
+    Generator(const Moc &parent, ClassDef *classDef, const QList<QByteArray> &metaTypes, FILE *outfile = 0);
     void generateCode();
+
+    /// Creates header-file for Q_REMOTE_CONTROLLER class.
+    void remote_generateClass();
+    void remote_generateMethod(const FunctionDef *def, int index);
 private:
     bool registerableMetaType(const QByteArray &propertyType);
     void registerClassInfoStrings();
     void generateClassInfos();
-    void registerFunctionStrings(const QList<FunctionDef> &list);
-    void generateFunctions(const QList<FunctionDef> &list, const char *functype, int type, int &paramsIndex);
-    void generateFunctionRevisions(const QList<FunctionDef>& list, const char *functype);
-    void generateFunctionParameters(const QList<FunctionDef> &list, const char *functype);
+    void registerFunctionStrings(const FunctionList &list);
+    void generateFunctions(const FunctionList &list, const char *functype, int type, int &paramsIndex);
+    void generateFunctionRevisions(const FunctionList& list, const char *functype);
+    void generateFunctionParameters(const FunctionList &list, const char *functype);
     void generateTypeInfo(const QByteArray &typeName, bool allowEmptyName = false);
     void registerEnumStrings();
     void generateEnums(int index);
@@ -62,17 +68,23 @@ private:
     void generateMetacall();
     void generateStaticMetacall();
     void generateSignal(FunctionDef *def, int index);
+
+    void generateNamespace(bool begin);
+
+    void remote_generateSlot(FunctionDef *def, int index);
+
+    // MARK: helpers used by binary QMetaObject generator.
     void generatePluginMetaData();
     QMultiMap<QByteArray, int> automaticPropertyMetaTypesHelper();
-    QMap<int, QMultiMap<QByteArray, int> > methodsWithAutomaticTypesHelper(const QList<FunctionDef> &methodList);
+    QMap<int, QMultiMap<QByteArray, int> > methodsWithAutomaticTypesHelper(const FunctionList &methodList);
+
+    // MARK: State info, like strings registered.
 
     void strreg(const QByteArray &); // registers a string
     int stridx(const QByteArray &); // returns a string's id
     QList<QByteArray> strings;
     QByteArray purestSuperClass;
     QList<QByteArray> metaTypes;
-    QHash<QByteArray, QByteArray> knownQObjectClasses;
-    QHash<QByteArray, QByteArray> knownGadgets;
 };
 
 QT_END_NAMESPACE

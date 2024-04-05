@@ -1,5 +1,6 @@
 /****************************************************************************
 **
+** Copyright (C) 2015 The XD Company Ltd.
 ** Copyright (C) 2015 The Qt Company Ltd.
 ** Contact: http://www.qt.io/licensing/
 **
@@ -34,7 +35,9 @@
 #ifndef UTILS_H
 #define UTILS_H
 
+#include "udebug.h"
 #include <QtCore/qglobal.h>
+#include <QtCore/qdir.h>
 
 QT_BEGIN_NAMESPACE
 
@@ -110,6 +113,42 @@ inline const char *skipQuote(const char *data)
     return data;
 }
 
+
+#define ErrorFormatStringLinux "%s:%d: "
+
+#ifdef Q_CC_MSVC
+#define ErrorFormatString "%s(%d): "
+#else
+#define ErrorFormatString "%s:%d: "
+#endif
+
+#define ErrorFormatStringByOption(x) \
+    (Parser::forceLinuxFormatLogs \
+        ? (ErrorFormatStringLinux x) \
+        : (ErrorFormatString x))
+
+
+#ifdef DEBUG_MOC
+#   define moc_trace(x) xd(x)
+#   define DEBUG_MOC_SCOAP(x) x
+#else
+#   define moc_trace(x) do { } while(0)
+#   define DEBUG_MOC_SCOAP(x)
+#endif
+
+QString moc_mark_impl();
+#   define moc_mark(x) xd(x << moc_mark_impl())
+
+void errorArgv(const QByteArray &msg = "Invalid argument");
+void errorAt(const char *file, const char *msg = 0, int line = 0);
+
+QByteArray linkToParent(const QByteArray &targetFile, const QByteArray &referingFile);
+QByteArray linkToParent(const QString &targetFile, const QString &referingFile);
+inline QByteArray linkToParent(const char *targetFile, const char *referingFile)
+    { return linkToParent(QByteArray(targetFile), QByteArray(referingFile)); }
+
+QByteArray linkFromDir(const char *target, const QDir &dir = QDir::current());
+QByteArray linkFromDir(const char *target, const char *currentDir);
 QT_END_NAMESPACE
 
 #endif // UTILS_H

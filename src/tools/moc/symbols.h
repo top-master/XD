@@ -1,5 +1,6 @@
 /****************************************************************************
 **
+** Copyright (C) 2015 The XD Company Ltd.
 ** Copyright (C) 2015 The Qt Company Ltd.
 ** Copyright (C) 2013 Olivier Goffart <ogoffart@woboq.com>
 ** Contact: http://www.qt.io/licensing/
@@ -36,11 +37,13 @@
 #define SYMBOLS_H
 
 #include "token.h"
+#include "outputrevision.h"
+#include "udebug.h"
+
 #include <qstring.h>
 #include <qhash.h>
 #include <qvector.h>
 #include <qstack.h>
-#include <qdebug.h>
 
 QT_BEGIN_NAMESPACE
 
@@ -66,7 +69,22 @@ struct SubArray
 
 inline uint qHash(const SubArray &key)
 {
-    return qHash(QLatin1String(key.array.constData() + key.from, key.len));
+    if (mocOutputRevision > 63) {
+        return qHash(QLatin1String(key.array.constData() + key.from, key.len));
+    }
+
+    const uchar *p = reinterpret_cast<const uchar *>(key.array.data() + key.from);
+    int n = key.len;
+    uint h = 0;
+    uint g;
+
+    while (n--) {
+        h = (h << 4) + *p++;
+        if ((g = (h & 0xf0000000)) != 0)
+            h ^= g >> 23;
+        h &= ~g;
+    }
+    return h;
 }
 
 
@@ -100,7 +118,7 @@ struct Symbol
     inline operator QByteArray() const { return lex; }
     QByteArray lex;
 
-#else
+#else // USE_LEXEM_STORE
 
     inline Symbol() : lineNum(-1),token(NOTOKEN), from(0),len(-1) {}
     inline Symbol(int lineNum, Token token):
@@ -113,6 +131,8 @@ struct Symbol
     Token token;
     inline QByteArray lexem() const { return lex.mid(from, len); }
     inline QByteArray unquotedLexem() const { return lex.mid(from+1, len-2); }
+    inline QByteArray unquotedLexemIfAny() const { return lex.at(from) == '"' ? unquotedLexem() : lexem(); }
+    inline operator QByteArray() const { return lex.mid(from, len); }
     inline operator SubArray() const { return SubArray(lex, from, len); }
     bool operator==(const Symbol& o) const
     {
@@ -121,7 +141,7 @@ struct Symbol
     QByteArray lex;
     int from, len;
 
-#endif
+#endif // USE_LEXEM_STORE
 };
 Q_DECLARE_TYPEINFO(Symbol, Q_MOVABLE_TYPE);
 

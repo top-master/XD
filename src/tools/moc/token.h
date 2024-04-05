@@ -1,5 +1,6 @@
 /****************************************************************************
 **
+** Copyright (C) 2015 The XD Company Ltd.
 ** Copyright (C) 2015 The Qt Company Ltd.
 ** Contact: http://www.qt.io/licensing/
 **
@@ -31,10 +32,12 @@
 **
 ****************************************************************************/
 
-#ifndef TOKEN_H
+#ifndef QT_MOC_TOKEN_H
+#define QT_MOC_TOKEN_H
+// Legacy.
 #define TOKEN_H
 
-#include <QtCore/qglobal.h>
+#include "moc-config.h"
 
 QT_BEGIN_NAMESPACE
 
@@ -158,8 +161,12 @@ QT_BEGIN_NAMESPACE
     F(SLOTS) \
     F(RETURN) \
     F(Q_OBJECT_TOKEN) \
+    F(Q_REMOTE_TOKEN) \
+    F(Q_REMOTE_INCLUDE_TOKEN) \
+    F(Q_REMOTE_FORWARD_TOKEN) \
     F(Q_GADGET_TOKEN) \
     F(Q_PROPERTY_TOKEN) \
+    F(Q_DEFAULT_TOKEN) \
     F(Q_PLUGIN_METADATA_TOKEN) \
     F(Q_ENUMS_TOKEN) \
     F(Q_ENUM_TOKEN) \
@@ -212,7 +219,7 @@ QT_BEGIN_NAMESPACE
     F(PP_MOC_TRUE) \
     F(PP_MOC_FALSE)
 
-
+#ifndef MOC_NO_TOKEN
 enum Token {
 
 #define CREATE_ENUM_VALUE(Name) Name,
@@ -220,49 +227,55 @@ enum Token {
 #undef CREATE_ENUM_VALUE
 
     // aliases
-    PP_AND = AND,
-    PP_ANDAND = ANDAND,
-    PP_BACKSLASH = BACKSLASH,
-    PP_CHARACTER = CHARACTER,
-    PP_CHARACTER_LITERAL = CHARACTER_LITERAL,
-    PP_COLON = COLON,
-    PP_COMMA = COMMA,
-    PP_CPP_COMMENT = CPP_COMMENT,
-    PP_C_COMMENT = C_COMMENT,
-    PP_DIGIT = DIGIT,
-    PP_EQEQ = EQEQ,
-    PP_FLOATING_LITERAL = FLOATING_LITERAL,
-    PP_GE = GE,
-    PP_GTGT = GTGT,
-    PP_HAT = HAT,
+    PP_NOTOKEN = NOTOKEN,
     PP_IDENTIFIER = IDENTIFIER,
     PP_INTEGER_LITERAL = INTEGER_LITERAL,
-    PP_LANGLE = LANGLE,
-    PP_LE = LE,
-    PP_LPAREN = LPAREN,
-    PP_LTLT = LTLT,
-    PP_MINUS = MINUS,
-    PP_NE = NE,
-    PP_NEWLINE = NEWLINE,
-    PP_NOTOKEN = NOTOKEN,
-    PP_NOT = NOT,
-    PP_OR = OR,
-    PP_OROR = OROR,
-    PP_PERCENT = PERCENT,
-    PP_PLUS = PLUS,
-    PP_QUESTION = QUESTION,
-    PP_QUOTE = QUOTE,
-    PP_RANGLE = RANGLE,
-    PP_RPAREN = RPAREN,
-    PP_SINGLEQUOTE = SINGLEQUOTE,
-    PP_SLASH = SLASH,
-    PP_STAR = STAR,
+    PP_FLOATING_LITERAL = FLOATING_LITERAL,
+    PP_CHARACTER_LITERAL = CHARACTER_LITERAL,
     PP_STRING_LITERAL = STRING_LITERAL,
+    PP_LANGLE = LANGLE,
+    PP_RANGLE = RANGLE,
+    PP_LPAREN = LPAREN,
+    PP_RPAREN = RPAREN,
+    PP_COMMA = COMMA,
+    PP_PLUS = PLUS,
+    PP_MINUS = MINUS,
+    PP_STAR = STAR,
+    PP_SLASH = SLASH,
+    PP_PERCENT = PERCENT,
+    PP_HAT = HAT,
+    PP_AND = AND,
+    PP_OR = OR,
     PP_TILDE = TILDE,
+    PP_NOT = NOT,
+    PP_LTLT = LTLT,
+    PP_GTGT = GTGT,
+    PP_EQEQ = EQEQ,
+    PP_NE = NE,
+    PP_LE = LE,
+    PP_GE = GE,
+    PP_ANDAND = ANDAND,
+    PP_OROR = OROR,
+    PP_QUESTION = QUESTION,
+    PP_COLON = COLON,
+    PP_QUOTE = QUOTE,
+    PP_SINGLEQUOTE = SINGLEQUOTE,
+    PP_DIGIT = DIGIT,
+    PP_CHARACTER = CHARACTER,
     PP_WHITESPACE = WHITESPACE,
+    PP_NEWLINE = NEWLINE,
+    PP_CPP_COMMENT = CPP_COMMENT,
+    PP_C_COMMENT = C_COMMENT,
+    PP_BACKSLASH = BACKSLASH,
     Q_META_TOKEN_BEGIN = Q_OBJECT_TOKEN,
     Q_META_TOKEN_END = SPECIAL_TREATMENT_MARK
 };
+
+#else
+enum Token {
+    NOTOKEN
+};
+#endif
 
 // for debugging only
 #if defined(DEBUG_MOC)
@@ -273,4 +286,4 @@ typedef Token PP_Token;
 
 QT_END_NAMESPACE
 
-#endif // TOKEN_H
+#endif // QT_MOC_TOKEN_H
