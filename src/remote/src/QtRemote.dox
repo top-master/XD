@@ -1,0 +1,6 @@
+/**
+ * @file QtRemote
+ * @brief Public all-in-one header file, containing all required classes.
+ *
+ * Include this header file to automatically include most header files.
+ */

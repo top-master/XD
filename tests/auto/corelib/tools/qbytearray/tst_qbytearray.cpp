@@ -117,6 +117,7 @@ private slots:
     void appendAfterFromRawData();
     void toFromHex_data();
     void toFromHex();
+    void toHexDataStream();
     void toFromPercentEncoding();
     void fromPercentEncoding_data();
     void fromPercentEncoding();
@@ -1470,6 +1471,12 @@ void tst_QByteArray::toFromHex()
     }
 
     QCOMPARE(QByteArray::fromHex(hex_alt1), str);
+}
+
+void tst_QByteArray::toHexDataStream()
+{
+    QCOMPARE(QByteArray("\x34\x56\x78\x99\x12\x34\x56\x78\x99\x12\x34\x56\x78\x99\x12\x34\x56\x78").toHex(Qt::HexDataStream),
+             QByteArray("00000012345678991234567899123456789912345678"));
 }
 
 void tst_QByteArray::toFromPercentEncoding()

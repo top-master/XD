@@ -1655,6 +1655,17 @@ public:
     };
     Q_DECLARE_FLAGS(MouseEventFlags, MouseEventFlag)
 
+    enum HexFlag {
+        HexDefault = 0x00,
+
+        /// If supported by encoder, resulting Hex-string will be upper-case.
+        HexUpperCase = 0x11,
+
+        /// If this flag is set and is supported by encoder, then the
+        /// resulting Hex-string includes even bytes only written to QDataStram.
+        HexDataStream = 0x22
+    };
+
     enum LogMode {
         LogSilent = 0x00,
         LogInfo = 0x11,
@@ -1749,6 +1760,7 @@ public:
     QT_Q_ENUM(MouseEventSource)
     QT_Q_FLAG(MouseEventFlag)
     QT_Q_ENUM(TabFocusBehavior)
+    QT_Q_FLAG(HexFlag)
     QT_Q_ENUM(LogMode)
 #endif // Q_DOC
 

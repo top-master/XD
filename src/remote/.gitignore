@@ -1,0 +1,16 @@
+
+# Personal.
+#
+todo/
+
+# Compile.
+#
+/build/
+*_remote.cpp
+*_remote.h
+
+# IDE.
+#
+*.user
+*.pro.user*
+*.autosave
