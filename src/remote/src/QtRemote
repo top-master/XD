@@ -1,0 +1,12 @@
+#ifndef QT_REMOTE_H
+#define QT_REMOTE_H
+
+#include "qremote-config.h"
+
+#include "qremoteobject.h"
+
+#include "qremote-stream-codec.h"
+
+#include "qremoteuser.h"
+
+#endif // QT_REMOTE_H

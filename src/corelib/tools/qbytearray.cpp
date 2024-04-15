@@ -44,6 +44,7 @@
 #include "qbytearray_p.h"
 #include <qdatastream.h>
 #include <qmath.h>
+#include <QtCore/qendian.h>
 
 #ifndef QT_NO_COMPRESS
 #include <zconf.h>
@@ -4203,15 +4204,44 @@ QByteArray QByteArray::fromHex(const QByteArray &hexEncoded)
 
     \sa fromHex()
 */
-QByteArray QByteArray::toHex() const
+QByteArray QByteArray::toHex(int flags) const
 {
-    QByteArray hex(d->size * 2, Qt::Uninitialized);
+    bool includeHeader = (flags & int(Qt::HexDataStream)) != 0;
+
+    // Reserves memory for buffers.
+    enum { SizeOfInt32 = 4 };
+    QByteArray hex(2 * (d->size + (includeHeader ? SizeOfInt32 : 0)), Qt::Uninitialized);
     char *hexData = hex.data();
-    const uchar *data = (const uchar *)d->data();
-    for (int i = 0; i < d->size; ++i) {
+    uchar headerData[SizeOfInt32];
+    Q_STATIC_ASSERT(int(sizeof(headerData) / sizeof(headerData[0])) == SizeOfInt32);
+    Q_STATIC_ASSERT(int(sizeof(qint32)) == SizeOfInt32);
+
+    // Configures loop scope.
+    const uchar *data;
+    int dataSize;
+    if (includeHeader) {
+        qToBigEndian<qint32>(qint32(d->size), headerData);
+        data = headerData;
+        dataSize = SizeOfInt32;
+    } else {
+posEncodeData:
+        data = (const uchar *)d->data();
+        dataSize = d->size;
+    }
+
+    // Actual loop.
+    for (int i = 0; i < dataSize; ++i) {
         hexData[i*2] = QtMiscUtils::toHexLower(data[i] >> 4);
         hexData[i*2+1] = QtMiscUtils::toHexLower(data[i] & 0xf);
     }
+
+    // Repeat for data if was handling header.
+    if (includeHeader) {
+        includeHeader = false;
+        hexData += SizeOfInt32 * 2;
+        goto posEncodeData;
+    }
+
     return hex;
 }
 

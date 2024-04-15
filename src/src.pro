@@ -211,7 +211,7 @@ contains(QT_CONFIG, concurrent):SUBDIRS += src_concurrent
 ## TODO: add view for listing and/or managing Remote-objects,
 ## but for head-less Ubuntu reasons, may add a separate module,
 ## however, for now set after `SUBDIRS += src_gui`.
-#SUBDIRS += src_remote
+SUBDIRS += src_remote
 
 # Should be after GUI.
 SUBDIRS += src_plugins

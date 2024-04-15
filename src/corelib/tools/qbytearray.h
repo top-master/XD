@@ -369,7 +369,8 @@ public:
     double toDouble(bool *ok = Q_NULLPTR) const;
     QByteArray toBase64(Base64Options options) const;
     QByteArray toBase64() const; // ### Qt6 merge with previous
-    QByteArray toHex() const;
+    QByteArray toHex(int flags) const;
+    Q_ALWAYS_INLINE QByteArray toHex() const { return this->toHex(Qt::HexDefault); }
     QByteArray toPercentEncoding(const QByteArray &exclude = QByteArray(),
                                  const QByteArray &include = QByteArray(),
                                  char percent = '%') const;
