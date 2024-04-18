@@ -1,5 +1,6 @@
 /****************************************************************************
 **
+** Copyright (C) 2015 The XD Company Ltd.
 ** Copyright (C) 2013 Samuel Gaist <samuel.gaist@edeltech.ch>
 ** Copyright (C) 2015 The Qt Company Ltd.
 ** Contact: http://www.qt.io/licensing/
@@ -486,6 +487,23 @@ static void CALLBACK_CALL_TYPE qt_png_warning(png_structp /*png_ptr*/, png_const
     qWarning("libpng warning: %s", message);
 }
 
+// TRACE/gui/libpng: be more verbose for image-read warnings,
+// because unlike writting, they may happen for program's own resources.
+static void CALLBACK_CALL_TYPE qt_png_warning_read(png_structp png_ptr, png_const_charp message)
+{
+    QPngHandlerPrivate *handler = (QPngHandlerPrivate *) png_get_io_ptr(png_ptr);
+    QIODevice *io = handler->q->device();
+    QFile *file = qobject_cast<QFile *>(io);
+    if (file) {
+        qWarning("libpng warning: %s {"
+                 "\n  while reading file: \"%s\""
+                 "\n}",
+                 message, qPrintable(file->fileName()));
+    } else {
+        qWarning("libpng warning: %s", message);
+    }
+}
+
 }
 
 
@@ -523,7 +541,7 @@ bool Q_INTERNAL_WIN_NO_THROW QPngHandlerPrivate::readPngHeader()
     if (!png_ptr)
         return false;
 
-    png_set_error_fn(png_ptr, 0, 0, qt_png_warning);
+    png_set_error_fn(png_ptr, 0, 0, qt_png_warning_read);
 
 #if defined(PNG_SET_OPTION_SUPPORTED) && defined(PNG_MAXIMUM_INFLATE_WINDOW)
     // Trade off a little bit of memory for better compatibility with existing images
