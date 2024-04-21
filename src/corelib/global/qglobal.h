@@ -53,6 +53,7 @@
 #endif /* __cplusplus */
 #ifndef __ASSEMBLER__
 #  include <stddef.h>
+#  include <QtCore/qpolyfill-int.h>
 #endif
 
 
@@ -572,6 +573,7 @@ template <>    struct QIntegerForSize<16> { __extension__ typedef unsigned __int
 template <class T> struct QIntegerForSizeof: QIntegerForSize<sizeof(T)> { };
 typedef QIntegerForSize<Q_PROCESSOR_WORDSIZE>::Signed qregisterint;
 typedef QIntegerForSize<Q_PROCESSOR_WORDSIZE>::Unsigned qregisteruint;
+/** @note For C-language, this may be defined in `<QtCore/qpolyfill-int.h>` header (if supported). */
 typedef QIntegerForSizeof<void*>::Unsigned quintptr;
 typedef QIntegerForSizeof<void*>::Signed qptrdiff;
 typedef qptrdiff qintptr;
@@ -684,6 +686,9 @@ template <typename T>
 Q_DECL_CONSTEXPR inline bool qNot(const T &a) { return !a; }
 template <typename T1, typename T2>
 Q_DECL_CONSTEXPR inline bool qNotEqual(const T1 &a, const T2 &b) { return a != b; }
+
+Q_DECL_CONSTEXPR Q_ALWAYS_INLINE quintptr qPtrDistance(const void *a, const void *b)
+{ return quintptr((a < b) ? (reinterpret_cast<quintptr>(b) - reinterpret_cast<quintptr>(a)) : (reinterpret_cast<quintptr>(a) - reinterpret_cast<quintptr>(b))); }
 
 #ifndef Q_FORWARD_DECLARE_OBJC_CLASS
 #  ifdef __OBJC__
@@ -1430,6 +1435,7 @@ Q_DECL_CONSTEXPR Q_ALWAYS_INLINE QtPrivate::QFinally<Func1 > qScopeGuard(Func1 &
 {
     return QtPrivate::QFinally<Func1 >(qMove(f));
 }
+
 #endif /* __cplusplus end */
 
 /// Combines #Q_PTR_ADD_OFFSET with #Q_PTR_CAST.
@@ -1440,8 +1446,6 @@ Q_DECL_CONSTEXPR Q_ALWAYS_INLINE QtPrivate::QFinally<Func1 > qScopeGuard(Func1 &
 #define Q_PTR_ALIGN_CAST(Pointer, Align, TYPE) Q_PTR_CAST(TYPE, Q_PTR_ALIGN(Pointer, Align))
 
 #define Q_PTR_REBASE_CAST(Pointer, OldBase, NewBase, TYPE) Q_PTR_CAST(TYPE, Q_PTR_REBASE(Pointer, OldBase, NewBase))
-
-#define Q_PTR_DISTANCE(Pointer, OtherPointer) Q_PTR_CAST(quintptr, Q_PTR_SUB_OFFSET(Q_MAX(Pointer, OtherPointer), Q_MIN(Pointer, OtherPointer)))
 
 #define Q_FIELDER_OFFSET(TYPE, FIELD) Q_PTR_SUB_OFFSET(0u, Q_FIELD_OFFSET(TYPE, FIELD))
 
@@ -1459,9 +1463,11 @@ Q_DECL_CONSTEXPR Q_ALWAYS_INLINE QtPrivate::QFinally<Func1 > qScopeGuard(Func1 &
 /// Same as "Q_PTR_CAST(TYPE, Q_PTR_ADD_OFFSET(Pointer, Offset))" combo.
 #  define Q_PTR_TRANSLATE(Pointer, Offset, TYPE) (reinterpret_cast<TYPE>(reinterpret_cast<void *>(reinterpret_cast<quintptr>(Pointer) + quintptr(Offset))))
 
+#  define Q_PTR_DISTANCE QT_PREPEND_NAMESPACE(qPtrDistance)
+
 // Calculate the byte offset of a field in a structure of type "TYPE".
-#  define Q_FIELD_OFFSET(TYPE, FIELD) (reinterpret_cast<void *>(reinterpret_cast<qintptr>(&(Q_PTR_CAST(TYPE *, 1u)->FIELD)) - 1u))
-#  define Q_FIELD_PTR(CLASS_PTR, FIELD)  (reinterpret_cast<void *>(reinterpret_cast<qintptr>(&((CLASS_PTR)->FIELD))))
+#  define Q_FIELD_OFFSET(TYPE, FIELD) (reinterpret_cast<void *>(reinterpret_cast<quintptr>(&(Q_PTR_CAST(TYPE *, 1u)->FIELD)) - 1u))
+#  define Q_FIELD_PTR(CLASS_PTR, FIELD)  (reinterpret_cast<void *>(reinterpret_cast<quintptr>(&((CLASS_PTR)->FIELD))))
 
 /// @def Q_FIELDER(TYPE, FIELD, FIELD_PTR)
 /// @brief Gets pointer of field holder from field's pointer.
@@ -1489,22 +1495,24 @@ Q_DECL_CONSTEXPR Q_ALWAYS_INLINE QtPrivate::QFinally<Func1 > qScopeGuard(Func1 &
 #  define Q_FIELD_SIZE(TYPE, FIELD) (sizeof((static_cast<TYPE *>(0))->FIELD))
 #else /* __cplusplus */
 /* Memory */
-#  define Q_PTR_ADD_OFFSET(Pointer, Offset) ((void *)((quintptr)(Pointer) + (quintptr)(Offset)))
-#  define Q_PTR_SUB_OFFSET(Pointer, Offset) ((void *)((quintptr)(Pointer) - (quintptr)(Offset)))
-#  define Q_PTR_ALIGN(Pointer, Align) ((void *)(((quintptr)(Pointer) + (Align) - 1) & ~((Align) - 1)))
+#  define Q_PTR_ADD_OFFSET(Pointer, Offset) ((void *)((uintptr_t)(Pointer) + (uintptr_t)(Offset)))
+#  define Q_PTR_SUB_OFFSET(Pointer, Offset) ((void *)((uintptr_t)(Pointer) - (uintptr_t)(Offset)))
+#  define Q_PTR_ALIGN(Pointer, Align) ((void *)(((uintptr_t)(Pointer) + (Align) - 1) & ~((Align) - 1)))
 #  define Q_PTR_REBASE(Pointer, OldBase, NewBase) \
-    ((void *)((quintptr)(Pointer) - (quintptr)(OldBase) + (quintptr)(NewBase)))
-#  define Q_PTR_CAST(TYPE, Pointer) ((TYPE)((void *)((quintptr)(Pointer))))
+    ((void *)((uintptr_t)(Pointer) - (uintptr_t)(OldBase) + (uintptr_t)(NewBase)))
+#  define Q_PTR_CAST(TYPE, Pointer) ((TYPE)((void *)((uintptr_t)(Pointer))))
 /* Same as "Q_PTR_CAST(TYPE, Q_PTR_ADD_OFFSET(Pointer, Offset))" */
-#  define Q_PTR_TRANSLATE(Pointer, Offset, TYPE) ((TYPE)((void *)((quintptr)(Pointer) + (quintptr)(Offset))))
+#  define Q_PTR_TRANSLATE(Pointer, Offset, TYPE) ((TYPE)((void *)((uintptr_t)(Pointer) + (uintptr_t)(Offset))))
+
+#  define Q_PTR_DISTANCE(Pointer, OtherPointer) Q_PTR_CAST(uintptr_t, Q_PTR_SUB_OFFSET(Q_MAX(Pointer, OtherPointer), Q_MIN(Pointer, OtherPointer)))
 
 /* Calculate the byte offset of a field in a structure of type "TYPE". */
 #  ifndef offsetof
-#    define Q_FIELD_OFFSET(TYPE, FIELD)    ((void *)((qintptr)&(Q_PTR_CAST(TYPE *, 1u)->FIELD)) - 1u)
+#    define Q_FIELD_OFFSET(TYPE, FIELD)    ((void *)((uintptr_t)&(Q_PTR_CAST(TYPE *, 1u)->FIELD)) - 1u)
 #  else
 #    define Q_FIELD_OFFSET offsetof
 #  endif
-#  define Q_FIELD_PTR(CLASS_PTR, FIELD)  ((void *)(qintptr)&((CLASS_PTR)->FIELD))
+#  define Q_FIELD_PTR(CLASS_PTR, FIELD)  ((void *)(uintptr_t)&((CLASS_PTR)->FIELD))
 /* Get pointer of field holder from fields pointer: needs Holder-type, Field-name and Field-pointer. */
 #  define Q_FIELDER(TYPE, FIELD, Pointer) ((TYPE *)(Q_PTR_SUB_OFFSET(Pointer, Q_FIELD_OFFSET(TYPE, FIELD))))
 
