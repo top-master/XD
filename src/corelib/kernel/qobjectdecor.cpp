@@ -54,7 +54,7 @@ void QObjectDecor::decorAttach(QObject *owner)
     // the QObject's destructor may cause crash.
     decorOwner = owner;
     QObjectPrivate *ownerPrivate = static_cast<QObjectPrivate *>(
-                QScopedPointerBase<QObjectData>::get(&owner->d_ptr)->d);
+                QScopedPointerLazyBase<QObjectData>::get(&owner->d_ptr)->d);
     decorOwnerPrivate = ownerPrivate;
     decorOwnerMeta = m;
     ownerPrivate->isLazy = true;
@@ -66,7 +66,7 @@ void QObjectDecor::decorDetach()
     QObjectDecorLocker _(this);
     if (decorOwner) {
         QObjectPrivate *ownerPrivate = decorOwnerPrivate;
-        QScopedPointerBase<QObjectData> *base = QScopedPointerBase<QObjectData>::get(&decorOwner->d_ptr);
+        QScopedPointerLazyBase<QObjectData> *base = QScopedPointerLazyBase<QObjectData>::get(&decorOwner->d_ptr);
         base->d = ownerPrivate;
         QLazinessResolver::set(decorOwner->d_ptr, this, &globalImmutable);
         ownerPrivate->isLazy = false;
@@ -104,7 +104,7 @@ void QObjectDecor::postDecorLoad(QObject *loaded) {
 
     QObjectPrivate *loadedPrivate = QObjectPrivate::get(loaded);
     loadedPrivate->isDecoratee = true;
-    QScopedPointerBase<QObjectData> *base = QScopedPointerBase<QObjectData>::get(&decorOwner->d_ptr);
+    QScopedPointerLazyBase<QObjectData> *base = QScopedPointerLazyBase<QObjectData>::get(&decorOwner->d_ptr);
     base->d = loadedPrivate;
     this->decorLoaded = QPointer<QObject>(loaded);
     decorOwnerPrivate->isLazy = false;
@@ -153,8 +153,8 @@ bool QObjectDecor::decorListenTrigger() {
 bool QObjectDecor::lazyEvent(QLazyEvent *event)
 {
     // Validation.
-    QScopedPointerBase<QObjectData> *base = QScopedPointerBase<QObjectData>::get(&decorOwner->d_ptr);
-    QObjectData *&dataRef = event->data<QObjectData *>();
+    QScopedPointerLazyBase<QObjectData> *base = QScopedPointerLazyBase<QObjectData>::get(&decorOwner->d_ptr);
+    QObjectPrivate *&dataRef = event->data<QObjectPrivate *>();
     if (&dataRef != &base->d) {
         // Some resolvers may support different data, hence don't throw.
         return false;

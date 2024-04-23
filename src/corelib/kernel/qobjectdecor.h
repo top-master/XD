@@ -122,7 +122,7 @@ public:
 
     /// Returns QObjectData::isDecor field's value without causing decoratee to be loaded.
     static Q_ALWAYS_INLINE bool isDecor(const QObject *obj) {
-        return (QScopedPointerBase<QObjectData>::get(&const_cast<QObject *>(obj)->d_ptr)->d)->isDecor;
+        return reinterpret_cast<QObjectData *>(QScopedPointerLazyBase<QObjectData>::get(&const_cast<QObject *>(obj)->d_ptr)->d)->isDecor;
     }
 
     /// Returns given @p obj's current QObjectDecor if any, otherwise @c nullptr.
@@ -132,7 +132,7 @@ public:
     /// @warning Use @ref qobject_cast instead, wherever the
     /// sub-class of QObjectDecor extends QObject as well.
     static inline QObjectDecor *fromDecorable(QObject *obj) {
-        QObjectData *d = QScopedPointerBase<QObjectData>::get(&obj->d_ptr)->d;
+        QObjectData *d = reinterpret_cast<QObjectData *>(QScopedPointerLazyBase<QObjectData>::get(&obj->d_ptr)->d);
         QLazinessResolver *resolver = d->lazinessResolver.raw();
         if (resolver != &QPointerLazinessResolver::globalImmutable) {
             Q_ASSERT_X(0 == static_cast<QLazinessResolver *>(Q_PTR_CAST(QObjectDecor *, 0)),
@@ -143,11 +143,11 @@ public:
     }
 
     Q_ALWAYS_INLINE const QObject *toDecor() const {
-        return this->decorOwner;
+        return this->decorOwner.data();
     }
 
     Q_ALWAYS_INLINE QObject *toDecor() {
-        return this->decorOwner;
+        return this->decorOwner.data();
     }
 
     Q_ALWAYS_INLINE const QObjectPrivate *toDecorPrivate() const {
@@ -156,6 +156,12 @@ public:
 
     Q_ALWAYS_INLINE QObjectPrivate *toDecorPrivate() {
         return this->decorOwnerPrivate;
+    }
+
+    /// @warning Binary-casts to given @tparam X type without checking.
+    template <typename X>
+    Q_ALWAYS_INLINE const QPointer<X> &toDecorPointer() {
+        return *Q_PTR_CAST(QPointer<X> *, &this->decorOwner);
     }
 
     static Q_ALWAYS_INLINE QScopedPointerLazyImmutable<QObjectData> &d_ptr_from(const QObject *obj) {
@@ -203,7 +209,7 @@ protected:
     ///
     /// Can be set by @ref decorAttach method's first argument, and
     /// can be unset by calling @ref decorDetach method.
-    QObject *decorOwner;
+    QPointer<QObject> decorOwner;
     /// Backup of original QObjectPrivate of @ref decorOwner.
     QObjectPrivate *decorOwnerPrivate;
     const QMetaObject *decorOwnerMeta;

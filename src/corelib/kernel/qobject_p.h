@@ -176,6 +176,7 @@ public:
     virtual ~QObjectPrivate();
     void detachSharedRefCount();
     void emitDestroyed();
+    void deleteChildrenEarly();
     void deleteChildren();
 
     void setParent_helper(QObject *);
@@ -236,7 +237,7 @@ public:
     QObjectConnectionListVector *connectionLists;
 
     Connection *senders;     // linked list of connections connected to this object
-    Sender *currentSender;   // object currently activating the object
+    Sender *currentSender;   // object currently activating this object.
     mutable quint32 connectedSignals[2];
 
     // TRACE/QObject/remote support 3-2: `privateData` getter and setter declared.

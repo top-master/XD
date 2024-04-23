@@ -895,7 +895,7 @@ public:
     inline bool isNull() const { return d == Q_NULLPTR || d->strongref.load() == 0 || value == Q_NULLPTR; }
     inline operator RestrictedBool() const { return isNull() ? Q_NULLPTR : &QWeakPointer::value; }
     inline bool operator !() const { return isNull(); }
-    inline T *data() const { return d == Q_NULLPTR || d->strongref.load() == 0 ? Q_NULLPTR : value; }
+    inline T *data() const Q_DECL_NOTHROW { return d == Q_NULLPTR || d->strongref.load() == 0 ? Q_NULLPTR : value; }
 
     inline QWeakPointer() : d(Q_NULLPTR), value(Q_NULLPTR) { }
     inline ~QWeakPointer() { if (d && !d->weakref.deref()) delete d; }
@@ -995,6 +995,7 @@ public:
 #else
     template <class X> friend class QSharedPointer;
     template <class X> friend class QPointer;
+    template <class X> friend class QObjectPointerAtomic;
 #endif
 
     template <class X>
@@ -1015,11 +1016,11 @@ public:
         if (d && !d->weakref.deref())
             delete d;
         d = o;
-        value = actual;
+        value.store(actual);
     }
 
     Data *d;
-    T *value;
+    QAtomicPointer<T> value;
 };
 
 // Non-QObject classes can inherit this, to provide `sharedFromThis()` methods.

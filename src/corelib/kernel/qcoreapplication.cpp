@@ -833,11 +833,13 @@ void QCoreApplicationPrivate::init()
     };
     if (lazyDispatcher) {
         lazyDispatcher->decorListen(postLoad);
+        QPointer<QAbstractEventDispatcher> ptr = lazyDispatcher->toDecorPointer<QAbstractEventDispatcher>();
+        threadData->eventDispatcher.swap(ptr);
     } else {
         postLoad(eventDispatcher);
+        threadData->eventDispatcher = eventDispatcher;
     }
 
-    threadData->eventDispatcher = eventDispatcher;
     eventDispatcherReady();
 #endif
 

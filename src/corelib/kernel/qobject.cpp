@@ -1113,6 +1113,46 @@ void QObjectPrivate::emitDestroyed() {
     }
 }
 
+void QObjectPrivate::deleteChildrenEarly()
+{
+    this->wasDeleted = true;
+    this->emitDestroyed();
+
+    if (this->children.isEmpty()) {
+        return;
+    }
+
+    if (this->connectionLists) {
+        // Simulates all signal/slot connections being disconnected.
+        QMutex *signalSlotMutex = signalSlotLock(q_ptr);
+        QMutexLocker locker(signalSlotMutex);
+
+        QObjectConnectionListVector *connectionListsBackup = this->connectionLists;
+        if (connectionListsBackup) {
+            ++connectionListsBackup->inUse;
+            this->connectionLists = 0;
+        }
+        locker.unlock();
+
+        this->deleteChildren();
+
+        if (connectionListsBackup) {
+            if (this->connectionLists) {
+                Q_UNREACHABLE();
+            } else {
+                locker.relock();
+                if ( ! --connectionListsBackup->inUse) {
+                    delete connectionListsBackup;
+                } else {
+                    this->connectionLists = connectionListsBackup;
+                }
+            }
+        }
+    } else {
+        this->deleteChildren();
+    }
+}
+
 QObjectPrivate::Connection::~Connection()
 {
     if (ownArgumentTypes) {
@@ -1502,7 +1542,8 @@ bool QObject::blockRemoteSignals(bool block)
 */
 QThread *QObject::thread() const
 {
-    return d_func()->threadData->thread;
+    Q_D(const QObject);
+    return d->threadData->thread;
 }
 
 /*!
@@ -2114,8 +2155,9 @@ void QObjectPrivate::setParent_helper(QObject *o)
     // Bind to new parent.
     parent = o;
     if (parent) {
+        QObjectPrivate *parentD = parent->d_func();
         // object hierarchies are constrained to a single thread
-        if (threadData != parent->d_func()->threadData) {
+        if (threadData != parentD->threadData) {
             qWarning("QObject::setParent: Cannot set parent, new parent is in a different thread");
             parent = Q_NULLPTR;
             return;
@@ -2128,8 +2170,8 @@ void QObjectPrivate::setParent_helper(QObject *o)
             this->hasParentStrongRef = sharedRefcount->tryIncrementStrong();
         }
 
-        parent->d_func()->children.append(q);
-        if(sendChildEvents && parent->d_func()->receiveChildEvents) {
+        parentD->children.append(q);
+        if(sendChildEvents && parentD->receiveChildEvents) {
             if (!isWidget) {
                 QChildEvent e(QEvent::ChildAdded, q);
                 QCoreApplication::sendEvent(parent, &e);

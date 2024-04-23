@@ -43,6 +43,7 @@ HEADERS += \
         widgets/qmenubar.h \
         widgets/qmenubar_p.h \
         widgets/qprogressbar.h \
+        widgets/qprogress-spinner.h \
         widgets/qpushbutton.h \
         widgets/qpushbutton_p.h \
         widgets/qradiobutton.h \
@@ -114,6 +115,7 @@ SOURCES += \
         widgets/qmenu.cpp \
         widgets/qmenubar.cpp \
         widgets/qprogressbar.cpp \
+        widgets/qprogress-spinner.cpp \
         widgets/qpushbutton.cpp \
         widgets/qradiobutton.cpp \
         widgets/qrubberband.cpp \
