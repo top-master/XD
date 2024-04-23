@@ -53,6 +53,7 @@
 #include "QtCore/qwaitcondition.h"
 #include "QtCore/qmap.h"
 #include "QtCore/qcoreapplication.h"
+#include "QtCore/qabstracteventdispatcher.h"
 #include "private/qobject_p.h"
 
 #include <algorithm>
@@ -277,7 +278,7 @@ public:
     QPostEventList postEventList;
     QAtomicPointer<QThread> thread;
     Qt::HANDLE threadId;
-    QAtomicPointer<QAbstractEventDispatcher> eventDispatcher;
+    QObjectPointerAtomic<QAbstractEventDispatcher> eventDispatcher;
     QVector<void *> tls;
     FlaggedDebugSignatures flaggedSignatures;
 

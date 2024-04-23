@@ -1279,7 +1279,7 @@ void QGuiApplicationPrivate::createEventDispatcher()
 #else
     QEventDispatcherDecorFunc *decor = new QEventDispatcherDecorFunc();
     decor->load = [&] (QEventDispatcherDecor *current) {
-        Q_UNUSED(current)
+        Q_UNUSED(current) // Not always used.
         QGuiApplication *app = qApp;
         QGuiApplicationPrivate *d = QGuiApplicationPrivate::get(app);
         if (platform_integration == 0) {

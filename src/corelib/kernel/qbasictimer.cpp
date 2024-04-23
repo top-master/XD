@@ -111,7 +111,10 @@ void QBasicTimer::start(int msec, QObject *obj)
 {
     QAbstractEventDispatcher *eventDispatcher = QAbstractEventDispatcher::instance();
     if (Q_UNLIKELY(!eventDispatcher)) {
-        qWarning("QBasicTimer::start: QBasicTimer can only be used with threads started with QThread");
+        // TRACE/corelib improve: warn about thread only if App's NOT already terminating.
+        if (qApp) {
+            qWarning("QBasicTimer::start: QBasicTimer can only be used with threads started with QThread");
+        }
         return;
     }
     if (Q_UNLIKELY(obj && obj->thread() != eventDispatcher->thread())) {

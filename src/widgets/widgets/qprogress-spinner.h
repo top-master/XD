@@ -31,7 +31,7 @@
 #include <QtWidgets/qwidget.h>
 
 
-class QProgressSpinner : public QWidget
+class Q_WIDGETS_EXPORT QProgressSpinner : public QWidget
 {
     Q_OBJECT
     typedef QWidget super;

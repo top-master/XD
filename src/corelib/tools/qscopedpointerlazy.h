@@ -106,9 +106,9 @@ public:
         if (super::isLoadPending()) {
             super::lazinessResolver().loadNow(
                     const_cast<Self *>(this),
-                    reinterpret_cast<void **>(&const_cast<Self *>(this)->d));
+                    Q_PTR_CAST(void **, &this->d));
         }
-        return static_cast<T *>(this->d);
+        return Q_PTR_CAST(T *, this->d);
     }
 
     Q_ALWAYS_INLINE bool isNull() const
@@ -118,19 +118,19 @@ public:
 
     inline bool reset(T *other = Q_NULLPTR)
     {
-        T *oldD = static_cast<T *>(this->d);
+        T *oldD = Q_PTR_CAST(T *, this->d);
         if (super::lazinessResolver().replace(
                     this, reinterpret_cast<void **>(&this->d),
                     reinterpret_cast<void **>(&other))
         ) {
             Deleter::cleanup(oldD);
         }
-        return static_cast<T *>(this->d) == other;
+        return Q_PTR_CAST(T *, this->d) == other;
     }
 
     Q_ALWAYS_INLINE T *take()
     {
-        return static_cast<T *>(super::lazinessResolver().take(this, reinterpret_cast<void **>(&this->d)));
+        return Q_PTR_CAST(T *, super::lazinessResolver().take(this, reinterpret_cast<void **>(&this->d)));
     }
 
     Q_ALWAYS_INLINE bool swap(Self &other)

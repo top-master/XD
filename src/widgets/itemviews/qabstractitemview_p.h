@@ -45,6 +45,7 @@
 // We mean it.
 //
 
+#include "qabstractitemview.h"
 #include "private/qabstractscrollarea_p.h"
 #include "private/qabstractitemmodel_p.h"
 #include "QtWidgets/qapplication.h"
