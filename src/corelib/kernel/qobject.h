@@ -617,11 +617,11 @@ inline QObjectData *QObjectData::get(QObject *o) { return o->d_ptr.data(); }
 inline const QObjectData *QObjectData::get(const QObject *o) { return o->d_ptr.data(); }
 
 inline QPointerLazinessResolverAtomic &QScopedPointerLazyBase<QObjectData>::lazinessResolver() const {
-    return (const_cast<Self *>(this)->d)->lazinessResolver;
+    return Q_PTR_CAST(QObjectData *, this->d)->lazinessResolver;
 }
 
 Q_DECL_CONSTEXPR inline bool QScopedPointerLazyBase<QObjectData>::isLoadPending() const {
-    return static_cast<QObjectData *>(const_cast<Self *>(this)->d)->isLazy;
+    return Q_PTR_CAST(QObjectData *, this->d)->isLazy;
 }
 
 QSignalBlocker::QSignalBlocker(QObject *o) Q_DECL_NOTHROW

@@ -372,8 +372,8 @@ private slots:
         qExpect(resolver)->Not->toBe(&QPointerLazinessResolver::globalNonNull);
         qExpect(resolver)->toBe(obj.toLazinessResolver());
         // Without being loaded yet.
-        QScopedPointerBase<QObjectData> *base = QScopedPointerBase<QObjectData>::get(&d_ptr);
-        QObjectPrivate *objPrivate = static_cast<QObjectPrivate *>(base->d);
+        QScopedPointerBase<QObjectPrivate> *base = QScopedPointerBase<QObjectPrivate>::get(&d_ptr);
+        QObjectPrivate *objPrivate = base->d;
         qExpect(bool(objPrivate->isDecoratee))->toBeFalsy();
         qExpect(bool(objPrivate->isLazy))->toBeTruthy();
 
@@ -426,7 +426,7 @@ private slots:
         {
             DecorDummy obj;
             QScopedPointerLazy<QObjectData> &d_ptr = DecorDummy::d_ptr_from(&obj);
-            QScopedPointerBase<QObjectData> *base = QScopedPointerBase<QObjectData>::get(&d_ptr);
+            QScopedPointerBase<QObjectPrivate> *base = QScopedPointerBase<QObjectPrivate>::get(&d_ptr);
             QPointerLazinessResolverAtomic &resolver = QLazinessResolver::fieldCast<QPointerLazinessResolverAtomic>(d_ptr);
             // With simulating global static.
             obj.isDecorateeDeletable = ! isGlobal;
@@ -481,7 +481,7 @@ private slots:
         {
             DecorDummy decor;
             QScopedPointerLazy<QObjectData> &d_ptr = DecorDummy::d_ptr_from(&decor);
-            QScopedPointerBase<QObjectData> *base = QScopedPointerBase<QObjectData>::get(&d_ptr);
+            QScopedPointerBase<QObjectPrivate> *base = QScopedPointerBase<QObjectPrivate>::get(&d_ptr);
             DecorDummy decorOther;
             QScopedPointerLazy<QObjectData> &d_ptrOther = DecorDummy::d_ptr_from(&decorOther);
             // With initial value by `data()`.
@@ -511,7 +511,7 @@ private slots:
         {
             DecorDummy obj;
             QScopedPointerLazy<QObjectData> &d_ptr = DecorDummy::d_ptr_from(&obj);
-            QScopedPointerBase<QObjectData> *base = QScopedPointerBase<QObjectData>::get(&d_ptr);
+            QScopedPointerBase<QObjectPrivate> *base = QScopedPointerBase<QObjectPrivate>::get(&d_ptr);
             // With loading.
             ptrInitial = assertDecorLoaded(&obj);
             QObjectPrivate *ptrInitialPrivate = QObjectPrivate::get(ptrInitial);

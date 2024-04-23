@@ -1,5 +1,6 @@
 /****************************************************************************
 **
+** Copyright (C) 2015 The XD Company Ltd.
 ** Copyright (C) 2015 The Qt Company Ltd.
 ** Contact: http://www.qt.io/licensing/
 **
@@ -48,6 +49,7 @@ class QPointer
 {
     Q_STATIC_ASSERT_X(!QtPrivate::is_pointer<T>::value, "QPointer's template type must not be a pointer type");
 
+protected:
     template<typename U>
     struct TypeSelector
     {
@@ -76,7 +78,7 @@ public:
     inline QPointer<T> &operator=(T* p)
     { wp.assign(static_cast<QObjectType*>(p)); return *this; }
 
-    inline T* data() const
+    inline T* data() const Q_DECL_NOTHROW
     { return static_cast<T*>( wp.data()); }
     inline T* operator->() const
     { return data(); }
@@ -139,6 +141,110 @@ qPointerFromVariant(const QVariant &variant)
 {
     return QPointer<T>(qobject_cast<T*>(QtSharedPointer::weakPointerFromVariant_internal(variant).data()));
 }
+
+/// Same as QPointer, but simulates QAtomicPointer API.
+template <typename T>
+class QObjectPointerAtomic : public QPointer<T> {
+    typedef QPointer<T> super;
+    typedef QObjectPointerAtomic<T> Self;
+public:
+    typedef T *Type;
+    typedef QAtomicOps<Type> Ops;
+    typedef typename Ops::Type AtomicType;
+
+    Q_DECL_CONSTEXPR inline QObjectPointerAtomic() { }
+    Q_DECL_CONSTEXPR inline QObjectPointerAtomic(Type p) : super(p) { }
+
+    template <typename X>
+    Q_DECL_CONSTEXPR inline Q_IMPLICIT QObjectPointerAtomic(const QPointer<X> &other)
+        : super(other)
+    { }
+
+    template <typename X>
+    Q_DECL_CONSTEXPR inline QObjectPointerAtomic &operator=(const QPointer<X> &other)
+    { super::operator=(other); return *this; }
+
+    /// Same as @ref data.
+    Q_ALWAYS_INLINE Type load() const Q_DECL_NOTHROW { return this->data(); }
+    Q_ALWAYS_INLINE void store(Type newValue) { *this = Self(newValue); }
+
+    Q_ALWAYS_INLINE Type loadAcquire() const Q_DECL_NOTHROW { (void) this->wp.value.loadAcquire(); return this->data(); }
+    Q_ALWAYS_INLINE void storeRelease(Type newValue) {
+        *this = Self(newValue);
+        // Repeats to release memory-fence.
+        this->wp.value.storeRelease(newValue);
+    }
+
+    static Q_ALWAYS_INLINE Q_DECL_CONSTEXPR bool isTestAndSetNative() { return Ops::isTestAndSetNative(); }
+    static Q_ALWAYS_INLINE Q_DECL_CONSTEXPR bool isTestAndSetWaitFree() { return Ops::isTestAndSetWaitFree(); }
+
+    inline bool testAndSetRelaxed(Type expectedValue, Type newValue) Q_DECL_NOTHROW {
+        if (this->wp.value.testAndSetRelaxed(expectedValue, newValue)) {
+            *this = Self(newValue);
+            return true;
+        }
+        return false;
+    }
+
+    inline bool testAndSetAcquire(Type expectedValue, Type newValue) Q_DECL_NOTHROW {
+        if (this->wp.value.testAndSetAcquire(expectedValue, newValue)) {
+            *this = Self(newValue);
+            return true;
+        }
+        return false;
+    }
+
+    inline bool testAndSetRelease(Type expectedValue, Type newValue) Q_DECL_NOTHROW {
+        if (this->wp.value.testAndSetRelease(expectedValue, newValue)) {
+            *this = Self(newValue);
+            return true;
+        }
+        return false;
+    }
+
+    inline bool testAndSetOrdered(Type expectedValue, Type newValue) Q_DECL_NOTHROW {
+        if (this->wp.value.testAndSetOrdered(expectedValue, newValue)) {
+            *this = Self(newValue);
+            return true;
+        }
+        return false;
+    }
+
+
+
+    inline bool testAndSetRelaxed(Type expectedValue, Type newValue, Type &currentValue) Q_DECL_NOTHROW {
+        if (this->wp.value.testAndSetRelaxed(expectedValue, newValue, currentValue)) {
+            *this = Self(newValue);
+            return true;
+        }
+        return false;
+    }
+
+    inline bool testAndSetAcquire(Type expectedValue, Type newValue, Type &currentValue) Q_DECL_NOTHROW {
+        if (this->wp.value.testAndSetAcquire(expectedValue, newValue, currentValue)) {
+            *this = Self(newValue);
+            return true;
+        }
+        return false;
+    }
+
+    inline bool testAndSetRelease(Type expectedValue, Type newValue, Type &currentValue) Q_DECL_NOTHROW {
+        if (this->wp.value.testAndSetRelease(expectedValue, newValue, currentValue)) {
+            *this = Self(newValue);
+            return true;
+        }
+        return false;
+    }
+
+    inline bool testAndSetOrdered(Type expectedValue, Type newValue, Type &currentValue) Q_DECL_NOTHROW {
+        if (this->wp.value.testAndSetOrdered(expectedValue, newValue, currentValue)) {
+            *this = Self(newValue);
+            return true;
+        }
+        return false;
+    }
+
+};
 
 QT_END_NAMESPACE
 
