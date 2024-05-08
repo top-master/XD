@@ -689,6 +689,6 @@ namespace QtPrivate {
 
 QT_END_NAMESPACE
 
-#endif
+#endif // QT_NO_QOBJECT
 
 #endif // QOBJECT_H

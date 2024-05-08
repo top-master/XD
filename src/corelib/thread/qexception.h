@@ -74,7 +74,7 @@ public:
         : m_value(valueArg)
     {}
 
-    inline operator int() const { return m_value; }
+    inline Q_IMPLICIT operator int() const { return m_value; }
 };
 
 Q_ALWAYS_INLINE void qThrow(QRequirementErrorType type, const char *msg = Q_NULLPTR)
@@ -132,6 +132,8 @@ public:
     virtual const QString &message() const Q_DECL_NOTHROW;
     virtual void setMessage(const QString &) Q_DECL_NOTHROW;
 
+    void appendMessage(const QString &msg);
+
 protected:
     QString m_message;
     /// Used by what() to speed-up conversion to `const char *` type.
@@ -146,6 +148,16 @@ public:
     ~QNullPointerException() Q_DECL_NOTHROW;
     void raise() const Q_DECL_OVERRIDE;
     QNullPointerException *clone() const Q_DECL_OVERRIDE;
+};
+
+/// Never thrown by XD, but useful where checking for intruption is expensive.
+class Q_CORE_EXPORT QInterruptedException : public QExceptionWithMessage
+{
+public:
+    inline explicit QInterruptedException(const char *msg = Q_NULLPTR) : QExceptionWithMessage(msg) {}
+    ~QInterruptedException() Q_DECL_NOTHROW;
+    void raise() const Q_DECL_OVERRIDE;
+    QInterruptedException *clone() const Q_DECL_OVERRIDE;
 };
 
 /// Use qThrowAtomicMismatch() instead.
@@ -175,6 +187,15 @@ public:
     {
         this->prefixMessage();
     }
+
+    inline explicit QRequirementError(Type type_, const QString &msg, const QVariant &context_ = QVariant())
+        : super(msg)
+        , m_type(type_)
+        , m_context(context_)
+    {
+        this->prefixMessage();
+    }
+
     ~QRequirementError() Q_DECL_NOTHROW;
     void raise() const Q_DECL_OVERRIDE;
     QRequirementError *clone() const Q_DECL_OVERRIDE;

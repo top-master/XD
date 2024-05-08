@@ -256,6 +256,7 @@ lib/*
 imports/*
 !lib/fonts/
 !lib/README
+!lib/qt.conf
 plugins/*/*
 release
 tmp

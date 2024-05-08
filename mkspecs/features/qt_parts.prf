@@ -33,6 +33,8 @@ exists($$_PRO_FILE_PWD_/src/src.pro) {
     }
 }
 
+xd_mini_mode: return()
+
 contains(QT_CONFIG, examples) {
     exists($$_PRO_FILE_PWD_/examples/examples.pro) {
         sub_examples.subdir = examples
