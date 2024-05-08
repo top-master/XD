@@ -249,8 +249,9 @@ debug
 #!include/*/*
 lib/*
 imports/*
-!lib/fonts
+!lib/fonts/
 !lib/README
+!lib/qt.conf
 plugins/*/*
 release
 tmp

@@ -3260,8 +3260,10 @@ bool QApplication::notify(QObject *receiver, QEvent *e)
                 if (!w->hasMouseTracking()
                     && mouse->type() == QEvent::MouseMove && mouse->buttons() == 0) {
                     // but still send them through all application event filters (normally done by notify_helper)
-                    for (int i = 0; d->extraData && i < d->extraData->eventFilters.size(); ++i) {
-                        QObject *obj = d->extraData->eventFilters.at(i);
+                    QObjectPrivate::ExtraData *ext = d->extraData.load();
+                    const int filterCount = ext ? ext->eventFilters.size() : 0;
+                    for (int i = 0; i < filterCount; ++i) {
+                        QObject *obj = ext->eventFilters.at(i);
                         if (!obj)
                             continue;
                         if (obj->d_func()->threadData != w->d_func()->threadData) {

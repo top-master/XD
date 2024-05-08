@@ -48,11 +48,6 @@
 #endif
 #include <stdlib.h>
 #include <qglobal.h>
-#ifdef Q_OS_WIN
-# define _POSIX_
-# include <limits.h>
-# undef _POSIX_
-#endif
 #include <qcoreapplication.h>
 #include <qlist.h>
 #include <qvariant.h>  /* All moc genereated code has this include */

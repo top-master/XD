@@ -205,6 +205,14 @@ void QExceptionWithMessage::setMessage(const QString &msg) Q_DECL_NOTHROW
     m_messageCache = QByteArray();
 }
 
+void QExceptionWithMessage::appendMessage(const QString &msg) {
+    (void) this->message();
+    QLL newLine(QT_NEW_LINE);
+    m_message.reserve(m_message.size() + newLine.size() + msg.size());
+    m_message += newLine;
+    m_message += msg;
+}
+
 QNullPointerException::~QNullPointerException() Q_DECL_NOTHROW
 {
     // Nothing to do (but required).
@@ -219,6 +227,22 @@ void QNullPointerException::raise() const
 QNullPointerException *QNullPointerException::clone() const
 {
     return new QNullPointerException(*this);
+}
+
+QInterruptedException::~QInterruptedException() Q_DECL_NOTHROW
+{
+    // Nothing to do (but required).
+}
+
+void QInterruptedException::raise() const
+{
+    QInterruptedException e = *this;
+    throw e;
+}
+
+QInterruptedException *QInterruptedException::clone() const
+{
+    return new QInterruptedException(*this);
 }
 
 QAtomicMismatchException::~QAtomicMismatchException() Q_DECL_NOTHROW

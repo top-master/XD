@@ -92,6 +92,12 @@ public:
 
     inline void clear()
     { wp.clear(); }
+
+    Q_ALWAYS_INLINE QSharedPointer<T> toStrongRef(Qt::LogMode logMode = Qt::LogWarning) const
+    { return qSharedPointerCast<T, QObjectType>(wp, logMode); }
+    // std::weak_ptr compatibility:
+    Q_ALWAYS_INLINE QSharedPointer<T> lock() const
+    { return qSharedPointerCast<T, QObjectType>(wp); }
 };
 template <class T> Q_DECLARE_TYPEINFO_BODY(QPointer<T>, Q_MOVABLE_TYPE);
 

@@ -639,6 +639,26 @@ typedef qptrdiff qintptr;
 #  define QT_WIN_CALLBACK CALLBACK QT_ENSURE_STACK_ALIGNED_FOR_SSE
 #endif
 
+#ifndef Q_OUTOFLINE_TEMPLATE
+#  define Q_OUTOFLINE_TEMPLATE
+#endif
+// Usable after template arguments, like
+// ```
+// template <typename T>
+// Q_INLINE_TEMPLATE void myFunc(T arg)
+// { ... }
+// ```
+#ifndef Q_INLINE_TEMPLATE
+#  define Q_INLINE_TEMPLATE inline
+#  define Q_ALWAYS_INLINE_T Q_ALWAYS_INLINE
+#else
+#  define Q_ALWAYS_INLINE_T
+#endif
+
+#ifndef Q_TYPENAME
+#  define Q_TYPENAME typename
+#endif
+
 typedef int QNoImplicitBoolCast;
 
 /*
@@ -671,11 +691,11 @@ qint64 qRound64(qreal d);
 #endif
 
 template <typename T>
-Q_DECL_CONSTEXPR inline const T &qMin(const T &a, const T &b) { return (a < b) ? a : b; }
+Q_DECL_CONSTEXPR Q_ALWAYS_INLINE_T const T &qMin(const T &a, const T &b) { return (a < b) ? a : b; }
 template <typename T>
-Q_DECL_CONSTEXPR inline const T &qMax(const T &a, const T &b) { return (a < b) ? b : a; }
+Q_DECL_CONSTEXPR Q_ALWAYS_INLINE_T const T &qMax(const T &a, const T &b) { return (a < b) ? b : a; }
 template <typename T>
-Q_DECL_CONSTEXPR inline const T &qBound(const T &min, const T &val, const T &max)
+Q_DECL_CONSTEXPR Q_ALWAYS_INLINE_T const T &qBound(const T &min, const T &val, const T &max)
 { return qMax(min, qMin(max, val)); }
 
 #define Q_MIN(a, b) ((a < b) ? a : b)
@@ -687,7 +707,7 @@ Q_DECL_CONSTEXPR inline bool qNot(const T &a) { return !a; }
 template <typename T1, typename T2>
 Q_DECL_CONSTEXPR inline bool qNotEqual(const T1 &a, const T2 &b) { return a != b; }
 
-Q_DECL_CONSTEXPR Q_ALWAYS_INLINE quintptr qPtrDistance(const void *a, const void *b)
+Q_ALWAYS_INLINE quintptr qPtrDistance(const void *a, const void *b)
 { return quintptr((a < b) ? (reinterpret_cast<quintptr>(b) - reinterpret_cast<quintptr>(a)) : (reinterpret_cast<quintptr>(a) - reinterpret_cast<quintptr>(b))); }
 
 #ifndef Q_FORWARD_DECLARE_OBJC_CLASS
@@ -813,26 +833,6 @@ Q_NORETURN Q_CORE_EXPORT void qTerminate() Q_DECL_NOTHROW;
 
 
 Q_CORE_EXPORT bool qSharedBuild() Q_DECL_NOTHROW;
-
-#ifndef Q_OUTOFLINE_TEMPLATE
-#  define Q_OUTOFLINE_TEMPLATE
-#endif
-// Usable after template arguments, like
-// ```
-// template <typename T>
-// Q_INLINE_TEMPLATE void myFunc(T arg)
-// { ... }
-// ```
-#ifndef Q_INLINE_TEMPLATE
-#  define Q_INLINE_TEMPLATE inline
-#  define Q_ALWAYS_INLINE_T Q_ALWAYS_INLINE
-#else
-#  define Q_ALWAYS_INLINE_T
-#endif
-
-#ifndef Q_TYPENAME
-#  define Q_TYPENAME typename
-#endif
 
 /*
    Avoid "unused parameter" warnings

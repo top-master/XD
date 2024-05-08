@@ -37,20 +37,31 @@
 
 #include <QtCore/qglobal.h>
 #include <QtCore/qatomic.h>
+
+/// @def QT_NO_STD_FUNCTION
+/// This option is only used by low-level purpose headers, like QMutex, since
+/// QMutex can be included anywhere, but including `std` based things may cause
+/// compile issues, or even conflict and cause almost random run-time crashes.
+#ifndef QT_NO_STD_FUNCTION
+#  include <QtCore/qfunction.h>
+#endif
+
 #include <new>
 
 QT_BEGIN_NAMESPACE
 
 
-#if !defined(QT_NO_THREAD) && !defined(Q_QDOC)
-
+// Only needed if QT_NO_THREAD is undefined.
 #ifdef Q_OS_LINUX
 # define QT_MUTEX_LOCK_NOEXCEPT Q_DECL_NOTHROW
 #else
 # define QT_MUTEX_LOCK_NOEXCEPT
 #endif
 
+#if !defined(QT_NO_THREAD) && !defined(Q_QDOC)
+
 class QMutexData;
+class QRecursiveMutex;
 
 class Q_CORE_EXPORT QBasicMutex
 {
@@ -97,14 +108,18 @@ private:
 
     friend class QMutex;
     friend class QMutexData;
+    friend class QRecursiveMutex;
 };
 
 class Q_CORE_EXPORT QMutex : public QBasicMutex {
 public:
     enum RecursionMode { NonRecursive, Recursive };
 
-    explicit QMutex(RecursionMode mode = NonRecursive);
-    ~QMutex();
+    /// Defaults to NonRecursive instance.
+    Q_ALWAYS_INLINE QMutex() Q_DECL_NOTHROW { d_ptr.store(0); }
+
+    explicit QMutex(RecursionMode mode);
+    Q_ALWAYS_INLINE ~QMutex() { if (d_ptr.load()) this->destroy(); }
 
     void lock() QT_MUTEX_LOCK_NOEXCEPT;
     bool tryLock(int timeout = 0) QT_MUTEX_LOCK_NOEXCEPT;
@@ -115,6 +130,7 @@ public:
 private:
     Q_DISABLE_COPY(QMutex)
     friend class QMutexLocker;
+    void QT_FASTCALL destroy();
 };
 
 class Q_CORE_EXPORT QMutexLocker
@@ -229,6 +245,59 @@ private:
 typedef QMutex QBasicMutex;
 
 #endif // QT_NO_THREAD or Q_QDOC
+
+#ifndef QT_NO_STD_FUNCTION
+/// @def syncronized(lockObject)
+///
+/// Usable with Lambda, like:
+/// ```
+/// synchronized(myMutex) {
+///     mySharedVariable += 1;
+/// };
+/// ```
+#if defined(_MSC_VER) && _MSC_VER < 1900
+#  define Q_SYNCHRONIZED(lockObject) QtPrivate::QSynchronized(lockObject) + [&, this]()
+#else
+#  define Q_SYNCHRONIZED(lockObject) QtPrivate::QSynchronized(lockObject) + [&]()
+#endif
+
+#if !defined(QT_NO_KEYWORDS) && !defined(synchronized)
+#  define synchronized(lockObject) Q_SYNCHRONIZED(lockObject)
+#endif
+
+namespace QtPrivate {
+
+class QSynchronized : private QMutexLocker {
+public:
+    Q_ALWAYS_INLINE explicit QSynchronized(QMutex &mutexArg) QT_MUTEX_LOCK_NOEXCEPT
+        : QMutexLocker(&mutexArg)
+    {
+    }
+
+#ifdef Q_COMPILER_RVALUE_REFS
+    template <typename F>
+    Q_ALWAYS_INLINE_T auto operator +(F &&callback) Q_DECL_NOEXCEPT -> decltype(callback())
+    {
+        return (callback)();
+    }
+#else
+    template <typename F>
+    Q_ALWAYS_INLINE_T auto operator +(F &callback) Q_DECL_NOEXCEPT -> decltype(callback())
+    {
+        return (callback)();
+    }
+#endif
+
+    Q_ALWAYS_INLINE void operator +(const std::function<void()> &callback) Q_DECL_NOEXCEPT
+    {
+        return (callback)();
+    }
+
+};
+
+} // namespace QtPrivate
+
+#endif // QT_NO_STD_FUNCTION
 
 QT_END_NAMESPACE
 

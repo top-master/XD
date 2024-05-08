@@ -1655,6 +1655,16 @@ public:
     };
     Q_DECLARE_FLAGS(MouseEventFlags, MouseEventFlag)
 
+    enum LogMode {
+        LogSilent = 0x00,
+        LogInfo = 0x11,
+        LogDebug = 0x22,
+        LogWarning = 0x44,
+        LogError = 0x88,
+        LogVerbose = LogError | LogWarning | LogInfo
+    };
+
+
 #ifndef Q_QDOC
     // NOTE: Generally, do not add QT_Q_ENUM if a corresponding Q_Q_FLAG exists.
     QT_Q_ENUM(ScrollBarPolicy)
@@ -1739,6 +1749,7 @@ public:
     QT_Q_ENUM(MouseEventSource)
     QT_Q_FLAG(MouseEventFlag)
     QT_Q_ENUM(TabFocusBehavior)
+    QT_Q_ENUM(LogMode)
 #endif // Q_DOC
 
 }

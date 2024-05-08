@@ -53,6 +53,8 @@ private slots:
 
     void strong_sharedptrDelete();
 
+    void testQPointerFromFakeQSharedPointer();
+
 public slots:
     void cleanup() { safetyCheck(); }
 
@@ -131,12 +133,33 @@ void tst_QSharedPointer_and_QWidget::strong_sharedptrDelete()
     QVERIFY(!check.isNull());
     QVERIFY(!weak.isNull());
 
-    ptr.clear();  // deletes
+    ptr.clear();  // Does not delete (since `parent` counts as strong-ref).
+
+    QVERIFY( ! check.isNull());
+    QVERIFY( ! weak.isNull());
+
+    delete parent; // mustn't crash
 
     QVERIFY(check.isNull());
     QVERIFY(weak.isNull());
+}
 
-    delete parent; // mustn't crash
+void tst_QSharedPointer_and_QWidget::testQPointerFromFakeQSharedPointer()
+{
+    QWidget *obj = new QWidget;
+    QSharedPointer<QWidget> fake = QSharedPointer<QWidget>::fromStack(obj);
+    QPointer<QWidget> weak = obj;
+
+    QVERIFY( ! fake.isNull());
+    QVERIFY( ! weak.isNull());
+
+    QEXPECT_WARN("QObject: has QSharedPointer coverage but was deleted directly. The program is malformed and may crash.");
+    delete obj;
+
+    // The QWeakPointer checks before returning.
+    QVERIFY(weak.isNull());
+    // But fake did become a dangling pointer.
+    QVERIFY( ! fake.isNull());
 }
 
 QTEST_MAIN(tst_QSharedPointer_and_QWidget)

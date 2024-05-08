@@ -1,5 +1,6 @@
 /****************************************************************************
 **
+** Copyright (C) 2015 The XD Company Ltd.
 ** Copyright (C) 2015 The Qt Company Ltd.
 ** Contact: http://www.qt.io/licensing/
 **
@@ -32,12 +33,25 @@
 ****************************************************************************/
 
 #include "qrunnable.h"
+#include "qrunnablefunc.h"
 
 QT_BEGIN_NAMESPACE
 
 QRunnable::~QRunnable()
 {
     // Must be empty until ### Qt 6
+}
+
+QRunnableFunc::~QRunnableFunc()
+{
+    // Nothing to do (but required).
+}
+
+void QRunnableFunc::run()
+{
+    if (data) {
+        (data)();
+    }
 }
 
 /*!

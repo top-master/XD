@@ -1,5 +1,6 @@
 /****************************************************************************
 **
+** Copyright (C) 2015 The XD Company Ltd.
 ** Copyright (C) 2015 The Qt Company Ltd.
 ** Contact: http://www.qt.io/licensing/
 **
@@ -1621,14 +1622,7 @@ QWidget::~QWidget()
                 // and if that also doesn't work, then give up
             }
         }
-    }
-
-#if defined(Q_DEAD_CODE_FROM_QT4_WIN) || defined(Q_DEAD_CODE_FROM_QT4_X11)|| defined(Q_DEAD_CODE_FROM_QT4_MAC)
-    else if (!internalWinId() && isVisible()) {
-        qApp->d_func()->sendSyntheticEnterLeave(this);
-    }
-#endif
-    else if (isVisible()) {
+    } else if ( ! QApplicationPrivate::is_app_closing && isVisible()) {
         qApp->d_func()->sendSyntheticEnterLeave(this);
     }
 
@@ -7732,13 +7726,16 @@ void QWidget::setUpdatesEnabled(bool enable)
 */
 void QWidget::show()
 {
+    // Note: we call `setVisible` instead of `showNormal` to prevent overwrite of
+    // possible Qt::WindowMaximized or Qt::WindowMinimized state(s).
+
     Qt::WindowState defaultState = QGuiApplicationPrivate::platformIntegration()->defaultWindowState(data->window_flags);
     if (defaultState == Qt::WindowFullScreen)
         showFullScreen();
     else if (defaultState == Qt::WindowMaximized)
         showMaximized();
     else
-        setVisible(true); // FIXME: Why not showNormal(), like QWindow::show()?
+        setVisible(true);
 }
 
 /*! \internal
@@ -8133,8 +8130,12 @@ void QWidget::setVisible(bool visible)
 
         //create toplevels but not children of non-visible parents
         QWidget *pw = parentWidget();
-        if (!testAttribute(Qt::WA_WState_Created)
-            && (isWindow() || pw->testAttribute(Qt::WA_WState_Created))) {
+        if ( ! testAttribute(Qt::WA_WState_Created)
+            && (isWindow()
+                // Either is Window or `pw` is non-null, but check anyway.
+                || (pw && pw->testAttribute(Qt::WA_WState_Created))
+            )
+        ) {
             create();
         }
 
