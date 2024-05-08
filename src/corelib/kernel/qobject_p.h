@@ -55,6 +55,7 @@
 #include "QtCore/qvector.h"
 #include "QtCore/qvariant.h"
 #include "QtCore/qreadwritelock.h"
+#include "QtCore/qrecursivemutex.h"
 
 QT_BEGIN_NAMESPACE
 
@@ -107,6 +108,8 @@ public:
     struct ExtraData
     {
         ExtraData() {}
+
+        QRecursiveMutex mutex;
     #ifndef QT_NO_USERDATA
         QVector<QObjectUserData *> userData;
     #endif
@@ -175,9 +178,19 @@ public:
     inline void attachPublic(QObject *q);
     virtual ~QObjectPrivate();
     void detachSharedRefCount();
+    bool detachParentStrongRef(bool isDisowned);
     void emitDestroyed();
     void deleteChildrenEarly();
     void deleteChildren();
+
+    static inline const QObjectPrivate *get(const QObject *o) { return o->d_func(); }
+
+    static inline QObjectPrivate *get(QObject *o) { return o->d_func(); }
+
+    ExtraData *extras();
+
+    /*! @internal Returns a recursive QMutex. */
+    Q_ALWAYS_INLINE QMutex *mutex() { return &(extras()->mutex); }
 
     void setParent_helper(QObject *);
     void moveToThread_helper();
@@ -196,13 +209,6 @@ public:
     static inline void resetCurrentSender(QObject *receiver,
                                    Sender *currentSender,
                                    Sender *previousSender);
-
-    static inline QObjectPrivate *get(QObject *o) {
-        return o->d_func();
-    }
-    static inline const QObjectPrivate *get(const QObject *o) {
-        return o->d_func();
-    }
 
     /// Redirects to QMetaObject::indexOfSignalReal(const char *, const QMetaObject **).
     Q_ALWAYS_INLINE int signalIndex(const char *signalName, const QMetaObject **meta = Q_NULLPTR) const
@@ -230,8 +236,22 @@ public:
     static QMetaObject::Connection connect(const QObject *sender, int signal_index, QtPrivate::QSlotObjectBase *slotObj, Qt::ConnectionType type);
     static bool disconnect(const QObject *sender, int signal_index, void **slot);
 
+    enum { RawMutexPoolSize = 171 };
+    static QBasicMutex rawMutexPool[QObjectPrivate::RawMutexPoolSize];
+
+    /// Internally used for locking instead of keeping one mutex per instance.
+    ///
+    /// @warning This will be locked by signal-slot (dis)connect, hence
+    /// ensure to NOT over-use this for non-core features, to avoid dead-lock(s).
+    static Q_ALWAYS_INLINE QMutex *sharedMutex(const QObject *o)
+    {
+        return static_cast<QMutex *>(&QObjectPrivate::rawMutexPool[
+            quint32(quintptr(o)) % sizeof(QObjectPrivate::rawMutexPool)/sizeof(QObjectPrivate::rawMutexPool[0])]);
+    }
+
 public:
-    ExtraData *extraData;    // extra data set by the user
+    /// Extra data set by the user or rarely needed.
+    QAtomicPointer<ExtraData> extraData;
     QThreadData *threadData; // id of the thread that owns the object
 
     QObjectConnectionListVector *connectionLists;

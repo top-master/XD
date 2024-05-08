@@ -70,7 +70,7 @@ class QMutexData
 {
 public:
     bool recursive;
-    QMutexData(QMutex::RecursionMode mode = QMutex::NonRecursive)
+    Q_ALWAYS_INLINE Q_DECL_CONSTEXPR QMutexData(QMutex::RecursionMode mode = QMutex::NonRecursive)
         : recursive(mode == QMutex::Recursive) {}
 };
 
@@ -129,6 +129,26 @@ public:
 #endif
 };
 #endif //QT_LINUX_FUTEX
+
+
+class QRecursiveMutexPrivate : public QMutexData
+{
+public:
+    Q_ALWAYS_INLINE QRecursiveMutexPrivate()
+        : QMutexData(QMutex::Recursive), owner(0), count(0) {}
+
+    // written to by the thread that first owns 'mutex';
+    // read during attempts to acquire ownership of 'mutex' from any other thread:
+    QAtomicPointer<QtPrivate::remove_pointer<Qt::HANDLE>::type> owner;
+
+    // only ever accessed from the thread that owns 'mutex':
+    uint count;
+
+    QMutex mutex;
+
+    bool lock(int timeout) QT_MUTEX_LOCK_NOEXCEPT;
+    void unlock() Q_DECL_NOTHROW;
+};
 
 
 #ifdef Q_OS_UNIX

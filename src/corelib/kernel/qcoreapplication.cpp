@@ -1113,10 +1113,11 @@ bool QCoreApplicationPrivate::sendThroughApplicationEventFilters(QObject *receiv
     // We can't access the application event filters outside of the main thread (race conditions)
     Q_ASSERT(receiver->d_func()->threadData->thread == mainThread());
 
-    if (extraData) {
+    ExtraData *ext = extraData.load();
+    if (ext) {
         // application event filters are only called for objects in the GUI thread
-        for (int i = 0; i < extraData->eventFilters.size(); ++i) {
-            QObject *obj = extraData->eventFilters.at(i);
+        for (int i = 0; i < ext->eventFilters.size(); ++i) {
+            QObject *obj = ext->eventFilters.at(i);
             if (!obj)
                 continue;
             if (obj->d_func()->threadData != threadData) {
@@ -1132,9 +1133,12 @@ bool QCoreApplicationPrivate::sendThroughApplicationEventFilters(QObject *receiv
 
 bool QCoreApplicationPrivate::sendThroughObjectEventFilters(QObject *receiver, QEvent *event)
 {
-    if (receiver != QCoreApplication::instance() && receiver->d_func()->extraData) {
-        for (int i = 0; i < receiver->d_func()->extraData->eventFilters.size(); ++i) {
-            QObject *obj = receiver->d_func()->extraData->eventFilters.at(i);
+    ExtraData *ext = Q_NULLPTR;
+    if (receiver != QCoreApplication::instance()
+        && (ext = receiver->d_func()->extraData.load())
+    ) {
+        for (int i = 0; i < ext->eventFilters.size(); ++i) {
+            QObject *obj = ext->eventFilters.at(i);
             if (!obj)
                 continue;
             if (obj->d_func()->threadData != receiver->d_func()->threadData) {

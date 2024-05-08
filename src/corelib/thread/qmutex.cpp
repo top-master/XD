@@ -63,26 +63,7 @@ static inline bool isRecursive(QMutexData *d)
 #endif
 }
 
-class QRecursiveMutexPrivate : public QMutexData
-{
-public:
-    QRecursiveMutexPrivate()
-        : QMutexData(QMutex::Recursive), owner(0), count(0) {}
-
-    // written to by the thread that first owns 'mutex';
-    // read during attempts to acquire ownership of 'mutex' from any other thread:
-    QAtomicPointer<QtPrivate::remove_pointer<Qt::HANDLE>::type> owner;
-
-    // only ever accessed from the thread that owns 'mutex':
-    uint count;
-
-    QMutex mutex;
-
-    bool lock(int timeout) QT_MUTEX_LOCK_NOEXCEPT;
-    void unlock() Q_DECL_NOTHROW;
-};
-
-/*
+/*!
     \class QBasicMutex
     \inmodule QtCore
     \brief QMutex POD
@@ -180,11 +161,13 @@ QMutex::QMutex(RecursionMode mode)
 }
 
 /*!
+    \fn QMutex::~QMutex()
     Destroys the mutex.
 
     \warning Destroying a locked mutex may result in undefined behavior.
 */
-QMutex::~QMutex()
+
+void QT_FASTCALL QMutex::destroy()
 {
     QMutexData *d = d_ptr.load();
     if (isRecursive()) {

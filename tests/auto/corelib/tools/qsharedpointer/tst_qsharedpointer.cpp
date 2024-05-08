@@ -40,11 +40,13 @@
 #include <QtCore/QMap>
 #include <QtCore/QThread>
 #include <QtCore/QVector>
+#include <QtCore/QRegularExpression>
 
 #include "externaltests.h"
 #include "forwarddeclared.h"
 #include "nontracked.h"
 #include "wrapper.h"
+#include "qobjectspy.h"
 
 #include <stdlib.h>
 #include <time.h>
@@ -56,9 +58,16 @@ namespace QtSharedPointer {
 }
 QT_END_NAMESPACE
 
+
 class tst_QSharedPointer: public QObject
 {
     Q_OBJECT
+
+public:
+    inline tst_QSharedPointer()
+        : skipSafetyCheck(true)
+    {
+    }
 
 private slots:
     void basics_data();
@@ -79,8 +88,14 @@ private slots:
     void sharedPointerFromQObjectWithFakeQSharedPointer();
     void sharedPointerFromFakeQSharedPointer();
     void fakeFromRawPointerWithRealQSharedPointer();
+    void fakeFromRawPointerWithQWeakPointer_data();
+    void fakeFromRawPointerWithQWeakPointer();
     void fakeWhileAlreadyHavingFake();
+    void fakeWhileAlreadyHadFakeButNotCurrently();
+    void testIsNull_fakeFromRawPointerWithParent();
     void weakQObjectFromSharedPointer();
+    void weakQObjectAfterFakeReplacesWeak_data();
+    void weakQObjectAfterFakeReplacesWeak();
     void objectCast();
     void differentPointers();
     void virtualBaseDifferentPointers();
@@ -112,6 +127,7 @@ private slots:
     void validConstructs();
     void invalidConstructs_data();
     void invalidConstructs();
+    void staticDestruct();
     // let invalidConstructs be the last test, because it's the slowest;
     // add new tests above this block
 public slots:
@@ -120,11 +136,24 @@ public slots:
 public:
     inline void safetyCheck()
     {
+        if (skipSafetyCheck) {
+            skipSafetyCheck = false;
+            return;
+        }
 #ifdef QT_BUILD_INTERNAL
         QtSharedPointer::internalSafetyCheckCleanCheck();
 #endif
+        QObjectSpy::assertDestructedAll();
     }
+
+    bool skipSafetyCheck;
 };
+
+typedef const char * StaticString;
+typedef QList<const char *> StaticStringList;
+
+Q_DECLARE_METATYPE(StaticStringList)
+
 
 template<typename T> static inline
 QtSharedPointer::ExternalRefCountData *refCountData(const QSharedPointer<T> &b)
@@ -139,6 +168,13 @@ QtSharedPointer::ExternalRefCountData *refCountData(const QSharedPointer<T> &b)
     Q_ASSERT(static_cast<const Dummy*>(static_cast<const void*>(&b))->value == b.data());
     return static_cast<const Dummy*>(static_cast<const void*>(&b))->data;
 }
+
+#define ASSERT_NULL_OR_FIRST_INSTANCE(x) \
+    do { \
+        auto counterData = refCountData(x); \
+        QVERIFY(counterData == Q_NULLPTR \
+                || (counterData->strongref.load() == 1 && counterData->weakref.load() == 1)); \
+    } while (0)
 
 class Data
 {
@@ -277,8 +313,7 @@ void tst_QSharedPointer::basics()
         QVERIFY(! (ptr == otherData));
         QVERIFY(! (otherData == ptr));
     }
-    QVERIFY(!refCountData(ptr) || refCountData(ptr)->weakref.load() == 1);
-    QVERIFY(!refCountData(ptr) || refCountData(ptr)->strongref.load() == 1);
+    ASSERT_NULL_OR_FIRST_INSTANCE(ptr);
 
     {
         // create another object:
@@ -290,8 +325,7 @@ void tst_QSharedPointer::basics()
 
         // otherData is deleted here
     }
-    QVERIFY(!refCountData(ptr) || refCountData(ptr)->weakref.load() == 1);
-    QVERIFY(!refCountData(ptr) || refCountData(ptr)->strongref.load() == 1);
+    ASSERT_NULL_OR_FIRST_INSTANCE(ptr);
 
     {
         // create a copy:
@@ -307,8 +341,7 @@ void tst_QSharedPointer::basics()
         QCOMPARE(copy.data(), aData);
         QVERIFY(copy == aData);
     }
-    QVERIFY(!refCountData(ptr) || refCountData(ptr)->weakref.load() == 1);
-    QVERIFY(!refCountData(ptr) || refCountData(ptr)->strongref.load() == 1);
+    ASSERT_NULL_OR_FIRST_INSTANCE(ptr);
 
     {
         // create a weak reference:
@@ -339,8 +372,7 @@ void tst_QSharedPointer::basics()
         QVERIFY(strong == ptr);
         QCOMPARE(strong.data(), aData);
     }
-    QVERIFY(!refCountData(ptr) || refCountData(ptr)->weakref.load() == 1);
-    QVERIFY(!refCountData(ptr) || refCountData(ptr)->strongref.load() == 1);
+    ASSERT_NULL_OR_FIRST_INSTANCE(ptr);
 
     // aData is deleted here
 }
@@ -691,9 +723,10 @@ void tst_QSharedPointer::upCast()
     QCOMPARE(int(refCountData(baseptr)->strongref.load()), 1);
 }
 
-class OtherObject: public QObject
+class OtherObject: public QObjectSpy
 {
     Q_OBJECT
+
 };
 
 void tst_QSharedPointer::qobjectWeakManagement()
@@ -842,12 +875,12 @@ void tst_QSharedPointer::noSharedPointerFromWeakQObject()
     QWeakPointer<QObject> weak(&obj);
 
     {
-        QTest::ignoreMessage(QtWarningMsg ,  "QSharedPointer: cannot create a QSharedPointer from a QObject-tracking QWeakPointer");
+        QEXPECT_WARN(QRegularExpression("QSharedPointer: cannot create a QSharedPointer from a QWeakPointer-to-QObject.*"));
         QSharedPointer<QObject> strong = weak.toStrongRef();
         QVERIFY(strong.isNull());
     }
     {
-        QTest::ignoreMessage(QtWarningMsg ,  "QSharedPointer: cannot create a QSharedPointer from a QObject-tracking QWeakPointer");
+        QEXPECT_WARN(QRegularExpression("QSharedPointer: cannot create a QSharedPointer from a QWeakPointer-to-QObject.*"));
         QSharedPointer<QObject> strong = weak;
         QVERIFY(strong.isNull());
     }
@@ -897,7 +930,10 @@ void tst_QSharedPointer::sharedPointerFromQObjectWithFakeQSharedPointer()
 void tst_QSharedPointer::sharedPointerFromFakeQSharedPointer()
 {
     // Note that below the `copy` does NOT construct from raw-pointer directly,
-    // but such "from raw-pointer" case can be found in `invalidConstructs()` test.
+    // hence the `isFake` method should remain returning `true`, but even such
+    // "real-shared-pointer from raw-pointer with previous fake-shared-pointer"
+    // case is forbidden for non-QObject(s), hence
+    // can be found in `invalidConstructs()` test.
 
     // Dummy.
     Data *ptr = new Data;
@@ -940,6 +976,209 @@ void tst_QSharedPointer::fakeFromRawPointerWithRealQSharedPointer()
     QVERIFY( ! shared.isFake());
 }
 
+void tst_QSharedPointer::fakeFromRawPointerWithQWeakPointer_data()
+{
+    QTest::addColumn<StaticStringList>("creationOrder");
+    QTest::addColumn<StaticStringList>("outOfScopeOrder");
+    QTest::addColumn<StaticStringList>("expectationList");
+
+    // Reminder row (else already tested by other cases).
+    QTest::newRow("weak should get null after parent is gone.")
+            << (StaticStringList() << "parent")
+            << (StaticStringList() << "parent")
+            << (StaticStringList() << "no-weak");
+
+    QTest::newRow("weak should remain non-null after fake is gone.")
+            << (StaticStringList() << "fake")
+            << (StaticStringList() << "fake")
+            << (StaticStringList() << "weak");
+
+    QTest::newRow("weak should get null if strong's created from raw-pointer.")
+            << (StaticStringList() << "fake" << "strong")
+            << (StaticStringList() << "strong" << "fake")
+            << (StaticStringList() << "no-weak");
+    QTest::newRow("weak should get null if strong's created from raw-pointer #2")
+            << (StaticStringList() << "fake" << "strong")
+            << (StaticStringList() << "fake" << "strong")
+            << (StaticStringList() << "no-weak");
+
+    QTest::newRow("weak should remain non-null if strong's created from fake.")
+            << (StaticStringList() << "fake" << "strong-copy")
+            << (StaticStringList() << "strong" << "fake")
+            << (StaticStringList() << "weak");
+    QTest::newRow("weak should remain non-null if strong's created from fake #2")
+            << (StaticStringList() << "fake" << "strong-copy")
+            << (StaticStringList() << "fake" << "strong")
+            << (StaticStringList() << "weak");
+
+    // See "weak should get null after parent then fake are both gone" cases,
+    // which're related to above but need to be after below `parent` tests.
+
+    QTest::newRow("weak should get null after fake then parent are both gone.")
+            << (StaticStringList() << "fake" << "parent")
+            << (StaticStringList() << "fake" << "parent")
+            << (StaticStringList() << "no-weak");
+    QTest::newRow("weak should get null after fake then parent are both gone #2")
+            << (StaticStringList() << "parent" << "fake")
+            << (StaticStringList() << "fake" << "parent")
+            << (StaticStringList() << "no-weak");
+
+    QTest::newRow("weak should remain non-null after only parent remains.")
+            << (StaticStringList() << "parent" << "fake")
+            << (StaticStringList() << "fake")
+            << (StaticStringList() << "weak");
+    QTest::newRow("weak should remain non-null after only parent remains #2")
+            << (StaticStringList() << "fake" << "parent")
+            << (StaticStringList() << "fake")
+            << (StaticStringList() << "weak");
+
+    QTest::newRow("weak should remain non-null after only fake remains.")
+            << (StaticStringList() << "fake" << "parent")
+            << (StaticStringList() << "parent")
+            << (StaticStringList() << "weak" << "fake-getting-real");
+    QTest::newRow("weak should remain non-null after only fake remains #2")
+            << (StaticStringList() << "parent" << "fake")
+            << (StaticStringList() << "parent")
+            << (StaticStringList() << "weak" << "fake-getting-real");
+
+    QTest::newRow("weak should remain non-null after only strong remains.")
+            << (StaticStringList() << "parent" << "fake" << "strong")
+            << (StaticStringList() << "parent" << "fake")
+            << (StaticStringList() << "strong" << "weak");
+    QTest::newRow("weak should remain non-null after only strong remains #2")
+            << (StaticStringList() << "parent" << "fake" << "strong")
+            << (StaticStringList() << "fake" << "parent")
+            << (StaticStringList() << "strong" << "weak");
+
+    QTest::newRow("weak should get null after parent then fake are both gone #1")
+            << (StaticStringList() << "parent" << "fake")
+            << (StaticStringList() << "parent" << "fake")
+            << (StaticStringList() << "no-weak");
+    QTest::newRow("weak should get null after parent then fake are both gone #2")
+            << (StaticStringList() << "fake" << "parent")
+            << (StaticStringList() << "parent" << "fake")
+            << (StaticStringList() << "no-weak");
+
+    QTest::newRow("weak should get null after parent's gone, even if strong's created from fake #1")
+            << (StaticStringList() << "fake" << "strong-copy" << "parent")
+            << (StaticStringList() << "strong" << "fake" << "parent")
+            << (StaticStringList() << "no-weak");
+    QTest::newRow("weak should get null after parent's gone, even if strong's created from fake #2")
+            << (StaticStringList() << "fake" << "strong-copy" << "parent")
+            << (StaticStringList() << "fake" << "strong" << "parent")
+            << (StaticStringList() << "no-weak");
+
+    // Low priority repeat of previous tests, just with different order.
+    QTest::newRow("weak should get null after parent's gone, even if strong's created from fake #3")
+            << (StaticStringList() << "fake" << "strong-copy" << "parent")
+            << (StaticStringList() << "parent" << "strong" << "fake")
+            << (StaticStringList() << "no-weak");
+    QTest::newRow("weak should get null after parent's gone, even if strong's created from fake #4")
+            << (StaticStringList() << "fake" << "strong-copy" << "parent")
+            << (StaticStringList() << "parent" << "fake" << "strong")
+            << (StaticStringList() << "no-weak");
+    QTest::newRow("weak should get null after parent's gone, even if strong's created from fake #5")
+            << (StaticStringList() << "fake" << "strong-copy" << "parent")
+            << (StaticStringList() << "strong" << "parent" << "fake")
+            << (StaticStringList() << "no-weak");
+    QTest::newRow("weak should get null after parent's gone, even if strong's created from fake #6")
+            << (StaticStringList() << "fake" << "strong-copy" << "parent")
+            << (StaticStringList() << "fake" << "parent" << "strong")
+            << (StaticStringList() << "no-weak");
+}
+
+void tst_QSharedPointer::fakeFromRawPointerWithQWeakPointer()
+{
+    // Three ref-counters with the same raw pointer, where the
+    // first is a weak, second's a fake-strong-ref, and third's a real-strong-ref,
+    // while said fake-strong-ref does NOT outlive said real-strong-ref.
+
+    QFETCH(StaticStringList, creationOrder);
+    QFETCH(StaticStringList, outOfScopeOrder);
+    QFETCH(StaticStringList, expectationList);
+
+    // Dummy.
+    QObject *rawPtr = new QObjectSpy;
+    QScopedPointer<QObject> rawParent(new QObject());
+    // With weak-ref from raw-pointer.
+    QWeakPointer<QObject> weakRef(rawPtr);
+    // With spicific order of other references after weak-ref.
+    QSharedPointer<QObject> fakeRef;
+    QSharedPointer<QObject> strongRef;
+    bool hasParent = false;
+    for (int i = 0; i < creationOrder.count(); ++i) {
+        const QString current = qMove(QString::fromLocal8Bit(creationOrder.at(i)));
+        if (current == QLL("parent")) {
+            hasParent = true;
+            rawPtr->setParent(rawParent.data());
+        } else if (current == QLL("fake")) {
+            // With fake-strong-ref from raw-pointer.
+            fakeRef = qMove(QSharedPointer<QObject>::fromStack(rawPtr));
+            QVERIFY( ! fakeRef.isNull());
+            QCOMPARE(fakeRef.isFake(), ! hasParent);
+        } else if (current == QLL("strong")) {
+            // With real-strong-ref from raw-pointer.
+            strongRef = qMove(QSharedPointer<QObject>(rawPtr));
+            QVERIFY( ! fakeRef.isFake());
+        } else if (current == QLL("strong-copy")) {
+            strongRef = qMove(QSharedPointer<QObject>(fakeRef));
+            QVERIFY(fakeRef.isFake());
+        } else {
+            Q_UNREACHABLE();
+        }
+    }
+    // With spicific order of things going out of scope.
+    for (int i = 0; i < outOfScopeOrder.count(); ++i) {
+        const QString current = qMove(QString::fromLocal8Bit(outOfScopeOrder.at(i)));
+        if (current == QLL("parent")) {
+            rawParent.reset();
+        } else if (current == QLL("fake")) {
+            fakeRef.clear();
+        } else if (current == QLL("weak")) {
+            weakRef.clear();
+        } else if (current == QLL("strong")) {
+            strongRef.clear();
+        } else {
+            Q_UNREACHABLE();
+        }
+    }
+
+    // Actual test.
+    for (int i = 0; i < expectationList.count(); ++i) {
+        const QString current = qMove(QString::fromLocal8Bit(expectationList.at(i)));
+        bool boolExpectation = ! current.startsWith(QLL("no-"));
+        if (current.endsWith(QLL("parent"))) {
+            QCOMPARE( ! rawParent.isNull(), boolExpectation);
+        } else if (current.endsWith(QLL("fake"))) {
+            QCOMPARE( ! fakeRef.isNull(), boolExpectation);
+        } else if (current.endsWith(QLL("fake-getting-real"))) {
+            QCOMPARE( ! fakeRef.isFake(), boolExpectation);
+        } else if (current.endsWith(QLL("weak"))) {
+            QCOMPARE( ! weakRef.isNull(), boolExpectation);
+        } else if (current.endsWith(QLL("strong"))) {
+            QCOMPARE( ! strongRef.isNull(), boolExpectation);
+        } else {
+            Q_UNREACHABLE();
+        }
+    }
+    // With simulating last ref going out of scope.
+    if ( ! strongRef.isFake()) {
+        strongRef.clear();
+    }
+    if ( ! fakeRef.isFake()) {
+        fakeRef.clear();
+    }
+    if ( ! weakRef.isNull()) {
+        if (rawPtr->parent()) {
+            rawParent.reset();
+        } else {
+            delete rawPtr;
+        }
+    }
+    rawPtr = Q_NULLPTR;
+    QVERIFY(weakRef.isNull());
+}
+
 void tst_QSharedPointer::fakeWhileAlreadyHavingFake()
 {
     // TRACE/corelib BugFix: holding reference followed by `delete` causes crash #2,
@@ -955,6 +1194,56 @@ void tst_QSharedPointer::fakeWhileAlreadyHavingFake()
     QVERIFY(fakeY.isFake());
 }
 
+void tst_QSharedPointer::fakeWhileAlreadyHadFakeButNotCurrently()
+{
+    // Dummy.
+    QObject *ptr = new QObjectSpy;
+    // With previous fake-ref-counter.
+    QSharedPointer<QObject> fakeX = QSharedPointer<QObject>::fromStack(ptr);
+    QVERIFY(fakeX.isFake());
+    QVERIFY( ! fakeX.isNull());
+    // With previous ref-counter going out-of-scope or similar.
+    fakeX.clear();
+    // Without really deleting.
+    QCOMPARE(QObjectSpy::destructCounter, 0);
+
+    // Actual test.
+    QSharedPointer<QObject> fakeY = QSharedPointer<QObject>::fromStack(ptr);
+    QVERIFY(fakeY.isFake());
+    QVERIFY( ! fakeY.isNull());
+    // With warning, since fake is now a dangling pointer.
+    QEXPECT_WARN("QObject: has QSharedPointer coverage but was deleted directly. The program is malformed and may crash.");
+    delete ptr;
+}
+
+void tst_QSharedPointer::testIsNull_fakeFromRawPointerWithParent()
+{
+    // Case: Fake ref-counter which is created after QObject's parent,
+    // and outlives said perent, should become dangling-pointer
+    // (user is responsible to prevent malformed programs).
+    {
+        // Dummy.
+        QObject *rawParent = new QObject;
+        defer {
+            delete rawParent;
+        };
+        QObject *rawPtr = new QObject(rawParent);
+        // With fake-shared-pointer from raw-pointer.
+        QSharedPointer<QObject> fake = QSharedPointer<QObject>::fromStack(rawPtr);
+        QVERIFY( ! fake.isNull());
+        // Since has parent, gets auto-converted to real-strong-ref.
+        QVERIFY( ! fake.isFake());
+        // With parent going out of scope before fake-ref.
+        //QEXPECT_WARN("QObject: has QSharedPointer coverage but was deleted directly. The program is malformed and may crash.");
+        delete rawParent;
+        rawParent = Q_NULLPTR;
+
+        // Actual test.
+        QVERIFY( ! fake.isNull());
+    }
+    safetyCheck();
+}
+
 void tst_QSharedPointer::weakQObjectFromSharedPointer()
 {
     // this is the inverse of the above: you're allowed to create a QWeakPointer
@@ -966,6 +1255,43 @@ void tst_QSharedPointer::weakQObjectFromSharedPointer()
     // delete:
     shared.clear();
     QVERIFY(weak.isNull());
+}
+
+void tst_QSharedPointer::weakQObjectAfterFakeReplacesWeak_data()
+{
+    QTest::addColumn<bool>("hasPreviousWeak");
+    QTest::newRow("with previous-weak") << true;
+    QTest::newRow("without previous-weak") << false;
+}
+
+void tst_QSharedPointer::weakQObjectAfterFakeReplacesWeak()
+{
+    QFETCH(bool, hasPreviousWeak);
+
+    // Dummy.
+    QObjectSpy *obj = new QObjectSpy();
+    // With weak-ref-counter.
+    QWeakPointer<QObjectSpy> weakFirst;
+    if (hasPreviousWeak) {
+        weakFirst = obj;
+        QVERIFY( ! weakFirst.isNull());
+    }
+    // With fake strong-ref-counter.
+    QSharedPointer<QObjectSpy> fake = QSharedPointer<QObjectSpy>::fromStack(obj);
+    QVERIFY( ! fake.isNull());
+    // With fake going out-of-scope.
+    fake.clear();
+    // Without first weak being affected.
+    if (hasPreviousWeak) {
+        QVERIFY( ! weakFirst.isNull());
+    }
+
+    // Actual test.
+    QWeakPointer<QObjectSpy> weakSecond = obj;
+    QVERIFY( ! weakSecond.isNull());
+    // Without being a dangling-pointer.
+    delete obj;
+    QVERIFY(weakSecond.isNull());
 }
 
 void tst_QSharedPointer::objectCast()
@@ -2109,11 +2435,12 @@ void tst_QSharedPointer::invalidConstructs_data()
 
     // Two ref-counters with the same raw pointer,
     // where first is fake.
-    QTest::newRow("real-shared-pointer from raw-pointer, out-living previous fake-shared-pointer")
+    QTest::newRow("real-shared-pointer from raw-pointer with previous fake-shared-pointer")
         << &QTest::QExternalTest::tryRunFail
         << "Data *rawPtr = new Data;\n"
            "QSharedPointer<Data> fake = QSharedPointer<Data>::fromStack(rawPtr);\n"
-           "QSharedPointer<Data> shared(rawPtr);\n";
+           "QSharedPointer<Data> shared(rawPtr);\n"
+           "qWarning(\"Converting fake to real is only allowed for QObject(s).\");";
 
     // Repeats above but exits to be sure failure happens where expected.
     QTest::newRow("Initial shared-pointer should NOT cause crash.")
@@ -2637,6 +2964,28 @@ void tst_QSharedPointer::sharedFromThis()
 
     QCOMPARE(Data::generationCounter, generations + 6);
     QCOMPARE(Data::destructorCounter, destructions + 6);
+}
+
+class StaticDestructedObject : public QObject {
+public:
+    ~StaticDestructedObject() {
+        theInstance.clear();
+    }
+
+    static QSharedPointer<StaticDestructedObject> theInstance;
+};
+
+QSharedPointer<StaticDestructedObject> StaticDestructedObject::theInstance;
+
+
+void tst_QSharedPointer::staticDestruct()
+{
+    StaticDestructedObject::theInstance = QSharedPointer<StaticDestructedObject>(new StaticDestructedObject());
+    // Prevents "did assert nothing" warning, otherwise, actual test happens by
+    // the `Q_ASSERT_X` in `QtSharedPointer::ExternalRefCountData::derefStrong`.
+    QVERIFY( ! StaticDestructedObject::theInstance.isNull());
+    // Without checking yet.
+    this->skipSafetyCheck = true;
 }
 
 namespace ReentrancyWhileDestructing {

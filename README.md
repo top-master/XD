@@ -63,10 +63,10 @@ then you will need to run below command to fetch any sub-module:
     - In "`Qt Version`" Drop-down menu select "`MyXD`" (which you added in previous step)
     - In `"Compiler"` Drop-down menu select the auto-detected one with `x86` architecture (or even [configure compiler](./doc/qt-creator/tool-chains.md) manually)
 
-5. In `Qt-Creator` open as project our main build-script file which is "`XD.pro`", then configure it to use the build tool-kit (which you added in previous step), like:
+5. In `Qt-Creator` open as project our main build-script file which is "`XD-mini.pro`" file, or for advanced users "`XD.pro`", then configure it to use the build tool-kit (which you added in previous step), like:
     - The "`Configure Project`" wizard should appear right after open.
     - **WARNING:** if said wizard does **not** appear, then do either of these:
-        - Close Qt-Creator, and remove the "`C:/XD/XD.pro.user`" file, finally re-open said main build-script file in Qt-Creator.
+        - Close Qt-Creator, and remove the "`C:/XD/XD-mini.pro.user`" file or if advanced `XD.pro.user` file, finally re-open said main build-script file in Qt-Creator.
         - Or [configure project](./doc/qt-creator/configuring-projects.md) manually.
     - In said wizard, tick the "`MyToolKit`" checkbox, and un-tick any other kit.
     - Expand the "`Details`" of said checkbox.

@@ -129,17 +129,11 @@ static int *queuedConnectionTypes(const QArgumentType *argumentTypes, int argc)
     return types.take();
 }
 
-static QBasicMutex _q_ObjectMutexPool[131];
-
 /**
  * \internal
  * mutex to be locked when accessing the connectionlists or the senders list
  */
-static inline QMutex *signalSlotLock(const QObject *o)
-{
-    return static_cast<QMutex *>(&_q_ObjectMutexPool[
-        uint(quintptr(o)) % sizeof(_q_ObjectMutexPool)/sizeof(QBasicMutex)]);
-}
+#define signalSlotLock(x) QObjectPrivate::sharedMutex(x)
 
 // TRACE/corelib security: remove reverse engineering support #3,
 // but keep  qt_add and/or qt_removeObject for obfuscation.
@@ -193,6 +187,7 @@ void (*QAbstractDeclarativeData::setWidgetParent)(QObject *, QObject *) = 0;
 QObjectData::~QObjectData() {}
 
 int QtPrivate::remoteTimeout = 5000; //Q_VAR_EXPORT
+QBasicMutex QObjectPrivate::rawMutexPool[QObjectPrivate::RawMutexPoolSize];
 
 QMetaObject *QObjectData::dynamicMetaObject() const
 {
@@ -231,7 +226,6 @@ QObjectPrivate::QObjectPrivate(int version)
     sendChildEvents = true;                     // if we should send ChildInsert and ChildRemove events to parent
     receiveChildEvents = true;
     postedEvents = 0;
-    extraData = 0;
     connectedSignals[0] = connectedSignals[1] = 0;
     metaObject = 0;
     isWindow = false;
@@ -242,15 +236,16 @@ QObjectPrivate::QObjectPrivate(int version)
 
 QObjectPrivate::~QObjectPrivate()
 {
-    if (extraData && !extraData->runningTimers.isEmpty()) {
+    ExtraData *ext = extraData.load();
+    if (ext && !ext->runningTimers.isEmpty()) {
         if (Q_LIKELY(threadData->thread == QThread::currentThread())) {
             // unregister pending timers
             if (threadData->eventDispatcher.load())
                 threadData->eventDispatcher.load()->unregisterTimers(q_ptr);
 
             // release the timer ids back to the pool
-            for (int i = 0; i < extraData->runningTimers.size(); ++i)
-                QAbstractEventDispatcherPrivate::releaseTimerId(extraData->runningTimers.at(i));
+            for (int i = 0; i < ext->runningTimers.size(); ++i)
+                QAbstractEventDispatcherPrivate::releaseTimerId(ext->runningTimers.at(i));
         } else {
             qWarning("QObject::~QObject: Timers cannot be stopped from another thread");
         }
@@ -263,11 +258,28 @@ QObjectPrivate::~QObjectPrivate()
 
     if (metaObject) metaObject->objectDestroyed(q_ptr);
 
+    ext = extraData.load();
 #ifndef QT_NO_USERDATA
-    if (extraData)
-        qDeleteAll(extraData->userData);
+    if (ext)
+        qDeleteAll(ext->userData);
 #endif
-    delete extraData;
+    delete ext;
+}
+
+QObjectPrivate::ExtraData *QObjectPrivate::extras() {
+    QObjectPrivate::ExtraData *result = extraData.load();
+    if ( ! result) {
+        QObjectPrivate::ExtraData *newData = new QObjectPrivate::ExtraData();
+        if (extraData.testAndSetRelaxed(Q_NULLPTR, newData)) {
+            Q_CHECK_PTR(newData);
+            result = newData;
+        } else {
+            delete newData;
+            result = extraData.load();
+        }
+    }
+
+    return result;
 }
 
 /*!
@@ -925,7 +937,7 @@ QObject::~QObject()
     //
     // Hence, we let sub-classes decide whether to keep QPointer non-null until
     // the `destroyed(this)` signal finishes, which allows said listeners to
-    // check what QPointer was for emitted `this` of `destroyed(this)`
+    // check what QPointer was for the emitted `this` of `destroyed(this)`
     // (else said listeners would need to keep raw-pointer beside `QPointer`).
     d->emitDestroyed();
 
@@ -1066,17 +1078,84 @@ void QObjectPrivate::detachSharedRefCount() {
     QtSharedPointer::ExternalRefCountData *sharedRefcount = this->sharedRefcount.load();
     if (sharedRefcount) {
         if (sharedRefcount->strongref.load() > 0) {
-            qWarning("QObject: shared QObject was deleted directly. The program is malformed and may crash.");
+            qWarning("QObject: has QSharedPointer coverage but was deleted directly. The program is malformed and may crash.");
             // but continue deleting, it's too late to stop anyway
+
+            // Ensures Qt's smart-pointers know the QObject has already been deleted.
+            //
+            // First, handles current and down-stream.
+            sharedRefcount->addFlagOnce(QtSharedPointer::FlagIsMalformed);
+            QtSharedPointer::ExternalRefCountData *it = sharedRefcount;
+            do {
+                int tmp = it->strongref.fetchAndStoreRelaxed(0);
+                if (tmp > 0) {
+                    it->destroy(false);
+                }
+            } while (( it = it->next.load() ));
+
+            // Repeat for previous, and there should be only a single previous
+            // (but using `while`-loop we try to handle malformed programs).
+            it = sharedRefcount;
+            while (( it = it->previous )) {
+                int tmp = it->strongref.fetchAndStoreRelaxed(0);
+                if (tmp > 0) {
+                    it->destroy(false);
+                }
+            }
         }
 
         // indicate to all QWeakPointers that this QObject has now been deleted
         sharedRefcount->strongref.store(0);
+        // Handles extra weak-ref (each QObject is a weak-ref to itself, but
+        // only after the first Qt-smart-pointer gets created for said QObject).
         if ( ! sharedRefcount->weakref.deref()) {
             delete sharedRefcount;
             this->sharedRefcount.store(Q_NULLPTR);
         }
     }
+}
+
+bool QObjectPrivate::detachParentStrongRef(bool isDisowned) {
+    if (this->hasParentStrongRef
+        && ! (this->wasDeleted || this->isDeletingChildren) // Prevents infinite loop.
+    ) {
+        QMutex *mutex = this->mutex();
+        mutex->lock();
+        // Rechecks after lock.
+        if ( ! this->hasParentStrongRef) {
+            mutex->unlock();
+            return false;
+        }
+
+        // First, converts fake QSharedPointers to real ones.
+        QtSharedPointer::ExternalRefCountData *sharedRefcount =
+                this->sharedRefcount.load();
+        if (sharedRefcount->isFake()
+            // Fake-strong-ref will not `delete` this, else could skip if
+            // only parent has reference to us, like:
+            // ```&& sharedRefcount->strongref.load() > 1```
+        ) {
+            QSharedPointer<QObject> reallySharedCounter(const_cast<QObject *>(q_ptr));
+            Q_UNUSED(reallySharedCounter)
+            sharedRefcount = this->sharedRefcount.load();
+        }
+
+        this->hasParentStrongRef = false;
+        mutex->unlock();
+
+        // Dereference.
+        const bool isShared = QtSharedPointer::ExternalRefCountData::derefStrong(sharedRefcount, isDisowned);
+        if ( ! isShared || sharedRefcount->strongref.load() <= 0) {
+            if (isDisowned) {
+                // Above deleted QObject, hence App may crash if we don't:
+                return true;
+            } else {
+                qWarning("QObject: Was detached from strong-referencing parent-QObject. The program is malformed and may leak-memory.");
+            }
+        }
+    }
+
+    return false;
 }
 
 void QObjectPrivate::emitDestroyed() {
@@ -1281,7 +1360,8 @@ QObjectPrivate::Connection::~Connection()
 QString QObject::objectName() const
 {
     Q_D(const QObject);
-    return d->extraData ? d->extraData->objectName : QString();
+    QObjectPrivate::ExtraData *ext = d->extraData.load();
+    return ext ? ext->objectName : QString();
 }
 
 /*
@@ -1290,12 +1370,10 @@ QString QObject::objectName() const
 void QObject::setObjectName(const QString &name)
 {
     Q_D(QObject);
-    if (!d->extraData)
-        d->extraData = new QObjectPrivate::ExtraData;
-
-    if (d->extraData->objectName != name) {
-        d->extraData->objectName = name;
-        emit objectNameChanged(d->extraData->objectName, QPrivateSignal());
+    QObjectPrivate::ExtraData *ext = d->extras();
+    if (ext->objectName != name) {
+        ext->objectName = name;
+        emit objectNameChanged(ext->objectName, QPrivateSignal());
     }
 }
 
@@ -1758,9 +1836,7 @@ int QObject::startTimer(int interval, Qt::TimerType timerType)
         return 0;
     }
     int timerId = d->threadData->eventDispatcher.load()->registerTimer(interval, timerType, this);
-    if (!d->extraData)
-        d->extraData = new QObjectPrivate::ExtraData;
-    d->extraData->runningTimers.append(timerId);
+    d->extras()->runningTimers.append(timerId);
     return timerId;
 }
 
@@ -1781,7 +1857,8 @@ void QObject::killTimer(int id)
         return;
     }
     if (id) {
-        int at = d->extraData ? d->extraData->runningTimers.indexOf(id) : -1;
+        QObjectPrivate::ExtraData *ext = d->extraData.load();
+        int at = ext ? ext->runningTimers.indexOf(id) : -1;
         if (at == -1) {
             // timer isn't owned by this object
             qWarning("QObject::killTimer(): Error: timer id %d is not valid for object %p (%s, %s), timer has not been killed",
@@ -1795,7 +1872,7 @@ void QObject::killTimer(int id)
         if (d->threadData->eventDispatcher.load())
             d->threadData->eventDispatcher.load()->unregisterTimer(id);
 
-        d->extraData->runningTimers.remove(at);
+        ext->runningTimers.remove(at);
         QAbstractEventDispatcherPrivate::releaseTimerId(id);
     }
 }
@@ -2121,24 +2198,13 @@ void QObjectPrivate::setParent_helper(QObject *o)
                 && parentD->currentChildBeingDeleted == q;
 
         // TRACE/QObject/parent-ref 4: Ends parent's strong-referencing.
-        if (o == Q_NULLPTR && this->hasParentStrongRef
-            && ! (this->wasDeleted || this->isDeletingChildren) // Prevents infinite loop.
-        ) {
-            this->hasParentStrongRef = false;
-            const bool isShared = QtSharedPointer::ExternalRefCountData::derefStrong(sharedRefcount, isDisowned);
-            if ( ! isShared || sharedRefcount->strongref.load() <= 0) {
-                if (isDisowned) {
-                    // Above deleted QObject, hence App may crash if we don't:
-                    return;
-                } else {
-                    qWarning("QObject: Was detached from strong-referencing parent-QObject. The program is malformed and may leak-memory.");
-                }
-            }
+        if (o == Q_NULLPTR && this->detachParentStrongRef(isDisowned)) {
+            return;
         }
 
         if (isDisowned) {
             // don't do anything since QObjectPrivate::deleteChildren() already
-            // cleared our entry in parentD->children.
+            // cleared our entry in `parentD->children`.
         } else {
             const int index = parentD->children.indexOf(q);
             if (parentD->wasDeleted || parentD->isDeletingChildren) {
@@ -2167,7 +2233,10 @@ void QObjectPrivate::setParent_helper(QObject *o)
         // because else "parent" would delete the child-object ignorantly,
         // leaving us with invalid QSharedPointer instances.
         if ( ! this->hasParentStrongRef && sharedRefcount) {
-            this->hasParentStrongRef = sharedRefcount->tryIncrementStrong();
+            QMutexLocker locker(this->mutex());
+            if ( ! this->hasParentStrongRef) {
+                this->hasParentStrongRef = sharedRefcount->tryIncrementStrong();
+            }
         }
 
         parentD->children.append(q);
@@ -2234,13 +2303,12 @@ void QObject::installEventFilter(QObject *obj)
         return;
     }
 
-    if (!d->extraData)
-        d->extraData = new QObjectPrivate::ExtraData;
+    QObjectPrivate::ExtraData *ext = d->extras();
 
     // clean up unused items in the list
-    d->extraData->eventFilters.removeAll((QObject*)0);
-    d->extraData->eventFilters.removeAll(obj);
-    d->extraData->eventFilters.prepend(obj);
+    ext->eventFilters.removeAll((QObject*)0);
+    ext->eventFilters.removeAll(obj);
+    ext->eventFilters.prepend(obj);
 }
 
 /*!
@@ -2259,10 +2327,11 @@ void QObject::installEventFilter(QObject *obj)
 void QObject::removeEventFilter(QObject *obj)
 {
     Q_D(QObject);
-    if (d->extraData) {
-        for (int i = 0; i < d->extraData->eventFilters.count(); ++i) {
-            if (d->extraData->eventFilters.at(i) == obj)
-                d->extraData->eventFilters[i] = 0;
+    QObjectPrivate::ExtraData *ext = d->extraData.load();
+    if (ext) {
+        for (int i = 0; i < ext->eventFilters.count(); ++i) {
+            if (ext->eventFilters.at(i) == obj)
+                ext->eventFilters[i] = 0;
         }
     }
 }
@@ -3987,24 +4056,23 @@ bool QObject::setProperty(const char *name, const QVariant &value)
 
     int id = meta->indexOfProperty(name);
     if (id < 0) {
-        if (!d->extraData)
-            d->extraData = new QObjectPrivate::ExtraData;
+        QObjectPrivate::ExtraData *ext = d->extras();
 
-        const int idx = d->extraData->propertyNames.indexOf(name);
+        const int idx = ext->propertyNames.indexOf(name);
 
         if (!value.isValid()) {
             if (idx == -1)
                 return false;
-            d->extraData->propertyNames.removeAt(idx);
-            d->extraData->propertyValues.removeAt(idx);
+            ext->propertyNames.removeAt(idx);
+            ext->propertyValues.removeAt(idx);
         } else {
             if (idx == -1) {
-                d->extraData->propertyNames.append(name);
-                d->extraData->propertyValues.append(value);
+                ext->propertyNames.append(name);
+                ext->propertyValues.append(value);
             } else {
-                if (value == d->extraData->propertyValues.at(idx))
+                if (value == ext->propertyValues.at(idx))
                     return false;
-                d->extraData->propertyValues[idx] = value;
+                ext->propertyValues[idx] = value;
             }
         }
 
@@ -4041,10 +4109,11 @@ QVariant QObject::property(const char *name) const
 
     int id = meta->indexOfProperty(name);
     if (id < 0) {
-        if (!d->extraData)
+        QObjectPrivate::ExtraData *ext = d->extraData.load();
+        if ( ! ext)
             return QVariant();
-        const int i = d->extraData->propertyNames.indexOf(name);
-        return d->extraData->propertyValues.value(i);
+        const int i = ext->propertyNames.indexOf(name);
+        return ext->propertyValues.value(i);
     }
     QMetaProperty p = meta->property(id);
 #ifndef QT_NO_DEBUG
@@ -4064,8 +4133,9 @@ QVariant QObject::property(const char *name) const
 QList<QByteArray> QObject::dynamicPropertyNames() const
 {
     Q_D(const QObject);
-    if (d->extraData)
-        return d->extraData->propertyNames;
+    QObjectPrivate::ExtraData *ext = d->extraData.load();
+    if (ext)
+        return ext->propertyNames;
     return QList<QByteArray>();
 }
 
@@ -4227,12 +4297,11 @@ QObjectUserData::~QObjectUserData()
 void QObject::setUserData(uint id, QObjectUserData* data)
 {
     Q_D(QObject);
-    if (!d->extraData)
-        d->extraData = new QObjectPrivate::ExtraData;
+    QObjectPrivate::ExtraData *ext = d->extras();
 
-    if (d->extraData->userData.size() <= (int) id)
-        d->extraData->userData.resize((int) id + 1);
-    d->extraData->userData[id] = data;
+    if (ext->userData.size() <= (int) id)
+        ext->userData.resize((int) id + 1);
+    ext->userData[id] = data;
 }
 
 /*!
@@ -4241,10 +4310,11 @@ void QObject::setUserData(uint id, QObjectUserData* data)
 QObjectUserData* QObject::userData(uint id) const
 {
     Q_D(const QObject);
-    if (!d->extraData)
+    QObjectPrivate::ExtraData *ext = d->extraData.load();
+    if ( ! ext)
         return 0;
-    if ((int)id < d->extraData->userData.size())
-        return d->extraData->userData.at(id);
+    if ((int)id < ext->userData.size())
+        return ext->userData.at(id);
     return 0;
 }
 
@@ -4255,18 +4325,17 @@ QObjectUserData* QObject::userData(uint id) const
  */
 void QObjectPrivate::setPrivateData(const QByteArray &id, QObjectUserData *data)
 {
-    if ( ! extraData)
-        extraData = new QObjectPrivate::ExtraData();
-    extraData->privateDataMap.insert(id, data);
+    extras()->privateDataMap.insert(id, data);
 }
 
 /*!\internal
  */
 QObjectUserData *QObjectPrivate::privateData(const QByteArray &id) const
 {
-    if ( ! extraData)
+    ExtraData *ext = this->extraData.load();
+    if ( ! ext)
         return Q_NULLPTR;
-    return extraData->privateDataMap.value(id);
+    return ext->privateDataMap.value(id);
 }
 
 #ifndef QT_NO_DEBUG_STREAM

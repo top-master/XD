@@ -1,5 +1,6 @@
 /****************************************************************************
 **
+** Copyright (C) 2015 The XD Company Ltd.
 ** Copyright (C) 2015 The Qt Company Ltd.
 ** Contact: http://www.qt.io/licensing/
 **
@@ -2355,7 +2356,8 @@ void QStateMachinePrivate::registerEventTransition(QEventTransition *transition)
     if (!object)
         return;
     QObjectPrivate *od = QObjectPrivate::get(object);
-    if (!od->extraData || !od->extraData->eventFilters.contains(q))
+    QObjectPrivate::ExtraData *ext = od->extraData.load();
+    if ( ! ext || ! ext->eventFilters.contains(q))
         object->installEventFilter(q);
     ++qobjectEvents[object][transition->eventType()];
     QEventTransitionPrivate::get(transition)->registered = true;
