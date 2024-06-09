@@ -181,8 +181,23 @@ private slots:
 
     inline void toContain_shouldBinaryCheckArray() const {
         qExpect(QByteArray("x\0\ry\0", 5))->toContain(QByteArray("y\0", 2));
+        qExpect(QByteArray("x\0\ry\0", 5))->Not->toContain(QByteArray("y\0\0", 3));
         qExpect(QByteArray("x\0\r\0y", 5))->toContain(QByteArray("\r"));
         qExpect(QByteArray("x\0\r\0y", 5))->Not->toContain(QByteArray("z"));
+    }
+
+    /// Should not binary-check if actual is string even if expected is QByteArray.
+    inline void toContain_shouldUseFromLocal8BitIfActualIsQString() const {
+        qExpect(QString::fromLatin1("x\0\ry\0"))->toContain(QByteArray("x"));
+        qExpect(QString::fromLatin1("x\0\ry\0"))->Not->toContain(QByteArray("y"));
+        // Supports QLatin1String as well.
+        qExpect(QLatin1String("x\0\ry\0"))->toContain(QByteArray("x"));
+        qExpect(QLatin1String("x\0\ry\0"))->Not->toContain(QByteArray("y"));
+
+        // However, if QString allows null if size is set manually,
+        // and `fromLocal8Bit` ignores QByteArray's "\0z" part.
+        qExpect(QLatin1String("x\0\ry\0", 5))->toContain(QByteArray("y\0z", 3));
+        qExpect(QLatin1String("x\0\r\0y", 5))->Not->toContain(QByteArray("z"));
     }
 
     inline void toEqual_shouldHandleBinaryArray() const {

@@ -219,7 +219,7 @@ Qt::Key QTest::asciiToKey(char ascii)
     case 0xf7: return Qt::Key_division;
     case 0xf8: return Qt::Key_Ooblique;
     case 0xff: return Qt::Key_ydiaeresis;
-    default: QTEST_ASSERT(false); return Qt::Key(0);
+    default: QTEST_UNREACHABLE(); return Qt::Key(0);
     }
 }
 
@@ -492,7 +492,7 @@ char QTest::keyToAscii(Qt::Key key)
     case Qt::Key_LaunchE : return 0; // = 0x10b0,
     case Qt::Key_LaunchF : return 0; // = 0x10b1,
 
-    default: QTEST_ASSERT(false); return 0;
+    default: QTEST_UNREACHABLE(); return 0;
     }
 }
 

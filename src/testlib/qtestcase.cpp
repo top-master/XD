@@ -2160,35 +2160,39 @@ static void qInvokeTestMethodDataEntry(char *slot)
             // Reverts un-sticky per-test-method options.
             QTest::setTimeout(0);
             QTest::setContinuous(false);
-            // Executes before-each handlers (which prepare per-test-method needs).
-            invokeMethod(QTest::currentTestObject, "init()");
-            if (QTestResult::skipCurrentTest() || QTestResult::currentTestFailed())
-                break;
 
-            QBenchmarkTestMethodData::current->result = QBenchmarkResult();
-            QBenchmarkTestMethodData::current->resultAccepted = false;
-
-            QBenchmarkGlobalData::current->context.tag =
-                QLatin1String(
-                    QTestResult::currentDataTag()
-                    ? QTestResult::currentDataTag() : "");
-
+            // TRACE/testlib: XD allows test-slots (`invokeMethod`) to throw, but
+            // even those are only allowed to throw `QTestFailure`, otherwise
+            // the Qt's behaviour is kept, which is/was cancelling any other test.
             QT_TRY {
+                // Executes before-each handlers (which prepare per-test-method needs).
+                invokeMethod(QTest::currentTestObject, "init()");
+                if (QTestResult::skipCurrentTest() || QTestResult::currentTestFailed())
+                    break;
+
+                QBenchmarkTestMethodData::current->result = QBenchmarkResult();
+                QBenchmarkTestMethodData::current->resultAccepted = false;
+
+                const char *tag = QTestResult::currentDataTag();
+                QBenchmarkGlobalData::current->context.tag =
+                    QLatin1String(
+                            tag ? tag : "");
+
                 invokeOk = QMetaObject::invokeMethod(QTest::currentTestObject, slot,
                                                      Qt::DirectConnection);
                 if (!invokeOk)
                     QTestResult::addFailure("Unable to execute slot", __FILE__, __LINE__);
+
+                isBenchmark = QBenchmarkTestMethodData::current->isBenchmark();
+
+                QTestResult::finishedCurrentTestData();
+
+                invokeMethod(QTest::currentTestObject, "cleanup()");
             } QT_CATCHES(QTestFailure &error,
                 error.log();
             ) QT_CATCHES(const QExceptionWithMessage &error,
                 QTest::qFail(error.what(), (const char *)__FILE__, (int)__LINE__);
             )
-
-            isBenchmark = QBenchmarkTestMethodData::current->isBenchmark();
-
-            QTestResult::finishedCurrentTestData();
-
-            invokeMethod(QTest::currentTestObject, "cleanup()");
 
             // If the test isn't a benchmark, finalize the result after cleanup() has finished.
             if (!isBenchmark)

@@ -86,6 +86,7 @@ namespace QTest {
     int passes = 0;
     int skips = 0;
     int blacklists = 0;
+    int warningCount = 0;
 
     struct IgnoreResultList
     {
@@ -166,6 +167,9 @@ namespace QTest {
 
         static void destroyLoggers()
         {
+            // TRACE/testlib/logging BugFix: accessing loggers should be thread-safe #3,
+            // locked here.
+            QMutexLocker _(&loggersMutex);
             while (loggers) {
                 LoggerList *l = loggers;
                 loggers = loggers->next;
@@ -174,7 +178,10 @@ namespace QTest {
             }
         }
 
+        // TRACE/testlib/logging BugFix: accessing loggers should be thread-safe #4,
+        // locked here.
 #define FOREACH_LOGGER(operation) \
+        QMutexLocker _(&loggersMutex); \
         LoggerList *l = loggers; \
         while (l) { \
             QAbstractTestLogger *logger = l->logger; \
@@ -233,11 +240,15 @@ namespace QTest {
         }
 
     private:
+        // TRACE/testlib/logging BugFix: accessing loggers should be thread-safe #2,
+        // hence added related Mutex, and lock that wherever required.
+        static QBasicMutex loggersMutex;
         static LoggerList *loggers;
     };
 
 #undef FOREACH_LOGGER
 
+    QBasicMutex TestLoggers::loggersMutex;
     LoggerList *TestLoggers::loggers = 0;
     static bool loggerUsingStdout = false;
 
@@ -312,6 +323,7 @@ namespace QTest {
             break;
         case QtWarningMsg:
             QTest::TestLoggers::addMessage(QAbstractTestLogger::QWarning, msg);
+            ++QTest::warningCount;
             break;
         case QtFatalMsg:
             QTest::TestLoggers::addMessage(QAbstractTestLogger::QFatal, msg);
@@ -322,6 +334,8 @@ namespace QTest {
              * that we wrap up nicely, and in particular produce well-formed XML. */
             QTestResult::addFailure("Received a fatal error.", "Unknown file", 0);
             QTestLog::leaveTestFunction();
+            // TRACE/testlib/logging BugFix: accessing loggers should be thread-safe #1
+            // because multiple threads could cause `QtFatalMsg`.
             QTestLog::stopLogging();
             break;
         }
@@ -592,11 +606,17 @@ int QTestLog::blacklistCount()
     return QTest::blacklists;
 }
 
+int QTestLog::warningCount()
+{
+    return QTest::warningCount;
+}
+
 void QTestLog::resetCounters()
 {
     QTest::passes = 0;
     QTest::fails = 0;
     QTest::skips = 0;
+    QTest::warningCount = 0;
 }
 
 void QTestLog::setInstalledTestCoverage(bool installed)

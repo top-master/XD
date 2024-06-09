@@ -27,6 +27,7 @@
 #include <QtCore/qmutex.h>
 #include <QtCore/qdir.h>
 #include <QtCore/qexception.h>
+#include <QtCore/qregularexpression.h>
 
 
 QT_BEGIN_NAMESPACE
@@ -164,6 +165,72 @@ bool QStackTrace::next()
 #else
     return false;
 #endif
+}
+
+bool QStackTrace::skip(const QString &symbolPattern)
+{
+    Q_D(QStackTrace);
+
+    // Ensures ready (moves past invalid index).
+    if (d->currentIndex < d->beginIndex) {
+        if ( ! this->next()) {
+            return false;
+        }
+    }
+
+    bool foundAnyMatch = false;
+    QRegularExpression regExp(symbolPattern);
+    do {
+        QString symbol = qMove(this->symbolName());
+#if 0
+        qDebug() << symbol << filePath() << fileLineNumber() << symbolAddress();
+#endif
+        if (regExp.match(symbol).hasMatch()) {
+            // Skips all symbol matches (we want caller of symbol).
+            foundAnyMatch = true;
+            continue;
+        } else if (foundAnyMatch) {
+            return true;
+        }
+    } while (this->next());
+
+    // Reached end of stack, hence fallback.
+    if (foundAnyMatch) {
+        d->currentIndex = d->endIndex - 1;
+    }
+
+    return foundAnyMatch;
+}
+
+bool QStackTrace::skipAddress(qptrdiff address)
+{
+    Q_D(QStackTrace);
+
+    // Ensures ready (moves past invalid index).
+    if (d->currentIndex < d->beginIndex &&  ! this->next()) {
+        return false;
+    }
+
+    bool foundAnyMatch = false;
+    do {
+        const qptrdiff &symbol = this->symbolAddress();
+        if (address == symbol) {
+            // Skips symbol match (we want caller of symbol).
+            foundAnyMatch = true;
+            if (this->next()) {
+                return true;
+            } else {
+                break;
+            }
+        }
+    } while (this->next());
+
+    // Reached end of stack, hence fallback.
+    if (foundAnyMatch) {
+        d->currentIndex = d->endIndex - 1;
+    }
+
+    return foundAnyMatch;
 }
 
 QString QStackTrace::filePath() const

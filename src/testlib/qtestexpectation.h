@@ -56,6 +56,9 @@ public:
         return *this;
     }
 
+    inline const QString &filePath() const { return m_file; }
+    inline int fileLineNumber() const { return m_line; }
+
 protected:
     QStackTrace trace;
     QString m_file;
@@ -98,7 +101,7 @@ public:
     // MARK: Condition helpers.
 
     inline Self *toBeTruthy() {
-        inTestee = true;
+        QT_QEXPECT_BEGIN
 
         const bool casted = Traits::boolean_cast<TActual>(actual);
         if (isFailed(casted == true)) {
@@ -113,7 +116,7 @@ public:
     }
 
     inline Self *toBeFalsy() {
-        inTestee = true;
+        QT_QEXPECT_BEGIN
 
         const bool casted = Traits::boolean_cast<TActual>(actual);
         if (isFailed(casted == false)) {
@@ -129,7 +132,7 @@ public:
 
     template <typename T>
     inline Self *toBe(const T &expected) {
-        inTestee = true;
+        QT_QEXPECT_BEGIN
 
         QString actualPtr = formatter.ptrText(actual);
         QString expectedPtr = formatter.ptrText(expected);
@@ -145,7 +148,7 @@ public:
     }
 
     inline Self *toBeEmpty() {
-        inTestee = true;
+        QT_QEXPECT_BEGIN
 
         QString value;
         DefaultBool f = [&]() -> bool {
@@ -170,7 +173,7 @@ public:
     template <typename T = TActual>
     inline typename QEnableIf<Traits::has_isNull<T >::value, SelfPtr >::type
             toBeNull() {
-        inTestee = true;
+        QT_QEXPECT_BEGIN
 
         if (isFailed( const_cast<TActual *>(&actual)->isNull() )) {
             QString value = formatter.stringify(actual);
@@ -187,7 +190,7 @@ public:
     template <typename T = TActual>
     inline typename QEnableIf<Traits::has_isNull<T >::value == false, SelfPtr >::type
             toBeNull(int = 0) {
-        inTestee = true;
+        QT_QEXPECT_BEGIN
 
         QString value = formatter.ptrText(actual);
         if (isFailed( value == QStringLiteral("nullptr") )) {
@@ -203,7 +206,7 @@ public:
 
     template <typename T>
     inline Self *toBeGreaterThan(const T &expected) {
-        inTestee = true;
+        QT_QEXPECT_BEGIN
 
         if (isFailed(actual > expected)) {
             messenger.fail(
@@ -218,7 +221,7 @@ public:
 
     template <typename T>
     inline Self *toBeGreaterOrEqual(const T &expected) {
-        inTestee = true;
+        QT_QEXPECT_BEGIN
 
         if (isFailed(actual >= expected)) {
             messenger.fail(
@@ -233,7 +236,7 @@ public:
 
     template <typename T>
     inline Self *toBeLessThan(const T &expected) {
-        inTestee = true;
+        QT_QEXPECT_BEGIN
 
         if (isFailed(actual < expected)) {
             messenger.fail(
@@ -248,7 +251,7 @@ public:
 
     template <typename T>
     inline Self *toBeLessOrEqual(const T &expected) {
-        inTestee = true;
+        QT_QEXPECT_BEGIN
 
         if (isFailed(actual <= expected)) {
             messenger.fail(
@@ -263,7 +266,7 @@ public:
 
     template <typename T>
     inline Self *toEqual(const T &expected) {
-        inTestee = true;
+        QT_QEXPECT_BEGIN
 
         if (isFailed(actual == expected)) {
             messenger.fail(
@@ -281,7 +284,7 @@ public:
     /// instead fix said operator's tests before solving tests related to this.
     template <typename T>
     inline Self *toEqualFuzzy(const T &expected, const T &precession) {
-        inTestee = true;
+        QT_QEXPECT_BEGIN
 
         // Empty lines ensure possible compile-error mentions right line.
         bool match = (actual == expected);
@@ -323,7 +326,7 @@ public:
 
     template <typename T>
     inline Self *toEqualString(const T &expected, Qt::CaseSensitivity casing = Qt::CaseSensitive) {
-        inTestee = true;
+        QT_QEXPECT_BEGIN
 
         QString actualString = formatter.stringify(actual);
         QString expectedString = formatter.stringify(expected);
@@ -340,7 +343,7 @@ public:
 
     inline Self *toContain(const QString &expected, Qt::CaseSensitivity casing = Qt::CaseSensitive)
     {
-        inTestee = true;
+        QT_QEXPECT_BEGIN
 
         if (m_isNull(actual)) {
             messenger.fail(
@@ -353,7 +356,7 @@ public:
                 messenger.fail(
                     QStringLiteral("String content mismatch."),
                     QStringLiteral("expected String to contain"), expected,
-                    QStringLiteral("but was"), actual);
+                    QStringLiteral("but was"), value);
             }
         }
 
@@ -363,9 +366,12 @@ public:
 
     inline Self *toContain(const QByteArray &expected, Qt::CaseSensitivity casing = Qt::CaseSensitive)
     {
-        inTestee = true;
+        QT_QEXPECT_BEGIN
 
-        const QString &expectedString = formatter.stringify(expected);
+        // Converts `expected` to Hex, unless `TActual` is `QString`.
+        const QString &expectedString = Traits::isQString(actual)
+                ? QString::fromLocal8Bit(expected)
+                : formatter.stringify(expected);
 
         inTestee = false;
         return this->toContain(expectedString, casing);
@@ -381,7 +387,7 @@ public:
     template <int N>
     inline Self *toBeInArray(TActual (&expectedList)[N])
     {
-        inTestee = true;
+        QT_QEXPECT_BEGIN
 
         if (N <= 0) {
             messenger.fail(
@@ -409,11 +415,11 @@ public:
 
     template <typename TList>
     inline Self *toBeInArray(const TList &expectedList) {
-        inTestee = true;
+        QT_QEXPECT_BEGIN
 
         int count = 0;
         bool found = false;
-        foreach (TActualConst &expected, expectedList) {
+        Q_FOREACH (TActualConst &expected, expectedList) {
             ++count;
             if (actual == expected) {
                 found = true;
@@ -437,7 +443,7 @@ public:
 
     template <typename T>
     inline Self *toStartWith(const T &expected) {
-        inTestee = true;
+        QT_QEXPECT_BEGIN
 
         bool success = actual.startsWith(expected);
         if (isFailed(success)) {
@@ -453,7 +459,7 @@ public:
 
     template <typename T>
     inline Self *toEndWith(const T &expected) {
-        inTestee = true;
+        QT_QEXPECT_BEGIN
 
         bool success = actual.endsWith(expected);
         if (isFailed(success)) {
@@ -500,13 +506,28 @@ public:
     /// may be faster, because given @p func is never called if test passes.
     template <typename T = int>
     inline Self *withContext(const CustomMessageFunc &func) {
-        inTestee = true;
+        inTestee =true;
 
         if (func) {
             this->customMessage = func;
         }
 
         inTestee = false;
+        return this;
+    }
+
+    /// Changes the #qExpect macro's trace (file and line-number) based on stack-trace.
+    ///
+    /// @param symbolRegEx The pattern matching the point in stack-trace which we
+    /// want to skip anything after (inclusive).
+    ///
+    /// @warning Given @p symbolRegEx will not be copied, hence ensure that
+    /// it remains valid until `~ExpectationBase` finishes destructing.
+    ///
+    /// @see QStackTrace::skip
+    template <typename X = void>
+    Q_ALWAYS_INLINE Self *withTraceSkip(const char *symbolRegEx) {
+        this->m_traceSkipPattern = symbolRegEx;
         return this;
     }
 

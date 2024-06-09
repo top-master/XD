@@ -53,6 +53,8 @@ QT_BEGIN_NAMESPACE
 QAbstractTestLogger::QAbstractTestLogger(const char *filename)
 {
     if (!filename) {
+        // The `stderr` causes crashes, and in case of CLI,
+        // may not be piped to log-file anyway.
         stream = stdout;
         return;
     }

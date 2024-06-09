@@ -32,7 +32,7 @@ QT_BEGIN_NAMESPACE
 
 class Q_CORE_EXPORT QRunnableFunc : public QRunnable
 {
-    QFunction<void()> data;
+    QFunction<void () > data;
 public:
     inline QRunnableFunc() {}
 

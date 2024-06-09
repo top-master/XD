@@ -16,5 +16,6 @@ SUBDIRS=\
     qthreadonce \
     qthreadpool \
     qthreadstorage \
+    qthreadfunc \
     qwaitcondition \
     qwritelocker

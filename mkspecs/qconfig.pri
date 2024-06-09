@@ -32,6 +32,12 @@ QT_CONFIG += sql
 ## Qt would disable text-codecs for Windows, XD keeps it always if possible.
 QT_CONFIG += codecs
 
+# Improves auto-tests if debug-build.
+!CONFIG(debug, release|debug) {
+    DEFINES += QT_BUILD_INTERNAL
+    QT_CONFIG += private_tests
+}
+
 #versioning 
 QT_VERSION = 5.6.3
 QT_MAJOR_VERSION = 5

@@ -53,6 +53,7 @@ bootstrap { #Qt code
         qfilesystemengine.cpp \
         qfsfileengine.cpp \
         qfsfileengine_iterator.cpp \
+        qfunction.cpp \
         qglobal.cpp \
         qnumeric.cpp \
         qhash.cpp \

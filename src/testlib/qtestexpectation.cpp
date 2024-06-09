@@ -88,9 +88,18 @@ void QTest::ExpectationBase::throwIfPending()
     Q_ASSERT(msg.endsWith(singleLineFade));
     msg.chop(singleLineFade.size());
 
+    if (this->m_traceSkipPattern) {
+        // Plus one to skip self.
+        QStackTrace trace = qMove(QStackTrace::capture(1));
+        if (trace.skip(m_traceSkipPattern)) {
+            this->file = trace.filePath();
+            this->line = trace.fileLineNumber();
+        }
+    }
+
     QTestFailure err(msg);
     err.withContext(
-            QString::fromLocal8Bit(this->file),
+            this->file,
             this->line);
     if (QTest::isContinuous() || inTestee) {
         err.log();

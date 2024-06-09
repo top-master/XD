@@ -89,6 +89,73 @@ public:
 
 QT_WARNING_POP
 
+
+/// @def defer
+///
+/// Usable with Lambda, like:
+/// ```
+/// defer {
+///     qFree(myVariable);
+/// };
+/// ```
+/// @see #QT_FINALLY
+#if defined(_MSC_VER) && _MSC_VER < 1900
+#  define Q_DEFER_X(name) QtPrivate::QDefer name; \
+    do { Q_UNUSED(name) } while(0); \
+    name + [&, this]()
+#else
+#  define Q_DEFER_X(name) QtPrivate::QDefer name; \
+    do { Q_UNUSED(name) } while(0); \
+    name + [&]() -> void
+#endif
+#define Q_DEFER Q_DEFER_X(QT_JOIN(_qDefer, __LINE__))
+
+#if !defined(QT_NO_KEYWORDS) && !defined(defer)
+#  define defer Q_DEFER
+#endif
+
+namespace QtPrivate {
+
+class QDefer {
+    QFunction<void ()> m_callback;
+public:
+    Q_ALWAYS_INLINE QDefer() Q_DECL_NOTHROW
+    {
+    }
+
+    Q_ALWAYS_INLINE ~QDefer() Q_THROWS(?)
+    {
+        if (m_callback) (m_callback)();
+    }
+
+#ifdef Q_COMPILER_RVALUE_REFS
+    template <typename F>
+    Q_ALWAYS_INLINE_T void operator +(F &&callback) Q_DECL_NOEXCEPT
+    {
+        m_callback = callback;
+    }
+#else
+    template <typename F>
+    Q_ALWAYS_INLINE_T void operator +(F &callback) Q_DECL_NOEXCEPT
+    {
+        m_callback = callback;
+    }
+#endif
+
+    Q_ALWAYS_INLINE void operator +(const std::function<void()> &callback) Q_DECL_NOEXCEPT
+    {
+        m_callback = callback;
+    }
+
+    Q_ALWAYS_INLINE void operator +(const QFunction<void()> &callback) Q_DECL_NOEXCEPT
+    {
+        m_callback = callback;
+    }
+
+};
+
+} // namespace QtPrivate
+
 QT_END_NAMESPACE
 
 #endif //QFUNCTION_H

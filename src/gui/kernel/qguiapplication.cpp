@@ -580,8 +580,10 @@ QGuiApplication::QGuiApplication(int &argc, char **argv, int flags)
 #endif
     : QCoreApplication(*new QGuiApplicationPrivate(argc, argv, flags))
 {
-    d_func()->init();
+    Q_D(QGuiApplication);
+    d->init();
 
+    Q_ASSERT_X(QCoreApplicationPrivate::eventDispatcher, 0, "Event-dispatcher missing.");
     QCoreApplicationPrivate::eventDispatcher->startingUp();
 }
 

@@ -222,6 +222,22 @@ public:
 
 };
 
+template <typename T, typename Deleter = QScopedPointerDeleter<T> >
+class QScopedPointerLazyImmutableNonNull : public QScopedPointerLazy<T, Deleter>
+{
+    typedef QScopedPointerLazy<T, Deleter> super;
+public:
+    Q_DECL_CONSTEXPR explicit inline QScopedPointerLazyImmutableNonNull(Qt::Initialization)
+        : super(Qt::Uninitialized)
+    {}
+
+    Q_DECL_CONSTEXPR explicit inline QScopedPointerLazyImmutableNonNull(T *p = Q_NULLPTR)
+        : super(p, &QPointerLazinessResolver::globalImmutableNonNull)
+    {
+    }
+
+};
+
 QT_END_NAMESPACE
 
 #endif // QSCOPEDPOINTER_LAZY_H

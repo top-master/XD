@@ -1,5 +1,6 @@
 /****************************************************************************
 **
+** Copyright (C) 2015 The XD Company Ltd.
 ** Copyright (C) 2015 The Qt Company Ltd.
 ** Contact: http://www.qt.io/licensing/
 **
@@ -90,6 +91,39 @@ const QRect QDesktopWidget::availableGeometry(const QWidget *widget) const
         return availableGeometry(screenNumber(widget));
     else
         return rect;
+}
+
+/*!
+    Limits given @p x and @p y to be within the screen that contains the
+    given @p widget.
+
+    @param ignoredBorder How much of the given @p widget is allowed to
+    go outside of the screen bounds (and hence be invisible).
+ */
+QPoint QDesktopWidget::limitToView(
+        int x, int y, const QWidget *widget, const QMargins &ignoredBorder) const
+{
+    if ( ! widget) {
+        qWarning("QDesktopWidget: Attempt to limit point by a null widget.");
+        return QPoint();
+    }
+
+    QRect screenRect = this->screenGeometry(widget);
+    screenRect.adjust(-ignoredBorder.left(), -ignoredBorder.top(),
+                      ignoredBorder.right(), ignoredBorder.bottom());
+
+    // Do not move out of screen in x-axis.
+    if ((x + widget->width()) > screenRect.width())
+        x = screenRect.width() - widget->width();
+    if (x < screenRect.x())
+        x = screenRect.x();
+    // Do not move out of screen in y-axis.
+    if ( (y + widget->height()) > screenRect.height())
+        y = screenRect.height() - widget->height();
+    if (y < screenRect.y() )
+        y = screenRect.y();
+
+    return QPoint(x, y);
 }
 
 QDesktopScreenWidget *QDesktopWidgetPrivate::widgetForScreen(QScreen *qScreen) const

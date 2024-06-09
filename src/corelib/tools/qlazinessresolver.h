@@ -173,6 +173,8 @@ public:
         /// Forbids being set to null-pointer, hence QLazyEvenr::Take is
         /// forbidden as well.
         NonNull = 0x01,
+        /// Forbids being changed, meaning the value can only be set once, and
+        /// that only by the related QPointerLazinessResolver.
         Immutable = 0x02,
     };
 
@@ -190,12 +192,15 @@ public:
     static QPointerLazinessResolver globalNullable;
     static QPointerLazinessResolver globalNonNull;
     static QPointerLazinessResolver globalImmutable;
+    /// Combines @ref Immutable and @ref NonNull.
+    static QPointerLazinessResolver globalImmutableNonNull;
 
 protected:
     bool m_forbidNullPtr;
     bool m_immutable;
 };
 
+/// Wraps QPointerLazinessResolver with QAtomicPointer, and adds event helpers.
 class QPointerLazinessResolverAtomic : private QAtomicPointer<QLazinessResolver>
 {
     friend class QLazinessResolver;
@@ -269,6 +274,21 @@ public:
     {}
 
     inline explicit QPointerLazinessResolverAtomicImmutable(QPointerLazinessResolver *resolver)
+        : super(resolver)
+    {}
+};
+
+/// Same as QPointerLazinessResolverAtomic, but uses the
+/// @ref QPointerLazinessResolver::globalImmutableNonNull by default.
+class QObjectLazinessResolverPtr : public QPointerLazinessResolverAtomic
+{
+    typedef QPointerLazinessResolverAtomic super;
+public:
+    inline QObjectLazinessResolverPtr()
+        : super(&QPointerLazinessResolver::globalImmutableNonNull)
+    {}
+
+    inline explicit QObjectLazinessResolverPtr(QPointerLazinessResolver *resolver)
         : super(resolver)
     {}
 };

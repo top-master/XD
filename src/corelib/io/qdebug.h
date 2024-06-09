@@ -100,7 +100,7 @@ protected:
 public:
     inline QDebug(QIODevice *device) : stream(new Stream(device)) {}
     inline QDebug(QString *string) : stream(new Stream(string)) {}
-    inline QDebug(QtMsgType t) : stream(new Stream(t)) {}
+    inline QDebug(QtMsgType t = QT_PREPEND_NAMESPACE(QtDebugMsg)) : stream(new Stream(t)) {}
     inline QDebug(const QDebug &o):stream(o.stream) { ++stream->ref; }
     inline QDebug &operator=(const QDebug &other);
     ~QDebug();
@@ -161,8 +161,8 @@ public:
     inline QDebug &setMessageEnabled(bool e = true) { stream->message_output = e; return *this; }
     inline QDebug &hide() { stream->message_output = false; return *this; }
     inline QDebug &show() { stream->message_output = true; return *this; }
-    inline QString toString() const { QString r = stream->buffer; stream->buffer = QString(); return r; }
-    inline QString *data() { return &stream->buffer; }
+    inline QString toString() const { QString *old = stream->ts.string(); QString r = *old; old->resize(0); return r; }
+    inline QString *data() { return stream->ts.string(); }
 
     /// Prints message only if enabled, but always clears message-buffer.
     ///

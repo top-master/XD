@@ -40,7 +40,7 @@
 #include <QtNetwork/qnetworkproxy.h>
 
 #if !defined(QT_NO_SSL) && defined(QT_BUILD_INTERNAL)
-#include "private/qsslkey_p.h"
+#include <QtNetwork/private/qsslkey_p.h>
 #define TEST_CRYPTO
 #endif
 

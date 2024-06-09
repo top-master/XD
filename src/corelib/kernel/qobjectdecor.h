@@ -89,6 +89,10 @@ public:
 
     void decorListen(const QObjectDecorListener &listener);
 
+    static Q_ALWAYS_INLINE QPointerLazinessResolver *defaultResolver() {
+        return &super::globalImmutableNonNull;
+    }
+
     // MARK: Access helpers.
 
     Q_ALWAYS_INLINE const QPointer<QObject> &toDecoratee() const {
@@ -131,13 +135,16 @@ public:
     ///
     /// @warning Use @ref qobject_cast instead, wherever the
     /// sub-class of QObjectDecor extends QObject as well.
-    static inline QObjectDecor *fromDecorable(QObject *obj) {
+    static Q_ALWAYS_INLINE QObjectDecor *fromDecorable(QObject *obj) {
         QObjectData *d = reinterpret_cast<QObjectData *>(QScopedPointerLazyBase<QObjectData>::get(&obj->d_ptr)->d);
-        QLazinessResolver *resolver = d->lazinessResolver.raw();
-        if (resolver != &QPointerLazinessResolver::globalImmutable) {
-            Q_ASSERT_X(0 == static_cast<QLazinessResolver *>(Q_PTR_CAST(QObjectDecor *, 0)),
-                       "Decor", "Should be binary-castable to laziness-resolver.");
-            return reinterpret_cast<QObjectDecor *>(resolver);
+        // TRACE/QObject: `d_ptr` should always be non-null, but let's check #2
+        Q_IF (d) {
+            QLazinessResolver *resolver = d->lazinessResolver.raw();
+            if (resolver != defaultResolver()) {
+                Q_ASSERT_X(0 == static_cast<QLazinessResolver *>(Q_PTR_CAST(QObjectDecor *, 0)),
+                           "Decor", "Should be binary-castable to laziness-resolver.");
+                return reinterpret_cast<QObjectDecor *>(resolver);
+            }
         }
         return Q_NULLPTR;
     }
