@@ -83,7 +83,7 @@ void QTestData::append(int type, const void *data)
                 QMetaType::typeName(d->parent->elementTypeId(d->dataCount)),
                 QMetaType::typeName(type),
                 d->dataCount, d->tag);
-        QTEST_ASSERT(false);
+        QTEST_UNREACHABLE();
     }
     d->data[d->dataCount] = QMetaType::create(type, data);
     ++d->dataCount;

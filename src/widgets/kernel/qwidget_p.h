@@ -175,6 +175,7 @@ struct QTLWExtra {
 
     // *************************** Cross-platform bit fields ****************************
     uint opacity : 8;
+    /// Whether @ref QWidget::pos should result to global position (or subtract it).
     uint posIncludesFrame : 1;
     uint sizeAdjusted : 1;
     uint inTopLevelResize : 1;

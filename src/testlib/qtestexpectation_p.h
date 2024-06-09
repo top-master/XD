@@ -56,7 +56,7 @@ class Expectation;
 
 class Q_TESTLIB_EXPORT ExpectationBase {
 public:
-    const char *file;
+    QString file;
     int line;
     typedef QFunction<QString()> CustomMessageFunc;
     CustomMessageFunc customMessage;
@@ -84,14 +84,17 @@ protected:
     bool inTestee;
     bool m_isPositive;
     QString pendingMessage;
+
+    const char *m_traceSkipPattern;
 };
 
 // Outside-class to support more compilers.
 inline ExpectationBase::ExpectationBase(const char *fileArg, int lineArg)
-    : file(fileArg)
+    : file(QString::fromLocal8Bit(fileArg))
     , line(lineArg)
     , inTestee(false)
     , m_isPositive(true)
+    , m_traceSkipPattern(Q_NULLPTR)
 {
     customMessage = CustomMessageFunc([&] {
         return QString();
@@ -291,7 +294,27 @@ static inline typename QEnableIf< ! QTypeInfo<T>::isComplex, bool >::type
     return actual != 0;
 }
 
+template <typename TActual>
+static inline typename QEnableIf<QtPrivate::is_base_of<QString, TActual >::value || QtPrivate::is_base_of<QLatin1String, TActual >::value, bool >::type
+        isQString(const TActual &)
+{
+    return true;
+}
+
+template <typename T>
+static inline typename QEnableIf< ! QtPrivate::is_base_of<QString, T >::value && ! QtPrivate::is_base_of<QLatin1String, T >::value, bool >::type
+        isQString(T &)
+{
+    return false;
+}
+
 } // namespace Traits
+
+#define QT_QEXPECT_BEGIN \
+    inTestee = true; \
+    if ( ! pendingMessage.isEmpty()) { \
+        return this; \
+    }
 
 } // namespace QTest
 

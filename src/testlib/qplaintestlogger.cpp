@@ -360,14 +360,17 @@ void QPlainTestLogger::stopLogging()
     bool ok = false;
     const bool oldStyle = qEnvironmentVariableIntValue("QTEST_LOG_OLDSTYLE", &ok) && ok;
 
-    QString duration;
+    QString infoMsg;
     if ( ! oldStyle) {
-        duration.reserve(64);
-        duration += QLL("Duration: ");
-        duration += QElapsedTimer::toStringLabel(
+        // Estimates 64 for duration-info and 25 for warning-info.
+        infoMsg.reserve(64 + 25);
+        infoMsg += QLL("Duration: ");
+        infoMsg += QElapsedTimer::toStringLabel(
                     QTestLog::duration(),
                     QElapsedTimer::FormatFlags(QElapsedTimer::Precise | QElapsedTimer::ForceEnglish));
-        duration += QLatin1Char('\n');
+        infoMsg += QLL(" with ");
+        infoMsg += QString::number(QTestLog::warningCount());
+        infoMsg += QLL(" warning(s)\n");
     }
 
     if (QTestLog::verboseLevel() < 0) {
@@ -376,7 +379,7 @@ void QPlainTestLogger::stopLogging()
                   "%s",
                   QTestLog::passCount(), QTestLog::failCount(),
                   QTestLog::skipCount(), QTestLog::blacklistCount(),
-                  qPrintable(duration));
+                  qPrintable(infoMsg));
     } else {
         qsnprintf(buf, sizeof(buf),
                   "Totals: %d passed, %d failed, %d skipped, %d blacklisted\n"
@@ -384,7 +387,7 @@ void QPlainTestLogger::stopLogging()
                   "********* Finished testing of %s *********\n",
                   QTestLog::passCount(), QTestLog::failCount(),
                   QTestLog::skipCount(), QTestLog::blacklistCount(),
-                  qPrintable(duration),
+                  qPrintable(infoMsg),
                   QTestResult::currentTestObjectName());
     }
     outputMessage(buf);

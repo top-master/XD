@@ -782,6 +782,8 @@ void tst_QDir::entryList_data()
     QTest::newRow("Sorting QDir::Type | QDir::DirsFirst") << (m_dataPath + "/types/") << QStringList("*")
                                   << int(QDir::NoFilter) << int(QDir::Type | QDir::DirsFirst)
                                   << QString(".,..,d,e,f,d.a,e.a,f.a,d.b,e.b,f.b,d.c,e.c,f.c,a,b,c,a.a,b.a,c.a,a.b,b.b,c.b,a.c,b.c,c.c").split(',');
+    // NOTE: if `b.a` has same size as `c.c`, then
+    // your Git-repo is misconfigured and replaces LF with CRLF.
     QTest::newRow("Sorting QDir::Size") << (m_dataPath + "/types/") << QStringList("*")
                                   << int(QDir::AllEntries|QDir::NoDotAndDotDot) << int(QDir::Size | QDir::DirsFirst)
                                   << QString("d,d.a,d.b,d.c,e,e.a,e.b,e.c,f,f.a,f.b,f.c,c.a,c.b,c.c,b.a,b.c,b.b,a.c,a.b,a.a,a,b,c").split(',');

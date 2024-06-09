@@ -37,6 +37,7 @@
 #include <QtTest/qtestcase.h>
 #include <QtCore/qcoreapplication.h>
 #include <QtCore/qelapsedtimer.h>
+#include <QtCore/qrunnablefunc.h>
 #ifdef QT_GUI_LIB
 #  include <QtGui/QWindow>
 #endif
@@ -45,6 +46,10 @@
 #endif
 
 QT_BEGIN_NAMESPACE
+
+#ifndef QT_NO_THREAD
+class QThread;
+#endif
 
 namespace QTest
 {
@@ -131,7 +136,17 @@ namespace QTest
     }
 #  endif // QT_WIDGETS_LIB
 #endif // QT_DEPRECATED_SINCE(5, 0)
-}
+
+#ifndef QT_NO_THREAD
+    Q_TESTLIB_EXPORT bool qWaitForThread(QThread *thread, int ms);
+
+    Q_TESTLIB_EXPORT bool qWaitForAsync(QRunnable *task, int ms = -1) Q_THROWS(?);
+
+    Q_ALWAYS_INLINE bool qWaitForAsync(const QFunction<void () > &task, int ms = -1) Q_THROWS(?)
+    {  return qWaitForAsync(new QRunnableFunc(task), ms); }
+#endif
+
+} // namespace QTest
 
 QT_END_NAMESPACE
 

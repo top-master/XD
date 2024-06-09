@@ -147,6 +147,13 @@ typedef integral_constant<bool, false> false_type;
 typedef true_type  true_;
 typedef false_type false_;
 
+typedef char NoType[1];
+typedef char YesType[2];
+enum {
+    NoSize = sizeof(NoType),
+    YesSize = sizeof(YesType)
+};
+
 // if_ is a templatized conditional statement.
 // if_<cond, A, B> is a compile time evaluation of cond.
 // if_<>::type contains A if cond is true, B otherwise.
@@ -469,6 +476,17 @@ template <typename T> struct mutable_derefable {
 // Specified by TR1 [4.6] Relationships between types
 template<typename T, typename U> struct is_same : public false_type { };
 template<typename T> struct is_same<T, T> : public true_type { };
+
+// Same as `std::is_base_of`.
+template <typename Base, typename Derived> class is_base_of {
+    // Overload resolution for derived types.
+    static YesType & qInlineTest(const Base *);
+    // Overload resolution for non-derived types.
+    static NoType & qInlineTest(...);
+
+public:
+    enum { value = sizeof(qInlineTest(static_cast<Derived*>(0))) == YesSize };
+};
 
 // Specified by TR1 [4.6] Relationships between types
 #if !defined(_MSC_VER) && !(defined(__GNUC__) && __GNUC__ <= 3)

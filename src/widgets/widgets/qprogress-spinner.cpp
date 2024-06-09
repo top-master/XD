@@ -85,7 +85,11 @@ void QProgressSpinner::render(QPainter *p, const QRectF &dest,
     const int halfWidth = shortDimension / 2.0f;
     Q_ASSERT(p);
 
-    int lineHeight = (shortDimension * 0.40) - 2;
+    int lineHeight = shortDimension > 40
+            ? shortDimension * 0.33
+            : shortDimension * 0.35;
+    // Keeps minimum empty-space in center.
+    lineHeight -= 2;
     int lineWidth  = shortDimension > 40
             ? lineHeight * 0.21
             : lineHeight * 0.40;

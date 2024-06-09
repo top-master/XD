@@ -49,6 +49,7 @@
 #include <QtWidgets/QDialog>
 #include <QtWidgets/QStyledItemDelegate>
 #include <QtWidgets/QStyleFactory>
+#include <QtWidgets/QVBoxLayout>
 
 #if defined(Q_OS_WIN) || defined(Q_OS_WINCE)
 #  include <windows.h>
@@ -115,7 +116,7 @@ private slots:
     void scrollBarAsNeeded();
     void moveItems();
     void wordWrap();
-#if defined(Q_OS_WIN) && !defined(Q_OS_WINCE) && WINVER >= 0x0500
+#if defined(Q_OS_WIN) && WINVER >= 0x0500 && !defined(Q_OS_WINCE) && !defined(Q_OS_WINRT)
     void setCurrentIndexAfterAppendRowCrash();
 #endif
     void emptyItemSize();
@@ -308,7 +309,8 @@ void tst_QListView::init()
 
 void tst_QListView::cleanup()
 {
-    QVERIFY(QApplication::topLevelWidgets().isEmpty());
+    QWidgetList list = QApplication::topLevelWidgets();
+    qExpect(list)->toBeEmpty();
 }
 
 
@@ -1472,16 +1474,25 @@ void tst_QListView::wordWrap()
     QTRY_COMPARE(lv.verticalScrollBar()->isVisible(), true);
 }
 
-#if defined(Q_OS_WIN) && !defined(Q_OS_WINCE) && !defined(Q_OS_WINRT)
+#if defined(Q_OS_WIN) && WINVER >= 0x0500 && !defined(Q_OS_WINCE) && !defined(Q_OS_WINRT)
 class SetCurrentIndexAfterAppendRowCrashDialog : public QDialog
 {
     Q_OBJECT
 public:
     SetCurrentIndexAfterAppendRowCrashDialog()
     {
-#if WINVER >= 0x0500
         listView = new QListView();
+        listView->setObjectName(QTest::currentTestFunction());
         listView->setViewMode(QListView::IconMode);
+
+        // TRACE/tests/QListView BugFix: add `listView` into dialog-window, else
+        // shows as separate-window, causing the `cleanup` slot to fail, however,
+        // we prefer adding to layout instead of setting `parent`, since else the
+        // dialog-window may cause "Unable to set geometry" warning(s), because
+        // the default QWidget size may be less than what Windows-OS allows
+        // (but Qt logs even if it auto-increased size to match Windows needs).
+        QVBoxLayout *layout = new QVBoxLayout(this);
+        layout->addWidget(listView);
 
         model = new QStandardItemModel(this);
         listView->setModel(model);
@@ -1489,12 +1500,17 @@ public:
         timer = new QTimer(this);
         connect(timer, SIGNAL(timeout()), this, SLOT(buttonClicked()));
         timer->start(1000);
+    }
 
+protected:
+    // TRACE/tests/QListView BugFix: there's NOT any HWND until window is created.
+    void showEvent(QShowEvent *event) Q_DECL_OVERRIDE
+    {
+        QDialog::showEvent(event);
         DWORD lParam = 0xFFFFFFFC/*OBJID_CLIENT*/;
         DWORD wParam = 0;
-        if (const HWND hwnd =getHWNDForWidget(this))
+        if (const HWND hwnd = getHWNDForWidget(this))
             SendMessage(hwnd, WM_GETOBJECT, wParam, lParam);
-#endif
     }
 
 private slots:
@@ -1506,21 +1522,20 @@ private slots:
         listView->setCurrentIndex(model->indexFromItem(item));
         close();
     }
+
 private:
     QListView *listView;
     QStandardItemModel *model;
     QTimer *timer;
 };
-#endif
 
-#if defined(Q_OS_WIN) && !defined(Q_OS_WINCE) && !defined(Q_OS_WINRT) && WINVER >= 0x0500
 // This test only makes sense on windows 2000 and higher.
 void tst_QListView::setCurrentIndexAfterAppendRowCrash()
 {
     SetCurrentIndexAfterAppendRowCrashDialog w;
     w.exec();
 }
-#endif
+#endif // Q_OS_WIN
 
 void tst_QListView::emptyItemSize()
 {

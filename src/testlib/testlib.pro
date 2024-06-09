@@ -64,6 +64,7 @@ SOURCES = \
     qtestelement.cpp \
     qtestelementattribute.cpp \
     qtestmouse.cpp \
+    qtestsystem.cpp \
     qtestxunitstreamer.cpp \
     qxunittestlogger.cpp \
     qtestblacklist.cpp \

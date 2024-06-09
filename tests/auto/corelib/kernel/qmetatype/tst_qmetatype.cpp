@@ -1108,6 +1108,7 @@ void testConstructHelper<QMetaType::Void>()
     QMetaType::destruct(QMetaType::Void, actual);
     qFreeAligned(storage);
 
+    QEXPECT_WARN("Meta-type: auto memory-allocation is forbidden.");
     QVERIFY(QMetaType::construct(QMetaType::Void, 0, /*copy=*/0) == 0);
     QMetaType::destruct(QMetaType::Void, 0);
 }
@@ -1174,6 +1175,7 @@ void testConstructCopyHelper<QMetaType::Void>()
     QMetaType::destruct(QMetaType::Void, actual);
     qFreeAligned(storage);
 
+    QEXPECT_WARN("Meta-type: auto memory-allocation is forbidden.");
     QVERIFY(QMetaType::construct(QMetaType::Void, 0, expected) == 0);
 }
 

@@ -1,7 +1,7 @@
 # OpenSSL support; compile in QSslSocket.
 contains(QT_CONFIG, ssl) | contains(QT_CONFIG, openssl) | contains(QT_CONFIG, openssl-linked) {
     load(extras)
-    INCLUDEPATH += $$extras/lib/openssl-1.0.1c/include
+    MODULE_PRIVATE_INCLUDES += $$extras/lib/openssl-1.0.1c/include
 
     HEADERS += ssl/qasn1element_p.h \
                ssl/qssl.h \

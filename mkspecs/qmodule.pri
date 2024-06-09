@@ -1,4 +1,5 @@
-QT_BUILD_PARTS += libs tools
+
+QT_BUILD_PARTS += tests libs tools
 QT_QCONFIG_PATH = 
 
 host_build {

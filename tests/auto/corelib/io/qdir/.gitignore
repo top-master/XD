@@ -1,1 +1,7 @@
 tst_qdir
+
+# Windows.
+entrylist/brokenlink.lnk
+entrylist/linktodirectory.lnk
+entrylist/linktofile.lnk
+entrylist/writable

@@ -43,6 +43,15 @@ public:
 
     bool next();
 
+    /// Skips stack-trace entries until given @p symbolPattern is reached, and
+    /// even once reached, continues skipping until there's NOT any match left.
+    ///
+    /// @warning For MSVC's release builds with `force_debug_info`, the trace may
+    /// end at first symbol that's part of `std` library, unless `std` got inlined.
+    bool skip(const QString &symbolPattern);
+    inline bool skip(const char *symbolPattern) { return this->skip(QString::fromLocal8Bit(symbolPattern)); }
+    bool skipAddress(qptrdiff address);
+
     QString filePath() const;
     int fileLineNumber() const;
 

@@ -40,7 +40,7 @@
 #include <qpaintengine.h>
 
 #ifdef QT_BUILD_INTERNAL
-#include <private/qstatictext_p.h>
+#include <QtGui/private/qstatictext_p.h>
 #endif
 
 // #define DEBUG_SAVE_IMAGE

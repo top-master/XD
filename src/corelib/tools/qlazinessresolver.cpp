@@ -29,9 +29,12 @@
 
 QT_BEGIN_NAMESPACE
 
+#define LAZINESS_ASSERT Q_ASSERT
+
 QPointerLazinessResolver QPointerLazinessResolver::globalNullable;
 QPointerLazinessResolver QPointerLazinessResolver::globalNonNull(QPointerLazinessResolver::NonNull);
 QPointerLazinessResolver QPointerLazinessResolver::globalImmutable(QPointerLazinessResolver::Immutable);
+QPointerLazinessResolver QPointerLazinessResolver::globalImmutableNonNull(QPointerLazinessResolver::Immutable | QPointerLazinessResolver::NonNull);
 
 
 QLazinessResolver::~QLazinessResolver()
@@ -53,10 +56,16 @@ bool QPointerLazinessResolver::lazyEvent(QLazyEvent *event)
         // ```
         // event->data<void *>() = myLoadedPointer;
         // ```
-        return ! m_forbidNullPtr || (event->rawData() != Q_NULLPTR);
+        if (m_forbidNullPtr) {
+            void *rawData = event->rawData();
+            LAZINESS_ASSERT(rawData);
+            return rawData != Q_NULLPTR;
+        }
+        return true;
     }
     case QLazyEvent::Take: {
         if (m_forbidNullPtr || m_immutable) {
+            LAZINESS_ASSERT(false);
             return false;
         }
         event->data<void *>() = Q_NULLPTR;
@@ -73,6 +82,7 @@ bool QPointerLazinessResolver::lazyEvent(QLazyEvent *event)
         void *newValue = newValueRef;
         if (newValue != oldValue) {
             if (m_forbidNullPtr && ! newValue) {
+                LAZINESS_ASSERT(false);
                 return false;
             }
             oldValueRef = newValue;
@@ -100,8 +110,10 @@ bool QPointerLazinessResolver::lazyEvent(QLazyEvent *event)
         // instead of following lines till case-end.
 
         if (m_forbidNullPtr) {
-            if ( ! newValueRef)
+            if ( ! newValueRef) {
+                LAZINESS_ASSERT(false);
                 return false;
+            }
             // Docs for Swap already mention it's only optional if null-pointer is
             // allowed, hence if sub-class let's below be reached, then
             // it means a binary swap is enough.

@@ -73,6 +73,10 @@ public:
     const QRect availableGeometry(const QPoint &point) const
     { return availableGeometry(screenNumber(point)); }
 
+    QPoint limitToView(int x, int y, const QWidget *widget, const QMargins &ignoredBorder = QMargins()) const;
+    inline QPoint limitToView(const QPoint &p, const QWidget *widget, const QMargins &ignoredBorder = QMargins()) const
+        { return limitToView(p.x(), p.y(), widget, ignoredBorder); }
+
 Q_SIGNALS:
     void resized(int);
     void workAreaResized(int);
