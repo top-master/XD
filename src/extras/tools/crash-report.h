@@ -135,7 +135,7 @@ public:
     RegisterApplicationRestartFunc registerRestart;
 };
 
-/// @warning Supports Windows only, at least tested versions (XP, 7, 10).
+/// @warning Supports Windows only, at least versions we tested (XP, 7, 10).
 ///
 /// @todo Support more platforms.
 class CrashReporter {

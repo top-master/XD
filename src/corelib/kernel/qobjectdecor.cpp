@@ -47,7 +47,7 @@ void QObjectDecor::decorAttach(QObject *owner)
     }
 
     const QMetaObject *m = owner->metaObject();
-    if ( ! QLazinessResolver::set(owner->d_ptr, &globalImmutable, this)) {
+    if ( ! QLazinessResolver::set(owner->d_ptr, defaultResolver(), this)) {
         qThrowAtomicMismatch();
     }
     // Needs to be last, because if above throws, then
@@ -68,14 +68,14 @@ void QObjectDecor::decorDetach()
         QObjectPrivate *ownerPrivate = decorOwnerPrivate;
         QScopedPointerLazyBase<QObjectData> *base = QScopedPointerLazyBase<QObjectData>::get(&decorOwner->d_ptr);
         base->d = ownerPrivate;
-        QLazinessResolver::set(decorOwner->d_ptr, this, &globalImmutable);
+        QLazinessResolver::set(decorOwner->d_ptr, this, defaultResolver());
         ownerPrivate->isLazy = false;
         ownerPrivate->isDecor = false;
         QObject *loaded = decorLoaded.data();
         if (loaded) {
             QObjectPrivate *loadedPrivate = QObjectPrivate::get(loaded);
             loadedPrivate->isDecoratee = false;
-            QLazinessResolver::set(loaded->d_ptr, this, &globalImmutable);
+            QLazinessResolver::set(loaded->d_ptr, this, defaultResolver());
             // If `decorOwner` if handles delete of any loaded QObject, then
             // it should copy the decorLoaded QPointer before calling this.
             decorLoaded = QPointer<QObject>();
@@ -98,7 +98,7 @@ void QObjectDecor::postDecorLoad(QObject *loaded) {
                " ensure has different resolver.");
     }
 
-    if ( ! QLazinessResolver::set(loaded->d_ptr, &globalImmutable, this)) {
+    if ( ! QLazinessResolver::set(loaded->d_ptr, defaultResolver(), this)) {
         qThrow(QRequirementErrorType::Usage,  "Freshly loaded decoratee should have default resolver.");
     }
 

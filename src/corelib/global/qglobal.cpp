@@ -113,6 +113,8 @@ Q_STATIC_ASSERT_X(sizeof(int) == 4, "Qt assumes that int is 32 bits");
 Q_STATIC_ASSERT_X(UCHAR_MAX == 255, "Qt assumes that char is 8 bits");
 Q_STATIC_ASSERT_X(QT_POINTER_SIZE == sizeof(void *), "QT_POINTER_SIZE defined incorrectly");
 
+void *QtPrivate::debugBreakContext = Q_NULLPTR;
+
 /*!
     \class QFlag
     \inmodule QtCore

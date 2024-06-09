@@ -128,7 +128,7 @@ namespace QTest
             // which is highly undesired here. Tests must avoid relying on QCursor.
             break;
         default:
-            QTEST_ASSERT(false);
+            QTEST_UNREACHABLE();
         }
         waitForEvents();
     }
@@ -204,7 +204,7 @@ namespace QTest
 #endif
                 return;
             default:
-                QTEST_ASSERT(false);
+                QTEST_UNREACHABLE();
         }
         QSpontaneKeyEvent::setSpontaneous(&me);
         if (!qApp->notify(widget, &me)) {

@@ -93,7 +93,7 @@ public:
     QObject *q_ptr;
     QObject *parent;
     QObjectList children;
-    QPointerLazinessResolverAtomicImmutable lazinessResolver;
+    QObjectLazinessResolverPtr lazinessResolver;
 
     uint isWidget : 1;
     uint blockSig : 1;
@@ -620,8 +620,9 @@ inline QPointerLazinessResolverAtomic &QScopedPointerLazyBase<QObjectData>::lazi
     return Q_PTR_CAST(QObjectData *, this->d)->lazinessResolver;
 }
 
-Q_DECL_CONSTEXPR inline bool QScopedPointerLazyBase<QObjectData>::isLoadPending() const {
-    return Q_PTR_CAST(QObjectData *, this->d)->isLazy;
+Q_ALWAYS_INLINE bool QScopedPointerLazyBase<QObjectData>::isLoadPending() const {
+    // TRACE/QObject: `d_ptr` should always be non-null, but let's check #1
+    return this->d && Q_PTR_CAST(QObjectData *, this->d)->isLazy;
 }
 
 QSignalBlocker::QSignalBlocker(QObject *o) Q_DECL_NOTHROW

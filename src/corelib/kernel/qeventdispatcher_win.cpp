@@ -43,6 +43,7 @@
 #include "qwineventnotifier.h"
 
 #include "qelapsedtimer.h"
+#include <QtCore/qmap.h>
 #include "qcoreapplication_p.h"
 #include <private/qthread_p.h>
 #include <private/qmutexpool_p.h>
@@ -55,6 +56,43 @@ QT_BEGIN_NAMESPACE
 
 HINSTANCE qWinAppInst();
 extern uint qGlobalPostedEventsCount();
+
+// TRACE/corelib BugFix: Windows's `GWLP_USERDATA` is NOT for window-authors #1
+// hence we enable `cbWndExtra` by setting it to required byte-count, which,
+// is auto-tested in `tst_NoQtEventLoop` class, also, official-docs were
+// confusing, maybe learn at: https://stackoverflow.com/a/65876605
+//
+// Seems `cbWndExtra` is safe, else would enable custom-map, like:
+// ```
+// #define QT_NO_WINDOWLONG
+// ```
+
+#ifndef QT_NO_WINDOWLONG
+/// Used as second-argument in `SetWindowLongPtr` and `GetWindowLongPtr` calls.
+///
+/// Passing any non-negative (zero or up) number as said argument means to
+/// set/get `cbWndExtra` bytes, however, we use this value instead of zero, to
+/// skip initial bytes and prevent possible conflicts.
+#  define QT_WINDOWEXTRA_OFFSET (64)
+
+/// Assumed size of a C/C++ pointer.
+#  define QT_WINDOWEXTRA_PTR_SIZE (10)
+
+/// Similar to Windows's `DLGWINDOWEXTRA` constant.
+#  define QT_WINDOWEXTRA_SIZE (QT_WINDOWEXTRA_OFFSET + QT_WINDOWEXTRA_PTR_SIZE)
+
+static Q_ALWAYS_INLINE void qSetWindowPtr(HWND hWnd, const void *ptr) {
+#ifdef GWLP_USERDATA
+    SetWindowLongPtr(hWnd, QT_WINDOWEXTRA_OFFSET, (LONG_PTR)ptr);
+#else
+    SetWindowLong(hWnd, QT_WINDOWEXTRA_OFFSET, (LONG)ptr);
+#endif
+}
+
+#else
+typedef QMap<void *, QEventDispatcherWin32 *> MapWindowDispatcher;
+Q_GLOBAL_STATIC(MapWindowDispatcher, mapWindowDispatcher);
+#endif // QT_NO_WINDOWLONG
 
 #ifndef TIME_KILL_SYNCHRONOUS
 #  define TIME_KILL_SYNCHRONOUS 0x0100
@@ -364,14 +402,25 @@ LRESULT QT_WIN_CALLBACK qt_internal_proc(HWND hwnd, UINT message, WPARAM wp, LPA
         return result;
     }
 
-#ifdef GWLP_USERDATA
-    QEventDispatcherWin32 *q = (QEventDispatcherWin32 *) GetWindowLongPtr(hwnd, GWLP_USERDATA);
+    // TRACE/corelib BugFix: Windows's `GWLP_USERDATA` is NOT for window-authors #3
+    // hence we load `cbWndExtra` here, or load custom-map if `QT_NO_WINDOWLONG`.
+#ifndef QT_NO_WINDOWLONG
+#  ifdef GWLP_USERDATA
+    QEventDispatcherWin32 *q = Q_PTR_CAST(QEventDispatcherWin32 *, GetWindowLongPtr(hwnd, QT_WINDOWEXTRA_OFFSET));
+#  else
+    QEventDispatcherWin32 *q = Q_PTR_CAST(QEventDispatcherWin32 *, GetWindowLong(hwnd, QT_WINDOWEXTRA_OFFSET));
+#  endif
 #else
-    QEventDispatcherWin32 *q = (QEventDispatcherWin32 *) GetWindowLong(hwnd, GWL_USERDATA);
-#endif
+    MapWindowDispatcher *map = mapWindowDispatcher();
+    QEventDispatcherWin32 *q = map ? map->value(hwnd, 0) : 0;
+#endif // QT_NO_WINDOWLONG
     QEventDispatcherWin32Private *d = 0;
-    if (q != 0)
+    if (q != 0) {
         d = q->d_func();
+    }
+    if ( ! d) {
+        goto posEndFunc;
+    }
 
     if (message == WM_QT_SOCKETNOTIFIER) {
         // socket notifier message
@@ -447,6 +496,7 @@ LRESULT QT_WIN_CALLBACK qt_internal_proc(HWND hwnd, UINT message, WPARAM wp, LPA
         return 0;
     }
 
+posEndFunc:
     return DefWindowProc(hwnd, message, wp, lp);
 }
 
@@ -532,7 +582,11 @@ QWindowsMessageWindowClassContext::QWindowsMessageWindowClassContext()
     wc.style = 0;
     wc.lpfnWndProc = qt_internal_proc;
     wc.cbClsExtra = 0;
+#ifndef QT_NO_WINDOWLONG
+    wc.cbWndExtra = QT_WINDOWEXTRA_SIZE;
+#else
     wc.cbWndExtra = 0;
+#endif
     wc.hInstance = qWinAppInst();
     wc.hIcon = 0;
     wc.hCursor = 0;
@@ -581,11 +635,24 @@ static HWND qt_create_internal_window(const QEventDispatcherWin32 *eventDispatch
         return 0;
     }
 
-#ifdef GWLP_USERDATA
-    SetWindowLongPtr(wnd, GWLP_USERDATA, (LONG_PTR)eventDispatcher);
+    Q_ASSERT(eventDispatcher);
+    // TRACE/corelib BugFix: Windows's `GWLP_USERDATA` is NOT for window-authors #2
+    // hence we set `cbWndExtra` bytes here.
+#ifndef QT_NO_WINDOWLONG
+    QObject::connect(eventDispatcher, &QObject::destroyed, [wnd]() -> void {
+        if (IsWindow(wnd)) {
+            qSetWindowPtr(wnd, Q_NULLPTR);
+        }
+    });
+    qSetWindowPtr(wnd, eventDispatcher);
 #else
-    SetWindowLong(wnd, GWL_USERDATA, (LONG)eventDispatcher);
-#endif
+    MapWindowDispatcher *map = mapWindowDispatcher();
+    Q_CHECK_PTR(map);
+    QObject::connect(eventDispatcher, &QObject::destroyed, [wnd]() -> void {
+        mapWindowDispatcher()->remove(wnd);
+    });
+    (*map)[wnd] = const_cast<QEventDispatcherWin32 *>(eventDispatcher);
+#endif // QT_NO_WINDOWLONG
 
     return wnd;
 }

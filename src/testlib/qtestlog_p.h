@@ -106,6 +106,7 @@ public:
     static int failCount();
     static int skipCount();
     static int blacklistCount();
+    static int warningCount();
     /// Alias for @ref msecsTotalTime.
     static inline qint64 duration();
 

@@ -69,3 +69,14 @@ just few notes.
 * QMAKE_DIR_REPLACE and QMAKE_DIR_REPLACE_SANE : both deprecated now,
   but were similar to `QMAKE_DIR_FIX` in older Qt projects,
   where "affix" was little different (and *could* have spaces).
+
+-----------------------------------------------------------------------
+
+## Qt Modules
+
+Below statements only apply to projects that do `load(qt_module)`.
+
+### Variables
+
+* MODULE_PRIVATE_INCLUDES : Same as adding to `INCLUDEPATH`, but allows projects using the
+  `QT += network_private` config to find internally used headers, like OpenSSL's.

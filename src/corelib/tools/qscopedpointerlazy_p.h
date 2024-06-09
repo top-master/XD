@@ -87,14 +87,14 @@ public:
     Q_DECL_CONSTEXPR explicit inline QScopedPointerLazyBase(Qt::Initialization)
     {}
 
-    Q_DECL_CONSTEXPR explicit inline QScopedPointerLazyBase(QObjectData *p = Q_NULLPTR)
+    explicit Q_ALWAYS_INLINE QScopedPointerLazyBase(QObjectData *p = Q_NULLPTR)
         : super(reinterpret_cast<QObjectPrivate *>(p))
     {
     }
 
     /// @warning QObjectData always remains immutable, but
     /// change could be forced using @ref QLazinessResolver::set helper.
-    Q_DECL_CONSTEXPR explicit inline QScopedPointerLazyBase(QObjectData *p, QPointerLazinessResolver *resolver)
+    explicit Q_ALWAYS_INLINE QScopedPointerLazyBase(QObjectData *p, QPointerLazinessResolver *resolver)
         : super(reinterpret_cast<QObjectPrivate *>(p))
     {
         Q_UNUSED(resolver);
@@ -103,7 +103,7 @@ public:
     // Defined in QObject header.
     inline QPointerLazinessResolverAtomic &lazinessResolver() const;
 
-    Q_DECL_CONSTEXPR inline bool isLoadPending() const;
+    Q_ALWAYS_INLINE bool isLoadPending() const;
 
     template <typename X>
     static Q_ALWAYS_INLINE Self *get(X *subclass) {

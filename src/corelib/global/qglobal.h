@@ -826,7 +826,11 @@ Q_NORETURN Q_CORE_EXPORT void qTerminate() Q_DECL_NOTHROW;
 #  endif
 #endif
 
-// Usable with Lambda, like `QT_FINALLY([&] { qFree(myVariable); });`.
+/// @def QT_FINALLY(callback)
+///
+/// Usable with Lambda, like `QT_FINALLY([&] { qFree(myVariable); });`.
+///
+/// @note Use `defer` macro instead if including `QFunction` is possible.
 #define QT_FINALLY_X(name, callback) auto name = qScopeGuard(callback); \
     do { Q_UNUSED(name) } while(0)
 #define QT_FINALLY(callback) QT_FINALLY_X(QT_JOIN(_qDefer, __LINE__), callback)
@@ -1403,9 +1407,12 @@ template <bool B, typename T = void> struct QEnableIf;
 template <typename T> struct QEnableIf<true, T> { typedef T Type; typedef T type; };
 
 namespace QtPrivate {
-    // TRACE/QApplication: defines global settings for inline access.
 
-    Q_VAR_EXPORT(CORE) extern int remoteTimeout; //declared at "corelib/kernel/qobject.cpp"
+// TRACE/QApplication: defines global settings for inline access.
+
+Q_VAR_EXPORT(CORE) extern int remoteTimeout; //declared at "corelib/kernel/qobject.cpp"
+/// Internally used to know where to trigger debug-break-point.
+Q_VAR_EXPORT(CORE) extern void * debugBreakContext;
 
 //like std::enable_if
 template <bool B, typename T = void> struct QEnableIf;
@@ -1469,25 +1476,25 @@ Q_DECL_CONSTEXPR Q_ALWAYS_INLINE QtPrivate::QFinally<Func1 > qScopeGuard(Func1 &
 #  define Q_FIELD_OFFSET(TYPE, FIELD) (reinterpret_cast<void *>(reinterpret_cast<quintptr>(&(Q_PTR_CAST(TYPE *, 1u)->FIELD)) - 1u))
 #  define Q_FIELD_PTR(CLASS_PTR, FIELD)  (reinterpret_cast<void *>(reinterpret_cast<quintptr>(&((CLASS_PTR)->FIELD))))
 
-/// @def Q_FIELDER(TYPE, FIELD, FIELD_PTR)
-/// @brief Gets pointer of field holder from field's pointer.
-///
-/// Needs Holder-type, Field-name and Field-pointer as arguments.
-///
-/// Use only in combination with #Q_DISABLE_COPY(CLASS), like:
-/// ```
-/// class MyOwnerClass {
-/// public:
-///     struct MyFieldType {
-///         inline MyFieldType() {}
-///
-///         MyOwnerClass &owner() { return *Q_FIELDER(MyOwnerClass, m_myField, this); }
-///
-///     private:
-///         Q_DISABLE_COPY(MyFieldType)
-///     } m_myField;
-/// };
-/// ```
+/*! @def Q_FIELDER(TYPE, FIELD, FIELD_PTR)
+    @brief Gets pointer of field holder from field's pointer.
+
+    Needs Holder-type, Field-name and Field-pointer as arguments.
+
+    Use only in combination with #Q_DISABLE_COPY(CLASS), like:
+```
+class MyOwnerClass {
+public:
+    struct MyFieldType {
+        inline MyFieldType() {}
+
+        MyOwnerClass &owner() { return *Q_FIELDER(MyOwnerClass, m_myField, this); }
+
+    private:
+        Q_DISABLE_COPY(MyFieldType)
+    } m_myField;
+};
+``` */
 #  define Q_FIELDER(TYPE, FIELD, FIELD_PTR) (static_cast<TYPE *>(Q_PTR_SUB_OFFSET(FIELD_PTR, Q_FIELD_OFFSET(TYPE, FIELD))))
 
 /// Calculates the size of a field in a structure of type "TYPE",

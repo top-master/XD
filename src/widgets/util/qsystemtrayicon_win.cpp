@@ -184,9 +184,13 @@ QSystemTrayIconSys::QSystemTrayIconSys(HWND hwnd, QSystemTrayIcon *object)
 {
     handleTrayIconHash()->insert(m_hwnd, this);
 
-    if (QSysInfo::windowsVersion() < QSysInfo::WV_VISTA) {
+    QSysInfo::WinVersion winVer = QSysInfo::windowsVersion();
+    if (winVer < QSysInfo::WV_VISTA) {
         notifyIconSize = NOTIFYICONDATA_V2_SIZE;
         version = NOTIFYICON_VERSION;
+    } else {
+        notifyIconSize = sizeof(NOTIFYICONDATA);
+        version = 4; // Same as `NOTIFYICON_VERSION_4`.
     }
 
     // For restoring the tray icon after explorer crashes
@@ -237,7 +241,7 @@ void QSystemTrayIconSys::setIconContents(NOTIFYICONDATA &tnd)
 bool QSystemTrayIconSys::showMessage(const QString &title, const QString &message, QSystemTrayIcon::MessageIcon type, uint uSecs)
 {
     NOTIFYICONDATA tnd;
-    memset(&tnd, 0, notifyIconSize);
+    memset(&tnd, 0, sizeof(tnd));
     qStringToLimitedWCharArray(message, tnd.szInfo, 256);
     qStringToLimitedWCharArray(title, tnd.szInfoTitle, 64);
 
@@ -269,7 +273,7 @@ bool QSystemTrayIconSys::showMessage(const QString &title, const QString &messag
 bool QSystemTrayIconSys::trayMessage(DWORD msg)
 {
     NOTIFYICONDATA tnd;
-    memset(&tnd, 0, notifyIconSize);
+    memset(&tnd, 0, sizeof(tnd));
 
     tnd.uID = q_uNOTIFYICONID;
     tnd.cbSize = notifyIconSize;

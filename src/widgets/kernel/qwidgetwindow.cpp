@@ -956,7 +956,13 @@ void QWidgetWindow::handleWindowStateChangedEvent(QWindowStateChangeEvent *event
 
 bool QWidgetWindow::nativeEvent(const QByteArray &eventType, void *message, long *result)
 {
-    return m_widget->nativeEvent(eventType, message, result);
+    QSharedPointer<QWidget> widgetStrong = m_widget.toStrongRef(Qt::LogSilent);
+    QWidget *widgetWeak = m_widget.data();
+    if (widgetWeak) {
+        return widgetWeak->nativeEvent(eventType, message, result);
+    }
+
+    return false;
 }
 
 #ifndef QT_NO_TABLETEVENT
