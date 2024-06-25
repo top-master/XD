@@ -1,5 +1,6 @@
 /****************************************************************************
 **
+** Copyright (C) 2015 The XD Company Ltd.
 ** Copyright (C) 2015 The Qt Company Ltd.
 ** Contact: http://www.qt.io/licensing/
 **
@@ -482,13 +483,13 @@ Q_DECL_CONSTEXPR inline QRect QRect::marginsRemoved(const QMargins &margins) con
 
 Q_DECL_RELAXED_CONSTEXPR inline QRect &QRect::operator+=(const QMargins &margins) Q_DECL_NOTHROW
 {
-    *this = marginsAdded(margins);
+    *this = qMove(marginsAdded(margins));
     return *this;
 }
 
 Q_DECL_RELAXED_CONSTEXPR inline QRect &QRect::operator-=(const QMargins &margins) Q_DECL_NOTHROW
 {
-    *this = marginsRemoved(margins);
+    *this = qMove(marginsRemoved(margins));
     return *this;
 }
 

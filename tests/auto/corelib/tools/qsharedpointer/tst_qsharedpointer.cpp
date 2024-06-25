@@ -839,8 +839,9 @@ void tst_QSharedPointer::treatParentQObjectAsStrongRef()
     }
 
     {
+        // Initial test.
         QObject *obj, *parent;
-        obj = new QObject;
+        obj = new QObjectSpy;
         parent = new QObject;
         obj->setParent(parent);
 
@@ -855,7 +856,7 @@ void tst_QSharedPointer::treatParentQObjectAsStrongRef()
     {
         // same as above, but set the parent after QSharedPointer is created
         QObject *obj, *parent;
-        obj = new QObject;
+        obj = new QObjectSpy;
         QSharedPointer<QObject> shared(obj);
 
         parent = new QObject;
@@ -864,6 +865,134 @@ void tst_QSharedPointer::treatParentQObjectAsStrongRef()
         // now, ignores wrong deletes.
         delete parent;
         QVERIFY(!shared.isNull());
+    }
+    safetyCheck();
+
+    const int notDestroyedYet = QObjectSpy::constructCounter;
+    {
+        // Smart-pointer gone test, is
+        // same as "Initial test", but smart-pointer goes out of scope first.
+        QObject *obj, *parent;
+        obj = new QObjectSpy;
+        parent = new QObject;
+        obj->setParent(parent);
+
+        QSharedPointer<QObject> shared(obj);
+
+        // now, ignores wrong deletes.
+        shared.clear();
+        qExpect(QObjectSpy::destructCounter)->toEqual(notDestroyedYet);
+
+        // Cleanup, unlike first two cases not a test.
+        delete parent;
+    }
+    safetyCheck();
+
+    {
+        // same as above, but sets the parent after QSharedPointer is created
+        QObject *obj, *parent;
+        obj = new QObjectSpy;
+        QSharedPointer<QObject> shared(obj);
+
+        parent = new QObject;
+        obj->setParent(parent);
+
+        // now, ignores wrong deletes.
+        shared.clear();
+        qExpect(QObjectSpy::destructCounter)->toEqual(notDestroyedYet);
+
+        // Cleanup, not a test.
+        delete parent;
+    }
+    safetyCheck();
+
+    {
+        // Smart-pointer gone and back test, is
+        // same as "Initial test", but smart-pointer goes out of scope first multiple times.
+        QObject *obj, *parent;
+        obj = new QObjectSpy;
+        parent = new QObject;
+        obj->setParent(parent);
+
+        QSharedPointer<QObject> shared(obj);
+
+        // Now, ignores wrong deletes.
+        shared.clear();
+        qExpect(QObjectSpy::destructCounter)->toEqual(notDestroyedYet);
+        // Repeat.
+        QSharedPointer<QObject> sharedSecond(obj);
+        sharedSecond.clear();
+        qExpect(QObjectSpy::destructCounter)->toEqual(notDestroyedYet);
+
+        // Cleanup, not a test.
+        delete parent;
+    }
+    safetyCheck();
+
+    {
+        // Same as above, but sets the parent after QSharedPointer is created
+        QObject *obj, *parent;
+        obj = new QObjectSpy;
+        QSharedPointer<QObject> shared(obj);
+
+        parent = new QObject;
+        obj->setParent(parent);
+
+        // Now, ignores wrong deletes.
+        shared.clear();
+        qExpect(QObjectSpy::destructCounter)->toEqual(notDestroyedYet);
+        // Repeat.
+        QSharedPointer<QObject> sharedSecond(obj);
+        sharedSecond.clear();
+        qExpect(QObjectSpy::destructCounter)->toEqual(notDestroyedYet);
+
+        // Cleanup, not a test.
+        delete parent;
+    }
+    safetyCheck();
+
+    {
+        // Smart-pointer gone and fake-back test, is
+        // same as "Initial test", but smart-pointer goes out of scope first multiple times.
+        QObject *obj, *parent;
+        obj = new QObjectSpy;
+        parent = new QObject;
+        obj->setParent(parent);
+
+        QSharedPointer<QObject> shared(obj);
+
+        // Now, ignores wrong deletes.
+        shared.clear();
+        qExpect(QObjectSpy::destructCounter)->toEqual(notDestroyedYet);
+        // Repeat.
+        QSharedPointer<QObject> fake = QSharedPointer<QObject>::fromStack(obj);
+        fake.clear();
+        qExpect(QObjectSpy::destructCounter)->toEqual(notDestroyedYet);
+
+        // Cleanup, not a test.
+        delete parent;
+    }
+    safetyCheck();
+
+    {
+        // Same as above, but sets the parent after QSharedPointer is created
+        QObject *obj, *parent;
+        obj = new QObjectSpy;
+        QSharedPointer<QObject> shared(obj);
+
+        parent = new QObject;
+        obj->setParent(parent);
+
+        // Now, ignores wrong deletes.
+        shared.clear();
+        qExpect(QObjectSpy::destructCounter)->toEqual(notDestroyedYet);
+        // Repeat.
+        QSharedPointer<QObject> fake = QSharedPointer<QObject>::fromStack(obj);
+        fake.clear();
+        qExpect(QObjectSpy::destructCounter)->toEqual(notDestroyedYet);
+
+        // Cleanup, not a test.
+        delete parent;
     }
     safetyCheck();
 }
@@ -2329,10 +2458,29 @@ void tst_QSharedPointer::validConstructs()
     }
 }
 
+/// More tied to QSharedPointer, unlike of QTest::QExternalTest.
+class ExternalTestEx : public QTest::QExternalTest
+{
+public:
+    bool assertQFatal_alreadyDestructed(const QByteArray &body) {
+        if (this->tryRunFail(body)) {
+            qExpect(QString::fromLocal8Bit(this->standardErrorOfRun()))
+                    ->toContain(QLL("Cannot create a QSharedPointer from an already destructed QObject-pointer:"))
+                    ->withContext("While checking standardError:");
+            return true;
+        }
+        return false;
+    }
+};
+typedef bool (ExternalTestEx:: * TestFunctionEx)(const QByteArray &body);
+Q_DECLARE_METATYPE(TestFunctionEx)
+
 typedef bool (QTest::QExternalTest:: * TestFunction)(const QByteArray &body);
 Q_DECLARE_METATYPE(TestFunction)
 void tst_QSharedPointer::invalidConstructs_data()
 {
+    QMetaType::registerTypedef("TestFunctionEx", qMetaTypeId<TestFunction>());
+
     QTest::addColumn<TestFunction>("testFunction");
     QTest::addColumn<QString>("code");
     QTest::newRow("sanity-checking") << &QTest::QExternalTest::tryCompile << "";
@@ -2502,6 +2650,19 @@ void tst_QSharedPointer::invalidConstructs_data()
         << &QTest::QExternalTest::tryCompileFail
         << "QSharedPointer<Data> ptr(new Data, [](int *) {});\n";
 #endif
+
+    QTest::newRow("already-destroyed-qobject")
+        << &ExternalTestEx::assertQFatal_alreadyDestructed
+        << "QObject *anObj = new QObject();\n"
+           "QSharedPointer<QObject> ptr1 = QSharedPointer<QObject>(anObj);\n"
+           "const_cast<QtSharedPointer::ExternalRefCountData *>(ptr1.internalData())->strongref.store(0);\n"
+           "QSharedPointer<QObject> ptr2 = QSharedPointer<QObject>(anObj);\n";
+    QTest::newRow("already-destroyed-qobject-fake")
+        << &ExternalTestEx::assertQFatal_alreadyDestructed
+        << "QObject *anObj = new QObject();\n"
+           "QSharedPointer<QObject> ptr1 = QSharedPointer<QObject>(anObj);\n"
+           "const_cast<QtSharedPointer::ExternalRefCountData *>(ptr1.internalData())->strongref.store(0);\n"
+           "QSharedPointer<QObject> ptr2 = QSharedPointer<QObject>::fromStack(anObj);\n";
 }
 
 void tst_QSharedPointer::invalidConstructs()
@@ -2513,7 +2674,7 @@ void tst_QSharedPointer::invalidConstructs()
     QSKIP("This test does not work on cross compiled systems");
 #endif
 
-    QTest::QExternalTest test;
+    ExternalTestEx test;
     test.setQtModules(QTest::QExternalTest::QtCore);
     test.setProgramHeader(
         "#include <external-build/prepare-test.cpp>\n"

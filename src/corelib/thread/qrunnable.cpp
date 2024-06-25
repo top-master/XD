@@ -34,6 +34,10 @@
 
 #include "qrunnable.h"
 #include "qrunnablefunc.h"
+#include "qrunnableevent.h"
+#include "qrunnabledelay.h"
+#include <QtCore/qtimerfunc.h>
+
 
 QT_BEGIN_NAMESPACE
 
@@ -53,6 +57,38 @@ void QRunnableFunc::run()
         (data)();
     }
 }
+
+QRunnableEvent::~QRunnableEvent()
+{
+    // Handles never being run.
+    QRunnable *callback = Q_PTR_CAST(QRunnable *, this->d);
+    if (callback) {
+        this->d = Q_NULLPTR;
+        if (callback->autoDelete()) {
+            delete callback;
+        }
+    }
+}
+
+#ifndef QT_NO_QOBJECT
+
+QRunnableDelay::~QRunnableDelay()
+{
+    // Nothing to do (but required).
+}
+
+void QRunnableDelay::run()
+{
+    if (m_delay <= 0) {
+        if (data) {
+            (data)();
+        }
+    } else {
+        QTimerFunc::singleShot(m_delay, data, Qt::CoarseTimer);
+    }
+}
+
+#endif // QT_NO_QOBJECT
 
 /*!
     \class QRunnable

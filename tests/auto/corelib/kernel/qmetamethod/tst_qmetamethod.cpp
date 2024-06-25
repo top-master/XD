@@ -38,6 +38,16 @@
 #include <qobject.h>
 #include <qmetaobject.h>
 
+
+inline QDebug &operator<<(QDebug &dbg, const QMetaMethod &m) {
+    dbg << "Method at index:";
+    dbg.space().quote() << m.methodIndex()
+        << "Signature:" << m.methodSignature()
+        << "Type:" << m.methodType();
+
+    return dbg;
+}
+
 class tst_QMetaMethod : public QObject
 {
     Q_OBJECT
@@ -710,8 +720,15 @@ void tst_QMetaMethod::fromSignal()
 {
 #define FROMSIGNAL_HELPER(ObjectType, Name, Arguments)  { \
         const QMetaObject *signalMeta = &ObjectType::staticMetaObject; \
-        QCOMPARE(QMetaMethod::fromSignal(&ObjectType::Name), \
-            signalMeta->method(signalMeta->indexOfSignal(QMetaObject::normalizedSignature(#Name #Arguments)))); \
+        const QMetaMethod &expected = QMetaMethod::fromSignal(&ObjectType::Name); \
+        const QByteArray &normalized = QMetaObject::normalizedSignature(#Name #Arguments); \
+        qExpect(normalized)->Not->toBeEmpty(); \
+        const QMetaMethod &actual = signalMeta->method(signalMeta->indexOfSignal(normalized)); \
+        qExpect(actual)->toEqual(expected) \
+            ->withContext([&] { \
+                return QLL("While searching for normalizedSignature: \"") \
+                    + QString::fromLocal8Bit(normalized) + QLL("\""); \
+            }); \
     }
 
     FROMSIGNAL_HELPER(MethodTestObject, voidSignal, ())

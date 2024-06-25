@@ -90,6 +90,9 @@ public:
 
     bool isNull() const;
     bool isDetached() const;
+    /// @warning Users expect the @c operator== to perform image compare, hence
+    /// we don't have any @c operator== for QIcon, else it would redirect to here.
+    inline bool isSharedWith(const QIcon &other) const { return d == other.d; }
     void detach();
 
 #if QT_DEPRECATED_SINCE(5, 0)

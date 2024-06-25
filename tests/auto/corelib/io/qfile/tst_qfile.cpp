@@ -2658,7 +2658,8 @@ void tst_QFile::appendAndRead()
     for (int j = 0; j < 18; ++j) {
         writeFile.write(QByteArray(1 << j, '@'));
         writeFile.flush();
-        QCOMPARE(readFile.read(1 << j).size(), 1 << j);
+        qint64 maxSize = Q_INT64_C(1)  << j;
+        QCOMPARE(readFile.read(maxSize).size(), 1 << j);
     }
 
     readFile.close();

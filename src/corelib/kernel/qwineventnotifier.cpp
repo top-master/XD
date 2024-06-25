@@ -48,10 +48,12 @@ class QWinEventNotifierPrivate : public QObjectPrivate
 {
     Q_DECLARE_PUBLIC(QWinEventNotifier)
 public:
-    QWinEventNotifierPrivate()
-    : handleToEvent(0), enabled(false) {}
-    QWinEventNotifierPrivate(HANDLE h, bool e)
-    : handleToEvent(h), enabled(e) {}
+    inline explicit QWinEventNotifierPrivate(HANDLE h = 0, bool e = false)
+        : handleToEvent(h), enabled(e)
+    {
+        // Required if things connected to `activated` are in another thread.
+        qRegisterMetaType<QWinEventNotifier::HANDLE>("HANDLE");
+    }
 
     HANDLE handleToEvent;
     bool enabled;

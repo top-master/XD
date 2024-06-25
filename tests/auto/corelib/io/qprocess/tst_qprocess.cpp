@@ -1730,6 +1730,7 @@ void tst_QProcess::setEnvironment()
     QVERIFY(qgetenv("tst_QProcess").isEmpty());
     QVERIFY(!qgetenv("PATH").isEmpty());
 #ifdef Q_OS_WIN
+    // Fails if runned by IDE (Qt-Creator is missing some environment variables).
     QVERIFY(!qgetenv("PROMPT").isEmpty());
 #endif
 

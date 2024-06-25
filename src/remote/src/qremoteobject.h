@@ -29,6 +29,8 @@
 #include "qremote-exceptions.h"
 #include "qremote-type.h"
 
+#include <QtCore/qeventloop.h>
+
 
 QT_BEGIN_NAMESPACE
 
@@ -39,6 +41,18 @@ namespace QRemote {
     class Packet;
     class MethodPacket;
     class PacketTypeEntry;
+
+    /// Can be passed as flag to QRemoteEventModer.
+    enum EventModeFlag {
+        /// The given QObject is NOT usable as a #Q_REMOTE_CONTROLLER.
+        InvalidController = 0xdead,
+        /// Means to use QRemoteUser::requestWaitMode, without caching.
+        InheritMode = 0x00f01100,
+        /// This mode blocks all events of the calling-thread until the
+        /// remote-slot request's reply arrives.
+        /// remote slot request blocks the calling thread until reply
+        BlockingMode = 0x00b10c00
+    };
 } // namespace QRemote
 
 /**
@@ -57,7 +71,7 @@ public:
     QObjectRemote(QObject *parent = 0);
     virtual ~QObjectRemote();
 
-    inline QRemoteBound &remote() const { return *const_cast<QRemoteBound *>(reinterpret_cast<const QRemoteBound *>(this)); }
+    Q_ALWAYS_INLINE QRemoteBound &remote() const { return *const_cast<QRemoteBound *>(reinterpret_cast<const QRemoteBound *>(this)); }
 
     inline bool isRemote() const { return d_ptr->isRemote; }
 
@@ -80,14 +94,18 @@ class QT_REMOTE_EXPORT QRemoteData : public QObjectUserData
 {
 public:
     QRemoteData();
-    virtual ~QRemoteData() {}
+    virtual ~QRemoteData();
 
     /// The QRemoteUser who owns the QIODevice session, that
     /// created the Servce which this QRemoteData blongs to, or
     /// if local, the QRemoteUser on which this said service was registered.
     QRemoteUser *session;
 
+    /// Reference to any custom-data needed by #Q_REMOTE instance, and,
+    /// is unused by QtRemote's source-codes.
     void *instanse;
+
+    int eventMode;
 };
 
 template <typename T>
@@ -197,6 +215,9 @@ public:
     inline int timeout() const; //in mili-seconds
     inline void setTimeout(int);
     inline bool isTimeoutExpired() const;
+
+    int QT_FASTCALL eventMode() const;
+    int QT_FASTCALL setEventMode(int);
 };
 
 
@@ -282,6 +303,40 @@ private:
 #endif
     QObjectRemote * m_o;
     quint8 m_backup;
+};
+
+/**
+ * Overrides event-handling mode while waiting for any response of
+ * #Q_REMOTE_CONTROLLER slot(s).
+ *
+ * @warning Only applies for current-thread and given %QObjectRemote.
+ *
+ * However, using zero as flags means %QEventLoop::AllEvents.
+ */
+class QRemoteEventModer
+{
+public:
+    inline explicit QRemoteEventModer(QObjectRemote *o, int flags = QEventLoop::AllEvents) Q_DECL_NOTHROW;
+    inline explicit QRemoteEventModer(QObjectRemote &o, int flags = QEventLoop::AllEvents) Q_DECL_NOTHROW;
+    inline explicit QRemoteEventModer(const QRef<QObjectRemote> &r, int flags = QEventLoop::AllEvents) Q_DECL_NOTHROW;
+    inline ~QRemoteEventModer();
+
+    inline void redo(int flags = QEventLoop::AllEvents) Q_DECL_NOTHROW;
+    inline void undo() Q_DECL_NOTHROW;
+
+    /// Reads current default mode, which's copied on %QObjectRemote creation.
+    /// @note The default should be QEventLoop::AllEvents mode, unless changed.
+    static inline int defaultMode() { return QtPrivate::remoteEventMode; }
+    static inline void setDefaultMode(int flags) { QtPrivate::remoteEventMode = flags; }
+
+private:
+    Q_DISABLE_COPY(QRemoteEventModer)
+#ifdef Q_COMPILER_RVALUE_REFS
+    QRemoteEventModer(QRemoteEventModer &&other) Q_DECL_NOTHROW;
+    QRemoteEventModer &operator=(QRemoteEventModer &&other) Q_DECL_NOTHROW;
+#endif
+    QObjectRemote * m_o;
+    qint32 m_backup;
 };
 
 #ifndef Q_MOC_RUN
@@ -494,6 +549,46 @@ inline void QRemoteTimeLimiter::unblock() Q_DECL_NOTHROW {
 inline bool QRemoteTimeLimiter::isExpired() const
 {
     return m_o ? m_o->remote().isTimeoutExpired() : false;
+}
+
+
+inline QRemoteEventModer::QRemoteEventModer(QObjectRemote *o, int flags) Q_DECL_NOTHROW
+    : m_o(o)
+{
+    if (o) {
+        m_backup = o->remote().setEventMode(flags);
+    } else {
+        m_backup = QRemote::InvalidController;
+    }
+}
+
+inline QRemoteEventModer::QRemoteEventModer(QObjectRemote &o, int flags) Q_DECL_NOTHROW
+    : m_o(&o), m_backup(o.remote().setEventMode(flags))
+{
+}
+
+inline QRemoteEventModer::QRemoteEventModer(const QRef<QObjectRemote> &r, int flags) Q_DECL_NOTHROW
+    : m_o(r.data())
+{
+    if (r) {
+        m_backup = r->remote().setEventMode(flags);
+    } else {
+        m_backup = QRemote::InvalidController;
+    }
+}
+
+inline QRemoteEventModer::~QRemoteEventModer() {
+    if (m_o) {
+        m_o->remote().setEventMode(m_backup);
+    }
+}
+
+inline void QRemoteEventModer::redo(int flags) Q_DECL_NOTHROW {
+    if (m_o) m_o->remote().setEventMode(flags);
+}
+
+inline void QRemoteEventModer::undo() Q_DECL_NOTHROW {
+    if (m_o) m_o->remote().setEventMode(m_backup);
 }
 #endif //Q_MOC_RUN
 

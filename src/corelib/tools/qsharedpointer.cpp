@@ -1457,6 +1457,20 @@ posLoadExisting:
         }
 
         ExternalRefCountData::DestroyerFn existing_destroyer = existing_counter->destroyer;
+        if (existing_counter->strongref.load() == 0
+            && existing_destroyer != &ExternalRefCountData::fakeDestroyer
+        ) {
+            // Access-violation crash may happen when using invalid pointers, and that
+            // before below's ever reached, but we manually crash to support multi-threaded contexts.
+            //
+            // Fix: create debug-break-point on your class's destructor, then
+            // ensure raw-pointer is NOT used after that point-in-time, or
+            // instead ensure destruct happens later.
+            //
+            qFatal("Cannot create a QSharedPointer from an already destructed QObject-pointer: %p"
+                   " The program is malformed; here Qt prefers crashing before worse happens.", obj);
+        }
+
         if (destroyer == &ExternalRefCountData::fakeDestroyer
             // Or if both destroyers are trival.
             || ((destroyer == &ExternalRefCountWithCustomDeleter<QObject, NormalDeleter>::deleter
@@ -1602,8 +1616,10 @@ posReplaceExisting:
 void QtSharedPointer::ExternalRefCountData::checkQObjectShared(const QObject *)
 {
     if (strongref.load() < 0) {
-        qWarning("QSharedPointer: cannot create a QSharedPointer from a QWeakPointer-to-QObject"
-                 ", unless another QSharedPointer (created from raw-pointer) exists for the same QObject.");
+        // Separate line allows debug-break-point.
+        const char *msg = "QSharedPointer: cannot create a QSharedPointer from a QWeakPointer-to-QObject"
+                          ", unless another QSharedPointer (created from raw-pointer) exists for the same QObject.";
+        qWarning(msg);
     }
 }
 

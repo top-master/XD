@@ -64,7 +64,7 @@ public:
         Hour = 60 * Minute,
         Day = 24u * Hour,
 
-        /// @warning The actual value *would* exceed `int`, hence
+        /// @warning The actual value *would* exceed a signed `int`, hence
         /// use @ref Month instead, unless value isn't used in calculations, and
         /// is just used as `enum` (like in `switch`).
         Monthly = 31

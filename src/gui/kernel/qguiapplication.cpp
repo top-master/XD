@@ -1667,6 +1667,8 @@ int QGuiApplication::exec()
 #ifndef QT_NO_ACCESSIBILITY
     QAccessible::setRootObject(qApp);
 #endif
+    // TRACE/gui/input-event 1: the `main` function calls App's `exec`, or
+    // something calls `processEvents` to prevent blocking the GUI.
     return QCoreApplication::exec();
 }
 
@@ -1721,6 +1723,7 @@ void QGuiApplicationPrivate::processWindowSystemEvent(QWindowSystemInterfacePriv
     switch(e->type) {
     case QWindowSystemInterfacePrivate::FrameStrutMouse:
     case QWindowSystemInterfacePrivate::Mouse:
+        // TRACE/gui/input-event 6: QtGui redirects to another process-method based on event's type.
         QGuiApplicationPrivate::processMouseEvent(static_cast<QWindowSystemInterfacePrivate::MouseEvent *>(e));
         break;
     case QWindowSystemInterfacePrivate::Wheel:
@@ -1937,6 +1940,7 @@ void QGuiApplicationPrivate::processMouseEvent(QWindowSystemInterfacePrivate::Mo
         setMouseEventFlags(&ev, ev.flags() | Qt::MouseEventCreatedDoubleClick);
     }
 
+    // TRACE/gui/input-event 7: QtGui passes postponed-event(s) to related QWindow as spontaneous-event(s).
     QGuiApplication::sendSpontaneousEvent(window, &ev);
     e->eventAccepted = ev.isAccepted();
     if (!e->synthetic() && !ev.isAccepted()

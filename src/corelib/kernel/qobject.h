@@ -131,7 +131,14 @@ public:
     /// Truthy if q_ptr is a QObjectDecor::decorOwner and load is yet pending.
     uint isLazy : 1;
 
-    uint unused : 6;
+    /// The object is already guarded by a mutex, hence skip thread-checks if set.
+    ///
+    /// @warning Child QObject's inherit this flag.
+    uint isThreadSafe : 1;
+
+    uint isDebugging : 1;
+
+    uint unused : 4;
 
     int postedEvents;
     QDynamicMetaObjectData *metaObject;

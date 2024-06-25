@@ -1,5 +1,6 @@
 /****************************************************************************
 **
+** Copyright (C) 2015 The XD Company Ltd.
 ** Copyright (C) 2015 The Qt Company Ltd.
 ** Contact: http://www.qt.io/licensing/
 **
@@ -37,6 +38,7 @@
 #include "qthread.h"
 #include "qthread_p.h"
 #include "qmutex.h"
+#include "qrunnablefunc.h"
 
 #include <string.h>
 
@@ -56,6 +58,8 @@ void qtsDebug(const char *fmt, ...)
     fprintf(stderr, "QThreadStorage: ");
     vfprintf(stderr, fmt, va);
     fprintf(stderr, "\n");
+    // TRACE/corelib #logs; manually flush.
+    fflush(stderr);
 
     va_end(va);
 }
@@ -71,7 +75,7 @@ QThreadStorageData::QThreadStorageData(void (*func)(void *))
 {
     QMutexLocker locker(&destructorsMutex);
     DestructorMap *destr = destructors();
-    if (!destr) {
+    if ( ! destr) {
         /*
          the destructors vector has already been destroyed, yet a new
          QThreadStorage is being allocated. this can only happen during global
@@ -86,8 +90,8 @@ QThreadStorageData::QThreadStorageData(void (*func)(void *))
         DEBUG_MSG("QThreadStorageData: Allocated id %d, destructor %p cannot be stored", id, func);
         return;
     }
-    for (id = 0; id < destr->count(); id++) {
-        if (destr->at(id) == 0)
+    for (id = 0; id < destr->count(); ++id) {
+        if (destr->at(id) == Q_NULLPTR)
             break;
     }
     if (id == destr->count()) {
@@ -98,20 +102,32 @@ QThreadStorageData::QThreadStorageData(void (*func)(void *))
     DEBUG_MSG("QThreadStorageData: Allocated id %d, destructor %p", id, func);
 }
 
+// TRACE/corelib BugFix: thread-storage should NOT forget the destructor #1,
+// since we want to postpone the delete until QThread gets deleted.
+//
+// However, if the thread is yet processing events, we postpone the delete,
+// instead of waiting for thread's exit, since the thread may never exit.
+//
+// Else we would do:
+#if 0
 QThreadStorageData::~QThreadStorageData()
 {
     DEBUG_MSG("QThreadStorageData: Released id %d", id);
+    this->set(Q_NULLPTR);
     QMutexLocker locker(&destructorsMutex);
-    if (destructors())
-        (*destructors())[id] = 0;
+    DestructorMap *destr = destructors();
+    if (destr) {
+        (*destr)[id] = Q_NULLPTR;
+    }
 }
+#endif // 0
 
 void **QThreadStorageData::get() const
 {
     QThreadData *data = QThreadData::current();
-    if (!data) {
+    if ( ! data) {
         qWarning("QThreadStorage::get: QThreadStorage can only be used with threads started with QThread");
-        return 0;
+        return Q_NULLPTR;
     }
     QVector<void *> &tls = data->tls;
     if (tls.size() <= id)
@@ -123,15 +139,15 @@ void **QThreadStorageData::get() const
           *v,
           data->thread.load());
 
-    return *v ? v : 0;
+    return *v ? v : Q_NULLPTR;
 }
 
-void **QThreadStorageData::set(void *p)
+void **QThreadStorageData::internalSet(const int id, void *p)
 {
     QThreadData *data = QThreadData::current();
-    if (!data) {
+    if ( ! data) {
         qWarning("QThreadStorage::set: QThreadStorage can only be used with threads started with QThread");
-        return 0;
+        return Q_NULLPTR;
     }
     QVector<void *> &tls = data->tls;
     if (tls.size() <= id)
@@ -139,7 +155,7 @@ void **QThreadStorageData::set(void *p)
 
     void *&value = tls[id];
     // delete any previous data
-    if (value != 0) {
+    if (value != Q_NULLPTR) {
         DEBUG_MSG("QThreadStorageData: Deleting previous storage %d, data %p, for thread %p",
                 id,
                 value,
@@ -147,11 +163,11 @@ void **QThreadStorageData::set(void *p)
 
         QMutexLocker locker(&destructorsMutex);
         DestructorMap *destr = destructors();
-        void (*destructor)(void *) = destr ? destr->value(id) : 0;
+        void (*destructor)(void *) = destr ? destr->value(id) : Q_NULLPTR;
         locker.unlock();
 
         void *q = value;
-        value = 0;
+        value = Q_NULLPTR;
 
         if (destructor)
             destructor(q);
@@ -163,21 +179,36 @@ void **QThreadStorageData::set(void *p)
     return &value;
 }
 
+void QThreadStorageData::finishLater() Q_DECL_NOTHROW
+{
+    QThread *thread = QThread::currentThread();
+    if (thread) {
+        DEBUG_MSG("QThreadStorageData: Postponed release for id %d", id);
+        int idCopy = id;
+        thread->post(new QRunnableFunc([idCopy]() mutable -> void {
+#ifdef Q_COMPILER_STATIC_ASSERT
+            static_assert(std::is_same<decltype(idCopy), int>::value, "Should copy.");
+#endif
+            QThreadStorageData::internalSet(idCopy, Q_NULLPTR);
+        }));
+    }
+}
+
 void QThreadStorageData::finish(void **p)
 {
     QVector<void *> *tls = reinterpret_cast<QVector<void *> *>(p);
-    if (!tls || tls->isEmpty() || !destructors())
+    if ( ! tls || tls->isEmpty() || ! destructors())
         return; // nothing to do
 
     DEBUG_MSG("QThreadStorageData: Destroying storage for thread %p", QThread::currentThread());
-    while (!tls->isEmpty()) {
+    while ( ! tls->isEmpty()) {
         void *&value = tls->last();
         void *q = value;
-        value = 0;
+        value = Q_NULLPTR;
         int i = tls->size() - 1;
         tls->resize(i);
 
-        if (!q) {
+        if ( ! q) {
             // data already deleted
             continue;
         }
@@ -186,7 +217,7 @@ void QThreadStorageData::finish(void **p)
         void (*destructor)(void *) = destructors()->value(i);
         locker.unlock();
 
-        if (!destructor) {
+        if ( ! destructor) {
             if (QThread::currentThread())
                 qWarning("QThreadStorage: Thread %p exited after QThreadStorage %d destroyed",
                          QThread::currentThread(), i);
@@ -196,7 +227,7 @@ void QThreadStorageData::finish(void **p)
 
         if (tls->size() > i) {
             //re reset the tls in case it has been recreated by its own destructor.
-            (*tls)[i] = 0;
+            (*tls)[i] = Q_NULLPTR;
         }
     }
     tls->clear();
@@ -239,9 +270,14 @@ void QThreadStorageData::finish(void **p)
 
     \list
 
-    \li The QThreadStorage destructor does not delete per-thread data.
+    \li The QThreadStorage destructor does not delete per-thread data .
     QThreadStorage only deletes per-thread data when the thread exits
     or when setLocalData() is called multiple times.
+
+    \li Before XD fixed this, the QThreadStorage destructor would prevent the
+    thread exit from ever deleting the per-thread data, and the constructor
+    would even reuse the old never deleted per-thread data for a separate type
+    which would cause crash and other undefined-behavior.
 
     \li QThreadStorage can be used to store data for the \c main()
     thread. QThreadStorage deletes all data set for the \c main()

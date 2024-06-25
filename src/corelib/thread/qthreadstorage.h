@@ -41,16 +41,26 @@
 QT_BEGIN_NAMESPACE
 
 
+template <class T> class QThreadStorageScoped;
+
 class Q_CORE_EXPORT QThreadStorageData
 {
+    static void** internalSet(const int idArg, void* p);
+
 public:
     explicit QThreadStorageData(void (*func)(void *));
-    ~QThreadStorageData();
+    inline ~QThreadStorageData()
+    {
+    }
 
     void** get() const;
-    void** set(void* p);
+    Q_ALWAYS_INLINE void** set(void* p) { return QThreadStorageData::internalSet(id, p); }
+
+    void finishLater() Q_DECL_NOTHROW;
 
     static void finish(void**);
+
+public:
     int id;
 };
 
@@ -121,6 +131,8 @@ template <class T>
 class QThreadStorage
 {
 private:
+    friend class QThreadStorageScoped<T>;
+
     QThreadStorageData d;
 
     Q_DISABLE_COPY(QThreadStorage)
@@ -132,16 +144,44 @@ public:
     inline QThreadStorage() : d(deleteData) { }
     inline ~QThreadStorage() { }
 
-    inline bool hasLocalData() const
+    Q_ALWAYS_INLINE bool hasLocalData() const
     { return d.get() != 0; }
 
-    inline T& localData()
+    Q_ALWAYS_INLINE const T& localData() const
+    { return qThreadStorage_localData(*const_cast<QThreadStorageData *>(&d), reinterpret_cast<T*>(0)); }
+    Q_ALWAYS_INLINE T& localData()
     { return qThreadStorage_localData(d, reinterpret_cast<T*>(0)); }
-    inline T localData() const
-    { return qThreadStorage_localData_const(d, reinterpret_cast<T*>(0)); }
+    Q_ALWAYS_INLINE T localDataCopy() const
+    { return qMove(qThreadStorage_localData_const(d, reinterpret_cast<T*>(0))); }
 
-    inline void setLocalData(T t)
-    { qThreadStorage_setLocalData(d, &t); }
+    Q_ALWAYS_INLINE void setLocalData(const T &t)
+    { qThreadStorage_setLocalData(d, const_cast<T *>(&t)); }
+
+    /// Same as localData(), however, allows default-value to be custom.
+    Q_ALWAYS_INLINE T& localDataOr(const T &defaultValue)
+    {
+        if (d.get() == 0) qThreadStorage_setLocalData(d, &defaultValue);
+        return this->localData();
+    }
+};
+
+/// Same as %QThreadStorage, however, enqueues an event to delete T.
+template <class T>
+class QThreadStorageScoped : public QThreadStorage<T>
+{
+    typedef QThreadStorage<T> super;
+    Q_DISABLE_COPY(QThreadStorageScoped)
+public:
+    inline QThreadStorageScoped()
+        : super()
+    {
+    }
+
+    Q_ALWAYS_INLINE ~QThreadStorageScoped()
+    {
+        this->d.finishLater();
+    }
+
 };
 
 QT_END_NAMESPACE

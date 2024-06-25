@@ -2219,11 +2219,15 @@ bool QAbstractSocket::waitForBytesWritten(int msecs)
             return false;
     }
 
+    // TRACE/network Dead-lock: waiting-methods should assert current-thread #3
+    d->assertThreadOwned();
+
     forever {
         bool readyToRead = false;
         bool readyToWrite = false;
+
         if (!d->socketEngine->waitForReadOrWrite(&readyToRead, &readyToWrite, true, !d->writeBuffer.isEmpty(),
-                                               qt_subtract_from_timeout(msecs, stopWatch.elapsed()))) {
+                                                 stopWatch.timeLeft(msecs))) {
 #if defined (QABSTRACTSOCKET_DEBUG)
             qDebug("QAbstractSocket::waitForBytesWritten(%i) failed (%i, %s)",
                    msecs, d->socketEngine->error(), d->socketEngine->errorString().toLatin1().constData());

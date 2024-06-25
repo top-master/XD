@@ -242,7 +242,7 @@ defineTest(copyOpenSSL) {
 }
 
 # Returns `DESTDIR` converted to absolute-path, maybe affixed by build-type
-# (see `mkspecs/README.md`).
+# (see `QMAKE_DIR_FIX` section of `mkspecs/README.md` file).
 #
 # Result's an absolute-path for possible copy calls.
 defineReplace(xd_destdir) {

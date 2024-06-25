@@ -487,6 +487,9 @@ LRESULT QT_WIN_CALLBACK qt_internal_proc(HWND hwnd, UINT message, WPARAM wp, LPA
         const int localSerialNumber = d->serialNumber.load();
         if (localSerialNumber != d->lastSerialNumber) {
             d->lastSerialNumber = localSerialNumber;
+            // TRACE/gui/input-event 4: win32 3: all Qt Windows share `qt_internal_proc` as window-process function, and
+            // it postpones Window-messages using custom `WM_QT_SENDPOSTEDEVENTS`, then
+            // here asks platform-plugin's event-dispatcher to handle postponed events.
             q->sendPostedEvents();
         }
         return 0;
@@ -822,6 +825,7 @@ bool QEventDispatcherWin32::processEvents(QEventLoop::ProcessEventsFlags flags)
         DWORD waitRet = 0;
         HANDLE pHandles[MAXIMUM_WAIT_OBJECTS - 1];
         QVarLengthArray<MSG> processedTimers;
+        bool didActivateEventNotifiers = false;
         while (!d->interrupt) {
             DWORD nCount = d->winEventNotifierList.count();
             Q_ASSERT(nCount < MAXIMUM_WAIT_OBJECTS - 1);
@@ -906,9 +910,16 @@ bool QEventDispatcherWin32::processEvents(QEventLoop::ProcessEventsFlags flags)
 
                 if (!filterNativeEvent(QByteArrayLiteral("windows_generic_MSG"), &msg, 0)) {
                     TranslateMessage(&msg);
+                    // TRACE/gui/input-event 4: win32 2: Qt corelib's event-dispatcher finishes waiting for native-events, and
+                    // redirects event and/or window-message to related window-process function.
                     DispatchMessage(&msg);
                 }
             } else if (waitRet - WAIT_OBJECT_0 < nCount) {
+                if (didActivateEventNotifiers) {
+                    // Already tried requesting more events.
+                    break;
+                }
+                didActivateEventNotifiers = true;
                 d->activateEventNotifier(d->winEventNotifierList.at(waitRet - WAIT_OBJECT_0));
             } else {
                 // nothing todo so break

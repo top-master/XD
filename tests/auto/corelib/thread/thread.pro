@@ -4,6 +4,7 @@ SUBDIRS=\
     qatomicinteger \
     qatomicpointer \
     qresultstore \
+    qexception \
     qfuture \
     qfuturesynchronizer \
     qfuturewatcher \

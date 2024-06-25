@@ -5,7 +5,10 @@
 # TRACE/mkspecs bugfix: some Qt Creator versions don't set `build_pass`,
 # for example consider `!build_pass: mySlowTaskOrWarning()`.
 load(qtc_run_polyfill)
-qtc_run: CONFIG *= build_pass
+qtc_run {
+    CONFIG *= build_pass
+    CONFIG -= isXD isXd isxD isxd
+}
 
 load(exclusive_builds)
 CONFIG = \

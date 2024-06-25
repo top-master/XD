@@ -493,6 +493,35 @@ namespace QtSharedPointer {
 #endif
 } // namespace QtSharedPointer
 
+/// Sets default delete logic for given @p TYPE which can be a QObject sub-class.
+#define QSHAREDPOINTER_DELETER(TYPE, expr) \
+namespace QtSharedPointer { \
+ \
+template <> \
+struct CustomDeleter<TYPE, NormalDeleter> \
+{ \
+    TYPE *ptr; \
+ \
+    inline CustomDeleter(TYPE *p, NormalDeleter) : ptr(p) {} \
+    inline void execute() { \
+        expr; \
+    } \
+}; \
+ \
+template <> \
+struct CustomDeleter<TYPE, ObjectDeleter> : CustomDeleter<TYPE, NormalDeleter> \
+{ \
+    typedef CustomDeleter<TYPE, NormalDeleter> super; \
+ \
+    inline CustomDeleter(TYPE *p, ObjectDeleter) \
+        : super(p, NormalDeleter()) \
+    { \
+    } \
+}; \
+ \
+} \
+ /**/
+
 // QSharedPointer will delete the pointer it is holding when it goes out of scope,
 // provided no other QSharedPointer copies are referencing that pointer.
 template <class T>

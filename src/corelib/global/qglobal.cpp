@@ -40,6 +40,7 @@
 #include "qthreadstorage.h"
 #include "qdir.h"
 #include "qdatetime.h"
+#include "qcoreapplication.h"
 #include <private/qlocale_tools_p.h>
 
 #include <private/qsystemlibrary_p.h>
@@ -114,6 +115,8 @@ Q_STATIC_ASSERT_X(UCHAR_MAX == 255, "Qt assumes that char is 8 bits");
 Q_STATIC_ASSERT_X(QT_POINTER_SIZE == sizeof(void *), "QT_POINTER_SIZE defined incorrectly");
 
 void *QtPrivate::debugBreakContext = Q_NULLPTR;
+
+bool QtPrivate::debugDeleteEvents = false;
 
 /*!
     \class QFlag
@@ -3089,6 +3092,14 @@ void qt_assert_x(const char *where, const char *what, const char *file, int line
         qFatal("ASSERT: \"%s\" in file %s, line %d", what, file, line);
 }
 
+void qt_warn_location(const char *where, const char *what, const char *file, int line) Q_DECL_NOTHROW
+{
+    if (where)
+        qWarning("ASSERT failure in %s: \"%s\", file %s, line %d", where, what, file, line);
+    else
+        qWarning("ASSERT: failure \"%s\" in file %s, line %d", what, file, line);
+}
+
 
 /*
     Dijkstra's bisection algorithm to find the square root of an integer.
@@ -3206,10 +3217,18 @@ QString qt_error_string(int errorCode)
 #endif
     break; }
     }
-    if (s)
-        // ######## this breaks moc build currently
-//         ret = QCoreApplication::translate("QIODevice", s);
+    if (s) {
+#ifndef QT_BOOTSTRAPPED
+        // TRACE/corelib note: removed "breaks moc build" notice #1
+        // since disabling translation seems required for all bootstrapped-tools.
+        //
+        // For example, MOC never calls `QCoreApplication::installTranslator`,
+        // hence below would be almost same as `QString::fromUtf8(s)`.
+        ret = QCoreApplication::translate("QIODevice", s);
+#else
         ret = QString::fromLatin1(s);
+#endif
+    }
     return ret.trimmed();
 }
 

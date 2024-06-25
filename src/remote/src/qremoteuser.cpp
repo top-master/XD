@@ -74,7 +74,7 @@ QRemoteUserCounter *QRemoteUserPrivate::instanceManager()
     return globalInstanceManager();
 }
 
-QThreadStorage<QRemoteUserPrivate::PerThreadStorage> QRemoteUserPrivate::threadStore;
+QThreadStorage<QRemoteUserPrivate::PerThreadStorageGlobal> QRemoteUserPrivate::threadStoreGlobal;
 
 
 QRemoteUser::QRemoteUser(QObject *parent, bool storeFirst):
@@ -115,7 +115,7 @@ QRemoteUser::~QRemoteUser()
     MapLocal::const_iterator end = d->locals.end();
     for (; it != end; ++it) {
         const QRef<QObject> obj = it.value();
-        QRemoteData *data = QMetaRemote::dataFromObject(obj.data());
+        QRemoteData *data = QObjectRemotePrivate::findData(obj.data());
         Q_ASSERT(data->session == this);
         data->session = Q_NULLPTR;
     }
@@ -150,12 +150,12 @@ QRemoteUser *QRemoteUser::findInstance(const QRemoteUserName &user)
 
 QRemoteUser *QRemoteUser::fromThreadStorage()
 {
-    return QRemoteUserPrivate::threadStore.localData().instance;
+    return QRemoteUserPrivate::threadStoreGlobal.localData().instance;
 }
 
 QRemoteUser *QRemoteUser::toThreadStorage(QRemoteUser *v)
 {
-    QRemoteUserPrivate::PerThreadStorage &store = QRemoteUserPrivate::threadStore.localData();
+    QRemoteUserPrivate::PerThreadStorageGlobal &store = QRemoteUserPrivate::threadStoreGlobal.localData();
     QRemoteUser *last = store.instance;
     store.instance = v;
     return last;
@@ -199,7 +199,7 @@ bool QRemoteUser::registerLocal(const QRef<QObject> &local)
         return false;
     }
     //fetch or create internal-data
-    QRemoteData *data = QMetaRemote::dataFromObject(local.data());
+    QRemoteData *data = QObjectRemotePrivate::findData(d);
     if(data) {
         // Detaches from old owner.
         QRemoteUser *owner = data->session;
@@ -235,7 +235,7 @@ QRef<QObject> QRemoteUser::unregisterLocal(const QRemoteAddress &name, QRemoteDa
         QRef<QObject> result = it.value();
         d->locals.erase(it);
         if( ! data) {
-            data = QMetaRemote::dataFromObject(result.data());
+            data = QObjectRemotePrivate::findData(result.data());
             if ( ! data)
                 return result;
         }
@@ -301,7 +301,7 @@ QRef<QObjectRemote> QRemoteUser::unregisterRemote(const QRemoteLink &name)
         if (it != remotes.end()) {
             QRef<QObjectRemote> &res = it.value();
             remotes.erase(it);
-            QRemoteData *data = QMetaRemote::dataFromObject(res.data());
+            QRemoteData *data = QObjectRemotePrivate::findData(res.data());
             Q_ASSERT_X(data, "QRemoteUser::unregisterRemote", "missing registration data");
             data->session = 0;
             emit disconnected(res);
@@ -316,9 +316,10 @@ bool QRemoteUser::registerOnce(const QRef<QObject> &v)
     QObject *obj = v.data();
     if(obj == Q_NULLPTR)
         return false;
-    QRemoteData *data = QMetaRemote::dataFromObject(obj);
+    QObjectPrivate *objPrivate = QObjectPrivate::get(obj);
+    QRemoteData *data = QObjectRemotePrivate::findData(objPrivate);
     if(data == Q_NULLPTR || data->session == Q_NULLPTR) {
-        if(QObjectPrivate::get(obj)->isRemote) {
+        if(objPrivate->isRemote) {
             const QRef<QObjectRemote> &remoteRef = v.staticCast<QObjectRemote>();
             return this->registerRemote(remoteRef);
         } else
@@ -370,7 +371,7 @@ bool QRemoteUser::unregister(const QRef<QObject> &obj)
     }
 
 posCleanData:
-    QRemoteData *data = QMetaRemote::dataFromObject(obj.data());
+    QRemoteData *data = QObjectRemotePrivate::findData(obj.data());
     if(data && data->session) {
         if(data->session == this) {
             data->session = Q_NULLPTR;
@@ -492,7 +493,7 @@ bool QRemoteUser::setObjectVisible(const QObject *local, bool visible, const QSt
         // Can not change visibilty of services provided by others.
         return false;
     }
-    QRemoteData *dat = QMetaRemote::dataFromObject(local);
+    QRemoteData *dat = QObjectRemotePrivate::findData(local);
     if (dat) {
         const QRemoteAddress &address = QRemoteAddress(local);
         MapLocal::const_iterator it = d->locals.find(address);
@@ -577,6 +578,24 @@ void QRemoteUser::onPacketLimitExceed(DeviceHandler *causer, quint32 sizeLimit)
     emit ofPacketLimitExceed(causer->device());
 }
 
+int QRemoteUser::requestEventMode() const
+{
+    Q_D(const QRemoteUser);
+    const QRemoteUserPrivate::PerThreadStorage &store = d->threadStore.localData();
+    return store.requestEventMode;
+}
+
+void QRemoteUser::setRequestEventMode(int flags)
+{
+    Q_D(QRemoteUser);
+    if (flags == QRemote::InvalidController) {
+        qAssertWarning("QRemoteUser.setRequestEventMode", "Invalid flags argument.");
+        return;
+    }
+    QRemoteUserPrivate::PerThreadStorage &store = d->threadStore.localData();
+    store.requestEventMode = flags;
+}
+
 bool QRemoteUser::isDisconnectSendable() const
 {
     Q_D(const QRemoteUser);
@@ -607,12 +626,13 @@ bool QRemoteUser::setDisconnectReceivable(bool enabled)
 
 // MARK: Packet I.O. device management.
 
-void QRemoteUser::addDevice(QIODevice *newDevice)
+void QRemoteUser::addDevice(QIODevice *newDevice, bool isThreadSafe)
 {
     Q_D(QRemoteUser);
 
-    // TODO: maybe use qFatal instead, to force even in release.
-    Q_ASSERT_X( ! objectName().isEmpty(), "QRemoteUser", "unique-name is missing.");
+    if (objectName().isEmpty()) {
+        qAssertWarning("QRemoteUser", "unique-name is missing.");
+    }
 
     if ( ! newDevice) {
         qWarning("QRemoteUser: IO-device should be non-null.");
@@ -629,8 +649,9 @@ void QRemoteUser::addDevice(QIODevice *newDevice)
         }
     }
 
-    // Should set parent to "this" for debugging support.
-    QSharedPointer<DeviceHandler> handler(new DeviceHandler(this));
+    // Sets parent to "this" just to improve debugging, however,
+    // only if `isThreadSafe` is true.
+    QSharedPointer<DeviceHandler> handler(new DeviceHandler(this, isThreadSafe));
     d->deviceHandlers.append(handler);
 
     // Needs to be after append to `deviceHandlers`, since
@@ -659,6 +680,18 @@ QIODevice *QRemoteUser::takeDeviceAt(int i)
     return device;
 }
 
+void QRemoteUser::removeAllDevices()
+{
+    QRemoteUserPrivate::DeviceHandlers &list = d_func()->deviceHandlers;
+    const int count = list.count();
+    for (int i = 0; i < count; ++i) {
+        QSharedPointer<DeviceHandler> handler = *list.ptr(i);
+        sendDisconnect(handler.data());
+        handler->dispose(false);
+    }
+    list.clear();
+}
+
 // MARK: Packet upload/send and download/receive helpers.
 
 void QRemoteUser::send(Packet &pkt)
@@ -676,56 +709,80 @@ void QRemoteUser::send(Packet &pkt)
     }
 }
 
-MethodPacket *QRemoteUser::request(MethodPacket &pkt, long waitTime)
+MethodPacket *QRemoteUser::request(MethodPacket &pkt, long waitTime, int eventMode)
 {
     Q_D(QRemoteUser);
-    if (d->packetCodec) {
-        QScopedPointer<ReplyWaiter> rw(
-                    new ReplyWaiter(d, &pkt)
-                );
-        send(pkt);
+    if ( ! d->packetCodec) {
+        qWarning("QRemoteUser.request: Ignored since PacketCodec is not set.");
+        return Q_NULLPTR;
+    }
 
-        //ensure data is sent before waiting for response
-        bool hasDevice = false;
+    // Intentionally listens for reply before packet is even sent.
+    QScopedPointer<ReplyWaiter> rw(
+                new ReplyWaiter(d, &pkt)
+            );
+    send(pkt);
+
+    // Resolves event-handling mode.
+    if (eventMode == QRemote::InheritMode || eventMode == QRemote::InvalidController) {
+        eventMode = this->requestEventMode();
+        if (eventMode == QRemote::InheritMode || eventMode == QRemote::InvalidController) {
+            eventMode = QtPrivate::remoteEventMode;
+            if (eventMode == QRemote::InheritMode || eventMode == QRemote::InvalidController) {
+                eventMode = QEventLoop::AllEvents;
+            }
+        }
+    }
+
+    // Waits for all devices of this thread to finish their Packet sends,
+    // which's only needed if we block all events.
+    if (eventMode == QRemote::BlockingMode) {
+        int devicesFinishedWritting = 0;
+        int devicesInOtherThreads = 0;
         QRemoteUserPrivate::DeviceHandlers::const_iterator it;
         QRemoteUserPrivate::DeviceHandlers::const_iterator end = d->deviceHandlers.cend();
         for (it = d->deviceHandlers.cbegin(); it != end; ++it) {
             const QSharedPointer<DeviceHandler> &h = *it;
+            QObjectPrivate *hPrivate = QObjectPrivate::get(h.data());
+            if ( ! hPrivate->isThreadOwned()) {
+                ++devicesInOtherThreads;
+                continue;
+            }
             if(h && h->flush()) {
-                hasDevice = true; //waitForBytesWritten
+                ++devicesFinishedWritting; //waitForBytesWritten
             }
         }
-
-        if(hasDevice) {
-            QElapsedTimer stopwach; stopwach.start();
-            int remaining = 0;
-            while (rw->waiting() && (remaining = stopwach.timeLeft(waitTime))) {
-#if QREMOTE_SLOT_BLOCK_EVENTS
-                // Blocks QApplication's main-loop if called in main-thread.
-                foreach (QSharedPointer<DeviceHandler> handler, d->deviceHandlers) {
-                    if (handler->device()
-                        && handler->device()->bytesAvailable() > 0
-                    ) {
-                        handler->receiveData();
-                    }
-                }
-                QThread::msleep(20);
-#else
-                // Could use `ExcludeUserInputEvents`, to prevent conflicts, but
-                // the App should itself disable GUI that may conflict.
-                QCoreApplication::processEvents(QEventLoop::AllEvents, 100);
-                QCoreApplication::sendPostedEvents(Q_NULLPTR, QEvent::DeferredDelete);
-#endif
-            }
-
-            Packet *reply = Packet::load(rw->result);
-            if(reply) {
-                if(reply->type() == Packet::SlotReply)
-                    return reinterpret_cast<MethodPacket *>(reply);
-                delete reply;
-            }
+        if (devicesFinishedWritting <= 0 && devicesInOtherThreads <= 0) {
+            return Q_NULLPTR;
         }
     }
+
+    QElapsedTimer stopwach; stopwach.start();
+    int remaining = 0;
+    while (rw->waiting() && (remaining = stopwach.timeLeft(waitTime))) {
+        if (eventMode == QRemote::BlockingMode) {
+            // Blocks QApplication's main-loop if called in main-thread.
+            foreach (QSharedPointer<DeviceHandler> handler, d->deviceHandlers) {
+                if (handler->device()
+                    && handler->device()->bytesAvailable() > 0
+                ) {
+                    handler->receiveData();
+                }
+            }
+            QThread::msleep(20);
+        } else {
+            QCoreApplication::processEvents(QEventLoop::ProcessEventsFlags(eventMode), 100);
+            QCoreApplication::sendPostedEvents(Q_NULLPTR, QEvent::DeferredDelete);
+        }
+    }
+
+    Packet *reply = Packet::load(rw->result);
+    if(reply) {
+        if(reply->type() == Packet::SlotReply)
+            return reinterpret_cast<MethodPacket *>(reply);
+        delete reply;
+    }
+
     return Q_NULLPTR;
 }
 

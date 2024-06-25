@@ -18,6 +18,7 @@ public:
     inline QSharedPointer<QObjectRemote> assertNewConnection(int index) {
         qExpect(spyNewConnection.count())->toBeGreaterOrEqual(index + 1)
                 ->withTraceSkip(":assert");
+        // With right argument count.
         qExpect(spyNewConnection[index].count())->toEqual(1);
         // With right argument type.
         QVariant arg = spyNewConnection[index][0];

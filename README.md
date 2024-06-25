@@ -66,14 +66,14 @@ then you will need to run below command to fetch any sub-module:
 5. In `Qt-Creator` open as project our main build-script file which is "`XD-mini.pro`" file, or for advanced users "`XD.pro`", then configure it to use the build tool-kit (which you added in previous step), like:
     - The "`Configure Project`" wizard should appear right after open.
     - **WARNING:** if said wizard does **not** appear, then do either of these:
-        - Close Qt-Creator, and remove the "`C:/XD/XD-mini.pro.user`" file or if advanced `XD.pro.user` file, finally re-open said main build-script file in Qt-Creator.
+        - Close Qt-Creator, and remove the "`C:/XD/XD-mini.pro.user`" file, finally re-open said main build-script file in Qt-Creator.
         - Or [configure project](./doc/qt-creator/configuring-projects.md) manually.
     - In said wizard, tick the "`MyToolKit`" checkbox, and un-tick any other kit.
     - Expand the "`Details`" of said checkbox.
     - In both "`Debug`" and "`Release`" text-boxes type "C:/build/XD-tmp" without quotes (any path is allowed except "`C:/XD`" folder or its sub-folders).
 
 6. In `Qt-Creator` click "Build All" from "Build" menu
-   (note that both `debug` and `release` libraies get built, unlike normal projects,
+   (note that both `debug` and `release` libraries get built, unlike normal projects,
    hence no need for switching to `release` mode, using `Ctrl+T` menu).
 
 7. Optionally, create the `XD_ROOT` named environment-variable, and point it to `C:/XD` (directory which second step creates).

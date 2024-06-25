@@ -40,6 +40,7 @@
 #include "qstyleoption.h"
 #include "private/qstyle_p.h"
 #include "private/qguiapplication_p.h"
+#include "private/qapplication_p.h"
 #ifndef QT_NO_DEBUG
 #include "qdebug.h"
 #endif
@@ -412,6 +413,10 @@ QStyle::QStyle(QStylePrivate &dd)
 */
 QStyle::~QStyle()
 {
+    if (QApplicationPrivate::app_style == this) {
+        qAssertWarning("QStyle", "QApplication's style should NOT be deleted before QApplication.");
+        QApplicationPrivate::app_style = Q_NULLPTR;
+    }
 }
 
 /*!

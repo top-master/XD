@@ -105,6 +105,12 @@ public:
     {
     }
 
+    Q_ALWAYS_INLINE ~QScopedPointerBase() {
+        // TRACE/smart-pointer: always set to `nullptr` on destruction,
+        // even if non-null and/or immutable, to remember was used after destruction.
+        d = Q_NULLPTR;
+    }
+
     template <typename X>
     static inline const Self *get(const X *subclass) {
         return QUnprotect<X, const Self>::cast(subclass);

@@ -249,8 +249,12 @@ template <typename BaseClass> struct QGenericAtomicOps
     template <typename T> static Q_ALWAYS_INLINE
     T fetchAndSubRelaxed(T &_q_value, typename QAtomicAdditiveType<T>::AdditiveT operand) Q_DECL_NOTHROW
     {
-        // implement fetchAndSub on top of fetchAndAdd
-        return fetchAndAddRelaxed(_q_value, -operand);
+        // implement fetchAndSub on top of testAndSet, to support `unsigned` types.
+        Q_FOREVER {
+            T tmp = BaseClass::load(_q_value);
+            if (BaseClass::testAndSetRelaxed(_q_value, tmp, T(tmp - operand)))
+                return tmp;
+        }
     }
 
     template <typename T> static Q_ALWAYS_INLINE

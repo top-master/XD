@@ -187,6 +187,13 @@ QApplicationPrivate::QApplicationPrivate(int &argc, char **argv, int flags)
 
 QApplicationPrivate::~QApplicationPrivate()
 {
+#ifndef QT_NO_GESTURES
+    if (gestureManager) {
+        delete gestureManager;
+        gestureManager = 0;
+    }
+#endif // QT_NO_GESTURES
+
     if (self == this)
         self = 0;
 }
@@ -862,8 +869,11 @@ QApplication::~QApplication()
     QApplicationPrivate::set_font = 0;
     app_fonts()->clear();
 
-    delete QApplicationPrivate::app_style;
-    QApplicationPrivate::app_style = 0;
+    QStyle *oldStyle = QApplicationPrivate::app_style;
+    if (oldStyle) {
+        QApplicationPrivate::app_style = 0;
+        delete oldStyle;
+    }
 
 #ifndef QT_NO_DRAGANDDROP
     if (qt_is_gui_used)
@@ -2769,10 +2779,11 @@ bool QApplicationPrivate::sendMouseEvent(QWidget *receiver, QMouseEvent *event,
     // leaveAfterRelease is set to null, but we shall not update lastMouseReceiver.
     const bool wasLeaveAfterRelease = leaveAfterRelease != 0;
     bool result;
-    if (spontaneous)
+    if (spontaneous) {
         result = QApplication::sendSpontaneousEvent(receiver, event);
-    else
+    } else {
         result = QApplication::sendEvent(receiver, event);
+    }
 
     if (!graphicsWidget && leaveAfterRelease && event->type() == QEvent::MouseButtonRelease
         && !event->buttons() && QWidget::mouseGrabber() != leaveAfterRelease) {
@@ -3160,6 +3171,8 @@ bool QApplication::notify(QObject *receiver, QEvent *e)
 
     bool res = false;
     if (!receiver->isWidgetType()) {
+        // TRACE/gui/input-event 9: after QApplication's checks, for top-level windows the
+        // QWidget specific handling of keyboard/mouse/gesture event(s) get skipped.
         res = d->notify_helper(receiver, e);
     } else switch (e->type()) {
     case QEvent::ShortcutOverride:
@@ -3801,6 +3814,8 @@ bool QApplicationPrivate::notify_helper(QObject *receiver, QEvent * e)
     // send to all receiver event filters
     if (sendThroughObjectEventFilters(receiver, e))
         return true;
+
+    // TRACE/gui/input-event 10: first handles event-filters, then finally event gets passed to top-level QWindow's `event` method.
 
     // deliver the event
     bool consumed = receiver->event(e);
@@ -4583,7 +4598,7 @@ QGestureManager* QGestureManager::instance()
     if (!qAppPriv)
         return 0;
     if (!qAppPriv->gestureManager)
-        qAppPriv->gestureManager = new QGestureManager(qApp);
+        qAppPriv->gestureManager = new QGestureManager();
     return qAppPriv->gestureManager;
 }
 #endif // QT_NO_GESTURES

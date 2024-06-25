@@ -1882,7 +1882,11 @@ QColor QColor::convertTo(QColor::Spec colorSpec) const
 
 /// Overlays @p front on top of "this" with @p alpha as opacity.
 QColor QColor::blendTo(const QColor &front, int frontAlpha) const
-{ //formula: result.setRed( (colorA.red() * factor) / maxFactor + (colorB.red() * (maxFactor - factor)) / maxFactor) );
+{
+    // Formula:
+    // ```
+    // result.setRed( (colorA.red() * factor) / maxFactor + (colorB.red() * (maxFactor - factor)) / maxFactor) );
+    // ```
     QColor result(Qt::Uninitialized); //Rgb mode does not need initialize
     result.cspec = Rgb;
     QCOLOR_INT_RANGE_CHECK("QColor::blendTo", frontAlpha);
@@ -1901,7 +1905,6 @@ QColor QColor::blendToF(const QColor &front, qreal frontAlpha) const
     result.cspec = Rgb;
     QCOLOR_REAL_RANGE_CHECK("QColor::blendToF", frontAlpha);
     result.ct.argb.alpha = (1.0 - (1.0 - alphaF())*(1.0 - frontAlpha)) * USHRT_MAX;
-    //result.ct.argb.red = (red()    * (1.0 - frontAlpha) + front.red()    * frontAlpha) * 0x101; //old code
 #if 1
     result.ct.argb.red   = (redF()   * (1.0 - frontAlpha) + front.redF()   * frontAlpha) * USHRT_MAX;
     result.ct.argb.green = (greenF() * (1.0 - frontAlpha) + front.greenF() * frontAlpha) * USHRT_MAX;

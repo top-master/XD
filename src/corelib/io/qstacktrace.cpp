@@ -27,7 +27,11 @@
 #include <QtCore/qmutex.h>
 #include <QtCore/qdir.h>
 #include <QtCore/qexception.h>
-#include <QtCore/qregularexpression.h>
+#ifndef QT_NO_REGULAREXPRESSION
+#  include <QtCore/qregularexpression.h>
+#elif !defined(QT_NO_REGEXP)
+#  include <QtCore/qregexp.h>
+#endif
 
 
 QT_BEGIN_NAMESPACE
@@ -167,6 +171,18 @@ bool QStackTrace::next()
 #endif
 }
 
+bool QStackTrace::restart()
+{
+    Q_D(QStackTrace);
+    if (d->isOpen) {
+        // Start by invalid index.
+        d->currentIndex = d->beginIndex - 1;
+        return true;
+    }
+    return false;
+}
+
+#if !defined(QT_NO_REGULAREXPRESSION) || !defined(QT_NO_REGEXP)
 bool QStackTrace::skip(const QString &symbolPattern)
 {
     Q_D(QStackTrace);
@@ -179,13 +195,22 @@ bool QStackTrace::skip(const QString &symbolPattern)
     }
 
     bool foundAnyMatch = false;
+#if !defined(QT_NO_REGULAREXPRESSION) && 0
     QRegularExpression regExp(symbolPattern);
+#else
+    QRegExp regExp(symbolPattern);
+#endif
     do {
         QString symbol = qMove(this->symbolName());
 #if 0
         qDebug() << symbol << filePath() << fileLineNumber() << symbolAddress();
 #endif
-        if (regExp.match(symbol).hasMatch()) {
+#if !defined(QT_NO_REGULAREXPRESSION) && 0
+        if (regExp.match(symbol).hasMatch())
+#else
+        if (regExp.indexIn(symbol) > 0)
+#endif
+        {
             // Skips all symbol matches (we want caller of symbol).
             foundAnyMatch = true;
             continue;
@@ -201,6 +226,7 @@ bool QStackTrace::skip(const QString &symbolPattern)
 
     return foundAnyMatch;
 }
+#endif // !QT_NO_REGULAREXPRESSION
 
 bool QStackTrace::skipAddress(qptrdiff address)
 {
@@ -325,6 +351,59 @@ QStackTrace::PathTranslator QStackTrace::setPathTranslatorDefault(const QStackTr
     PathTranslator old = globals->pathTranslator;
     globals->pathTranslator = f;
     return old;
+}
+
+QString QStackTrace::toString(const QString &msg, int depthLimit, bool skipSymbolOnly)
+{
+    QString out;
+    const QLatin1String lineFade = QLL(QT_NEW_LINE);
+    const QLatin1String prefix("WARNING: ");
+    int depth = 1;
+    if (depthLimit <= 0) {
+        depthLimit = (std::numeric_limits<int>::max)();
+    }
+    // Ensure enough memory.
+    out.reserve(1024 * 1024); // 1 MiB.
+
+    while (this->next()) {
+        QString file = qMove(this->filePath());
+        int line = this->fileLineNumber();
+        // Maybe skip if address is missing.
+        if (skipSymbolOnly
+                && (line <= 0 || file.isEmpty()))
+        {
+            continue;
+        }
+        const QString &lineStr = QString::number(line);
+
+        // Join.
+        out += prefix;
+        out += file;
+        out += QLatin1Char(':');
+        out += lineStr;
+
+        // Message.
+        out += QLatin1Literal(": ");
+        if (depth == 1 && ! msg.isEmpty()) {
+            out += msg;
+        } else {
+            out += QLatin1Char('#');
+            out += QString::number(depth);
+            out += QChar::Space;
+            out += this->symbolName();
+        }
+        out += lineFade;
+
+        if (depth >= depthLimit) {
+            break;
+        }
+        ++depth;
+    }
+    out.chop(lineFade.size());
+    // Releases unused memory while keeping 512 bytes for caller.
+    out.squeeze(out.size() + 512);
+
+    return out;
 }
 
 QT_END_NAMESPACE

@@ -1,6 +1,6 @@
 TEMPLATE = subdirs
 SUBDIRS = \
-    test
+    test/qthreadstorage_tst.pro
 
 !winrt: SUBDIRS += crashonexit
 

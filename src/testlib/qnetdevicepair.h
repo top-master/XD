@@ -36,6 +36,9 @@ public:
     /// @returns always @c false.
     bool seek(qint64 pos) Q_DECL_OVERRIDE;
 
+    bool waitForReadyRead(int msecs) Q_DECL_OVERRIDE;
+    bool waitForBytesWritten(int msecs) Q_DECL_OVERRIDE;
+
     void reset(const QByteArray &);
 
     inline void clear() { reset(QByteArray()); }

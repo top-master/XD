@@ -183,6 +183,22 @@ Q_STATIC_ASSERT_X(sizeof(qunicodechar) == 2,
 
 #ifndef QT_NO_UNICODE_LITERAL
 #  define QT_UNICODE_LITERAL(str) QT_UNICODE_LITERAL_II(str)
+
+   /// Implementation of #QStringLiteralGlobal, but allows custom-type.
+#  define QStringLiteralGlobal_T(name, str, type, id) \
+    enum { QT_JOIN(_qLiteralSize_, id) = sizeof(QT_UNICODE_LITERAL(str))/2 - 1 }; \
+    static const QStaticStringData< QT_JOIN(_qLiteralSize_, id) > QT_JOIN(_qLiteralData_, id) = { \
+    Q_STATIC_STRING_DATA_HEADER_INITIALIZER( QT_JOIN(_qLiteralSize_, id) ), \
+    QT_UNICODE_LITERAL(str) }; \
+    type name(QStringDataPtr({ QT_JOIN(_qLiteralData_, id).data_ptr() }));
+
+   /// Similar to #QStringLiteral, but for global-scope.
+#  define QStringLiteralGlobal(name, str) QStringLiteralGlobal_T(name, str, const QString, __LINE__)
+
+   /// Similar to #QStringLiteral, but for non-exportable static-scope usages.
+#  define QStringLiteralStatic(name, str) QStringLiteralGlobal_T(name, str, static const QString, __LINE__)
+
+
 # if defined(Q_COMPILER_LAMBDA)
 
 #  define QStringLiteral(str) \
@@ -267,7 +283,7 @@ public:
 
     inline int capacity() const;
     inline void reserve(int size);
-    inline void squeeze();
+    inline void squeeze(uint keepReserved = 0);
 
     inline const QChar *unicode() const;
     inline QChar *data();
@@ -1128,10 +1144,10 @@ inline void QString::reserve(int asize)
     }
 }
 
-inline void QString::squeeze()
+inline void QString::squeeze(uint keepReserved)
 {
     if (d->ref.isShared() || uint(d->size) + 1u < d->alloc)
-        reallocData(uint(d->size) + 1u);
+        reallocData(qMax(uint(d->size), keepReserved) + 1u);
 
     if (d->capacityReserved) {
         // cannot set unconditionally, since d could be shared_null or

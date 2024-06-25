@@ -224,10 +224,11 @@ protected:
     /// Decoratee.
     mutable QPointer<QObject> decorLoaded;
 
-    typedef QLinkedList<QObjectDecorListener> Listeners;
-    Listeners decorListeners;
+    typedef QLinkedList<QObjectDecorListener> DecorListeners;
+    DecorListeners decorListeners;
 };
 
+/// Similar to QRecursiveMutex; required by QObjectDecor::decorLoad() overrides.
 class Q_CORE_EXPORT QObjectDecorLocker : public QMutexLocker {
     typedef QMutexLocker super;
 public:

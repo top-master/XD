@@ -41,6 +41,8 @@
 QT_BEGIN_NAMESPACE
 
 
+class QStackTrace;
+
 class QEventPrivate;
 class Q_CORE_EXPORT QEvent           // event base class
 {
@@ -277,6 +279,8 @@ public:
 
         PlatformSurface = 217,                  // Platform surface created or about to be destroyed
 
+        Runnable = 219,
+
         // 218 reserved for Update
         // 512 reserved for Qt Jambi's MetaCall event
         // 513 reserved for Qt Jambi's DeleteOnMainThread event
@@ -373,6 +377,14 @@ public:
     explicit QDeferredDeleteEvent();
     ~QDeferredDeleteEvent();
     int loopLevel() const { return level; }
+
+    /// @returns If @ref QObjectData::isDebugging is set, the stack-trace of
+    /// the @ref QObject::deleteLater call, otherwise, an empty stack-trace.
+    ///
+    /// @warning Non-Qt code may override said behavior using @ref setTrace.
+    QStackTrace trace() const;
+    void setTrace(const QStackTrace &);
+
 private:
     int level;
     friend class QCoreApplication;

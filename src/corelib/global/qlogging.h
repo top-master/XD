@@ -58,18 +58,33 @@ class QMessageLogContext
 {
     Q_DISABLE_COPY(QMessageLogContext)
 public:
-    Q_DECL_CONSTEXPR QMessageLogContext()
+    inline Q_DECL_CONSTEXPR QMessageLogContext()
         : version(2), line(0), file(Q_NULLPTR), function(Q_NULLPTR), category(Q_NULLPTR) {}
-    Q_DECL_CONSTEXPR QMessageLogContext(const char *fileName, int lineNumber, const char *functionName, const char *categoryName)
+    inline Q_DECL_CONSTEXPR QMessageLogContext(const char *fileName, int lineNumber, const char *functionName, const char *categoryName)
         : version(2), line(lineNumber), file(fileName), function(functionName), category(categoryName) {}
 
     void copy(const QMessageLogContext &logContext);
+#ifdef Q_COMPILER_RVALUE_REFS
+    Q_ALWAYS_INLINE QMessageLogContext&& clone() const
+    { return qMove(QMessageLogContext(this->file, this->line, this->function, this->category)); }
+#endif
 
     int version;
     int line;
     const char *file;
     const char *function;
     const char *category;
+
+#ifdef Q_COMPILER_RVALUE_REFS
+#  ifdef Q_COMPILER_DEFAULT_MEMBERS
+   QMessageLogContext(QMessageLogContext &&other) = default;
+#  else
+    inline Q_DECL_CONSTEXPR QMessageLogContext(QMessageLogContext &&other)
+        : version(other.version), line(other.line), file(other.file), function(other.function), category(other.category)
+    {
+    }
+#  endif
+#endif
 
 private:
     friend class QMessageLogger;
@@ -169,6 +184,17 @@ private:
 #if defined(QT_NO_WARNING_OUTPUT)
 #  undef qWarning
 #  define qWarning QT_NO_QDEBUG_MACRO
+#endif
+
+/// @def qAssertWarning(where, what)
+/// Similar to #Q_ASSERT_X, however, only call this if the assertion already failed, also,
+/// for release-builds this calls #qWarning instead of #qFatal, unless #QT_FORCE_ASSERTS is defined.
+#if !defined(qAssertWarning)
+#  if defined(QT_NO_DEBUG) && !defined(QT_FORCE_ASSERTS)
+#    define qAssertWarning(where, what) qt_warn_location(where, what,__FILE__,__LINE__)
+#  else
+#    define qAssertWarning(where, what) qt_assert_x(where, what,__FILE__,__LINE__)
+#  endif
 #endif
 
 Q_CORE_EXPORT QString qt_message(QtMsgType msgType, const char *msg, va_list ap);

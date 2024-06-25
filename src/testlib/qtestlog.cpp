@@ -544,9 +544,11 @@ void QTestLog::info(const char *msg, const char *file, int line)
     QTest::TestLoggers::addMessage(QAbstractTestLogger::Info, QString::fromUtf8(msg), file, line);
 }
 
-void QTestLog::setVerboseLevel(int level)
+int QTestLog::setVerboseLevel(int level)
 {
+    int oldLevel = QTest::verbosity;
     QTest::verbosity = level;
+    return oldLevel;
 }
 
 int QTestLog::verboseLevel()
