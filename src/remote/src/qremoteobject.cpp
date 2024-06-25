@@ -119,7 +119,7 @@ QRef<QObjectRemote> QMetaRemote::remoteFromType(const QByteArray &typeName, QObj
         remoteType.prepend(typeName);
     }
     const TypeInfo &inf = remoteTypes.typeInfo(remoteType.constData(), remoteType.size());
-    if(!inf.isEmpty()) {
+    if( ! inf.isEmpty()) {
         void *ptr = reinterpret_cast<Constructor>(inf.constructorPtr)( malloc(sizeof(QObjectRemote)), parent );
         return QRef<QObjectRemote>(reinterpret_cast<QObjectRemote *>(ptr));
     }
@@ -309,7 +309,10 @@ static inline void warnActivate(...) {}
 
 void QMetaRemote::activate(QObject *sender, const QMetaObject *m, int local_signal_index, void **argv)
 {
-    //if(!sender || !m) return; //we expect correct input parameters
+    // We expect correct input parameters, else would do:
+    // ```
+    // if( ! sender || ! m) return;
+    // ```
     QObjectPrivate *d = QObjectPrivate::get(sender);
 
     // Gets real signal-index, if sender is a local-model casted into controller
@@ -381,7 +384,7 @@ void QMetaRemote::request(QObjectRemote *sender, const QMetaObject *m, int local
     QObjectRemotePrivate *d = reinterpret_cast<QObjectRemotePrivate *>(QObjectPrivate::get(sender));
 
     QMetaMethod smethod = m->local_method(local_method_index);
-    if(!smethod.enclosingMetaObject())
+    if( ! smethod.enclosingMetaObject())
         return;
 
     if(d->isRemote) {
@@ -443,7 +446,7 @@ void QMetaRemote::request(QObjectRemote *sender, const QMetaObject *m, int local
                 //at last send request and wait for reply
                 const int timeoutMiliSec = d->remoteTimeout ? d->remoteTimeout * d->remoteMiliSecPerTimeout : -1;
                 QScopedPointer<MethodPacket> replyPkt(
-                        session->request(*pkt, timeoutMiliSec)
+                        session->request(*pkt, timeoutMiliSec, d->eventMode)
                     );
                 //process reply return-value
                 d->remoteTimeoutExpired = replyPkt.isNull();
@@ -591,7 +594,7 @@ void QMetaRemote::receive(QObject *receiver, const Packet &pkt)
             QScopedPointer<ConstructedArgs> params(
                     ConstructedArgs::fromParams(session, callPkt->params())
                 );
-            if(!params.isNull()) {
+            if( ! params.isNull()) {
                 if(callPkt->flags().testFlag(MethodPacket::NoReply)) {
                     rmethod.metaInvoke(receiver, params->argv);
                     return;
@@ -643,7 +646,7 @@ void QMetaRemote::receive(QObject *receiver, const Packet &pkt)
             serviceSession->receiveRequestReply(reinterpret_cast<const MethodPacket &>(pkt));
     } else {
         //invalid receiver or packet type
-        if(!d->isRemote && !d->isReinterpretable) {
+        if( ! d->isRemote && ! d->isReinterpretable) {
             //invalid receiver
             qWarning("QMetaRemote.receive: object (%s) is invalid or not registered Local",
                      receiver->metaObject()->className());
@@ -700,7 +703,33 @@ QString QMetaRemote::trUtf8(const char *s, const char *c, int n) const
 QRemoteData::QRemoteData()
     : session(0)
     , instanse(0)
+    , eventMode(QRemote::InheritMode)
 {
+}
+
+QRemoteData::~QRemoteData()
+{
+}
+
+int QT_FASTCALL QRemoteBound::eventMode() const
+{
+    const QRemoteData *dat = QObjectRemotePrivate::findData(reinterpret_cast<const QObject *>(this));
+    if (dat) {
+        return dat->eventMode;
+    }
+    return QRemote::InvalidController;
+}
+
+int QT_FASTCALL QRemoteBound::setEventMode(int m) {
+    QRemoteData *dat = QObjectRemotePrivate::findData(reinterpret_cast<QObject *>(this));
+    if (dat) {
+        int oldMode = dat->eventMode;
+        if (m != QRemote::InvalidController) {
+            dat->eventMode = m;
+        }
+        return oldMode;
+    }
+    return QRemote::InvalidController;
 }
 
 QT_END_NAMESPACE

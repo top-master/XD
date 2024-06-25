@@ -4,11 +4,14 @@
 HEADERS += thread/qmutex.h \
            thread/qrunnable.h \
            thread/qrunnablefunc.h \
+           thread/qrunnableevent.h \
+           thread/qrunnabledelay.h \
            thread/qreadwritelock.h \
            thread/qsemaphore.h \
            thread/qthread.h \
            thread/qthreadfunc.h \
            thread/qthreadpool.h \
+           thread/qthreadslotable.h \
            thread/qthreadstorage.h \
            thread/qwaitcondition.h \
            thread/qatomic.h \
@@ -44,6 +47,7 @@ SOURCES += thread/qatomic.cpp \
            thread/qthread.cpp \
            thread/qthreadfunc.cpp \
            thread/qthreadpool.cpp \
+           thread/qthreadslotable.cpp \
            thread/qthreadstorage.cpp
 
 # Per platform sources are already included in `qmutex.cpp` file

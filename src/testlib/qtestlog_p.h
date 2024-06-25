@@ -95,7 +95,7 @@ public:
     static int loggerCount();
     static bool loggerUsingStdout();
 
-    static void setVerboseLevel(int level);
+    static int setVerboseLevel(int level);
     static int verboseLevel();
 
     static void setMaxWarnings(int max);

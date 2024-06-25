@@ -359,7 +359,7 @@ private slots:
         QPointerLazinessResolverAtomic &resolver = QLazinessResolver::fieldCast<QPointerLazinessResolverAtomic>(ptr);
 
         // Actual test.
-        qExpect(resolver.raw())->toBe(&QPointerLazinessResolver::globalImmutable);
+        qExpect(resolver.raw())->toBe(&QPointerLazinessResolver::globalImmutableNonNull);
         delete obj;
     }
 

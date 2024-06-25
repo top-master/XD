@@ -888,6 +888,7 @@ Q_CORE_EXPORT void qt_assert(const char *assertion, const char *file, int line) 
 Q_NORETURN
 #endif
 Q_CORE_EXPORT void qt_assert_x(const char *where, const char *what, const char *file, int line) Q_DECL_NOTHROW;
+Q_CORE_EXPORT void qt_warn_location(const char *where, const char *what, const char *file, int line) Q_DECL_NOTHROW;
 
 // Note to place debug-breakpoint inside `qt_message_fatal` which `Q_ASSERT_X` calls.
 #if !defined(Q_ASSERT_X)
@@ -1411,8 +1412,13 @@ namespace QtPrivate {
 // TRACE/QApplication: defines global settings for inline access.
 
 Q_VAR_EXPORT(CORE) extern int remoteTimeout; //declared at "corelib/kernel/qobject.cpp"
+Q_VAR_EXPORT(CORE) extern int remoteEventMode; //declared at "corelib/kernel/qobject.cpp"
 /// Internally used to know where to trigger debug-break-point.
 Q_VAR_EXPORT(CORE) extern void * debugBreakContext;
+
+/// If enabled @ref QObject::event logs stack-trace of `deleteLater` events,
+/// and that before handling the event.
+Q_VAR_EXPORT(CORE) extern bool debugDeleteEvents;
 
 //like std::enable_if
 template <bool B, typename T = void> struct QEnableIf;

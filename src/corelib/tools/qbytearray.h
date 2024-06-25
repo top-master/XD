@@ -255,6 +255,8 @@ public:
     Q_REQUIRED_RESULT QByteArray left(int len) const;
     Q_REQUIRED_RESULT QByteArray right(int len) const;
     Q_REQUIRED_RESULT QByteArray mid(int index, int len = -1) const;
+    /// @warning Result needs to be detached manually, or,
+    /// be used in a way that causes detach to happen.
     Q_REQUIRED_RESULT inline QByteArray midRef(int index, int len = -1) const;
 
     bool startsWith(const QByteArray &a) const;

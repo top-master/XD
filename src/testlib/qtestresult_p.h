@@ -57,6 +57,7 @@ class Q_TESTLIB_EXPORT QTestResult
 public:
     static const char *currentTestObjectName();
     static bool currentTestFailed();
+    static void internalSetCurrentTestFailState(bool b);
     static QTestData *currentTestData();
     static QTestData *currentGlobalTestData();
     static const char *currentTestFunction();
@@ -66,6 +67,7 @@ public:
     static void finishedCurrentTestDataCleanup();
     static void finishedCurrentTestFunction();
     static void reset();
+    static bool isCurrentTestBlacklisted();
     static void setBlacklistCurrentTest(bool b);
 
     static void addFailure(const char *message, const char *file, int line);

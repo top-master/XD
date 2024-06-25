@@ -100,6 +100,9 @@ public:
     inline bool isAutoDeletable() const { return m_autoDelete; }
     inline void setAutoDeleteEnabled(bool state) { m_autoDelete = state; }
 
+    inline int port() const { return m_port; }
+    inline void setPort(int newValue) { m_port = newValue; }
+
     inline const QRef<ServerServiceRemote> &controller() const { return m_controller; }
     inline QRef<ServerServiceRemote> &controller() { return m_controller; }
 
@@ -171,12 +174,24 @@ protected:
     QString m_signalArg;
 };
 
+Q_GLOBAL_STATIC_WITH_ARGS(QAtomicInt, ServerClientPairPortCounter, (ServerThread::PortDefault))
+
 class ServerClientPair {
 public:
-    inline ServerClientPair()
+    inline explicit ServerClientPair(int portArg = ServerThread::PortDefault)
     {
-        server = new ServerThread();
-        client = new ClientThread();
+        server = new ServerThread(Q_NULLPTR, portArg);
+        client = new ClientThread(portArg);
+    }
+
+    static inline int registerPort() {
+        return ServerClientPairPortCounter()->fetchAndAddRelaxed(1);
+    }
+
+    inline int port() const { return this->server->port(); }
+    inline void setPort(int portArg) {
+        this->server->setPort(portArg);
+        this->client->setPort(portArg);
     }
 
     inline void waitForDeleted(int timeout) {

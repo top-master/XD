@@ -27,12 +27,17 @@
 
 #include "./qmutex_p.h"
 
-/// Same as QMutex, but without separate allocation for QRecursiveMutexPrivate.
-class QRecursiveMutex : public QMutex, public QRecursiveMutexPrivate {
+/// Same as QMutex, but won't dead-lock if local-thread already holds a lock.
+///
+/// Instead, this auto increases and decreases an internal lock-counter.
+///
+/// Before XD5, this feature was internal and was only available through a
+/// separate allocation for QRecursiveMutexPrivate, then setting `d_ptr` to that.
+class QRecursiveMutex : public QMutex, private QRecursiveMutexPrivate {
 public:
     Q_ALWAYS_INLINE QRecursiveMutex()
     {
-        this->d_ptr.store(this);
+        this->d_ptr.store(static_cast<QMutexData *>(this));
     }
 
     Q_ALWAYS_INLINE ~QRecursiveMutex()
@@ -40,6 +45,9 @@ public:
         // Skips QMutex's checks.
         this->d_ptr.store(Q_NULLPTR);
     }
+
+    Q_ALWAYS_INLINE void lock() QT_MUTEX_LOCK_NOEXCEPT { QMutex::lock(); }
+    Q_ALWAYS_INLINE void unlock() Q_DECL_NOTHROW { QMutex::unlock(); }
 };
 
 #endif // QMUTEX_RECURSIVE_H

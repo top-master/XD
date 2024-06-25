@@ -230,6 +230,7 @@ bool QWidgetWindow::event(QEvent *event)
     case QEvent::MouseButtonPress:
     case QEvent::MouseButtonRelease:
     case QEvent::MouseButtonDblClick:
+        // TRACE/gui/input-event 11: QWidgetWindow redirects to type specific event-handler method.
         handleMouseEvent(static_cast<QMouseEvent *>(event));
         return true;
 
@@ -603,6 +604,8 @@ void QWidgetWindow::handleMouseEvent(QMouseEvent *event)
         QMouseEvent translated(event->type(), mapped, event->windowPos(), event->screenPos(),
                                event->button(), event->buttons(), event->modifiers(), event->source());
         translated.setTimestamp(event->timestamp());
+        // TRACE/gui/input-event 12: after some checks, QWidgetWindow redirects to it's sub-QWidget, but that
+        // through QApplicationPrivate; hence the checks skipped at #9 were just waiting for #12 to decide receiver.
         QApplicationPrivate::sendMouseEvent(receiver, &translated, widget, m_widget,
                                             &qt_button_down, qt_last_mouse_receiver);
         event->setAccepted(translated.isAccepted());

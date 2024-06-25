@@ -50,6 +50,24 @@ bool QNetDevice::seek(qint64 pos)
     return false;
 }
 
+/// Simulates not being thread-safe, like real socket-devices.
+bool QNetDevice::waitForReadyRead(int msecs)
+{
+#ifndef QT_NO_QOBJECT
+    QObjectPrivate::get(this)->assertThreadOwned();
+#endif
+    return super::waitForReadyRead(msecs);
+}
+
+/// Simulates not being thread-safe, like real socket-devices.
+bool QNetDevice::waitForBytesWritten(int msecs)
+{
+#ifndef QT_NO_QOBJECT
+    QObjectPrivate::get(this)->assertThreadOwned();
+#endif
+    return super::waitForBytesWritten(msecs);
+}
+
 void QNetDevice::reset(const QByteArray &newValue)
 {
     QBufferPrivate *d = QBufferPrivate::get(this);

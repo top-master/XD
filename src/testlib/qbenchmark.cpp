@@ -107,7 +107,7 @@ int QBenchmarkGlobalData::adjustMedianIterationCount()
 }
 
 
-QBenchmarkTestMethodData *QBenchmarkTestMethodData::current;
+QBenchmarkTestMethodData *QBenchmarkTestMethodData::current = Q_NULLPTR;
 
 QBenchmarkTestMethodData::QBenchmarkTestMethodData()
 :resultAccepted(false), runOnce(false), iterationCount(-1)

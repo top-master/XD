@@ -65,9 +65,11 @@
 #  define QREMOTE_ALIGNED_ALLOC 0
 #endif
 
-//0=request blocks but "qApp->processEvents();" is called until reply
-//1=remote slot request blocks the calling thread until reply
-#define QREMOTE_SLOT_BLOCK_EVENTS 0
+/// @deprecated Use %QRemoteUser::setRequestEventMode instead, or,
+/// use %QRemoteEventModer instead.
+#ifndef QREMOTE_SLOT_BLOCK_EVENTS
+#  define QREMOTE_SLOT_BLOCK_EVENTS 0
+#endif
 
 #if QREMOTE_DEBUG
 #  define QREMOTE_DEBUG_SCOPE(x) x

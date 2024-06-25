@@ -49,12 +49,15 @@ namespace QRemote {
  * allows Qt to process events, preventing connection timeout(s) and
  * if App's connection gets timeout even with these, then
  * search for the cause outside of QtRemote module.
+ *
+ * @warning Don't use this after related QRemoteUser A.K.A. owner is deleted,
+ * otherwise, expect undefined-behaviour or crashes.
  */
 class DeviceHandler : public QObject {
     Q_OBJECT
 public:
     /// @warning Needs @ref setDevice to be called separately.
-    explicit DeviceHandler(QRemoteUser *owner);
+    explicit DeviceHandler(QRemoteUser *owner, bool isThreadSafe = false);
     ~DeviceHandler() Q_DECL_OVERRIDE;
 
     void dispose(bool removeFromOwner = false);
@@ -124,6 +127,8 @@ private:
     enum {
         m_readResumable = 0
     };
+    /// Whether the device is thread-safe by its own or not.
+    bool m_isThreadSafe;
 
     QString m_lastError;
     QPointer<QIODevice> m_device;

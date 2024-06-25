@@ -60,6 +60,7 @@
 QT_BEGIN_NAMESPACE
 
 class QVariant;
+class QThread;
 class QThreadData;
 class QObjectConnectionListVector;
 namespace QtSharedPointer { struct ExternalRefCountData; }
@@ -193,8 +194,12 @@ public:
     Q_ALWAYS_INLINE QMutex *mutex() { return &(extras()->mutex); }
 
     void setParent_helper(QObject *);
+    void moveToThread_unchecked(QThreadData *currentData, QThreadData *targetData, bool sendEvent = true);
+    void moveToThread_unchecked(QThread *target, bool sendEvent = true);
     void moveToThread_helper();
     void setThreadData_helper(QThreadData *currentData, QThreadData *targetData);
+    bool QT_FASTCALL isThreadOwned() const;
+    void QT_FASTCALL assertThreadOwned(const char *tag = 0);
     void _q_reregisterTimers(void *pointer);
 
     bool isSender(const QObject *receiver, const char *signal) const;

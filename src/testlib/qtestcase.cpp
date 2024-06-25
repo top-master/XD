@@ -1480,6 +1480,7 @@ namespace QTest
      * on the command line, if any. Hence, if not empty,
      * those functions should be run instead of
      * all appearing in the test case.
+     * See usage in qInvokeTestMethods() method's logic.
      */
     static TestFunction * testFuncs = 0;
     static int testFuncCount = 0;
@@ -1517,14 +1518,16 @@ namespace QTest
 /*! \internal
     Invoke a method of the object without generating warning if the method does not exist
  */
-static void invokeMethod(QObject *obj, const char *methodName)
+static bool invokeMethod(QObject *obj, const char *methodName)
 {
     const QMetaObject *metaObject = obj->metaObject();
     int funcIndex = metaObject->indexOfMethod(methodName);
     if (funcIndex >= 0) {
         QMetaMethod method = metaObject->method(funcIndex);
         method.invoke(obj, Qt::DirectConnection);
+        return true;
     }
+    return false;
 }
 
 int defaultEventDelay()
@@ -1615,7 +1618,11 @@ static void randomizeList(T * array, int size)
     }
 }
 
-static bool isValidSlot(const QMetaMethod &sl)
+Q_ALWAYS_INLINE static bool isValidSlot(const QMetaMethod &sl) {
+    return isTestCase(sl);
+}
+
+Q_TESTLIB_EXPORT bool isTestCase(const QMetaMethod &sl)
 {
     if (sl.access() != QMetaMethod::Private || sl.parameterCount() != 0
         || sl.returnType() != QMetaType::Void || sl.methodType() != QMetaMethod::Slot)
@@ -1668,12 +1675,15 @@ static void qPrintDataTags(FILE *stream)
             // Retrieve local tags:
             QStringList localTags;
             QTestTable table;
+
+            // Executes _data suffixed method for given test-case signature.
             char *slot = qstrdup(tf.methodSignature().constData());
             slot[strlen(slot) - 2] = '\0';
             QByteArray member;
             member.resize(qstrlen(slot) + qstrlen("_data()") + 1);
             qsnprintf(member.data(), member.size(), "%s_data()", slot);
             invokeMethod(QTest::currentTestObject, member.constData());
+
             const int dataCount = table.dataCount();
             localTags.reserve(dataCount);
             for (int j = 0; j < dataCount; ++j)
@@ -2142,7 +2152,7 @@ qreal addResult(qreal current, const QBenchmarkResult& r)
 
 }
 
-static void qInvokeTestMethodDataEntry(char *slot)
+static void qInvokeTestMethodDataEntry(QBenchmarkTestMethodData *benchmark, char *slot)
 {
     /* Benchmarking: for each median iteration*/
 
@@ -2152,7 +2162,7 @@ static void qInvokeTestMethodDataEntry(char *slot)
     QVector<QBenchmarkResult> results;
     bool minimumTotalReached = false;
     do {
-        QBenchmarkTestMethodData::current->beginDataRun();
+        benchmark->beginDataRun();
 
         /* Benchmarking: for each accumulation iteration*/
         bool invokeOk;
@@ -2170,8 +2180,8 @@ static void qInvokeTestMethodDataEntry(char *slot)
                 if (QTestResult::skipCurrentTest() || QTestResult::currentTestFailed())
                     break;
 
-                QBenchmarkTestMethodData::current->result = QBenchmarkResult();
-                QBenchmarkTestMethodData::current->resultAccepted = false;
+                benchmark->result = QBenchmarkResult();
+                benchmark->resultAccepted = false;
 
                 const char *tag = QTestResult::currentDataTag();
                 QBenchmarkGlobalData::current->context.tag =
@@ -2183,7 +2193,7 @@ static void qInvokeTestMethodDataEntry(char *slot)
                 if (!invokeOk)
                     QTestResult::addFailure("Unable to execute slot", __FILE__, __LINE__);
 
-                isBenchmark = QBenchmarkTestMethodData::current->isBenchmark();
+                isBenchmark = benchmark->isBenchmark();
 
                 QTestResult::finishedCurrentTestData();
 
@@ -2203,23 +2213,23 @@ static void qInvokeTestMethodDataEntry(char *slot)
             // The QBENCHMARK macro increases the number of iterations for each run until
             // this happens.
         } while (invokeOk && isBenchmark
-                 && QBenchmarkTestMethodData::current->resultsAccepted() == false
+                 && benchmark->resultsAccepted() == false
                  && !QTestResult::skipCurrentTest() && !QTestResult::currentTestFailed());
 
-        QBenchmarkTestMethodData::current->endDataRun();
+        benchmark->endDataRun();
         if (!QTestResult::skipCurrentTest() && !QTestResult::currentTestFailed()) {
             if (i > -1)  // iteration -1 is the warmup iteration.
-                results.append(QBenchmarkTestMethodData::current->result);
+                results.append(benchmark->result);
 
             if (isBenchmark && QBenchmarkGlobalData::current->verboseOutput) {
                 if (i == -1) {
                     QTestLog::info(qPrintable(
                         QString::fromLatin1("warmup stage result      : %1")
-                            .arg(QBenchmarkTestMethodData::current->result.value)), 0, 0);
+                            .arg(benchmark->result.value)), 0, 0);
                 } else {
                     QTestLog::info(qPrintable(
                         QString::fromLatin1("accumulation stage result: %1")
-                            .arg(QBenchmarkTestMethodData::current->result.value)), 0, 0);
+                            .arg(benchmark->result.value)), 0, 0);
                 }
             }
         }
@@ -2240,7 +2250,7 @@ static void qInvokeTestMethodDataEntry(char *slot)
         bool testPassed = !QTestResult::skipCurrentTest() && !QTestResult::currentTestFailed();
         QTestResult::finishedCurrentTestDataCleanup();
         // Only report benchmark figures if the test passed
-        if (testPassed && QBenchmarkTestMethodData::current->resultsAccepted())
+        if (testPassed && benchmark->resultsAccepted())
             QTestLog::addBenchmarkResult(qMedian(results));
     }
 }
@@ -2341,7 +2351,6 @@ struct WatchDogFinalizer {
     }
 };
 
-
 /*!
     \internal
 
@@ -2353,6 +2362,7 @@ struct WatchDogFinalizer {
  */
 static bool qInvokeTestMethod(const char *slotName, const char *data, WatchDog *watchDog)
 {
+    bool result = false;
     QTEST_ASSERT(slotName);
 
     QBenchmarkTestMethodData benchmarkData;
@@ -2394,7 +2404,7 @@ static bool qInvokeTestMethod(const char *slotName, const char *data, WatchDog *
                 else {
                     fprintf(stderr, "Unknown testdata for function %s: '%s'\n", slotName, data);
                     fprintf(stderr, "Function has no testdata.\n");
-                    return false;
+                    goto posEndFunc;
                 }
             }
 
@@ -2412,7 +2422,7 @@ static bool qInvokeTestMethod(const char *slotName, const char *data, WatchDog *
 
                     if (watchDog)
                         watchDog->beginTest();
-                    qInvokeTestMethodDataEntry(slot);
+                    qInvokeTestMethodDataEntry(&benchmarkData, slot);
                     if (watchDog)
                         watchDog->testFinished();
 
@@ -2428,20 +2438,24 @@ static bool qInvokeTestMethod(const char *slotName, const char *data, WatchDog *
             fprintf(stderr, "Available testdata:\n");
             for (int i = 0; i < table.dataCount(); ++i)
                 fprintf(stderr, "%s\n", table.testData(i)->dataTag());
-            return false;
+            goto posEndFunc;
         }
 
         QTestResult::setCurrentGlobalTestData(0);
         ++curGlobalDataIndex;
     } while (curGlobalDataIndex < globalDataCount);
 
+    result = true;
+
+posEndFunc:
+    // Restores global state to the defaults.
     QTestResult::finishedCurrentTestFunction();
     QTestResult::setSkipCurrentTest(false);
     QTestResult::setBlacklistCurrentTest(false);
     QTestResult::setCurrentTestData(0);
+    // Actual cleanup.
     delete[] slot;
-
-    return true;
+    return result;
 }
 
 void *fetchData(QTestData *data, const char *tagName, int typeId)
@@ -2717,8 +2731,11 @@ static bool debuggerPresent()
 #endif
 }
 
-static void qInvokeTestMethods(QObject *testObject)
+/// @returns Always @c true, even if tests fail, and
+/// only returns @c false if there were invocation issues, which get logged too.
+static bool qInvokeTestMethods(QObject *testObject)
 {
+    bool result = true;
     const QMetaObject *metaObject = testObject->metaObject();
     QTEST_ASSERT(metaObject);
     // TRACE/testlib: moved logging start/stop to support `TestProvider` #1
@@ -2758,6 +2775,7 @@ static void qInvokeTestMethods(QObject *testObject)
                 for (int i = 0; i != QTest::testFuncCount; i++) {
                     if (!qInvokeTestMethod(metaObject->method(QTest::testFuncs[i].function()).methodSignature().constData(),
                                                               QTest::testFuncs[i].data(), watchDog.data())) {
+                        result = false;
                         break;
                     }
                 }
@@ -2772,8 +2790,10 @@ static void qInvokeTestMethods(QObject *testObject)
                 for (int i = 0; i != methodCount; i++) {
                     if (!isValidSlot(testMethods[i]))
                         continue;
-                    if (!qInvokeTestMethod(testMethods[i].methodSignature().constData(), 0, watchDog.data()))
+                    if (!qInvokeTestMethod(testMethods[i].methodSignature().constData(), 0, watchDog.data())) {
+                        result = false;
                         break;
+                    }
                 }
                 delete[] testMethods;
                 testMethods = 0;
@@ -2796,6 +2816,8 @@ static void qInvokeTestMethods(QObject *testObject)
     // ```
     // QTestLog::stopLogging();
     // ```
+
+    return result;
 }
 
 #if defined(Q_OS_UNIX)
@@ -2909,7 +2931,7 @@ FatalSignalHandler::~FatalSignalHandler()
 #endif
 
 
-} // namespace
+} // namespace QTest
 
 #if defined(Q_OS_WIN) && !defined(Q_OS_WINCE) && !defined(Q_OS_WINRT)
 

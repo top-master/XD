@@ -59,6 +59,7 @@ private Q_SLOTS:
     void elapsed();
     void toString_data();
     void toString();
+    void toStringLabel();
 };
 
 void tst_QElapsedTimer::statics()
@@ -208,6 +209,24 @@ void tst_QElapsedTimer::toString()
 
     QCOMPARE(QElapsedTimer::toString(elapsed), expected);
     QCOMPARE(QElapsedTimer::toStringLabel(elapsed), expectedLabel);
+}
+
+/// Compiler should call member method instead of static method.
+void tst_QElapsedTimer::toStringLabel()
+{
+    // Dummy.
+    QElapsedTimer obj;
+    obj.start();
+    // With passing flags as `int` type.
+    int flags = QElapsedTimer::Precise | QElapsedTimer::ForceEnglish;
+    QString resultForInt = obj.toStringLabel(flags);
+    // With repeat with direct passing.
+    QString resultForBitWise = obj.toStringLabel(QElapsedTimer::Precise | QElapsedTimer::ForceEnglish);
+
+    // Actaul test.
+    QString wrongResult = QElapsedTimer::toStringLabel(qint64(flags));
+    qExpect(resultForInt)->Not->toEqual(wrongResult);
+    qExpect(resultForBitWise)->Not->toEqual(wrongResult);
 }
 
 QTEST_MAIN(tst_QElapsedTimer);

@@ -50,6 +50,33 @@ private slots:
             ->withContext("May have nothing to do; set to false by default.");
     }
 
+    void testKeepLooping_execShouldNotFinishUnlessQuitIsCalled() {
+        // Dummy.
+        QThreadFunc thread;
+        thread.setKeepLooping(true);
+        qExpect(thread.keepLooping())->toBeTruthy();
+        thread.start();
+        // With waiting.
+        QElapsedTimer timer;
+        timer.restart();
+        const int milliSec = 10000;
+        do {
+            QCoreApplication::processEvents(QEventLoop::AllEvents, milliSec);
+            QCoreApplication::sendPostedEvents(Q_NULLPTR, QEvent::DeferredDelete);
+            QThread::msleep(10);
+        } while (thread.isRunning() && timer.timeLeft(milliSec));
+
+        // Actual test.
+        qExpect(thread.isFinished())->toBeFalsy()
+                ->withContext([&] {
+                    return QLL("After ") + timer.toStringLabel();;
+                });
+        // With finish trigger.
+        thread.quit();
+        // With rechecking.
+        qExpect(QTest::qWaitForThread(&thread, milliSec))->toBeTruthy();
+    }
+
 };
 
 QTEST_MAIN(tst_QThreadFunc)

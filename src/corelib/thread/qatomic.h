@@ -221,6 +221,37 @@ public:
 #endif
 };
 
+/// Same as QAtomicPointer, but provides @ref operator-> which
+/// loads in a relaxed manner.
+template <typename T>
+class QAtomicPointerLoader : public QAtomicPointer<T>
+{
+    typedef QAtomicPointer<T> super;
+public:
+#ifdef QT_BASIC_ATOMIC_HAS_CONSTRUCTORS
+    constexpr QAtomicPointerLoader(T *value = 0) Q_DECL_NOTHROW
+        : super(value)
+    {
+    }
+#else
+    inline QAtomicPointerLoader(T *value = 0) Q_DECL_NOTHROW
+    {
+        this->store(value);
+    }
+#endif
+
+    Q_ALWAYS_INLINE const T *operator->() const
+    {
+        return this->load();
+    }
+
+    Q_ALWAYS_INLINE T *operator->()
+    {
+        return this->load();
+    }
+
+};
+
 QT_WARNING_POP
 
 #ifdef QT_BASIC_ATOMIC_HAS_CONSTRUCTORS

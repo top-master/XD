@@ -53,6 +53,8 @@
 #include <qset.h>
 #include <qsemaphore.h>
 #include <qsharedpointer.h>
+#include <QtCore/qrunnableevent.h>
+#include <QtCore/qstacktrace.h>
 
 #include <private/qorderedmutexlocker_p.h>
 #include <private/qhooks_p.h>
@@ -187,6 +189,7 @@ void (*QAbstractDeclarativeData::setWidgetParent)(QObject *, QObject *) = 0;
 QObjectData::~QObjectData() {}
 
 int QtPrivate::remoteTimeout = 5000; //Q_VAR_EXPORT
+int QtPrivate::remoteEventMode = QEventLoop::AllEvents; //Q_VAR_EXPORT
 QBasicMutex QObjectPrivate::rawMutexPool[QObjectPrivate::RawMutexPoolSize];
 
 QMetaObject *QObjectData::dynamicMetaObject() const
@@ -232,6 +235,9 @@ QObjectPrivate::QObjectPrivate(int version)
     isDecoratee = false;
     isDecor = false;
     isLazy = false;
+    isThreadSafe = false;
+    // For debugging purposes, like, pointer is invalid if contains another value.
+    unused = 3;
 }
 
 QObjectPrivate::~QObjectPrivate()
@@ -803,27 +809,6 @@ void *qt_find_obj_child(QObject *parent, const char *type, const QString &name)
   QObject member functions
  *****************************************************************************/
 
-// check the constructor's parent thread argument
-static bool check_parent_thread(QObject *parent,
-                                QThreadData *parentThreadData,
-                                QThreadData *currentThreadData)
-{
-    if (parent && parentThreadData != currentThreadData) {
-        QThread *parentThread = parentThreadData->thread;
-        QThread *currentThread = currentThreadData->thread;
-        qWarning("QObject: Cannot create children for a parent that is in a different thread.\n"
-                 "(Parent is %s(%p), parent's thread is %s(%p), current thread is %s(%p)",
-                 parent->metaObject()->className(),
-                 parent,
-                 parentThread ? parentThread->metaObject()->className() : "QThread",
-                 parentThread,
-                 currentThread ? currentThread->metaObject()->className() : "QThread",
-                 currentThread);
-        return false;
-    }
-    return true;
-}
-
 /*!
     Constructs an object with parent object \a parent.
 
@@ -873,19 +858,43 @@ QObject::QObject(QObjectPrivate &dd, QObject *parent)
 
 void QObjectPrivate::attachPublic(QObject *q, QObject *parent) {
     this->q_ptr = q;
-    this->threadData = (parent && ! parent->thread())
-            ? parent->d_func()->threadData
-            : QThreadData::current();
-    this->threadData->ref();
     if (parent) {
         QT_TRY {
-            if ( ! check_parent_thread(parent, parent ? parent->d_func()->threadData : 0, this->threadData))
-                parent = 0;
+            QObjectPrivate *parentPrivate = QObjectPrivate::get(parent);
+            QThreadData *parentThreadData = parentPrivate->threadData;
+            QThread *parentThread = parentThreadData->thread;
+            const bool parentIsThreadSave = parentPrivate->isThreadSafe;
+            this->isThreadSafe = parentIsThreadSave;
+            // If parent is thread-less yet, use whatever `QThreadData` it has,
+            // otherwise, fallbacks to real current-thread.
+            QThreadData *currentThreadData = ( ! parentThread || parentIsThreadSave)
+                    ? parentThreadData
+                    : QThreadData::current();
+
+            currentThreadData->ref();
+            this->threadData = currentThreadData;
+
+            // Skips constructor's `parent` argument, if threads mismatch.
+            if (parentThreadData != currentThreadData) {
+                QThread *currentThread = currentThreadData->thread;
+
+                qWarning("QObject: Cannot create children for a parent that is in a different thread.\n"
+                         "(Parent is %s(%p), parent's thread is %s(%p), current thread is %s(%p)",
+                         parent->metaObject()->className(),
+                         parent,
+                         parentThread ? parentThread->metaObject()->className() : "QThread",
+                         parentThread,
+                         currentThread ? currentThread->metaObject()->className() : "QThread",
+                         currentThread);
+
+                // Skips parent change.
+                return;
+            }
+
+            // Actual `parent` setter.
             if (this->isWidget) {
-                if (parent) {
-                    this->parent = parent;
-                    this->parent->d_func()->children.append(q);
-                }
+                this->parent = parent;
+                this->parent->d_func()->children.append(q);
                 // no events sent here, this is done at the end of the QWidget constructor
             } else {
                 q->setParent(parent);
@@ -894,6 +903,10 @@ void QObjectPrivate::attachPublic(QObject *q, QObject *parent) {
             this->threadData->deref();
             QT_RETHROW;
         }
+    } else {
+        QThreadData *currentThreadData = QThreadData::current();
+        currentThreadData->ref();
+        this->threadData = currentThreadData;
     }
 }
 
@@ -1434,6 +1447,12 @@ bool QObject::event(QEvent *e)
         break;
 
     case QEvent::DeferredDelete:
+        if (QtPrivate::debugDeleteEvents) {
+            QString msg = QString::asprintf("QObject: Received DeferredDelete event for %p with stack-trace:", this);
+            QStackTrace trace = qMove(Q_PTR_CAST(QDeferredDeleteEvent *, e)->trace());
+            trace.restart();
+            trace.print(msg);
+        }
         qDeleteInEventHandler(this);
         break;
 
@@ -1462,6 +1481,9 @@ bool QObject::event(QEvent *e)
         }
         break;
     }
+
+    case QEvent::Runnable:
+        Q_PTR_CAST(QRunnableEvent *, e)->run();
 
     default:
         if (e->type() >= QEvent::User) {
@@ -1695,8 +1717,21 @@ void QObject::moveToThread(QThread *targetThread)
         return;
     }
 
+    d->moveToThread_unchecked(currentData, targetData, true);
+}
+
+void QObjectPrivate::moveToThread_unchecked(QThreadData *currentData, QThreadData *targetData, bool sendEvent)
+{
+    QObjectPrivate *d = this; // Keeps Git-diff small.
+    // Some checks are kept.
+    if (targetData && d->threadData == targetData) {
+        return;
+    }
+
     // prepare to move
-    d->moveToThread_helper();
+    if (sendEvent) {
+        d->moveToThread_helper();
+    }
 
     if (!targetData)
         targetData = new QThreadData(0);
@@ -1708,7 +1743,7 @@ void QObject::moveToThread(QThread *targetThread)
     currentData->ref();
 
     // move the object
-    d_func()->setThreadData_helper(currentData, targetData);
+    d->setThreadData_helper(currentData, targetData);
 
     locker.unlock();
 
@@ -1716,15 +1751,29 @@ void QObject::moveToThread(QThread *targetThread)
     currentData->deref();
 }
 
+void QObjectPrivate::moveToThread_unchecked(QThread *target, bool sendEvent)
+{
+    Q_ASSERT_X(target, "QObject", "Expected non-null target thread.");
+    QThreadData *currentData = QThreadData::current();
+    QThreadData *targetData = QThreadData::get2(target);
+    moveToThread_unchecked(currentData, targetData, sendEvent);
+}
+
+/// Sends the QEvent::ThreadChange event to the QObject itself, and
+/// to all of its children as well.
 void QObjectPrivate::moveToThread_helper()
 {
     Q_Q(QObject);
+    // Notify self.
     QEvent e(QEvent::ThreadChange);
     QCoreApplication::sendEvent(q, &e);
+    // Notify children.
     for (int i = 0; i < children.size(); ++i) {
         QObject *child = children.at(i);
-        child->d_func()->moveToThread_helper();
+        QObjectPrivate *childPrivate = child->d_func();
+        childPrivate->moveToThread_helper();
     }
+
 }
 
 void QObjectPrivate::setThreadData_helper(QThreadData *currentData, QThreadData *targetData)
@@ -1762,6 +1811,40 @@ void QObjectPrivate::setThreadData_helper(QThreadData *currentData, QThreadData 
     for (int i = 0; i < children.size(); ++i) {
         QObject *child = children.at(i);
         child->d_func()->setThreadData_helper(currentData, targetData);
+    }
+}
+
+/// Checks if callers thread is the thread that handles this QObject's events.
+/// @note Consider using assertThreadOwned() instead of this.
+bool QT_FASTCALL QObjectPrivate::isThreadOwned() const
+{
+    return QThreadData::current() == this->threadData
+            || this->threadData->thread == Q_NULLPTR;
+}
+
+/// Notifies if reentrant logic is being called from the wrong thread.
+///
+/// @warning This helper just adds explicit assertion and/or warning, to
+/// methods that are often assumed to be thread-safe. Even if a class calls this
+/// in few methods, it does NOT mean that the remaining logic is thread-safe.
+/// However, sub-classes are free to add thread-safe methods where needed.
+///
+/// @note Only connect and disconnect methods of QObject class are thread-safe.
+void QT_FASTCALL QObjectPrivate::assertThreadOwned(const char *tag)
+{
+    // TRACE/network Dead-lock: waiting-methods should assert current-thread #1
+    // for example, if another thread finishes writting the last packet that's
+    // needed, before #2's native-logic is reached, then #2 waits forever.
+    //
+    // Setting `msecs` limit may seem like a solution for #2, but root-issue is
+    // that this class is reentrant and should NOT be used multi-threaded, and
+    // instead should be moved to required-thread by `moveToThread` and that
+    // at least before calling any waiting-methods.
+    //
+    // Ignores `QObjectData::isThreadSafe` option, since in this case that would
+    // always be a lie, because owning-thread handles queued writes or reads.
+    if (QThreadData::current() != this->threadData && this->threadData->thread) {
+        qAssertWarning(tag, "Reentrant logic was called from wrong thread.");
     }
 }
 
@@ -2223,10 +2306,18 @@ void QObjectPrivate::setParent_helper(QObject *o)
     if (parent) {
         QObjectPrivate *parentD = parent->d_func();
         // object hierarchies are constrained to a single thread
-        if (threadData != parentD->threadData) {
-            qWarning("QObject::setParent: Cannot set parent, new parent is in a different thread");
-            parent = Q_NULLPTR;
-            return;
+        QThreadData *currentThreadData = this->threadData;
+        QThreadData *parentThreadData = parentD->threadData;
+        if (currentThreadData != parentThreadData) {
+            if ( ! parentD->isThreadSafe) {
+                qWarning("QObject::setParent: Cannot set parent, new parent is in a different thread");
+                parent = Q_NULLPTR;
+                this->detachParentStrongRef(false /* Was not disowned, just wrong thread. */);
+                return;
+            } else {
+                this->isThreadSafe = true;
+                this->moveToThread_unchecked(currentThreadData, parentThreadData, true);
+            }
         }
         // TRACE/QObject/parent-ref 1: handles setting parent after strong-ref,
         // by treating Parent-object as a strong-ref as well,
@@ -2375,8 +2466,13 @@ void QObject::removeEventFilter(QObject *obj)
 */
 void QObject::deleteLater()
 {
+    Q_D(QObject);
+    QDeferredDeleteEvent *event = new QDeferredDeleteEvent();
+    if (d->isDebugging || QtPrivate::debugDeleteEvents) {
+        event->setTrace(QStackTrace::capture());
+    }
     // Sent here and received in `qDeleteInEventHandler(...)` method.
-    QCoreApplication::postEvent(this, new QDeferredDeleteEvent());
+    QCoreApplication::postEvent(this, event);
 }
 
 /*!

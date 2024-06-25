@@ -651,6 +651,7 @@ bool QWindowSystemInterface::sendWindowSystemEvents(QEventLoop::ProcessEventsFla
                 nevents++;
         } else {
             nevents++;
+            // TRACE/gui/input-event 5: QtGui checks and redirects only accepted events to yet another method.
             QGuiApplicationPrivate::processWindowSystemEvent(event);
         }
 

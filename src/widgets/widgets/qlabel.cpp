@@ -1651,11 +1651,23 @@ void QLabelPrivate::drawText(QPainter *painter, const QRect &lr, const QStyleOpt
         // TRACE/widgets/label: text elide support.
         QString elidedText = this->text;
         if (this->isSingleLine) {
+            // Considers word-wrap.
+            int width = q->width();
+            if (align & Qt::TextWordWrap) {
+                // Minimum-size-hint should match single-line height.
+                int maxLines = lr.height() / this->msh.height();
+                if (maxLines > 1) {
+                    const int maxWidth = width;
+                    do {
+                        width = maxWidth * maxLines;
+                    } while(width < 0 && --maxLines);
+                }
+            }
             // Ignores Mnemonic (the "&" sign).
             elidedText = painter->fontMetrics().elidedText(
                 this->text
                 , isLeftToRight ? Qt::ElideRight : Qt::ElideLeft
-                , q->width(), flags
+                , width, flags
             );
             this->isTextElided = qNotEqual(elidedText.constData(), this->text.constData());
         }

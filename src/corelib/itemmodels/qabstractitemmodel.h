@@ -49,7 +49,12 @@ class Q_CORE_EXPORT QModelIndex
 {
     friend class QAbstractItemModel;
 public:
-    Q_DECL_CONSTEXPR inline QModelIndex() Q_DECL_NOTHROW : r(-1), c(-1), i(0), m(Q_NULLPTR) {}
+    // TRACE/corelib/item-model BugFix: should allow model being set,
+    // otherwise, the `model()` method is useless for root node.
+    Q_DECL_CONSTEXPR Q_ALWAYS_INLINE explicit QModelIndex(const QAbstractItemModel *owner = Q_NULLPTR) Q_DECL_NOTHROW
+        : r(-1), c(-1), i(0), m(owner)
+    {
+    }
     // compiler-generated copy/move ctors/assignment operators are fine!
     Q_DECL_CONSTEXPR inline int row() const Q_DECL_NOTHROW { return r; }
     Q_DECL_CONSTEXPR inline int column() const Q_DECL_NOTHROW { return c; }

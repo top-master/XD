@@ -38,6 +38,7 @@
 #include "qabstracteventdispatcher.h"
 
 #include <qeventloop.h>
+#include <QtCore/qrunnableevent.h>
 
 #include "qthread_p.h"
 #include "private/qcoreapplication_p.h"
@@ -720,6 +721,14 @@ int QThread::loopLevel() const
 {
     Q_D(const QThread);
     return d->data->eventLoops.size();
+}
+
+/// Takes ownership of given @p callback (i.e. deletes it).
+void QThread::post(QRunnable *callback, int priority)
+{
+    QRunnableEvent *event = new QRunnableEvent(callback);
+    // Takes ownership of `event` (i.e. deletes it).
+    QCoreApplication::postEvent(this, event, priority);
 }
 
 #else // QT_NO_THREAD

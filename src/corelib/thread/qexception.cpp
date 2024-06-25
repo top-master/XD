@@ -41,6 +41,12 @@
 
 QT_BEGIN_NAMESPACE
 
+// MARK: globals.
+
+QStringLiteralStatic(MSG_INT64, "Exception of type 64-bit Integer: ")
+QStringLiteralStatic(MSG_INT32, "Exception of type 32-bit Integer: ")
+QStringLiteralStatic(MSG_INT8, "Exception of type 8-bit Integer: ")
+
 /*!
     \class QException
     \inmodule QtCore
@@ -130,6 +136,23 @@ QException *QException::clone() const
     return new QException(*this);
 }
 
+std::exception_ptr QException::toPtr() const Q_DECL_NOTHROW
+{
+    std::exception_ptr result = qMove(std::exception_ptr(Q_NULLPTR));
+
+    try {
+        // Spacing may ensure debugger shows right line.
+        this->raise();
+
+    }  catch (...) {
+        // Spacing may ensure debugger shows right line.
+        result = std::current_exception();
+
+    }
+
+    return result;
+}
+
 QUnhandledException::~QUnhandledException()
 #ifdef Q_COMPILER_NOEXCEPT
     noexcept
@@ -171,7 +194,7 @@ const char *QExceptionWithMessage::what() const Q_DECL_NOTHROW
 {
     if (Q_UNLIKELY(m_messageCache.isNull())) {
         QExceptionWithMessage *that = const_cast<QExceptionWithMessage *>(this);
-        if (m_message.size() > 0) {
+        if ( ! m_message.isNull()) {
             that->m_messageCache = m_message.toLocal8Bit();
         } else {
             that->m_messageCache = QByteArray("Unknown error.");
@@ -190,7 +213,7 @@ const QString &QExceptionWithMessage::message() const Q_DECL_NOTHROW
 {
     if (Q_UNLIKELY(m_message.isNull())) {
         QExceptionWithMessage *that = const_cast<QExceptionWithMessage *>(this);
-        if (m_messageCache.size() > 0) {
+        if ( ! m_messageCache.isNull()) {
             that->m_message = QString::fromLocal8Bit(m_messageCache);
         } else {
             that->m_message = QLL("Unknown error.");
@@ -211,6 +234,59 @@ void QExceptionWithMessage::appendMessage(const QString &msg) {
     m_message.reserve(m_message.size() + newLine.size() + msg.size());
     m_message += newLine;
     m_message += msg;
+}
+
+/*!
+@func bool QExceptionWithMessage::isEmpty() const
+
+Checks wheter the {@link #message message} is empty or not.
+ */
+
+/*!
+Parses given @c std::exception_ptr into a new QExceptionWithMessage instance.
+
+@return Said Parse's result, or a QExceptionWithMessage with
+empty message in case of passing @c null to @p ptr argument (see isEmpty()).
+ */
+QExceptionWithMessage QExceptionWithMessage::fromPtr(
+        const std::exception_ptr &ptr, int flags) Q_DECL_NOTHROW
+{
+    Q_UNUSED(flags)
+    const char *msg = Q_NULLPTR;
+
+    if (ptr == Q_NULLPTR) {
+        msg = "";
+        goto posEndFunc;
+    }
+
+    try {
+        std::rethrow_exception(ptr);
+    } catch (const QExceptionWithMessage &ex) {
+        return ex;
+    } catch (const QException &ex) {
+        msg = ex.what();
+        if ( ! msg) {
+            msg = "QException without description.";
+        }
+    } catch (const std::exception &ex) {
+        msg = ex.what();
+        if ( ! msg) {
+            msg = "std-exception without description.";
+        }
+    } catch (qint64 i) {
+        return qMove(QExceptionWithMessage(MSG_INT64 + QString::number(i)));
+    } catch (int i) {
+        return qMove(QExceptionWithMessage(MSG_INT32 + QString::number(i)));
+    } catch (char i) {
+        return qMove(QExceptionWithMessage(MSG_INT8 + QString::number(i)));
+    } catch (bool b) {
+        msg = b ? "Exception of type Boolean: true" : "Exception of type Boolean: false";
+    } catch (...) {
+        msg = "Unknown exception type.";
+    }
+
+posEndFunc:
+    return qMove(QExceptionWithMessage(msg));
 }
 
 QNullPointerException::~QNullPointerException() Q_DECL_NOTHROW

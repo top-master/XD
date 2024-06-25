@@ -21,6 +21,7 @@ HEADERS += \
         kernel/qsignalmapper.h \
         kernel/qsocketnotifier.h \
         kernel/qtimer.h \
+        kernel/qtimerfunc.h \
         kernel/qtranslator.h \
         kernel/qtranslator_p.h \
         kernel/qvariant.h \
@@ -61,6 +62,7 @@ SOURCES += \
         kernel/qsignalmapper.cpp \
         kernel/qsocketnotifier.cpp \
         kernel/qtimer.cpp \
+        kernel/qtimerfunc.cpp \
         kernel/qtranslator.cpp \
         kernel/qvariant.cpp \
         kernel/qcoreglobaldata.cpp \

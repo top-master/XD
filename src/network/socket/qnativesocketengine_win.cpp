@@ -1604,6 +1604,8 @@ int QNativeSocketEnginePrivate::nativeSelect(int timeout,
     tv.tv_sec = timeout / 1000;
     tv.tv_usec = (timeout % 1000) * 1000;
 
+    // TRACE/network Dead-lock: waiting-methods should assert current-thread #2
+    // where #1's said native-logic is here.
 #if !defined(Q_OS_WINCE)
     ret = select(socketDescriptor + 1, &fdread, &fdwrite, &fdexception, timeout < 0 ? 0 : &tv);
 #else

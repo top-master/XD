@@ -26,12 +26,17 @@
 #include "dummy-client.h"
 
 #include "remote-spy.h"
+#include "message-storage.h"
 
 #include <QtTest/QtTest>
 #include <QtTest/QNetDevicePair>
 #include <QtCore/qendian.h>
+#include <QtCore/QThreadSlotable>
+#include <QtCore/QTimestamp>
 #include <QtRemote/QRemoteUser>
 #include <QtRemote/qremote-stream-codec.h>
+#include <QtRemote/qremote-device-handler.h>
+#include <QtTest/private/qtestlog_p.h>
 
 
 #ifdef Q_OS_WIN
@@ -55,6 +60,8 @@ class tst_remote : public QObject
 
 public:
     inline tst_remote()
+        : ignoreThreadingTests(false)
+        , ignoreBlockingModeTests(false)
     {
     }
 
@@ -87,10 +94,24 @@ private slots:
     void user_shouldHandleDisconnect_data();
     void user_shouldHandleDisconnect();
     void serverAndClient_connectToEachOther();
+    void serverAndClient_shouldWaitForSlotResultInMainThread();
+    void serverAndClient_shouldWaitForSlotResultThreadSafely();
     void clientAndServerThread_connectToEachOther();
+
+    void eventMode_shouldSupportAllTestCasesInBlockingMode();
+
+    void threading_shouldSupportAllTestCasesInAsyncThreads();
+
+public:
+    bool runTestCases();
+    void runTestCasesAsync(int threadCount);
 
 private:
     QString moc_path;
+    /// Helper to stop on first failure (to keep logs clean).
+    QAtomicInt m_isSubThreadAborted;
+    bool ignoreThreadingTests;
+    bool ignoreBlockingModeTests;
 };
 
 class MyClass {};
@@ -245,8 +266,8 @@ void tst_remote::client_shouldRegisterServiceByStatusPacket()
     // Dummy.
     QScopedPointer<QRemoteUser> userClient( new QRemoteUser() );
     userClient->setObjectName("my-client");
-    QRef<ServerService> servce = QRef<ServerService>(new ServerService());
-    userClient->registerLocal(servce);
+    QRef<ServerService> service = QRef<ServerService>(new ServerService());
+    userClient->registerLocal(service);
     // With connection spy.
     UserSpy userSpy(*userClient);
     // With device/connection containing StatusPacket.
@@ -290,9 +311,9 @@ QList<QByteArray> tst_remote::userDestructor_shouldReportDisconnect()
     user->setObjectName("my-server");
     // With local-services.
     for (int i = 0; i < serviceCount; ++i) {
-        QRef<ServerService> servce = QRef<ServerService>(new ServerService());
-        servce->setObjectName(QStringLiteral("ID-%1").arg(i));
-        user->registerLocal(servce);
+        QRef<ServerService> service = QRef<ServerService>(new ServerService());
+        service->setObjectName(QStringLiteral("ID-%1").arg(i));
+        user->registerLocal(service);
     }
     // With server device/connection.
     QNetDevice device;
@@ -374,8 +395,8 @@ void tst_remote::serverAndClient_connectToEachOther()
     // Dummy.
     QScopedPointer<QRemoteUser> userServer( new QRemoteUser() );
     userServer->setObjectName("my-server");
-    QRef<ServerService> servce = QRef<ServerService>(new ServerService());
-    userServer->registerLocal(servce);
+    QRef<ServerService> service = QRef<ServerService>(new ServerService());
+    userServer->registerLocal(service);
     // With device/connection.
     QNetDevicePair network;
     userServer->addDevice(network.server());
@@ -396,7 +417,106 @@ void tst_remote::serverAndClient_connectToEachOther()
 
     // Actual test.
     QSharedPointer<QObjectRemote> controller = spy.assertNewConnection(0);
+    // With controller being a separate object.
+    qExpect( qptrdiff(controller.data()) )
+            ->Not->toEqual( qptrdiff(service.data()) );
+    // With right type.
+    QSharedPointer<ServerServiceRemote> casted =
+            qMove(controller.objectCast<ServerServiceRemote>());
+    qExpect(casted)->Not->toBeNull();
     // Without disconnect isssues.
+    delete userClient.take();
+}
+
+void tst_remote::serverAndClient_shouldWaitForSlotResultInMainThread()
+{
+    // Dummy.
+    QScopedPointer<QRemoteUser> userServer( new QRemoteUser() );
+    userServer->setObjectName("my-server");
+    QRef<ServerService> service = QRef<ServerService>(new ServerService());
+    userServer->registerLocal(service);
+    // With device/connection.
+    QNetDevicePair network;
+    userServer->addDevice(network.server());
+    qExpect(network.serverData())->Not->toBeEmpty();
+    // With client.
+    QScopedPointer<QRemoteUser> userClient( new QRemoteUser() );
+    userClient->setObjectName("my-client");
+    // With connection spy.
+    UserSpy spy(*userClient);
+    // With connection to server.
+    userClient->addDevice(network.client());
+    // With connection success.
+    QSharedPointer<QObjectRemote> rawController = spy.assertNewConnection(0);
+    // With right type.
+    QRef<ServerServiceRemote> controller = rawController.objectCast<ServerServiceRemote>();
+    qExpect(controller)->Not->toBeNull();
+
+    // Actual test.
+    qExpect(service->isSecretCalled())->toBeFalsy();
+    QString reslut = controller->onSecretCallable();
+    qExpect(reslut)->toEqualString(QLL("My secret's result."));
+    qExpect(service->isSecretCalled())->toBeTruthy();
+
+    // Without disconnect isssues.
+    QByteArray oldData = network.serverData();
+    userServer->setDisconnectSendable(false);
+    delete userServer.take();
+    qExpect(network.serverData())->toEqual(oldData)
+            ->withContext([&] { return QLL("Don't send any disconnect packets."); });
+    delete userClient.take();
+}
+
+
+class SecretCallerThread : public QThread {
+public:
+    QRef<ServerServiceRemote> controller;
+
+    void run() Q_DECL_OVERRIDE {
+        qExpect(controller)->Not->toBeNull();
+        QString reslut = controller->onSecretCallable();
+        qExpect(reslut)->toEqualString(QLL("My secret's result."));
+    }
+};
+
+void tst_remote::serverAndClient_shouldWaitForSlotResultThreadSafely()
+{
+    // Dummy.
+    QScopedPointer<QRemoteUser> userServer( new QRemoteUser() );
+    userServer->setObjectName("my-server");
+    QRef<ServerService> service = QRef<ServerService>(new ServerService());
+    userServer->registerLocal(service);
+    // With device/connection.
+    QNetDevicePair network;
+    userServer->addDevice(network.server());
+    qExpect(network.serverData())->Not->toBeEmpty();
+    // With client.
+    QScopedPointer<QRemoteUser> userClient( new QRemoteUser() );
+    userClient->setObjectName("my-client");
+    // With connection spy.
+    UserSpy spy(*userClient);
+    // With connection to server.
+    userClient->addDevice(network.client());
+    // With connection success.
+    QSharedPointer<QObjectRemote> rawController = spy.assertNewConnection(0);
+    // With right type.
+    QRef<ServerServiceRemote> controller = rawController.objectCast<ServerServiceRemote>();
+    qExpect(controller)->Not->toBeNull();
+
+    // Actual test.
+    qExpect(service->isSecretCalled())->toBeFalsy();
+    SecretCallerThread *thread = new SecretCallerThread();
+    thread->controller = controller;
+    thread->start();
+    QTest::qWaitForThread(thread, 15000);
+    qExpect(service->isSecretCalled())->toBeTruthy();
+
+    // Without disconnect isssues.
+    QByteArray oldData = network.serverData();
+    userServer->setDisconnectSendable(false);
+    delete userServer.take();
+    qExpect(network.serverData())->toEqual(oldData)
+            ->withContext([&] { return QLL("Don't send any disconnect packets."); });
     delete userClient.take();
 }
 
@@ -404,6 +524,7 @@ void tst_remote::clientAndServerThread_connectToEachOther()
 {
     // Dummy.
     ServerClientPair network;
+    network.setPort(ServerClientPair::registerPort());
     QPointer<ServerThread> server = network.server;
     QPointer<ClientThread> client = network.client;
     // With server execution.
@@ -413,7 +534,7 @@ void tst_remote::clientAndServerThread_connectToEachOther()
     qExpect(server->raw()->isListening())->toBeTruthy();
     // With waiting for connection to server.
     client->start();
-    client->waitForController(3000);
+    client->waitForController(7000);
     // With server yet listening.
     qExpect(server->raw()->isListening())->toBeTruthy();
 
@@ -429,6 +550,158 @@ void tst_remote::clientAndServerThread_connectToEachOther()
     network.quit(3000);
     qExpect(server)->toBeNull();
     qExpect(client)->toBeNull();
+}
+
+void tst_remote::eventMode_shouldSupportAllTestCasesInBlockingMode()
+{
+    if (ignoreBlockingModeTests) {
+        return;
+    } else if (QTestLog::failCount() > 0) {
+        QSKIP("Only tested if all other tests pass.");
+    }
+    ignoreBlockingModeTests = true;
+    bool oldThreadingTests = ignoreThreadingTests;
+    ignoreThreadingTests = true;
+    QtPrivate::remoteEventMode = QRemote::BlockingMode;
+
+    defer {
+        ignoreBlockingModeTests = false;
+        ignoreThreadingTests = oldThreadingTests;
+        QtPrivate::remoteEventMode = QEventLoop::AllEvents;
+    };
+
+    runTestCases();
+}
+
+void tst_remote::threading_shouldSupportAllTestCasesInAsyncThreads()
+{
+    if (ignoreThreadingTests) {
+        return;
+    } else if (QTestLog::failCount() > 0) {
+        QSKIP("Only tested if all other tests pass.");
+    }
+    ignoreThreadingTests = true;
+
+    // Configures.
+    int oldLevel = QTestLog::setVerboseLevel(-1);
+    defer {
+        QTestLog::setVerboseLevel(oldLevel);
+    };
+#if 0
+    QtPrivate::debugDeleteEvents = true;
+#endif
+
+    // Firstly, checks with a single background-thread to ensure that
+    // non-main threads work to begin with.
+    runTestCasesAsync(1);
+    // Then we increase overhead.
+    runTestCasesAsync(15);
+}
+
+bool tst_remote::runTestCases()
+{
+    QObject *obj = this;
+    int oldFailures = QTestLog::failCount();
+    const QMetaObject *meta = obj->metaObject();
+    const int count = meta->methodCount();
+    int i = 0;
+    for (; i < count; ++i) {
+        QMetaMethod m = meta->method(i);
+        if ( ! QTest::isTestCase(m)) {
+            continue;
+        }
+        try {
+            if (m_isSubThreadAborted.load()) {
+                return false;
+            }
+
+            // Skips tests that need data-providers.
+            QByteArray name = m.methodSignature();
+            name.chop(2);
+            name.append(QLL("_data"));
+            if (meta->indexOfMethod(name.constData())) {
+                continue;
+            }
+
+            m.invoke(obj);
+        } catch (...) {
+            goto posAbort;
+        }
+
+        if (oldFailures < QTestLog::failCount()) {
+posAbort:
+            if (m_isSubThreadAborted.fetchAndStoreRelaxed(1)) {
+                // Already aborted.
+                return false;
+            }
+            break;
+        }
+    }
+
+    if (i < count) {
+        MessageStorage::get().flush();
+    }
+
+    return true;
+}
+
+class SubThread : public QThreadSlotable {
+    typedef QThreadSlotable super;
+public:
+    SubThread(tst_remote *ownerArg)
+        : owner(ownerArg)
+    {
+    }
+    ~SubThread()
+    {
+        super::requireDeleteSafe();
+        owner.clear();
+    }
+
+    bool preRun() Q_DECL_OVERRIDE {
+        owner->runTestCases();
+
+        // Continues to execute events.
+        return true;
+    }
+
+public:
+    QPointer<tst_remote> owner;
+};
+
+QSHAREDPOINTER_DELETER(SubThread, ptr->deleteSafe())
+
+void tst_remote::runTestCasesAsync(int threadCount)
+{
+    qDebug("runTestCasesAsync: started for thread-count: %d", threadCount);
+    QtMessageHandler oldHandler = MessageStorage::get().registerHandler();
+    defer {
+        qInstallMessageHandler(oldHandler);
+    };
+
+    const int timeout = 60 * QTimestamp::Second;
+    QElapsedTimer timer;
+    timer.start();
+
+    QVector<QRef<SubThread>> threadList;
+    for (int i = 0; i < threadCount; ++i) {
+        threadList.append(QRef<SubThread>(new SubThread(this)));
+    }
+
+    for (int i = 0; i < threadCount; ++i) {
+        threadList.ptr(i)->data()->start();
+    }
+
+    for (int i = 0; i < threadCount; ++i) {
+        QThread *thread = threadList.ptr(i)->data();
+        QTest::qWaitForThread(thread, timer.timeLeft(timeout));
+    }
+
+    qExpect(m_isSubThreadAborted.load())->toEqual(0)
+            ->withContext([&]() -> QString {
+                return QString(QLL("Test repeats failed, elapsed-time: %s"))
+                        .arg(timer.toString());
+            });
 }
 
 QTEST_MAIN(tst_remote)

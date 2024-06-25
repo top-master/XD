@@ -557,6 +557,9 @@ bool QCoreApplicationPrivate::threadRequiresCoreApplication()
 
 void QCoreApplicationPrivate::checkReceiverThread(QObject *receiver)
 {
+    if (QObjectData::get(receiver)->isThreadSafe) {
+        return;
+    }
     QThread *currentThread = QThread::currentThread();
     QThread *thr = receiver->thread();
     // Note to place debug-breakpoint inside `qt_message_fatal` which `Q_ASSERT_X` calls.
@@ -1030,6 +1033,7 @@ bool QCoreApplication::notifyInternal2(QObject *receiver, QEvent *event)
     QScopedLoopLevelCounter loopLevelCounter(threadData);
     if (!selfRequired)
         return doNotify(receiver, event);
+    // TRACE/gui/input-event 8: spontaneous-event(s) first get passed to App-class itself to be checked.
     return self->notify(receiver, event);
 }
 
@@ -2072,7 +2076,7 @@ QString QCoreApplication::translate(const char *context, const char *sourceText,
     return ret;
 }
 
-#endif //QT_NO_TRANSLATE
+#endif // QT_NO_TRANSLATION
 
 // Makes it possible to point QCoreApplication to a custom location to ensure
 // the directory is added to the patch, and qt.conf and deployed plugins are

@@ -36,6 +36,7 @@
 #include "qcoreapplication_p.h"
 
 #include "qbasicatomic.h"
+#include "qstacktrace.h"
 
 #include <limits>
 
@@ -632,7 +633,12 @@ QDeferredDeleteEvent::QDeferredDeleteEvent()
     \internal
 */
 QDeferredDeleteEvent::~QDeferredDeleteEvent()
-{ }
+{
+    if (this->d) {
+        delete Q_PTR_CAST(QStackTrace *, this->d);
+        this->d = Q_NULLPTR;
+    }
+}
 
 /*! \fn int QDeferredDeleteEvent::loopLevel() const
 
@@ -641,5 +647,16 @@ QDeferredDeleteEvent::~QDeferredDeleteEvent()
 
     \sa QObject::deleteLater()
 */
+
+QStackTrace QDeferredDeleteEvent::trace() const
+{
+    QStackTrace *cached = Q_PTR_CAST(QStackTrace *, d);
+    return cached ? *cached : QStackTrace();
+}
+
+void QDeferredDeleteEvent::setTrace(const QStackTrace &)
+{
+    d = Q_PTR_CAST(QEventPrivate *, new QStackTrace(QStackTrace::capture()));
+}
 
 QT_END_NAMESPACE

@@ -30,8 +30,11 @@
 
 QT_BEGIN_NAMESPACE
 
+class QRunnableDelay;
+
 class Q_CORE_EXPORT QRunnableFunc : public QRunnable
 {
+    friend class QRunnableDelay;
     QFunction<void () > data;
 public:
     inline QRunnableFunc() {}

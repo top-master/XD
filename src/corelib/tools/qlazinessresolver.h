@@ -53,6 +53,7 @@ public:
         /// @warning If null-pointer is forbidden, then
         /// may always return @c false, without doing anything.
         Take,
+        /// By default always calls deleter, however, QObjectDecor never calls deleter.
         Destroy,
         /// Is optional if extending QPointerLazinessResolver, but
         /// only if null-pointer is allowed, because

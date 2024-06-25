@@ -129,15 +129,15 @@ bool QObjectDecor::decorListenTrigger() {
     }
 
     // Maybe unlock `decorMutex`.
-    Listeners oldListeners = decorListeners;
+    DecorListeners oldListeners = decorListeners;
     decorListeners.clear();
 
 #ifdef QT_DEBUG
     int index = 0;
     Q_UNUSED(index) // Debug porpuses only.
 #endif
-    Listeners::const_iterator it = oldListeners.constBegin();
-    Listeners::const_iterator end = oldListeners.constEnd();
+    DecorListeners::const_iterator it = oldListeners.constBegin();
+    DecorListeners::const_iterator end = oldListeners.constEnd();
     for (; it != end; ++it) {
         const QObjectDecorListener &listener = *it;
         listener(loaded);

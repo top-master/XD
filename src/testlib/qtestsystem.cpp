@@ -32,6 +32,7 @@ QT_BEGIN_NAMESPACE
 
 #ifndef QT_NO_THREAD
 bool QTest::qWaitForThread(QThread *thread, int ms) {
+    Q_ASSERT_X(thread, "qWaitForThread", "Thread should NOT be null.");
     QElapsedTimer timer;
     timer.start();
 
@@ -73,7 +74,7 @@ bool QTest::qWaitForAsync(QRunnable *task, int ms) Q_THROWS(?)
                 QCoreApplication::sendPostedEvents(Q_NULLPTR, QEvent::DeferredDelete);
             }
             // Calls said destructor.
-            thread->deleteLater();
+            thread->deleteSafe();
         } else {
             delete thread;
         }

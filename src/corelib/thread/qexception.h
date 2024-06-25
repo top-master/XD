@@ -97,6 +97,8 @@ public:
     ;
     virtual void raise() const;
     virtual QException *clone() const;
+
+    std::exception_ptr toPtr() const Q_DECL_NOTHROW;
 };
 
 class Q_CORE_EXPORT QUnhandledException : public QException
@@ -133,6 +135,14 @@ public:
     virtual void setMessage(const QString &) Q_DECL_NOTHROW;
 
     void appendMessage(const QString &msg);
+
+    Q_ALWAYS_INLINE bool isEmpty() const Q_DECL_NOTHROW {
+        const char *msg = this->what();
+        return msg == Q_NULLPTR || msg[0] == 0;
+    }
+
+    static QExceptionWithMessage fromPtr(
+            const std::exception_ptr &ptr, int flags = 0) Q_DECL_NOTHROW;
 
 protected:
     QString m_message;

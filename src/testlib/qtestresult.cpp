@@ -75,6 +75,11 @@ void QTestResult::reset()
     QTestLog::resetCounters();
 }
 
+bool QTestResult::isCurrentTestBlacklisted()
+{
+    return QTest::blacklistCurrentTest;
+}
+
 void QTestResult::setBlacklistCurrentTest(bool b)
 {
     QTest::blacklistCurrentTest = b;
@@ -83,6 +88,11 @@ void QTestResult::setBlacklistCurrentTest(bool b)
 bool QTestResult::currentTestFailed()
 {
     return QTest::failed;
+}
+
+void QTestResult::internalSetCurrentTestFailState(bool b)
+{
+    QTest::failed = b;
 }
 
 QTestData *QTestResult::currentGlobalTestData()

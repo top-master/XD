@@ -295,6 +295,8 @@ QString QElapsedTimer::toString(qint64 msec, FormatFlags flags)
     return QString::fromLatin1(buf);
 }
 
+/// @warning Default value for @p flags should be
+/// the @ref QElapsedTimer::Precise "Precise" flag.
 QString QElapsedTimer::toStringLabel(qint64 msec, FormatFlags flags)
 {
     QString result = QElapsedTimer::toString(msec, flags);
@@ -337,6 +339,9 @@ QString QElapsedTimer::label(qint64 msec, FormatFlags flags)
 
   @note This is used in waiter contexts, hence no need to optimize, else
   could make this @c inline.
+
+  @note Seems Qt already has something similar. @ref qt_subtract_from_timeout,
+  but our version allows being inlined and is under Apache 2.0 license.
 */
 int QElapsedTimer::timeLeft(int timeout, int elapsed)
 {

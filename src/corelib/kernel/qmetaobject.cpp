@@ -2172,6 +2172,9 @@ QMetaMethod QMetaMethod::fromSignalImpl(const QMetaObject *metaObject, void **si
         if (i >= 0) {
             result.mobj = m;
             result.handle = priv(m->d.data)->methodData + 5*i;
+            if ( ! result.isSignal()) {
+                result = qMove(QMetaMethod());
+            }
             break;
         }
     }

@@ -101,7 +101,9 @@ namespace QTest {
         QExternalTestPrivate()
             : qtModules(QExternalTest::QtCore | QExternalTest::QtGui | QExternalTest::QtTest),
               appType(QExternalTest::AutoApplication),
-              temporaryDir(0), exitCode(-1)
+              temporaryDir(0),
+              std_err_run(-1),
+              exitCode(-1)
         {
         }
         ~QExternalTestPrivate()
@@ -122,6 +124,7 @@ namespace QTest {
         QByteArray sourceCode;
         QByteArray std_out;
         QByteArray std_err;
+        int std_err_run;
         int exitCode;
         QExternalTest::Stage failedStage;
 
@@ -253,6 +256,13 @@ namespace QTest {
     QByteArray QExternalTest::standardError() const
     {
         return d->std_err;
+    }
+
+    QByteArray QExternalTest::standardErrorOfRun() const
+    {
+        return d->std_err_run >= 0
+                ? d->std_err.midRef(d->std_err_run)
+                : QByteArray();
     }
 
     QString QExternalTest::errorReport() const
@@ -708,6 +718,7 @@ namespace QTest {
         failedStage = QExternalTest::RunStage;
         std_out += "\n### --- stdout from process --- ###\n";
         std_err += "\n### --- stderr from process --- ###\n";
+        std_err_run = std_err.length();
         return runMake(Run);
     }
 }

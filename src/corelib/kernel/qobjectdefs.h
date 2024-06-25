@@ -595,9 +595,9 @@ namespace QtPrivate {
     /* Trait that tells us Object has a Q_OBJECT macro with true as "Value" */
     template <typename Object> struct HasQ_OBJECT_Macro {
         template <typename T>
-        static char qInlineTest(int (T::*)(QMetaObject::Call, int, void **));
-        static int qInlineTest(int (Object::*)(QMetaObject::Call, int, void **));
-        enum { Value =  sizeof(qInlineTest(&Object::qt_metacall)) == sizeof(int) };
+        static NoType & qInlineTest(int (T::*)(QMetaObject::Call, int, void **));
+        static YesType & qInlineTest(int (Object::*)(QMetaObject::Call, int, void **));
+        enum { Value =  sizeof(qInlineTest(&Object::qt_metacall)) == YesSize };
     };
 }
 

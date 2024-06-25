@@ -111,6 +111,7 @@ namespace QTest {
         QByteArray fullProgramSource() const;
         QByteArray standardOutput() const;
         QByteArray standardError() const;
+        QByteArray standardErrorOfRun() const;
 
         QString errorReport() const;
 

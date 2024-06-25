@@ -46,10 +46,14 @@ signals:
     void myHelloSignal(const QString &message);
 
 private slots:
-    inline void onSecretCallable() {
+
+    inline QString onSecretCallable() {
         m_isSecretCalled = true;
         myHelloSignal("Secret revealed");
+
+        return QLL("My secret's result.");
     }
+    Q_DEFAULT(QLL("My secret's default-value."))
 
 private:
     bool m_isSecretCalled;
@@ -159,6 +163,9 @@ public:
 
     inline bool isAutoDeletable() const { return m_autoDelete; }
     inline void setAutoDeleteEnabled(bool state) { m_autoDelete = state; }
+
+    inline int port() const { return m_port; }
+    inline void setPort(int newValue) { m_port = newValue; }
 
 private slots:
     inline void onFinished() {

@@ -24,6 +24,7 @@
 
 #include "./qthreadfunc.h"
 
+#include <QtCore/private/qobject_p.h>
 
 QT_BEGIN_NAMESPACE
 
@@ -33,33 +34,11 @@ QThreadFunc::QThreadFunc()
     : m_callback(Q_NULLPTR)
     , m_autoDelete(false)
     , m_keepLooping(false)
-#ifndef QT_NO_EXCEPTIONS
-    , m_lastError(Q_NULLPTR)
-#endif
 {
-    QObjectData::get(this)->receiveChildEvents = false;
-
-    // First of all, connect things we want to happen in calling-thread
-    // (just to be sure, else `moveToThread(...)` takes effect later).
-    QObject::connect(this, &QThread::finished, this, &QThreadFunc::onFinished);
-    // Below needs to occur before `start()`, else things connected to
-    // this class's signals get triggered from calling-thread
-    // (and never happen if said calling-thread is busy, or has no event-loop).
-    this->moveToThread(this);
 }
 
 QThreadFunc::~QThreadFunc() {
-
-    if (QThread::currentThread() != this) {
-        // Allows below to wait for itself.
-        if (qApp) {
-            this->moveToThread(qApp->thread());
-        }
-        // Waits for self.
-        this->wait(3000);
-    } else {
-        Q_ASSERT_X(false, "QThreadFunc", "Thread-manager should not be deleted by own thread.");
-    }
+    requireDeleteSafe();
 
     QRunnable *runnable = m_callback;
     if (runnable && runnable->autoDelete()) {
@@ -67,35 +46,18 @@ QThreadFunc::~QThreadFunc() {
     }
 }
 
-void QThreadFunc::run() {
-    Q_DEFER {
-        // Allows destructor to wait for self.
-        if (qApp) {
-            this->moveToThread(qApp->thread());
-        }
-    };
-
-    if (this->isInterruptionRequested()) {
-        return;
+bool QThreadFunc::preRun() {
+    if (m_callback) {
+        m_callback->run();
     }
 
-    QT_TRY {
-        if (m_callback) {
-            m_callback->run();
-        }
-
-        if (m_keepLooping) {
-            this->exec();
-        }
-    } QT_CATCHES(...,
-        m_lastError = std::current_exception();
-    )
+    return m_keepLooping;
 }
 
 void QThreadFunc::onFinished() {
-    Q_ASSERT(QThread::currentThread() != this);
+    super::onFinished();
     if (m_autoDelete) {
-        this->deleteLater();
+        this->deleteSafe();
     }
 }
 

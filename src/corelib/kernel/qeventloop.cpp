@@ -125,6 +125,7 @@ bool QEventLoop::processEvents(ProcessEventsFlags flags)
     Q_D(QEventLoop);
     if (!d->threadData->eventDispatcher.load())
         return false;
+    // TRACE/gui/input-event 3: but QEventLoop's seems to be just a wrapper for event-dispatcher.
     return d->threadData->eventDispatcher.load()->processEvents(flags);
 }
 
@@ -202,6 +203,7 @@ int QEventLoop::exec(ProcessEventsFlags flags)
     if (app && app->thread() == thread())
         QCoreApplication::removePostedEvents(app, QEvent::Quit);
 
+    // TRACE/gui/input-event 2: the `exec` fallbacks to QEventLoop's `processEvents`.
     while (!d->exit.loadAcquire())
         processEvents(flags | WaitForMoreEvents | EventLoopExec);
 

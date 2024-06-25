@@ -65,6 +65,9 @@ bool QWindowsGuiEventDispatcher::processEvents(QEventLoop::ProcessEventsFlags fl
 {
     const QEventLoop::ProcessEventsFlags oldFlags = m_flags;
     m_flags = flags;
+    // TRACE/gui/input-event 4: win32 1: platform-plugin's event-dispatcher redirects to
+    // the Qt corelib's event-dispatcher, then restores flags used by
+    // the `sendWindowSystemEvents` method.
     const bool rc = QEventDispatcherWin32::processEvents(flags);
     m_flags = oldFlags;
     return rc;
@@ -73,6 +76,8 @@ bool QWindowsGuiEventDispatcher::processEvents(QEventLoop::ProcessEventsFlags fl
 void QWindowsGuiEventDispatcher::sendPostedEvents()
 {
     QEventDispatcherWin32::sendPostedEvents();
+    // TRACE/gui/input-event 4: win32 4: platform-plugin redirects postponed window-events to QtGui, but
+    // first above sends postponed now-window events.
     QWindowSystemInterface::sendWindowSystemEvents(m_flags);
 }
 

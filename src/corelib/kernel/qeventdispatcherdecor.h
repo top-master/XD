@@ -46,7 +46,7 @@ class Q_CORE_EXPORT QEventDispatcherDecor : public QAbstractEventDispatcher, pub
     typedef QAbstractEventDispatcher super;
     typedef QEventDispatcherDecor Self;
 public:
-    explicit QEventDispatcherDecor(QObject *parent = Q_NULLPTR) Q_DECL_NOEXCEPT_EXPR(false);
+    explicit QEventDispatcherDecor(QObject *parent = Q_NULLPTR) Q_THROWS(?);
     ~QEventDispatcherDecor();
 
     // MARK: helpers.

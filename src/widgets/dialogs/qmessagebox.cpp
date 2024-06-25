@@ -430,6 +430,7 @@ void QMessageBoxPrivate::updateSize()
 
     q->setFixedSize(width, height);
     QCoreApplication::removePostedEvents(q, QEvent::LayoutRequest);
+    label->update();
 }
 
 
@@ -1209,8 +1210,9 @@ void QMessageBox::setText(const QString &text)
 {
     Q_D(QMessageBox);
     d->label->setText(text);
-    d->label->setWordWrap(d->label->textFormat() == Qt::RichText
-        || (d->label->textFormat() == Qt::AutoText && Qt::mightBeRichText(text)));
+    const Qt::TextFormat format = d->label->textFormat();
+    d->label->setWordWrap(format == Qt::RichText
+        || (format == Qt::AutoText && Qt::mightBeRichText(text)));
     d->updateSize();
 }
 
@@ -2606,7 +2608,6 @@ void QMessageBox::setInformativeText(const QString &text)
             // apply a smaller font the information label on the mac
             label->setFont(qt_app_fonts_hash()->value("QTipLabel"));
 #endif
-            label->setWordWrap(true);
             d->informativeLabel = label;
         }
         d->informativeLabel->setText(text);

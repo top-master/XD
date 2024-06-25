@@ -136,6 +136,22 @@ public:
     /// @sa onPacketLimitExceed
     void setPacketSizeLimit(quint32 sizeLimit);
 
+    /// Mode of event-handling while waiting for slot replies.
+    /// @warning This only reads current-thread's configuration, since we
+    /// intentionally use thread-local storage to behave that way.
+    int requestEventMode() const;
+
+    /// Sets how to handle events while waiting for slot replies.
+    /// @warning This only changes current-thread's configuration, since we
+    /// intentionally use thread-local storage to behave that way.
+    ///
+    /// @note You could use @c ExcludeUserInputEvents, to prevent conflicts, but
+    /// the App should itself disable GUI that may conflict.
+    ///
+    /// @param flags Can be either QRemote::BlockEvents, or, any combination of
+    /// the QEventLoop::ProcessEventsFlag
+    void setRequestEventMode(int flags);
+
     /// Getter for @ref setDisconnectSendable.
     /// @returns @c true by default.
     Q_REQUIRED_RESULT bool isDisconnectSendable() const;
@@ -157,12 +173,15 @@ public:
     ///
     /// WARNING: device(s) are never deleted by QRemote directly, but
     /// you could use @ref QIODevice::setParent, which we support.
-    void addDevice(QIODevice *device);
+    ///
+    /// @param isThreadSafe Set this to @c true if the device is thread-safe.
+    void addDevice(QIODevice *device, bool isThreadSafe = false);
     Q_REQUIRED_RESULT QIODevice *deviceAt(int i);
     Q_REQUIRED_RESULT int deviceCount() const;
 
     Q_REQUIRED_RESULT QIODevice *takeDeviceAt(int i);
     inline void removeDeviceAt(int i) { (void) this->takeDeviceAt(i); }
+    void removeAllDevices();
 
     // MARK: Packet upload/send and download/receive helpers.
 
@@ -176,7 +195,7 @@ public:
     /// (i.e. `delete` it).
     ///
     /// @note Used for triggering remote "slots" only.
-    QRemote::MethodPacket *request(QRemote::MethodPacket &pkt, long waitTime = -1);
+    QRemote::MethodPacket *request(QRemote::MethodPacket &pkt, long waitTime = -1, int eventMode = 0xdead);
     /// @note Used for "slot" result receivement.
     void receiveRequestReply(const QRemote::MethodPacket &pkt);
 

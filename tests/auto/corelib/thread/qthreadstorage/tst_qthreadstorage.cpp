@@ -67,6 +67,8 @@ private slots:
     void leakInDestructor();
     void resetInDestructor();
     void valueBased();
+    void destructor_shouldNotForgetTheDeleter();
+    void scopedDestructor_shouldPostponeTheDelete();
 
 private:
     QString m_crashOnExit;
@@ -516,6 +518,73 @@ void tst_QThreadStorage::valueBased()
 
     QCOMPARE(c, int(SPointer::count.load()));
 
+}
+
+static QObject *lastDeletedObject = Q_NULLPTR;
+
+class MyObject : public QObject {
+public:
+    ~MyObject() {
+        lastDeletedObject = this;
+    }
+};
+
+void tst_QThreadStorage::destructor_shouldNotForgetTheDeleter()
+{
+    // TRACE/corelib BugFix: thread-storage should NOT forget the destructor #2,
+    // where #1's said not-forgetting part gets tested here.
+
+    // Prepare.
+    lastDeletedObject = Q_NULLPTR;
+
+    // Dummy,
+    // with construct history.
+    QThreadStorage<QString> a;
+    a.localData();
+    QThreadStorage<QString> b;
+    b.localData();
+    // With destruct history.
+    {
+        QThreadStorage<QString> c;
+        c.localData();
+        QThreadStorage<QString> d;
+        d.localData();
+    }
+    // With last type being a pointer.
+    QThreadStorage<QObject *> z;
+
+    // Actual test,
+    // where setter should NOT treat QString as QObject.
+    z.setLocalData(Q_NULLPTR);
+
+    // With delete never being called.
+    QCoreApplication::processEvents();
+    qExpect(lastDeletedObject)->toBeNull();
+}
+
+void tst_QThreadStorage::scopedDestructor_shouldPostponeTheDelete()
+{
+    // TRACE/corelib BugFix: thread-storage should NOT forget the destructor #2,
+    // where #1's said postpone gets tested here.
+
+    // Prepare.
+    lastDeletedObject = Q_NULLPTR;
+
+    // Dummy.
+    MyObject *dataPtr;
+    {
+        QThreadStorageScoped<QObject *> store;
+        dataPtr = new MyObject();
+        store.localData() = dataPtr;
+    }
+    // Actual test,
+    // with delete being postponed.
+    qExpect(lastDeletedObject)->toBeNull()
+            ->withContext("Delete should be postponed.");
+    // With delete being handled like other events.
+    QCoreApplication::processEvents();
+    qExpect(lastDeletedObject)->toEqual(dataPtr)
+            ->withContext("Delete should have been handled by now.");
 }
 
 

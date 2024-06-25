@@ -39,12 +39,17 @@ static Q_CONSTEXPR QString MSG_DEVICE_MISSING = QStringLiteral("Device not set (
 static Q_CONSTEXPR QString MSG_DEVICE_READ_FAILED = QStringLiteral("Device read failed.");
 
 
-DeviceHandler::DeviceHandler(QRemoteUser *owner)
-    : QObject(owner)
-    , m_owner(owner)
+DeviceHandler::DeviceHandler(QRemoteUser *owner, bool isThreadSafe)
+    : m_owner(owner)
     , m_device(Q_NULLPTR)
     , m_readSizeMax(0)
+    , m_isThreadSafe(isThreadSafe)
 {
+    QObjectData::get(this)->sendChildEvents = false;
+    if (m_isThreadSafe) {
+        this->moveToThread(owner->thread());
+        this->setParent(owner);
+    }
 }
 
 DeviceHandler::~DeviceHandler()
@@ -79,9 +84,15 @@ void DeviceHandler::dispose(bool removeFromOwner)
         }
     }
 
-    Q_ASSERT(ref.internalData()->strongref.load() > 1);
-    this->setParent(Q_NULLPTR);
-    Q_ASSERT(ref.internalData()->strongref.load() == 1);
+    // Don't reference DeviceHandler after the related QRemoteUser is deleted,
+    // otherwise, expect undefined-behaviour or crashes.
+    if (m_isThreadSafe) {
+        Q_ASSERT(ref.internalData()->strongref.load() > 1);
+        this->setParent(Q_NULLPTR);
+        Q_ASSERT(ref.internalData()->strongref.load() == 1);
+    } else {
+        Q_ASSERT(ref.internalData()->strongref.load() == 1);
+    }
 }
 
 void DeviceHandler::setDevice(QIODevice *newDevice)
@@ -106,6 +117,10 @@ void DeviceHandler::setDevice(QIODevice *newDevice)
         setError(MSG_DEVICE_MISSING);
         return;
     }
+    if ( ! m_isThreadSafe) {
+        this->moveToThread(newDevice->thread());
+    }
+
     // Bind to owner (where Qt will auto use `QueuedConnection` if required).
     connect(owner, &QRemoteUser::sendData,
             this, &DeviceHandler::sendData);

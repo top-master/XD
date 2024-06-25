@@ -261,6 +261,12 @@ namespace QTest
 
     } // namespace Internal
 
+    /// Checks whether given method is a test-case.
+    ///
+    /// Where test-case means all private-slots that take zero arguments, excluding any
+    /// init and cleanup methods or data-providers (a method name ending with "_data").
+    Q_TESTLIB_EXPORT bool isTestCase(const QMetaMethod &sl);
+
     template<typename T>
     inline char *toString(const T &t)
     {

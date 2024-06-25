@@ -44,6 +44,7 @@ QT_BEGIN_NAMESPACE
 class QThreadData;
 class QThreadPrivate;
 class QAbstractEventDispatcher;
+class QRunnable;
 
 #ifndef QT_NO_THREAD
 class Q_CORE_EXPORT QThread : public QObject
@@ -92,8 +93,10 @@ public:
     bool event(QEvent *event) Q_DECL_OVERRIDE;
     int loopLevel() const;
 
+    void post(QRunnable *, int priority = Qt::NormalEventPriority);
+
 public Q_SLOTS:
-    void start(Priority = InheritPriority);
+    virtual void start(Priority = InheritPriority);
     void terminate();
     void quit();
 

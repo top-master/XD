@@ -25,7 +25,7 @@
 #ifndef QTHREAD_FUNC_H
 #define QTHREAD_FUNC_H
 
-#include <QtCore/qthread.h>
+#include <QtCore/qthreadslotable.h>
 #include <QtCore/qrunnablefunc.h>
 #include <QtCore/qexception.h>
 
@@ -36,8 +36,9 @@ QT_BEGIN_NAMESPACE
 /// Same as QThread, but optimized for Lambda instead of overridding @ref QThread::run.
 ///
 /// @warning Sets `QObjectData::receiveChildEvents` to `false`.
-class Q_CORE_EXPORT QThreadFunc : public QThread
+class Q_CORE_EXPORT QThreadFunc : public QThreadSlotable
 {
+    typedef QThreadSlotable super;
     Q_OBJECT
 public:
     /// @warning Forbids setting @ref parent in constructor, since
@@ -73,28 +74,28 @@ public:
     /// Default's @c false.
     inline bool keepLooping() const { return m_keepLooping; }
     /// Setter for @ref keepLooping.
+    ///
+    /// @warning If @p enabled is set to @c true, then
+    /// the @ref quit method needs to be called manually.
     inline void setKeepLooping(bool enabled) { m_keepLooping = enabled; }
 
-#ifndef QT_NO_EXCEPTIONS
-    inline const std::exception_ptr &lastError() const { return m_lastError; }
-#endif // QT_NO_EXCEPTIONS
-
 protected:
-    void run() Q_DECL_OVERRIDE;
+    bool preRun() Q_DECL_OVERRIDE;
 
-private Q_SLOTS:
-    void onFinished();
+protected Q_SLOTS:
+    /// @copydoc QThreadSlotable::onFinished()
+    void onFinished() Q_DECL_OVERRIDE;
 
 private:
     QRunnable *m_callback;
     bool m_autoDelete;
     bool m_keepLooping;
 
-#ifndef QT_NO_EXCEPTIONS
-    std::exception_ptr m_lastError;
-#endif // QT_NO_EXCEPTIONS
-
 };
+
+QSHAREDPOINTER_DELETER(QThreadFunc, ptr->deleteSafe())
+
+QT_END_NAMESPACE
 
 #endif // QT_NO_THREAD
 

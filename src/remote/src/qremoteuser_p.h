@@ -141,15 +141,17 @@ public:
     {}
     static inline QRemoteUserPrivate *get(QRemoteUser *o) { return o->d_func(); }
     static inline const QRemoteUserPrivate *get(const QRemoteUser *o) { return o->d_func(); }
+    static inline QRemoteUserPrivate *get(QSharedPointer<QRemoteUser> &o) { return o.data()->d_func(); }
+    static inline const QRemoteUserPrivate *get(const QSharedPointer<QRemoteUser> &o) { return o.data()->d_func(); }
 
     static QRemote::QRemoteUserCounter *instanceManager();
-    struct PerThreadStorage {
-        inline PerThreadStorage()
+    struct PerThreadStorageGlobal {
+        inline PerThreadStorageGlobal()
             : instance(Q_NULLPTR)
         {}
         QRemoteUser *instance;
     };
-    static QThreadStorage<PerThreadStorage> threadStore;
+    static QThreadStorage<PerThreadStorageGlobal> threadStoreGlobal;
 
     // MARK: Service helpers (register, find and etc).
 
@@ -187,6 +189,16 @@ public:
     QMutex waitersMutex;
     QMultiHash<QByteArray, QRemote::ReplyWaiter *> waiters;
     typedef QMultiHash<QByteArray, QRemote::ReplyWaiter *> WaiterHash;
+
+    struct PerThreadStorage {
+        inline PerThreadStorage()
+        {
+            requestEventMode = QtPrivate::remoteEventMode;
+        }
+
+        int requestEventMode;
+    };
+    QThreadStorageScoped<PerThreadStorage> threadStore;
 };
 
 #ifndef Q_MOC_RUN
