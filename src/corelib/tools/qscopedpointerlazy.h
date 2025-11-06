@@ -40,6 +40,13 @@
 
 QT_BEGIN_NAMESPACE
 
+#ifndef QT_NO_QOBJECT
+class QObject;
+class QObjectData;
+class QObjectPrivate;
+class QObjectDecor;
+#endif // QT_NO_QOBJECT
+
 /// Simulates QScopedPointer's API, but provides lazy-loading support.
 ///
 /// @warning Ensure given @tparam Deleter handles null-pointer, because
@@ -210,6 +217,10 @@ template <typename T, typename Deleter = QScopedPointerDeleter<T> >
 class QScopedPointerLazyImmutable : public QScopedPointerLazy<T, Deleter>
 {
     typedef QScopedPointerLazy<T, Deleter> super;
+#ifndef QT_NO_QOBJECT
+    friend class QObjectDecor;
+#endif
+
 public:
     Q_DECL_CONSTEXPR explicit inline QScopedPointerLazyImmutable(Qt::Initialization)
         : super(Qt::Uninitialized)
@@ -237,6 +248,94 @@ public:
     }
 
 };
+
+
+#ifndef QT_NO_QOBJECT
+/// Same as %QScopedPointerLazyImmutable with QObjectData as @tparam T.
+/// However, specialized for QObjectPrivate.
+class QObjectPrivateScoped
+{
+    typedef QObjectPrivate *QObjectPrivateScoped:: *RestrictedBool;
+    typedef QObjectPrivateScoped Self;
+
+    friend class QObject;
+    friend class QObjectDecor;
+
+    QObjectPrivate *d;
+public:
+    Q_DECL_CONSTEXPR explicit inline QObjectPrivateScoped(Qt::Initialization)
+    {
+    }
+
+    Q_DECL_CONSTEXPR explicit inline QObjectPrivateScoped(QObjectData *p = Q_NULLPTR)
+        : d(reinterpret_cast<QObjectPrivate *>(p))
+    {
+    }
+
+    Q_ALWAYS_INLINE QObjectData &operator*() const
+    {
+        QObjectData *p = data();
+        Q_ASSERT(p);
+        return *p;
+    }
+
+    Q_ALWAYS_INLINE QObjectData *operator->() const
+    {
+        QObjectData *p = data();
+        Q_ASSERT(p);
+        return p;
+    }
+
+    Q_ALWAYS_INLINE bool operator!() const
+    {
+        QObjectData *p = data();
+        return !p;
+    }
+
+#if defined(Q_QDOC)
+    inline operator bool() const
+    {
+        return isNull() ? Q_NULLPTR : &QObjectPrivateScoped::d;
+    }
+#else
+    inline operator RestrictedBool() const
+    {
+        return isNull() ? Q_NULLPTR : &QObjectPrivateScoped::d;
+    }
+#endif
+
+    Q_ALWAYS_INLINE bool isNull() const
+    {
+        return !data();
+    }
+
+    typedef QObjectData *pointer;
+
+    static Q_ALWAYS_INLINE QObjectPrivate *&raw(QObjectPrivateScoped *p) {
+        return p->d;
+    }
+
+    // MARK: Defined in qobjectdecor.cpp file.
+
+    Q_CORE_EXPORT static void loadNow(const QObjectPrivateScoped *);
+
+    // MARK: Defined in QObject header.
+
+    Q_ALWAYS_INLINE ~QObjectPrivateScoped();
+
+    inline QPointerLazinessResolverAtomic &lazinessResolver() const;
+
+    Q_ALWAYS_INLINE QObjectData *data() const;
+
+};
+
+#define QT_OBJECT_PRIVATE_LOAD(x) do { \
+        if ((x)->d != Q_NULLPTR && Q_PTR_CAST(QObjectData *, (x)->d)->isLazy) { \
+            QObjectPrivateScoped::loadNow((x)); \
+        } \
+    } while(0)
+
+#endif // QT_NO_QOBJECT
 
 QT_END_NAMESPACE
 

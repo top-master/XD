@@ -126,7 +126,7 @@ public:
 
     /// Returns QObjectData::isDecor field's value without causing decoratee to be loaded.
     static Q_ALWAYS_INLINE bool isDecor(const QObject *obj) {
-        return reinterpret_cast<QObjectData *>(QScopedPointerLazyBase<QObjectData>::get(&const_cast<QObject *>(obj)->d_ptr)->d)->isDecor;
+        return reinterpret_cast<QObjectData *>(QObjectPrivateScoped::raw(&const_cast<QObject *>(obj)->d_ptr))->isDecor;
     }
 
     /// Returns given @p obj's current QObjectDecor if any, otherwise @c nullptr.
@@ -136,7 +136,7 @@ public:
     /// @warning Use @ref qobject_cast instead, wherever the
     /// sub-class of QObjectDecor extends QObject as well.
     static Q_ALWAYS_INLINE QObjectDecor *fromDecorable(QObject *obj) {
-        QObjectData *d = reinterpret_cast<QObjectData *>(QScopedPointerLazyBase<QObjectData>::get(&obj->d_ptr)->d);
+        QObjectData *d = reinterpret_cast<QObjectData *>(QObjectPrivateScoped::raw(&obj->d_ptr));
         // TRACE/QObject: `d_ptr` should always be non-null, but let's check #2
         Q_IF (d) {
             QLazinessResolver *resolver = d->lazinessResolver.raw();
@@ -172,7 +172,11 @@ public:
     }
 
     static Q_ALWAYS_INLINE QScopedPointerLazyImmutable<QObjectData> &d_ptr_from(const QObject *obj) {
-        return const_cast<QObject * >(obj)->d_ptr;
+        // Ensures casting is possible.
+        Q_STATIC_ASSERT(sizeof(QObjectPrivateScoped) == sizeof(QScopedPointerLazyImmutable<QObjectData>));
+        Q_ASSERT(Q_FIELD_OFFSET(QObjectPrivateScoped, d) == Q_FIELD_OFFSET(QScopedPointerLazyImmutable<QObjectData>, d));
+
+        return *Q_PTR_CAST(QScopedPointerLazyImmutable<QObjectData> *, &const_cast<QObject * >(obj)->d_ptr);
     }
 
 protected:

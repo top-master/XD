@@ -53,8 +53,7 @@ void QObjectDecor::decorAttach(QObject *owner)
     // Needs to be last, because if above throws, then
     // the QObject's destructor may cause crash.
     decorOwner = owner;
-    QObjectPrivate *ownerPrivate = static_cast<QObjectPrivate *>(
-                QScopedPointerLazyBase<QObjectData>::get(&owner->d_ptr)->d);
+    QObjectPrivate *ownerPrivate = QObjectPrivateScoped::raw(&owner->d_ptr);
     decorOwnerPrivate = ownerPrivate;
     decorOwnerMeta = m;
     ownerPrivate->isLazy = true;
@@ -66,8 +65,7 @@ void QObjectDecor::decorDetach()
     QObjectDecorLocker _(this);
     if (decorOwner) {
         QObjectPrivate *ownerPrivate = decorOwnerPrivate;
-        QScopedPointerLazyBase<QObjectData> *base = QScopedPointerLazyBase<QObjectData>::get(&decorOwner->d_ptr);
-        base->d = ownerPrivate;
+        QObjectPrivateScoped::raw(&decorOwner->d_ptr) = ownerPrivate;
         QLazinessResolver::set(decorOwner->d_ptr, this, defaultResolver());
         ownerPrivate->isLazy = false;
         ownerPrivate->isDecor = false;
@@ -104,8 +102,7 @@ void QObjectDecor::postDecorLoad(QObject *loaded) {
 
     QObjectPrivate *loadedPrivate = QObjectPrivate::get(loaded);
     loadedPrivate->isDecoratee = true;
-    QScopedPointerLazyBase<QObjectData> *base = QScopedPointerLazyBase<QObjectData>::get(&decorOwner->d_ptr);
-    base->d = loadedPrivate;
+    QObjectPrivateScoped::raw(&decorOwner->d_ptr) = loadedPrivate;
     this->decorLoaded = QPointer<QObject>(loaded);
     decorOwnerPrivate->isLazy = false;
 
@@ -153,9 +150,9 @@ bool QObjectDecor::decorListenTrigger() {
 bool QObjectDecor::lazyEvent(QLazyEvent *event)
 {
     // Validation.
-    QScopedPointerLazyBase<QObjectData> *base = QScopedPointerLazyBase<QObjectData>::get(&decorOwner->d_ptr);
+    QObjectPrivate *&baseD = QObjectPrivateScoped::raw(&decorOwner->d_ptr);
     QObjectPrivate *&dataRef = event->data<QObjectPrivate *>();
-    if (&dataRef != &base->d) {
+    if (&dataRef != &baseD) {
         // Some resolvers may support different data, hence don't throw.
         return false;
     }
@@ -199,6 +196,13 @@ QObjectDecorLocker::QObjectDecorLocker(QObjectDecor *owner) Q_THROWS(!)
         owner->decorLocker = this;
         owner->decorLockThread = current;
     }
+}
+
+void QObjectPrivateScoped::loadNow(const QObjectPrivateScoped *that)
+{
+    Q_PTR_CAST(QObjectData *, that->d)->lazinessResolver.loadNow(
+            const_cast<Self *>(that),
+            Q_PTR_CAST(void **, &that->d));
 }
 
 #endif // QT_NO_QOBJECT
