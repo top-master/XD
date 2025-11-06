@@ -153,7 +153,8 @@ class Q_CORE_EXPORT
 {
     Q_OBJECT
     Q_PROPERTY(QString objectName READ objectName WRITE setObjectName NOTIFY objectNameChanged)
-    Q_DECLARE_PRIVATE(QObject)
+    // Same as `Q_DECLARE_PRIVATE(QObject)`.
+    friend class QObjectPrivate;
 
 public:
     Q_INVOKABLE explicit QObject(QObject *parent=Q_NULLPTR);
@@ -490,7 +491,7 @@ protected:
     QObject(QObjectPrivate &dd, QObject *parent = Q_NULLPTR);
 
 protected:
-    QScopedPointerLazyImmutable<QObjectData> d_ptr;
+    QObjectPrivateScoped d_ptr;
 
     static const QMetaObject staticQtMetaObject;
     friend inline const QMetaObject *qt_getQtMetaObject() Q_DECL_NOEXCEPT;
@@ -506,6 +507,11 @@ protected:
     friend class QThreadData;
     friend class QObjectData;
     friend class QObjectDecor;
+
+private:
+    /// Same as `Q_DECLARE_PRIVATE(QObject)`, to force compiler inlinement.
+    Q_ALWAYS_INLINE const QObjectPrivate *d_func() const;
+    Q_ALWAYS_INLINE QObjectPrivate *d_func();
 
 private:
     Q_DISABLE_COPY(QObject)
@@ -622,6 +628,33 @@ private:
 #ifndef Q_MOC_RUN
 inline QObjectData *QObjectData::get(QObject *o) { return o->d_ptr.data(); }
 inline const QObjectData *QObjectData::get(const QObject *o) { return o->d_ptr.data(); }
+
+Q_ALWAYS_INLINE const QObjectPrivate *QObject::d_func() const {
+    QT_OBJECT_PRIVATE_LOAD(&d_ptr);
+    return d_ptr.d;
+}
+
+Q_ALWAYS_INLINE QObjectPrivate *QObject::d_func() {
+    QT_OBJECT_PRIVATE_LOAD(&d_ptr);
+    return d_ptr.d;
+}
+
+Q_ALWAYS_INLINE QObjectData *QObjectPrivateScoped::data() const
+{
+    QT_OBJECT_PRIVATE_LOAD(this);
+    return Q_PTR_CAST(QObjectData *, this->d);
+}
+
+Q_ALWAYS_INLINE QObjectPrivateScoped::~QObjectPrivateScoped()
+{
+    if (Q_PTR_CAST(QObjectData *, this->d)->lazinessResolver.destroy(this, reinterpret_cast<void **>(&this->d))) {
+        QScopedPointerDeleter<QObjectData>::cleanup(data());
+    }
+}
+
+Q_ALWAYS_INLINE QPointerLazinessResolverAtomic &QObjectPrivateScoped::lazinessResolver() const {
+    return Q_PTR_CAST(QObjectData *, this->d)->lazinessResolver;
+}
 
 inline QPointerLazinessResolverAtomic &QScopedPointerLazyBase<QObjectData>::lazinessResolver() const {
     return Q_PTR_CAST(QObjectData *, this->d)->lazinessResolver;
