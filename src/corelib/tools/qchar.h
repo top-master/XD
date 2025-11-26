@@ -1,5 +1,6 @@
 /****************************************************************************
 **
+** Copyright (C) 2015 The XD Company Ltd.
 ** Copyright (C) 2015 The Qt Company Ltd.
 ** Contact: http://www.qt.io/licensing/
 **
@@ -61,6 +62,7 @@ public:
         LineFeed = 0x000a,
         CarriageReturn = 0x000d,
         Space = 0x0020,
+        /// Non breaking space (used to skip word wrap).
         Nbsp = 0x00a0,
         SoftHyphen = 0x00ad,
         ReplacementCharacter = 0xfffd,
@@ -69,6 +71,46 @@ public:
         ByteOrderSwapped = 0xfffe,
         ParagraphSeparator = 0x2029,
         LineSeparator = 0x2028,
+
+        // MARK: Symbolic Characters (SC).
+
+        /// Horizontal Ellipsis "...".
+        Ellipsis = 0x2026,
+
+        // MARK: CC (unicode control characters).
+
+        /// ZWJ: Zero width joiner.
+        CC_Joiner = 0x200d,
+        /// ZWNJ: Zero width non-joiner.
+        CC_Spliter = 0x200c,
+        /// ZWSP: Zero width space.
+        CC_ZeroWideSpace = 0x200b,
+
+        // MARK: any directional formatting start needs an end/pop.
+
+        /// LRM: Left-to-right mark.
+        Push_LeftToRightMark = 0x200e,
+        /// RLM: Right-to-left mark.
+        Push_RightToLeftMark = 0x200f,
+        /// LRE: Start of left-to-right embedding.
+        Push_LeftToRightEmbedding = 0x202a,
+        /// RLE: Start of right-to-left embedding.
+        Push_RightToLeftEmbedding = 0x202b,
+        /// LRO: Start of left-to-right override.
+        Push_LeftToRightOverride = 0x202d,
+        /// RLO: Start of right-to-left override.
+        Push_RightToLeftOverride = 0x202e,
+        /// PDF: Pop directional formatting (end last started).
+        PopDirection = 0x202c,
+        // MARK: Other CC.
+
+        /// RS: Record Separator (Block Separator).
+        CC_BlockSeparator = 0x001e,
+        /// US: Unit Separator (Segment Separator).
+        CC_SegmentSeparator = 0x001f,
+
+        // Last and secound noncharacter member of last unicode block
+        // "Supplementary Private Use Area-B" since unicode version 2.0 until 10.0
         LastValidCodePoint = 0x10ffff
     };
 
@@ -107,7 +149,7 @@ public:
         Other_Format,             //   Cf
         Other_Surrogate,          //   Cs
         Other_PrivateUse,         //   Co
-        Other_NotAssigned,        //   Cn
+        Other_NotAssigned,        //   Cn, replaces Qt4's `NoCategory`.
 
         Letter_Uppercase,         //   Lu
         Letter_Lowercase,         //   Ll
