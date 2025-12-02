@@ -276,7 +276,10 @@ private:
  * Limits waiting for any response of #Q_REMOTE_CONTROLLER slot(s), and,
  * once past limit, remaining remote-slot will return default-constructed value.
  *
- * But using zero as timeout means infinite.
+ * WARNING: using zero as timeout means infinite.
+ *
+ * Minimum possible timeout value is 500 milli-seconds, and
+ * maximum value is 128000 ms, which equals 2 minutes and 8 seconds.
  */
 class QRemoteTimeLimiter
 {
@@ -525,9 +528,9 @@ inline QRemoteTimeLimiter::QRemoteTimeLimiter(QObjectRemote &o, int timeout) Q_D
 inline QRemoteTimeLimiter::QRemoteTimeLimiter(const QRef<QObjectRemote> &r, int timeout) Q_DECL_NOTHROW
     : m_o(r.data())
 {
-    if(r) {
-        m_backup = r->remote().timeout() / QObjectData::remoteMiliSecPerTimeout;
-        r->remote().setTimeout(timeout);
+    if (m_o) {
+        m_backup = m_o->remote().timeout() / QObjectData::remoteMiliSecPerTimeout;
+        m_o->remote().setTimeout(timeout);
     } else {
         m_backup = 0;
     }
@@ -570,7 +573,7 @@ inline QRemoteEventModer::QRemoteEventModer(QObjectRemote &o, int flags) Q_DECL_
 inline QRemoteEventModer::QRemoteEventModer(const QRef<QObjectRemote> &r, int flags) Q_DECL_NOTHROW
     : m_o(r.data())
 {
-    if (r) {
+    if (m_o) {
         m_backup = r->remote().setEventMode(flags);
     } else {
         m_backup = QRemote::InvalidController;

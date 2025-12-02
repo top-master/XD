@@ -1097,7 +1097,7 @@ void QObjectPrivate::detachSharedRefCount() {
             // Ensures Qt's smart-pointers know the QObject has already been deleted.
             //
             // First, handles current and down-stream.
-            sharedRefcount->addFlagOnce(QtSharedPointer::FlagIsMalformed);
+            sharedRefcount->flags.append(QtSharedPointer::FlagIsMalformed);
             QtSharedPointer::ExternalRefCountData *it = sharedRefcount;
             do {
                 int tmp = it->strongref.fetchAndStoreRelaxed(0);
@@ -1846,6 +1846,18 @@ void QT_FASTCALL QObjectPrivate::assertThreadOwned(const char *tag)
     if (QThreadData::current() != this->threadData && this->threadData->thread) {
         qAssertWarning(tag, "Reentrant logic was called from wrong thread.");
     }
+}
+
+bool QT_FASTCALL QObjectPrivate::assertStrongRef(const char *clazz)
+{
+    QtSharedPointer::ExternalRefCountData *sharedRefcount = this->sharedRefcount.load();
+    if (sharedRefcount && sharedRefcount->strongref.load() > 0) {
+        return true;
+    }
+
+    qAssertWarning(clazz, "This class requires QSharedPointer or QRef coverage"
+                         " (for example, to be usable by async-threads).");
+    return false;
 }
 
 void QObjectPrivate::_q_reregisterTimers(void *pointer)

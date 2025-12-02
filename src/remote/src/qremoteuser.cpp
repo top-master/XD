@@ -110,6 +110,22 @@ QRemoteUser::~QRemoteUser()
     // note that device(s) are never deleted by QRemote directly.
     d->deviceHandlers.clear(); // QSharedPointer should delete all `deviceHandlers`.
 
+    // Aborts all reply waiters.
+    {
+        QMutexLocker waitersLocker(&d->waitersMutex);
+        WaiterHash::const_iterator it = d->waiters.begin();
+        WaiterHash::const_iterator end = d->waiters.end();
+        if (it != end) {
+            qAssertWarning("QRemoteUser", "was deleted while waiting for slot-reply. The program is malformed and may crash.");
+        }
+        for (; it != end; ++it) {
+            it.value()->wake(QByteArray());
+        }
+        d->waiters.clear();
+        // Ensures all waiters exit waiting.
+        QWriteLocker receiveLocker(&d->receiveMutex);
+    }
+
     // Detach all local-services.
     MapLocal::const_iterator it = d->locals.begin();
     MapLocal::const_iterator end = d->locals.end();
@@ -278,10 +294,13 @@ bool QRemoteUser::registerRemote(const QRef<QObjectRemote> &obj)
     Q_ASSERT(obj);
     QObjectRemotePrivate *d = QObjectRemotePrivate::get(obj.data());
     if(d->isRemote) {
+        // Detaches from any old QRemoteUser, even if it's this same instance, since
+        // our `QRemoteUser::objectName()` may have changed.
         if(d->session) {
             d->session->unregister(obj);
         }
-        //since we already unregistered address will not contain name of old QRemoteUser
+        // Since we already unregistered, the address will not contain the
+        // name of old QRemoteUser.
         const QRemoteLink &address = QRemoteLink::fromObject(obj.data());
         d_func()->remotes[address.userName][address] = obj;
         emit newConnection(obj);
@@ -717,6 +736,12 @@ MethodPacket *QRemoteUser::request(MethodPacket &pkt, long waitTime, int eventMo
         return Q_NULLPTR;
     }
 
+    // Syncs with destructor.
+    QReadLocker receiveLocker(&d->receiveMutex);
+    if (d->wasDeleteSignaled || d->wasDeleted) {
+        return Q_NULLPTR;
+    }
+
     // Intentionally listens for reply before packet is even sent.
     QScopedPointer<ReplyWaiter> rw(
                 new ReplyWaiter(d, &pkt)
@@ -791,9 +816,9 @@ void QRemoteUser::receiveRequestReply(const MethodPacket &packet)
     Q_D(QRemoteUser);
     QMutexLocker locker(&d->waitersMutex);
     const QByteArray &buffer = Packet::save(packet);
-    QRemoteUserPrivate::WaiterHash::iterator it = d->waiters.find(packet.id());
+    QRemote::WaiterHash::iterator it = d->waiters.find(packet.id());
     // TRACE/remote: Caching QHash::end() #x
-    QRemoteUserPrivate::WaiterHash::const_iterator end = d->waiters.constEnd();
+    QRemote::WaiterHash::const_iterator end = d->waiters.constEnd();
     while (it != end && it.key() == packet.id()) {
         ReplyWaiter *w = it.value();
         w->wake(buffer);

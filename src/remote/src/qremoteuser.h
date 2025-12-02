@@ -28,6 +28,7 @@
 #include "qremote-packet.h"
 
 #include <QtCore/QObject>
+#include <QtCore/QSharedPointer>
 
 #include <limits.h>
 
@@ -276,6 +277,29 @@ private:
 private:
     Q_DISABLE_COPY(QRemoteUser)
     Q_DECLARE_PRIVATE(QRemoteUser)
+};
+
+/// Same as `QRef<QRemoteUser>`, but has simpler forward declaration.
+///
+/// WARNING: only `QSharedPointer<QRemoteUser>` is supported by MOC's #Q_REMOTE handler.
+class QT_REMOTE_EXPORT QRemoteUserShared : public QSharedPointer<QRemoteUser> {
+    typedef QSharedPointer<QRemoteUser> super;
+protected:
+    inline explicit QRemoteUserShared(Qt::Initialization i) : super(i) {}
+public:
+    Q_DECL_CONSTEXPR inline QRemoteUserShared()
+    {
+    }
+
+    inline explicit QRemoteUserShared(QRemoteUser *ptr)
+        : super(ptr, QtSharedPointer::ObjectDeleter()) // throws
+    {
+    }
+
+    /// Same as @ref QSharedPointer::fromStack, but with compatible return-type.
+    template <typename PreventCompileUnlessUsed = int>
+    Q_INLINE_TEMPLATE static QRemoteUserShared fromStack(QRemoteUser *ptr)
+        { QRemoteUserShared r(Qt::Uninitialized); r.internalConstructFake(ptr); return qMove(r); }
 };
 
 /// @internal
