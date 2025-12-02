@@ -55,6 +55,7 @@ QT_END_NAMESPACE
 
 #include <new>
 #include <QtCore/qatomic.h>
+#include <QtCore/qatomicflags.h>
 #include <QtCore/qobject.h>    // for qobject_cast
 #if QT_DEPRECATED_SINCE(5, 6)
 #include <QtCore/qhash.h>
@@ -158,6 +159,7 @@ namespace QtSharedPointer {
     struct ExternalRefCountData
     {
         typedef void (*DestroyerFn)(ExternalRefCountData *, bool);
+        typedef QT_PREPEND_NAMESPACE(QtSharedPointer)::Flag Flag;
 
         /// Once this reaches zero, ExternalRefCountData gets deleted.
         QBasicAtomicInt weakref;
@@ -173,7 +175,7 @@ namespace QtSharedPointer {
         ///
         /// Note that `QBasicAtomicInteger<char>` is not cross-platform.
         /// \sa QAtomicOpsSupport<sizeof(char)>::IsSupported
-        QBasicAtomicInt flags;
+        QBasicAtomicFlags<Flag > flags;
         /// Remembers previous counter (if this counter did override another).
         ExternalRefCountData *previous;
         /// What overrides this counter, else null.
@@ -187,7 +189,7 @@ namespace QtSharedPointer {
         {
             strongref.store(1);
             weakref.store(1);
-            flags.store(flagsArg);
+            flags.storeUnsafe(flagsArg);
             next.store(Q_NULLPTR);
         }
 
@@ -197,7 +199,7 @@ namespace QtSharedPointer {
         {
             strongref.store(-1);
             weakref.store(weakRefCount);
-            flags.store(FlagIsQObject);
+            flags.storeUnsafe(FlagIsQObject);
             next.store(Q_NULLPTR);
         }
 
@@ -209,35 +211,10 @@ namespace QtSharedPointer {
 #endif
         }
 
-        Q_ALWAYS_INLINE bool hasFlag(QT_PREPEND_NAMESPACE(QtSharedPointer)::Flag f) const
-        { return (this->flags.load() & int(f)) == int(f); }
-
-        /// Races with other threads for being first to enable Safety-check.
-        /// @returns @c true if won said race.
-        Q_ALWAYS_INLINE bool addFlagOnce(QT_PREPEND_NAMESPACE(QtSharedPointer)::Flag f) {
-            int tmp = this->flags.load();
-            while ((tmp & int(f)) != int(f)) {
-                if (this->flags.testAndSetRelaxed(tmp, (tmp | int(f)), tmp)) {
-                    return true;
-                }
-            }
-            return false;
-        }
-
-        Q_ALWAYS_INLINE bool removeFlagOnce(QT_PREPEND_NAMESPACE(QtSharedPointer)::Flag f) {
-            int tmp = this->flags.load();
-            while ((tmp & int(f)) == int(f)) {
-                if (this->flags.testAndSetRelaxed(tmp, (tmp & ~int(f)), tmp)) {
-                    return true;
-                }
-            }
-            return false;
-        }
-
         /// Whether ExternalRefCountData is checked for wrong-duplication.
-        Q_ALWAYS_INLINE bool isSafetyChecked() const { return this->hasFlag(FlagIsSafetyChecked); }
-        Q_ALWAYS_INLINE bool skipSafetyCheck() { return this->removeFlagOnce(FlagIsSafetyChecked); }
-        Q_ALWAYS_INLINE bool enableSafetyCheckRace() { return this->addFlagOnce(FlagIsSafetyChecked); }
+        Q_ALWAYS_INLINE bool isSafetyChecked() const { return this->flags.includes(FlagIsSafetyChecked); }
+        Q_ALWAYS_INLINE bool skipSafetyCheck() { return this->flags.remove(FlagIsSafetyChecked); }
+        Q_ALWAYS_INLINE bool enableSafetyCheckRace() { return this->flags.append(FlagIsSafetyChecked); }
 
         /// @param isDeletable true if guarded pointer should really be deleted,
         /// false means to only destruct ExternalRefCountData sub-classes.
@@ -290,7 +267,7 @@ namespace QtSharedPointer {
         ///
         /// @warning Usable with QSharedPointer's private-data (but not QWeakPointer's).
         Q_ALWAYS_INLINE bool isFake() const {
-            return this->hasFlag(FlagIsFake) && ! this->next.load();
+            return this->flags.includes(FlagIsFake) && ! this->next.load();
         }
 
         /// Increase the strongref, but never up from zero or less.
@@ -405,11 +382,16 @@ namespace QtSharedPointer {
         // static void safetyCheckDeleter(ExternalRefCountData *self);
         // ```
 
+        /// Constructs and initializes the `extra` sub-object,
+        /// which if needed may contain a copy of `Deleter` object.
         static inline Self *create(T *ptr, Deleter userDeleter, DestroyerFn actualDeleter, int flagsArg)
         {
             Self *d = static_cast<Self *>(::operator new(sizeof(Self)));
 
-            // initialize the two sub-objects
+            // NOTICE: If you get "cannot convert ... to QObject *" error around here,
+            // then either ensure you construct QRef without any arguments, or,
+            // ensure forward-declaration of the type passed as first template-arg to
+            // QRef is resolved before calling QRef's constructor.
             new (&d->extra) CustomDeleter<T, Deleter>(ptr, userDeleter);
             new (d) BaseClass(actualDeleter, flagsArg); // can't throw
 

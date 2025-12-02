@@ -200,6 +200,7 @@ public:
     void setThreadData_helper(QThreadData *currentData, QThreadData *targetData);
     bool QT_FASTCALL isThreadOwned() const;
     void QT_FASTCALL assertThreadOwned(const char *tag = 0);
+    bool QT_FASTCALL assertStrongRef(const char *clazz);
     void _q_reregisterTimers(void *pointer);
 
     bool isSender(const QObject *receiver, const char *signal) const;

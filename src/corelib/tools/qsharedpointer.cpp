@@ -1364,7 +1364,7 @@ bool QtSharedPointer::ExternalRefCountData::derefStrong(
     //     myStrongRef.clear();
     // };
     // ```
-    Q_ASSERT_X(count > 0 || counter->hasFlag(FlagIsMalformed), QtSharedPointer::TAG,
+    Q_ASSERT_X(count > 0 || counter->flags.includes(FlagIsMalformed), QtSharedPointer::TAG,
                "Was dereferenced more than there were smart-pointer instances.");
 
     if ( ! counter->weakref.deref()) {
@@ -1389,7 +1389,7 @@ void QtSharedPointer::ExternalRefCountData::copyStrong(
         otherValue = Q_NULLPTR;
     } else if ( ! other->tryIncrementStrong()) {
 #ifndef QT_NO_QOBJECT
-        if (other->hasFlag(FlagIsQObject)
+        if (other->flags.includes(FlagIsQObject)
             && (flags & int(Qt::LogWarning)) == int(Qt::LogWarning)
         ) {
             other->checkQObjectShared(Q_PTR_CAST(const QObject *, otherValue));
@@ -1471,6 +1471,7 @@ posLoadExisting:
                    " The program is malformed; here Qt prefers crashing before worse happens.", obj);
         }
 
+        // Replaces input with existing counter if possible.
         if (destroyer == &ExternalRefCountData::fakeDestroyer
             // Or if both destroyers are trival.
             || ((destroyer == &ExternalRefCountWithCustomDeleter<QObject, NormalDeleter>::deleter
@@ -1479,7 +1480,6 @@ posLoadExisting:
                     || existing_destroyer == &ExternalRefCountWithCustomDeleter<QObject, ObjectDeleter>::deleter)
             )
         ) {
-            // Replaces input with existing counter if possible.
             if (existing_destroyer == &ExternalRefCountData::fakeDestroyer) {
                 existing_counter->strongref.ref();
                 // Ensures strong-ref keeps weak-ref(s) alive.

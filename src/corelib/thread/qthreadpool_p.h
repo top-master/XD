@@ -46,6 +46,7 @@
 //
 //
 
+#include "./qthreadpool.h"
 #include "QtCore/qmutex.h"
 #include "QtCore/qwaitcondition.h"
 #include "QtCore/qset.h"
@@ -60,10 +61,17 @@ class QThreadPoolThread;
 class Q_CORE_EXPORT QThreadPoolPrivate : public QObjectPrivate
 {
     Q_DECLARE_PUBLIC(QThreadPool)
+    Q_DISABLE_COPY(QThreadPoolPrivate)
     friend class QThreadPoolThread;
 
 public:
     QThreadPoolPrivate();
+
+
+    static inline const QThreadPoolPrivate *get(const QThreadPool *o) { return o->d_func(); }
+
+    static inline QThreadPoolPrivate *get(QThreadPool *o) { return o->d_func(); }
+
 
     bool tryStart(QRunnable *task);
     void enqueueTask(QRunnable *task, int priority = 0);

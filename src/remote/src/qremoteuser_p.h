@@ -77,6 +77,7 @@ public:
 typedef QMap<QRemoteAddress, QRef<QObject> > MapLocal;
 typedef QMap<QRemoteAddress, QRef<QObjectRemote> > MapRemote;
 typedef QMap<QRemoteUserName, MapRemote > MapRemoteUser;
+typedef QMultiHash<QByteArray, QT_PREPEND_NAMESPACE(QRemote)::ReplyWaiter *> WaiterHash;
 
 class QRemoteUserCounter
 {
@@ -85,14 +86,41 @@ public:
     QList<QRemoteUser *> instanceList;
     QRemoteUser *m_instance;
     QSharedPointer<PacketCodec> m_codec;
+    enum Flag {
+        FlagIsDeleted = 10,
+        FlagIsInstanceOwner = 160
+    };
+    QAtomicFlags<Flag > flags;
 
     inline QRemoteUserCounter()
-        : m_instance(0)
-    {}
+        : instanceMutex(QReadWriteLock::Recursive)
+    {
+    }
 
-    inline QRemoteUser *instance() const {
+    inline ~QRemoteUserCounter()
+    {
+        QReadLocker locker(&instanceMutex);
+        flags.append(FlagIsDeleted);
+        if (flags.includes(FlagIsInstanceOwner)) {
+            QRemoteUser *user = m_instance;
+            m_instance = Q_NULLPTR;
+            locker.unlock();
+            delete user;
+        }
+    }
+
+    inline QRemoteUser *instance() {
+        QReadLocker readLocker(&instanceMutex);
+        if (flags.includes(QRemoteUserCounter::FlagIsDeleted)) {
+            return Q_NULLPTR;
+        }
         if( ! m_instance) {
-            new QRemoteUser;
+            readLocker.unlock();
+            QWriteLocker locker(&instanceMutex);
+            if ( ! m_instance) {
+                new QRemoteUser();
+                flags.append(FlagIsInstanceOwner);
+            }
         }
         return m_instance;
     }
@@ -101,19 +129,24 @@ public:
 
     inline void remove(QRemoteUser *v) {
         QWriteLocker locker(&instanceMutex);
+        if (flags.includes(FlagIsDeleted)) {
+            return;
+        }
         instanceList.removeOne(v);
-        if (v == m_instance)
+        if (v == m_instance) {
             m_instance = Q_NULLPTR;
+        }
     }
 
     inline QRemoteUser *findInstance(const QRemoteUserName &user) {
         QReadLocker locker(&instanceMutex);
         for (int i = 0; i < instanceList.count(); ++i) {
             QRemoteUser *sm = instanceList.at(i);
-            if(sm->objectName() == user)
+            if (sm->objectName() == user) {
                 return sm;
+            }
         }
-        return 0;
+        return Q_NULLPTR;
     }
 
     QSharedPointer<PacketCodec> &defaultCodec() {
@@ -188,7 +221,7 @@ public:
 
     QMutex waitersMutex;
     QMultiHash<QByteArray, QRemote::ReplyWaiter *> waiters;
-    typedef QMultiHash<QByteArray, QRemote::ReplyWaiter *> WaiterHash;
+    QReadWriteLock receiveMutex;
 
     struct PerThreadStorage {
         inline PerThreadStorage()
@@ -206,8 +239,12 @@ namespace QRemote {
 
 inline void QRemoteUserCounter::append(QRemoteUser *v, bool storeFirst) {
     QWriteLocker locker(&instanceMutex);
-    if(storeFirst && m_instance == Q_NULLPTR)
+    if (flags.includes(QRemoteUserCounter::FlagIsDeleted)) {
+        return;
+    }
+    if (storeFirst && m_instance == Q_NULLPTR) {
         m_instance = v;
+    }
     instanceList.append(v);
 
     if (m_codec.data() == Q_NULLPTR) {

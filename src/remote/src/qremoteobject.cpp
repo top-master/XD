@@ -23,6 +23,7 @@
 ****************************************************************************/
 
 #include "qremoteuser_p.h"
+#include "./qremote-logging.h"
 
 #include <extras/customtypes.h>
 
@@ -33,6 +34,7 @@
 #include <QtCore/QMetaMethod>
 #include <QtCore/QDebug>
 #include <QCoreApplication>
+#include <QtCore/QAtomicFlags>
 
 
 QT_BEGIN_NAMESPACE
@@ -96,8 +98,13 @@ QRef<QObjectRemote> QMetaRemote::registerLocal(QRef<QObject> local, QRemoteUser 
     Q_UNUSED(&isMacroMissing)
 #endif
 
-    if ( ! owner)
+    if ( ! owner) {
         owner = QRemoteUser::instance();
+        if ( ! owner) {
+            QRemote::warnGlobalInstance("QMetaRemote.registerLocal");
+            return QRef<QObjectRemote>();
+        }
+    }
     owner->registerLocal(local);
     return local.staticCast<QObjectRemote>();
 }

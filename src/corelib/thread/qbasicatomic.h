@@ -111,7 +111,7 @@ public:
     // static check that this is a valid integer
     Q_STATIC_ASSERT_X(QTypeInfo<T>::isIntegral, "template parameter is not an integral type");
     Q_STATIC_ASSERT_X(QAtomicOpsSupport<sizeof(T)>::IsSupported, "template parameter is an integral of a size not supported on this platform");
-
+    /// @warning Internal, only public to allow #Q_BASIC_ATOMIC_INITIALIZER usage.
     typename Ops::Type _q_value;
 
     // Everything below is either implemented in ../arch/qatomic_XXX.h or (as fallback) in qgenericatomic.h
