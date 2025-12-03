@@ -1,4 +1,9 @@
+
+# Build generated.
 tst_qdir
+
+# Test-run generated things.
+testCaching/
 
 # Windows.
 entrylist/brokenlink.lnk

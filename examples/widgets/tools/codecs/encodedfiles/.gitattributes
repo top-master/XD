@@ -1,0 +1,5 @@
+
+# Never modify line endings of this folder
+# (while ensuring is tracked line by line instead of "binary").
+#
+*.txt           text eol=lf
