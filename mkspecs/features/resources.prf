@@ -3,6 +3,7 @@ qtPrepareTool(QMAKE_RCC, rcc, _DEP)
 # Ensoures `RCC_DIR` is already affixed (if needed).
 load(exclusive_builds_post)
 isEmpty(RCC_DIR):RCC_DIR = .
+RCC_DIR = $$absolute_path($$RCC_DIR, $$OUT_PWD)
 isEmpty(QMAKE_MOD_RCC):QMAKE_MOD_RCC = qrc
 
 !contains(QMAKE_RESOURCE_FLAGS, -root):!isEmpty(QMAKE_RESOURCE_ROOT):QMAKE_RESOURCE_FLAGS += -root $$QMAKE_RESOURCE_ROOT

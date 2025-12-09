@@ -1,4 +1,4 @@
-QT_FOR_PRIVATE += dbus
+QT_FOR_PRIVATE *= dbus
 
 INCLUDEPATH += $$PWD $$PWD/../../gui/kernel
 

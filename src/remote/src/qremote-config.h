@@ -37,11 +37,11 @@
 
 #ifdef QT_REMOTE_BUILDING
 // we are building shared library
-#  define QT_REMOTE_EXPORT Q_DECL_EXPORT
+#  define QT_REMOTE_EXPORT Q_DECL_EXPORT_M
 #  define QT_REMOTE_EXTERN
 #else
 // we are using shared library
-#  define QT_REMOTE_EXPORT Q_DECL_IMPORT
+#  define QT_REMOTE_EXPORT Q_DECL_IMPORT_M
 #  define QT_REMOTE_EXTERN extern
 #endif
 
@@ -65,6 +65,8 @@
 #  define QREMOTE_ALIGNED_ALLOC 0
 #endif
 
+/// @macro QREMOTE_SLOT_BLOCK_EVENTS
+///
 /// @deprecated Use %QRemoteUser::setRequestEventMode instead, or,
 /// use %QRemoteEventModer instead.
 #ifndef QREMOTE_SLOT_BLOCK_EVENTS

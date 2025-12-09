@@ -47,8 +47,8 @@ class Q_WIDGETS_EXPORT QProxyStyle : public QCommonStyle
     Q_OBJECT
 
 public:
-    QProxyStyle(QStyle *style = Q_NULLPTR);
-    QProxyStyle(const QString &key);
+    explicit QProxyStyle(QStyle *style = Q_NULLPTR);
+    explicit QProxyStyle(const QString &key);
     ~QProxyStyle();
 
     QStyle *baseStyle() const;
@@ -88,6 +88,8 @@ public:
 
 protected:
     bool event(QEvent *e) Q_DECL_OVERRIDE;
+
+    explicit QProxyStyle(QProxyStylePrivate &p, QStyle *style = Q_NULLPTR);
 
 private:
     Q_DISABLE_COPY(QProxyStyle)

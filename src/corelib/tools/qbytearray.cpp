@@ -2647,6 +2647,9 @@ bool QByteArray::startsWith(const QByteArray &ba) const
         return true;
     if (d->size < ba.d->size)
         return false;
+    // TRACE/strings improve: use `memcmp` if length is already checked or known #1,
+    // since `strncmp` may not work in static-init context, like in MSVC's case,
+    // the CRT-init may finish later, after `_initterm` sets static-variables.
     return memcmp(d->data(), ba.d->data(), ba.d->size) == 0;
 }
 
@@ -2662,7 +2665,8 @@ bool QByteArray::startsWith(const char *str) const
     const int len = int(strlen(str));
     if (d->size < len)
         return false;
-    return qstrncmp(d->data(), str, len) == 0;
+    // TRACE/strings improve: use `memcmp` if length is already checked or known #2.
+    return memcmp(d->data(), str, len) == 0;
 }
 
 /*! \overload
@@ -2692,6 +2696,7 @@ bool QByteArray::endsWith(const QByteArray &ba) const
         return true;
     if (d->size < ba.d->size)
         return false;
+    // TRACE/strings improve: use `memcmp` if length is already checked or known #3.
     return memcmp(d->data() + d->size - ba.d->size, ba.d->data(), ba.d->size) == 0;
 }
 
@@ -2707,7 +2712,8 @@ bool QByteArray::endsWith(const char *str) const
     const int len = int(strlen(str));
     if (d->size < len)
         return false;
-    return qstrncmp(d->data() + d->size - len, str, len) == 0;
+    // TRACE/strings improve: use `memcmp` if length is already checked or known #4.
+    return memcmp(d->data() + d->size - len, str, len) == 0;
 }
 
 /*! \overload

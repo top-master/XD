@@ -50,7 +50,7 @@
 #if !defined(QT_NO_STYLE_WINDOWSVISTA)
 #include <private/qwindowsxpstyle_p_p.h>
 #include <private/qstyleanimation_p.h>
-#include <private/qpaintengine_raster_p.h>
+#include <QtGui/private/qpaintengine_raster_p.h>
 #include <qlibrary.h>
 #include <qpaintengine.h>
 #include <qwidget.h>

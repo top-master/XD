@@ -174,8 +174,11 @@ bool QProcessPrivate::openChannel(Channel &channel)
                 if (processChannelMode != QProcess::ForwardedChannels
                         && processChannelMode != QProcess::ForwardedOutputChannel) {
                     if (!stdoutChannel.reader) {
-                        stdoutChannel.reader = new QWindowsPipeReader(q);
-                        q->connect(stdoutChannel.reader, SIGNAL(readyRead()), SLOT(_q_canReadStandardOutput()));
+                        QWindowsPipeReader *reader = new QWindowsPipeReader();
+                        reader->moveToThread(q->thread());
+                        reader->setParent(q);
+                        stdoutChannel.reader = reader;
+                        q->connect(reader, SIGNAL(readyRead()), SLOT(_q_canReadStandardOutput()));
                     }
                 } else {
                     duplicateStdWriteChannel(channel.pipe, STD_OUTPUT_HANDLE);
@@ -184,8 +187,11 @@ bool QProcessPrivate::openChannel(Channel &channel)
                 if (processChannelMode != QProcess::ForwardedChannels
                         && processChannelMode != QProcess::ForwardedErrorChannel) {
                     if (!stderrChannel.reader) {
-                        stderrChannel.reader = new QWindowsPipeReader(q);
-                        q->connect(stderrChannel.reader, SIGNAL(readyRead()), SLOT(_q_canReadStandardError()));
+                        QWindowsPipeReader *reader = new QWindowsPipeReader();
+                        reader->moveToThread(q->thread());
+                        reader->setParent(q);
+                        stderrChannel.reader = reader;
+                        q->connect(reader, SIGNAL(readyRead()), SLOT(_q_canReadStandardError()));
                     }
                 } else {
                     duplicateStdWriteChannel(channel.pipe, STD_ERROR_HANDLE);
@@ -536,9 +542,10 @@ void QProcessPrivate::startProcess()
         return;
 
     if (threadData->hasEventDispatcher()) {
-        processFinishedNotifier = new QWinEventNotifier(pid->hProcess, q);
-        QObject::connect(processFinishedNotifier, SIGNAL(activated(HANDLE)), q, SLOT(_q_processDied()));
-        processFinishedNotifier->setEnabled(true);
+        QWinEventNotifier *notifier = new QWinEventNotifier(pid->hProcess, q);
+        processFinishedNotifier = notifier;
+        QObject::connect(notifier, SIGNAL(activated(HANDLE)), q, SLOT(_q_processDied()));
+        notifier->setEnabled(true);
     }
 
     _q_startupNotification();

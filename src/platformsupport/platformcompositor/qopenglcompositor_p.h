@@ -46,7 +46,7 @@
 //
 
 #include <QtCore/QTimer>
-#include <QtGui/private/qopengltextureblitter_p.h>
+#include <private/qopengltextureblitter_p.h>
 
 QT_BEGIN_NAMESPACE
 

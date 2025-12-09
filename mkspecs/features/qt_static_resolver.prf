@@ -1,0 +1,37 @@
+#
+# WARNING: don't use `qt_static` before calling `load(qt_static_resolver)`, and
+# that at least once per file's beginning, or, once per function.
+#
+# TRACE/mkspecs: added `qt_static` build-mode support #1,
+# which needs adding macros here, see also:
+shortcut {
+    $$PWD/qt.prf
+    $$PWD/qt_module.prf
+    $$PWD/qt_functions.prf
+    $$PWD/win32/windows.prf
+}
+
+force_bootstrap {
+    CONFIG -= qt_static
+    export(CONFIG)
+}
+qt_static {
+    DEFINES += QT_STATIC
+    # Note: forces static with export use
+    # (i.e. an .exe can be used like a plugin).
+    qt_force_export: DEFINES *= QT_FORCE_EXPORT
+    export(DEFINES)
+
+    MODULE_SUFFIX = _static
+    MODULE_DIR = static/
+} else {
+    # Shared-mode is the default, else would do:
+    # ```
+    # DEFINES += QT_SHARED
+    # ```
+    MODULE_SUFFIX =
+    MODULE_DIR =
+}
+
+export(MODULE_SUFFIX)
+export(MODULE_DIR)

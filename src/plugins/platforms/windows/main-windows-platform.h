@@ -3,7 +3,7 @@
 ** Copyright (C) 2015 The Qt Company Ltd.
 ** Contact: http://www.qt.io/licensing/
 **
-** This file is part of the QtWidgets module of the Qt Toolkit.
+** This file is part of the plugins of the Qt Toolkit.
 **
 ** $QT_BEGIN_LICENSE:LGPL21$
 ** Commercial License Usage
@@ -31,41 +31,21 @@
 **
 ****************************************************************************/
 
-#ifndef QPROXYSTYLE_P_H
-#define QPROXYSTYLE_P_H
+#ifndef MAIN_WINDOWS_PLATFORM_H
+#define MAIN_WINDOWS_PLATFORM_H
 
-//
-//  W A R N I N G
-//  -------------
-//
-// This file is not part of the Qt API.  It exists for the convenience
-// of qapplication_*.cpp, qwidget*.cpp and qfiledialog.cpp.  This header
-// file may change from version to version without notice, or even be removed.
-//
-// We mean it.
-//
-
-#include "qcommonstyle.h"
-#include "qcommonstyle_p.h"
-#include "qproxystyle.h"
-
-#ifndef QT_NO_STYLE_PROXY
+#include <qpa/qplatformintegrationplugin.h>
 
 QT_BEGIN_NAMESPACE
 
-class QProxyStylePrivate : public QCommonStylePrivate
+class QWindowsIntegrationPlugin : public QPlatformIntegrationPlugin
 {
-    Q_DECLARE_PUBLIC(QProxyStyle)
+    Q_OBJECT
+    Q_PLUGIN_METADATA(IID QPlatformIntegrationFactoryInterface_iid FILE "windows.json")
 public:
-    void ensureBaseStyle() const;
-    inline QProxyStylePrivate() :
-        QCommonStylePrivate(), baseStyle(0) {}
-private:
-    mutable QPointer <QStyle> baseStyle;
+    QPlatformIntegration *create(const QString&, const QStringList&, int &, char **);
 };
 
 QT_END_NAMESPACE
 
-#endif // QT_NO_STYLE_PROXY
-
-#endif //QPROXYSTYLE_P_H
+#endif // MAIN_WINDOWS_PLATFORM_H

@@ -606,6 +606,11 @@ void QIdentityProxyModelPrivate::_q_sourceRowsRemoved(const QModelIndex &parent,
     q->endRemoveRows();
 }
 
+QProxyModel::~QProxyModel()
+{
+    // Nothing to do (but required).
+}
+
 QT_END_NAMESPACE
 
 #include "moc_qidentityproxymodel.cpp"

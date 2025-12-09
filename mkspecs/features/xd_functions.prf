@@ -252,3 +252,7 @@ defineReplace(xd_destdir) {
     # Make absolute-path.
     return( $$shadowed( $$DESTDIR ) )
 }
+
+defineReplace(makefile_relative) {
+    return($$relative_path($$absolute_path($$1, $$OUT_PWD), $$props(OUT_PWD)))
+}

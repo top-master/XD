@@ -111,7 +111,7 @@ QFactoryLoader::QFactoryLoader(const char *iid,
 
 void QFactoryLoader::update()
 {
-#ifdef QT_SHARED
+#if defined(QT_SHARED) || defined(QT_FORCE_EXPORT)
     Q_D(QFactoryLoader);
     QStringList paths = QCoreApplication::libraryPaths();
     for (int i = 0; i < paths.count(); ++i) {
@@ -130,11 +130,13 @@ void QFactoryLoader::update()
     posRetry:
         QDir dir(path);
         if ( ! dir.exists()) {
+            // Supports the folder already being suffixed.
             if (isFirstTry && d->suffix.length() >= 2
                 && pluginDir.length() > d->suffix.length()
+                // We support both backward-slash and slash, else would call `endsWith` directly.
                 && d->suffix.at(0).isDirSeparator()
                 && pluginDir.at(pluginDir.length() - d->suffix.length()).isDirSeparator()
-                && pluginDir.endsWith(d->suffix.midRef(1), Q_FS_CASE)
+                && pluginDir.endsWith(d->suffix.midRef(1), d->cs)
             ) {
                 // Probably `QApplication::addLibraryPath(...)` was called with a
                 // wrong path, not knowing that some plugins get loaded only if

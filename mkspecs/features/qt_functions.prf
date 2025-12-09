@@ -2,6 +2,7 @@
 # See `qt_functions.dox` file.
 #
 
+# Args: [forBuildType: can be debug or release, and auto-detects if unset]
 defineReplace(qtPlatformTargetSuffix) {
     ios:CONFIG(iphonesimulator, iphonesimulator|iphoneos): \
         suffix = _iphonesimulator
@@ -9,15 +10,27 @@ defineReplace(qtPlatformTargetSuffix) {
         suffix =
 
     # Suffix with "d" for debug mode builds (or "_debug" for Mac).
-    CONFIG(debug, debug|release) {
+    equals(1, debug) | if(isEmpty(1) : CONFIG(debug, debug|release)) {
         !debug_and_release|build_pass {
             mac: suffix = $${suffix}_debug
-            win32: suffix = $${suffix}d
+            else:win32: suffix = $${suffix}d
         }
     }
 
-    # Suffixes with "E" if 64 bit build (which supports up to 16 Exabyte RAM).
-    is64bit: suffix = $${suffix}E
+    load(qt_static_resolver)
+
+    # Suffixes with "E" if 64 bit build (which supports up to 16 Exabyte RAM),
+    # however, static x64 releases get suffixed by "_x64" instead of "E".
+    is64bit {
+        qt_static: suffix = $${suffix}_x64
+        else: suffix = $${suffix}E
+    }
+    # TRACE/mkspecs: added `qt_static` build-mode support #3,
+    # which needs name suffix.
+    qt_static {
+        !qt_force_export: suffix = $${suffix}_static
+        else:             suffix = $${suffix}_static_export
+    }
 
     return($$suffix)
 }
@@ -69,10 +82,37 @@ defineTest(qtAddLibrary) {
 }
 
 # qt module
+
+# Converts given "`QT` variable compatible" keyword to the actual Module-ID that's
+# used in "mkspecs/modules/qt_*.pri" files.
+#
+# Args: Module-keyword-list
+#
+# For example, converts `core-private` to `core_private_static` if
+# the `qt_static` is stays in `CONFIG` even after calling `qt_static_resolver`.
+defineReplace(qtModuleIdFromKey) {
+    load(qt_static_resolver)
+    1 ~= s|-|_|g
+    !isEmpty(MODULE_SUFFIX): 1 ~= s|$|$$re_escape($$MODULE_SUFFIX)|g
+    return($$1)
+}
+
 defineTest(qtHaveModule) {
-    !isEmpty(QT.$$replace(1, -, _).name): \
-        return(true)
-    return(false)
+    isEmpty(QT.$$qtModuleIdFromKey($$1).name): \
+        return(false)
+    # The module could be a tool, else we could check for a library like:
+    # ```
+    # !exists("$$[QT_INSTALL_ARCHDATA]/mkspecs/modules/$${MODULE_DIR}qt_lib_$$qtModuleIdFromKey($$1).pri"): \
+    #     return(false)
+    # ```
+    return(true)
+}
+
+defineTest(qtHaveModuleList) {
+    for(name, 1) {
+        !qtHaveModule($$name): return(false)
+    }
+    return(true)
 }
 
 # variable, default, [suffix for variable for system() use], [prepare primary variable for system() use]
@@ -175,11 +215,12 @@ defineTest(qtAddToolEnv) {
             mkpath($$OUT_PWD)
             !write_file($$OUT_PWD/$$batch_name, batch_cont, exe): error("Aborting.")
         }
+        batch_path = $$makefile_relative($$batch_name)
         isEmpty(3): \
-            $$1 += $$shell_quote($$shell_path($$OUT_PWD/$$batch_name))
+            $$1 += $$shell_quote($$shell_path($$batch_path))
         else: \
             $$1 += $$system_quote($$system_path($$OUT_PWD/$$batch_name))
-        QMAKE_DISTCLEAN += $$OUT_PWD/$$batch_name
+        QMAKE_DISTCLEAN += $$batch_path
     }
     export($$1)
     export(QMAKE_DISTCLEAN)

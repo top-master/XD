@@ -1,5 +1,6 @@
 /****************************************************************************
 **
+** Copyright (C) 2015 The XD Company Ltd.
 ** Copyright (C) 2015 The Qt Company Ltd.
 ** Contact: http://www.qt.io/licensing/
 **
@@ -40,11 +41,17 @@
 #include "qguiapplication.h"
 #include "qdebug.h"
 
+#ifdef QT_STATIC
+#  include "../../plugins/platforms/static/static-platform.h"
+#endif
+
 QT_BEGIN_NAMESPACE
+
+QStringLiteralGlobal(QPlatformIntegrationFactory::pathSuffix, "/platforms")
 
 #ifndef QT_NO_LIBRARY
 Q_GLOBAL_STATIC_WITH_ARGS(QFactoryLoader, loader,
-    (QPlatformIntegrationFactoryInterface_iid, QLatin1String("/platforms"), Qt::CaseInsensitive))
+    (QPlatformIntegrationFactoryInterface_iid, QPlatformIntegrationFactory::pathSuffix, Qt::CaseInsensitive))
 Q_GLOBAL_STATIC_WITH_ARGS(QFactoryLoader, directLoader,
                           (QPlatformIntegrationFactoryInterface_iid, QLatin1String(""), Qt::CaseInsensitive))
 
@@ -63,15 +70,27 @@ static inline QPlatformIntegration *loadIntegration(QFactoryLoader *loader, cons
 
 QPlatformIntegration *QPlatformIntegrationFactory::create(const QString &platform, const QStringList &paramList, int &argc, char **argv, const QString &platformPluginPath)
 {
+    QPlatformIntegration *found = Q_NULLPTR;
+
 #ifndef QT_NO_LIBRARY
-    // Try loading the plugin from platformPluginPath first:
+    // TRACE/gui/platform-plugin: added `qt_static` mode support,
+    // and rewritten with Apache 2.0 license.
+#  ifdef QT_STATIC
+    found = QtPrivate::findStaticIntegeration(platform, paramList, argc, argv);
+    if (found) {
+        return found;
+    }
+#  endif
+
+    // First tries to load the plugin from the path set by CLI option or env-var.
     if (!platformPluginPath.isEmpty()) {
         QCoreApplication::addLibraryPath(platformPluginPath);
-        if (QPlatformIntegration *ret = loadIntegration(directLoader(), platform, paramList, argc, argv))
-            return ret;
+        found = loadIntegration(directLoader(), platform, paramList, argc, argv);
+        if (found)
+            return found;
     }
-    if (QPlatformIntegration *ret = loadIntegration(loader(), platform, paramList, argc, argv))
-        return ret;
+    // Then loads normally.
+    found = loadIntegration(loader(), platform, paramList, argc, argv);
 #else
     Q_UNUSED(platform);
     Q_UNUSED(paramList);
@@ -79,7 +98,8 @@ QPlatformIntegration *QPlatformIntegrationFactory::create(const QString &platfor
     Q_UNUSED(argv);
     Q_UNUSED(platformPluginPath);
 #endif
-    return 0;
+
+    return found;
 }
 
 /*!

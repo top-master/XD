@@ -66,6 +66,8 @@ void *qRealloc(void *ptr, size_t size)
     return ::realloc(ptr, size);
 }
 
+/// @param size Number of bytes, and NOT count of items.
+///
 /// @param alignment Momory-alignment based on Type for which memory will be used, but
 /// should NOT be less than size of raw-pointer, for example,
 /// if memory gets used to store an array of `MyClass` (or just `MyClass`), then

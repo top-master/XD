@@ -1,3 +1,6 @@
+equals(skip_qt_3rdpary_zlib_deps, true): return()
+skip_qt_3rdpary_zlib_deps = true
+
 # zlib dependency satisfied by bundled 3rd party zlib or system zlib
 contains(QT_CONFIG, system-zlib) {
     if(unix|mingw):LIBS_PRIVATE += -lz

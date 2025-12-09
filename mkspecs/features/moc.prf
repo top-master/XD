@@ -4,6 +4,8 @@ load(exclusive_builds_target) # For `DIR_AFFIX`.
 #global defaults
 qtPrepareTool(QMAKE_MOC, moc)
 isEmpty(MOC_DIR):MOC_DIR = .
+MOC_DIR = $$absolute_path($$MOC_DIR, $$OUT_PWD)
+
 isEmpty(QMAKE_H_MOD_MOC):QMAKE_H_MOD_MOC = moc_
 isEmpty(QMAKE_EXT_CPP_MOC):QMAKE_EXT_CPP_MOC = .moc
 
@@ -26,13 +28,13 @@ isEmpty(BUILDS)|build_pass: win32:count(MOC_INCLUDEPATH, 10, >) {
     WIN_INCLUDETEMP_CONT =
     for (inc, MOC_INCLUDEPATH): \
         WIN_INCLUDETEMP_CONT += -I$$inc
-    write_file($$absolute_path($$WIN_INCLUDETEMP, $$OUT_PWD), WIN_INCLUDETEMP_CONT)|error("Aborting.")
+    write_file($$WIN_INCLUDETEMP, WIN_INCLUDETEMP_CONT)|error("Aborting.")
 }
 
 defineReplace(mocCmdBase) {
     RET =
     !isEmpty(WIN_INCLUDETEMP) {
-        incvar = @$$WIN_INCLUDETEMP
+        incvar = @$$makefile_relative($$WIN_INCLUDETEMP)
     } else {
         incvar =
         for (inc, MOC_INCLUDEPATH): \

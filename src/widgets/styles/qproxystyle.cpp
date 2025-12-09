@@ -117,6 +117,17 @@ QProxyStyle::QProxyStyle(QStyle *style) :
     }
 }
 
+QProxyStyle::QProxyStyle(QProxyStylePrivate &p, QStyle *style) :
+    QCommonStyle(p)
+{
+    Q_D(QProxyStyle);
+    if (style) {
+        d->baseStyle = style;
+        style->setProxy(this);
+        style->setParent(this); // Take ownership
+    }
+}
+
 /*!
     Constructs a QProxyStyle object for overriding behavior in
     the base style specified by style \a key, or in the current

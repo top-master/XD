@@ -82,13 +82,13 @@ QT_USE_NAMESPACE
 
 #if defined(QT_NEEDS_QMAIN)
 int qMain(int, char **);
-#define main qMain
+#  define main qMain
 #else
-#ifdef Q_OS_WINCE
+#  ifdef Q_OS_WINCE
 extern "C" int __cdecl main(int, char **);
-#else
+#  else
 extern "C" int main(int, char **);
-#endif
+#  endif
 #endif
 
 /*

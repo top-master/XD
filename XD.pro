@@ -188,3 +188,9 @@ OTHER_FILES += \
     header.LGPL \
     header.LGPL-ONLY \
     sync.profile
+
+# Final checks.
+
+if (qt_static) {
+    error("Invalid global-settings file, if it\'s not needed, delete the file at: $$OUT_PWD/.qmake.cache")
+}

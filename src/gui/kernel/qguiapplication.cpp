@@ -195,6 +195,10 @@ bool QGuiApplicationPrivate::scrollNoPhaseAllowed = false;
 
 static qreal fontSmoothingGamma = 1.7;
 
+QStringLiteralStatic(REASON_ENV, "was set by the QT_QPA_PLATFORM_PLUGIN_PATH environment-variable")
+QStringLiteralStatic(REASON_CLI, "was set by the -platformpluginpath CLI option")
+QStringLiteralStatic(REASON_DEFAULT, "is/are the folders we tried loading from")
+
 extern void qRegisterGuiVariant();
 #ifndef QT_NO_ANIMATION
 extern void qRegisterGuiGetInterpolator();
@@ -1057,7 +1061,11 @@ QString QGuiApplication::platformName()
            *QGuiApplicationPrivate::platform_name : QString();
 }
 
-static void init_platform(const QString &pluginArgument, const QString &platformPluginPath, const QString &platformThemeName, int &argc, char **argv)
+static void init_platform(
+        const QString &pluginArgument,
+        const QString &platformPluginPath, QString &platformPluginReason,
+        const QString &platformThemeName,
+        int &argc, char **argv)
 {
     // Split into platform name and arguments
     QStringList arguments = pluginArgument.split(QLatin1Char(':'));
@@ -1072,9 +1080,22 @@ static void init_platform(const QString &pluginArgument, const QString &platform
         QGuiApplicationPrivate::platform_name = new QString(name);
     } else {
         QStringList keys = QPlatformIntegrationFactory::keys(platformPluginPath);
-
+        // TRACE/gui/platform-plugin: mention all tried paths on failure.
+        QString path;
+        if (platformPluginReason.isEmpty()) {
+            platformPluginReason = REASON_DEFAULT;
+            QStringList list = QCoreApplication::libraryPaths();
+            QLL sep("\", \n\"");
+            path = list.join(QPlatformIntegrationFactory::pathSuffix + sep);
+            path += QPlatformIntegrationFactory::pathSuffix;
+            // Repeat to mention `directLoader` paths.
+            path += list.join(sep);
+        } else {
+            path = platformPluginPath;
+        }
         QString fatalMessage
-                = QStringLiteral("This application failed to start because it could not find or load the Qt platform plugin \"%1\"\nin \"%2\".\n\n").arg(name, QDir::toNativeSeparators(platformPluginPath));
+                = QStringLiteral("This application failed to start because it could not find or load the Qt platform plugin \"%1\"\nin \"%2\"\n(which %3).\n\n")
+                    .arg(name, QDir::toNativeSeparators(path), platformPluginReason);
         if (!keys.isEmpty()) {
             fatalMessage += QStringLiteral("Available platform plugins are: %1.\n\n").arg(
                         keys.join(QStringLiteral(", ")));
@@ -1178,6 +1199,10 @@ void QGuiApplicationPrivate::createPlatformIntegration()
 
     // Load the platform integration
     QString platformPluginPath = QString::fromLocal8Bit(qgetenv("QT_QPA_PLATFORM_PLUGIN_PATH"));
+    QString platformPluginReason;
+    if ( ! platformPluginPath.isEmpty()) {
+        platformPluginReason = REASON_ENV;
+    }
 
     // TRACE/gui/platform-plugin note: search-paths already include `QLibraryInfo::location(QLibraryInfo::PluginsPath)`,
     // because by default that's first entry in `QCoreApplication::libraryPaths()`
@@ -1186,6 +1211,7 @@ void QGuiApplicationPrivate::createPlatformIntegration()
     if (platformPluginPath.isEmpty() || ! QDir(platformPluginPath).exists()) {
         platformPluginPath = QLibraryInfo::location(QLibraryInfo::PluginsPath);
         platformPluginPath += QLatin1String("/platforms");
+        platformPluginReason = REASON_DEFAULT;
     }
 #endif
 
@@ -1218,8 +1244,10 @@ void QGuiApplicationPrivate::createPlatformIntegration()
         if (arg[1] == '-') // startsWith("--")
             ++arg;
         if (strcmp(arg, "-platformpluginpath") == 0) {
-            if (++i < argc)
+            if (++i < argc) {
                 platformPluginPath = QString::fromLocal8Bit(argv[i]);
+                platformPluginReason = REASON_CLI;
+            }
         } else if (strcmp(arg, "-platform") == 0) {
             if (++i < argc)
                 platformName = argv[i];
@@ -1246,7 +1274,7 @@ void QGuiApplicationPrivate::createPlatformIntegration()
         argc = j;
     }
 
-    init_platform(QLatin1String(platformName), platformPluginPath, platformThemeName, argc, argv);
+    init_platform(QLatin1String(platformName), platformPluginPath, platformPluginReason, platformThemeName, argc, argv);
 
     if (!icon.isEmpty())
         forcedWindowIcon = QDir::isAbsolutePath(icon) ? QIcon(icon) : QIcon::fromTheme(icon);

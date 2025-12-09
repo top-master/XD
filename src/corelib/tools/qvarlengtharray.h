@@ -107,13 +107,21 @@ public:
         Q_ASSERT(s > 0);
         realloc(s - 1, a);
     }
+    inline T takeLast() {
+        T r = last();
+        realloc(s - 1, a);
+        return r;
+    }
     inline int size() const { return s; }
     inline int count() const { return s; }
     inline int length() const { return s; }
+    inline int bytes() const { return s * sizeof(T); }
+
     inline T& first() { Q_ASSERT(!isEmpty()); return *begin(); }
     inline const T& first() const { Q_ASSERT(!isEmpty()); return *begin(); }
     T& last() { Q_ASSERT(!isEmpty()); return *(end() - 1); }
     const T& last() const { Q_ASSERT(!isEmpty()); return *(end() - 1); }
+
     inline bool isEmpty() const { return (s == 0); }
     inline void resize(int size);
     inline void clear() { resize(0); }
@@ -141,7 +149,7 @@ public:
 
     inline void append(const T &t) {
         if (s == a) {   // i.e. s != 0
-            T copy(t);
+            T copy(t); // Since `realloc` may move `t`.
             realloc(s, s<<1);
             const int idx = s++;
             if (QTypeInfo<T>::isComplex) {
@@ -176,6 +184,11 @@ public:
     inline T *data() { return ptr; }
     inline const T *data() const { return ptr; }
     inline const T * constData() const { return ptr; }
+    /// Throws if index out of range.
+    inline T &dataAt(int i) { return ptr[i]; }
+    /// Throws if index out of range.
+    inline const T &dataAt(int i) const { return ptr[i]; }
+
     typedef int size_type;
     typedef T value_type;
     typedef value_type *pointer;

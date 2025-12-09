@@ -149,9 +149,10 @@ void QProcessPrivate::startProcess()
         return;
 
     if (threadData->hasEventDispatcher()) {
-        processFinishedNotifier = new QWinEventNotifier(pid->hProcess, q);
-        QObject::connect(processFinishedNotifier, SIGNAL(activated(HANDLE)), q, SLOT(_q_processDied()));
-        processFinishedNotifier->setEnabled(true);
+        QWinEventNotifier *notifier = new QWinEventNotifier(pid->hProcess, q);
+        processFinishedNotifier = notifier;
+        QObject::connect(notifier, SIGNAL(activated(HANDLE)), q, SLOT(_q_processDied()));
+        notifier->setEnabled(true);
     }
 
     // give the process a chance to start ...

@@ -57,6 +57,9 @@ class Q_GUI_EXPORT QPlatformIntegrationFactory
 public:
     static QStringList keys(const QString &platformPluginPath = QString());
     static QPlatformIntegration *create(const QString &name, const QStringList &args, int &argc, char **argv, const QString &platformPluginPath = QString());
+
+public:
+    static const QString pathSuffix;
 };
 
 QT_END_NAMESPACE

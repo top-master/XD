@@ -437,21 +437,22 @@ inline QLibraryPrivate *QLibraryStore::findOrCreate(const QString &fileName, con
                                                     QLibrary::LoadHints loadHints)
 {
     QMutexLocker locker(&qt_library_mutex);
-    QLibraryStore *data = instance();
+    QLibraryStore *store = instance();
 
     // check if this library is already loaded
     QLibraryPrivate *lib = 0;
-    if (Q_LIKELY(data)) {
-        lib = data->libraryMap.value(fileName);
-        if (lib)
-            lib->mergeLoadHints(loadHints);
+    if (Q_LIKELY(store)) {
+        lib = store->libraryMap.value(fileName);
     }
-    if (!lib)
+    if (lib) {
+        lib->mergeLoadHints(loadHints);
+    } else {
         lib = new QLibraryPrivate(fileName, version, loadHints);
+    }
 
     // track this library
-    if (Q_LIKELY(data) && !fileName.isEmpty())
-        data->libraryMap.insert(fileName, lib);
+    if (Q_LIKELY(store) && !fileName.isEmpty())
+        store->libraryMap.insert(fileName, lib);
 
     lib->libraryRefCount.ref();
     return lib;

@@ -18,7 +18,7 @@ QMAKE_QT_CONFIG = $$[QT_HOST_DATA/get]/mkspecs/qconfig.pri
    QMAKE_MODULE_PATH = $$reverse(QMAKE_MODULE_PATH)
    for(dir, QMAKE_MODULE_PATH) {
       debug(1, "Loading modules from $${dir}")
-      mods = $$files($$dir/qt_*.pri)
+      mods = $$files($$dir/qt_*.pri, true)
       for (mod, mods) {
          # For installed Qt these paths will be common for all modules.
          # For uninstalled prefix builds these will vary per module, via the
@@ -45,5 +45,8 @@ QMAKE_QT_CONFIG = $$[QT_HOST_DATA/get]/mkspecs/qconfig.pri
    unset(QT_MODULE_IMPORT_BASE)
    unset(QT_MODULE_QML_BASE)
 }
+
+!isEmpty(MODULE_VERSION): !equals(MODULE_VERSION, $$QT_VERSION)): \
+    warning("MODULE_VERSION should follow QT_VERSION, unless testing/debugging temporarily.")
 
 load(qt_functions)

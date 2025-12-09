@@ -102,6 +102,26 @@ private:
     Q_PRIVATE_SLOT(d_func(), void _q_sourceModelReset())
 };
 
+#if QT_DEPRECATED_SINCE(5, 0)
+class Q_CORE_EXPORT QProxyModel : public QIdentityProxyModel
+{
+    typedef QIdentityProxyModel super;
+    Q_OBJECT
+public:
+    inline explicit QProxyModel(QObject* parent = Q_NULLPTR)
+        : super(parent)
+    {
+    }
+
+    ~QProxyModel();
+
+    Q_ALWAYS_INLINE QAbstractItemModel *model() const
+        { return this->sourceModel(); }
+    Q_ALWAYS_INLINE void setModel(QAbstractItemModel *sourceModel)
+        { this->setSourceModel(sourceModel); }
+};
+#endif
+
 QT_END_NAMESPACE
 
 #endif // QT_NO_IDENTITYPROXYMODEL
