@@ -109,10 +109,12 @@ QRef<QObjectRemote> QMetaRemote::registerLocal(QRef<QObject> local, QRemoteUser 
     return local.staticCast<QObjectRemote>();
 }
 
-static CustomTypes remoteTypes;
+// Note: needs `Q_GLOBAL_STATIC` to support `QT_STATIC` build mode.
+Q_GLOBAL_STATIC(CustomTypes, remoteTypes)
+
 void QMetaRemote::registerRemote(const char *typeName, QMetaRemote::Constructor constructor)
 {
-    remoteTypes.registerType(typeName,
+    remoteTypes()->registerType(typeName,
         sizeof(QObjectRemote), //size of any class with Q_REMOTE_CONTROLLER should be sizeof(QObjectRemote)
         reinterpret_cast<TypeInfo::Constructor>(constructor));
 }
@@ -125,7 +127,7 @@ QRef<QObjectRemote> QMetaRemote::remoteFromType(const QByteArray &typeName, QObj
     } else {
         remoteType.prepend(typeName);
     }
-    const TypeInfo &inf = remoteTypes.typeInfo(remoteType.constData(), remoteType.size());
+    const TypeInfo &inf = remoteTypes()->typeInfo(remoteType.constData(), remoteType.size());
     if( ! inf.isEmpty()) {
         void *ptr = reinterpret_cast<Constructor>(inf.constructorPtr)( malloc(sizeof(QObjectRemote)), parent );
         return QRef<QObjectRemote>(reinterpret_cast<QObjectRemote *>(ptr));
@@ -674,14 +676,18 @@ void QMetaRemote::receive(QObject *receiver, const Packet &pkt)
 
 const char * const QMetaRemote::timeStampFormatRaw = QT_TMP_TIME_FORMAT;
 
+QString QMetaRemote::timeStampFormatted() {
+    // Assumes QtRemote's binary uses same compiler as user,
+    // else QStringLiteralGlobal may not work.
+    //
+    // WARNING: is local-static to support `QT_STATIC` build mode.
 #ifdef QStringLiteralGlobal
-QStringLiteralGlobal(QMetaRemote::timeStampFormat, QT_TMP_TIME_FORMAT)
+    QStringLiteralStatic(staticTimeStampFormat, QT_TMP_TIME_FORMAT);
 #endif
 
-QString QMetaRemote::timeStampFormatted() {
     return QDateTime::currentDateTimeUtc().toString(
 #ifdef QStringLiteralGlobal
-        QMetaRemote::timeStampFormat
+        staticTimeStampFormat
 #else
         QLatin1String(QMetaRemote::timeStampFormatRaw)
 #endif // QStringLiteralGlobal

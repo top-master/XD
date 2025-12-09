@@ -168,15 +168,10 @@ struct QT_REMOTE_EXPORT QMetaRemote
     static void receive(QObject *receiver, const QRemote::Packet &pkt);
 
 
-    /// Same as @ref remoteTimeFormat, but in UTF8.
+    /// Same as @ref timeStampFormatted(), but in UTF8.
     static const char * const timeStampFormatRaw;
 
-    // Assumes QtRemote's binary uses same compiler as user.
-#ifdef QStringLiteralGlobal
     /// Equals "yyyy-MM-dd HH:mm:ss.zzz".
-    static const QString timeStampFormat;
-#endif
-
     static QString timeStampFormatted();
 
 

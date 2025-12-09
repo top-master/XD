@@ -329,12 +329,6 @@ public:
 
 };
 
-#define QT_OBJECT_PRIVATE_LOAD(x) do { \
-        if ((x)->d != Q_NULLPTR && Q_PTR_CAST(QObjectData *, (x)->d)->isLazy) { \
-            QObjectPrivateScoped::loadNow((x)); \
-        } \
-    } while(0)
-
 #endif // QT_NO_QOBJECT
 
 QT_END_NAMESPACE

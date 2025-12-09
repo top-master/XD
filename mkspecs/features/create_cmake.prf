@@ -91,6 +91,9 @@ win32:!wince:!static:!staticlib {
 
 static|staticlib:CMAKE_STATIC_TYPE = true
 
+load(qt_static_resolver)
+qt_static: isEmpty(CMAKE_STATIC_TYPE): !build_pass: warning("Failed to handle qt_static mode; expected static or staticlib in CONFIG.")
+
 CMAKE_DEBUG_TYPE =
 CMAKE_RELEASE_TYPE =
 
@@ -202,59 +205,65 @@ CMAKE_INTERFACE_QT5_MODULE_DEPS = $$join(aux_lib_deps, ";")
 
 CMAKE_QT_STEM = Qt$$QT_MAJOR_VERSION$${CMAKE_MODULE_NAME}$${QT_LIBINFIX}
 
+# Finds suffix for platform.
+_TMP_D = $$qtPlatformTargetSuffix(debug)
+_TMP_R = $$qtPlatformTargetSuffix(release)
+CMAKE_QT_STEM_D = $$CMAKE_QT_STEM$$_TMP_D
+CMAKE_QT_STEM_R = $$CMAKE_QT_STEM$$_TMP_R
+
 mac {
     !isEmpty(CMAKE_STATIC_TYPE) {
-        CMAKE_LIB_FILE_LOCATION_DEBUG = lib$${CMAKE_QT_STEM}_debug.a
-        CMAKE_LIB_FILE_LOCATION_RELEASE = lib$${CMAKE_QT_STEM}.a
+        CMAKE_LIB_FILE_LOCATION_DEBUG = lib$${CMAKE_QT_STEM_D}.a
+        CMAKE_LIB_FILE_LOCATION_RELEASE = lib$${CMAKE_QT_STEM_R}.a
 
-        CMAKE_PRL_FILE_LOCATION_DEBUG = lib$${CMAKE_QT_STEM}_debug.prl
-        CMAKE_PRL_FILE_LOCATION_RELEASE = lib$${CMAKE_QT_STEM}.prl
+        CMAKE_PRL_FILE_LOCATION_DEBUG = lib$${CMAKE_QT_STEM_D}.prl
+        CMAKE_PRL_FILE_LOCATION_RELEASE = lib$${CMAKE_QT_STEM_R}.prl
     } else {
         CONFIG(qt_framework, qt_framework|qt_no_framework) {
             CMAKE_LIB_FILE_LOCATION_DEBUG = Qt$${CMAKE_MODULE_NAME}$${QT_LIBINFIX}.framework/Qt$${CMAKE_MODULE_NAME}$${QT_LIBINFIX}
             CMAKE_LIB_FILE_LOCATION_RELEASE = Qt$${CMAKE_MODULE_NAME}$${QT_LIBINFIX}.framework/Qt$${CMAKE_MODULE_NAME}$${QT_LIBINFIX}
             CMAKE_BUILD_IS_FRAMEWORK = "true"
         } else {
-            CMAKE_LIB_FILE_LOCATION_DEBUG = lib$${CMAKE_QT_STEM}_debug.$$eval(QT.$${MODULE}.VERSION).dylib
-            CMAKE_LIB_FILE_LOCATION_RELEASE = lib$${CMAKE_QT_STEM}.$$eval(QT.$${MODULE}.VERSION).dylib
+            CMAKE_LIB_FILE_LOCATION_DEBUG = lib$${CMAKE_QT_STEM_D}.$$eval(QT.$${MODULE}.VERSION).dylib
+            CMAKE_LIB_FILE_LOCATION_RELEASE = lib$${CMAKE_QT_STEM_R}.$$eval(QT.$${MODULE}.VERSION).dylib
         }
     }
 } else:win32 {
     CMAKE_WINDOWS_BUILD = "true"
     CMAKE_FIND_OTHER_LIBRARY_BUILD = "true"
 
-    CMAKE_LIB_FILE_LOCATION_DEBUG = $${CMAKE_QT_STEM}d.dll
-    CMAKE_LIB_FILE_LOCATION_RELEASE = $${CMAKE_QT_STEM}.dll
+    CMAKE_LIB_FILE_LOCATION_DEBUG = $${CMAKE_QT_STEM_D}.dll
+    CMAKE_LIB_FILE_LOCATION_RELEASE = $${CMAKE_QT_STEM_R}.dll
 
     mingw {
-        CMAKE_WINMAIN_FILE_LOCATION_DEBUG = libqtmain$${QT_LIBINFIX}d.a
-        CMAKE_WINMAIN_FILE_LOCATION_RELEASE = libqtmain$${QT_LIBINFIX}.a
+        CMAKE_WINMAIN_FILE_LOCATION_DEBUG = libqtmain$${QT_LIBINFIX}$${_TMP_D}.a
+        CMAKE_WINMAIN_FILE_LOCATION_RELEASE = libqtmain$${QT_LIBINFIX}$${_TMP_R}.a
 
         !isEmpty(CMAKE_STATIC_TYPE) {
             CMAKE_STATIC_WINDOWS_BUILD = "true"
-            CMAKE_IMPLIB_FILE_LOCATION_DEBUG = lib$${CMAKE_QT_STEM}d.a
-            CMAKE_IMPLIB_FILE_LOCATION_RELEASE = lib$${CMAKE_QT_STEM}.a
+            CMAKE_IMPLIB_FILE_LOCATION_DEBUG = lib$${CMAKE_QT_STEM_D}.a
+            CMAKE_IMPLIB_FILE_LOCATION_RELEASE = lib$${CMAKE_QT_STEM_R}.a
 
-            CMAKE_PRL_FILE_LOCATION_DEBUG = lib$${CMAKE_QT_STEM}d.prl
-            CMAKE_PRL_FILE_LOCATION_RELEASE = lib$${CMAKE_QT_STEM}.prl
+            CMAKE_PRL_FILE_LOCATION_DEBUG = lib$${CMAKE_QT_STEM_D}.prl
+            CMAKE_PRL_FILE_LOCATION_RELEASE = lib$${CMAKE_QT_STEM_R}.prl
         } else {
-            CMAKE_IMPLIB_FILE_LOCATION_DEBUG = lib$${CMAKE_QT_STEM}d.a
-            CMAKE_IMPLIB_FILE_LOCATION_RELEASE = lib$${CMAKE_QT_STEM}.a
+            CMAKE_IMPLIB_FILE_LOCATION_DEBUG = lib$${CMAKE_QT_STEM_D}.a
+            CMAKE_IMPLIB_FILE_LOCATION_RELEASE = lib$${CMAKE_QT_STEM_R}.a
         }
     } else {
-        CMAKE_WINMAIN_FILE_LOCATION_DEBUG = qtmain$${QT_LIBINFIX}d.lib
-        CMAKE_WINMAIN_FILE_LOCATION_RELEASE = qtmain$${QT_LIBINFIX}.lib
+        CMAKE_WINMAIN_FILE_LOCATION_DEBUG = qtmain$${QT_LIBINFIX}$${_TMP_D}.lib
+        CMAKE_WINMAIN_FILE_LOCATION_RELEASE = qtmain$${QT_LIBINFIX}$${_TMP_R}.lib
 
         !isEmpty(CMAKE_STATIC_TYPE) {
             CMAKE_STATIC_WINDOWS_BUILD = "true"
-            CMAKE_IMPLIB_FILE_LOCATION_DEBUG = $${CMAKE_QT_STEM}d.lib
-            CMAKE_IMPLIB_FILE_LOCATION_RELEASE = $${CMAKE_QT_STEM}.lib
+            CMAKE_IMPLIB_FILE_LOCATION_DEBUG = $${CMAKE_QT_STEM_D}.lib
+            CMAKE_IMPLIB_FILE_LOCATION_RELEASE = $${CMAKE_QT_STEM_R}.lib
 
-            CMAKE_PRL_FILE_LOCATION_DEBUG = $${CMAKE_QT_STEM}d.prl
-            CMAKE_PRL_FILE_LOCATION_RELEASE = $${CMAKE_QT_STEM}.prl
+            CMAKE_PRL_FILE_LOCATION_DEBUG = $${CMAKE_QT_STEM_D}.prl
+            CMAKE_PRL_FILE_LOCATION_RELEASE = $${CMAKE_QT_STEM_R}.prl
         } else {
-            CMAKE_IMPLIB_FILE_LOCATION_DEBUG = $${CMAKE_QT_STEM}d.lib
-            CMAKE_IMPLIB_FILE_LOCATION_RELEASE = $${CMAKE_QT_STEM}.lib
+            CMAKE_IMPLIB_FILE_LOCATION_DEBUG = $${CMAKE_QT_STEM_D}.lib
+            CMAKE_IMPLIB_FILE_LOCATION_RELEASE = $${CMAKE_QT_STEM_R}.lib
         }
     }
 } else {
@@ -330,3 +339,6 @@ cmake_qt5_module_files.path = $$[QT_INSTALL_LIBS]/cmake/Qt5$${CMAKE_MODULE_NAME}
         error("Missing CMake tests. Either create tests in tests/auto/cmake," \
               "or disable cmake config file creation with CONFIG-=create_cmake.")
 }
+
+unset(CMAKE_QT_STEM_D)
+unset(CMAKE_QT_STEM_R)

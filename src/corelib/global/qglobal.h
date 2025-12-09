@@ -184,7 +184,7 @@ namespace QT_NAMESPACE {}
 #endif /* user namespace */
 
 #  if __cplusplus >= 201703L
-//   Since C++17 we get error if `register` is used.
+/*   Since C++17 we get error if `register` is used. */
 #    define Q_REGISTER
 #  else
 #    define Q_REGISTER register
@@ -382,38 +382,47 @@ typedef double qreal;
 #  endif
 #endif
 
-#if defined(QT_SHARED) || !defined(QT_STATIC)
-#  ifdef QT_STATIC
-#    error "Both QT_SHARED and QT_STATIC defined, please make up your mind"
+#if defined(QT_SHARED) || !defined(QT_STATIC) || defined(QT_FORCE_EXPORT)
+#  if defined(QT_STATIC) && defined(QT_SHARED)
+#    error "Both QT_SHARED and QT_STATIC are defined, please make up your mind."
 #  endif
-#  ifndef QT_SHARED
+#  if !defined(QT_SHARED) && !defined(QT_STATIC)
 #    define QT_SHARED
 #  endif
-#  if defined(QT_BUILD_CORE_LIB)
-#    define Q_CORE_EXPORT Q_DECL_EXPORT
+
+#  define Q_DECL_EXPORT_M Q_DECL_EXPORT
+/*
+ * Prevents unresolved externals, since MSVC's import ignores static libraries.
+ */
+#  if !defined(QT_STATIC) || !defined(QT_FORCE_EXPORT)
+#    define Q_DECL_IMPORT_M Q_DECL_IMPORT
 #  else
-#    define Q_CORE_EXPORT Q_DECL_IMPORT
-#  endif
-#  if defined(QT_BUILD_GUI_LIB)
-#    define Q_GUI_EXPORT Q_DECL_EXPORT
-#  else
-#    define Q_GUI_EXPORT Q_DECL_IMPORT
-#  endif
-#  if defined(QT_BUILD_WIDGETS_LIB)
-#    define Q_WIDGETS_EXPORT Q_DECL_EXPORT
-#  else
-#    define Q_WIDGETS_EXPORT Q_DECL_IMPORT
-#  endif
-#  if defined(QT_BUILD_NETWORK_LIB)
-#    define Q_NETWORK_EXPORT Q_DECL_EXPORT
-#  else
-#    define Q_NETWORK_EXPORT Q_DECL_IMPORT
+#    define Q_DECL_IMPORT_M
 #  endif
 #else
-#  define Q_CORE_EXPORT
-#  define Q_GUI_EXPORT
-#  define Q_WIDGETS_EXPORT
-#  define Q_NETWORK_EXPORT
+#  define Q_DECL_EXPORT_M
+#  define Q_DECL_IMPORT_M
+#endif
+
+#if defined(QT_BUILD_CORE_LIB)
+#  define Q_CORE_EXPORT Q_DECL_EXPORT_M
+#else
+#  define Q_CORE_EXPORT Q_DECL_IMPORT_M
+#endif
+#if defined(QT_BUILD_GUI_LIB)
+#  define Q_GUI_EXPORT Q_DECL_EXPORT_M
+#else
+#  define Q_GUI_EXPORT Q_DECL_IMPORT_M
+#endif
+#if defined(QT_BUILD_WIDGETS_LIB)
+#  define Q_WIDGETS_EXPORT Q_DECL_EXPORT_M
+#else
+#  define Q_WIDGETS_EXPORT Q_DECL_IMPORT_M
+#endif
+#if defined(QT_BUILD_NETWORK_LIB)
+#  define Q_NETWORK_EXPORT Q_DECL_EXPORT_M
+#else
+#  define Q_NETWORK_EXPORT Q_DECL_IMPORT_M
 #endif
 
 #define Q_VAR_EXPORT(module) Q_##module##_EXPORT
@@ -479,7 +488,7 @@ typedef void (*QErrorFunc)(void);
 Q_CORE_EXPORT_C void qThrowNullPointer();
 Q_CORE_EXPORT_C void qThrowOutOfMemory();
 Q_CORE_EXPORT_C void qThrowAtomicMismatch();
-// C++ should use qThrow(...) instead.
+/* C++ should use qThrow(...) instead. */
 Q_CORE_EXPORT_C void qThrowRequirement(int type, const char *message Q_CPP_EXPR(= Q_NULLPTR));
 
 #ifdef __cplusplus /* __cplusplus begin (search for "__cplusplus end"). */
@@ -782,6 +791,7 @@ class QDataStream;
 #endif
 
 inline void qt_noop(void) {}
+inline void qt_relax(void) {}
 
 /* These wrap try/catch so we can switch off exceptions later.
 

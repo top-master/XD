@@ -25,10 +25,14 @@ PRECOMPILED_DIR = .pch
 # Qt Creator's per file build (through right-click menu) fails if `OBJECTS_DIR` is set.
 #OBJECTS_DIR=.obj
 
-# QMake has a bug where if `MOC_DIR` is an absolute-path,
+# TRACE/mkspecs: added `qt_static` build-mode support #4,
+# QMake used to have a bug where if `MOC_DIR` is an absolute-path,
 # then even if already included in another C++ file,
 # the moc-generated source-file is added to `SOURCES` anyway
 # (which causes duplicate symbols, or Private-class not defined erros).
+#
+# Although that seems fixed, making the paths absolute is postponed into:
+# `$$PWD/moc.prf`, `$$PWD/resources.prf`, `$$PWD/uic.prf`.
 MOC_DIR = .moc
 RCC_DIR = .rcc
 UI_DIR = .uic

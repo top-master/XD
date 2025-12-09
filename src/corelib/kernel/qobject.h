@@ -630,18 +630,24 @@ inline QObjectData *QObjectData::get(QObject *o) { return o->d_ptr.data(); }
 inline const QObjectData *QObjectData::get(const QObject *o) { return o->d_ptr.data(); }
 
 Q_ALWAYS_INLINE const QObjectPrivate *QObject::d_func() const {
-    QT_OBJECT_PRIVATE_LOAD(&d_ptr);
+    if (d_ptr.d != Q_NULLPTR && Q_PTR_CAST(QObjectData *, d_ptr.d)->isLazy) {
+        QObjectPrivateScoped::loadNow(&d_ptr);
+    }
     return d_ptr.d;
 }
 
 Q_ALWAYS_INLINE QObjectPrivate *QObject::d_func() {
-    QT_OBJECT_PRIVATE_LOAD(&d_ptr);
+    if (d_ptr.d != Q_NULLPTR && Q_PTR_CAST(QObjectData *, d_ptr.d)->isLazy) {
+        QObjectPrivateScoped::loadNow(&d_ptr);
+    }
     return d_ptr.d;
 }
 
 Q_ALWAYS_INLINE QObjectData *QObjectPrivateScoped::data() const
 {
-    QT_OBJECT_PRIVATE_LOAD(this);
+    if (this->d != Q_NULLPTR && Q_PTR_CAST(QObjectData *, this->d)->isLazy) {
+        QObjectPrivateScoped::loadNow(this);
+    }
     return Q_PTR_CAST(QObjectData *, this->d);
 }
 
@@ -650,6 +656,7 @@ Q_ALWAYS_INLINE QObjectPrivateScoped::~QObjectPrivateScoped()
     if (Q_PTR_CAST(QObjectData *, this->d)->lazinessResolver.destroy(this, reinterpret_cast<void **>(&this->d))) {
         QScopedPointerDeleter<QObjectData>::cleanup(data());
     }
+    this->d = Q_NULLPTR;
 }
 
 Q_ALWAYS_INLINE QPointerLazinessResolverAtomic &QObjectPrivateScoped::lazinessResolver() const {

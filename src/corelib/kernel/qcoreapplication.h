@@ -51,6 +51,10 @@ typedef struct tagMSG MSG;
 #endif
 #endif
 
+#if defined(QT_NEEDS_QMAIN)
+#define main qMain
+#endif
+
 QT_BEGIN_NAMESPACE
 
 

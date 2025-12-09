@@ -58,9 +58,9 @@ class QProxyStylePrivate : public QCommonStylePrivate
     Q_DECLARE_PUBLIC(QProxyStyle)
 public:
     void ensureBaseStyle() const;
+    inline QProxyStylePrivate() :
+        QCommonStylePrivate(), baseStyle(0) {}
 private:
-    QProxyStylePrivate() :
-    QCommonStylePrivate(), baseStyle(0) {}
     mutable QPointer <QStyle> baseStyle;
 };
 

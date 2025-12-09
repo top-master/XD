@@ -74,7 +74,12 @@ QRemoteUserCounter *QRemoteUserPrivate::instanceManager()
     return globalInstanceManager();
 }
 
-QThreadStorage<QRemoteUserPrivate::PerThreadStorageGlobal> QRemoteUserPrivate::threadStoreGlobal;
+Q_GLOBAL_STATIC(QThreadStorage<QRemoteUserPrivate::PerThreadStorageGlobal>, globalThreadStore)
+
+QThreadStorage<QRemoteUserPrivate::PerThreadStorageGlobal> *QRemoteUserPrivate::threadStoreGlobal()
+{
+    return globalThreadStore();
+}
 
 
 QRemoteUser::QRemoteUser(QObject *parent, bool storeFirst):
@@ -166,12 +171,12 @@ QRemoteUser *QRemoteUser::findInstance(const QRemoteUserName &user)
 
 QRemoteUser *QRemoteUser::fromThreadStorage()
 {
-    return QRemoteUserPrivate::threadStoreGlobal.localData().instance;
+    return globalThreadStore()->localData().instance;
 }
 
 QRemoteUser *QRemoteUser::toThreadStorage(QRemoteUser *v)
 {
-    QRemoteUserPrivate::PerThreadStorageGlobal &store = QRemoteUserPrivate::threadStoreGlobal.localData();
+    QRemoteUserPrivate::PerThreadStorageGlobal &store = globalThreadStore()->localData();
     QRemoteUser *last = store.instance;
     store.instance = v;
     return last;

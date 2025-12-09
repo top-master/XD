@@ -2,16 +2,18 @@ CONFIG -= console
 QMAKE_LFLAGS += $$replace(QMAKE_LFLAGS_WINDOWS, @QMAKE_SUBSYSTEM_SUFFIX@, $$QMAKE_SUBSYSTEM_SUFFIX)
 contains(TEMPLATE, ".*app") {
     QMAKE_LFLAGS += $$QMAKE_LFLAGS_EXE
+    # TRACE/mkspecs: The QT_NEEDS_QMAIN macro usage is moved to "qcoreapplication.h" #1,
+    # to be more consistent, and support programs that only use QtCore;
+    # note: it was previously used in "src/gui/kernel/qwindowdefs.h".
     mingw:DEFINES += QT_NEEDS_QMAIN
 
     qt:for(entryLib, $$list($$unique(QMAKE_LIBS_QT_ENTRY))) {
         isEqual(entryLib, -lqtmain) {
             !contains(QMAKE_DEFAULT_LIBDIRS, $$QT.core.libs): \
                 QMAKE_LIBS += -L$$QT.core.libs
-            CONFIG(debug, debug|release): QMAKE_LIBS += $${entryLib}$${QT_LIBINFIX}d
-            else: QMAKE_LIBS += $${entryLib}$${QT_LIBINFIX}
-        } else {
-            QMAKE_LIBS += $${entryLib}
+            entryLib = $${entryLib}$${QT_LIBINFIX}$$qtPlatformTargetSuffix()
         }
+
+        QMAKE_LIBS += $${entryLib}
     }
 }

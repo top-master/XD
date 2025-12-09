@@ -1,5 +1,10 @@
-
+#
 # See `./README.md` for few details.
+#
+# This file is normally loaded by the platform-specific file, like by
+# the `features/win32/qt_config.prf` file, which loads
+# the `$$PWD/modules/qt_*.pri` modules right after this file.
+#
 
 # TRACE/mkspecs note: By default `release` is added to `CONFIG`,
 # but with the command-line `CONFIG+=debug`, `release` will be considered removed,
@@ -38,11 +43,11 @@ QT_CONFIG += codecs
     QT_CONFIG += private_tests
 }
 
-#versioning 
-QT_VERSION = 5.6.3
-QT_MAJOR_VERSION = 5
-QT_MINOR_VERSION = 6
-QT_PATCH_VERSION = 3
+# Versioning.
+QT_VERSION = 5.6.5
+QT_MAJOR_VERSION = $$section(QT_VERSION, ., 0, 0)
+QT_MINOR_VERSION = $$section(QT_VERSION, ., 1, 1)
+QT_PATCH_VERSION = $$section(QT_VERSION, ., 2, 2)
 
 QT_EDITION = OpenSource
 win32: QT_LICHECK = licheck.exe

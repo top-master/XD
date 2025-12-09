@@ -104,9 +104,13 @@ typedef QSet<QWidget *> QWidgetSet;
 
 QT_END_NAMESPACE
 
-#if defined(QT_NEEDS_QMAIN)
-#define main qMain
-#endif
+// TRACE/mkspecs: The QT_NEEDS_QMAIN macro usage is moved to "qcoreapplication.h" #2,
+// else would use it here, like:
+// ```
+// #if defined(QT_NEEDS_QMAIN)
+// #define main qMain
+// #endif
+// ```
 
 // Global platform-independent types and functions
 

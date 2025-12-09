@@ -18,6 +18,7 @@
     unset(QMAKE_ACTUAL_PRO_FILE)
 }
 load(qt_build_config) # loads qmodule.pri if hasn't been loaded already
+load(qt_static_resolver)
 
 isEmpty(MODULE):MODULE = $$section($$list($$basename(_PRO_FILE_)), ., 0, 0)
 isEmpty(VERSION): VERSION = $$MODULE_VERSION
@@ -59,6 +60,10 @@ MODULE_DEPENDS = $$unique(MODULE_DEPENDS)
 contains(MODULE_DEPENDS, $$MODULE): \
     error("$$TARGET depends on itself.")
 
+qt_static {
+    MODULE_DEPENDS = $$replace(MODULE_DEPENDS,$,$$MODULE_SUFFIX)
+}
+
 contains(TARGET, QtAddOn.*): \
     MODULE_DEFINE = QT_ADDON_$${ucmodule}_LIB
 else: \
@@ -84,8 +89,8 @@ load(qt_common)
 !no_module_headers: load(qt_module_headers)
 load(qt_module_pris)
 
-INCLUDEPATH *= $$eval(QT.$${MODULE}.includes)
-INCLUDEPATH *= $$eval(QT.$${MODULE}_private.includes)
+INCLUDEPATH *= $$eval(QT.$$MODULE$${MODULE_SUFFIX}.includes)
+INCLUDEPATH *= $$eval(QT.$${MODULE}_private$${MODULE_SUFFIX}.includes)
 
 # If Qt was configured with -debug-and-release then build the module the same way
 # - unless this is a host library
@@ -293,6 +298,35 @@ win32 {
 } else {
     # On other platforms, Qt's own compilation goes needs to compile the Qt 5.0 API
     DEFINES *= QT_DISABLE_DEPRECATED_BEFORE=0x050000
+}
+
+# TRACE/mkspecs: added `qt_static` build-mode support #2,
+# changes Qt's build-dirs to prevent conflicts, like overwriting shared-build's result.
+# note: this is partially done at "mkspecs\features\qt.prf",
+# else would do `DEFINES += QT_STATIC` inside below if-block.
+if(qt_static) {
+    force_bootstrap: !qtc_run: error("Expected qt_static_resolver.prf to load before qt_module.prf file.")
+    CONFIG += static
+
+    # Adds slash only if it does NOT mean Linux's root-folder.
+    !isEmpty(OBJECTS_DIR): OBJECTS_DIR=$$OBJECTS_DIR/
+    isEmpty(OUT_PWD) {
+        OUT_PWD = $$props(OUT_PWD)
+        warning("OUT_PWD was empty but should be an absolute-path to: " $$OUT_PWD)
+    }
+
+    !qt_force_export {
+        OUT_PWD=$${OUT_PWD}/static
+        OBJECTS_DIR=$${OBJECTS_DIR}static
+    } else {
+        OUT_PWD=$${OUT_PWD}/static_export
+        OBJECTS_DIR=$${OBJECTS_DIR}static_export
+    }
+}
+
+is64bit {
+    OUT_PWD=$${OUT_PWD}_x64
+    OBJECTS_DIR=$${OBJECTS_DIR}_x64
 }
 
 TARGET = $$qt5LibraryTarget($$TARGET$$QT_LIBINFIX)  # Do this towards the end

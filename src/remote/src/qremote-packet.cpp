@@ -115,10 +115,10 @@ QDebug &operator <<(QDebug &dbg, const Packet &v)
     return dbg;
 }
 
-static CustomTypes customTypes;
+Q_GLOBAL_STATIC(CustomTypes, customTypes)
 
 #define Q_REGISTER_PACKET(TYPE) \
-    Q_DECLARE_CUSTOM_TYPE_FLAGS(TYPE, &customTypes, CustomTypes::flag_NoCopy) \
+    Q_DECLARE_CUSTOM_TYPE_FLAGS(TYPE, customTypes(), CustomTypes::flag_NoCopy) \
     static qint8 QT_JOIN(q_static_type_id, __LINE__) = (qint8)CustomTypeInfo<TYPE>::id();
 
 Q_REGISTER_PACKET(Packet)
@@ -137,14 +137,14 @@ Packet::~Packet() {}
 
 QByteArray Packet::classType() const
 {
-    return customTypes.typeName(d_ptr->subclassId);
+    return customTypes()->typeName(d_ptr->subclassId);
 }
 
 Packet *Packet::create(const QByteArray &classType)
 {
     //qDebug("Packet::create: %s", classType.constData());
     Packet *pkt = 0;
-    const TypeInfo &info = customTypes.typeInfo(classType.constData());
+    const TypeInfo &info = customTypes()->typeInfo(classType.constData());
     if( ! info.isEmpty()) {
         pkt = reinterpret_cast<Packet *>(info.construct());
     }

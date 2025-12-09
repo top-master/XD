@@ -921,6 +921,36 @@ bool QtPrivate::debugDeleteEvents = false;
     \sa qMin(), qMax()
 */
 
+/*! \fn void qt_relax()
+    \relates <QtGlobal>
+
+    Both `qt_noop` and `qt_relax` are inline-functions that do nothing except
+    helping the compiler relax, for example, qt_relax() may correct the
+    QStackTrace's line-number for second-entry of below:
+    ```
+    QStringList myList;
+    myList << QLL("first");
+    myList << QLL("second-entry"); qt_relax();
+    myList << QLL("last");
+    ```
+
+    Or for example, qt_noop() could be used instead of `do { } while (0)` in below,
+    to enforce a semi-collon after a macro:
+    ```
+    #ifdef QT_DEBUG
+    #  define MY_MACRO(x) myDebugLogger(x)
+    #else
+    #  define MY_MACRO(x) do { } while (0)
+    #endif
+    ```
+*/
+
+/*! \fn void qt_noop()
+    \relates <QtGlobal>
+
+    \copydoc qt_relax
+*/
+
 /*!
     \macro QT_VERSION_CHECK
     \relates <QtGlobal>
@@ -4298,6 +4328,28 @@ bool QInternal::activateCallbacks(Callback cb, void **parameters)
     \l{sharedlibrary.html}{Creating Shared Libraries}).
 
     \sa Q_DECL_EXPORT
+*/
+
+/*!
+    \macro Q_DECL_EXPORT_M
+    Similar to #Q_DECL_EXPORT, however, follows Qt-module build rules,
+    like #QT_STATIC and #QT_FORCE_EXPORT.
+
+    Hence, the M stands for Qt-Module.
+
+    \warning Non-module code should avoid using this macro, otherwise,
+    your module should register itself into "mkspecs/modules" folder.
+*/
+
+/*!
+    \macro Q_DECL_IMPORT_M
+    Similar to #Q_DECL_IMPORT, however, follows Qt-module build rules,
+    like #QT_STATIC and #QT_FORCE_EXPORT.
+
+    Hence, the M stands for Qt-Module.
+
+    \warning Non-module code should avoid using this macro, otherwise,
+    your module should register itself into "mkspecs/modules" folder.
 */
 
 /*!

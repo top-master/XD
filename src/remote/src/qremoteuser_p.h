@@ -184,7 +184,7 @@ public:
         {}
         QRemoteUser *instance;
     };
-    static QThreadStorage<PerThreadStorageGlobal> threadStoreGlobal;
+    static QThreadStorage<PerThreadStorageGlobal> *threadStoreGlobal();
 
     // MARK: Service helpers (register, find and etc).
 

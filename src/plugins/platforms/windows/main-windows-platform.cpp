@@ -32,7 +32,7 @@
 ****************************************************************************/
 
 
-#include <qpa/qplatformintegrationplugin.h>
+#include "./main-windows-platform.h"
 #include <QtCore/QStringList>
 
 #include "qwindowsgdiintegration.h"
@@ -94,14 +94,6 @@ QT_BEGIN_NAMESPACE
     \ingroup qt-lighthouse-win
 */
 
-class QWindowsIntegrationPlugin : public QPlatformIntegrationPlugin
-{
-    Q_OBJECT
-    Q_PLUGIN_METADATA(IID QPlatformIntegrationFactoryInterface_iid FILE "windows.json")
-public:
-    QPlatformIntegration *create(const QString&, const QStringList&, int &, char **);
-};
-
 QPlatformIntegration *QWindowsIntegrationPlugin::create(const QString& system, const QStringList& paramList, int &, char **)
 {
     if (system.compare(system, QLatin1String("windows"), Qt::CaseInsensitive) == 0)
@@ -110,5 +102,3 @@ QPlatformIntegration *QWindowsIntegrationPlugin::create(const QString& system, c
 }
 
 QT_END_NAMESPACE
-
-#include "main.moc"

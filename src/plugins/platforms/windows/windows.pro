@@ -9,19 +9,22 @@ QT *= platformsupport-private
 include(windows.pri)
 
 SOURCES +=  \
-    main.cpp \
-    qwindowsbackingstore.cpp \
-    qwindowsgdiintegration.cpp \
-    qwindowsgdinativeinterface.cpp
+    $$PWD/main-windows-platform.cpp \
+    $$PWD/qwindowsbackingstore.cpp \
+    $$PWD/qwindowsgdiintegration.cpp \
+    $$PWD/qwindowsgdinativeinterface.cpp
 
 HEADERS +=  \
-    qwindowsbackingstore.h \
-    qwindowsgdiintegration.h \
-    qwindowsgdinativeinterface.h
+    $$PWD/main-windows-platform.h \
+    $$PWD/qwindowsbackingstore.h \
+    $$PWD/qwindowsgdiintegration.h \
+    $$PWD/qwindowsgdinativeinterface.h
 
-OTHER_FILES += windows.json
+OTHER_FILES += $$PWD/windows.json
 
-PLUGIN_TYPE = platforms
-PLUGIN_CLASS_NAME = QWindowsIntegrationPlugin
-!equals(TARGET, $$QT_DEFAULT_QPA_PLUGIN): PLUGIN_EXTENDS = -
-load(qt_plugin)
+!qt_static {
+    PLUGIN_TYPE = platforms
+    PLUGIN_CLASS_NAME = QWindowsIntegrationPlugin
+    !equals(TARGET, $$QT_DEFAULT_QPA_PLUGIN): PLUGIN_EXTENDS = -
+    load(qt_plugin)
+}

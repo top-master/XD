@@ -1,6 +1,7 @@
 CONFIG *= moc thread
 
 #handle defines
+load(qt_static_resolver)
 win32 {
    contains(QT_CONFIG, shared) {
       # this variable is read by qmake in qmake/generators/win32/msvc_vcproj.cpp
@@ -75,6 +76,9 @@ var_sfx =
 for(ever) {
     # qmake variables cannot contain dashes, so normalize the names first
     CLEAN_QT$$var_sfx = $$replace(QT$$var_sfx, -private$, _private)
+    # Redirects to `QT_STATIC` naming from `QT_SHARED`, if needed.
+    qt_static: \
+        CLEAN_QT$$var_sfx ~= s|$|_static|g
     # Topological resolution of modules based on their QT.<module>.depends variable
     FULL_QT$$var_sfx = $$resolve_depends(CLEAN_QT$$var_sfx, "QT.")
     # Finally actually add the modules
@@ -165,7 +169,7 @@ for(ever) {
                 WINRT_MANIFEST.capabilities_device_default += $$MODULE_WINRT_CAPABILITIES_DEVICE
         }
     }
-    !isEmpty(BAD_QT):error("Unknown module(s) in QT$$var_sfx: $$replace(BAD_QT, _private$, -private)")
+    !isEmpty(BAD_QT): !qtc_run: error("Unknown module(s) in QT$$var_sfx: $$replace(BAD_QT, _private$, -private)")
 
     !isEmpty(var_sfx): break()
     var_sfx = _PRIVATE
@@ -178,7 +182,7 @@ for(ever) {
 }
 
 qt_module_deps = $$CLEAN_QT $$CLEAN_QT_PRIVATE
-qt_module_deps = $$resolve_depends(qt_module_deps, "QT.")
+qt_module_deps = $$resolve_depends(qt_module_deps, "QT.", ".depends", ".priority")
 
 !no_qt_rpath:!static:contains(QT_CONFIG, rpath):!contains(QT_CONFIG, static):\
         contains(qt_module_deps, core) {

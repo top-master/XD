@@ -46,6 +46,9 @@ just few notes.
 
 * fix_output_dirs : enables `QMAKE_DIR_FIX` even without `debug_and_release` being set.
 
+* silent : Tells Qmake that the build is too silent, and asks the Makefile to
+  be more verbose, like echo-ing a message before each source-file's compile.
+
 ## Variables
 
 * CONFIG : a list of enabled features, which is specially treated by QMake,

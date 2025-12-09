@@ -1,6 +1,8 @@
 qtPrepareTool(QMAKE_UIC, uic, _DEP)
 
 isEmpty(UI_DIR):UI_DIR = .
+_TMP = $$UI_DIR
+UI_DIR = $$makefile_relative($$UI_DIR)
 isEmpty(QMAKE_MOD_UIC):QMAKE_MOD_UIC = ui_
 
 uic.commands = $$QMAKE_UIC ${QMAKE_FILE_IN} -o ${QMAKE_FILE_OUT}
@@ -15,5 +17,5 @@ QMAKE_EXTRA_COMPILERS += uic
 INCREDIBUILD_XGE += uic
 
 !isEmpty(FORMS) {
-    INCLUDEPATH += $$absolute_path($$UI_DIR, $$OUT_PWD)
+    INCLUDEPATH += $$absolute_path($$_TMP, $$OUT_PWD)
 }

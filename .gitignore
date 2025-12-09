@@ -296,6 +296,7 @@ work
 
 #generated module def and version header files
 mkspecs/modules/qt_*.pri
+mkspecs/modules/static/qt_*.pri
 mkspecs/modules-inst/
 #!mkspecs/qmodule.pri
 

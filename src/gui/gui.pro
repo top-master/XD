@@ -47,6 +47,8 @@ include(opengl/opengl.pri)
 include(animation/animation.pri)
 include(itemmodels/itemmodels.pri)
 
+qt_static: include(../plugins/platforms/static/static.pri)
+
 QMAKE_LIBS += $$QMAKE_LIBS_GUI
 
 load(qt_module)
