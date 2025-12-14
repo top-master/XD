@@ -256,3 +256,27 @@ defineReplace(xd_destdir) {
 defineReplace(makefile_relative) {
     return($$relative_path($$absolute_path($$1, $$OUT_PWD), $$props(OUT_PWD)))
 }
+
+# MARK: task-handler.
+
+XD_TASK_HANDLER = $$absolute_path(../../tools/task-handler/task-handler.pro, $$PWD)
+!build_pass: !exists($$XD_TASK_HANDLER) {
+    error("Failed to find file: $$XD_TASK_HANDLER")
+}
+
+# xd_taskRun(name, arguments)
+#
+# Executes task-handler with given arguments.
+defineTest(xd_taskHandlerRun) {
+    win32: nil = nul
+    else: nil = /dev/null
+    qmakeRun($$XD_TASK_HANDLER, \"CONFIG+=force_only_debug\" TASK=\"$$1\" ARG1=\"$$2\" ARG2=\"$$3\" ARG3=\"$$4\" ARG4=\"$$5\" ARG5=\"$$6\" -o - > $$nil )
+}
+
+# Args: filePath
+#
+# Syncs given file's change-date with that of the Makefile, if any.
+# This may ensure that given file gets re-parsed on next build as well.
+defineTest(refreshChangeDate) {
+    xd_taskHandlerRun("touch", $$1)
+}
