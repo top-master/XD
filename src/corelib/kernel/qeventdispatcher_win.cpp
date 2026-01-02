@@ -34,6 +34,7 @@
 
 #include "qeventdispatcher_win_p.h"
 
+#include "qatomicflags.h"
 #include "qcoreapplication.h"
 #include <private/qsystemlibrary_p.h>
 #include "qpair.h"
@@ -54,8 +55,16 @@
 
 QT_BEGIN_NAMESPACE
 
+
 HINSTANCE qWinAppInst();
 extern uint qGlobalPostedEventsCount();
+
+
+enum WarnTypes {
+    WarnInstance = 0x0010
+};
+static QBasicAtomicFlags<WarnTypes> warnSkip = Q_BASIC_ATOMIC_INITIALIZER(0);
+
 
 // TRACE/corelib BugFix: Windows's `GWLP_USERDATA` is NOT for window-authors #1
 // hence we enable `cbWndExtra` by setting it to required byte-count, which,
@@ -518,7 +527,11 @@ static inline UINT inputTimerMask()
 LRESULT QT_WIN_CALLBACK qt_GetMessageHook(int code, WPARAM wp, LPARAM lp)
 {
     QEventDispatcherWin32 *q = qobject_cast<QEventDispatcherWin32 *>(QAbstractEventDispatcher::instance());
-    Q_ASSERT(q != 0);
+    // TRACE/gui BugFix: should not show the assert-dialog if already visible, since
+    // this hook is called repeatedly even before closing the assert-dialog.
+    if (q == Q_NULLPTR && warnSkip.append(WarnInstance)) {
+        qAssertWarning("Message-listener hook", "No QEventDispatcherWin32 instance was available.");
+    }
 
     if (wp == PM_REMOVE) {
         if (q) {
@@ -556,7 +569,7 @@ LRESULT QT_WIN_CALLBACK qt_GetMessageHook(int code, WPARAM wp, LPARAM lp)
 #ifdef Q_OS_WINCE
     return 0;
 #else
-    return q->d_func()->getMessageHook ? CallNextHookEx(0, code, wp, lp) : 0;
+    return (!q || q->d_func()->getMessageHook) ? CallNextHookEx(0, code, wp, lp) : 0;
 #endif
 }
 
