@@ -1,5 +1,6 @@
 /****************************************************************************
 **
+** Copyright (C) 2015 The XD Company Ltd.
 ** Copyright (C) 2015 The Qt Company Ltd.
 ** Contact: http://www.qt.io/licensing/
 **
@@ -153,6 +154,7 @@ private:
 private:
     QWidget *widget;
     QRect rect;
+    QPoint point;
 };
 
 QTipLabel *QTipLabel::instance = 0;
@@ -163,6 +165,7 @@ QTipLabel::QTipLabel(const QString &text, QWidget *w, int msecDisplayTime)
 #else
     : QLabel(w, Qt::ToolTip | Qt::BypassGraphicsProxyWidget), widget(0)
 #endif
+    , point(-1, -1)
 {
     delete instance;
     instance = this;
@@ -175,7 +178,7 @@ QTipLabel::QTipLabel(const QString &text, QWidget *w, int msecDisplayTime)
     setAlignment(Qt::AlignLeft);
     setIndent(1);
     qApp->installEventFilter(this);
-    setWindowOpacity(style()->styleHint(QStyle::SH_ToolTipLabel_Opacity, 0, this) / 255.0);
+    setWindowOpacity(style()->styleHint(QStyle::SH_ToolTipLabel_Opacity, 0, this) / qreal(255.0));
     setMouseTracking(true);
     fadingOut = false;
     reuseTip(text, msecDisplayTime);
@@ -363,6 +366,8 @@ int QTipLabel::getTipScreen(const QPoint &pos, QWidget *w)
 
 void QTipLabel::placeTip(const QPoint &pos, QWidget *w)
 {
+    QTipLabel::instance->point = pos;
+
 #ifndef QT_NO_STYLE_STYLESHEET
     if (testAttribute(Qt::WA_StyleSheet) || (w && qobject_cast<QStyleSheetStyle *>(w->style()))) {
         //the stylesheet need to know the real parent
@@ -426,10 +431,14 @@ bool QTipLabel::tipChanged(const QPoint &pos, const QString &text, QObject *o)
     if (o != widget)
         return true;
 
-    if (!rect.isNull())
-        return !rect.contains(pos);
-    else
-       return false;
+    if (!rect.isNull()) {
+        QPoint localPos = pos;
+        if (QWidget *w = qobject_cast<QWidget *>(o))
+            localPos = w->mapFromGlobal(pos);
+        return !rect.contains(localPos);
+    }
+
+    return point != pos;
 }
 
 /*!
@@ -473,10 +482,7 @@ void QToolTip::showText(const QPoint &pos, const QString &text, QWidget *w, cons
         else if (!QTipLabel::instance->fadingOut){
             // If the tip has changed, reuse the one
             // that is showing (removes flickering)
-            QPoint localPos = pos;
-            if (w)
-                localPos = w->mapFromGlobal(pos);
-            if (QTipLabel::instance->tipChanged(localPos, text, w)){
+            if (QTipLabel::instance->tipChanged(pos, text, w)){
                 QTipLabel::instance->reuseTip(text, msecDisplayTime);
                 QTipLabel::instance->setTipRect(w, rect);
                 QTipLabel::instance->placeTip(pos, w);
