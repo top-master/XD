@@ -133,7 +133,7 @@ public:
 
     /// The object is already guarded by a mutex, hence skip thread-checks if set.
     ///
-    /// @warning Child QObject's inherit this flag.
+    /// @warning Any child QObject inherits this flag.
     uint isThreadSafe : 1;
 
     uint isDebugging : 1;

@@ -145,6 +145,7 @@ public:
     short indent;
     mutable uint valid_hints : 1;
     uint scaledcontents : 1;
+    uint aspectRatioMode: 2;
     mutable uint textLayoutDirty : 1;
     mutable uint textDirty : 1;
     mutable uint isRichText : 1;
@@ -158,6 +159,7 @@ public:
     mutable uint isSingleLine : 1;
     uint isTextElided : 1;
     // <-- space for more bit field values here
+
 
     friend class QMessageBoxPrivate;
 };
