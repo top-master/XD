@@ -61,7 +61,7 @@ win32: !if(force_angle | force_opengl) {
 }
 
 # Versioning.
-QT_VERSION = 5.6.5
+QT_VERSION = 5.6.6
 QT_MAJOR_VERSION = $$section(QT_VERSION, ., 0, 0)
 QT_MINOR_VERSION = $$section(QT_VERSION, ., 1, 1)
 QT_PATCH_VERSION = $$section(QT_VERSION, ., 2, 2)
