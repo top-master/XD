@@ -86,6 +86,7 @@ QLabelPrivate::QLabelPrivate()
       indent(-1),
       valid_hints(false),
       scaledcontents(false),
+      aspectRatioMode(Qt::IgnoreAspectRatio),
       textLayoutDirty(false),
       textDirty(false),
       isRichText(false),
@@ -1054,7 +1055,7 @@ void QLabel::paintEvent(QPaintEvent *)
     } else
 #endif
     if (d->pixmap && !d->pixmap->isNull()) {
-        d->drawPixmap(&painter, cr, Qt::IgnoreAspectRatio);
+        d->drawPixmap(&painter, cr, (Qt::AspectRatioMode) d->aspectRatioMode);
     }
 }
 
@@ -1365,6 +1366,29 @@ void QLabel::setScaledContents(bool enable)
         delete d->cachedimage;
         d->cachedimage = 0;
     }
+    update(contentsRect());
+}
+
+/*!
+    \property QLabel::aspectRatioMode
+    \brief How to scale if QLabel::scaledContents is enabled.
+
+    When QLabel::scaledContents is enabled and the label shows a pixmap,
+    it will scale the pixmap to fill the available space using this aspectRatioMode.
+
+    This property's default is Qt::IgnoreAspectRatio.
+*/
+
+Qt::AspectRatioMode QLabel::aspectRatioMode() const
+{
+    Q_D(const QLabel);
+    return (Qt::AspectRatioMode) d->aspectRatioMode;
+}
+
+void QLabel::setAspectRatioMode(Qt::AspectRatioMode mode)
+{
+    Q_D(QLabel);
+    d->aspectRatioMode = mode;
     update(contentsRect());
 }
 

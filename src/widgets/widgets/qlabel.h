@@ -48,6 +48,7 @@ class Q_WIDGETS_EXPORT QLabel : public QFrame
     Q_PROPERTY(Qt::TextFormat textFormat READ textFormat WRITE setTextFormat)
     Q_PROPERTY(QPixmap pixmap READ pixmap WRITE setPixmap)
     Q_PROPERTY(bool scaledContents READ hasScaledContents WRITE setScaledContents)
+    Q_PROPERTY(Qt::AspectRatioMode aspectRatioMode READ aspectRatioMode WRITE setAspectRatioMode)
     Q_PROPERTY(Qt::Alignment alignment READ alignment WRITE setAlignment)
     Q_PROPERTY(bool wordWrap READ wordWrap WRITE setWordWrap)
     Q_PROPERTY(int margin READ margin WRITE setMargin)
@@ -88,6 +89,8 @@ public:
 
     bool hasScaledContents() const;
     void setScaledContents(bool);
+    Qt::AspectRatioMode aspectRatioMode() const;
+    void setAspectRatioMode(Qt::AspectRatioMode mode);
     QSize sizeHint() const Q_DECL_OVERRIDE;
     QSize minimumSizeHint() const Q_DECL_OVERRIDE;
 #ifndef QT_NO_SHORTCUT
