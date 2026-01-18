@@ -1,0 +1,20 @@
+#
+# Packs the executable with UPX if enabled.
+#
+
+!packing | no_packing: return()
+# Maybe the packer is already added to `QMAKE_POST_LINK` queue.
+packing_queued: return()
+
+PACKER = "$$absolute_path($$PWD/../../tools/packing)"
+win32: PACKER = "$$PACKER/packer.bat"
+else:  PACKER = "$$PACKER/packer.sh"
+
+is64bit: PACKER_MODE = 64bit
+else:    PACKER_MODE = 32bit
+
+xd_postbuild( $$xd_escape($$PACKER) $(DESTDIR_TARGET) $$PACKER_MODE )
+export(QMAKE_POST_LINK)
+
+CONFIG += packing_queued
+export(CONFIG)
