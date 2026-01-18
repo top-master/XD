@@ -33,19 +33,9 @@ contains(QT_CONFIG, c++11):lessThan(QT_COMPILER_STDCXX, 201103): CONFIG += c++11
     unset(today)
 }
 
-# TRACE/qmake rules: XD forbids building inside of qtbase (sub-)folder #1,
-# because build artifacts may conflict, causing strange issues.
-if(!build_pass|qtc_run):QTDIR_build {
-    # Build dir validation.
-    tmpRoot = $$clean_path($$PWD/../..)
-    tmp = $$OUT_PWD
-    tmp ~= s|^($$re_escape($$tmpRoot))/.*|\\1|g
-    equals(tmp, "$$tmpRoot") {
-        error("Build directory is not allowed to be \"$$tmpRoot\" or one of its sub-folders - re-configure the project.")
-    }
-    unset(tmp)
-    unset(tmpRoot)
-}
-
 load(qt_functions)
 load(xd_functions)
+
+# TRACE/qmake rules: XD forbids building inside of qtbase (sub-)folder #1,
+# because build artifacts may conflict, causing strange issues.
+disallow_build_dir($$PWD/../..)

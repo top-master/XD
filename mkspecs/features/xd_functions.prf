@@ -2,11 +2,35 @@
 # This file defines few useful functions
 # --------------------------------------
 
-# Dependencies (does nothing if already loaded).
+# MARK: Dependencies (does nothing if already loaded).
 load(qt_functions)
 
 
+# MARK: Global variables.
 xd_command_count = 0
+
+
+# Disallows placing build artifacts in given folder or its sub-folders, and
+# that's because build artifacts may conflict, hence cause strange issues,
+# or to prevent confution, like when managing project's changes in Git.
+#
+# Args: 1=folder-path: The path to disallowed folder
+#
+# Usage:
+# ```
+# isXD: disallow_build_dir($$PWD)
+# ```
+defineTest(disallow_build_dir) {
+    if(!build_pass|qtc_run):QTDIR_build {
+        # Build dir validation.
+        tmpRoot = $$clean_path($$1)
+        tmp = $$OUT_PWD
+        tmp ~= s|^($$re_escape($$tmpRoot))/.*|\\1|g
+        equals(tmp, "$$tmpRoot") {
+            error("Build directory is not allowed to be \"$$tmpRoot\" or one of its sub-folders - re-configure the project.")
+        }
+    }
+}
 
 defineReplace(xd_suffix) {
     r = $$1

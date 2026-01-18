@@ -13,7 +13,6 @@ shortcut {
 
 force_bootstrap {
     CONFIG -= qt_static
-    export(CONFIG)
 }
 qt_static {
     DEFINES += QT_STATIC
@@ -24,6 +23,10 @@ qt_static {
 
     MODULE_SUFFIX = _static
     MODULE_DIR = static/
+
+    CONFIG(release, debug|release) {
+        CONFIG *= packing
+    }
 } else {
     # Shared-mode is the default, else would do:
     # ```
@@ -35,3 +38,4 @@ qt_static {
 
 export(MODULE_SUFFIX)
 export(MODULE_DIR)
+export(CONFIG)
