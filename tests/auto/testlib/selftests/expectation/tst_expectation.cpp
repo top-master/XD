@@ -108,6 +108,10 @@ class tst_Expectation: public QObject
 
 private slots:
 #ifndef QT_NO_EXCEPTIONS
+    inline void init() {
+        QTest::setFailureHandled(true);
+    }
+
     inline void toBeTruthy_shouldHandleBuiltInTypes() const {
         qExpect(true)->toBeTruthy();
         qExpect(1)->toBeTruthy();

@@ -24,6 +24,7 @@
 
 #include "qtestexpectation.h"
 
+
 QT_BEGIN_NAMESPACE
 
 
@@ -103,7 +104,11 @@ void QTest::ExpectationBase::throwIfPending()
             this->line);
     if (QTest::isContinuous() || inTestee) {
         err.log();
+    } else if (QTest::isFailureHandled()) {
+        err.raise();
     } else {
+        err.log();
+        err.ignore();
         err.raise();
     }
 }
@@ -156,6 +161,7 @@ void QTest::MessagesBase::fail(const QString &message)
     QLL lineFade(QT_NEW_LINE);
     m_context->pendingMessage.reserve(
             m_context->pendingMessage.size()
+                + message.size()
                 + lineFade.size());
     m_context->pendingMessage += message;
     m_context->pendingMessage += lineFade;

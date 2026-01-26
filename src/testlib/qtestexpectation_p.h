@@ -41,6 +41,8 @@
 
 QT_BEGIN_NAMESPACE
 
+class QTestFailure;
+
 namespace QTest {
 
 // MARK: Callbacks.

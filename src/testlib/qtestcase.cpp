@@ -1439,7 +1439,12 @@ namespace QTest
 {
     static QObject *currentTestObject = 0;
     static QString mainSourcePath;
-    static bool globalIsContinuous = false;
+
+    enum CaseFlags {
+        ContinuousFlag = 0x05,
+        FailureHandledFlag = 0x50
+    };
+    static QBasicAtomicFlags<CaseFlags, int> globalFlags = Q_BASIC_ATOMIC_INITIALIZER(0);
 
     class WatchDog;
 
@@ -2170,6 +2175,7 @@ static void qInvokeTestMethodDataEntry(QBenchmarkTestMethodData *benchmark, char
             // Reverts un-sticky per-test-method options.
             QTest::setTimeout(0);
             QTest::setContinuous(false);
+            QTest::setFailureHandled(false);
 
             // TRACE/testlib: XD allows test-slots (`invokeMethod`) to throw, but
             // even those are only allowed to throw `QTestFailure`, otherwise
@@ -2190,6 +2196,7 @@ static void qInvokeTestMethodDataEntry(QBenchmarkTestMethodData *benchmark, char
 
                 invokeOk = QMetaObject::invokeMethod(QTest::currentTestObject, slot,
                                                      Qt::DirectConnection);
+
                 if (!invokeOk)
                     QTestResult::addFailure("Unable to execute slot", __FILE__, __LINE__);
 
@@ -2199,7 +2206,7 @@ static void qInvokeTestMethodDataEntry(QBenchmarkTestMethodData *benchmark, char
 
                 invokeMethod(QTest::currentTestObject, "cleanup()");
             } QT_CATCHES(QTestFailure &error,
-                error.log();
+                if ( ! error.isIgnored()) error.log();
             ) QT_CATCHES(const QExceptionWithMessage &error,
                 QTest::qFail(error.what(), (const char *)__FILE__, (int)__LINE__);
             )
@@ -3752,14 +3759,24 @@ void QTest::setTimeout(int milliSec)
     }
 }
 
-void QTest::setContinuous(bool enabled)
+bool QTest::setContinuous(bool enabled)
 {
-    globalIsContinuous = enabled;
+    return globalFlags.setIf(enabled, ContinuousFlag);
 }
 
 bool QTest::isContinuous()
 {
-    return globalIsContinuous;
+    return globalFlags.includes(ContinuousFlag);
+}
+
+bool QTest::setFailureHandled(bool enabled) Q_DECL_NOTHROW
+{
+    return globalFlags.setIf(enabled, FailureHandledFlag);
+}
+
+bool QTest::isFailureHandled() Q_DECL_NOTHROW
+{
+    return globalFlags.includes(FailureHandledFlag);
 }
 
 /*! \internal

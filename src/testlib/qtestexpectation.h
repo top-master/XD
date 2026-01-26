@@ -59,10 +59,17 @@ public:
     inline const QString &filePath() const { return m_file; }
     inline int fileLineNumber() const { return m_line; }
 
+    /// Useful if @ref log is already called, hence Qt's log should be skipped.
+    inline void ignore() { m_isIgnored = true; }
+    inline bool isIgnored() const { return m_isIgnored; }
+
 protected:
     QStackTrace trace;
     QString m_file;
     int m_line;
+
+private:
+    bool m_isIgnored;
 };
 
 
