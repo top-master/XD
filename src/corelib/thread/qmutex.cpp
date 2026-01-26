@@ -198,7 +198,7 @@ void QT_FASTCALL QMutex::destroy()
 */
 void QMutex::lock() QT_MUTEX_LOCK_NOEXCEPT
 {
-    QMutexData *current;
+    QMutexData *current = Q_NULLPTR;
     if (fastTryLock(current))
         return;
     if (QT_PREPEND_NAMESPACE(isRecursive)(current))

@@ -99,6 +99,15 @@ public:
         return false;
     }
 
+    /// Short-hand for @ref append or @ref remove depending on given @p conditionMet status.
+    Q_ALWAYS_INLINE bool setIf(bool conditionMet, FlagType f) Q_DECL_NOTHROW
+    {
+        if (conditionMet) {
+            return this->append(f);
+        }
+        return this->remove(f);
+    }
+
 
     /// Same as includes(FlagType), however, uses relaxed memory-order.
     Q_ALWAYS_INLINE bool cacheIncludes(FlagType f) const Q_DECL_NOTHROW

@@ -312,9 +312,17 @@ namespace QTest
 
     /// @warning Reverts to @c false after each test-case-method, hence
     /// consider setting to @c true in the `init()` slot.
-    Q_TESTLIB_EXPORT void setContinuous(bool enabled);
+    ///
+    /// @return @c true if was not already same as @p enabled state.
+    Q_TESTLIB_EXPORT bool setContinuous(bool enabled);
     /// @returns @c false by default.
     Q_TESTLIB_EXPORT bool isContinuous();
+
+    /// Causes #qExpect to throw without directly logging, if @p enabled is @c true.
+    ///
+    /// @return @c true if was not already same as @p enabled state.
+    Q_TESTLIB_EXPORT bool setFailureHandled(bool enabled) Q_DECL_NOTHROW;
+    Q_TESTLIB_EXPORT bool isFailureHandled() Q_DECL_NOTHROW;
 
     Q_TESTLIB_EXPORT void setMainSourcePath(const char *file, const char *builddir = Q_NULLPTR);
 
