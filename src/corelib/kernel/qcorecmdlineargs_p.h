@@ -82,15 +82,16 @@ static inline QStringList qWinCmdArgs(const QString &cmdLine)
 // this is used from qcoreapplication_win.cpp and the tools (rcc, uic...)
 
 #ifdef Q_OS_WIN
-#  define QT_TMP_MAYBE_LINUX false
+#  define QT_CMD_LINUX false
 #else
-#  define QT_TMP_MAYBE_LINUX ture
+#  define QT_CMD_LINUX ture
 #endif
 
 /// Splits given single-line text into command-line's argument-list.
 ///
 /// @tparam linuxMode Set to @c true if single-quotes should be treated as quotes.
-template<typename Char, bool quoteEscapable, bool linuxMode = QT_TMP_MAYBE_LINUX>
+/// If unsure, simply pass `QT_CMD_LINUX` to this.
+template<typename Char, bool quoteEscapable, bool linuxMode Q_DEFAULT_ARG(QT_CMD_LINUX)>
 static QVector<Char*> qCmdLineParse(Char *cmdParam, int length, int &argc)
 {
     QVector<Char*> argv(8);
@@ -155,8 +156,6 @@ static QVector<Char*> qCmdLineParse(Char *cmdParam, int length, int &argc)
 
     return argv;
 }
-
-#undef QT_TMP_MAYBE_LINUX
 
 #if defined(Q_OS_WINCE)
 

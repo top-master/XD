@@ -445,6 +445,18 @@ typedef double qreal;
 #define Q_DISABLE_COPY_INIT(Class) \
     Class(const Class &) Q_DECL_EQ_DELETE;
 
+#if (defined(Q_CC_MSVC) && Q_CC_MSVC < 1900)
+#  define Q_SKIP_UNUSED
+#  define Q_DEFAULT_ARG(x) \
+/**/
+#else
+#  define Q_SKIP_UNUSED \
+    template <typename PreventCompileUnlessUsed = int>
+#  define Q_DEFAULT_ARG(x) \
+= x \
+/**/
+#endif
+
 /*
    No, this is not an evil backdoor. QT_BUILD_INTERNAL just exports more symbols
    for Qt's internal unit tests. If you want slower loading times and more

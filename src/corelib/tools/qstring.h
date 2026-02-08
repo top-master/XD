@@ -190,7 +190,7 @@ Q_STATIC_ASSERT_X(sizeof(qunicodechar) == 2,
     static const QStaticStringData< QT_JOIN(_qLiteralSize_, id) > QT_JOIN(_qLiteralData_, id) = { \
     Q_STATIC_STRING_DATA_HEADER_INITIALIZER( QT_JOIN(_qLiteralSize_, id) ), \
     QT_UNICODE_LITERAL(str) }; \
-    type name(QStringDataPtr({ QT_JOIN(_qLiteralData_, id).data_ptr() }));
+    type name(Qt::InternalCall, QT_JOIN(_qLiteralData_, id).data_ptr() );
 
    /// Similar to #QStringLiteral, but for global-scope.
 #  define QStringLiteralGlobal(name, str) QStringLiteralGlobal_T(name, str, const QString, __LINE__)
@@ -238,7 +238,7 @@ struct QStaticStringData
     QArrayData str;
     qunicodechar data[N + 1];
 
-    QStringData *data_ptr() const
+    inline QStringData *data_ptr() const
     {
         Q_ASSERT(str.ref.isStatic());
         return const_cast<QStringData *>(static_cast<const QStringData*>(&str));
@@ -836,6 +836,7 @@ public:
 
     QString(int size, Qt::Initialization);
     Q_DECL_CONSTEXPR inline QString(QStringDataPtr dd) : d(dd.ptr) {}
+    Q_DECL_CONSTEXPR inline QString(Qt::InternalGuard, QStringData *dd) : d(dd) {}
 
 private:
 #if defined(QT_NO_CAST_FROM_ASCII)

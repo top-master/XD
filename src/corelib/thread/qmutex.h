@@ -43,7 +43,8 @@
 /// QMutex can be included anywhere, but including `std` based things may cause
 /// compile issues, or even conflict and cause almost random run-time crashes.
 #ifndef QT_NO_STD_FUNCTION
-#  include <QtCore/qfunction.h>
+#  include <memory>
+#  include <functional>
 #endif
 
 #include <new>
@@ -288,7 +289,7 @@ public:
     }
 #endif
 
-    Q_ALWAYS_INLINE void operator +(const std::function<void()> &callback) Q_DECL_NOEXCEPT
+    Q_ALWAYS_INLINE void operator +(const ::std::function<void () > &callback) Q_DECL_NOEXCEPT
     {
         return (callback)();
     }

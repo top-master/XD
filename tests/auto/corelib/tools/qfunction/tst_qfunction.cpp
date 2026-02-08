@@ -184,7 +184,7 @@ void tst_QFunction::staticWithArguments()
 
 void tst_QFunction::copyAssign()
 {
-    QFunction< bool(*)(int, const char *) > dummy([&] (int first, const char *second) {
+    QFunction< bool(*)(int, const char *) > dummy([&] (int first, const char *second) -> bool {
         staticWithArgumentsCallback(first, reinterpret_cast<int>(second), 0);
         return true;
     });
@@ -203,7 +203,7 @@ void tst_QFunction::copyAssign()
 
 void tst_QFunction::copyConstruct()
 {
-    QFunction< bool(*)(int, const char *) > dummy([&] (int first, const char *second) {
+    QFunction< bool(*)(int, const char *) > dummy([&] (int first, const char *second) -> bool {
         staticWithArgumentsCallback(first, reinterpret_cast<int>(second), 0);
         return true;
     });

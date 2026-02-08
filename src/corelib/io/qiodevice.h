@@ -37,7 +37,9 @@
 
 #include <QtCore/qglobal.h>
 #ifndef QT_NO_QOBJECT
-#include <QtCore/qobject.h>
+#  define QT_TMP_SKIP_METATYPE
+#  include <QtCore/qobject.h>
+#  undef QT_TMP_SKIP_METATYPE
 #else
 #include <QtCore/qobjectdefs.h>
 #include <QtCore/qscopedpointer.h>
@@ -190,5 +192,9 @@ Q_DECL_CONSTEXPR Q_ALWAYS_INLINE void qWarnFlushIfNeeded(const char *) { }
 #endif
 
 QT_END_NAMESPACE
+
+#ifndef QT_NO_QOBJECT
+#  include <QtCore/qmetatype.h>
+#endif
 
 #endif // QIODEVICE_H

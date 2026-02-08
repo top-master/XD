@@ -60,17 +60,17 @@ public:
     ~QThread();
 
     enum Priority {
-        IdlePriority,
+        IdlePriority = 0,
 
-        LowestPriority,
-        LowPriority,
-        NormalPriority,
-        HighPriority,
-        HighestPriority,
+        LowestPriority = 1,
+        LowPriority = 2,
+        NormalPriority = 3,
+        HighPriority = 4,
+        HighestPriority = 5,
 
-        TimeCriticalPriority,
+        TimeCriticalPriority = 6,
 
-        InheritPriority
+        InheritPriority = 7
     };
 
     void setPriority(Priority priority);

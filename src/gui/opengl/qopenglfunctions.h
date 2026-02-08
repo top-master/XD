@@ -242,7 +242,8 @@ public:
         NPOTTextureRepeat     = 0x2000,
         FixedFunctionPipeline = 0x4000,
         TextureRGFormats      = 0x8000,
-        MultipleRenderTargets = 0x10000
+        MultipleRenderTargets = 0x10000,
+        BlendEquationAdvanced = 0x20000,
     };
     Q_DECLARE_FLAGS(OpenGLFeatures, OpenGLFeature)
 
@@ -567,7 +568,7 @@ struct QOpenGLFunctionsPrivate
 
 inline void QOpenGLFunctions::glBindTexture(GLenum target, GLuint texture)
 {
-#ifdef QT_OPENGL_ES_2
+#if defined(Q_OS_ANDROID) && defined(QT_OPENGL_ES_2)
     ::glBindTexture(target, texture);
 #else
     Q_ASSERT(QOpenGLFunctions::isInitialized(d_ptr));
@@ -578,7 +579,7 @@ inline void QOpenGLFunctions::glBindTexture(GLenum target, GLuint texture)
 
 inline void QOpenGLFunctions::glBlendFunc(GLenum sfactor, GLenum dfactor)
 {
-#ifdef QT_OPENGL_ES_2
+#if defined(Q_OS_ANDROID) && defined(QT_OPENGL_ES_2)
     ::glBlendFunc(sfactor, dfactor);
 #else
     Q_ASSERT(QOpenGLFunctions::isInitialized(d_ptr));
@@ -589,7 +590,7 @@ inline void QOpenGLFunctions::glBlendFunc(GLenum sfactor, GLenum dfactor)
 
 inline void QOpenGLFunctions::glClear(GLbitfield mask)
 {
-#ifdef QT_OPENGL_ES_2
+#if defined(Q_OS_ANDROID) && defined(QT_OPENGL_ES_2)
     ::glClear(mask);
 #else
     Q_ASSERT(QOpenGLFunctions::isInitialized(d_ptr));
@@ -600,7 +601,7 @@ inline void QOpenGLFunctions::glClear(GLbitfield mask)
 
 inline void QOpenGLFunctions::glClearColor(GLclampf red, GLclampf green, GLclampf blue, GLclampf alpha)
 {
-#ifdef QT_OPENGL_ES_2
+#if defined(Q_OS_ANDROID) && defined(QT_OPENGL_ES_2) 
     ::glClearColor(red, green, blue, alpha);
 #else
     Q_ASSERT(QOpenGLFunctions::isInitialized(d_ptr));
@@ -611,7 +612,7 @@ inline void QOpenGLFunctions::glClearColor(GLclampf red, GLclampf green, GLclamp
 
 inline void QOpenGLFunctions::glClearStencil(GLint s)
 {
-#ifdef QT_OPENGL_ES_2
+#if defined(Q_OS_ANDROID) && defined(QT_OPENGL_ES_2)
     ::glClearStencil(s);
 #else
     Q_ASSERT(QOpenGLFunctions::isInitialized(d_ptr));
@@ -622,7 +623,7 @@ inline void QOpenGLFunctions::glClearStencil(GLint s)
 
 inline void QOpenGLFunctions::glColorMask(GLboolean red, GLboolean green, GLboolean blue, GLboolean alpha)
 {
-#ifdef QT_OPENGL_ES_2
+#if defined(Q_OS_ANDROID) && defined(QT_OPENGL_ES_2)
     ::glColorMask(red, green, blue, alpha);
 #else
     Q_ASSERT(QOpenGLFunctions::isInitialized(d_ptr));
@@ -633,7 +634,7 @@ inline void QOpenGLFunctions::glColorMask(GLboolean red, GLboolean green, GLbool
 
 inline void QOpenGLFunctions::glCopyTexImage2D(GLenum target, GLint level, GLenum internalformat, GLint x, GLint y, GLsizei width, GLsizei height, GLint border)
 {
-#ifdef QT_OPENGL_ES_2
+#if defined(Q_OS_ANDROID) && defined(QT_OPENGL_ES_2)
     ::glCopyTexImage2D(target, level, internalformat, x, y, width,height, border);
 #else
     Q_ASSERT(QOpenGLFunctions::isInitialized(d_ptr));
@@ -644,7 +645,7 @@ inline void QOpenGLFunctions::glCopyTexImage2D(GLenum target, GLint level, GLenu
 
 inline void QOpenGLFunctions::glCopyTexSubImage2D(GLenum target, GLint level, GLint xoffset, GLint yoffset, GLint x, GLint y, GLsizei width, GLsizei height)
 {
-#ifdef QT_OPENGL_ES_2
+#if defined(Q_OS_ANDROID) && defined(QT_OPENGL_ES_2)
     ::glCopyTexSubImage2D(target, level, xoffset, yoffset, x, y, width, height);
 #else
     Q_ASSERT(QOpenGLFunctions::isInitialized(d_ptr));
@@ -655,7 +656,7 @@ inline void QOpenGLFunctions::glCopyTexSubImage2D(GLenum target, GLint level, GL
 
 inline void QOpenGLFunctions::glCullFace(GLenum mode)
 {
-#ifdef QT_OPENGL_ES_2
+#if defined(Q_OS_ANDROID) && defined(QT_OPENGL_ES_2)
     ::glCullFace(mode);
 #else
     Q_ASSERT(QOpenGLFunctions::isInitialized(d_ptr));
@@ -666,7 +667,7 @@ inline void QOpenGLFunctions::glCullFace(GLenum mode)
 
 inline void QOpenGLFunctions::glDeleteTextures(GLsizei n, const GLuint* textures)
 {
-#ifdef QT_OPENGL_ES_2
+#if defined(Q_OS_ANDROID) && defined(QT_OPENGL_ES_2)
     ::glDeleteTextures(n, textures);
 #else
     Q_ASSERT(QOpenGLFunctions::isInitialized(d_ptr));
@@ -677,7 +678,7 @@ inline void QOpenGLFunctions::glDeleteTextures(GLsizei n, const GLuint* textures
 
 inline void QOpenGLFunctions::glDepthFunc(GLenum func)
 {
-#ifdef QT_OPENGL_ES_2
+#if defined(Q_OS_ANDROID) && defined(QT_OPENGL_ES_2)
     ::glDepthFunc(func);
 #else
     Q_ASSERT(QOpenGLFunctions::isInitialized(d_ptr));
@@ -688,7 +689,7 @@ inline void QOpenGLFunctions::glDepthFunc(GLenum func)
 
 inline void QOpenGLFunctions::glDepthMask(GLboolean flag)
 {
-#ifdef QT_OPENGL_ES_2
+#if defined(Q_OS_ANDROID) && defined(QT_OPENGL_ES_2)
     ::glDepthMask(flag);
 #else
     Q_ASSERT(QOpenGLFunctions::isInitialized(d_ptr));
@@ -699,7 +700,7 @@ inline void QOpenGLFunctions::glDepthMask(GLboolean flag)
 
 inline void QOpenGLFunctions::glDisable(GLenum cap)
 {
-#ifdef QT_OPENGL_ES_2
+#if defined(Q_OS_ANDROID) && defined(QT_OPENGL_ES_2)
     ::glDisable(cap);
 #else
     Q_ASSERT(QOpenGLFunctions::isInitialized(d_ptr));
@@ -710,7 +711,7 @@ inline void QOpenGLFunctions::glDisable(GLenum cap)
 
 inline void QOpenGLFunctions::glDrawArrays(GLenum mode, GLint first, GLsizei count)
 {
-#ifdef QT_OPENGL_ES_2
+#if defined(Q_OS_ANDROID) && defined(QT_OPENGL_ES_2)
     ::glDrawArrays(mode, first, count);
 #else
     Q_ASSERT(QOpenGLFunctions::isInitialized(d_ptr));
@@ -721,7 +722,7 @@ inline void QOpenGLFunctions::glDrawArrays(GLenum mode, GLint first, GLsizei cou
 
 inline void QOpenGLFunctions::glDrawElements(GLenum mode, GLsizei count, GLenum type, const GLvoid* indices)
 {
-#ifdef QT_OPENGL_ES_2
+#if defined(Q_OS_ANDROID) && defined(QT_OPENGL_ES_2)
     ::glDrawElements(mode, count, type, indices);
 #else
     Q_ASSERT(QOpenGLFunctions::isInitialized(d_ptr));
@@ -732,7 +733,7 @@ inline void QOpenGLFunctions::glDrawElements(GLenum mode, GLsizei count, GLenum 
 
 inline void QOpenGLFunctions::glEnable(GLenum cap)
 {
-#ifdef QT_OPENGL_ES_2
+#if defined(Q_OS_ANDROID) && defined(QT_OPENGL_ES_2)
     ::glEnable(cap);
 #else
     Q_ASSERT(QOpenGLFunctions::isInitialized(d_ptr));
@@ -743,7 +744,7 @@ inline void QOpenGLFunctions::glEnable(GLenum cap)
 
 inline void QOpenGLFunctions::glFinish()
 {
-#ifdef QT_OPENGL_ES_2
+#if defined(Q_OS_ANDROID) && defined(QT_OPENGL_ES_2)
     ::glFinish();
 #else
     Q_ASSERT(QOpenGLFunctions::isInitialized(d_ptr));
@@ -754,7 +755,7 @@ inline void QOpenGLFunctions::glFinish()
 
 inline void QOpenGLFunctions::glFlush()
 {
-#ifdef QT_OPENGL_ES_2
+#if defined(Q_OS_ANDROID) && defined(QT_OPENGL_ES_2)
     ::glFlush();
 #else
     Q_ASSERT(QOpenGLFunctions::isInitialized(d_ptr));
@@ -765,7 +766,7 @@ inline void QOpenGLFunctions::glFlush()
 
 inline void QOpenGLFunctions::glFrontFace(GLenum mode)
 {
-#ifdef QT_OPENGL_ES_2
+#if defined(Q_OS_ANDROID) && defined(QT_OPENGL_ES_2)
     ::glFrontFace(mode);
 #else
     Q_ASSERT(QOpenGLFunctions::isInitialized(d_ptr));
@@ -776,7 +777,7 @@ inline void QOpenGLFunctions::glFrontFace(GLenum mode)
 
 inline void QOpenGLFunctions::glGenTextures(GLsizei n, GLuint* textures)
 {
-#ifdef QT_OPENGL_ES_2
+#if defined(Q_OS_ANDROID) && defined(QT_OPENGL_ES_2)
     ::glGenTextures(n, textures);
 #else
     Q_ASSERT(QOpenGLFunctions::isInitialized(d_ptr));
@@ -787,7 +788,7 @@ inline void QOpenGLFunctions::glGenTextures(GLsizei n, GLuint* textures)
 
 inline void QOpenGLFunctions::glGetBooleanv(GLenum pname, GLboolean* params)
 {
-#ifdef QT_OPENGL_ES_2
+#if defined(Q_OS_ANDROID) && defined(QT_OPENGL_ES_2)
     ::glGetBooleanv(pname, params);
 #else
     Q_ASSERT(QOpenGLFunctions::isInitialized(d_ptr));
@@ -798,7 +799,7 @@ inline void QOpenGLFunctions::glGetBooleanv(GLenum pname, GLboolean* params)
 
 inline GLenum QOpenGLFunctions::glGetError()
 {
-#ifdef QT_OPENGL_ES_2
+#if defined(Q_OS_ANDROID) && defined(QT_OPENGL_ES_2)
     GLenum result = ::glGetError();
 #else
     Q_ASSERT(QOpenGLFunctions::isInitialized(d_ptr));
@@ -809,7 +810,7 @@ inline GLenum QOpenGLFunctions::glGetError()
 
 inline void QOpenGLFunctions::glGetFloatv(GLenum pname, GLfloat* params)
 {
-#ifdef QT_OPENGL_ES_2
+#if defined(Q_OS_ANDROID) && defined(QT_OPENGL_ES_2)
     ::glGetFloatv(pname, params);
 #else
     Q_ASSERT(QOpenGLFunctions::isInitialized(d_ptr));
@@ -820,7 +821,7 @@ inline void QOpenGLFunctions::glGetFloatv(GLenum pname, GLfloat* params)
 
 inline void QOpenGLFunctions::glGetIntegerv(GLenum pname, GLint* params)
 {
-#ifdef QT_OPENGL_ES_2
+#if defined(Q_OS_ANDROID) && defined(QT_OPENGL_ES_2)
     ::glGetIntegerv(pname, params);
 #else
     Q_ASSERT(QOpenGLFunctions::isInitialized(d_ptr));
@@ -831,7 +832,7 @@ inline void QOpenGLFunctions::glGetIntegerv(GLenum pname, GLint* params)
 
 inline const GLubyte *QOpenGLFunctions::glGetString(GLenum name)
 {
-#ifdef QT_OPENGL_ES_2
+#if defined(Q_OS_ANDROID) && defined(QT_OPENGL_ES_2)
     const GLubyte *result = ::glGetString(name);
 #else
     Q_ASSERT(QOpenGLFunctions::isInitialized(d_ptr));
@@ -843,7 +844,7 @@ inline const GLubyte *QOpenGLFunctions::glGetString(GLenum name)
 
 inline void QOpenGLFunctions::glGetTexParameterfv(GLenum target, GLenum pname, GLfloat* params)
 {
-#ifdef QT_OPENGL_ES_2
+#if defined(Q_OS_ANDROID) && defined(QT_OPENGL_ES_2)
     ::glGetTexParameterfv(target, pname, params);
 #else
     Q_ASSERT(QOpenGLFunctions::isInitialized(d_ptr));
@@ -854,7 +855,7 @@ inline void QOpenGLFunctions::glGetTexParameterfv(GLenum target, GLenum pname, G
 
 inline void QOpenGLFunctions::glGetTexParameteriv(GLenum target, GLenum pname, GLint* params)
 {
-#ifdef QT_OPENGL_ES_2
+#if defined(Q_OS_ANDROID) && defined(QT_OPENGL_ES_2)
     ::glGetTexParameteriv(target, pname, params);
 #else
     Q_ASSERT(QOpenGLFunctions::isInitialized(d_ptr));
@@ -865,7 +866,7 @@ inline void QOpenGLFunctions::glGetTexParameteriv(GLenum target, GLenum pname, G
 
 inline void QOpenGLFunctions::glHint(GLenum target, GLenum mode)
 {
-#ifdef QT_OPENGL_ES_2
+#if defined(Q_OS_ANDROID) && defined(QT_OPENGL_ES_2)
     ::glHint(target, mode);
 #else
     Q_ASSERT(QOpenGLFunctions::isInitialized(d_ptr));
@@ -876,7 +877,7 @@ inline void QOpenGLFunctions::glHint(GLenum target, GLenum mode)
 
 inline GLboolean QOpenGLFunctions::glIsEnabled(GLenum cap)
 {
-#ifdef QT_OPENGL_ES_2
+#if defined(Q_OS_ANDROID) && defined(QT_OPENGL_ES_2)
     GLboolean result = ::glIsEnabled(cap);
 #else
     Q_ASSERT(QOpenGLFunctions::isInitialized(d_ptr));
@@ -888,7 +889,7 @@ inline GLboolean QOpenGLFunctions::glIsEnabled(GLenum cap)
 
 inline GLboolean QOpenGLFunctions::glIsTexture(GLuint texture)
 {
-#ifdef QT_OPENGL_ES_2
+#if defined(Q_OS_ANDROID) && defined(QT_OPENGL_ES_2)
     GLboolean result = ::glIsTexture(texture);
 #else
     Q_ASSERT(QOpenGLFunctions::isInitialized(d_ptr));
@@ -900,7 +901,7 @@ inline GLboolean QOpenGLFunctions::glIsTexture(GLuint texture)
 
 inline void QOpenGLFunctions::glLineWidth(GLfloat width)
 {
-#ifdef QT_OPENGL_ES_2
+#if defined(Q_OS_ANDROID) && defined(QT_OPENGL_ES_2)
     ::glLineWidth(width);
 #else
     Q_ASSERT(QOpenGLFunctions::isInitialized(d_ptr));
@@ -911,7 +912,7 @@ inline void QOpenGLFunctions::glLineWidth(GLfloat width)
 
 inline void QOpenGLFunctions::glPixelStorei(GLenum pname, GLint param)
 {
-#ifdef QT_OPENGL_ES_2
+#if defined(Q_OS_ANDROID) && defined(QT_OPENGL_ES_2)
     ::glPixelStorei(pname, param);
 #else
     Q_ASSERT(QOpenGLFunctions::isInitialized(d_ptr));
@@ -922,7 +923,7 @@ inline void QOpenGLFunctions::glPixelStorei(GLenum pname, GLint param)
 
 inline void QOpenGLFunctions::glPolygonOffset(GLfloat factor, GLfloat units)
 {
-#ifdef QT_OPENGL_ES_2
+#if defined(Q_OS_ANDROID) && defined(QT_OPENGL_ES_2)
     ::glPolygonOffset(factor, units);
 #else
     Q_ASSERT(QOpenGLFunctions::isInitialized(d_ptr));
@@ -933,7 +934,7 @@ inline void QOpenGLFunctions::glPolygonOffset(GLfloat factor, GLfloat units)
 
 inline void QOpenGLFunctions::glReadPixels(GLint x, GLint y, GLsizei width, GLsizei height, GLenum format, GLenum type, GLvoid* pixels)
 {
-#ifdef QT_OPENGL_ES_2
+#if defined(Q_OS_ANDROID) && defined(QT_OPENGL_ES_2)
     ::glReadPixels(x, y, width, height, format, type, pixels);
 #else
     Q_ASSERT(QOpenGLFunctions::isInitialized(d_ptr));
@@ -944,7 +945,7 @@ inline void QOpenGLFunctions::glReadPixels(GLint x, GLint y, GLsizei width, GLsi
 
 inline void QOpenGLFunctions::glScissor(GLint x, GLint y, GLsizei width, GLsizei height)
 {
-#ifdef QT_OPENGL_ES_2
+#if defined(Q_OS_ANDROID) && defined(QT_OPENGL_ES_2)
     ::glScissor(x, y, width, height);
 #else
     Q_ASSERT(QOpenGLFunctions::isInitialized(d_ptr));
@@ -955,7 +956,7 @@ inline void QOpenGLFunctions::glScissor(GLint x, GLint y, GLsizei width, GLsizei
 
 inline void QOpenGLFunctions::glStencilFunc(GLenum func, GLint ref, GLuint mask)
 {
-#ifdef QT_OPENGL_ES_2
+#if defined(Q_OS_ANDROID) && defined(QT_OPENGL_ES_2)
     ::glStencilFunc(func, ref, mask);
 #else
     Q_ASSERT(QOpenGLFunctions::isInitialized(d_ptr));
@@ -966,7 +967,7 @@ inline void QOpenGLFunctions::glStencilFunc(GLenum func, GLint ref, GLuint mask)
 
 inline void QOpenGLFunctions::glStencilMask(GLuint mask)
 {
-#ifdef QT_OPENGL_ES_2
+#if defined(Q_OS_ANDROID) && defined(QT_OPENGL_ES_2)
     ::glStencilMask(mask);
 #else
     Q_ASSERT(QOpenGLFunctions::isInitialized(d_ptr));
@@ -977,7 +978,7 @@ inline void QOpenGLFunctions::glStencilMask(GLuint mask)
 
 inline void QOpenGLFunctions::glStencilOp(GLenum fail, GLenum zfail, GLenum zpass)
 {
-#ifdef QT_OPENGL_ES_2
+#if defined(Q_OS_ANDROID) && defined(QT_OPENGL_ES_2)
     ::glStencilOp(fail, zfail, zpass);
 #else
     Q_ASSERT(QOpenGLFunctions::isInitialized(d_ptr));
@@ -988,7 +989,7 @@ inline void QOpenGLFunctions::glStencilOp(GLenum fail, GLenum zfail, GLenum zpas
 
 inline void QOpenGLFunctions::glTexImage2D(GLenum target, GLint level, GLint internalformat, GLsizei width, GLsizei height, GLint border, GLenum format, GLenum type, const GLvoid* pixels)
 {
-#ifdef QT_OPENGL_ES_2
+#if defined(Q_OS_ANDROID) && defined(QT_OPENGL_ES_2)
     ::glTexImage2D(target, level, internalformat, width,height, border, format, type, pixels);
 #else
     Q_ASSERT(QOpenGLFunctions::isInitialized(d_ptr));
@@ -999,7 +1000,7 @@ inline void QOpenGLFunctions::glTexImage2D(GLenum target, GLint level, GLint int
 
 inline void QOpenGLFunctions::glTexParameterf(GLenum target, GLenum pname, GLfloat param)
 {
-#ifdef QT_OPENGL_ES_2
+#if defined(Q_OS_ANDROID) && defined(QT_OPENGL_ES_2)
     ::glTexParameterf(target, pname, param);
 #else
     Q_ASSERT(QOpenGLFunctions::isInitialized(d_ptr));
@@ -1010,7 +1011,7 @@ inline void QOpenGLFunctions::glTexParameterf(GLenum target, GLenum pname, GLflo
 
 inline void QOpenGLFunctions::glTexParameterfv(GLenum target, GLenum pname, const GLfloat* params)
 {
-#ifdef QT_OPENGL_ES_2
+#if defined(Q_OS_ANDROID) && defined(QT_OPENGL_ES_2)
     ::glTexParameterfv(target, pname, params);
 #else
     Q_ASSERT(QOpenGLFunctions::isInitialized(d_ptr));
@@ -1021,7 +1022,7 @@ inline void QOpenGLFunctions::glTexParameterfv(GLenum target, GLenum pname, cons
 
 inline void QOpenGLFunctions::glTexParameteri(GLenum target, GLenum pname, GLint param)
 {
-#ifdef QT_OPENGL_ES_2
+#if defined(Q_OS_ANDROID) && defined(QT_OPENGL_ES_2)
     ::glTexParameteri(target, pname, param);
 #else
     Q_ASSERT(QOpenGLFunctions::isInitialized(d_ptr));
@@ -1032,7 +1033,7 @@ inline void QOpenGLFunctions::glTexParameteri(GLenum target, GLenum pname, GLint
 
 inline void QOpenGLFunctions::glTexParameteriv(GLenum target, GLenum pname, const GLint* params)
 {
-#ifdef QT_OPENGL_ES_2
+#if defined(Q_OS_ANDROID) && defined(QT_OPENGL_ES_2)
     ::glTexParameteriv(target, pname, params);
 #else
     Q_ASSERT(QOpenGLFunctions::isInitialized(d_ptr));
@@ -1043,7 +1044,7 @@ inline void QOpenGLFunctions::glTexParameteriv(GLenum target, GLenum pname, cons
 
 inline void QOpenGLFunctions::glTexSubImage2D(GLenum target, GLint level, GLint xoffset, GLint yoffset, GLsizei width, GLsizei height, GLenum format, GLenum type, const GLvoid* pixels)
 {
-#ifdef QT_OPENGL_ES_2
+#if defined(Q_OS_ANDROID) && defined(QT_OPENGL_ES_2)
     ::glTexSubImage2D(target, level, xoffset, yoffset, width, height, format, type, pixels);
 #else
     Q_ASSERT(QOpenGLFunctions::isInitialized(d_ptr));
@@ -1054,7 +1055,7 @@ inline void QOpenGLFunctions::glTexSubImage2D(GLenum target, GLint level, GLint 
 
 inline void QOpenGLFunctions::glViewport(GLint x, GLint y, GLsizei width, GLsizei height)
 {
-#ifdef QT_OPENGL_ES_2
+#if defined(Q_OS_ANDROID) && defined(QT_OPENGL_ES_2)
     ::glViewport(x, y, width, height);
 #else
     Q_ASSERT(QOpenGLFunctions::isInitialized(d_ptr));
@@ -1067,7 +1068,7 @@ inline void QOpenGLFunctions::glViewport(GLint x, GLint y, GLsizei width, GLsize
 
 inline void QOpenGLFunctions::glActiveTexture(GLenum texture)
 {
-#ifdef QT_OPENGL_ES_2
+#if defined(Q_OS_ANDROID) && defined(QT_OPENGL_ES_2)
     ::glActiveTexture(texture);
 #else
     Q_ASSERT(QOpenGLFunctions::isInitialized(d_ptr));
@@ -1078,7 +1079,7 @@ inline void QOpenGLFunctions::glActiveTexture(GLenum texture)
 
 inline void QOpenGLFunctions::glAttachShader(GLuint program, GLuint shader)
 {
-#ifdef QT_OPENGL_ES_2
+#if defined(Q_OS_ANDROID) && defined(QT_OPENGL_ES_2)
     ::glAttachShader(program, shader);
 #else
     Q_ASSERT(QOpenGLFunctions::isInitialized(d_ptr));
@@ -1089,7 +1090,7 @@ inline void QOpenGLFunctions::glAttachShader(GLuint program, GLuint shader)
 
 inline void QOpenGLFunctions::glBindAttribLocation(GLuint program, GLuint index, const char* name)
 {
-#ifdef QT_OPENGL_ES_2
+#if defined(Q_OS_ANDROID) && defined(QT_OPENGL_ES_2)
     ::glBindAttribLocation(program, index, name);
 #else
     Q_ASSERT(QOpenGLFunctions::isInitialized(d_ptr));
@@ -1100,7 +1101,7 @@ inline void QOpenGLFunctions::glBindAttribLocation(GLuint program, GLuint index,
 
 inline void QOpenGLFunctions::glBindBuffer(GLenum target, GLuint buffer)
 {
-#ifdef QT_OPENGL_ES_2
+#if defined(Q_OS_ANDROID) && defined(QT_OPENGL_ES_2)
     ::glBindBuffer(target, buffer);
 #else
     Q_ASSERT(QOpenGLFunctions::isInitialized(d_ptr));
@@ -1113,7 +1114,7 @@ inline void QOpenGLFunctions::glBindFramebuffer(GLenum target, GLuint framebuffe
 {
     if (framebuffer == 0)
         framebuffer = QOpenGLContext::currentContext()->defaultFramebufferObject();
-#ifdef QT_OPENGL_ES_2
+#if defined(Q_OS_ANDROID) && defined(QT_OPENGL_ES_2)
     ::glBindFramebuffer(target, framebuffer);
 #else
     Q_ASSERT(QOpenGLFunctions::isInitialized(d_ptr));
@@ -1124,7 +1125,7 @@ inline void QOpenGLFunctions::glBindFramebuffer(GLenum target, GLuint framebuffe
 
 inline void QOpenGLFunctions::glBindRenderbuffer(GLenum target, GLuint renderbuffer)
 {
-#ifdef QT_OPENGL_ES_2
+#if defined(Q_OS_ANDROID) && defined(QT_OPENGL_ES_2)
     ::glBindRenderbuffer(target, renderbuffer);
 #else
     Q_ASSERT(QOpenGLFunctions::isInitialized(d_ptr));
@@ -1135,7 +1136,7 @@ inline void QOpenGLFunctions::glBindRenderbuffer(GLenum target, GLuint renderbuf
 
 inline void QOpenGLFunctions::glBlendColor(GLclampf red, GLclampf green, GLclampf blue, GLclampf alpha)
 {
-#ifdef QT_OPENGL_ES_2
+#if defined(Q_OS_ANDROID) && defined(QT_OPENGL_ES_2)
     ::glBlendColor(red, green, blue, alpha);
 #else
     Q_ASSERT(QOpenGLFunctions::isInitialized(d_ptr));
@@ -1146,7 +1147,7 @@ inline void QOpenGLFunctions::glBlendColor(GLclampf red, GLclampf green, GLclamp
 
 inline void QOpenGLFunctions::glBlendEquation(GLenum mode)
 {
-#ifdef QT_OPENGL_ES_2
+#if defined(Q_OS_ANDROID) && defined(QT_OPENGL_ES_2)
     ::glBlendEquation(mode);
 #else
     Q_ASSERT(QOpenGLFunctions::isInitialized(d_ptr));
@@ -1157,7 +1158,7 @@ inline void QOpenGLFunctions::glBlendEquation(GLenum mode)
 
 inline void QOpenGLFunctions::glBlendEquationSeparate(GLenum modeRGB, GLenum modeAlpha)
 {
-#ifdef QT_OPENGL_ES_2
+#if defined(Q_OS_ANDROID) && defined(QT_OPENGL_ES_2)
     ::glBlendEquationSeparate(modeRGB, modeAlpha);
 #else
     Q_ASSERT(QOpenGLFunctions::isInitialized(d_ptr));
@@ -1168,7 +1169,7 @@ inline void QOpenGLFunctions::glBlendEquationSeparate(GLenum modeRGB, GLenum mod
 
 inline void QOpenGLFunctions::glBlendFuncSeparate(GLenum srcRGB, GLenum dstRGB, GLenum srcAlpha, GLenum dstAlpha)
 {
-#ifdef QT_OPENGL_ES_2
+#if defined(Q_OS_ANDROID) && defined(QT_OPENGL_ES_2)
     ::glBlendFuncSeparate(srcRGB, dstRGB, srcAlpha, dstAlpha);
 #else
     Q_ASSERT(QOpenGLFunctions::isInitialized(d_ptr));
@@ -1179,7 +1180,7 @@ inline void QOpenGLFunctions::glBlendFuncSeparate(GLenum srcRGB, GLenum dstRGB, 
 
 inline void QOpenGLFunctions::glBufferData(GLenum target, qopengl_GLsizeiptr size, const void* data, GLenum usage)
 {
-#ifdef QT_OPENGL_ES_2
+#if defined(Q_OS_ANDROID) && defined(QT_OPENGL_ES_2)
     ::glBufferData(target, size, data, usage);
 #else
     Q_ASSERT(QOpenGLFunctions::isInitialized(d_ptr));
@@ -1190,7 +1191,7 @@ inline void QOpenGLFunctions::glBufferData(GLenum target, qopengl_GLsizeiptr siz
 
 inline void QOpenGLFunctions::glBufferSubData(GLenum target, qopengl_GLintptr offset, qopengl_GLsizeiptr size, const void* data)
 {
-#ifdef QT_OPENGL_ES_2
+#if defined(Q_OS_ANDROID) && defined(QT_OPENGL_ES_2)
     ::glBufferSubData(target, offset, size, data);
 #else
     Q_ASSERT(QOpenGLFunctions::isInitialized(d_ptr));
@@ -1201,7 +1202,7 @@ inline void QOpenGLFunctions::glBufferSubData(GLenum target, qopengl_GLintptr of
 
 inline GLenum QOpenGLFunctions::glCheckFramebufferStatus(GLenum target)
 {
-#ifdef QT_OPENGL_ES_2
+#if defined(Q_OS_ANDROID) && defined(QT_OPENGL_ES_2)
     GLenum result = ::glCheckFramebufferStatus(target);
 #else
     Q_ASSERT(QOpenGLFunctions::isInitialized(d_ptr));
@@ -1213,7 +1214,7 @@ inline GLenum QOpenGLFunctions::glCheckFramebufferStatus(GLenum target)
 
 inline void QOpenGLFunctions::glClearDepthf(GLclampf depth)
 {
-#ifndef QT_OPENGL_ES
+#if !(defined(Q_OS_ANDROID) && defined(QT_OPENGL_ES_2))
     Q_ASSERT(QOpenGLFunctions::isInitialized(d_ptr));
     d_ptr->ClearDepthf(depth);
 #else
@@ -1224,7 +1225,7 @@ inline void QOpenGLFunctions::glClearDepthf(GLclampf depth)
 
 inline void QOpenGLFunctions::glCompileShader(GLuint shader)
 {
-#ifdef QT_OPENGL_ES_2
+#if defined(Q_OS_ANDROID) && defined(QT_OPENGL_ES_2)
     ::glCompileShader(shader);
 #else
     Q_ASSERT(QOpenGLFunctions::isInitialized(d_ptr));
@@ -1235,7 +1236,7 @@ inline void QOpenGLFunctions::glCompileShader(GLuint shader)
 
 inline void QOpenGLFunctions::glCompressedTexImage2D(GLenum target, GLint level, GLenum internalformat, GLsizei width, GLsizei height, GLint border, GLsizei imageSize, const void* data)
 {
-#ifdef QT_OPENGL_ES_2
+#if defined(Q_OS_ANDROID) && defined(QT_OPENGL_ES_2)
     ::glCompressedTexImage2D(target, level, internalformat, width, height, border, imageSize, data);
 #else
     Q_ASSERT(QOpenGLFunctions::isInitialized(d_ptr));
@@ -1246,7 +1247,7 @@ inline void QOpenGLFunctions::glCompressedTexImage2D(GLenum target, GLint level,
 
 inline void QOpenGLFunctions::glCompressedTexSubImage2D(GLenum target, GLint level, GLint xoffset, GLint yoffset, GLsizei width, GLsizei height, GLenum format, GLsizei imageSize, const void* data)
 {
-#ifdef QT_OPENGL_ES_2
+#if defined(Q_OS_ANDROID) && defined(QT_OPENGL_ES_2)
     ::glCompressedTexSubImage2D(target, level, xoffset, yoffset, width, height, format, imageSize, data);
 #else
     Q_ASSERT(QOpenGLFunctions::isInitialized(d_ptr));
@@ -1257,7 +1258,7 @@ inline void QOpenGLFunctions::glCompressedTexSubImage2D(GLenum target, GLint lev
 
 inline GLuint QOpenGLFunctions::glCreateProgram()
 {
-#ifdef QT_OPENGL_ES_2
+#if defined(Q_OS_ANDROID) && defined(QT_OPENGL_ES_2)
     GLuint result = ::glCreateProgram();
 #else
     Q_ASSERT(QOpenGLFunctions::isInitialized(d_ptr));
@@ -1269,7 +1270,7 @@ inline GLuint QOpenGLFunctions::glCreateProgram()
 
 inline GLuint QOpenGLFunctions::glCreateShader(GLenum type)
 {
-#ifdef QT_OPENGL_ES_2
+#if defined(Q_OS_ANDROID) && defined(QT_OPENGL_ES_2)
     GLuint result = ::glCreateShader(type);
 #else
     Q_ASSERT(QOpenGLFunctions::isInitialized(d_ptr));
@@ -1281,7 +1282,7 @@ inline GLuint QOpenGLFunctions::glCreateShader(GLenum type)
 
 inline void QOpenGLFunctions::glDeleteBuffers(GLsizei n, const GLuint* buffers)
 {
-#ifdef QT_OPENGL_ES_2
+#if defined(Q_OS_ANDROID) && defined(QT_OPENGL_ES_2)
     ::glDeleteBuffers(n, buffers);
 #else
     Q_ASSERT(QOpenGLFunctions::isInitialized(d_ptr));
@@ -1292,7 +1293,7 @@ inline void QOpenGLFunctions::glDeleteBuffers(GLsizei n, const GLuint* buffers)
 
 inline void QOpenGLFunctions::glDeleteFramebuffers(GLsizei n, const GLuint* framebuffers)
 {
-#ifdef QT_OPENGL_ES_2
+#if defined(Q_OS_ANDROID) && defined(QT_OPENGL_ES_2)
     ::glDeleteFramebuffers(n, framebuffers);
 #else
     Q_ASSERT(QOpenGLFunctions::isInitialized(d_ptr));
@@ -1303,7 +1304,7 @@ inline void QOpenGLFunctions::glDeleteFramebuffers(GLsizei n, const GLuint* fram
 
 inline void QOpenGLFunctions::glDeleteProgram(GLuint program)
 {
-#ifdef QT_OPENGL_ES_2
+#if defined(Q_OS_ANDROID) && defined(QT_OPENGL_ES_2)
     ::glDeleteProgram(program);
 #else
     Q_ASSERT(QOpenGLFunctions::isInitialized(d_ptr));
@@ -1314,7 +1315,7 @@ inline void QOpenGLFunctions::glDeleteProgram(GLuint program)
 
 inline void QOpenGLFunctions::glDeleteRenderbuffers(GLsizei n, const GLuint* renderbuffers)
 {
-#ifdef QT_OPENGL_ES_2
+#if defined(Q_OS_ANDROID) && defined(QT_OPENGL_ES_2)
     ::glDeleteRenderbuffers(n, renderbuffers);
 #else
     Q_ASSERT(QOpenGLFunctions::isInitialized(d_ptr));
@@ -1325,7 +1326,7 @@ inline void QOpenGLFunctions::glDeleteRenderbuffers(GLsizei n, const GLuint* ren
 
 inline void QOpenGLFunctions::glDeleteShader(GLuint shader)
 {
-#ifdef QT_OPENGL_ES_2
+#if defined(Q_OS_ANDROID) && defined(QT_OPENGL_ES_2)
     ::glDeleteShader(shader);
 #else
     Q_ASSERT(QOpenGLFunctions::isInitialized(d_ptr));
@@ -1336,7 +1337,7 @@ inline void QOpenGLFunctions::glDeleteShader(GLuint shader)
 
 inline void QOpenGLFunctions::glDepthRangef(GLclampf zNear, GLclampf zFar)
 {
-#ifndef QT_OPENGL_ES
+#if !(defined(Q_OS_ANDROID) && defined(QT_OPENGL_ES_2))
     Q_ASSERT(QOpenGLFunctions::isInitialized(d_ptr));
     d_ptr->DepthRangef(zNear, zFar);
 #else
@@ -1347,7 +1348,7 @@ inline void QOpenGLFunctions::glDepthRangef(GLclampf zNear, GLclampf zFar)
 
 inline void QOpenGLFunctions::glDetachShader(GLuint program, GLuint shader)
 {
-#ifdef QT_OPENGL_ES_2
+#if defined(Q_OS_ANDROID) && defined(QT_OPENGL_ES_2)
     ::glDetachShader(program, shader);
 #else
     Q_ASSERT(QOpenGLFunctions::isInitialized(d_ptr));
@@ -1358,7 +1359,7 @@ inline void QOpenGLFunctions::glDetachShader(GLuint program, GLuint shader)
 
 inline void QOpenGLFunctions::glDisableVertexAttribArray(GLuint index)
 {
-#ifdef QT_OPENGL_ES_2
+#if defined(Q_OS_ANDROID) && defined(QT_OPENGL_ES_2)
     ::glDisableVertexAttribArray(index);
 #else
     Q_ASSERT(QOpenGLFunctions::isInitialized(d_ptr));
@@ -1369,7 +1370,7 @@ inline void QOpenGLFunctions::glDisableVertexAttribArray(GLuint index)
 
 inline void QOpenGLFunctions::glEnableVertexAttribArray(GLuint index)
 {
-#ifdef QT_OPENGL_ES_2
+#if defined(Q_OS_ANDROID) && defined(QT_OPENGL_ES_2)
     ::glEnableVertexAttribArray(index);
 #else
     Q_ASSERT(QOpenGLFunctions::isInitialized(d_ptr));
@@ -1380,7 +1381,7 @@ inline void QOpenGLFunctions::glEnableVertexAttribArray(GLuint index)
 
 inline void QOpenGLFunctions::glFramebufferRenderbuffer(GLenum target, GLenum attachment, GLenum renderbuffertarget, GLuint renderbuffer)
 {
-#ifdef QT_OPENGL_ES_2
+#if defined(Q_OS_ANDROID) && defined(QT_OPENGL_ES_2)
     ::glFramebufferRenderbuffer(target, attachment, renderbuffertarget, renderbuffer);
 #else
     Q_ASSERT(QOpenGLFunctions::isInitialized(d_ptr));
@@ -1391,7 +1392,7 @@ inline void QOpenGLFunctions::glFramebufferRenderbuffer(GLenum target, GLenum at
 
 inline void QOpenGLFunctions::glFramebufferTexture2D(GLenum target, GLenum attachment, GLenum textarget, GLuint texture, GLint level)
 {
-#ifdef QT_OPENGL_ES_2
+#if defined(Q_OS_ANDROID) && defined(QT_OPENGL_ES_2)
     ::glFramebufferTexture2D(target, attachment, textarget, texture, level);
 #else
     Q_ASSERT(QOpenGLFunctions::isInitialized(d_ptr));
@@ -1402,7 +1403,7 @@ inline void QOpenGLFunctions::glFramebufferTexture2D(GLenum target, GLenum attac
 
 inline void QOpenGLFunctions::glGenBuffers(GLsizei n, GLuint* buffers)
 {
-#ifdef QT_OPENGL_ES_2
+#if defined(Q_OS_ANDROID) && defined(QT_OPENGL_ES_2)
     ::glGenBuffers(n, buffers);
 #else
     Q_ASSERT(QOpenGLFunctions::isInitialized(d_ptr));
@@ -1413,7 +1414,7 @@ inline void QOpenGLFunctions::glGenBuffers(GLsizei n, GLuint* buffers)
 
 inline void QOpenGLFunctions::glGenerateMipmap(GLenum target)
 {
-#ifdef QT_OPENGL_ES_2
+#if defined(Q_OS_ANDROID) && defined(QT_OPENGL_ES_2)
     ::glGenerateMipmap(target);
 #else
     Q_ASSERT(QOpenGLFunctions::isInitialized(d_ptr));
@@ -1424,7 +1425,7 @@ inline void QOpenGLFunctions::glGenerateMipmap(GLenum target)
 
 inline void QOpenGLFunctions::glGenFramebuffers(GLsizei n, GLuint* framebuffers)
 {
-#ifdef QT_OPENGL_ES_2
+#if defined(Q_OS_ANDROID) && defined(QT_OPENGL_ES_2)
     ::glGenFramebuffers(n, framebuffers);
 #else
     Q_ASSERT(QOpenGLFunctions::isInitialized(d_ptr));
@@ -1435,7 +1436,7 @@ inline void QOpenGLFunctions::glGenFramebuffers(GLsizei n, GLuint* framebuffers)
 
 inline void QOpenGLFunctions::glGenRenderbuffers(GLsizei n, GLuint* renderbuffers)
 {
-#ifdef QT_OPENGL_ES_2
+#if defined(Q_OS_ANDROID) && defined(QT_OPENGL_ES_2)
     ::glGenRenderbuffers(n, renderbuffers);
 #else
     Q_ASSERT(QOpenGLFunctions::isInitialized(d_ptr));
@@ -1446,7 +1447,7 @@ inline void QOpenGLFunctions::glGenRenderbuffers(GLsizei n, GLuint* renderbuffer
 
 inline void QOpenGLFunctions::glGetActiveAttrib(GLuint program, GLuint index, GLsizei bufsize, GLsizei* length, GLint* size, GLenum* type, char* name)
 {
-#ifdef QT_OPENGL_ES_2
+#if defined(Q_OS_ANDROID) && defined(QT_OPENGL_ES_2)
     ::glGetActiveAttrib(program, index, bufsize, length, size, type, name);
 #else
     Q_ASSERT(QOpenGLFunctions::isInitialized(d_ptr));
@@ -1457,7 +1458,7 @@ inline void QOpenGLFunctions::glGetActiveAttrib(GLuint program, GLuint index, GL
 
 inline void QOpenGLFunctions::glGetActiveUniform(GLuint program, GLuint index, GLsizei bufsize, GLsizei* length, GLint* size, GLenum* type, char* name)
 {
-#ifdef QT_OPENGL_ES_2
+#if defined(Q_OS_ANDROID) && defined(QT_OPENGL_ES_2)
     ::glGetActiveUniform(program, index, bufsize, length, size, type, name);
 #else
     Q_ASSERT(QOpenGLFunctions::isInitialized(d_ptr));
@@ -1468,7 +1469,7 @@ inline void QOpenGLFunctions::glGetActiveUniform(GLuint program, GLuint index, G
 
 inline void QOpenGLFunctions::glGetAttachedShaders(GLuint program, GLsizei maxcount, GLsizei* count, GLuint* shaders)
 {
-#ifdef QT_OPENGL_ES_2
+#if defined(Q_OS_ANDROID) && defined(QT_OPENGL_ES_2)
     ::glGetAttachedShaders(program, maxcount, count, shaders);
 #else
     Q_ASSERT(QOpenGLFunctions::isInitialized(d_ptr));
@@ -1479,7 +1480,7 @@ inline void QOpenGLFunctions::glGetAttachedShaders(GLuint program, GLsizei maxco
 
 inline GLint QOpenGLFunctions::glGetAttribLocation(GLuint program, const char* name)
 {
-#ifdef QT_OPENGL_ES_2
+#if defined(Q_OS_ANDROID) && defined(QT_OPENGL_ES_2)
     GLint result = ::glGetAttribLocation(program, name);
 #else
     Q_ASSERT(QOpenGLFunctions::isInitialized(d_ptr));
@@ -1491,7 +1492,7 @@ inline GLint QOpenGLFunctions::glGetAttribLocation(GLuint program, const char* n
 
 inline void QOpenGLFunctions::glGetBufferParameteriv(GLenum target, GLenum pname, GLint* params)
 {
-#ifdef QT_OPENGL_ES_2
+#if defined(Q_OS_ANDROID) && defined(QT_OPENGL_ES_2)
     ::glGetBufferParameteriv(target, pname, params);
 #else
     Q_ASSERT(QOpenGLFunctions::isInitialized(d_ptr));
@@ -1502,7 +1503,7 @@ inline void QOpenGLFunctions::glGetBufferParameteriv(GLenum target, GLenum pname
 
 inline void QOpenGLFunctions::glGetFramebufferAttachmentParameteriv(GLenum target, GLenum attachment, GLenum pname, GLint* params)
 {
-#ifdef QT_OPENGL_ES_2
+#if defined(Q_OS_ANDROID) && defined(QT_OPENGL_ES_2)
     ::glGetFramebufferAttachmentParameteriv(target, attachment, pname, params);
 #else
     Q_ASSERT(QOpenGLFunctions::isInitialized(d_ptr));
@@ -1513,7 +1514,7 @@ inline void QOpenGLFunctions::glGetFramebufferAttachmentParameteriv(GLenum targe
 
 inline void QOpenGLFunctions::glGetProgramiv(GLuint program, GLenum pname, GLint* params)
 {
-#ifdef QT_OPENGL_ES_2
+#if defined(Q_OS_ANDROID) && defined(QT_OPENGL_ES_2)
     ::glGetProgramiv(program, pname, params);
 #else
     Q_ASSERT(QOpenGLFunctions::isInitialized(d_ptr));
@@ -1524,7 +1525,7 @@ inline void QOpenGLFunctions::glGetProgramiv(GLuint program, GLenum pname, GLint
 
 inline void QOpenGLFunctions::glGetProgramInfoLog(GLuint program, GLsizei bufsize, GLsizei* length, char* infolog)
 {
-#ifdef QT_OPENGL_ES_2
+#if defined(Q_OS_ANDROID) && defined(QT_OPENGL_ES_2)
     ::glGetProgramInfoLog(program, bufsize, length, infolog);
 #else
     Q_ASSERT(QOpenGLFunctions::isInitialized(d_ptr));
@@ -1535,7 +1536,7 @@ inline void QOpenGLFunctions::glGetProgramInfoLog(GLuint program, GLsizei bufsiz
 
 inline void QOpenGLFunctions::glGetRenderbufferParameteriv(GLenum target, GLenum pname, GLint* params)
 {
-#ifdef QT_OPENGL_ES_2
+#if defined(Q_OS_ANDROID) && defined(QT_OPENGL_ES_2)
     ::glGetRenderbufferParameteriv(target, pname, params);
 #else
     Q_ASSERT(QOpenGLFunctions::isInitialized(d_ptr));
@@ -1546,7 +1547,7 @@ inline void QOpenGLFunctions::glGetRenderbufferParameteriv(GLenum target, GLenum
 
 inline void QOpenGLFunctions::glGetShaderiv(GLuint shader, GLenum pname, GLint* params)
 {
-#ifdef QT_OPENGL_ES_2
+#if defined(Q_OS_ANDROID) && defined(QT_OPENGL_ES_2)
     ::glGetShaderiv(shader, pname, params);
 #else
     Q_ASSERT(QOpenGLFunctions::isInitialized(d_ptr));
@@ -1557,7 +1558,7 @@ inline void QOpenGLFunctions::glGetShaderiv(GLuint shader, GLenum pname, GLint* 
 
 inline void QOpenGLFunctions::glGetShaderInfoLog(GLuint shader, GLsizei bufsize, GLsizei* length, char* infolog)
 {
-#ifdef QT_OPENGL_ES_2
+#if defined(Q_OS_ANDROID) && defined(QT_OPENGL_ES_2)
     ::glGetShaderInfoLog(shader, bufsize, length, infolog);
 #else
     Q_ASSERT(QOpenGLFunctions::isInitialized(d_ptr));
@@ -1568,7 +1569,7 @@ inline void QOpenGLFunctions::glGetShaderInfoLog(GLuint shader, GLsizei bufsize,
 
 inline void QOpenGLFunctions::glGetShaderPrecisionFormat(GLenum shadertype, GLenum precisiontype, GLint* range, GLint* precision)
 {
-#ifdef QT_OPENGL_ES_2
+#if defined(Q_OS_ANDROID) && defined(QT_OPENGL_ES_2)
     ::glGetShaderPrecisionFormat(shadertype, precisiontype, range, precision);
 #else
     Q_ASSERT(QOpenGLFunctions::isInitialized(d_ptr));
@@ -1579,7 +1580,7 @@ inline void QOpenGLFunctions::glGetShaderPrecisionFormat(GLenum shadertype, GLen
 
 inline void QOpenGLFunctions::glGetShaderSource(GLuint shader, GLsizei bufsize, GLsizei* length, char* source)
 {
-#ifdef QT_OPENGL_ES_2
+#if defined(Q_OS_ANDROID) && defined(QT_OPENGL_ES_2)
     ::glGetShaderSource(shader, bufsize, length, source);
 #else
     Q_ASSERT(QOpenGLFunctions::isInitialized(d_ptr));
@@ -1590,7 +1591,7 @@ inline void QOpenGLFunctions::glGetShaderSource(GLuint shader, GLsizei bufsize, 
 
 inline void QOpenGLFunctions::glGetUniformfv(GLuint program, GLint location, GLfloat* params)
 {
-#ifdef QT_OPENGL_ES_2
+#if defined(Q_OS_ANDROID) && defined(QT_OPENGL_ES_2)
     ::glGetUniformfv(program, location, params);
 #else
     Q_ASSERT(QOpenGLFunctions::isInitialized(d_ptr));
@@ -1601,7 +1602,7 @@ inline void QOpenGLFunctions::glGetUniformfv(GLuint program, GLint location, GLf
 
 inline void QOpenGLFunctions::glGetUniformiv(GLuint program, GLint location, GLint* params)
 {
-#ifdef QT_OPENGL_ES_2
+#if defined(Q_OS_ANDROID) && defined(QT_OPENGL_ES_2)
     ::glGetUniformiv(program, location, params);
 #else
     Q_ASSERT(QOpenGLFunctions::isInitialized(d_ptr));
@@ -1612,7 +1613,7 @@ inline void QOpenGLFunctions::glGetUniformiv(GLuint program, GLint location, GLi
 
 inline GLint QOpenGLFunctions::glGetUniformLocation(GLuint program, const char* name)
 {
-#ifdef QT_OPENGL_ES_2
+#if defined(Q_OS_ANDROID) && defined(QT_OPENGL_ES_2)
     GLint result = ::glGetUniformLocation(program, name);
 #else
     Q_ASSERT(QOpenGLFunctions::isInitialized(d_ptr));
@@ -1624,7 +1625,7 @@ inline GLint QOpenGLFunctions::glGetUniformLocation(GLuint program, const char* 
 
 inline void QOpenGLFunctions::glGetVertexAttribfv(GLuint index, GLenum pname, GLfloat* params)
 {
-#ifdef QT_OPENGL_ES_2
+#if defined(Q_OS_ANDROID) && defined(QT_OPENGL_ES_2)
     ::glGetVertexAttribfv(index, pname, params);
 #else
     Q_ASSERT(QOpenGLFunctions::isInitialized(d_ptr));
@@ -1635,7 +1636,7 @@ inline void QOpenGLFunctions::glGetVertexAttribfv(GLuint index, GLenum pname, GL
 
 inline void QOpenGLFunctions::glGetVertexAttribiv(GLuint index, GLenum pname, GLint* params)
 {
-#ifdef QT_OPENGL_ES_2
+#if defined(Q_OS_ANDROID) && defined(QT_OPENGL_ES_2)
     ::glGetVertexAttribiv(index, pname, params);
 #else
     Q_ASSERT(QOpenGLFunctions::isInitialized(d_ptr));
@@ -1646,7 +1647,7 @@ inline void QOpenGLFunctions::glGetVertexAttribiv(GLuint index, GLenum pname, GL
 
 inline void QOpenGLFunctions::glGetVertexAttribPointerv(GLuint index, GLenum pname, void** pointer)
 {
-#ifdef QT_OPENGL_ES_2
+#if defined(Q_OS_ANDROID) && defined(QT_OPENGL_ES_2)
     ::glGetVertexAttribPointerv(index, pname, pointer);
 #else
     Q_ASSERT(QOpenGLFunctions::isInitialized(d_ptr));
@@ -1657,7 +1658,7 @@ inline void QOpenGLFunctions::glGetVertexAttribPointerv(GLuint index, GLenum pna
 
 inline GLboolean QOpenGLFunctions::glIsBuffer(GLuint buffer)
 {
-#ifdef QT_OPENGL_ES_2
+#if defined(Q_OS_ANDROID) && defined(QT_OPENGL_ES_2)
     GLboolean result = ::glIsBuffer(buffer);
 #else
     Q_ASSERT(QOpenGLFunctions::isInitialized(d_ptr));
@@ -1669,7 +1670,7 @@ inline GLboolean QOpenGLFunctions::glIsBuffer(GLuint buffer)
 
 inline GLboolean QOpenGLFunctions::glIsFramebuffer(GLuint framebuffer)
 {
-#ifdef QT_OPENGL_ES_2
+#if defined(Q_OS_ANDROID) && defined(QT_OPENGL_ES_2)
     GLboolean result = ::glIsFramebuffer(framebuffer);
 #else
     Q_ASSERT(QOpenGLFunctions::isInitialized(d_ptr));
@@ -1681,7 +1682,7 @@ inline GLboolean QOpenGLFunctions::glIsFramebuffer(GLuint framebuffer)
 
 inline GLboolean QOpenGLFunctions::glIsProgram(GLuint program)
 {
-#ifdef QT_OPENGL_ES_2
+#if defined(Q_OS_ANDROID) && defined(QT_OPENGL_ES_2)
     GLboolean result = ::glIsProgram(program);
 #else
     Q_ASSERT(QOpenGLFunctions::isInitialized(d_ptr));
@@ -1693,7 +1694,7 @@ inline GLboolean QOpenGLFunctions::glIsProgram(GLuint program)
 
 inline GLboolean QOpenGLFunctions::glIsRenderbuffer(GLuint renderbuffer)
 {
-#ifdef QT_OPENGL_ES_2
+#if defined(Q_OS_ANDROID) && defined(QT_OPENGL_ES_2)
     GLboolean result = ::glIsRenderbuffer(renderbuffer);
 #else
     Q_ASSERT(QOpenGLFunctions::isInitialized(d_ptr));
@@ -1705,7 +1706,7 @@ inline GLboolean QOpenGLFunctions::glIsRenderbuffer(GLuint renderbuffer)
 
 inline GLboolean QOpenGLFunctions::glIsShader(GLuint shader)
 {
-#ifdef QT_OPENGL_ES_2
+#if defined(Q_OS_ANDROID) && defined(QT_OPENGL_ES_2)
     GLboolean result = ::glIsShader(shader);
 #else
     Q_ASSERT(QOpenGLFunctions::isInitialized(d_ptr));
@@ -1717,7 +1718,7 @@ inline GLboolean QOpenGLFunctions::glIsShader(GLuint shader)
 
 inline void QOpenGLFunctions::glLinkProgram(GLuint program)
 {
-#ifdef QT_OPENGL_ES_2
+#if defined(Q_OS_ANDROID) && defined(QT_OPENGL_ES_2)
     ::glLinkProgram(program);
 #else
     Q_ASSERT(QOpenGLFunctions::isInitialized(d_ptr));
@@ -1728,7 +1729,7 @@ inline void QOpenGLFunctions::glLinkProgram(GLuint program)
 
 inline void QOpenGLFunctions::glReleaseShaderCompiler()
 {
-#ifdef QT_OPENGL_ES_2
+#if defined(Q_OS_ANDROID) && defined(QT_OPENGL_ES_2)
     ::glReleaseShaderCompiler();
 #else
     Q_ASSERT(QOpenGLFunctions::isInitialized(d_ptr));
@@ -1739,7 +1740,7 @@ inline void QOpenGLFunctions::glReleaseShaderCompiler()
 
 inline void QOpenGLFunctions::glRenderbufferStorage(GLenum target, GLenum internalformat, GLsizei width, GLsizei height)
 {
-#ifdef QT_OPENGL_ES_2
+#if defined(Q_OS_ANDROID) && defined(QT_OPENGL_ES_2)
     ::glRenderbufferStorage(target, internalformat, width, height);
 #else
     Q_ASSERT(QOpenGLFunctions::isInitialized(d_ptr));
@@ -1750,7 +1751,7 @@ inline void QOpenGLFunctions::glRenderbufferStorage(GLenum target, GLenum intern
 
 inline void QOpenGLFunctions::glSampleCoverage(GLclampf value, GLboolean invert)
 {
-#ifdef QT_OPENGL_ES_2
+#if defined(Q_OS_ANDROID) && defined(QT_OPENGL_ES_2)
     ::glSampleCoverage(value, invert);
 #else
     Q_ASSERT(QOpenGLFunctions::isInitialized(d_ptr));
@@ -1761,7 +1762,7 @@ inline void QOpenGLFunctions::glSampleCoverage(GLclampf value, GLboolean invert)
 
 inline void QOpenGLFunctions::glShaderBinary(GLint n, const GLuint* shaders, GLenum binaryformat, const void* binary, GLint length)
 {
-#ifdef QT_OPENGL_ES_2
+#if defined(Q_OS_ANDROID) && defined(QT_OPENGL_ES_2)
     ::glShaderBinary(n, shaders, binaryformat, binary, length);
 #else
     Q_ASSERT(QOpenGLFunctions::isInitialized(d_ptr));
@@ -1772,7 +1773,7 @@ inline void QOpenGLFunctions::glShaderBinary(GLint n, const GLuint* shaders, GLe
 
 inline void QOpenGLFunctions::glShaderSource(GLuint shader, GLsizei count, const char** string, const GLint* length)
 {
-#ifdef QT_OPENGL_ES_2
+#if defined(Q_OS_ANDROID) && defined(QT_OPENGL_ES_2)
     ::glShaderSource(shader, count, string, length);
 #else
     Q_ASSERT(QOpenGLFunctions::isInitialized(d_ptr));
@@ -1783,7 +1784,7 @@ inline void QOpenGLFunctions::glShaderSource(GLuint shader, GLsizei count, const
 
 inline void QOpenGLFunctions::glStencilFuncSeparate(GLenum face, GLenum func, GLint ref, GLuint mask)
 {
-#ifdef QT_OPENGL_ES_2
+#if defined(Q_OS_ANDROID) && defined(QT_OPENGL_ES_2)
     ::glStencilFuncSeparate(face, func, ref, mask);
 #else
     Q_ASSERT(QOpenGLFunctions::isInitialized(d_ptr));
@@ -1794,7 +1795,7 @@ inline void QOpenGLFunctions::glStencilFuncSeparate(GLenum face, GLenum func, GL
 
 inline void QOpenGLFunctions::glStencilMaskSeparate(GLenum face, GLuint mask)
 {
-#ifdef QT_OPENGL_ES_2
+#if defined(Q_OS_ANDROID) && defined(QT_OPENGL_ES_2)
     ::glStencilMaskSeparate(face, mask);
 #else
     Q_ASSERT(QOpenGLFunctions::isInitialized(d_ptr));
@@ -1805,7 +1806,7 @@ inline void QOpenGLFunctions::glStencilMaskSeparate(GLenum face, GLuint mask)
 
 inline void QOpenGLFunctions::glStencilOpSeparate(GLenum face, GLenum fail, GLenum zfail, GLenum zpass)
 {
-#ifdef QT_OPENGL_ES_2
+#if defined(Q_OS_ANDROID) && defined(QT_OPENGL_ES_2)
     ::glStencilOpSeparate(face, fail, zfail, zpass);
 #else
     Q_ASSERT(QOpenGLFunctions::isInitialized(d_ptr));
@@ -1816,7 +1817,7 @@ inline void QOpenGLFunctions::glStencilOpSeparate(GLenum face, GLenum fail, GLen
 
 inline void QOpenGLFunctions::glUniform1f(GLint location, GLfloat x)
 {
-#ifdef QT_OPENGL_ES_2
+#if defined(Q_OS_ANDROID) && defined(QT_OPENGL_ES_2)
     ::glUniform1f(location, x);
 #else
     Q_ASSERT(QOpenGLFunctions::isInitialized(d_ptr));
@@ -1827,7 +1828,7 @@ inline void QOpenGLFunctions::glUniform1f(GLint location, GLfloat x)
 
 inline void QOpenGLFunctions::glUniform1fv(GLint location, GLsizei count, const GLfloat* v)
 {
-#ifdef QT_OPENGL_ES_2
+#if defined(Q_OS_ANDROID) && defined(QT_OPENGL_ES_2)
     ::glUniform1fv(location, count, v);
 #else
     Q_ASSERT(QOpenGLFunctions::isInitialized(d_ptr));
@@ -1838,7 +1839,7 @@ inline void QOpenGLFunctions::glUniform1fv(GLint location, GLsizei count, const 
 
 inline void QOpenGLFunctions::glUniform1i(GLint location, GLint x)
 {
-#ifdef QT_OPENGL_ES_2
+#if defined(Q_OS_ANDROID) && defined(QT_OPENGL_ES_2)
     ::glUniform1i(location, x);
 #else
     Q_ASSERT(QOpenGLFunctions::isInitialized(d_ptr));
@@ -1849,7 +1850,7 @@ inline void QOpenGLFunctions::glUniform1i(GLint location, GLint x)
 
 inline void QOpenGLFunctions::glUniform1iv(GLint location, GLsizei count, const GLint* v)
 {
-#ifdef QT_OPENGL_ES_2
+#if defined(Q_OS_ANDROID) && defined(QT_OPENGL_ES_2)
     ::glUniform1iv(location, count, v);
 #else
     Q_ASSERT(QOpenGLFunctions::isInitialized(d_ptr));
@@ -1860,7 +1861,7 @@ inline void QOpenGLFunctions::glUniform1iv(GLint location, GLsizei count, const 
 
 inline void QOpenGLFunctions::glUniform2f(GLint location, GLfloat x, GLfloat y)
 {
-#ifdef QT_OPENGL_ES_2
+#if defined(Q_OS_ANDROID) && defined(QT_OPENGL_ES_2)
     ::glUniform2f(location, x, y);
 #else
     Q_ASSERT(QOpenGLFunctions::isInitialized(d_ptr));
@@ -1871,7 +1872,7 @@ inline void QOpenGLFunctions::glUniform2f(GLint location, GLfloat x, GLfloat y)
 
 inline void QOpenGLFunctions::glUniform2fv(GLint location, GLsizei count, const GLfloat* v)
 {
-#ifdef QT_OPENGL_ES_2
+#if defined(Q_OS_ANDROID) && defined(QT_OPENGL_ES_2)
     ::glUniform2fv(location, count, v);
 #else
     Q_ASSERT(QOpenGLFunctions::isInitialized(d_ptr));
@@ -1882,7 +1883,7 @@ inline void QOpenGLFunctions::glUniform2fv(GLint location, GLsizei count, const 
 
 inline void QOpenGLFunctions::glUniform2i(GLint location, GLint x, GLint y)
 {
-#ifdef QT_OPENGL_ES_2
+#if defined(Q_OS_ANDROID) && defined(QT_OPENGL_ES_2)
     ::glUniform2i(location, x, y);
 #else
     Q_ASSERT(QOpenGLFunctions::isInitialized(d_ptr));
@@ -1893,7 +1894,7 @@ inline void QOpenGLFunctions::glUniform2i(GLint location, GLint x, GLint y)
 
 inline void QOpenGLFunctions::glUniform2iv(GLint location, GLsizei count, const GLint* v)
 {
-#ifdef QT_OPENGL_ES_2
+#if defined(Q_OS_ANDROID) && defined(QT_OPENGL_ES_2)
     ::glUniform2iv(location, count, v);
 #else
     Q_ASSERT(QOpenGLFunctions::isInitialized(d_ptr));
@@ -1904,7 +1905,7 @@ inline void QOpenGLFunctions::glUniform2iv(GLint location, GLsizei count, const 
 
 inline void QOpenGLFunctions::glUniform3f(GLint location, GLfloat x, GLfloat y, GLfloat z)
 {
-#ifdef QT_OPENGL_ES_2
+#if defined(Q_OS_ANDROID) && defined(QT_OPENGL_ES_2)
     ::glUniform3f(location, x, y, z);
 #else
     Q_ASSERT(QOpenGLFunctions::isInitialized(d_ptr));
@@ -1915,7 +1916,7 @@ inline void QOpenGLFunctions::glUniform3f(GLint location, GLfloat x, GLfloat y, 
 
 inline void QOpenGLFunctions::glUniform3fv(GLint location, GLsizei count, const GLfloat* v)
 {
-#ifdef QT_OPENGL_ES_2
+#if defined(Q_OS_ANDROID) && defined(QT_OPENGL_ES_2)
     ::glUniform3fv(location, count, v);
 #else
     Q_ASSERT(QOpenGLFunctions::isInitialized(d_ptr));
@@ -1926,7 +1927,7 @@ inline void QOpenGLFunctions::glUniform3fv(GLint location, GLsizei count, const 
 
 inline void QOpenGLFunctions::glUniform3i(GLint location, GLint x, GLint y, GLint z)
 {
-#ifdef QT_OPENGL_ES_2
+#if defined(Q_OS_ANDROID) && defined(QT_OPENGL_ES_2)
     ::glUniform3i(location, x, y, z);
 #else
     Q_ASSERT(QOpenGLFunctions::isInitialized(d_ptr));
@@ -1937,7 +1938,7 @@ inline void QOpenGLFunctions::glUniform3i(GLint location, GLint x, GLint y, GLin
 
 inline void QOpenGLFunctions::glUniform3iv(GLint location, GLsizei count, const GLint* v)
 {
-#ifdef QT_OPENGL_ES_2
+#if defined(Q_OS_ANDROID) && defined(QT_OPENGL_ES_2)
     ::glUniform3iv(location, count, v);
 #else
     Q_ASSERT(QOpenGLFunctions::isInitialized(d_ptr));
@@ -1948,7 +1949,7 @@ inline void QOpenGLFunctions::glUniform3iv(GLint location, GLsizei count, const 
 
 inline void QOpenGLFunctions::glUniform4f(GLint location, GLfloat x, GLfloat y, GLfloat z, GLfloat w)
 {
-#ifdef QT_OPENGL_ES_2
+#if defined(Q_OS_ANDROID) && defined(QT_OPENGL_ES_2)
     ::glUniform4f(location, x, y, z, w);
 #else
     Q_ASSERT(QOpenGLFunctions::isInitialized(d_ptr));
@@ -1959,7 +1960,7 @@ inline void QOpenGLFunctions::glUniform4f(GLint location, GLfloat x, GLfloat y, 
 
 inline void QOpenGLFunctions::glUniform4fv(GLint location, GLsizei count, const GLfloat* v)
 {
-#ifdef QT_OPENGL_ES_2
+#if defined(Q_OS_ANDROID) && defined(QT_OPENGL_ES_2)
     ::glUniform4fv(location, count, v);
 #else
     Q_ASSERT(QOpenGLFunctions::isInitialized(d_ptr));
@@ -1970,7 +1971,7 @@ inline void QOpenGLFunctions::glUniform4fv(GLint location, GLsizei count, const 
 
 inline void QOpenGLFunctions::glUniform4i(GLint location, GLint x, GLint y, GLint z, GLint w)
 {
-#ifdef QT_OPENGL_ES_2
+#if defined(Q_OS_ANDROID) && defined(QT_OPENGL_ES_2)
     ::glUniform4i(location, x, y, z, w);
 #else
     Q_ASSERT(QOpenGLFunctions::isInitialized(d_ptr));
@@ -1981,7 +1982,7 @@ inline void QOpenGLFunctions::glUniform4i(GLint location, GLint x, GLint y, GLin
 
 inline void QOpenGLFunctions::glUniform4iv(GLint location, GLsizei count, const GLint* v)
 {
-#ifdef QT_OPENGL_ES_2
+#if defined(Q_OS_ANDROID) && defined(QT_OPENGL_ES_2)
     ::glUniform4iv(location, count, v);
 #else
     Q_ASSERT(QOpenGLFunctions::isInitialized(d_ptr));
@@ -1992,7 +1993,7 @@ inline void QOpenGLFunctions::glUniform4iv(GLint location, GLsizei count, const 
 
 inline void QOpenGLFunctions::glUniformMatrix2fv(GLint location, GLsizei count, GLboolean transpose, const GLfloat* value)
 {
-#ifdef QT_OPENGL_ES_2
+#if defined(Q_OS_ANDROID) && defined(QT_OPENGL_ES_2)
     ::glUniformMatrix2fv(location, count, transpose, value);
 #else
     Q_ASSERT(QOpenGLFunctions::isInitialized(d_ptr));
@@ -2003,7 +2004,7 @@ inline void QOpenGLFunctions::glUniformMatrix2fv(GLint location, GLsizei count, 
 
 inline void QOpenGLFunctions::glUniformMatrix3fv(GLint location, GLsizei count, GLboolean transpose, const GLfloat* value)
 {
-#ifdef QT_OPENGL_ES_2
+#if defined(Q_OS_ANDROID) && defined(QT_OPENGL_ES_2)
     ::glUniformMatrix3fv(location, count, transpose, value);
 #else
     Q_ASSERT(QOpenGLFunctions::isInitialized(d_ptr));
@@ -2014,7 +2015,7 @@ inline void QOpenGLFunctions::glUniformMatrix3fv(GLint location, GLsizei count, 
 
 inline void QOpenGLFunctions::glUniformMatrix4fv(GLint location, GLsizei count, GLboolean transpose, const GLfloat* value)
 {
-#ifdef QT_OPENGL_ES_2
+#if defined(Q_OS_ANDROID) && defined(QT_OPENGL_ES_2)
     ::glUniformMatrix4fv(location, count, transpose, value);
 #else
     Q_ASSERT(QOpenGLFunctions::isInitialized(d_ptr));
@@ -2025,7 +2026,7 @@ inline void QOpenGLFunctions::glUniformMatrix4fv(GLint location, GLsizei count, 
 
 inline void QOpenGLFunctions::glUseProgram(GLuint program)
 {
-#ifdef QT_OPENGL_ES_2
+#if defined(Q_OS_ANDROID) && defined(QT_OPENGL_ES_2)
     ::glUseProgram(program);
 #else
     Q_ASSERT(QOpenGLFunctions::isInitialized(d_ptr));
@@ -2036,7 +2037,7 @@ inline void QOpenGLFunctions::glUseProgram(GLuint program)
 
 inline void QOpenGLFunctions::glValidateProgram(GLuint program)
 {
-#ifdef QT_OPENGL_ES_2
+#if defined(Q_OS_ANDROID) && defined(QT_OPENGL_ES_2)
     ::glValidateProgram(program);
 #else
     Q_ASSERT(QOpenGLFunctions::isInitialized(d_ptr));
@@ -2047,7 +2048,7 @@ inline void QOpenGLFunctions::glValidateProgram(GLuint program)
 
 inline void QOpenGLFunctions::glVertexAttrib1f(GLuint indx, GLfloat x)
 {
-#ifdef QT_OPENGL_ES_2
+#if defined(Q_OS_ANDROID) && defined(QT_OPENGL_ES_2)
     ::glVertexAttrib1f(indx, x);
 #else
     Q_ASSERT(QOpenGLFunctions::isInitialized(d_ptr));
@@ -2058,7 +2059,7 @@ inline void QOpenGLFunctions::glVertexAttrib1f(GLuint indx, GLfloat x)
 
 inline void QOpenGLFunctions::glVertexAttrib1fv(GLuint indx, const GLfloat* values)
 {
-#ifdef QT_OPENGL_ES_2
+#if defined(Q_OS_ANDROID) && defined(QT_OPENGL_ES_2)
     ::glVertexAttrib1fv(indx, values);
 #else
     Q_ASSERT(QOpenGLFunctions::isInitialized(d_ptr));
@@ -2069,7 +2070,7 @@ inline void QOpenGLFunctions::glVertexAttrib1fv(GLuint indx, const GLfloat* valu
 
 inline void QOpenGLFunctions::glVertexAttrib2f(GLuint indx, GLfloat x, GLfloat y)
 {
-#ifdef QT_OPENGL_ES_2
+#if defined(Q_OS_ANDROID) && defined(QT_OPENGL_ES_2)
     ::glVertexAttrib2f(indx, x, y);
 #else
     Q_ASSERT(QOpenGLFunctions::isInitialized(d_ptr));
@@ -2080,7 +2081,7 @@ inline void QOpenGLFunctions::glVertexAttrib2f(GLuint indx, GLfloat x, GLfloat y
 
 inline void QOpenGLFunctions::glVertexAttrib2fv(GLuint indx, const GLfloat* values)
 {
-#ifdef QT_OPENGL_ES_2
+#if defined(Q_OS_ANDROID) && defined(QT_OPENGL_ES_2)
     ::glVertexAttrib2fv(indx, values);
 #else
     Q_ASSERT(QOpenGLFunctions::isInitialized(d_ptr));
@@ -2091,7 +2092,7 @@ inline void QOpenGLFunctions::glVertexAttrib2fv(GLuint indx, const GLfloat* valu
 
 inline void QOpenGLFunctions::glVertexAttrib3f(GLuint indx, GLfloat x, GLfloat y, GLfloat z)
 {
-#ifdef QT_OPENGL_ES_2
+#if defined(Q_OS_ANDROID) && defined(QT_OPENGL_ES_2)
     ::glVertexAttrib3f(indx, x, y, z);
 #else
     Q_ASSERT(QOpenGLFunctions::isInitialized(d_ptr));
@@ -2102,7 +2103,7 @@ inline void QOpenGLFunctions::glVertexAttrib3f(GLuint indx, GLfloat x, GLfloat y
 
 inline void QOpenGLFunctions::glVertexAttrib3fv(GLuint indx, const GLfloat* values)
 {
-#ifdef QT_OPENGL_ES_2
+#if defined(Q_OS_ANDROID) && defined(QT_OPENGL_ES_2)
     ::glVertexAttrib3fv(indx, values);
 #else
     Q_ASSERT(QOpenGLFunctions::isInitialized(d_ptr));
@@ -2113,7 +2114,7 @@ inline void QOpenGLFunctions::glVertexAttrib3fv(GLuint indx, const GLfloat* valu
 
 inline void QOpenGLFunctions::glVertexAttrib4f(GLuint indx, GLfloat x, GLfloat y, GLfloat z, GLfloat w)
 {
-#ifdef QT_OPENGL_ES_2
+#if defined(Q_OS_ANDROID) && defined(QT_OPENGL_ES_2)
     ::glVertexAttrib4f(indx, x, y, z, w);
 #else
     Q_ASSERT(QOpenGLFunctions::isInitialized(d_ptr));
@@ -2124,7 +2125,7 @@ inline void QOpenGLFunctions::glVertexAttrib4f(GLuint indx, GLfloat x, GLfloat y
 
 inline void QOpenGLFunctions::glVertexAttrib4fv(GLuint indx, const GLfloat* values)
 {
-#ifdef QT_OPENGL_ES_2
+#if defined(Q_OS_ANDROID) && defined(QT_OPENGL_ES_2)
     ::glVertexAttrib4fv(indx, values);
 #else
     Q_ASSERT(QOpenGLFunctions::isInitialized(d_ptr));
@@ -2135,7 +2136,7 @@ inline void QOpenGLFunctions::glVertexAttrib4fv(GLuint indx, const GLfloat* valu
 
 inline void QOpenGLFunctions::glVertexAttribPointer(GLuint indx, GLint size, GLenum type, GLboolean normalized, GLsizei stride, const void* ptr)
 {
-#ifdef QT_OPENGL_ES_2
+#if defined(Q_OS_ANDROID) && defined(QT_OPENGL_ES_2)
     ::glVertexAttribPointer(indx, size, type, normalized, stride, ptr);
 #else
     Q_ASSERT(QOpenGLFunctions::isInitialized(d_ptr));

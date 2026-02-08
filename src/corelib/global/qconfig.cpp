@@ -24,7 +24,23 @@ static const char qt_configure_host_prefix_path_str  [512 + 12] = "qt_hpfxpath=.
 #endif
 
 #ifdef Q_CC_MSVC
-#  define mkspecs "win32-msvc2015\0"
+#  if Q_CC_MSVC <= 1499
+#    define mkspecs "win32-msvc2005\0"
+#  elif Q_CC_MSVC <= 1599
+#    define mkspecs "win32-msvc2008\0"
+#  elif Q_CC_MSVC <= 1699
+#    define mkspecs "win32-msvc2010\0"
+#  elif Q_CC_MSVC <= 1799
+#    define mkspecs "win32-msvc2012\0"
+#  elif Q_CC_MSVC <= 1899
+#    define mkspecs "win32-msvc2013\0"
+#  elif Q_CC_MSVC <= 1909
+#    define mkspecs "win32-msvc2015\0"
+#  elif Q_CC_MSVC <= 1919
+#    define mkspecs "win32-msvc2017\0"
+#  else
+#    define mkspecs "win32-msvc2019\0"
+#  endif
 #else
 #  define mkspecs "win32-g++\0"
 #endif

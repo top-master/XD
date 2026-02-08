@@ -6,6 +6,7 @@ git clean -d -x -f ^
     -e /todo/** ^
     -e /bin/** ^
     -e /lib/** ^
+    -e /src/** ^
     -e /mkspecs/modules/** ^
     -e /plugins/** ^
     -e /src/extras/lib/**

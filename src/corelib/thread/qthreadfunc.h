@@ -59,7 +59,7 @@ public:
         }
     }
 
-    inline void setCallback(const  QFunction<void () > &newValue)
+    inline void setCallback(const QFunction<void () > &newValue)
     { return setCallback(new QRunnableFunc(newValue)); }
 
     /// Whether to `delete` this class once the thread's event-loop finishes.

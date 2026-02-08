@@ -426,6 +426,7 @@ int main(int argc, char *argv[]) \
     TestObject tc; \
     QTEST_SET_MAIN_SOURCE_PATH \
     return QTest::qExec(&tc, argc, argv); \
-}
+} \
+/**/
 
 #endif

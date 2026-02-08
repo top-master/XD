@@ -40,7 +40,13 @@
 #include <QtCore/qtimestamp.h>
 #include <QtCore/qcoreapplication.h>
 
-#include <inttypes.h>
+#if (defined(Q_CC_MSVC) && Q_CC_MSVC < 1900)
+#  ifndef PRId64
+#    define PRId64 "%I64d"
+#  endif
+#else
+#  include <inttypes.h>
+#endif
 
 
 QT_BEGIN_NAMESPACE

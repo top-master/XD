@@ -31,9 +31,11 @@
 
 QT_BEGIN_NAMESPACE
 
-class Q_CORE_EXPORT QRunnableDelay : public QRunnableFunc
+class Q_CORE_EXPORT QRunnableDelay : public QRunnable
 {
-    typedef QRunnableFunc super;
+    typedef QRunnable super;
+    friend class QRunnableFunc;
+    QFunction<void () > data;
     int m_delay;
 public:
     inline QRunnableDelay()
@@ -43,7 +45,7 @@ public:
 
     template <typename T>
     Q_ALWAYS_INLINE Q_IMPLICIT QRunnableDelay(const T &callback)
-        : super(callback)
+        : data(callback)
         , m_delay(0)
     {
     }
@@ -55,6 +57,11 @@ public:
     inline int delay() const { return m_delay; }
     inline void setDelay(int newValue) { m_delay = newValue; }
 };
+
+inline QRunnableFunc::QRunnableFunc(const QRunnableDelay &other)
+    : data(other.data)
+{
+}
 
 QT_END_NAMESPACE
 

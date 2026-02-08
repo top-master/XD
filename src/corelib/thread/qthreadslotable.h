@@ -28,6 +28,7 @@
 #include <QtCore/qthread.h>
 #include <QtCore/qsharedpointer.h>
 #include <QtCore/qexception.h>
+#include <QtCore/qatomicflags.h>
 
 
 QT_BEGIN_NAMESPACE
@@ -50,6 +51,10 @@ class Q_CORE_EXPORT QThreadSlotable : public QThread {
     typedef QThread super;
     Q_OBJECT
 
+    enum Flag {
+        FlagIsRunReached = 10,
+        FlagIsDeletingSafely = 160
+    };
 public:
     /// @warning Forbids setting @ref parent in constructor, since
     /// the @ref start moves this to itself as thread, which is required because
@@ -63,12 +68,14 @@ public:
     /// @see preDestruct()
     ~QThreadSlotable();
 
-    void start(Priority priority = QThread::InheritPriority) Q_DECL_OVERRIDE;
+    void start(Priority priority) Q_DECL_OVERRIDE;
+
+    Q_ALWAYS_INLINE void start();
 
     /// @note QThread has NOT any "isRunReached" check and @ref isRunning is
     /// set to @c true the moment @ref start is called, however,
     /// that is enough for most use cases of QThread.
-    inline bool isRunReached() const { return m_isRunReached; }
+    inline bool isRunReached() const { return m_flags.includes(FlagIsRunReached); }
 
 #ifndef QT_NO_EXCEPTIONS
     inline const std::exception_ptr &lastError() const { return m_lastError; }
@@ -124,8 +131,7 @@ private:
     inline void deleteLater() { super::deleteLater(); }
 
 private:
-    volatile bool m_isRunReached;
-    volatile bool m_isDeletingSafely;
+    QAtomicFlags<Flag > m_flags;
 
 #ifndef QT_NO_EXCEPTIONS
     std::exception_ptr m_lastError;
@@ -134,6 +140,15 @@ private:
 
 
 QSHAREDPOINTER_DELETER(QThreadSlotable, ptr->deleteSafe())
+
+
+#ifndef Q_MOC_RUN
+Q_ALWAYS_INLINE void QThreadSlotable::start() {
+    // TRACE/build/MSVC 2010: may compile-crash if default-arg uses parent-class's sub-type #1,
+    // hence either overload `start` here, but could use `Q_DEFAULT_ARG`.
+    this->start(QThread::InheritPriority);
+}
+#endif // Q_MOC_RUN
 
 #endif // QT_NO_THREAD
 

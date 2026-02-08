@@ -557,7 +557,7 @@ public:
     /// @warning use only if existing-deleter is guaranteed to
     /// be executed only after all of resulting `QSharedPointer` get destructed,
     /// but if unsure how to, use QSharedPointer(T *, Deleter) instead of this.
-    template <typename PreventCompileUnlessUsed = int>
+    Q_SKIP_UNUSED
     Q_INLINE_TEMPLATE static QSharedPointer<T> fromStack(T *ptr)
         { QSharedPointer<T> r(Qt::Uninitialized); r.internalConstructFake(ptr); return qMove(r); }
 
@@ -716,7 +716,7 @@ protected:
     { Data::derefStrong(d); }
 
     /// @deprecated Use @ref Data::derefStrong instead.
-    template <typename X = void>
+    Q_SKIP_UNUSED
     static inline void deref(Data *dd) Q_DECL_NOTHROW
     {
         Data::derefStrong(dd);
@@ -743,7 +743,7 @@ protected:
         internalFinishConstruction(ptr);
     }
 
-    template <typename PreventCompileUnlessUsed = int>
+    Q_SKIP_UNUSED
     Q_ALWAYS_INLINE_T void internalConstructFake(T *ptr)
     {
         if (ptr) {
@@ -853,11 +853,11 @@ public:
     { }
 
     /// Same as @ref QSharedPointer::fromStack, but with compatible return-type.
-    template <typename PreventCompileUnlessUsed = int>
+    Q_SKIP_UNUSED
     Q_INLINE_TEMPLATE static QRef<T> fromStack(T *ptr)
         { QRef<T> r(Qt::Uninitialized); r.internalConstructFake(ptr); return qMove(r); }
 
-    Q_ALWAYS_INLINE T *data() const { return reinterpret_cast<T *>(super::data()); }
+    Q_ALWAYS_INLINE T *data() const Q_DECL_NOTHROW { return reinterpret_cast<T *>(super::data()); }
     inline T &operator*() const { return *data(); }
     inline T *operator->() const { return data(); }
 

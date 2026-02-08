@@ -477,6 +477,30 @@ bool QtPrivate::debugDeleteEvents = false;
 */
 
 /*!
+  \macro Q_SKIP_UNUSED
+  \relates QObject
+
+  May prevent the complie of the method unless the method is used.
+
+  Example:
+  ```
+  Q_SKIP_UNUSED
+  inline void myRarelyUsedMethod() {
+  }
+  ```
+*/
+
+/*!
+    \macro Q_DEFAULT_ARG
+    Useful firstly when the compiler does not support default-template-arguments, and
+    secondly when MSVC 2010 compile-crashes for default-method-arguments that
+    use parent-class's sub-type.
+
+    However, the second use-case should be worked around with an overload, like
+    the @ref QThreadSlotable::start method does.
+ */
+
+/*!
     \macro Q_DECLARE_FLAGS(Flags, Enum)
     \relates QFlags
 
@@ -4671,6 +4695,24 @@ bool QInternal::activateCallbacks(Callback cb, void **parameters)
     \endcode
 
     \sa Q_DECL_FINAL
+*/
+
+/*!
+    \macro Q_DECL_OVERRIDE_IL
+    \since 5.6
+    \relates <QtGlobal>
+
+    Same as Q_DECL_OVERRIDE, but for inline methods, and that means for
+    compilers that don't yet allow placing `override` on `inline` methods.
+*/
+
+/*!
+    \macro Q_DECL_OVERRIDE_DEL
+    \since 5.6
+    \relates <QtGlobal>
+
+    Same as Q_DECL_OVERRIDE, but for destructors, and that means for
+    compilers that don't yet allow placing `override` on destructors.
 */
 
 /*!

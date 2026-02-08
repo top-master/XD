@@ -37,6 +37,23 @@ QT_CONFIG += sql
 ## Qt would disable text-codecs for Windows, XD keeps it always if possible.
 QT_CONFIG += codecs
 
+# TRACE/gui: disables OpenGL usages for Windows, except if either:
+# its included into the compiler's normally used Windows-SDK,
+# or, DirectX-SDK is installed.
+#
+# Sync below DirectX checks with: src/angle/src/common/common.pri
+#
+win32: !if(force_angle | force_opengl) {
+    winrt | if(msvc: greaterThan(MSC_VER, 1699)) {
+        # DirectX is included in the Windows 8 Kit -- nothing to disable.
+    } else {
+        TMP = $$(DXSDK_DIR)
+        isEmpty(TMP) {
+            QT_CONFIG -= angle dynamicgl opengl
+        }
+    }
+}
+
 # Improves auto-tests if debug-build.
 !CONFIG(debug, release|debug) {
     DEFINES += QT_BUILD_INTERNAL

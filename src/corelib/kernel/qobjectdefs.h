@@ -372,7 +372,6 @@ struct Q_CORE_EXPORT QMetaObject
 
     QObject *cast(QObject *obj) const;
 
-    template <typename T = void>
     Q_ALWAYS_INLINE_T const QObject *cast(const QObject *obj) const
         { return QMetaObject::cast(const_cast<QObject *>(obj)); }
 

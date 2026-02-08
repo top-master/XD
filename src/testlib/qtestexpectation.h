@@ -83,9 +83,14 @@ namespace QTest {
 /// that may break IDE's auto-complete feature.
 ///
 template <typename TActual>
-class Expectation : public ExpectationBase {
+class Expectation : public ExpectationBase,
+    public Mixins::ToBeNull<Expectation<TActual >, TActual, Traits::has_isNull<TActual >::value >
+{
     typedef ExpectationBase super;
     typedef Expectation<TActual> *SelfPtr;
+
+    friend class Mixins::ToBeNull<Expectation<TActual >, TActual, Traits::has_isNull<TActual >::value >;
+
     typedef typename QtPrivate::add_const<TActual>::type TActualConst;
 public:
     typedef Expectation<TActual> Self;
@@ -170,40 +175,6 @@ public:
             messenger.fail(
                 QStringLiteral("Invalid value."),
                 QStringLiteral("expected to be"), QStringLiteral("\"\" (empty)"),
-                QStringLiteral("but was"), QLL("\"") + value + QLL("\""));
-        }
-
-        inTestee = false;
-        return this;
-    }
-
-    template <typename T = TActual>
-    inline typename QEnableIf<Traits::has_isNull<T >::value, SelfPtr >::type
-            toBeNull() {
-        QT_QEXPECT_BEGIN
-
-        if (isFailed( const_cast<TActual *>(&actual)->isNull() )) {
-            QString value = formatter.stringify(actual);
-            messenger.fail(
-                QStringLiteral("Invalid value."),
-                QStringLiteral("expected to be"), QStringLiteral("\"null\""),
-                QStringLiteral("but was"), QLL("\"") + value + QLL("\""));
-        }
-
-        inTestee = false;
-        return this;
-    }
-
-    template <typename T = TActual>
-    inline typename QEnableIf<Traits::has_isNull<T >::value == false, SelfPtr >::type
-            toBeNull(int = 0) {
-        QT_QEXPECT_BEGIN
-
-        QString value = formatter.ptrText(actual);
-        if (isFailed( value == QStringLiteral("nullptr") )) {
-            messenger.fail(
-                QStringLiteral("Invalid value."),
-                QStringLiteral("expected to be"), QStringLiteral("\"nullptr\""),
                 QStringLiteral("but was"), QLL("\"") + value + QLL("\""));
         }
 
@@ -314,7 +285,7 @@ public:
 
     /// @warning Intentionally ignores anything after twelfth decimal (exclusive),
     /// hence for anything more or less precise use @ref toEqualFuzzy instead.
-    template <typename T = TActual>
+    Q_SKIP_UNUSED
     inline Self *toEqualNearly(const double &expected) {
         // If we add even a single zero more,
         // some tests would fail.
@@ -324,7 +295,7 @@ public:
     /// @warning Is optimized for MSVC-2015,
     /// which's less than 4 decimals precise,
     /// hence for anything more or less precise use @ref toEqualFuzzy instead.
-    template <typename T = TActual>
+    Q_SKIP_UNUSED
     inline Self *toEqualNearly(const float &expected) {
         // If we add even a single zero more,
         // some tests would fail.
@@ -487,7 +458,7 @@ public:
     /// qExpect(myVariable)->toBeTruthy()
     ///         ->withContext("My Custom Message");
     /// ```
-    template <typename T = int>
+    Q_SKIP_UNUSED
     inline Self *withContext(const QString &message) Q_DECL_NOEXCEPT {
         if ( ! message.isNull()) {
             QString msgCopy = message;
@@ -499,7 +470,7 @@ public:
     }
 
     /// Same as @ref withContext(const QString &), but does NOT copy message.
-    template <typename T = int>
+    Q_SKIP_UNUSED
     inline Self *withContext(const char *message) Q_DECL_NOEXCEPT {
         if (message) {
             this->customMessage = CustomMessageFunc([message]() -> QString {
@@ -511,7 +482,7 @@ public:
 
     /// Same as @ref withContext(const QString &), but
     /// may be faster, because given @p func is never called if test passes.
-    template <typename T = int>
+    Q_SKIP_UNUSED
     inline Self *withContext(const CustomMessageFunc &func) {
         inTestee =true;
 
@@ -532,7 +503,7 @@ public:
     /// it remains valid until `~ExpectationBase` finishes destructing.
     ///
     /// @see QStackTrace::skip
-    template <typename X = void>
+    Q_SKIP_UNUSED
     Q_ALWAYS_INLINE Self *withTraceSkip(const char *symbolRegEx) {
         this->m_traceSkipPattern = symbolRegEx;
         return this;

@@ -25,7 +25,7 @@ qt_static {
     MODULE_DIR = static/
 
     CONFIG(release, debug|release) {
-        CONFIG *= packing
+        !contains(TEMPLATE, lib): CONFIG *= packing
     }
 } else {
     # Shared-mode is the default, else would do:

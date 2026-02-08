@@ -102,7 +102,7 @@ QT_WARNING_POP
 #if defined(_MSC_VER) && _MSC_VER < 1900
 #  define Q_DEFER_X(name) QtPrivate::QDefer name; \
     do { Q_UNUSED(name) } while(0); \
-    name + [&, this]()
+    name + [&]()
 #else
 #  define Q_DEFER_X(name) QtPrivate::QDefer name; \
     do { Q_UNUSED(name) } while(0); \

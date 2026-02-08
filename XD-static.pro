@@ -12,6 +12,7 @@ unset(QT)
 SUBDIRS += \
     $$PWD/src/3rdparty/pcre \
     $$PWD/src/tools/bootstrap \
+    $$PWD/src/tools/idc \
     $$PWD/src/tools/moc \
     $$PWD/src/tools/uic \
     $$PWD/src/tools/rcc \
