@@ -46,7 +46,6 @@
 #include <QtCore/qcoreevent.h>
 #endif
 #include <QtCore/qscopedpointerlazy.h>
-#include <QtCore/qmetatype.h>
 
 #include <QtCore/qobject_impl.h>
 
@@ -736,6 +735,11 @@ namespace QtPrivate {
 #define Q_SET_OBJECT_NAME(obj) QT_PREPEND_NAMESPACE(QtPrivate)::deref_for_methodcall(obj).setObjectName(QLatin1String(#obj))
 
 QT_END_NAMESPACE
+
+// Since `qiodevice.h` needs to finish before including `qdatastream.h`.
+#ifndef QT_TMP_SKIP_METATYPE
+#  include <QtCore/qmetatype.h>
+#endif
 
 #endif // QT_NO_QOBJECT
 

@@ -127,7 +127,7 @@ public:
         if (VerboseDelete) qDebug("ServerThread: deleted.");
     }
 
-    inline void run() Q_DECL_OVERRIDE {
+    inline void run() Q_DECL_OVERRIDE_IL {
         QT_FINALLY([&] {
             if (VerboseDelete) qDebug("ServerThread: loop quit.");
             disconnect(m_tcpServer, &QTcpServer::newConnection,

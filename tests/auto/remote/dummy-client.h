@@ -59,7 +59,7 @@ public:
         if (ServerThread::VerboseDelete) qDebug("ClientThread: deleted.");
     }
 
-    inline void run() Q_DECL_OVERRIDE {
+    inline void run() Q_DECL_OVERRIDE_IL {
         QT_FINALLY([&] {
             Q_ASSERT_X(qApp, "Sub-Thread", "Keep main-thread alive until sub-threads finish.");
             // Allows destructor to wait for self.

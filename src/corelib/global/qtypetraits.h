@@ -532,9 +532,15 @@ struct not_c
     : integral_constant<bool, !B> {};
 
 // Checks whether a type is unsigned (T must be convertible to unsigned int):
+#if (defined(Q_CC_MSVC) && Q_CC_MSVC < 1900)
+template <typename T>
+struct is_unsigned
+    : integral_constant<bool, (T(0) < T(-1))> {};
+#else
 template <typename T>
 struct is_unsigned
     : integral_constant<bool, (T(0) <= T((std::numeric_limits<T>::min)()))> {};
+#endif // !MSVC
 
 // Checks whether a type is signed (T must be convertible to int):
 template <typename T>

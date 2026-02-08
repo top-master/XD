@@ -3607,11 +3607,16 @@ void tst_Moc::registerMethodArgumentMetaType()
     }
 }
 
-//Q_DECLARE_METATYPE(CXX11Enums::NormalEnum)
-//Q_DECLARE_METATYPE(CXX11Enums::EnumClass)
-//Q_DECLARE_METATYPE(CXX11Enums::TypedEnumClass)
-//Q_DECLARE_METATYPE(CXX11Enums::TypedEnum)
-//Q_DECLARE_METATYPE(CStyleEnums::Baz)
+// Note: for enums `qRegisterMetaType` works without `Q_DECLARE_METATYPE`,
+// however, some old compilers don't default to `int` correctly when
+// expanding the `QMetaTypeId2<T>::Defined` logic.
+#if defined(_MSC_VER) && _MSC_VER < 1900
+Q_DECLARE_METATYPE(CXX11Enums::NormalEnum)
+Q_DECLARE_METATYPE(CXX11Enums::EnumClass)
+Q_DECLARE_METATYPE(CXX11Enums::TypedEnumClass)
+Q_DECLARE_METATYPE(CXX11Enums::TypedEnum)
+Q_DECLARE_METATYPE(CStyleEnums::Baz)
+#endif // _MSC_VER
 Q_DECLARE_METATYPE(CStyleEnums::Baz2)
 
 void tst_Moc::registerStreamOperatorsForEnum_data()

@@ -297,7 +297,7 @@ public:
     }
 
     /// Same as @ref QSharedPointer::fromStack, but with compatible return-type.
-    template <typename PreventCompileUnlessUsed = int>
+    Q_SKIP_UNUSED
     Q_INLINE_TEMPLATE static QRemoteUserShared fromStack(QRemoteUser *ptr)
         { QRemoteUserShared r(Qt::Uninitialized); r.internalConstructFake(ptr); return qMove(r); }
 };

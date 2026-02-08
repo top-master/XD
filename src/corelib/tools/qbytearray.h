@@ -142,7 +142,7 @@ struct QByteArrayDataPtr
     static const QStaticByteArrayData< QT_JOIN(_qLiteralSize_, id) > QT_JOIN(_qLiteralData_, id) = { \
     Q_STATIC_BYTE_ARRAY_DATA_HEADER_INITIALIZER( QT_JOIN(_qLiteralSize_, id) ), \
     str }; \
-    type name(QByteArrayDataPtr({ QT_JOIN(_qLiteralData_, id).data_ptr() }));
+    type name(Qt::InternalCall, QT_JOIN(_qLiteralData_, id).data_ptr());
 
 /// Similar to #QByteArrayLiteral, but for global-scope.
 #define QByteArrayLiteralGlobal(name, str) QByteArrayLiteralGlobal_T(name, str, const QByteArray, __LINE__)
@@ -454,8 +454,12 @@ public:
     inline int length() const { return d->size; }
     Q_ALWAYS_INLINE bool isNull() const { return d == const_cast<QArrayData*>(QArrayData::shared_null); }
 
-    inline QByteArray(QByteArrayDataPtr dd)
+    Q_DECL_CONSTEXPR inline QByteArray(QByteArrayDataPtr dd)
         : d(static_cast<Data *>(dd.ptr))
+    {
+    }
+    Q_DECL_CONSTEXPR inline QByteArray(Qt::InternalGuard, QByteArrayData *dd)
+        : d(static_cast<Data *>(dd))
     {
     }
 

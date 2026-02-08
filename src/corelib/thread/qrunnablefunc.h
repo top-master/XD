@@ -45,6 +45,8 @@ public:
     {
     }
 
+    inline explicit QRunnableFunc(const QRunnableDelay &other);
+
     virtual ~QRunnableFunc();
 
     void run() Q_DECL_OVERRIDE;

@@ -45,8 +45,11 @@
 #ifndef QT_NO_QOBJECT
 #include <QtCore/qobjectdefs.h>
 #endif
-#include <new>
+#ifndef QT_NO_DATASTREAM
+#  include <QtCore/qdatastream.h>
+#endif
 
+#include <new>
 #include <vector>
 #include <list>
 #include <map>
@@ -676,6 +679,12 @@ public:
 
     static bool hasRegisteredConverterFunction(int fromTypeId, int toTypeId);
 
+#if (defined(Q_CC_MSVC) && Q_CC_MSVC < 1900)
+public:
+    inline QMetaType(QMetaType &&other) Q_DECL_NOTHROW
+    { (*this) = other; }
+#endif
+
 private:
     static QMetaType typeInfo(const int type);
     inline QMetaType(const ExtensionFlag extensionFlags, const QMetaTypeInterface *info,
@@ -786,12 +795,12 @@ struct QMetaTypeFunctionHelper {
         return new (where) T(*static_cast<const T*>(t));
     }
 #ifndef QT_NO_DATASTREAM
-    static void Save(QDataStream &stream, const void *t)
+    static inline void Save(QDataStream &stream, const void *t)
     {
         stream << *static_cast<const T*>(t);
     }
 
-    static void Load(QDataStream &stream, void *t)
+    static inline void Load(QDataStream &stream, void *t)
     {
         stream >> *static_cast<T*>(t);
     }
@@ -803,8 +812,8 @@ struct QMetaTypeFunctionHelper<T, /* Accepted */ false> {
     static void Destruct(void *) {}
     static void *Construct(void *, const void *) { return Q_NULLPTR; }
 #ifndef QT_NO_DATASTREAM
-    static void Save(QDataStream &, const void *) {}
-    static void Load(QDataStream &, void *) {}
+    static inline void Save(QDataStream &, const void *) {}
+    static inline void Load(QDataStream &, void *) {}
 #endif // QT_NO_DATASTREAM
 };
 template <>

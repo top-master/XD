@@ -114,8 +114,7 @@ public:
     }
 
 #ifdef Q_COMPILER_NULLPTR
-    Q_INLINE_TEMPLATE QString ptrText(std::nullptr_t value) {
-        Q_UNUSED(value)
+    Q_INLINE_TEMPLATE QString ptrText(std::nullptr_t /*value*/) {
         return QString(QStringLiteral("nullptr"));
     }
 #endif
@@ -316,7 +315,68 @@ static inline typename QEnableIf< ! QtPrivate::is_base_of<QString, T >::value &&
     inTestee = true; \
     if ( ! pendingMessage.isEmpty()) { \
         return this; \
+    } \
+/**/
+
+#define QT_QEXPECT_MIXIN_BEGIN \
+    OwnerType *owner = static_cast<OwnerType *>(this); \
+    owner->inTestee = true; \
+    if ( ! owner->pendingMessage.isEmpty()) { \
+        return owner; \
+    } \
+/**/
+
+
+namespace Mixins {
+
+/// The Primary Mixin Template.
+///
+/// Types that don't support `isNull` will inherit this empty class.
+template <typename OwnerType, typename TActual, bool Enable>
+class ToBeNull {
+public:
+
+    Q_SKIP_UNUSED
+    inline OwnerType *toBeNull(int = 0) {
+        QT_QEXPECT_MIXIN_BEGIN
+
+        QString value = owner->formatter.ptrText(owner->actual);
+        if (owner->isFailed( value == QStringLiteral("nullptr") )) {
+            owner->messenger.fail(
+                QStringLiteral("Invalid value."),
+                QStringLiteral("expected to be"), QStringLiteral("\"nullptr\""),
+                QStringLiteral("but was"), QLL("\"") + value + QLL("\""));
+        }
+
+        owner->inTestee = false;
+        return owner;
     }
+
+};
+
+template <typename OwnerType, typename TActual>
+class ToBeNull<OwnerType, TActual, true> {
+public:
+
+    Q_SKIP_UNUSED
+    inline OwnerType *toBeNull() {
+        QT_QEXPECT_MIXIN_BEGIN
+
+        if (owner->isFailed( const_cast<TActual *>(&owner->actual)->isNull() )) {
+            QString value = owner->formatter.stringify(owner->actual);
+            owner->messenger.fail(
+                QStringLiteral("Invalid value."),
+                QStringLiteral("expected to be"), QStringLiteral("\"null\""),
+                QStringLiteral("but was"), QLL("\"") + value + QLL("\""));
+        }
+
+        owner->inTestee = false;
+        return owner;
+    }
+
+};
+
+} // namespace MixIns
 
 } // namespace QTest
 

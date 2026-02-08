@@ -354,13 +354,13 @@ QRequirementError *QRequirementError::clone() const
     return new QRequirementError(*this);
 }
 
-void QRequirementError::setWhat(const char *msg) noexcept
+void QRequirementError::setWhat(const char *msg) Q_DECL_NOTHROW
 {
     super::setWhat(msg);
     this->prefixMessage();
 }
 
-void QRequirementError::setMessage(const QString &msg) noexcept
+void QRequirementError::setMessage(const QString &msg) Q_DECL_NOTHROW
 {
     super::setMessage(msg);
     this->prefixMessage();

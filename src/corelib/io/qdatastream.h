@@ -428,7 +428,7 @@ Q_OUTOFLINE_TEMPLATE QDataStream &operator<<(QDataStream &out, const QMap<Key, T
     return out;
 }
 
-#ifndef QT_NO_DATASTREAM
+#ifndef QT_BOOTSTRAPPED
 template <class T1, class T2>
 inline QDataStream& operator>>(QDataStream& s, QPair<T1, T2>& p)
 {
@@ -442,9 +442,9 @@ inline QDataStream& operator<<(QDataStream& s, const QPair<T1, T2>& p)
     s << p.first << p.second;
     return s;
 }
-#endif
+#endif // !QT_BOOTSTRAPPED
 
-#endif // QT_NO_DATASTREAM
+#endif // !QT_NO_DATASTREAM || QT_BOOTSTRAPPED
 
 QT_END_NAMESPACE
 

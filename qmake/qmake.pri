@@ -69,7 +69,7 @@ bootstrap { #Qt code
         qtextcodec.cpp \
         qutfcodec.cpp \
         qstring.cpp \
-        #qstring_compat.cpp \
+        #qstring_compat.cpp \ # Added in `NO_PCH_SOURCES`.
         qstringlist.cpp \
         qtemporaryfile.cpp \
         qtextstream.cpp \
@@ -146,6 +146,11 @@ bootstrap { #Qt code
         qstacktrace.h \
         qstacktrace_p.h \
         qdebug.h
+
+
+    NO_PCH_SOURCES += \
+        qstring_compat.cpp \ # Needed for MSVC 2010.
+        # End of NO_PCH_SOURCES.
 
     unix {
         SOURCES += qfilesystemengine_unix.cpp qfilesystemiterator_unix.cpp qfsfileengine_unix.cpp

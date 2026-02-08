@@ -13,7 +13,7 @@ DEFINES += \
 ## which will log a warning for each change of variables (in qmake scripts),
 ## where `QMAKE_WATCH = myVar` filters by variable-name what gets logged,
 ## note that on Windows the `qmake.pdb` file is required for better logs.
-#DEFINES += QMAKE_WATCH
+DEFINES += QMAKE_WATCH
 
 contains(DEFINES, QMAKE_WATCH) {
     !CONFIG(debug, debug|release) {

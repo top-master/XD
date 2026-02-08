@@ -25,14 +25,14 @@
 #include "./qthreadslotable.h"
 
 #include <QtCore/private/qobject_p.h>
+#include <QtCore/qfunction.h>
 
 QT_BEGIN_NAMESPACE
 
 #ifndef QT_NO_THREAD
 
 QThreadSlotable::QThreadSlotable()
-    : m_isRunReached(false)
-    , m_isDeletingSafely(false)
+    : QThread()
 #ifndef QT_NO_EXCEPTIONS
     , m_lastError(Q_NULLPTR)
 #endif
@@ -59,9 +59,9 @@ void QThreadSlotable::preDestruct()
     }
 }
 
-void QThreadSlotable::start(Priority priority)
+void QThreadSlotable::start(QThread::Priority priority)
 {
-    m_isRunReached = false;
+    m_flags.remove(FlagIsRunReached);
 
     // Below needs to occur before `start()`, else things connected to
     // this class's signals get triggered from calling-thread
@@ -84,7 +84,7 @@ void QThreadSlotable::run() {
         }
     };
 
-    m_isRunReached = true;
+    m_flags.append(FlagIsRunReached);
 
     QT_TRY {
         if ( ! qApp
@@ -123,7 +123,7 @@ void QThreadSlotable::postRun()
 /// if that thread never calls @ref exec, then this never gets called.
 ///
 void QThreadSlotable::onFinished() {
-    if ( ! m_isRunReached) {
+    if (m_flags.excludes(FlagIsRunReached)) {
         qFatal("QThreadSlotable: Usage error; override preRun instead of run.");
     }
     Q_ASSERT_X(QThread::currentThread() != this, "QThreadSlotable", "Should be called from a separate-thread");
@@ -180,7 +180,7 @@ posInvokeQueued:
 
 void QThreadSlotable::requireDeleteSafe()
 {
-    if ( ! m_isDeletingSafely
+    if (m_flags.excludes(FlagIsDeletingSafely)
          && this->thread() == this
     ) {
         // Possible reasons:
@@ -219,7 +219,7 @@ bool QThreadSlotable::event(QEvent *event)
             return true;
         } else {
             // Was valid.
-            m_isDeletingSafely = true;
+            m_flags.append(FlagIsDeletingSafely);
             this->preDestruct();
             // Falls back to `super::event`.
         }

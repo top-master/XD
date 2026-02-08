@@ -1552,9 +1552,17 @@ public:
         Uninitialized
     };
     static constexpr Q_DECL_UNUSED Initialization Uninitialized = Initialization::Uninitialized;
+
+    enum class InternalGuard {
+        InternalCall
+    };
+    static constexpr Q_DECL_UNUSED InternalGuard InternalCall = InternalGuard::InternalCall;
 #else
     enum Initialization {
         Uninitialized
+    };
+    enum InternalGuard {
+        InternalCall
     };
 #endif
 

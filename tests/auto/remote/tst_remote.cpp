@@ -200,7 +200,7 @@ void tst_remote::streamCodec_shouldEncodeMethodPacket()
         MethodPacket *methodPkt = reinterpret_cast<MethodPacket *>(pktBase.get());
         qExpect(methodPkt->method())->toEqual(methodName);
         auto timeStamp = methodPkt->timeStamp();
-        qExpect(timeStamp.length())->toBeGreaterOrEqual(QMetaRemote::timeStampFormat.length())
+        qExpect(timeStamp.length())->toBeGreaterOrEqual(QMetaRemote::timeStampFormatted().length())
                 ->withContext(timeStamp.constData());
     } catch (QRemoteException &err) {
         qThrowTestFailure(err.message());
@@ -652,6 +652,7 @@ public:
         : owner(ownerArg)
     {
     }
+
     ~SubThread()
     {
         super::requireDeleteSafe();
@@ -689,6 +690,8 @@ void tst_remote::runTestCasesAsync(int threadCount)
     }
 
     for (int i = 0; i < threadCount; ++i) {
+        // TRACE/build/MSVC 2010: may compile-crash if default-arg uses parent-class's sub-type #2,
+        // and this can be reproduced here by removing the inline-start method.
         threadList.ptr(i)->data()->start();
     }
 
