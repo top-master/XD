@@ -3,16 +3,31 @@
 .gitattributes          export-ignore
 .commit-template        export-ignore
 
+#
+# Firstly, ensures everything goes through common text-encoding detection, and
+# that every text's line ending shall be automatically set
+# (i.e. `crlf` in Windows, and `lf` for MacOS and Linux).
+#
+* text=auto
 
-# Never modify line endings of our console-scripts
+# Ensures to never modify line endings of our console-scripts
 # (while ensuring is tracked line by line instead of "binary").
 #
-*.bat           text eol=crlf
-*.cmd           text eol=crlf
-*.sh            text eol=lf
+*.bat     text eol=crlf
+*.cmd     text eol=crlf
+*.sh      text eol=lf
 
-# Windows
-*.rc            text eol=lf
+# Windows resources.
+*.rc      text eol=lf
+
+# Finally, ensures below things don't get mistaken with text, and
+# that even if by chance their binary matches a common text-encoding.
+#
+*.dat     binary
+*.dll     binary
+*.exe     binary
 
 # Image formats.
-*.ppm           binary
+*.ico     binary
+*.png     binary
+*.ppm     binary

@@ -1,0 +1,32 @@
+#
+# This file disables line-ending changes where needed, and
+# remains Git's line-by-line tracking where possible.
+#
+# Note: Changes to this file can be tested with the command:
+# ```
+# clear && git restore --staged . && git add . --renormalize && git status
+# ```
+#
+
+*.dtd -text
+*.ent -text
+
+corelib/xml/**/*.xml -text
+xml/**/*.xml -text
+xml/**/*.xml.bak -text
+
+corelib/codecs/qtextcodec/utf8.txt -text
+
+corelib/io/qfile/dosfile.txt -text
+corelib/io/qresourceengine/testqrc/test.qrc -text
+corelib/io/qtextstream/rfc3261.txt -text
+
+corelib/xml/qxmlstream/**/*.txt -text
+corelib/xml/qxmlstream/**/*.htm -text
+corelib/xml/qxmlstream/**/*.html -text
+corelib/xml/qxmlstream/**/*.css -text
+corelib/xml/qxmlstream/**/*.msxsl -text
+corelib/xml/qxmlstream/**/*.xsl -text
+
+tools/moc/win-newlines.h -text
+tools/uic/baseline/Widget.ui -text
