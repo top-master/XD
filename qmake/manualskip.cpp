@@ -1,4 +1,6 @@
 #include "manualskip.h"
+
+#ifdef Q_OS_WIN
 #include "library/udebug.h"
 
 #include "qplatformdefs.h"
@@ -41,6 +43,7 @@ bool isKeyDown(int vKey)
     return false;
 }
 
+#endif // Q_OS_WIN
 
 bool skipOnKey(const QString &str)
 {
@@ -53,6 +56,9 @@ bool skipOnKey(const QString &str)
         xd("qmake exited since you holded PrintScreen key ").noQuotes() << str;
         return true;
     }
+#else
+    // No key-hook support outside Windows -- always continue.
+    Q_UNUSED(str)
 #endif
     return false;
 }

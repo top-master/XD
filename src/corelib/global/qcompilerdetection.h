@@ -1294,6 +1294,10 @@
 #define qMove(x) (x)
 #endif
 
+// Use this to call a deprecated symbol (function, member, constant) without
+// the `-Wdeprecated-declarations` (or MSVC C4996) warning.
+#define qUndeprecate(x) (QT_WARNING_PUSH QT_WARNING_SUPPRESS_DEPRECATED (x) QT_WARNING_POP)
+
 #define Q_UNREACHABLE() \
     do {\
         Q_ASSERT_X(false, "Q_UNREACHABLE()", "Q_UNREACHABLE was reached");\
@@ -1407,12 +1411,26 @@
 
 #if defined(Q_CC_CLANG)
 #  define QT_WARNING_SUPPRESS_MOVE \
-    QT_WARNING_DISABLE_CLANG("-Wpessimizing-move")
+    QT_WARNING_DISABLE_CLANG("-Wpessimizing-move") \
+    QT_WARNING_DISABLE_CLANG("-Wreturn-stack-address")
 #elif defined(Q_CC_GNU) && !defined(Q_CC_INTEL) && Q_CC_GNU >= 900
 #  define QT_WARNING_SUPPRESS_MOVE \
     QT_WARNING_DISABLE_GCC("-Wpessimizing-move")
 #else
 #  define QT_WARNING_SUPPRESS_MOVE
+#endif
+
+#if defined(Q_CC_CLANG)
+#  define QT_WARNING_SUPPRESS_DEPRECATED \
+    QT_WARNING_DISABLE_CLANG("-Wdeprecated-declarations")
+#elif defined(Q_CC_GNU) && !defined(Q_CC_INTEL)
+#  define QT_WARNING_SUPPRESS_DEPRECATED \
+    QT_WARNING_DISABLE_GCC("-Wdeprecated-declarations")
+#elif defined(Q_CC_MSVC)
+#  define QT_WARNING_SUPPRESS_DEPRECATED \
+    QT_WARNING_DISABLE_MSVC(4996)
+#else
+#  define QT_WARNING_SUPPRESS_DEPRECATED
 #endif
 
 #if defined(Q_CC_CLANG)

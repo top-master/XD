@@ -1673,7 +1673,11 @@ static void qt_message_fatal(QtMsgType, const QMessageLogContext &context, const
 #else
     Q_UNUSED(context);
     Q_UNUSED(message);
+#  ifdef Q_OS_WIN
+    // Reference the helper just to suppress the unused-function warning.
+    // It's only defined on Windows (see the Q_OS_WIN block at the top).
     Q_UNUSED(&convert_to_wchar_t_elided);
+#  endif
 #endif
 
     qWarnFatal("qFatal: exiting.");

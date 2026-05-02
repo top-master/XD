@@ -214,6 +214,7 @@ namespace QT_NAMESPACE {}
 #else
 #  define QT_NEW_LINE "\n"
 #endif
+#define QT_NEW_LINE_U QT_UNICODE_LITERAL(QT_NEW_LINE)
 
 /*
    The window system, must be one of: (Q_WS_x)

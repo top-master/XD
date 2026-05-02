@@ -555,8 +555,9 @@ void QMacSettingsPrivate::sync()
                 if (QSysInfo::macVersion() < QSysInfo::MV_10_7) {
                     // work around what seems to be a bug in CFPreferences:
                     // don't report an error if there are no preferences for the application
-                    QCFType<CFArrayRef> appIds = CFPreferencesCopyApplicationList(domains[i].userName,
-                                                                                  hostNames[j]);
+                    QCFType<CFArrayRef> appIds = qUndeprecate(CFPreferencesCopyApplicationList(
+                            domains[i].userName,
+                            hostNames[j]));
 
                     // iterate through all the applications and see if we're there
                     CFIndex size = CFArrayGetCount(appIds);
@@ -657,14 +658,16 @@ bool QConfFileSettingsPrivate::readPlistFile(const QString &fileName, ParsedSett
 {
     QCFType<CFDataRef> resource;
     SInt32 code;
-    if (!CFURLCreateDataAndPropertiesFromResource(kCFAllocatorDefault, urlFromFileName(fileName),
-                                                  &resource, 0, 0, &code))
+    if (!qUndeprecate(CFURLCreateDataAndPropertiesFromResource(
+            kCFAllocatorDefault, urlFromFileName(fileName),
+            &resource, 0, 0, &code)))
         return false;
 
     QCFString errorStr;
     QCFType<CFPropertyListRef> propertyList =
-            CFPropertyListCreateFromXMLData(kCFAllocatorDefault, resource, kCFPropertyListImmutable,
-                                            &errorStr);
+            qUndeprecate(CFPropertyListCreateFromXMLData(
+                    kCFAllocatorDefault, resource, kCFPropertyListImmutable,
+                    &errorStr));
 
     if (!propertyList)
         return true;
@@ -710,7 +713,7 @@ bool QConfFileSettingsPrivate::writePlistFile(const QString &fileName,
                  kCFAllocatorDefault, propertyList, kCFPropertyListXMLFormat_v1_0, 0, 0);
 
     SInt32 code;
-    return CFURLWriteDataAndPropertiesToResource(urlFromFileName(fileName), xmlData, 0, &code);
+    return qUndeprecate(CFURLWriteDataAndPropertiesToResource(urlFromFileName(fileName), xmlData, 0, &code));
 }
 
 QT_END_NAMESPACE

@@ -547,14 +547,25 @@ public:
 
     const ushort *utf16() const;
 
+    // T is needed to defer the QEnableIf check until wcharCast() is actually called.
+    Q_SKIP_UNUSED
     inline const wchar_t *wcharCast() const
     {
+#if !(defined(Q_CC_MSVC) && Q_CC_MSVC < 1900)
+        if (sizeof(typename QEnableIf<sizeof(ushort) == sizeof(wchar_t), PreventCompileUnlessUsed >::type)) {}
+#else
         if (sizeof(QEnableIf<sizeof(ushort) == sizeof(wchar_t), bool >::type)) {}
+#endif
         return reinterpret_cast<const wchar_t *>(utf16());
     }
 
+    Q_SKIP_UNUSED
     inline wchar_t *wcharCast() {
+#if !(defined(Q_CC_MSVC) && Q_CC_MSVC < 1900)
+        if (sizeof(typename QEnableIf<sizeof(ushort) == sizeof(wchar_t), PreventCompileUnlessUsed >::type)) {}
+#else
         if (sizeof(QEnableIf<sizeof(ushort) == sizeof(wchar_t), bool >::type)) {}
+#endif
         detach();
         return reinterpret_cast<wchar_t *>(d->data());
     }

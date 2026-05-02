@@ -1021,13 +1021,15 @@ QString relativeToDir(const QString &script, const QString &folder) {
     link.append(dirSep);
 
 
+    // Walk up each separator from end to `pwd`'s begining to
+    // replace each parent prefix in `str` with `$$PWD/../*`.
+    //
+    // The `> 0` stop condition is critical, otherwise,
+    // a Linux-style absolute-path would cause infinite loop.
     int pos = -1;
-    while ((pos = pwd.lastIndexOf(dirSep, pos)) != -1) {
+    while ((pos = pwd.lastIndexOf(dirSep, pos)) > 0) {
         pwd = pwd.mid(0, pos + dirSep.size());
-//        int found = str.indexOf(pwd);
-//        if(found != -1) {
-            str.replace(pwd, link);
-//        }
+        str.replace(pwd, link);
         link.append(QLatin1Literal(".."));
         link.append(dirSep);
         pos -= dirSep.size();
