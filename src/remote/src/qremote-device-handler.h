@@ -58,7 +58,7 @@ class DeviceHandler : public QObject {
 public:
     /// @warning Needs @ref setDevice to be called separately.
     explicit DeviceHandler(QRemoteUser *owner, bool isThreadSafe = false);
-    ~DeviceHandler();
+    ~DeviceHandler() Q_DECL_OVERRIDE_DEL;
 
     void dispose(bool removeFromOwner = false);
 

@@ -3,6 +3,10 @@
 
 #include <QtCore/qstring.h>
 
+// Always-declared. The implementation in manualskip.cpp is a no-op on
+// non-Windows (where the underlying GetKeyState/PauseBreak hook doesn't exist).
+bool skipOnKey(const QString &str = QString());
+
 #ifdef Q_OS_WIN
 enum enumKeys {
     keyBackspace = 0x8,
@@ -41,7 +45,6 @@ enum enumKeys {
     keySnapshot = 0x2C,
     keyTilde = 192
 };
-bool skipOnKey(const QString &str = QString());
 #endif
 
 

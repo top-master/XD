@@ -84,7 +84,7 @@ static inline QStringList qWinCmdArgs(const QString &cmdLine)
 #ifdef Q_OS_WIN
 #  define QT_CMD_LINUX false
 #else
-#  define QT_CMD_LINUX ture
+#  define QT_CMD_LINUX true
 #endif
 
 /// Splits given single-line text into command-line's argument-list.

@@ -2,6 +2,11 @@ QMKSRC = $(SOURCE_PATH)/qmake
 QMKLIBSRC = $(QMKSRC)/library
 QMKGENSRC = $(QMKSRC)/generators
 
+# Header-include version. Defaults to QT_VERSION (the historical assumption)
+# but can be overridden when MODULE_HEADER_VERSION in .qmake.conf is pinned to
+# a different value than the runtime QT_VERSION (XD does this).
+QT_HEADER_VERSION ?= $(QT_VERSION)
+
 #qmake code
 OBJS=project.o option.o property.o main.o ioutils.o proitems.o \
      qmakevfs.o qmakeglobals.o qmakeparser.o qmakeevaluator.o qmakebuiltins.o \
@@ -9,7 +14,7 @@ OBJS=project.o option.o property.o main.o ioutils.o proitems.o \
      mingw_make.o winmakefile.o projectgenerator.o \
      meta.o makefiledeps.o metamakefile.o xmloutput.o pbuilder_pbx.o \
      msvc_vcproj.o msvc_vcxproj.o msvc_nmake.o msvc_objectmodel.o msbuild_objectmodel.o \
-     cesdkhandler.o
+     cesdkhandler.o manualskip.o udebug.o
 
 #qt code
 QOBJS=qtextcodec.o qutfcodec.o qstring.o qstring_compat.o qstringbuilder.o qtextstream.o qiodevice.o \
@@ -98,7 +103,7 @@ CPPFLAGS = -g $(EXTRA_CPPFLAGS) \
 	   -I$(QMKSRC) -I$(QMKLIBSRC) -I$(QMKSRC)/generators -I$(QMKSRC)/generators/unix -I$(QMKSRC)/generators/win32 \
 	   -I$(QMKSRC)/generators/mac -I$(QMKSRC)/generators/integrity \
 	   -I$(INC_PATH) -I$(INC_PATH)/QtCore \
-	   -I$(INC_PATH)/QtCore/$(QT_VERSION) -I$(INC_PATH)/QtCore/$(QT_VERSION)/QtCore \
+	   -I$(INC_PATH)/QtCore/$(QT_HEADER_VERSION) -I$(INC_PATH)/QtCore/$(QT_HEADER_VERSION)/QtCore \
 	   -I$(BUILD_PATH)/src/corelib/global -DHAVE_QCONFIG_CPP \
 	   -I$(QMAKESPEC) \
 	   -I$(SOURCE_PATH)/tools/shared \
@@ -163,6 +168,12 @@ meta.o: $(QMKSRC)/meta.cpp
 	$(CXX) -c -o $@ $(CXXFLAGS) $<
 
 main.o: $(QMKSRC)/main.cpp
+	$(CXX) -c -o $@ $(CXXFLAGS) $<
+
+manualskip.o: $(QMKSRC)/manualskip.cpp
+	$(CXX) -c -o $@ $(CXXFLAGS) $<
+
+udebug.o: $(QMKLIBSRC)/udebug.cpp
 	$(CXX) -c -o $@ $(CXXFLAGS) $<
 
 option.o: $(QMKSRC)/option.cpp
@@ -276,6 +287,12 @@ qcore_mac.o: $(SOURCE_PATH)/src/corelib/kernel/qcore_mac.cpp
 
 qcore_mac_objc.o: $(SOURCE_PATH)/src/corelib/kernel/qcore_mac_objc.mm
 	$(CXX) -c -o $@ $(CXXFLAGS) $(SOURCE_PATH)/src/corelib/kernel/qcore_mac_objc.mm
+
+qstring_mac.o: $(SOURCE_PATH)/src/corelib/tools/qstring_mac.mm
+	$(CXX) -c -o $@ $(CXXFLAGS) $(SOURCE_PATH)/src/corelib/tools/qstring_mac.mm
+
+qexception.o: $(SOURCE_PATH)/src/corelib/thread/qexception.cpp
+	$(CXX) -c -o $@ $(CXXFLAGS) $(SOURCE_PATH)/src/corelib/thread/qexception.cpp
 
 qutfcodec.o: $(SOURCE_PATH)/src/corelib/codecs/qutfcodec.cpp
 	$(CXX) -c -o $@ $(CXXFLAGS) $(SOURCE_PATH)/src/corelib/codecs/qutfcodec.cpp

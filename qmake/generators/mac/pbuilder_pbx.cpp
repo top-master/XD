@@ -1861,10 +1861,10 @@ ProjectBuilderMakefileGenerator::pbuilderVersion() const
             ret = QLatin1String("34");
             QCFType<CFURLRef> cfurl;
             // Check for XCode 4 first
-            OSStatus err = LSFindApplicationForInfo(0, CFSTR("com.apple.dt.Xcode"), 0, 0, &cfurl);
+            OSStatus err = qUndeprecate(LSFindApplicationForInfo(0, CFSTR("com.apple.dt.Xcode"), 0, 0, &cfurl));
             // Now check for XCode 3
             if (err == kLSApplicationNotFoundErr)
-                err = LSFindApplicationForInfo(0, CFSTR("com.apple.Xcode"), 0, 0, &cfurl);
+                err = qUndeprecate(LSFindApplicationForInfo(0, CFSTR("com.apple.Xcode"), 0, 0, &cfurl));
             if (err == noErr) {
                 QCFType<CFBundleRef> bundle = CFBundleCreate(0, cfurl);
                 if (bundle) {

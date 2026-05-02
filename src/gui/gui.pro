@@ -4,7 +4,6 @@ QT = core-private
 contains(QT_CONFIG, opengl.*): MODULE_CONFIG = opengl
 
 DEFINES   += QT_NO_USING_NAMESPACE
-DEFINES   += __SSE2__
 
 QMAKE_DOCS = $$PWD/doc/qtgui.qdocconf
 

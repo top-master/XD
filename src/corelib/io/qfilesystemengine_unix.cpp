@@ -104,8 +104,8 @@ static bool isPackage(const QFileSystemMetaData &data, const QFileSystemEntry &e
     if (suffix.length() > 0) {
         // First step: is the extension known ?
         QCFType<CFStringRef> extensionRef = QCFString::toCFStringRef(suffix);
-        QCFType<CFStringRef> uniformTypeIdentifier = UTTypeCreatePreferredIdentifierForTag(kUTTagClassFilenameExtension, extensionRef, NULL);
-        if (UTTypeConformsTo(uniformTypeIdentifier, kUTTypeBundle))
+        QCFType<CFStringRef> uniformTypeIdentifier = qUndeprecate(UTTypeCreatePreferredIdentifierForTag(kUTTagClassFilenameExtension, extensionRef, NULL));
+        if (qUndeprecate(UTTypeConformsTo(uniformTypeIdentifier, kUTTypeBundle)))
             return true;
 
         // Second step: check if an application knows the package type
@@ -120,10 +120,11 @@ static bool isPackage(const QFileSystemMetaData &data, const QFileSystemEntry &e
 #ifdef Q_OS_OSX
         // Find if an application other than Finder claims to know how to handle the package
         QCFType<CFURLRef> application;
-        LSGetApplicationForURL(url,
-                               kLSRolesEditor|kLSRolesViewer|kLSRolesViewer,
-                               NULL,
-                               &application);
+        qUndeprecate(LSGetApplicationForURL(
+                url,
+                kLSRolesEditor|kLSRolesViewer|kLSRolesViewer,
+                NULL,
+                &application));
 
         if (application) {
             QCFType<CFBundleRef> bundle = CFBundleCreate(kCFAllocatorDefault, application);
