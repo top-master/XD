@@ -262,7 +262,14 @@ typedef QMutex QBasicMutex;
 #  define Q_SYNCHRONIZED(lockObject) QtPrivate::QSynchronized(lockObject) + [&]()
 #endif
 
-#if !defined(QT_NO_KEYWORDS) && !defined(synchronized)
+/**
+ * Stays out of the way of Objective-C's `@synchronized` keyword.
+ *
+ * In `.mm` translation units the preprocessor would otherwise rewrite the
+ * keyword's argument list as `QtPrivate::QSynchronized(...) + [&]()`, leaving
+ * the stray `@` for the parser and producing "unexpected '@' in program".
+ */
+#if !defined(QT_NO_KEYWORDS) && !defined(synchronized) && !defined(__OBJC__)
 #  define synchronized(lockObject) Q_SYNCHRONIZED(lockObject)
 #endif
 

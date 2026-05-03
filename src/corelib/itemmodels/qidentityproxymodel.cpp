@@ -606,10 +606,15 @@ void QIdentityProxyModelPrivate::_q_sourceRowsRemoved(const QModelIndex &parent,
     q->endRemoveRows();
 }
 
+// `QProxyModel` is gated behind `QT_DEPRECATED_SINCE(5, 0)` in the header
+// (qidentityproxymodel.h:106); guard the dtor identically so this TU still
+// compiles when the build defines QT_DISABLE_DEPRECATED_BEFORE >= 0x050000.
+#if QT_DEPRECATED_SINCE(5, 0)
 QProxyModel::~QProxyModel()
 {
     // Nothing to do (but required).
 }
+#endif
 
 QT_END_NAMESPACE
 

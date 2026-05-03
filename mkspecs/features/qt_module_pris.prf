@@ -122,7 +122,11 @@ MODULE_FWD_PRI = $$mod_work_pfx/$${MODULE_DIR}qt_lib_$${mod_file}.pri
         module_build_type += internal_module
         private_deps = $$qtModuleIdFromKey($$QT)
         private_deps -= $$MODULE_DEPENDS
-        private_deps += $$MODULE$$MODULE_SUFFIX $$qtModuleIdFromKey($$QT_FOR_PRIVATE)
+        private_deps += $$MODULE$$MODULE_SUFFIX
+        # TRACE/mkspecs: QT_FOR_PRIVATE leaks under qt_static #2,
+        # hence keep QT_FOR_PRIVATE out of `<mod>_private.depends`
+        # (callers walking it would resolve modules not yet qmake'd).
+        !qt_static: private_deps += $$qtModuleIdFromKey($$QT_FOR_PRIVATE)
         # The `resolve_depends` function ignores duplicates, hence
         # we can leave them to help detect mistakes, else would do:
         # ```

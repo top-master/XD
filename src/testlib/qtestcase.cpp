@@ -1444,7 +1444,8 @@ namespace QTest
         ContinuousFlag = 0x05,
         FailureHandledFlag = 0x50
     };
-    static QBasicAtomicFlags<CaseFlags, int> globalFlags = Q_BASIC_ATOMIC_INITIALIZER(0);
+    // TRACE/corelib #Q_BASIC_ATOMIC_INITIALIZER; nest braces.
+    static QBasicAtomicFlags<CaseFlags, int> globalFlags = { { 0 } };
 
     class WatchDog;
 
@@ -3272,7 +3273,11 @@ while (QObject *testObject = provider.next()) {
 int QTest::qExec(QObject *testObject, int argc, char **argv)
 {
     QTEST_ASSERT(testObject);
-    return qExec(SingleTestProvider(testObject), argc, argv);
+    // The receiving overload `qExec(TestProvider &, int, char **)` takes a
+    // non-const lvalue reference, which can't bind to a temporary in C++11+.
+    // Bind the provider to a named lvalue first.
+    SingleTestProvider provider(testObject);
+    return qExec(provider, argc, argv);
 }
 
 /*!

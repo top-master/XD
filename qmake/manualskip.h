@@ -3,8 +3,12 @@
 
 #include <QtCore/qstring.h>
 
-// Always-declared. The implementation in manualskip.cpp is a no-op on
-// non-Windows (where the underlying GetKeyState/PauseBreak hook doesn't exist).
+// Lets callers abort qmake when the user is holding a designated key,
+// without each call site having to special-case Windows vs non-Windows.
+//
+// Always declared so the call site stays platform-agnostic; the
+// implementation in manualskip.cpp returns false unconditionally on
+// platforms that lack the GetKeyState/PauseBreak hook.
 bool skipOnKey(const QString &str = QString());
 
 #ifdef Q_OS_WIN
