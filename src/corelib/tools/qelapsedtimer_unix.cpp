@@ -97,9 +97,12 @@ static inline void qt_clock_gettime(int, struct timespec *ts)
 #    define _POSIX_MONOTONIC_CLOCK -1
 #  endif
 #else
-static inline void qt_clock_gettime(clockid_t clock, struct timespec *ts)
+static inline void qt_clock_gettime(int clock, struct timespec *ts)
 {
-    clock_gettime(clock, ts);
+    // `unixCheckClockType()` (the only caller) returns `int`; on macOS
+    // `clockid_t` is an enum, so C++ won't implicitly convert int -> enum.
+    // Cast inside the wrapper instead of changing every call site.
+    clock_gettime(static_cast<clockid_t>(clock), ts);
 }
 #endif
 

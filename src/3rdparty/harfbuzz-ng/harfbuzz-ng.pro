@@ -25,7 +25,12 @@ android: DEFINES += _POSIX_C_SOURCE=200112L
 INCLUDEPATH += $$PWD/include
 
 # Harfbuzz-NG inside Qt uses the Qt atomics (inline code only)
-INCLUDEPATH += $$QT.core.includes
+#
+# Note: `QT.core.includes` may be empty under qt_static (if non-static build didn't run yet).
+#
+qt_static: INCLUDEPATH += $$QT.core_static.includes
+else:      INCLUDEPATH += $$QT.core.includes
+
 DEFINES += QT_NO_VERSION_TAGGING
 
 SOURCES += \

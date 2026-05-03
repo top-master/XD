@@ -1,4 +1,9 @@
-!win32|contains(QT_CONFIG, freetype):!mac {
+# TRACE/platformsupport mac: compile QBasicFontDatabase on Mac too,
+# since `qminimal` (the headless QPA plugin under
+# `src/plugins/platforms/minimal/qminimalintegration.cpp`) references it
+# unconditionally; the bundled `libqtfreetype.a` covers the freetype
+# prerequisite.
+!win32|contains(QT_CONFIG, freetype) {
     include($$PWD/basic/basic.pri)
 }
 

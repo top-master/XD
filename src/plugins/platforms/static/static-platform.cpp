@@ -3,6 +3,8 @@
 
 #ifdef Q_OS_WIN
 #  include "../windows/main-windows-platform.h"
+#elif defined(Q_OS_MAC)
+#  include "../cocoa/main-cocoa-platform.h"
 #endif
 
 #include <QtCore/qfunction.h>
@@ -17,6 +19,8 @@ QPlatformIntegration *QtPrivate::findStaticIntegeration(const QString &key, cons
 
 #ifdef Q_OS_WIN32
     factory = new QWindowsIntegrationPlugin();
+#elif defined(Q_OS_MAC)
+    factory = new QCocoaIntegrationPlugin();
 #else
 #  error "Platform not supported."
 #endif

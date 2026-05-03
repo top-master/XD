@@ -1383,10 +1383,47 @@ void tst_qmakelib::addReplaceFunctions(const QString &qindir)
             << ""
             << true;
 
+    // The 5th arg names a test function that is consulted for every module
+    // left tangled in a cycle: $$1 is that module, $$2 the path of deps that
+    // leads back to it (the cycle itself, with $$1 left out). Returning true
+    // keeps the module in the result instead of dropping it and warning.
+    //
+    // Below we simulate the `gui -> printsupport -> widgets -> gui` cycle,
+    // hence $$2 should hold `printsupport widgets` list as value, and that
+    // in the walk-order, and $$1 should hold `gui` as value.
+    QTest::newRow("$$resolve_depends(): recursion handler keeps cycle")
+            << "defineTest(keepCycle) {\n"
+                   "equals(1, gui_static) {\n"
+                       "GUI2 = $$2\n"
+                       "export(GUI2)\n"
+                       "message(\"Found cycle: $$1 caused by $$2\")\n"
+                   "}\n"
+                   "equals(1, printsupport_static) {\n"
+                       "PSUP2 = $$2\n"
+                       "export(PSUP2)\n"
+                   "}\n"
+                   "equals(1, widgets_static) {\n"
+                       "WID2 = $$2\n"
+                       "export(WID2)\n"
+                   "}\n"
+                   "return(true)\n"
+               "}\n"
+               "gui_static.depends = printsupport_static\n"
+               "printsupport_static.depends = widgets_static\n"
+               "widgets_static.depends = gui_static\n"
+               "VAR = $$resolve_depends($$list(gui_static), \"\", .depends, \"\", keepCycle)\n"
+               "count(VAR, 3): KEPT = 3"
+            << "GUI2 = printsupport_static widgets_static\n"
+               "PSUP2 = widgets_static gui_static\n"
+               "WID2 = gui_static printsupport_static\n"
+               "KEPT = 3"
+            << "Project MESSAGE: Found cycle: gui_static caused by printsupport_static widgets_static"
+            << true;
+
     QTest::newRow("$$resolve_depends(): bad number of arguments")
-            << "VAR = $$resolve_depends(1, 2, 3, 4, 5)"
+            << "VAR = $$resolve_depends(1, 2, 3, 4, 5, 6)"
             << "VAR ="
-            << "##:1: resolve_depends(var, [prefix, [suffixes, [prio-suffix]]]) requires one to four arguments."
+            << "##:1: resolve_depends(var, [prefix, [suffixes, [prio-suffix, [recursion-handler]]]]) requires one to five arguments."
             << true;
 
     QTest::newRow("$$enumerate_vars()")

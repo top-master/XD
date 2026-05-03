@@ -35,8 +35,12 @@
 QT_BEGIN_NAMESPACE
 using namespace QRemote;
 
-static Q_CONSTEXPR QString MSG_DEVICE_MISSING = QStringLiteral("Device not set (or destroyed)");
-static Q_CONSTEXPR QString MSG_DEVICE_READ_FAILED = QStringLiteral("Device read failed.");
+// QString is not a literal type, so it can't be `Q_CONSTEXPR`; modern clang
+// rejects it with `error: constexpr variable cannot have non-literal type`.
+// Plain `const` plus `QStringLiteral` keeps the same compile-time string
+// initialiser without forcing constexpr semantics.
+static const QString MSG_DEVICE_MISSING = QStringLiteral("Device not set (or destroyed)");
+static const QString MSG_DEVICE_READ_FAILED = QStringLiteral("Device read failed.");
 
 
 DeviceHandler::DeviceHandler(QRemoteUser *owner, bool isThreadSafe)

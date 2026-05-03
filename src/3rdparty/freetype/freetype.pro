@@ -14,13 +14,12 @@ win32 {
 }
 
 SOURCES += \
-    $$PWD/src/autofit/afangles.c \
-    $$PWD/src/autofit/afdummy.c \
-    $$PWD/src/autofit/afglobal.c \
-    $$PWD/src/autofit/afhints.c \
-    $$PWD/src/autofit/aflatin.c \
-    $$PWD/src/autofit/afloader.c \
-    $$PWD/src/autofit/afmodule.c \
+    # `autofit.c` is FreeType's amalgamation that already `#includes` every
+    # `af*.c` source -- including afblue/afcjk/afindic/afranges that define
+    # per-script `af_*_uniranges` and `af_*_writing_system_class` symbols.
+    # Listing the individual modules alongside the amalgamation produces
+    # duplicate-symbol errors on Mac's ld (Linux's ld silently drops them,
+    # hence not noticed there). Keep only the amalgamation.
     $$PWD/src/autofit/autofit.c \
     $$PWD/src/base/ftbase.c \
     $$PWD/src/base/ftbitmap.c \

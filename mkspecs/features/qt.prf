@@ -71,6 +71,11 @@ defineTest(qtProcessModuleFlags) {
     export($$1)
 }
 
+defineReplace(tmp_resolve_depends) {
+    qtc_run: return($$resolve_depends($$1, "QT.", ".depends"))
+    else: return($$resolve_depends($$1, "QT.", ".depends", ".priority", "onQtModuleRecursion"))
+}
+
 unset(using_privates)
 var_sfx =
 for(ever) {
@@ -80,7 +85,7 @@ for(ever) {
     qt_static: \
         CLEAN_QT$$var_sfx ~= s|$|_static|g
     # Topological resolution of modules based on their QT.<module>.depends variable
-    FULL_QT$$var_sfx = $$resolve_depends(CLEAN_QT$$var_sfx, "QT.")
+    FULL_QT$$var_sfx = $$tmp_resolve_depends(CLEAN_QT$$var_sfx)
     # Finally actually add the modules
     unset(BAD_QT)
     for(QTLIB, FULL_QT$$var_sfx) {
@@ -180,6 +185,7 @@ for(ever) {
     message("This is not a bug, but a result of using Qt internals.")
     message("You can disable this warning with "CONFIG += no_private_qt_headers_warning".")
 }
+unset(tmp_resolve_depends)
 
 qt_module_deps = $$CLEAN_QT $$CLEAN_QT_PRIVATE
 qt_module_deps = $$resolve_depends(qt_module_deps, "QT.", ".depends", ".priority")

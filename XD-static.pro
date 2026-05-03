@@ -12,21 +12,29 @@ unset(QT)
 SUBDIRS += \
     $$PWD/src/3rdparty/pcre \
     $$PWD/src/tools/bootstrap \
-    $$PWD/src/tools/idc \
+
+win32: SUBDIRS += $$PWD/src/tools/idc
+
+SUBDIRS += \
     $$PWD/src/tools/moc \
     $$PWD/src/tools/uic \
     $$PWD/src/tools/rcc \
     $$PWD/src/corelib \
-    $$PWD/src/winmain \
+
+win32: SUBDIRS += $$PWD/src/winmain
+
+SUBDIRS += \
     $$PWD/src/dbus \
+    $$PWD/src/network \
+    $$PWD/src/xml \
     $$PWD/src/3rdparty/harfbuzz-ng \
     $$PWD/src/3rdparty/freetype \
-    $$PWD/src/platformsupport \
     $$PWD/src/gui \
+    $$PWD/src/platformsupport \
     $$PWD/src/widgets \
+    $$PWD/src/printsupport \
     $$PWD/src/remote \
-    $$PWD/src/testlib \
-    # End of subdirs.
+    $$PWD/src/testlib
 
 # Enables global qt_static setting (if not already).
 if ( ! exists($$OUT_PWD/.qmake.cache)) {

@@ -159,16 +159,34 @@ void QEventDispatcherDecor::unregisterEventNotifier(QWinEventNotifier *notifier)
 
 void QEventDispatcherDecor::wakeUp()
 {
+    // TRACE/QEventDispatcher/decor BugFix: skip until decoratee loads #1,
+    // since `load` may still be constructing the platform integration --
+    // e.g. `QCocoaInputContext`'s ctor (called from inside
+    // `QCocoaIntegration`'s ctor, which is itself the body of `load`)
+    // queues `QMetaObject::invokeMethod(... Qt::QueuedConnection)`, and
+    // the resulting `QCoreApplication::postEvent` wakes the dispatcher.
+    // Forcing `toDecoratee()` here would re-enter `load` and create a
+    // second platform integration. Posted events are already in
+    // `data->postEventList`, so the wake is a no-op until a real event
+    // loop runs; safe to skip until the decoratee is in.
+    if ( ! isDecorLoaded())
+        return;
     return toDecoratee()->wakeUp();
 }
 
 void QEventDispatcherDecor::interrupt()
 {
+    // TRACE/QEventDispatcher/decor BugFix: skip until decoratee loads #2.
+    if ( ! isDecorLoaded())
+        return;
     return toDecoratee()->interrupt();
 }
 
 void QEventDispatcherDecor::flush()
 {
+    // TRACE/QEventDispatcher/decor BugFix: skip until decoratee loads #3.
+    if ( ! isDecorLoaded())
+        return;
     return toDecoratee()->flush();
 }
 

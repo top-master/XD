@@ -33,6 +33,12 @@ sql-drivers    -= $$eval(sql-plugins)
 
 win32 {
     styles     += windows fusion windowsxp windowsvista
+} else: macx {
+    # macOS native style; styles.pri also force-adds `mac` on macx.
+    styles     += mac
+} else: unix {
+    # X11/other unix: Fusion is the platform-neutral default.
+    styles     += fusion
 } else {
     # This file may be loaded by `.qmake.conf` (which runs before mkspecs),
     # hence checking `QMAKE_PLATFORM` as well.

@@ -87,8 +87,8 @@ public:
     inline QString toString(int flags = NoFlags) const { return QElapsedTimer::toString(elapsed(), FormatFlags(flags)); }
     /// Combines @ref toString with @ref label to prevent mismatch.
     static QString toStringLabel(qint64 msec, FormatFlags flags = Precise);
-    inline QString toStringLabel(int flags = Precise) const
-        { return QElapsedTimer::toStringLabel(elapsed(), FormatFlags(flags)); }
+    inline QString toStringLabel(FormatFlags flags = Precise) const
+        { return QElapsedTimer::toStringLabel(elapsed(), flags); }
     static QString label(qint64 msec, FormatFlags flags = NoFlags);
 
     bool operator==(const QElapsedTimer &other) const Q_DECL_NOTHROW

@@ -35,12 +35,18 @@ defineTest(disallow_build_dir) {
 defineReplace(xd_suffix) {
     r = $$1
 
-    # Suffixes with build-type's mark (like "d" for debug).
+    # Suffixes with build-type's mark (like "d" for debug, or
+    # "_debug" on macOS/Linux).
     r = $$r$$qtPlatformTargetSuffix()
 
     # Suffixes with system extension.
-    win32: r = $${r}.dll
-    else:  r = $${r}.so
+    win32 {
+        r = $${r}.dll
+    } else:macx {
+        r = lib$${r}.dylib
+    } else {
+        r = lib$${r}.so
+    }
     return($$r)
 }
 
@@ -208,7 +214,12 @@ defineTest(copyModule) {
         2 = $$xd_destdir()
     }
     mkpath($$2)
-    copy_file($$[QT_INSTALL_BINS]/$$xd_module($$1), $$2/)
+    # Windows ships its Qt DLLs alongside qmake and/or moc under
+    # `QT_INSTALL_BINS`; macOS and Linux keep `.dylib`/`.so` files
+    # under `QT_INSTALL_LIBS`.
+    win32: src_root = $$[QT_INSTALL_BINS]
+    else:  src_root = $$[QT_INSTALL_LIBS]
+    copy_file($$src_root/$$xd_module($$1), $$2/)
 }
 
 # copyModuleList(destinationPath, [variableName = QT])
@@ -230,7 +241,7 @@ defineTest(copyPlugin) {
     unset(path)
     path = $$[QT_INSTALL_PLUGINS]/$$1
     # Append name
-    path = $${path}/q$$xd_suffix($$2)
+    path = $${path}/$$xd_suffix(q$$2)
     # Create destination directory and copy plugin there
     isEmpty(3) {
         3 = $$xd_destdir()/$$1 # Is absolute for later copy calls.
@@ -261,8 +272,24 @@ defineTest(copyOpenSSL) {
     } else {
         path = $${path}/release
     }
-    copy_file($$path/libeay32.dll, $$1/)
-    copy_file($$path/ssleay32.dll, $$1/)
+    # XD ships a custom OpenSSL build under `$$[QT_INSTALL_LIBS]/openssl/`
+    # on every platform; consumers must use that exact build (Qt5Network
+    # is linked against its symbol set) rather than whatever OpenSSL the
+    # host happens to expose.
+    #
+    win32 {
+        ext = .dll
+    } else:macx {
+        ext = *.dylib
+    } else {
+        ext = .so*
+    }
+    for(f, $$list($$files($$path/libeay32$$ext)))  {
+        copy_file($$f, $$1/)
+    }
+    for(f, $$list($$files($$path/libssleay32$$ext))) {
+        copy_file($$f, $$1/)
+    }
 }
 
 # Returns `DESTDIR` converted to absolute-path, maybe affixed by build-type

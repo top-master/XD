@@ -216,9 +216,14 @@ defineTest(qtAddToolEnv) {
             !write_file($$OUT_PWD/$$batch_name, batch_cont, exe): error("Aborting.")
         }
         batch_path = $$makefile_relative($$batch_name)
-        isEmpty(3): \
+        isEmpty(3) {
+            # The wrapper sits next to the makefile and is invoked by make
+            # itself, hence reference it via an explicit `./` (otherwise,
+	    # non-Windows platforms would require its dir to be on `$PATH`).
+            !contains(batch_path, [/\\\\]): batch_path = ./$$batch_path
+
             $$1 += $$shell_quote($$shell_path($$batch_path))
-        else: \
+        } else: \
             $$1 += $$system_quote($$system_path($$OUT_PWD/$$batch_name))
         QMAKE_DISTCLEAN += $$batch_path
     }

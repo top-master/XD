@@ -39,3 +39,25 @@ qt_static {
 export(MODULE_SUFFIX)
 export(MODULE_DIR)
 export(CONFIG)
+
+# Recursion-handler passed to the resolve_depends built-in (its 5th arg) by qt.prf.
+#
+# $$1 is the module qmake found in a dependency cycle,
+# and $$2 is the list of deps that end up leading back to $$1.
+#
+# For qt_static builds, and only for `*_static` keyworded modules:
+# static archives are allowed to reference each other
+# (e.g. gui_static <-> platformsupport_static),
+# and ld64 and/or link.exe resolve mutually-referential archives order-independently,
+# so they're safe to keep -- the link needs them all present.
+#
+# For shared builds (not qt_static) this returns false, hence
+# a real cycle still warns and drops as before.
+#
+defineTest(onQtModuleRecursion) {
+    qt_static: contains(1, .*_static) {
+        message("Ignored dependency cycle: $$1 caused by $$2")
+        return(true)
+    }
+    return(false)
+}

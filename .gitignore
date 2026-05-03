@@ -15,6 +15,9 @@
 *.qmlproject.user*
 *~*.TMP
 
+# Claude AI-agent.
+.claude/
+
 examples/*/*/*
 !examples/*/*/*[.]*
 !examples/*/*/README
