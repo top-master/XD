@@ -103,6 +103,13 @@ inline ExpectationBase::ExpectationBase(const char *fileArg, int lineArg)
     });
 }
 
+// Forward-declared so Formatter::ptrText below can SFINAE on it; the
+// full definition (with the other helpers) lives in the Traits block
+// further down.
+namespace Traits {
+    template <typename T> struct IsPtr;
+}
+
 class Formatter {
     typedef ExpectationBase Owner;
 public:
@@ -119,11 +126,32 @@ public:
     }
 #endif
 
-    template <typename T>
-    Q_INLINE_TEMPLATE QString ptrText(const T &value) {
+    // Raw-pointer path: preferred for any T* convertible to `const void *`.
+    Q_INLINE_TEMPLATE QString ptrText(const void *value) {
         return value == Q_NULLPTR
                 ? QString(QStringLiteral("nullptr"))
                 : QString(QLL("0x") + QString::number(qlonglong(value), 16));
+    }
+
+    // Non-pointer fallback (PMFs, etc.): the above qlonglong() cast is
+    // ill-formed for pointer-to-member-function types (not scalar on the
+    // Itanium ABI), so dump the raw object bytes via memcpy instead.
+    // SFINAE'd on Traits::IsPtr<T> so raw pointers always go through the
+    // const-void* overload above.
+    template <typename T>
+    Q_INLINE_TEMPLATE
+    typename QEnableIf< ! Traits::IsPtr<T >::value, QString >::type
+    ptrText(const T &value) {
+        if (value == Q_NULLPTR) {
+            return QString(QStringLiteral("nullptr"));
+        }
+        QString out = QLL("0x");
+        unsigned char buf[sizeof(T)];
+        memcpy(buf, &value, sizeof(T));
+        for (int i = int(sizeof(T)) - 1; i >= 0; --i) {
+            out += QString::number(buf[i], 16).rightJustified(2, QLatin1Char('0'));
+        }
+        return out;
     }
 
     Q_REQUIRED_RESULT inline QString stringify(const char *value) {
@@ -308,6 +336,23 @@ static inline typename QEnableIf< ! QtPrivate::is_base_of<QString, T >::value &&
 {
     return false;
 }
+
+// declval-style helper for unevaluated contexts; lets `IsPtr` below
+// produce a T-typed expression without depending on T being
+// default-constructible. (No need to pull in <utility>.)
+template <typename T> T &qDeclval();
+
+// Overload-trick (same `qInlineTest` shape as DEFINE_HAS_METHOD):
+// reusing the YesType/NoType pair so sizeof distinguishes the two --
+// anything binding to `const void *` selects YesType; PMFs, QString,
+// ints, etc. fall through to varargs and select NoType. `IsPtr<T>`
+// exposes the result as a compile-time boolean usable with QEnableIf.
+template <typename T>
+struct IsPtr {
+    static YesType &qInlineTest(const void *);
+    static NoType  &qInlineTest(...);
+    enum { value = (sizeof(qInlineTest(qDeclval<T>())) == sizeof(YesType)) };
+};
 
 } // namespace Traits
 

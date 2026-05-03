@@ -2,9 +2,13 @@ QMKSRC = $(SOURCE_PATH)/qmake
 QMKLIBSRC = $(QMKSRC)/library
 QMKGENSRC = $(QMKSRC)/generators
 
-# Header-include version. Defaults to QT_VERSION (the historical assumption)
-# but can be overridden when MODULE_HEADER_VERSION in .qmake.conf is pinned to
-# a different value than the runtime QT_VERSION (XD does this).
+# Lets the include path point at a different `include/QtCore/<version>/`
+# directory than the runtime `QT_VERSION` baked into the binary.
+#
+# XD pins `MODULE_HEADER_VERSION = 5.6.3` in .qmake.conf while
+# `QT_VERSION = 5.6.6`; without this seam, the bootstrap build would
+# either fail to find private headers (5.6.6 dir does not exist) or
+# embed the wrong version string into the binary.
 QT_HEADER_VERSION ?= $(QT_VERSION)
 
 #qmake code

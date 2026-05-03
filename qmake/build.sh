@@ -2,18 +2,8 @@
 
 # License: Apache 2.0 without attribution need.
 
-# MARK: Common.
-
-# Gets the absolute path of this script's directory.
-cd "${0%[/\\]*}" > /dev/null 2>&1;
+cd "${0%[/\\]*}" > /dev/null 2>&1
 ROOT=$(pwd)
-
-error() {
-    echo "$ROOT/${0##*/}:${2:-1}:1: error: $1" 1>&2;
-    exit 1
-}
-
-# Gets QtBase's directory, one level up from ROOT.
 QT_DIR="$(dirname "$ROOT")"
 
 
@@ -73,17 +63,11 @@ if [ "${cleanBuild:-0}" -gt 0 ]; then
 fi
 mkdir -p "$QMAKE_BUILD_DIR"
 
-# Detect host. Mac is a Unix, so it goes through Makefile.unix; we just
-# default to a different mkspec/compiler and append the Mac-only sources,
-# objects, frameworks, and -fconstant-cfstrings to the per-Unix lists below.
-# Keeping the Mac-aware bits here (instead of in Makefile.unix) avoids
-# pulling in $(shell)/$(filter)/ifeq -- those are GNU-only directives.
 HOST_OS=$(uname -s)
 MAC_OBJS=
 MAC_SRCS=
 MAC_LFLAGS=
 MAC_CXXFLAGS=
-HOST_CXXFLAGS="-Wno-deprecated-register"
 case "$HOST_OS" in
     Darwin)
         : "${QMAKESPEC:=macx-clang}"
@@ -94,15 +78,13 @@ $QT_DIR/src/corelib/kernel/qcore_mac.cpp \
 $QT_DIR/src/corelib/kernel/qcore_mac_objc.mm \
 $QT_DIR/src/corelib/tools/qstring_mac.mm"
         MAC_LFLAGS="-framework Foundation -framework CoreServices -framework ApplicationServices"
-        MAC_CXXFLAGS="-fconstant-cfstrings"
+        MAC_CXXFLAGS="-fconstant-cfstrings -Wno-deprecated-register"
         ;;
-    *)
+    Linux)
         : "${QMAKESPEC:=linux-g++}"
-        : "${CXX:=g++}"
+        BIN_SUFFIX=-linux
         ;;
 esac
-
-# Ensures Compiler is installed on this environment.
 command -v "$CXX" >/dev/null 2>&1 \
     || error "C++ compiler '$CXX' not found in PATH (install build-essential / gcc-c++)." $LINENO
 
@@ -119,8 +101,6 @@ QT_PATCH_VERSION=${_rest#*.}
 QT_HEADER_VERSION=$(awk -F'[= ]+' '/^[[:space:]]*MODULE_HEADER_VERSION[[:space:]]*=/{print $2; exit}' "$QT_DIR/.qmake.conf")
 : "${QT_HEADER_VERSION:=$QT_VERSION}"
 
-# Per-Unix common extras + (empty on non-Mac) Mac extras. Makefile.unix stays
-# free of any platform conditionals -- it just consumes whatever shows up here.
 QTOBJS="qfilesystemengine_unix.o qfilesystemiterator_unix.o qfsfileengine_unix.o qlocale_unix.o $MAC_OBJS"
 QTSRCS="$QT_DIR/src/corelib/io/qfilesystemengine_unix.cpp \
 $QT_DIR/src/corelib/io/qfilesystemiterator_unix.cpp \

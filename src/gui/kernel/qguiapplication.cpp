@@ -1086,9 +1086,13 @@ static void init_platform(
             platformPluginReason = REASON_DEFAULT;
             QStringList list = QCoreApplication::libraryPaths();
             QLL sep("\", \n\"");
-            path = list.join(QPlatformIntegrationFactory::pathSuffix + sep);
-            path += QPlatformIntegrationFactory::pathSuffix;
+            if ( ! list.isEmpty()) {
+                path = list.join(QPlatformIntegrationFactory::pathSuffix + sep);
+                path += QPlatformIntegrationFactory::pathSuffix;
+            }
             // Repeat to mention `directLoader` paths.
+            if ( ! path.isEmpty())
+                path += sep;
             path += list.join(sep);
         } else {
             path = platformPluginPath;

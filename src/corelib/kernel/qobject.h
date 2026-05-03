@@ -47,6 +47,13 @@
 #endif
 #include <QtCore/qscopedpointerlazy.h>
 
+QT_BEGIN_NAMESPACE
+template <typename T> struct QMetaTypeId2;
+namespace QtPrivate {
+template <typename T, bool Defined = QMetaTypeId2<T>::Defined> struct QMetaTypeIdHelper;
+}
+QT_END_NAMESPACE
+
 #include <QtCore/qobject_impl.h>
 
 QT_BEGIN_NAMESPACE

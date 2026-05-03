@@ -1170,8 +1170,8 @@ ProStringList QMakeEvaluator::evaluateBuiltinExpand(
         break;
     case E_SORT_DEPENDS:
     case E_RESOLVE_DEPENDS:
-        if (args.count() < 1 || args.count() > 4) {
-            evalError(fL1S("%1(var, [prefix, [suffixes, [prio-suffix]]]) requires one to four arguments.")
+        if (args.count() < 1 || args.count() > 5) {
+            evalError(fL1S("%1(var, [prefix, [suffixes, [prio-suffix, [recursion-handler]]]]) requires one to five arguments.")
                       .arg(func.toQString(m_tmp1)));
         } else {
             QHash<ProKey, QSet<ProKey> > dependencies;
@@ -1208,6 +1208,67 @@ ProStringList QMakeEvaluator::evaluateBuiltinExpand(
                 auto end = dependencies.constEnd();
                 for (; it != end; ++it) {
                     missing.unite(it.value());
+                }
+
+                // The optional 5th arg names a test function. We hand it each
+                // entry that's still tangled in a cycle (as $$1); when it
+                // returns true, we keep that entry in the result rather than
+                // warning about it. That lets the caller wave through cycles it
+                // knows are fine. Whatever it approves we drop from `missing`,
+                // so only what's left gets reported as recursion below.
+                //
+                // $$2 carries the chain that leads back to $$1: every module
+                // reachable from it through the still-unsatisfied dependencies,
+                // with $$1 itself left out.
+                QHash<ProKey, ProFunctionDef>::ConstIterator handler =
+                        args.count() < 5
+                        ? m_functionDefs.testFunctions.constEnd()
+                        : m_functionDefs.testFunctions.constFind(args.at(4).toKey());
+                if (handler != m_functionDefs.testFunctions.constEnd()) {
+                    foreach (const ProKey &entry, missing) {
+                        // $$2: a path from $$1 back to itself through the
+                        // still-unsatisfied dependencies (the actual cycle),
+                        // not the whole set of reachable deps. We descend one
+                        // dependency path at a time, backtracking dead ends,
+                        // until an edge returns to `entry`; `chain` then holds
+                        // that path, with `entry` itself left out. `frontier`
+                        // keeps the deps still to try at each level, so it
+                        // stays one deeper than `chain`.
+                        ProStringList chain;
+                        QSet<ProKey> visited;
+                        QList<QList<ProKey> > frontier;
+                        frontier << dependencies.value(entry).toList();
+                        while (!frontier.isEmpty()) {
+                            // Handles dead end -> back up.
+                            if (frontier.last().isEmpty()) {
+                                frontier.removeLast();
+                                if (!chain.isEmpty())
+                                    chain.removeLast();
+                                continue;
+                            }
+                            // Maybe closed the loop back to $$1.
+                            const ProKey dep = frontier.last().takeLast();
+                            if (dep == entry) {
+                                break;
+                            }
+
+                            if (visited.contains(dep))
+                                continue;
+                            visited.insert(dep);
+                            chain << dep;
+                            frontier << dependencies.value(dep).toList();
+                        }
+                        QList<ProStringList> handlerArgs;
+                        handlerArgs << ProStringList(entry) << chain;
+                        if (evaluateBoolFunction(*handler, handlerArgs, handler.key()) == ReturnTrue) {
+                            if (!ret.contains(entry))
+                                ret.prepend(entry);
+                            missing.remove(entry);
+                        }
+                    }
+                } else if (args.count() >= 5) {
+                    logicWarning(fL1S("Invalid 5th arg, expected recursion-handler: \"%1\"")
+                                 .arg(args.at(4).toQString(m_tmp2)));
                 }
                 if ( ! missing.isEmpty()) {
                     QLL separator(", ");

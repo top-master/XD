@@ -95,3 +95,10 @@ static const char qt_configure_strs[] =
 # define QT_CONFIGURE_EXT_PREFIX_PATH qt_configure_ext_prefix_path_str + 12
 # define QT_CONFIGURE_HOST_PREFIX_PATH qt_configure_host_prefix_path_str + 12
 #endif
+
+// QStandardPaths::SettingsPath default. Configure normally bakes this into a
+// `qt_configure_settings_path_str` constant; this checked-in qconfig.cpp
+// doesn't carry one, so use the upstream Unix default literal directly.
+#ifndef QT_CONFIGURE_SETTINGS_PATH
+# define QT_CONFIGURE_SETTINGS_PATH "/etc/xdg"
+#endif

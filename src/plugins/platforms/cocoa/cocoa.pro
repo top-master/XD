@@ -1,105 +1,115 @@
 TARGET = qcocoa
 
-OBJECTIVE_SOURCES += main.mm \
-    qcocoaintegration.mm \
-    qcocoatheme.mm \
-    qcocoabackingstore.mm \
-    qcocoawindow.mm \
-    qnsview.mm \
-    qnsviewaccessibility.mm \
-    qnswindowdelegate.mm \
-    qcocoanativeinterface.mm \
-    qcocoaeventdispatcher.mm \
-    qcocoaapplicationdelegate.mm \
-    qcocoaapplication.mm \
-    qcocoamenu.mm \
-    qcocoamenuitem.mm \
-    qcocoamenubar.mm \
-    qcocoamenuloader.mm \
-    qcocoahelpers.mm \
-    qmultitouch_mac.mm \
-    qcocoaaccessibilityelement.mm \
-    qcocoaaccessibility.mm \
-    qcocoacolordialoghelper.mm \
-    qcocoafiledialoghelper.mm \
-    qcocoafontdialoghelper.mm \
-    qcocoacursor.mm \
-    qcocoaclipboard.mm \
-    qcocoadrag.mm \
-    qmacclipboard.mm \
-    qcocoasystemsettings.mm \
-    qcocoainputcontext.mm \
-    qcocoaservices.mm \
-    qcocoasystemtrayicon.mm \
-    qcocoaintrospection.mm \
-    qcocoakeymapper.mm \
-    qcocoamimetypes.mm
 
-SOURCES += messages.cpp
+# In qt_static builds we are included from gui/, hence register own dir explicitly,
+# otherwise qmake adds root-pro-file's PWD by default.
+INCLUDEPATH += $$PWD
 
-HEADERS += qcocoaintegration.h \
-    qcocoatheme.h \
-    qcocoabackingstore.h \
-    qcocoawindow.h \
-    qnsview.h \
-    qnswindowdelegate.h \
-    qcocoanativeinterface.h \
-    qcocoaeventdispatcher.h \
-    qcocoaapplicationdelegate.h \
-    qcocoaapplication.h \
-    qcocoamenu.h \
-    qcocoamenuitem.h \
-    qcocoamenubar.h \
-    qcocoamenuloader.h \
-    qcocoahelpers.h \
-    qmultitouch_mac_p.h \
-    qcocoaaccessibilityelement.h \
-    qcocoaaccessibility.h \
-    qcocoacolordialoghelper.h \
-    qcocoafiledialoghelper.h \
-    qcocoafontdialoghelper.h \
-    qcocoacursor.h \
-    qcocoaclipboard.h \
-    qcocoadrag.h \
-    qmacclipboard.h \
-    qcocoasystemsettings.h \
-    qcocoainputcontext.h \
-    qcocoaservices.h \
-    qcocoasystemtrayicon.h \
-    qcocoaintrospection.h \
-    qcocoakeymapper.h \
-    messages.h \
-    qcocoamimetypes.h
+OBJECTIVE_SOURCES += $$PWD/main.mm \
+    $$PWD/qcocoaintegration.mm \
+    $$PWD/qcocoatheme.mm \
+    $$PWD/qcocoabackingstore.mm \
+    $$PWD/qcocoawindow.mm \
+    $$PWD/qnsview.mm \
+    $$PWD/qnsviewaccessibility.mm \
+    $$PWD/qnswindowdelegate.mm \
+    $$PWD/qcocoanativeinterface.mm \
+    $$PWD/qcocoaeventdispatcher.mm \
+    $$PWD/qcocoaapplicationdelegate.mm \
+    $$PWD/qcocoaapplication.mm \
+    $$PWD/qcocoamenu.mm \
+    $$PWD/qcocoamenuitem.mm \
+    $$PWD/qcocoamenubar.mm \
+    $$PWD/qcocoamenuloader.mm \
+    $$PWD/qcocoahelpers.mm \
+    $$PWD/qmultitouch_mac.mm \
+    $$PWD/qcocoaaccessibilityelement.mm \
+    $$PWD/qcocoaaccessibility.mm \
+    $$PWD/qcocoacolordialoghelper.mm \
+    $$PWD/qcocoafiledialoghelper.mm \
+    $$PWD/qcocoafontdialoghelper.mm \
+    $$PWD/qcocoacursor.mm \
+    $$PWD/qcocoaclipboard.mm \
+    $$PWD/qcocoadrag.mm \
+    $$PWD/qmacclipboard.mm \
+    $$PWD/qcocoasystemsettings.mm \
+    $$PWD/qcocoainputcontext.mm \
+    $$PWD/qcocoaservices.mm \
+    $$PWD/qcocoasystemtrayicon.mm \
+    $$PWD/qcocoaintrospection.mm \
+    $$PWD/qcocoakeymapper.mm \
+    $$PWD/qcocoamimetypes.mm
+
+SOURCES += $$PWD/messages.cpp
+
+HEADERS += $$PWD/qcocoaintegration.h \
+    $$PWD/qcocoatheme.h \
+    $$PWD/qcocoabackingstore.h \
+    $$PWD/qcocoawindow.h \
+    $$PWD/qnsview.h \
+    $$PWD/qnswindowdelegate.h \
+    $$PWD/qcocoanativeinterface.h \
+    $$PWD/qcocoaeventdispatcher.h \
+    $$PWD/qcocoaapplicationdelegate.h \
+    $$PWD/qcocoaapplication.h \
+    $$PWD/qcocoamenu.h \
+    $$PWD/qcocoamenuitem.h \
+    $$PWD/qcocoamenubar.h \
+    $$PWD/qcocoamenuloader.h \
+    $$PWD/qcocoahelpers.h \
+    $$PWD/qmultitouch_mac_p.h \
+    $$PWD/qcocoaaccessibilityelement.h \
+    $$PWD/qcocoaaccessibility.h \
+    $$PWD/qcocoacolordialoghelper.h \
+    $$PWD/qcocoafiledialoghelper.h \
+    $$PWD/qcocoafontdialoghelper.h \
+    $$PWD/qcocoacursor.h \
+    $$PWD/qcocoaclipboard.h \
+    $$PWD/qcocoadrag.h \
+    $$PWD/qmacclipboard.h \
+    $$PWD/qcocoasystemsettings.h \
+    $$PWD/qcocoainputcontext.h \
+    $$PWD/qcocoaservices.h \
+    $$PWD/qcocoasystemtrayicon.h \
+    $$PWD/qcocoaintrospection.h \
+    $$PWD/qcocoakeymapper.h \
+    $$PWD/messages.h \
+    $$PWD/qcocoamimetypes.h
 
 contains(QT_CONFIG, opengl.*) {
-    OBJECTIVE_SOURCES += qcocoaglcontext.mm
+    OBJECTIVE_SOURCES += $$PWD/qcocoaglcontext.mm
 
-    HEADERS += qcocoaglcontext.h
+    HEADERS += $$PWD/qcocoaglcontext.h
 }
 
-RESOURCES += qcocoaresources.qrc
+RESOURCES += $$PWD/qcocoaresources.qrc
 
 LIBS += -framework Cocoa -framework Carbon -framework IOKit -lcups
 
 QT += core-private gui-private platformsupport-private
 
-qtHaveModule(widgets) {
+# For shared builds the original `qtHaveModule(widgets)` guard works,
+# and for `qt_static` builds the symbols are resolved only when the
+# consumer app statically links all archives together,
+# hence no need for `qtHaveModule` guard.
+#
+qt_static|qtHaveModule(widgets) {
     OBJECTIVE_SOURCES += \
-        qpaintengine_mac.mm \
-        qprintengine_mac.mm \
-        qcocoaprintersupport.mm \
-        qcocoaprintdevice.mm \
+        $$PWD/qpaintengine_mac.mm \
+        $$PWD/qprintengine_mac.mm \
+        $$PWD/qcocoaprintersupport.mm \
+        $$PWD/qcocoaprintdevice.mm \
 
     HEADERS += \
-        qpaintengine_mac_p.h \
-        qprintengine_mac_p.h \
-        qcocoaprintersupport.h \
-        qcocoaprintdevice.h \
+        $$PWD/qpaintengine_mac_p.h \
+        $$PWD/qprintengine_mac_p.h \
+        $$PWD/qcocoaprintersupport.h \
+        $$PWD/qcocoaprintdevice.h \
 
     QT += widgets-private printsupport-private
 }
 
-OTHER_FILES += cocoa.json
+OTHER_FILES += $$PWD/cocoa.json
 
 # Acccessibility debug support
 # DEFINES += QT_COCOA_ENABLE_ACCESSIBILITY_INSPECTOR
@@ -108,7 +118,11 @@ OTHER_FILES += cocoa.json
 # Window debug support
 #DEFINES += QT_COCOA_ENABLE_WINDOW_DEBUG
 
-PLUGIN_TYPE = platforms
-PLUGIN_CLASS_NAME = QCocoaIntegrationPlugin
-!equals(TARGET, $$QT_DEFAULT_QPA_PLUGIN): PLUGIN_EXTENDS = -
-load(qt_plugin)
+!qt_static {
+    PLUGIN_TYPE = platforms
+    PLUGIN_CLASS_NAME = QCocoaIntegrationPlugin
+    !equals(TARGET, $$QT_DEFAULT_QPA_PLUGIN): PLUGIN_EXTENDS = -
+    load(qt_plugin)
+}
+
+HEADERS += $$PWD/main-cocoa-platform.h
