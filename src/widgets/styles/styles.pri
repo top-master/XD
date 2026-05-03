@@ -40,6 +40,14 @@ contains( styles, all ) {
     styles = fusion mac windows windowsxp windowsvista
 }
 
+# Note: mkspecs/qmodule.pri already sets styles, however, we fallback here,
+# since else `QApplication`'s ctor asserts "No styles available!" because
+# `QStyleFactory::keys()` would return empty.
+isEmpty(styles) {
+    macx:  styles *= mac
+    win32: styles *= windows windowsxp windowsvista
+}
+
 !macx:styles -= mac
 
 contains(QT_CONFIG, gtkstyle) {

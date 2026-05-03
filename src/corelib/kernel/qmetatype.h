@@ -1644,7 +1644,7 @@ template <typename T>
 struct QMetaTypeId2<T&> { enum {Defined = false }; };
 
 namespace QtPrivate {
-    template <typename T, bool Defined = QMetaTypeId2<T>::Defined>
+    template <typename T, bool Defined>
     struct QMetaTypeIdHelper {
         static inline Q_DECL_CONSTEXPR int qt_metatype_id()
         { return QMetaTypeId2<T>::qt_metatype_id(); }
@@ -1716,7 +1716,7 @@ int qRegisterNormalizedMetaType(const QT_PREPEND_NAMESPACE(QByteArray) &normaliz
 #ifndef QT_NO_QOBJECT
     Q_ASSERT_X(normalizedTypeName == QMetaObject::normalizedType(normalizedTypeName.constData()), "qRegisterNormalizedMetaType", "qRegisterNormalizedMetaType was called with a not normalized type name, please call qRegisterMetaType instead.");
 #endif
-    const int typedefOf = dummy ? -1 : QtPrivate::QMetaTypeIdHelper<T>::qt_metatype_id();
+    const int typedefOf = dummy ? -1 : QtPrivate::QMetaTypeIdHelper<T, QMetaTypeId2<T>::Defined>::qt_metatype_id();
     if (typedefOf != -1)
         return QMetaType::registerNormalizedTypedef(normalizedTypeName, typedefOf);
 

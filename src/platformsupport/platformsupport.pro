@@ -30,10 +30,4 @@ include(platformcompositor/platformcompositor.pri)
     include(dbustray/dbustray.pri)
 }
 
-qt_static {
-    QT -= gui-private
-    include($$PWD/../plugins/platforms/static/helpers.pri)
-    add_include(QtGui)
-}
-
 load(qt_module)

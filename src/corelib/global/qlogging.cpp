@@ -1674,8 +1674,12 @@ static void qt_message_fatal(QtMsgType, const QMessageLogContext &context, const
     Q_UNUSED(context);
     Q_UNUSED(message);
 #  ifdef Q_OS_WIN
-    // Reference the helper just to suppress the unused-function warning.
-    // It's only defined on Windows (see the Q_OS_WIN block at the top).
+    // Silences the unused-function warning when the MSVC-debug branch
+    // above is inactive but the helper is still in scope.
+    //
+    // The helper itself is defined only inside the top-of-file Q_OS_WIN
+    // block; referencing it on non-Windows would be a use of an
+    // undeclared identifier, hence the matching guard.
     Q_UNUSED(&convert_to_wchar_t_elided);
 #  endif
 #endif

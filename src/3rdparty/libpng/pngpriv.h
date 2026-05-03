@@ -429,12 +429,12 @@
     */
 #  include <float.h>
 
-#  if (defined(__MWERKS__) && defined(macintosh)) || defined(applec) || \
-    defined(THINK_C) || defined(__SC__) || defined(TARGET_OS_MAC)
-     /* We need to check that <math.h> hasn't already been included earlier
-      * as it seems it doesn't agree with <fp.h>, yet we should really use
-      * <fp.h> if possible.
-      */
+#  if ((defined(__MWERKS__) && defined(macintosh)) || defined(applec) || \
+    defined(THINK_C) || defined(__SC__) || defined(TARGET_OS_MAC)) && \
+    !defined(__APPLE__)
+     /* Mac OS Classic only -- modern macOS (which defines __APPLE__ and
+      * also defines TARGET_OS_MAC=1 through TargetConditionals.h) ships a
+      * standard <math.h> and no <fp.h>, so it must take the else branch. */
 #    if !defined(__MATH_H__) && !defined(__MATH_H) && !defined(__cmath__)
 #      include <fp.h>
 #    endif

@@ -10,7 +10,10 @@ MODULE_CONFIG = moc resources remote
 CONFIG *= $$MODULE_CONFIG
 DEFINES += $$MODULE_DEFINES
 
-QT += core-private
+# `mkspecs/features/spec_pre.prf` defaults `QT` to `core gui`. Remote does not
+# use any QtGui types, and on builds where Gui isn't compiled (e.g. XD-mini's
+# headless path) the default would error with "Unknown module(s) in QT: gui".
+QT = core core-private
 CONFIG += exceptions
 
 DEFINES += QT_REMOTE_BUILDING

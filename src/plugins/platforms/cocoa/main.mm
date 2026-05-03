@@ -35,18 +35,11 @@
 
 #include <qpa/qplatformintegrationplugin.h>
 #include <qpa/qplatformthemeplugin.h>
+#include "main-cocoa-platform.h"
 #include "qcocoaintegration.h"
 #include "qcocoatheme.h"
 
 QT_BEGIN_NAMESPACE
-
-class QCocoaIntegrationPlugin : public QPlatformIntegrationPlugin
-{
-    Q_OBJECT
-    Q_PLUGIN_METADATA(IID QPlatformIntegrationFactoryInterface_iid FILE "cocoa.json")
-public:
-    QPlatformIntegration *create(const QString&, const QStringList&);
-};
 
 QPlatformIntegration * QCocoaIntegrationPlugin::create(const QString& system, const QStringList& paramList)
 {
@@ -59,4 +52,3 @@ QPlatformIntegration * QCocoaIntegrationPlugin::create(const QString& system, co
 
 QT_END_NAMESPACE
 
-#include "main.moc"

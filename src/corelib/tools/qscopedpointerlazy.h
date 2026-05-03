@@ -267,7 +267,9 @@ public:
     {
     }
 
-    Q_DECL_CONSTEXPR explicit inline QObjectPrivateScoped(QObjectData *p = Q_NULLPTR)
+    // Not actually constexpr -- a constexpr ctor cannot contain reinterpret_cast,
+    // and modern clang emits `-Winvalid-constexpr` (an error, not just a warn).
+    explicit inline QObjectPrivateScoped(QObjectData *p = Q_NULLPTR)
         : d(reinterpret_cast<QObjectPrivate *>(p))
     {
     }

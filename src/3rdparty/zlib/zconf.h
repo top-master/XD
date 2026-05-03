@@ -333,7 +333,11 @@
 #  define FAR
 #endif
 
-#if !defined(__MACTYPES__)
+// Skip only if MacTypes.h is in scope AND we are NOT prefixing zlib symbols.
+// Under Z_PREFIX (line 12) the macro at line 113 renames our `Byte` to
+// `z_Byte`, so there is no clash with MacTypes.h's `Byte` to worry about --
+// and skipping the typedef leaves z_Byte undefined for line 346's `Bytef`.
+#if !defined(__MACTYPES__) || defined(Z_PREFIX)
 typedef unsigned char  Byte;  /* 8 bits */
 #endif
 typedef unsigned int   uInt;  /* 16 bits or more */

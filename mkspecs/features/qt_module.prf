@@ -102,7 +102,11 @@ INCLUDEPATH *= $$eval(QT.$${MODULE}_private$${MODULE_SUFFIX}.includes)
 
 QMAKE_LFLAGS += $$QMAKE_LFLAGS_NOUNDEF
 
-QT += $$QT_FOR_PRIVATE
+# TRACE/mkspecs: QT_FOR_PRIVATE leaks under qt_static #1,
+# qt_module_pris.prf above already captured QT_FOR_PRIVATE into
+# `run_depends`, hence promoting into QT here forces qt.prf to
+# resolve modules not yet qmake'd (gui -> printsupport -> widgets -> gui).
+!qt_static: QT += $$QT_FOR_PRIVATE
 unset(QT_FOR_PRIVATE)
 
 !internal_module:CONFIG += create_cmake
@@ -142,6 +146,16 @@ mac {
        QMAKE_CFLAGS += -fconstant-cfstrings
        QMAKE_CXXFLAGS += -fconstant-cfstrings
    }
+
+   # Prevents major-version suffix.
+   #
+   # Since the Qt-major-version is already in the target name,
+   # the extra `.5` suffix is redundant, for example thanks to
+   # below config, binaries link to `libQt5Widgets_debug.dylib`
+   # instead of linking to `libQt5Widgets_debug.5.dylib`.
+   #
+   # This does not prevent the creation of versioned-files and symlinks.
+   CONFIG += unversioned_soname
 
    contains(QT_CONFIG, rpath): \
        QMAKE_SONAME_PREFIX = @rpath
