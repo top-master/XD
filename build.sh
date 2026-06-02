@@ -8,104 +8,84 @@
 cd "${0%[/\\]*}" > /dev/null 2>&1
 ROOT=$(pwd)
 
-error() {
-    echo "$ROOT/${0##*/}:${2:-1}:1: error: $1" 1>&2
-    exit 1
-}
+# MARK: Hand off to the subdirs template driver.
+#
+# XD *is* the framework, so XD_DIR points to this very repo
+# (bh_template_subdirs needs XD_DIR set; for self-builds we point
+# it at $ROOT). BH_TEST_ROOT plugs the `--test` shape: XD's tests
+# live under `tests/auto/auto.pro` (a TEMPLATE = subdirs of
+# testcase apps), which `bh_run_tests --subdirs` knows how to drive.
+#
+# Everything else (arg parsing, build dir, license gate, lifecycle
+# wipes, qmake bootstrap, qmake, make, plugin staging, tests, run)
+# lives in `tools/build-handler.sh`. The only XD-specific overrides
+# happen above the source line below.
 
-# Force error handling. `pipefail` isn't in POSIX 2008 (it landed in Issue 8 /
-# 2024), so try to enable it but tolerate shells that don't know it.
-set -e
-(set -o pipefail) 2>/dev/null && set -o pipefail || true
+XD_DIR=$ROOT
+BH_ROOT=$ROOT
+BH_SCRIPT_NAME=build.sh
+BH_TEST_ROOT=$ROOT/tests/auto/auto.pro
+. "$ROOT/tools/build-handler.sh"
 
-# MARK: Argument parsing.
-
-verbose=0
-headless=0
-while [ $# -gt 0 ]; do
-    case "$1" in
-        -v|--verbose)  verbose=1; shift;;
-        --headless)    headless=1; shift;;
-        --)            shift; break;;
-        *)             break;;
+# MARK: --static: XD-only flag.
+#
+# Builds the static-link subset (`XD-static.pro` selects the
+# qt_static-friendly subprojects) into its own build dir
+# (`build/XD-static`) so the static tree doesn't stomp the
+# regular `build/XD`. Implemented entirely in this script:
+#   * `BH_BUILD_DIR_SUFFIX=-static` is the documented hook
+#     bh_template_subdirs reads when composing $BUILD_DIR, so no
+#     tools/build-handler.sh change is needed.
+#   * `--static` is consumed here and stripped from the
+#     forwarded argv -- otherwise bh_parse_args would treat it
+#     as an unknown positional and fold it into the qmake
+#     remaining-args.
+_xd_pro=$ROOT/XD-mini.pro
+_xd_static=0
+# Consumes `--static` and forwards the rest to bh_template_subdirs.
+#
+# We rotate the args through the positional parameters (pop the front with
+# `shift`, push keepers to the back) rather than joining them into one
+# string, so the forwarded `"$@"` stays quoted end-to-end. That keeps a
+# glob argument such as `--test '**/*qmake*'` literal (an unquoted,
+# space-joined string would word-split it and pathname-expand it here,
+# before build-handler.sh could resolve it) and likewise survives args
+# that contain spaces.
+_xd_argc=$#
+while [ "$_xd_argc" -gt 0 ]; do
+    _xd_arg=$1
+    shift
+    _xd_argc=$((_xd_argc - 1))
+    case "$_xd_arg" in
+        --static)
+            _xd_pro=$ROOT/XD-static.pro
+            BH_BUILD_DIR_SUFFIX=-static
+            _xd_static=1
+            ;;
+        *)
+            set -- "$@" "$_xd_arg"
+            ;;
     esac
 done
 
-# MARK: Defaults.
+# Seed `.qmake.cache` BEFORE qmake's `-r` recursive walk -- writing it
+# from XD-static.pro's body lands too late (qmake has already started
+# reading subdir .pro files in-process by then, so `CONFIG += qt_static`
+# never makes it into corelib/gui/widgets/etc., and the per-module
+# Makefile.Release ends up targeting the shared dylib instead of the
+# static .a archive).
+if [ "$_xd_static" -eq 1 ]; then
+    : "${BUILD_DIR:=$(dirname "$BH_ROOT")/build/$(basename "$BH_ROOT")${BH_BUILD_DIR_SUFFIX:-}}"
+    mkdir -p "$BUILD_DIR"
+    printf 'CONFIG += qt_static\n' > "$BUILD_DIR/.qmake.cache"
+    export BUILD_DIR
 
-# Parallel-job count for make. Override via the JOBS env var. Picks the host's
-# logical CPU count using whichever of getconf/sysctl/nproc is present; falls
-# back to 4 on shells that lack all three.
-if [ -z "${JOBS:-}" ]; then
-    JOBS=$(getconf _NPROCESSORS_ONLN 2>/dev/null \
-           || sysctl -n hw.logicalcpu 2>/dev/null \
-           || nproc 2>/dev/null \
-           || echo 4)
+    # The static module .pri files are auto-generated (git-ignored) and read
+    # by consumers (e.g. a consuming app's qt_static build), so a normal
+    # rebuild must keep them. Hand them to bh_clean as extras, so that
+    # `--clean` can simulate an out-of-the-box state
+    # (without a real git-re-clone, which would drop the OpenSSL submodule).
+    export BH_CLEAN_EXTRA="$ROOT/mkspecs/modules/static/qt_lib_*.pri"
 fi
 
-# Pick the mkspec by host. macx-clang on Darwin, linux-g++ otherwise.
-case "$(uname -s)" in
-    Darwin) : "${QMAKESPEC:=macx-clang}";;
-    *)      : "${QMAKESPEC:=linux-g++}";;
-esac
-
-# `mkspecs/features/xd_functions.prf` forbids building inside the source tree,
-# so default to a sibling directory next to the source root.
-: "${XD_BUILD_DIR:=$(dirname "$ROOT")/XD-build}"
-
-# Show where we will build, and confirm unless --headless was passed.
-echo "Build directory:"
-echo "  $XD_BUILD_DIR"
-if [ "$headless" -eq 0 ]; then
-    printf 'Do you want to continue? [Y/n] '
-    read -r _answer
-    case "$_answer" in
-        n|N|no|NO|No) echo "Aborted."; exit 1;;
-    esac
-fi
-
-# Per-step logs go to disk (no risk of overflowing a shell variable for a long
-# build). Each invocation is a fresh re-build, so wipe the prior logs up
-# front -- only deletes existing `*.log` files; the folder itself is reused.
-LOGS=$XD_BUILD_DIR/logs
-mkdir -p "$LOGS"
-rm -f "$LOGS"/*.log
-
-# MARK: Run helper.
-
-_step=0
-
-# Run a named step. Stream goes to `$LOGS/<NN>-<name>.log`; verbose mode also
-# tees it to the terminal. Non-verbose mode is silent on success and dumps the
-# step's log to stderr only on failure (preserving the original exit status).
-run() {
-    _name=$1; shift
-    _step=$((_step + 1))
-    _log=$LOGS/$(printf '%02d-%s.log' "$_step" "$_name")
-    if [ "$verbose" -gt 0 ]; then
-        # `pipefail` (best-effort above) propagates the inner command's exit.
-        "$@" 2>&1 | tee "$_log"
-    else
-        if "$@" >"$_log" 2>&1; then
-            :
-        else
-            _status=$?
-            cat "$_log" 1>&2
-            exit "$_status"
-        fi
-    fi
-}
-
-# MARK: Build.
-
-# Bootstrap bin/qmake on demand. We track bin/qmake in git, so a tracked
-# binary skips this step entirely. The bootstrap's intermediate objects land
-# in `$XD_BUILD_DIR/qmake/` (passed via `-d`), keeping the source tree clean.
-if [ ! -x "$ROOT/bin/qmake" ]; then
-    run bootstrap-qmake sh "$ROOT/qmake/build.sh" -d "$XD_BUILD_DIR/qmake"
-fi
-
-cd "$XD_BUILD_DIR"
-
-run qmake "$ROOT/bin/qmake" -spec "$ROOT/mkspecs/$QMAKESPEC" "$ROOT/XD-mini.pro" "$@"
-run make  make -j"$JOBS"
+bh_template_subdirs "$_xd_pro" "$@"
