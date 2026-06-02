@@ -34,3 +34,31 @@ equals(TASK, "touch") {
             warning(Failed to find Makefile or $$tmp at: \"$$OUT_PWD\" for file: \"$$ARG1\")
     }
 }
+
+# removeObjects(folders)
+#
+# Removes the object files of each folder in `folders` (relative to the build
+# folder, the one make runs the task in), several per command. cmd.exe refuses
+# a command line past 8191 characters; hence a batch stays at 25 paths.
+defineTest(removeObjects) {
+    equals(QMAKE_HOST.os, Windows): remove = del /f /q
+    else: remove = rm -f
+    for(folder, ARGS) {
+        folder = $$absolute_path($$folder, $$OUT_PWD)
+        objects = $$files($$folder/*$$QMAKE_EXT_OBJ)
+        batch =
+        for(object, objects) {
+            batch += $$system_quote($$system_path($$object))
+            count(batch, 25) {
+                system($$remove $$batch)
+                batch =
+            }
+        }
+        !isEmpty(batch): system($$remove $$batch)
+    }
+    return(true)
+}
+
+equals(TASK, "remove-objects") {
+    removeObjects($$ARG1 $$ARG2 $$ARG3 $$ARG4 $$ARG5)
+}

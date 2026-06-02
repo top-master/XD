@@ -96,8 +96,10 @@ INCLUDEPATH *= $$eval(QT.$${MODULE}_private$${MODULE_SUFFIX}.includes)
 # - unless this is a host library
 !host_build:if(win32|mac):!macx-xcode {
     contains(QT_CONFIG, simulator_and_device): CONFIG += iphonesimulator_and_iphoneos
-    contains(QT_CONFIG, debug_and_release): CONFIG += debug_and_release
-    contains(QT_CONFIG, build_all): CONFIG += build_all
+    !no_debug_and_release {
+        contains(QT_CONFIG, debug_and_release): CONFIG += debug_and_release
+        contains(QT_CONFIG, build_all): CONFIG += build_all
+    }
 }
 
 QMAKE_LFLAGS += $$QMAKE_LFLAGS_NOUNDEF

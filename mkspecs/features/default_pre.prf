@@ -33,6 +33,9 @@ contains(QT_CONFIG, c++11):lessThan(QT_COMPILER_STDCXX, 201103): CONFIG += c++11
     unset(today)
 }
 
+# Enables `qt_static` for the projects that build.sh's `--static` option names.
+include($$PWD/../xd/static_list.prf)
+
 load(qt_functions)
 load(xd_functions)
 

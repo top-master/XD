@@ -70,5 +70,61 @@ bh_path_before_windows() {
         }'
 }
 
+# Usage: bh_tool_check [posix-dir]
+#
+# Warns once about each external tool (see `BH_EXTERNAL_TOOLS`) that is
+# missing, resolves to a Windows one, or, on a Windows host, resolves to
+# another copy than the POSIX one in [posix-dir] (`/usr/bin` by default) that
+# it shadows; such a tool fails, or worse, prints nothing, with no error of
+# its own. Prints nothing when each is fine.
+bh_tool_check() {
+    _btc_posix=${1:-/usr/bin}
+    _btc_windows=0
+    if [ -n "${1:-}" ] || bh_windows_host; then
+        _btc_windows=1
+    fi
+    _btc_lines=
+    for _btc_tool in $BH_EXTERNAL_TOOLS; do
+        _btc_path=$(command -v "$_btc_tool" 2>/dev/null || true)
+        case "$_btc_path" in
+            '')
+                _btc_lines="$_btc_lines
+$_btc_tool: not found." ;;
+            */[Ww][Ii][Nn][Dd][Oo][Ww][Ss]/*)
+                _btc_lines="$_btc_lines
+$_btc_tool: runs $_btc_path, the Windows tool, not the POSIX one." ;;
+            *)
+                # Folders match ignoring letter case, as Windows compares them.
+                _btc_lower=$(printf '%s' "$_btc_path" | tr '[:upper:]' '[:lower:]')
+                _btc_want=$(printf '%s' "$_btc_posix/$_btc_tool" | tr '[:upper:]' '[:lower:]')
+                if [ "$_btc_windows" -eq 1 ] && [ -x "$_btc_posix/$_btc_tool" ] \
+                    && [ "${_btc_lower%.exe}" != "$_btc_want" ]; then
+                    _btc_lines="$_btc_lines
+$_btc_tool: runs $_btc_path, which shadows the POSIX $_btc_posix/$_btc_tool."
+                fi ;;
+        esac
+    done
+    [ -n "$_btc_lines" ] || return 0
+    _btc_oldifs=$IFS
+    IFS='
+'
+    # shellcheck disable=SC2086  # one argument per line.
+    bh_warning "A tool check after the failure found issues:" ${_btc_lines#?}
+    IFS=$_btc_oldifs
+}
+
+# bh_tool_check_on_failure
+#
+# Runs `bh_tool_check` once at the end of a failed run, as an `on-exit` hook
+# (see `bh_hook`); a Ctrl+C stop (exit 130) is no failure.
+bh_tool_check_on_failure() {
+    if [ "$BH_EXIT_STATUS" -ne 0 ] && [ "$BH_EXIT_STATUS" -ne 130 ]; then
+        bh_tool_check
+    fi
+}
+
+
 # MARK: On load.
 
+bh_posix_path
+bh_hook_add on-exit bh_tool_check_on_failure

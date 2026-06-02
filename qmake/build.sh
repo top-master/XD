@@ -6,62 +6,19 @@ cd "${0%[/\\]*}" > /dev/null 2>&1
 ROOT=$(pwd)
 QT_DIR="$(dirname "$ROOT")"
 
+BH_ROOT=$QT_DIR
+BH_SCRIPT_NAME=$(basename "$0")
+BH_BUILD_DIR_SUFFIX=/qmake
+. "$QT_DIR/tools/build-handler.sh"
 
-# Command-line argument parsing.
-#
-
-mode=release
-while [ $# -gt 0 ]; do
-    case "$1" in
-    -v|--verbose) verbose=1; shift;;
-    -c|--clean) cleanBuild=1; shift;;
-    --release) mode=release; shift;;
-    --debug)   mode=debug;   shift;;
-    -d|--directory)
-        # `-d` requires a non-flag argument.
-        if [ $# -gt 1 ]; then
-            case "$2" in
-                -*) error "-d requires value." $LINENO;;
-                *)  export QMAKE_BUILD_DIR=$2; shift 2;;
-            esac
-        else
-            error "-d requires value." $LINENO
-        fi ;;
-    --)
-        while [ $# -gt 0 ]; do BACKUP="$BACKUP;$1"; shift; done
-        break;;
-    *)
-        BACKUP="$BACKUP;$1"
-        shift
-        ;;
-    esac
-done
-# Restore unused arguments.
-while [ -n "$BACKUP" ] ; do
-    [ -n "${BACKUP%%;*}" ] && set -- "$@" "${BACKUP%%;*}"
-    # Stop once no `;` remains in BACKUP. POSIX-portable form of the bash
-    # `[ "$BACKUP" = "${BACKUP/;/}" ]` test.
-    case "$BACKUP" in
-        *\;*) ;;
-        *)    break;;
-    esac
-    BACKUP="${BACKUP#*;}"
-done
-
-# Force error handling. `pipefail` isn't in POSIX 2008 (it landed in Issue 8 /
-# 2024), so try to enable it but tolerate shells that don't know it.
-set -e
-(set -o pipefail) 2>/dev/null && set -o pipefail || true
-
-: "${QMAKE_BUILD_DIR:=$(dirname "$QT_DIR")/build/$(basename "$QT_DIR")-$mode/qmake}"
-
-# Optionally, remove previous build.
-echo "Build directory:"
-echo "$QMAKE_BUILD_DIR"
-if [ "${cleanBuild:-0}" -gt 0 ]; then
-    rm -rf "${QMAKE_BUILD_DIR}"
-fi
-mkdir -p "$QMAKE_BUILD_DIR"
+QT_VERSION=$(awk -F'[= ]+' '/^[ \t]*QT_VERSION[ \t]*=/{print $2; exit}' "$QT_DIR/mkspecs/qconfig.pri")
+[ -n "$QT_VERSION" ] || bh_error "could not read QT_VERSION from $QT_DIR/mkspecs/qconfig.pri"
+QT_MAJOR_VERSION=${QT_VERSION%%.*}
+_rest=${QT_VERSION#*.}
+QT_MINOR_VERSION=${_rest%%.*}
+QT_PATCH_VERSION=${_rest#*.}
+QT_HEADER_VERSION=$(awk -F'[= ]+' '/^[ \t]*MODULE_HEADER_VERSION[ \t]*=/{print $2; exit}' "$QT_DIR/.qmake.conf")
+: "${QT_HEADER_VERSION:=$QT_VERSION}"
 
 HOST_OS=$(uname -s)
 MAC_OBJS=
@@ -84,22 +41,28 @@ $QT_DIR/src/corelib/tools/qstring_mac.mm"
         : "${QMAKESPEC:=linux-g++}"
         BIN_SUFFIX=-linux
         ;;
+    *)
+        bh_error "unsupported host OS: $HOST_OS"
+        ;;
 esac
-command -v "$CXX" >/dev/null 2>&1 \
-    || error "C++ compiler '$CXX' not found in PATH (install build-essential / gcc-c++)." $LINENO
 
-# Read QT_VERSION (e.g. 5.6.6) from the canonical place.
-QT_VERSION=$(awk -F'[= ]+' '/^[[:space:]]*QT_VERSION[[:space:]]*=/{print $2; exit}' "$QT_DIR/mkspecs/qconfig.pri")
-[ -n "$QT_VERSION" ] || error "could not read QT_VERSION from $QT_DIR/mkspecs/qconfig.pri" $LINENO
-QT_MAJOR_VERSION=${QT_VERSION%%.*}
-_rest=${QT_VERSION#*.}
-QT_MINOR_VERSION=${_rest%%.*}
-QT_PATCH_VERSION=${_rest#*.}
-
-# Header version may differ from runtime QT_VERSION when MODULE_HEADER_VERSION
-# in .qmake.conf is pinned (see XD's .qmake.conf). Falls back to QT_VERSION.
-QT_HEADER_VERSION=$(awk -F'[= ]+' '/^[[:space:]]*MODULE_HEADER_VERSION[[:space:]]*=/{print $2; exit}' "$QT_DIR/.qmake.conf")
-: "${QT_HEADER_VERSION:=$QT_VERSION}"
+# Default the Linux qmake to a statically-linked libc, via build-handler's --libc
+# feature (unless the caller already picked one with --libc=<X> / --musl). A
+# fully-static bin/qmake-linux runs on ANY Linux regardless of glibc version --
+# notably the win32 cross build's older debian:12 image. Dynamic linking is only
+# forward-compatible (an old-glibc build runs on newer systems, never the
+# reverse), so a build on this newer host would fail there with "GLIBC_x.y not
+# found"; static sidesteps the version, and qmake does no NSS lookups that a
+# static libc breaks. The chosen libc's compiler/flags land in BH_LIBC_CC /
+# BH_LIBC_LDFLAGS (see drive_qmake_build).
+if [ "$HOST_OS" = Linux ]; then
+    # Fil-C (--memory-safe / --watch-memory) links against its own libc, so a
+    # forced --libc=static would clash; leave those builds to Fil-C's linker.
+    case " $* " in
+        *" --libc="*|*" --musl "*|*" --memory-safe"*|*" --watch-memory "*) : ;;
+        *) set -- "$@" --libc=static ;;
+    esac
+fi
 
 QTOBJS="qfilesystemengine_unix.o qfilesystemiterator_unix.o qfsfileengine_unix.o qlocale_unix.o $MAC_OBJS"
 QTSRCS="$QT_DIR/src/corelib/io/qfilesystemengine_unix.cpp \
@@ -107,33 +70,39 @@ $QT_DIR/src/corelib/io/qfilesystemiterator_unix.cpp \
 $QT_DIR/src/corelib/io/qfsfileengine_unix.cpp \
 $QT_DIR/src/corelib/tools/qlocale_unix.cpp $MAC_SRCS"
 
-case "$mode" in
-    release) MODE_CXXFLAGS="-O2" ;;
-    debug)   MODE_CXXFLAGS="-O0 -g" ;;
-esac
+drive_qmake_build() {
+    case "$BH_MODE" in
+        release) MODE_CXXFLAGS="-std=c++14 -O2" ;;
+        debug)   MODE_CXXFLAGS="-std=c++14 -O0 -g" ;;
+    esac
+    # --release-debug (BH_DEBUG_INFO) keeps -g on an otherwise -O2 build.
+    [ "${BH_DEBUG_INFO:-0}" = 1 ] && MODE_CXXFLAGS="$MODE_CXXFLAGS -g"
+    ARCH_CXXFLAGS=
+    ARCH_LFLAGS=
+    if [ "$HOST_OS" = Darwin ]; then
+        ARCH_CXXFLAGS="-arch $BH_CURRENT_ARCH"
+        ARCH_LFLAGS="-arch $BH_CURRENT_ARCH"
+    fi
+    # Makefile.unix is a GNU make file, whatever spec the new qmake defaults to.
+    bh_make_find_gnu
+    bh_make_step make "" "$JOBS" -f "$QT_DIR/qmake/Makefile.unix" \
+        SOURCE_PATH="$QT_DIR" \
+        BUILD_PATH="$QT_DIR" \
+        INC_PATH="$QT_DIR/include" \
+        QMAKESPEC="$QT_DIR/mkspecs/$QMAKESPEC" \
+        QT_VERSION="$QT_VERSION" \
+        QT_MAJOR_VERSION="$QT_MAJOR_VERSION" \
+        QT_MINOR_VERSION="$QT_MINOR_VERSION" \
+        QT_PATCH_VERSION="$QT_PATCH_VERSION" \
+        QT_HEADER_VERSION="$QT_HEADER_VERSION" \
+        CXX="$CXX" \
+        EXEEXT="$BIN_SUFFIX" \
+        RM_F="rm -f" \
+        RM_RF="rm -rf" \
+        LFLAGS="$MAC_LFLAGS $ARCH_LFLAGS" \
+        EXTRA_CXXFLAGS="$MODE_CXXFLAGS $MAC_CXXFLAGS $ARCH_CXXFLAGS -DPROJECT_FOLDER=\"\\\"$ROOT/\\\"\" -DQT_NO_EXCEPTIONS" \
+        QTOBJS="$QTOBJS" \
+        QTSRCS="$QTSRCS"
+}
 
-# Build out-of-tree: cwd = $QMAKE_BUILD_DIR (under git-ignored tmp/), so .o
-# files land there and qmake/ source dir stays clean. The Makefile is invoked
-# by absolute path; SOURCE_PATH/BUILD_PATH/INC_PATH are absolute so the
-# recipes don't depend on cwd. The link rule writes to $(BUILD_PATH)/bin/qmake,
-# which resolves to $QT_DIR/bin/qmake regardless of where we run from.
-cd "$QMAKE_BUILD_DIR"
-
-SOURCE_PATH="$QT_DIR" \
-BUILD_PATH="$QT_DIR" \
-INC_PATH="$QT_DIR/include" \
-QMAKESPEC="$QT_DIR/mkspecs/$QMAKESPEC" \
-QT_VERSION="$QT_VERSION" \
-QT_MAJOR_VERSION="$QT_MAJOR_VERSION" \
-QT_MINOR_VERSION="$QT_MINOR_VERSION" \
-QT_PATCH_VERSION="$QT_PATCH_VERSION" \
-QT_HEADER_VERSION="$QT_HEADER_VERSION" \
-CXX="$CXX" \
-EXEEXT="" \
-RM_F="rm -f" \
-RM_RF="rm -rf" \
-LFLAGS="$MAC_LFLAGS" \
-EXTRA_CXXFLAGS="$MODE_CXXFLAGS $MAC_CXXFLAGS $HOST_CXXFLAGS -DPROJECT_FOLDER=\"\\\"$ROOT/\\\"\" -DQT_NO_EXCEPTIONS" \
-QTOBJS="$QTOBJS" \
-QTSRCS="$QTSRCS" \
-exec make -f "$QT_DIR/qmake/Makefile.unix"
+bh_template_makefile drive_qmake_build "$QT_DIR/bin/qmake$BIN_SUFFIX" "$@"

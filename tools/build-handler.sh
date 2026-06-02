@@ -1,0 +1,3586 @@
+# License: Apache 2.0 without attribution need.
+#
+# Shared build-orchestration helpers, sourced (not executed) by:
+#   - `XD/build.sh`
+#   - consumer build.sh files (e.g. `<App>/build.sh`)
+#
+# The default flow for a single-app consumer is:
+#
+#   #!/bin/sh
+#   cd "${0%[/\\]*}" > /dev/null 2>&1
+#   ROOT=$(pwd)
+#
+#   # Consumer-specific: detect the XD framework checkout.
+#   if [ -n "${XD_ROOT:-}" ]; then XD_DIR=$XD_ROOT
+#   else XD_DIR=$ROOT/../XD; fi
+#   ...resolve absolute / error if missing...
+#
+#   BH_ROOT=$ROOT
+#   BH_SCRIPT_NAME=build.sh
+#   . "$XD_DIR/tools/build-handler.sh"
+#
+#   bh_template_app "$ROOT/<App>.pro" "$@"
+#
+# Frameworks that don't fit the template (XD itself) call the smaller
+# helpers (bh_run, bh_make, bh_run_tests) directly. See `XD/build.sh`
+# for that pattern.
+#
+# Caller-set env vars consumed here:
+#   $BH_ROOT          absolute path of the caller's source root
+#   $BH_SCRIPT_NAME   basename of the caller's script (for error reports)
+#   $BH_LOG_LEVEL     log verbosity: 0 errors only (-q), 1 normal
+#                     (default), 2 verbose (-v: live make + test output),
+#                     3 very-verbose (-vv: also qmake's "Reading ..."
+#                     firehose). bh_parse_args sets it from -q/-v/-vv; a
+#                     legacy truthy $BH_VERBOSE maps to verbose.
+
+
+# ---- error reporting ---------------------------------------------------
+
+# Usage: bh_error "message" [line]
+#
+# Formatted to mimic compiler diagnostics so editors that read shell
+# output (Qt Creator, VS Code) can jump to the caller's script line.
+bh_error() {
+    echo "${BH_ROOT:-.}/${BH_SCRIPT_NAME:-build.sh}:${2:-1}:1: error: $1" 1>&2
+    exit 1
+}
+
+# Usage: bh_warning "first line" ["follow-up line"] ["another line"] ...
+#
+# Non-fatal stderr warning. Renders as:
+#
+#     <blank>
+#     WARNING: <first line>
+#              <follow-up line>
+#              <another line>
+#     <blank>
+#
+# `WARNING:` is bolded via `\033[1m`/`\033[22m` -- only when stderr
+# is a tty though, so piped/captured stderr stays clean for CI
+# logs. Each follow-up arg is indented 9 spaces so it aligns under
+# the message column (under the space following `WARNING:`).
+# Caller passes one arg per visual line; the function handles all
+# padding (leading blank, trailing blank, continuation indent) so
+# call sites don't keep re-implementing the same layout.
+bh_warning() {
+    [ "$#" -gt 0 ] || return 0
+    if [ -t 2 ]; then
+        _bhw_b=$(printf '\033[1m')
+        _bhw_r=$(printf '\033[22m')
+    else
+        _bhw_b=
+        _bhw_r=
+    fi
+    printf '\n%sWARNING:%s %s\n' "$_bhw_b" "$_bhw_r" "$1" 1>&2
+    shift
+    for _bhw_line in "$@"; do
+        printf '         %s\n' "$_bhw_line" 1>&2
+    done
+    printf '\n' 1>&2
+}
+
+
+# ---- optional tool auto-install ----------------------------------------
+
+# Usage: bh_sudo <command> [args...]
+#
+# Runs a command with root privileges only when the current user is not already
+# root: through `sudo` (with `-n` under --headless, so an unattended build fails
+# fast rather than blocking on a password prompt). As root, or where sudo is
+# absent, runs it directly. Kept in one place so per-platform install steps never
+# re-implement the root-escalation dance.
+bh_sudo() {
+    if [ "$(id -u)" = 0 ]; then "$@"
+    elif command -v sudo >/dev/null 2>&1; then
+        if [ "${BH_HEADLESS:-0}" = 1 ]; then sudo -n "$@"; else sudo "$@"; fi
+    else "$@"; fi
+}
+
+# Usage: bh_pkg_install <package> [package...]
+#
+# Installs OS packages by name through whichever package manager the host
+# actually has -- apt (Debian/Ubuntu), apk (Alpine), pacman (Arch), dnf (Fedora)
+# or brew (macOS). This is the SINGLE place per-platform package commands live,
+# so every install routine stays platform-agnostic and just says
+# `bh_pkg_install <pkg>`.
+bh_pkg_install() {
+    if   command -v apt-get >/dev/null 2>&1; then bh_sudo apt-get update -qq >/dev/null 2>&1; bh_sudo apt-get install -y "$@"
+    elif command -v apk     >/dev/null 2>&1; then bh_sudo apk add "$@"
+    elif command -v pacman  >/dev/null 2>&1; then bh_sudo pacman -Sy --needed --noconfirm "$@"
+    elif command -v dnf     >/dev/null 2>&1; then bh_sudo dnf install -y "$@"
+    elif command -v brew    >/dev/null 2>&1; then brew install "$@"
+    else bh_error "no supported package manager found (need one of: apt, apk, pacman, dnf, brew) to install: $*"
+    fi
+}
+
+# ---- strict mode -------------------------------------------------------
+
+# `pipefail` isn't in POSIX 2008 (it landed in Issue 8 / 2024), so try
+# to enable it but tolerate shells that don't know it.
+bh_strict_mode() {
+    set -e
+    (set -o pipefail) 2>/dev/null && set -o pipefail || true
+    # Ctrl+C: the command of the current step takes the signal too (same
+    # process group), unless the step holds it (see `bh_held_start`).
+    # Settle its row on `[C]`, an explicit "manual abort" glyph for the
+    # user, then re-raise; hence the script exits 130 instead of marching
+    # on to the next step.
+    trap '_bh_on_sigint' INT
+    trap '_bh_on_exit' EXIT
+}
+
+# _bh_on_exit
+#
+# Runs the hooks that `bh_hook` added for the exit stages, when the script
+# exits: `pre-exit`, then `on-exit`, then `post-exit`. `BH_EXIT_STATUS` holds
+# the status the script exits with; a hook that fails changes it in no way.
+_bh_on_exit() {
+    BH_EXIT_STATUS=$?
+    set +e
+    bh_hook_run pre-exit
+    bh_hook_run on-exit
+    bh_hook_run post-exit
+    exit "$BH_EXIT_STATUS"
+}
+
+# _bh_on_sigint
+#
+# Stops the build on Ctrl+C: stops the spinner ticker, settles the row on
+# `[C]`, and exits 130. While a step holds Ctrl+C (see `bh_held_start`), it
+# only marks the stop as pending, with a notice, and `bh_held_finish` stops
+# the build once that step has ended.
+_bh_on_sigint() {
+    if [ "${_bh_sigint_holds:-0}" -gt 0 ]; then
+        if [ "${_bh_sigint_pending:-0}" -eq 0 ]; then
+            _bh_sigint_pending=1
+            printf '\nCtrl+C: the build stops once this step ends, since stopping it now may leave its files half-written.\n' 1>&2
+        fi
+        return 0
+    fi
+    bh_ticker_stop
+    bh_progress_hide C
+    trap - INT
+    kill -INT $$
+    exit 130
+}
+
+# Usage: bh_held_start <command...>
+#
+# Starts <command> for a step that has to end whole, such as qmake writing
+# Makefiles or `rm -rf` wiping the build folder: the next run trusts what
+# such a step leaves behind, and has no way to tell a half-written
+# Makefile from a whole one. Its process id goes in `_bh_held_pid`; a
+# caller may spin on it (`bh_spin_until`), then calls `bh_held_finish`.
+#
+# <command> runs in the background with Ctrl+C ignored, and until
+# `bh_held_finish`, Ctrl+C only marks the stop as pending (see
+# `_bh_on_sigint`). The trap goes in again here, since a subshell starts
+# without the traps of its parent shell.
+bh_held_start() {
+    _bh_sigint_holds=$((${_bh_sigint_holds:-0} + 1))
+    trap '_bh_on_sigint' INT
+    ( trap '' INT; "$@" ) &
+    _bh_held_pid=$!
+}
+
+# Usage: bh_held_finish
+#
+# Waits for the command of `bh_held_start` and returns its exit code; when
+# Ctrl+C came meanwhile, it stops the build right after
+# (see `_bh_on_sigint`).
+bh_held_finish() {
+    _bhhf_status=0
+    bh_wait_pid "$_bh_held_pid" || _bhhf_status=$?
+    _bh_sigint_holds=$((_bh_sigint_holds - 1))
+    if [ "$_bh_sigint_holds" -le 0 ] && [ "${_bh_sigint_pending:-0}" -eq 1 ]; then
+        _bh_sigint_pending=0
+        _bh_on_sigint
+    fi
+    return "$_bhhf_status"
+}
+
+# Usage: bh_run_held <command...>
+#
+# Runs <command> to its end, even on Ctrl+C, and returns its exit code
+# (see `bh_held_start`).
+bh_run_held() {
+    bh_held_start "$@"
+    bh_held_finish
+}
+
+# Usage: bh_wait_pid <pid>
+#
+# Waits for the background process <pid> and returns its exit code. A trap
+# that runs (such as Ctrl+C's) ends `wait` early with the process still
+# alive, hence it waits again until the process is gone.
+bh_wait_pid() {
+    while :; do
+        _bwp_status=0
+        wait "$1" || _bwp_status=$?
+        if ! kill -0 "$1" 2>/dev/null; then
+            return "$_bwp_status"
+        fi
+    done
+}
+
+# Usage: bh_ticker_start
+#
+# Turns the spinner once per `BH_SPIN_INTERVAL` in the background, while the
+# command of a step runs in the foreground, where Ctrl+C reaches it.
+# `bh_ticker_stop` (or `_bh_on_sigint`) ends it; it also ends by itself
+# once the script is gone, since a command in the background ignores Ctrl+C.
+bh_ticker_start() {
+    ( while kill -0 $$ 2>/dev/null && sleep "$BH_SPIN_INTERVAL"; do
+          BH_PROGRESS_VALUE=$((BH_PROGRESS_VALUE + 1))
+          bh_progress_tick
+      done ) &
+    _bh_spinner_pid=$!
+}
+
+# Usage: bh_ticker_stop
+#
+# Ends the spinner of `bh_ticker_start`, when one runs.
+bh_ticker_stop() {
+    if [ -z "${_bh_spinner_pid:-}" ]; then
+        return 0
+    fi
+    kill "$_bh_spinner_pid" 2>/dev/null || true
+    wait "$_bh_spinner_pid" 2>/dev/null || true
+    _bh_spinner_pid=
+}
+
+
+# ---- defaults ----------------------------------------------------------
+
+# Extended-regex (grep -E) matching the lines worth showing when a build
+# step fails -- the "Filter" view in bh_dump_fail. Covers gcc/clang
+# (`error:`, `fatal error`), MSVC (`error C1234`, `fatal error C1083`,
+# linker `LNK2019`), and make/nmake/jom (`*** [target] Error 1`).
+BH_BUILD_ERROR_RE='([Ee]rror:|fatal error|: error|[Ee]rror [A-Z]?[0-9]|LNK[0-9]|undefined (reference|symbol)|ld:|\*\*\* )'
+
+# Seconds between spinner/ticker frames. One knob for every animated
+# poll loop so the rotating |/-\ cadence stays uniform.
+BH_SPIN_INTERVAL=0.15
+
+# Parallel-job count for make. Picks the host's logical CPU count using
+# whichever of getconf/sysctl/nproc is present; falls back to 4 on
+# shells that lack all three.
+bh_default_jobs() {
+    if [ -z "${JOBS:-}" ]; then
+        JOBS=$(getconf _NPROCESSORS_ONLN 2>/dev/null \
+               || sysctl -n hw.logicalcpu 2>/dev/null \
+               || nproc 2>/dev/null \
+               || echo 4)
+    fi
+}
+
+# Pick the mkspec by host: macx-clang on Darwin, win32-g++ on a Windows host
+# (git-bash / MSYS / Cygwin, where `uname -s` is MINGW*/MSYS*/CYGWIN*), linux-g++
+# otherwise.
+#
+# --memory-safe=filc needs the clang-family spec instead of the g++ one: Fil-C
+# IS a clang, so linux-clang / win32-clang drive qmake's QMAKE_CXX (= clang++)
+# and QMAKE_LINK (= $$QMAKE_CXX) by bare name, which resolve via PATH to the
+# Fil-C compiler bh_parse_args already verified and placed first. linux-g++ /
+# win32-g++ would instead compile and (crucially) LINK with g++, which fails
+# against the Fil-C-built Qt. The swap is purely textual (`*-g++` -> `*-clang`),
+# so it also covers a native Windows host and any win32-g++ cross target -- Fil-C
+# has no win32 runtime YET, but the plumbing is ready for when it does. macx-clang
+# is already clang. Explicit QMAKESPEC / --cross-build values still win (:=).
+# On a Windows host choose between the MSVC and the MinGW/g++ mkspec. MSVC is
+# preferred -- it is the usual Qt-on-Windows toolchain and what a vcvars*.bat
+# shell puts on PATH (as `cl`), while g++ is often absent. Resolution order:
+#   --msvc        -> win32-msvc<ver>   (forced)
+#   --gcc         -> win32-g++         (forced)
+#   `cl` on PATH  -> win32-msvc<ver>   (auto; also wins when both cl and g++ are)
+#   `g++` on PATH -> win32-g++         (auto; only MinGW present)
+#   neither       -> win32-msvc<ver>   (Windows default is MSVC)
+bh_win_host_spec() {
+    case "${BH_WIN_TOOLCHAIN:-}" in
+        msvc) bh_msvc_spec; return ;;
+        gcc)  echo win32-g++; return ;;
+    esac
+    if command -v cl >/dev/null 2>&1; then bh_msvc_spec
+    elif command -v g++ >/dev/null 2>&1; then echo win32-g++
+    else bh_msvc_spec
+    fi
+}
+
+# Map the active Visual Studio (vcvars' $VisualStudioVersion, else the `cl`
+# banner) to the newest matching Qt 5.6 mkspec present under mkspecs/. Falls
+# back to win32-msvc2015, the common Qt-5.6 baseline. `cl </dev/null` prints
+# its banner (to stderr) without waiting for source on stdin.
+bh_msvc_spec() {
+    _vs="${VisualStudioVersion:-}"
+    if [ -z "$_vs" ] && command -v cl >/dev/null 2>&1; then
+        _clv=$(cl </dev/null 2>&1 | sed -n 's/.*Version \([0-9][0-9]*\.[0-9][0-9]*\).*/\1/p' | head -1)
+        case "$_clv" in
+            14.00*)      _vs=8.0 ;;
+            15.00*)      _vs=9.0 ;;
+            16.00*)      _vs=10.0 ;;
+            17.00*)      _vs=11.0 ;;
+            18.00*)      _vs=12.0 ;;
+            19.0|19.00*) _vs=14.0 ;;
+            19.1*)       _vs=15.0 ;;
+            19.2*)       _vs=16.0 ;;
+            19.3*|19.4*) _vs=17.0 ;;
+        esac
+    fi
+    case "$_vs" in
+        8.0)                   echo win32-msvc2005 ;;
+        9.0)                   echo win32-msvc2008 ;;
+        10.0)                  echo win32-msvc2010 ;;
+        11.0)                  echo win32-msvc2012 ;;
+        12.0)                  echo win32-msvc2013 ;;
+        14.0)                  echo win32-msvc2015 ;;
+        15.0)                  echo win32-msvc2017 ;;
+        1[6-9].0|[2-9][0-9].0) echo win32-msvc2017 ;;  # VS2019/2022+ -> newest spec here
+        *)                     echo win32-msvc2015 ;;   # sensible Qt-5.6 default
+    esac
+}
+
+bh_default_qmakespec() {
+    _bh_host_spec=
+    case "$(uname -s)" in
+        Darwin)               _bh_host_spec=macx-clang ;;
+        MINGW*|MSYS*|CYGWIN*) _bh_host_spec=$(bh_win_host_spec) ;;
+        *)                    _bh_host_spec=linux-g++ ;;
+    esac
+}
+
+
+# ---- interactive Y/N helper -------------------------------------------
+
+# bh_yes_no <prompt>
+#
+# Standard Y/N gate used by every "do you want to ..." prompt the
+# scripts surface (Xcode-license accept, qmake bootstrap, XD's
+# continue-or-abort prompt). Returns 0 on Y/empty/anything-not-N and
+# 1 on N variants (`n`/`N`/`no`/`NO`/`No`).
+#
+# Under --headless (BH_HEADLESS > 0) the prompt is skipped and 0 is
+# returned -- "the caller has signed up for the unattended path".
+# This is what lets a single `bh_yes_no` call serve both modes.
+bh_yes_no() {
+    if [ "${BH_HEADLESS:-0}" -gt 0 ]; then
+        return 0
+    fi
+    printf '%s ' "$1"
+    read -r _bh_yes_no_answer
+    case "$_bh_yes_no_answer" in
+        n|N|no|NO|No) return 1;;
+    esac
+    return 0
+}
+
+
+# ---- macOS Xcode license -----------------------------------------------
+
+# bh_license_message
+#
+# Prints a short note explaining why the macOS Xcode license must be
+# accepted before the build can proceed. No-op off Darwin and no-op
+# under --headless (the headless caller has already agreed to anything
+# their unattended environment will surface).
+#
+# Pairs with `bh_yes_no` to form a license prompt -- see
+# `bh_license_prompt` for the convenience wrapper.
+bh_license_message() {
+    [ "$(uname -s)" = "Darwin" ] || return 0
+    [ "${BH_HEADLESS:-0}" -eq 0 ] || return 0
+    echo
+    echo "macOS requires the Xcode license to be accepted before xcodebuild"
+    echo "and qmake's mac/default_pre.prf can locate Xcode -- a one-time"
+    echo "system-wide step that's a no-op if you've already accepted."
+}
+
+# bh_license_accept
+#
+# Runs `sudo xcodebuild -license accept`. No prompt, no message --
+# callers are responsible for gating (in non-headless flows the
+# convention is `bh_license_message + bh_yes_no + bh_license_accept`,
+# or the all-in-one `bh_license_prompt && bh_license_accept`).
+#
+# Off Darwin: no-op. The underlying sudo call is a no-op when the
+# license is already accepted; errors are swallowed so a sudo decline
+# can't break the build chain.
+#
+# Under `--headless` we add `-n` to sudo so the call is
+# non-interactive: a missing cached credential fails immediately
+# rather than blocking the build on an invisible password prompt
+# (which is what happens in CI, `expect` captures, or any pipe
+# where the tty isn't actually attended). If `sudo -n` fails we
+# print a one-line warning telling the user to either pre-cache
+# credentials (`sudo -v`) or re-run the build under sudo so the
+# license-accept can complete -- then continue with the build
+# (the license may already be accepted from a prior session, in
+# which case the build will succeed anyway; if it isn't, the
+# first compiler invocation will surface a clear xcodebuild
+# license error).
+bh_license_accept() {
+    [ "$(uname -s)" = "Darwin" ] || return 0
+    if [ "${BH_HEADLESS:-0}" -gt 0 ]; then
+        if ! sudo -n xcodebuild -license accept 2>/dev/null; then
+            bh_warning \
+                'Could not accept the Xcode license in --headless mode.' \
+                'Run the build once with sudo (or pre-cache creds with `sudo -v`)' \
+                'to accept the Xcode license in --headless mode.'
+        fi
+        return 0
+    fi
+    sudo xcodebuild -license accept 2>/dev/null || true
+}
+
+# bh_license_prompt
+#
+# Convenience: `bh_license_message` followed by a Y/N gate. Returns 0
+# when the user accepts (or under --headless, where `bh_yes_no` is
+# auto-yes), 1 on N. Future callers can use this single call; today's
+# callers (XD/build.sh) keep calling the two pieces explicitly for
+# finer control.
+bh_license_prompt() {
+    bh_license_message
+    bh_yes_no 'Do you want to accept Xcode license? [Y/n]'
+}
+
+# bh_license_gate
+#
+# Full interactive gate used by the template drivers
+# (bh_template_app / bh_template_subdirs). Under --headless this is
+# a no-op (bh_parse_args already pre-accepted the license). Under
+# interactive runs, prints the rationale, prompts the user with the
+# "build dir" question (on macOS combined with the Xcode license),
+# accepts the license on Y, and aborts the script on N. Keeps both
+# templates' gate semantics in one place; hence they stay in lockstep.
+bh_license_gate() {
+    [ "${BH_HEADLESS:-0}" -eq 0 ] || return 0
+    bh_license_message
+    # Names the Xcode license only on macOS, the one host that has it.
+    _blg_question='Continue with this build directory'
+    if [ "$(uname -s)" = Darwin ]; then
+        _blg_question="$_blg_question and accept the Xcode license"
+    fi
+    bh_yes_no "$_blg_question? [Y/n]" \
+        || { echo "Aborted."; exit 1; }
+    bh_license_accept
+}
+
+bh_build_dir_gate() {
+    bh_hook_run display-build-dir > /dev/null
+    # Shows a folder once: a dependency's build (see bh_dependency_build) in
+    # the folder this run showed does not show it again.
+    if [ "${BH_BUILD_DIR_SHOWN:-}" != "$BH_HOOK_RESULT" ]; then
+        echo "Build directory:"
+        echo "  $BH_HOOK_RESULT"
+        echo
+    fi
+    BH_BUILD_DIR_SHOWN=$BH_HOOK_RESULT
+    bh_license_gate
+}
+
+
+# ---- macOS Xcode developer dir auto-detection --------------------------
+
+# On Darwin, qmake's `mac/default_pre.prf` shells out to `xcode-select`
+# and `xcrun` to locate Xcode. When the active selection is the bare
+# Command Line Tools tree (no `xcodebuild`, no SDK metadata) but a real
+# Xcode.app exists, export DEVELOPER_DIR pointing at it so those tools
+# resolve correctly -- saves the user from running
+# `sudo xcode-select -switch ...` system-wide.
+bh_macos_developer_dir() {
+    [ "$(uname -s)" = "Darwin" ] || return 0
+    [ -z "${DEVELOPER_DIR:-}" ] || return 0
+    case "$(xcode-select -p 2>/dev/null)" in
+        */Xcode*.app/*) ;; # Already a real Xcode -- nothing to do.
+        *)
+            for _xc in /Applications/Xcode*.app; do
+                [ -d "$_xc/Contents/Developer" ] || continue
+                DEVELOPER_DIR=$_xc/Contents/Developer
+                export DEVELOPER_DIR
+                break
+            done
+            ;;
+    esac
+}
+
+
+# ---- argument parsing --------------------------------------------------
+
+# bh_parse_args "$@"
+#
+# Pulls common build-driver flags off the argument list and stores them
+# in BH_* globals. An unknown flag stops the run; the words after the flags
+# go to qmake through BH_REMAINING_ARGS, and what follows a lone `--` goes
+# to make through BH_MAKE_ARGS.
+#
+# Defaults: --debug, log level 1 (normal), non-headless, no tests, no run.
+#
+# build-handler.md lists the flags.
+#
+# True (exit 0) when there are post-build tasks to run -- i.e. --test or
+# --run was requested. Such tasks consume the executable's TARGET name
+# and make the build steps a prerequisite rather than the end of the run.
+bh_has_tasks() {
+    [ "${BH_RUN_TESTS:-0}" -gt 0 ] || [ "${BH_RUN_TARGET:-0}" -gt 0 ]
+}
+
+# True (exit 0) when the lifecycle can stop at the given stage with
+# nothing left undone. The argument is the current stage (hook keyword):
+#   pre-build   after the wipe/clean phase, before qmake -- can stop when
+#               --no-build was asked, no `--qmake` Makefile regen is due,
+#               and there are no post-build tasks (--test/--run).
+#   post-qmake  after a `--qmake --no-build` Makefile regen -- can stop
+#               unless post-build tasks still need the build artifacts.
+bh_can_exit() {
+    case "$1" in
+        pre-build)
+            [ "${BH_NO_BUILD:-0}" -gt 0 ] \
+                && [ "${BH_FORCE_QMAKE:-0}" -eq 0 ] \
+                && ! bh_has_tasks
+            ;;
+        post-qmake)
+            ! bh_has_tasks
+            ;;
+        *)
+            bh_error "bh_can_exit: unknown stage '$1'"
+            ;;
+    esac
+}
+
+# True (exit 0) when $1 is an absolute path, recognising both unix
+# (/path) and Windows forms (C:/path, C:\path, and \\host\share UNC) --
+# the Windows ones matter under a shell like Git Bash. Backslashes are
+# written `\\` (one literal backslash) outside the brackets to dodge
+# shell glob-escaping quirks inside bracket expressions.
+bh_is_path_absolute() {
+    case "${1:-}" in
+        /* | [A-Za-z]:/* | [A-Za-z]:\\* | \\\\*) return 0;;
+        *) return 1;;
+    esac
+}
+
+# True (exit 0) when $1 is a real test project -- one that declares
+# `CONFIG += testcase`, the marker the test runner keys on. The first
+# grep narrows to CONFIG assignments, the second checks `testcase` as a
+# whole token (so a value like `testcase_exceptions` does not count).
+# Used to keep dummy `.pro` fixtures a test feeds to qmake (e.g. the
+# qmake test's testdata/*.pro) out of a glob's results.
+bh_is_testcase() {
+    grep -E '^[[:space:]]*CONFIG[[:space:]]*[-+*]?=' "$1" 2>/dev/null \
+        | grep -Eq '(^|[[:space:]])testcase([[:space:]]|$)'
+}
+
+# Consume an optional test-project argument shared by --test and
+# --test-review. $1 may be a `.pro` path or a glob pattern (quote a glob
+# so the calling shell passes it through, e.g. `--test '**/*qmake*'`).
+#
+# A literal path stores that one project in BH_TEST_ROOT. A glob stores
+# every `.pro` whose path matches -- newline-separated and sorted, so the
+# order is stable regardless of the filesystem's find order -- and sets
+# BH_TEST_GLOB=1. Real-ness is deliberately NOT checked here: deferring
+# it to the test step lets that step vet the upcoming matches in the
+# background while the current one builds and runs (see the run loop).
+# It reports success so the caller knows to `shift` the arg. A flag, an
+# empty arg, or anything that is neither a `.pro` nor a glob leaves
+# BH_TEST_ROOT untouched and reports failure. Runs in the parser's own
+# shell (not a subshell) so bh_error can abort.
+bh_take_test_pro() {
+    case "${1:-}" in
+        '' | -*)               return 1 ;;  # nothing, or another flag
+        *.pro) ;;                            # a .pro path
+        *"*"* | *"?"* | *"["*) ;;            # a glob pattern
+        *)                     return 1 ;;   # neither -> not ours
+    esac
+    _bhtp_arg=$1
+
+    # A literal, existing file wins outright (covers full .pro paths and
+    # a glob the calling shell already expanded to one file). Keep it if
+    # absolute; otherwise make it absolute against the current dir (a bare
+    # $(pwd) prefix would mangle a native path under a Windows shell --
+    # hence bh_is_path_absolute).
+    if [ -f "$_bhtp_arg" ]; then
+        if bh_is_path_absolute "$_bhtp_arg"; then
+            BH_TEST_ROOT=$_bhtp_arg
+        else
+            BH_TEST_ROOT=$(pwd)/$_bhtp_arg
+        fi
+        return 0
+    fi
+
+    # Otherwise treat it as a glob and collect every `.pro` whose path
+    # matches. The pattern need not spell out the extension (`**/*qmake*`
+    # finds qmake `.pro`s); it is matched against each file's path
+    # relative to the root via `case`, where `*` (and `**`) span
+    # directory separators. `find | sort` pins the order; `set -f` stops
+    # the find output from being re-globbed (`case` still patterns).
+    # Real-ness is left to the test step (see BH_TEST_GLOB above).
+    _bhtp_roots=
+    _bhtp_count=0
+    _bhtp_oldifs=$IFS
+    set -f
+    IFS='
+'
+    for _bhtp_pro in $(find -H "$BH_ROOT" -name '*.pro' \
+            ! -path '*/build/*' ! -path '*/.git/*' 2>/dev/null | sort); do
+        _bhtp_rel=${_bhtp_pro#"$BH_ROOT"/}
+        case "$_bhtp_rel" in
+            $_bhtp_arg) ;;
+            *) continue ;;
+        esac
+        _bhtp_count=$((_bhtp_count + 1))
+        _bhtp_roots="${_bhtp_roots:+$_bhtp_roots
+}$_bhtp_pro"
+    done
+    IFS=$_bhtp_oldifs
+    set +f
+
+    if [ "$_bhtp_count" -eq 0 ]; then
+        bh_error "--test: nothing under '$BH_ROOT' matches the glob '$_bhtp_arg'"
+    fi
+    BH_TEST_ROOT=$_bhtp_roots
+    BH_TEST_GLOB=1
+    BH_TEST_PATTERN=$_bhtp_arg   # for the "Searching for test-pattern" spinner
+}
+
+# bh_hook <stage> <<'}'
+#     <code>
+# }
+#
+# Runs <code>, read from the here-document, at <stage> of the build, after
+# the code that earlier hooks added for that stage; a build.sh adds its hooks
+# before it calls a template. The here-document ends at a line holding only
+# `}`, hence a hook reads like a block, and its quoted `'}'` keeps <code> as
+# written. <code> becomes the body of a function of its own right away (hence
+# a mistake in it stops the build here), which runs in the build's own shell
+# (the variables it sets stay set); the stage keeps only the function's name
+# (see bh_hook_add). build-handler.md lists the stages.
+bh_hook() {
+    if [ -t 0 ]; then
+        bh_error "bh_hook $1: give the hook's code as a here-document"
+    fi
+    _bhh_code=$(cat)
+    [ -n "$_bhh_code" ] || return 0
+    _bh_hook_count=$((${_bh_hook_count:-0} + 1))
+    _bhh_function=_bh_hook_$_bh_hook_count
+    # A syntax error in <code> stops the shell right here.
+    eval "$_bhh_function() {
+$_bhh_code
+}"
+    bh_hook_add "$1" "$_bhh_function"
+}
+
+# bh_hook_add <stage> <function>
+#
+# Adds <function>, which the build.sh defined beforehand, to the hooks of
+# <stage>: its name goes on a line of its own in the stage's variable (see
+# bh_hook_variable); it runs just like the code that bh_hook adds.
+bh_hook_add() {
+    _bha_variable=$(bh_hook_variable "$1")
+    eval "_bha_hooks=\${$_bha_variable:-}"
+    _bha_hooks="${_bha_hooks:+$_bha_hooks
+}$2"
+    eval "$_bha_variable=\$_bha_hooks"
+}
+
+# bh_hook_run <stage>
+#
+# Runs the functions of the hooks of <stage>, in the order they were added, in
+# the build's own shell (the variables they set stay set). What each one
+# prints is its result: it shows as it comes, and BH_HOOK_RESULT holds it
+# afterwards, hence the next hook can build on it (BH_HOOK_RESULT is empty for
+# the first). A caller that wants the result alone sends this output to
+# /dev/null (see bh_build_dir_gate).
+bh_hook_run() {
+    BH_HOOK_RESULT=
+    _bhr_variable=$(bh_hook_variable "$1")
+    eval "_bhr_hooks=\${$_bhr_variable:-}"
+    [ -n "$_bhr_hooks" ] || return 0
+    # A hook writes into a FIFO, which `tee` shows and keeps; a pipe would run
+    # the hook in a subshell instead, and lose the variables it sets.
+    _bhr_dir=$(mktemp -d)
+    mkfifo "$_bhr_dir/output"
+    for _bhr_function in $_bhr_hooks; do
+        tee "$_bhr_dir/result" < "$_bhr_dir/output" &
+        _bhr_tee=$!
+        "$_bhr_function" > "$_bhr_dir/output"
+        wait "$_bhr_tee"
+        BH_HOOK_RESULT=$(cat "$_bhr_dir/result")
+    done
+    rm -rf "$_bhr_dir"
+}
+
+# bh_hook_variable <stage>
+#
+# Prints the name of the variable that lists the hook functions of <stage>:
+# `BH_HOOKS_` plus <stage>, each character a name cannot hold turned into `_`
+# (`args-parsed` -> `BH_HOOKS_args_parsed`).
+bh_hook_variable() {
+    printf 'BH_HOOKS_%s' "$(printf '%s' "$1" | tr -c 'A-Za-z0-9' '_')"
+}
+
+# Template-sensitive: when `$BH_TEMPLATE` is set to "subdirs", the
+# `--run` flag also consumes the next positional argument as the
+# relative subdir path to launch -- subdirs trees don't have a
+# single top-level TARGET, so the user has to point us at one.
+# Stored in `BH_RUN_TARGET_PATH`. Under `BH_TEMPLATE=app` (or
+# unset), `--run` consumes nothing extra -- behaviour unchanged.
+bh_parse_args() {
+    # Use `:=` defaults so a caller that pre-sets any BH_* (env var,
+    # wrapper script, nested bh_template_app call) survives this
+    # initialisation -- only unset values get the default. Cmdline
+    # flags below still win because they assign with plain `=`.
+    : "${BH_MODE:=debug}"
+    : "${BH_MODE_GIVEN:=0}"
+    # Log verbosity is a level: 0 = errors only, 1 = normal (default),
+    # 2 = verbose (-v: live make + test output), 3 = very-verbose (-vv:
+    # also qmake's recursive "Reading ..." firehose). Back-compat: an old
+    # truthy BH_VERBOSE maps to verbose. Normalise anything unexpected.
+    case "${BH_VERBOSE:-}" in '' | 0) ;; *) : "${BH_LOG_LEVEL:=2}" ;; esac
+    case "${BH_LOG_LEVEL:-}" in 0 | 1 | 2 | 3) ;; *) BH_LOG_LEVEL=1 ;; esac
+    : "${BH_HEADLESS:=0}"
+    : "${BH_RUN_TESTS:=0}"
+    : "${BH_RUN_TARGET:=0}"
+    : "${BH_NO_PROGRESS:=0}"
+    : "${BH_CLEAN:=0}"
+    : "${BH_WIPE:=0}"
+    : "${BH_NO_BUILD:=0}"
+    : "${BH_FORCE_QMAKE:=0}"
+    : "${BH_IGNORE_PRI:=0}"
+    : "${BH_TEST_GLOB:=0}"
+    : "${BH_GET:=}"
+    : "${BH_SAVE_SPACE:=0}"
+    : "${BH_PREFER_PATH:=0}"
+    : "${BH_NO_XD_BUILD:=0}"
+
+    # --test-review is a review shortcut that pre-sets headless + verbose
+    # + no-build. We apply those defaults *before* the parse loop so that
+    # the loop -- which sees every flag, including ones written before
+    # --test-review -- can override any of them through the same
+    # variables (--no-verbose -> BH_LOG_LEVEL=1, --headed -> BH_HEADLESS=0,
+    # --build -> BH_NO_BUILD=0). No extra "force" variables needed.
+    for _bharg in "$@"; do
+        if [ "$_bharg" = "--test-review" ]; then
+            BH_HEADLESS=1
+            BH_LOG_LEVEL=2
+            BH_NO_BUILD=1
+            break
+        fi
+    done
+
+    BH_FORWARD_ARGS=
+    while [ $# -gt 0 ]; do
+        # Keeps what the case below reads (one argument, or two for a flag
+        # with a value), for bh_forward_note.
+        _bhpa_count=$#
+        _bhpa_flag=$1
+        _bhpa_value=${2-}
+        case "$1" in
+            # Log level: -q = 0 (errors only), default 1 (normal),
+            # -v = 2 (live make + test output), -vv = 3 (also the qmake
+            # "Reading ..." firehose). -v never downgrades a higher -vv.
+            -q|--quiet)          BH_LOG_LEVEL=0; shift ;;
+            -v|--verbose)
+                case "${BH_LOG_LEVEL:-1}" in 0|1|2) BH_LOG_LEVEL=2 ;; esac
+                shift ;;
+            -vv|--very-verbose)  BH_LOG_LEVEL=3; shift ;;
+            --test|--tests)
+                # An optional `.pro` path or glob right after --test
+                # overrides the default test root; `--test` alone (or
+                # before another flag) keeps it.
+                BH_RUN_TESTS=1; shift
+                bh_take_test_pro "${1:-}" && shift
+                ;;
+            --test-review)
+                # Review shortcut == --test <pro> --headless --verbose
+                # --no-build. The three defaults were pre-set above; here
+                # we just enable tests and take the optional `.pro` path or
+                # glob. Flip any default with its opposite flag (any order).
+                BH_RUN_TESTS=1; shift
+                bh_take_test_pro "${1:-}" && shift
+                ;;
+            # Opposites of the --test-review defaults -- they just clear
+            # the same variables the shortcut set.
+            --build)                BH_NO_BUILD=0; shift;;
+            --headed|--interactive) BH_HEADLESS=0; shift;;
+            --no-verbose)           BH_LOG_LEVEL=1; shift;;
+            --run)
+                BH_RUN_TARGET=1; shift
+                # Subdirs template: --run needs a subdir path. App
+                # template (default): nothing to consume.
+                if [ "${BH_TEMPLATE:-app}" = "subdirs" ]; then
+                    [ $# -gt 0 ] || bh_error "--run needs a subdir path when BH_TEMPLATE=subdirs"
+                    # Two guards against silently eating the next
+                    # flag as a path:
+                    #   1) reject anything starting with `-` -- a
+                    #      legitimate subdir name wouldn't.
+                    #   2) require the path to resolve to a real
+                    #      directory under $BH_ROOT -- catches
+                    #      typos and the "missing arg" case where
+                    #      the user invoked `--run` last.
+                    case "$1" in
+                        -*) bh_error "--run expects a subdir path next, got flag '$1'";;
+                    esac
+                    [ -d "$BH_ROOT/$1" ] || \
+                        bh_error "--run path '$1' does not exist under '$BH_ROOT'"
+                    BH_RUN_TARGET_PATH=$1; shift
+                fi
+                ;;
+            --debug)          BH_MODE=debug; BH_MODE_GIVEN=1; shift;;
+            --release)        BH_MODE=release; BH_MODE_GIVEN=1; shift;;
+            # --release-debug: an optimized (release) build that still carries
+            # debug info -- BH_MODE=release plus BH_DEBUG_INFO, so a build script
+            # adds -g without dropping -O2 (good for profiling, post-mortem cores,
+            # or readable Fil-C panics). BH_DEBUG_INFO is the switch build scripts
+            # read.
+            --release-debug)  BH_MODE=release; BH_DEBUG_INFO=1; BH_MODE_GIVEN=1; shift;;
+            --headless)       BH_HEADLESS=1; shift;;
+            --no-progress)    BH_NO_PROGRESS=1; shift;;
+            # --estimate-actions=<count>: the `estimate` progress mode, whose
+            # bar starts at <count> build actions (see bh_progress_mode_resolve).
+            --estimate-actions=*)
+                BH_PROGRESS_MODE=estimate
+                BH_ESTIMATED_ACTIONS="${1#*=}"
+                shift;;
+            --clean)          BH_CLEAN=1; shift;;
+            --wipe)         BH_WIPE=1; shift;;
+            --no-build)       BH_NO_BUILD=1; shift;;
+            # --only-clean expands to the `--clean --no-build` combo
+            # -- the common "wipe without rebuild" shorthand.
+            --only-clean)     BH_CLEAN=1; BH_NO_BUILD=1; shift;;
+            # Whether the test step (re)builds each test or just runs an
+            # already-built one. Left unset here, it defaults to follow the
+            # main build (see the resolution after the loop); these flags
+            # force it on/off independently.
+            --build-tests)    BH_BUILD_TESTS=1; shift;;
+            --no-build-tests) BH_BUILD_TESTS=0; shift;;
+            # Two spellings for the same force-qmake behaviour.
+            --qmake|--refresh) BH_FORCE_QMAKE=1; shift;;
+            --force-qmake)     BH_FORCE_QMAKE=1; BH_QMAKE_KEEP_GOING=1; shift;;
+            --ignore-pri)     BH_IGNORE_PRI=1; shift;;
+            # --save-space: reclaim disk as we go -- each lib/exe drops its
+            # build artifacts (objects, moc/rcc output) right after it links,
+            # keeping only the binary. Forwarded to qmake as CONFIG+=save_space
+            # (see mkspecs/xd/save_space.prf). Handy for a big build on
+            # a tight disk, e.g. cross-building the whole framework.
+            --save-space)     BH_SAVE_SPACE=1; shift;;
+            # --cross-compile[=<spec>] (alias --cross-build): build the target
+            # for a different platform than the host. Host tools (moc/rcc/uic and
+            # the qmake bootstrap) keep building with the native host spec, while
+            # the target uses <spec> (default win32-g++). Passed to qmake as a
+            # separate -xspec, so host_build stays on the host spec instead of
+            # the target's, and the target spec's flags never reach the native
+            # host toolchain.
+            --cross-compile=*|--cross-build=*) BH_CROSS_SPEC="${1#*=}"; shift;;
+            --cross-compile|--cross-build)     BH_CROSS_SPEC=win32-g++; shift;;
+            # --gcc / --msvc: on a Windows host, force the target toolchain and
+            # mkspec (win32-g++ vs win32-msvc*). Optional -- with neither, the
+            # host default prefers MSVC when it is on PATH (see bh_win_host_spec).
+            # No effect on a Linux/macOS host (their spec is fixed).
+            --gcc)            BH_WIN_TOOLCHAIN=gcc; shift;;
+            --msvc)           BH_WIN_TOOLCHAIN=msvc; shift;;
+            # --filter=<regexp> (alias --only): build only the projects whose
+            # path relative to the build root matches the extended regexp
+            # (grep -E), so `a|b` builds multiple patterns at once (e.g.
+            # --filter='tools/(moc|rcc|uic)/'). This skips the whole-tree qmake,
+            # so an unrelated broken .pro (one that needs an SDK we lack, say)
+            # cannot block the subset asked for.
+            --filter=*|--only=*) BH_FILTER="${1#*=}"; shift;;
+            --filter|--only)     [ $# -ge 2 ] || bh_error "$1 requires a regexp"; BH_FILTER="$2"; shift 2;;
+            # --rebuild[=<regexp>]: under --save-space, build the projects whose
+            # path relative to the build root matches (default every project)
+            # even though the .qmake.save_space cache lists them as finished --
+            # for instance after editing a header they include.
+            --rebuild=*)      BH_REBUILD="${1#*=}"; shift;;
+            --rebuild)        BH_REBUILD='^.*$'; shift;;
+            # --static[=<regexp>]: build the projects whose path relative to
+            # the build root matches (default every project) in `qt_static`
+            # mode, at whichever qmake run reaches them (see
+            # bh_static_record). A sub-filter on top of --filter, just like
+            # --rebuild. --no-static clears it, also a BH_STATIC that the
+            # build.sh preset.
+            --static=*)       BH_STATIC="${1#*=}"; shift;;
+            --static)         BH_STATIC='^.*$'; shift;;
+            --no-static)      BH_STATIC=; shift;;
+            --no-xd-* | --no-qt-*) bh_xd_arg_add "--no-${1#--no-??-}"; shift;;
+            --xd-* | --qt-*)  bh_xd_arg_add "--${1#--??-}"; shift;;
+            # --get=<what>: print a single resolved path and exit without
+            # building, so a caller can capture and forward it (e.g. bind-mount
+            # XD's already-built dirs into a cross-build container instead of
+            # rebuilding XD). Values -- see bh_handle_get: build-dir|bin-dir|lib-dir.
+            --get=*)          BH_GET="${1#--get=}"; shift;;
+            --get)            [ $# -ge 2 ] || bh_error "--get requires a value"; BH_GET="$2"; shift 2;;
+            -d|--directory)
+                # Override BUILD_DIR; consumed by all templates' :- default.
+                # Absolutise a relative value: templates `cd` around before
+                # reusing BUILD_DIR, so a relative path would later resolve
+                # against the wrong directory.
+                [ $# -ge 2 ] || bh_error "$1 requires a value"
+                if bh_is_path_absolute "$2"; then
+                    BUILD_DIR=$2
+                else
+                    BUILD_DIR=$(pwd)/$2
+                fi
+                shift 2;;
+            --)               break;;
+            -*)
+                bh_error "unknown flag '$1'; pass an option of make after ' -- ', such as: build.sh -- $1" ;;
+            *)                break;;
+        esac
+        bh_forward_note "$((_bhpa_count - $#))" "$_bhpa_flag" "$_bhpa_value"
+    done
+    # Splits what follows the flags: the qmake arguments, then, after a
+    # `--`, the arguments of every make run (see bh_make_run). A dependency's
+    # build gets them all too, after every flag (see bh_dependency_build).
+    BH_REMAINING_ARGS=
+    _bhpa_make=0
+    for _bhpa_argument in "$@"; do
+        BH_FORWARD_TAIL="${BH_FORWARD_TAIL:+$BH_FORWARD_TAIL
+}$_bhpa_argument"
+        if [ "$_bhpa_make" -eq 0 ] && [ "$_bhpa_argument" = -- ]; then
+            _bhpa_make=1
+        elif [ "$_bhpa_make" -eq 1 ]; then
+            BH_MAKE_ARGS="${BH_MAKE_ARGS:+$BH_MAKE_ARGS }$_bhpa_argument"
+        else
+            BH_REMAINING_ARGS="${BH_REMAINING_ARGS:+$BH_REMAINING_ARGS }$_bhpa_argument"
+        fi
+    done
+
+    # Lets a build.sh adjust what the flags set (see bh_hook).
+    bh_hook_run args-parsed
+
+    # Resolve whether the test step builds each test. Unless --build-tests
+    # / --no-build-tests set it explicitly (or a caller pre-set it), it
+    # follows the now-final main build: build tests when building, skip
+    # (just run) under --no-build. From here on, test logic checks only
+    # BH_BUILD_TESTS -- never BH_NO_BUILD.
+    if [ -z "${BH_BUILD_TESTS:-}" ]; then
+        if [ "${BH_NO_BUILD:-0}" -gt 0 ]; then
+            BH_BUILD_TESTS=0
+        else
+            BH_BUILD_TESTS=1
+        fi
+    fi
+
+    # Only --test / --run consume the executable's TARGET name, so mark it
+    # `pending` for lazy resolution (bh_target_resolve runs `qmake -E` on
+    # first fetch). A plain build leaves it unset and skips that step.
+    # `:=` so a caller that pre-set BH_TARGET_NAME keeps its literal.
+    if bh_has_tasks; then
+        : "${BH_TARGET_NAME:=pending}"
+    fi
+
+    # Headless = "the caller has taken responsibility for unattended
+    # behavior." Pre-accept the macOS Xcode license here so downstream
+    # steps (qmake's mac/default_pre.prf, xcodebuild invocations the
+    # build calls) don't trip on the un-accepted gate. Interactive runs
+    # keep wrapping `bh_license_accept` in their own Y/N prompt.
+    #
+    # Skip it under --no-build: nothing gets compiled then, so the
+    # precaution -- and its "could not accept the license" warning when
+    # passwordless sudo isn't available -- is just noise.
+    if [ "$BH_HEADLESS" -gt 0 ] && [ "${BH_NO_BUILD:-0}" -eq 0 ]; then
+        bh_license_accept
+    fi
+}
+
+
+# bh_forward_note <count> <flag> [<value>]
+#
+# Adds a flag that bh_parse_args just read, with its <value> when the flag took
+# <count> 2 arguments, to BH_FORWARD_ARGS: the arguments that
+# bh_dependency_build_static hands on to a framework's static build. It leaves
+# out the flags that name this project's own paths or steps, which that build
+# would fail on or turn against this project: --filter (and --only), the
+# --static regexp (the framework gets a plain --static), --format,
+# --estimate-actions (the count of this project's build), --test,
+# --tests, and
+# --test-review with their test project, --run with its subdir, -d
+# (--directory), and the flags that would redo or drop what the framework
+# built (build-handler.md lists them); hence --only-clean passes on its
+# --no-build only. --test-review's own defaults go along, in front of every
+# flag, just as bh_parse_args sets them before it reads the flags.
+bh_forward_note() {
+    case "$2" in
+        --filter | --filter=* | --child | --only | --only=* \
+                | --static | --static=* \
+                | --format | --estimate-actions=* \
+                | --test | --tests | --run | -d | --directory | --clean \
+                | --xd-* | --no-xd-* | --qt-* | --no-qt-*)
+            return 0
+            ;;
+        --only-clean)
+            bh_forward_add --no-build
+            return 0
+            ;;
+        --test-review)
+            _bfn_flags=$BH_FORWARD_ARGS
+            BH_FORWARD_ARGS=
+            bh_forward_add --headless
+            bh_forward_add --verbose
+            bh_forward_add --no-build
+            BH_FORWARD_ARGS="$BH_FORWARD_ARGS${_bfn_flags:+
+$_bfn_flags}"
+            return 0
+            ;;
+    esac
+    bh_forward_add "$2"
+    if [ "$1" -ge 2 ]; then
+        bh_forward_add "$3"
+    fi
+}
+
+# bh_forward_add <argument>
+#
+# Adds <argument> as one more line to BH_FORWARD_ARGS (see bh_forward_note).
+bh_forward_add() {
+    BH_FORWARD_ARGS="${BH_FORWARD_ARGS:+$BH_FORWARD_ARGS
+}$1"
+}
+
+
+# bh_handle_get
+#
+# When --get=<what> was passed, print a single resolved path to stdout and exit
+# 0 -- no banner, no build -- so a caller can capture and forward it (for
+# example bind-mount XD's already-built dirs into a cross-build container instead
+# of rebuilding XD). Every template driver calls this right after $BUILD_DIR is
+# resolved. Values:
+#   build-dir  the shadow build directory ($BUILD_DIR)
+#   bin-dir    $XD_DIR/bin  (built framework binaries: qmake-linux, ...)
+#   lib-dir    $XD_DIR/lib  (built framework libraries)
+bh_handle_get() {
+    [ -n "${BH_GET:-}" ] || return 0
+    _bh_xd="${XD_DIR:-$BH_ROOT}"
+    case "$BH_GET" in
+        build-dir) printf '%s\n' "$BUILD_DIR" ;;
+        bin-dir)   printf '%s\n' "$_bh_xd/bin" ;;
+        lib-dir)   printf '%s\n' "$_bh_xd/lib" ;;
+        *) echo "unknown --get value: '$BH_GET' (build-dir | bin-dir | lib-dir)" >&2; exit 2 ;;
+    esac
+    exit 0
+}
+
+
+# ---- per-step log cache + run helper -----------------------------------
+
+# bh_logs_init "$DIR"
+#
+# Per-step logs go to disk (no risk of overflowing a shell variable for
+# a long build). Each invocation is a fresh re-build, so wipe the prior
+# logs up front -- only deletes existing `*.log` files; the folder
+# itself is reused.
+bh_logs_init() {
+    LOGS=$1
+    mkdir -p "$LOGS"
+    rm -f "$LOGS"/*.log
+    # Only init `_step` if the template hasn't already started
+    # counting. `--wipe` runs *before* bh_logs_init and bumps
+    # `_step` to 1 for the `[√] (1/N)` row; clobbering it here
+    # would push every subsequent step's counter down by one.
+    : "${_step:=0}"
+}
+
+# ---- progress bar (reusable) ------------------------------------------
+
+# Stateful progress API. Four methods, single source of truth for the
+# bar format. Both `bh_run` (qmake/test-qmake/etc -- spinner mode)
+# and `bh_make_step` (determinate mode, fed by parsed make output)
+# drive the same renderer so visuals stay consistent.
+#
+#   bh_progress_setType <t>         Pick the display shape:
+#                                     "spinner" -- single line, format
+#                                       `  [/] (step/total): <desc>`
+#                                       (description on same row).
+#                                     "bar"     -- two-row shape:
+#                                       description prints once as a
+#                                       header line above, the bar
+#                                       updates in place on the next
+#                                       row as `  [bar] X.XX % (V/M)`
+#                                       where V/M is value/max (e.g.
+#                                       "(745/2466)" for "compiled
+#                                       745 of 2466 files").
+#                                   Resets the header-printed flag so
+#                                   the next render emits the header.
+#   bh_progress_setMax <N>          Set the determinate denominator
+#                                   (use with `setType "bar"`). Resets
+#                                   value to 0 and "arms" hide so the
+#                                   next bh_progress_hide actually
+#                                   advances to a new line (otherwise
+#                                   it's a no-op, so unrelated callers
+#                                   don't eat a blank line). For spinner
+#                                   mode, call `setMax 0` after
+#                                   `setType "spinner"`.
+#   bh_progress_setValue <V>        Update the count without rendering.
+#   bh_progress_setDescription <s>  Store <s> for the renderer to use --
+#                                   either inline (spinner mode) or as
+#                                   the header line above the bar (bar
+#                                   mode). The bar mode header is
+#                                   printed once per `setType` call.
+#   bh_progress_render              Draw the row on stderr (clears via
+#                                   \r\033[K). No-op when stderr isn't
+#                                   a TTY or BH_NO_PROGRESS=1. Bar mode
+#                                   embeds the `|/-\` spinner at the
+#                                   filled portion's leading edge
+#                                   (`[##/-------]`); spinner mode is
+#                                   just the spinner char alone.
+#   bh_progress_hide                Re-render the row once with the
+#                                   "done" symbol -- the bar/spinner
+#                                   gets replaced by the radical sign
+#                                   `[√]` -- then `\n` to advance the
+#                                   cursor so the row stays on screen
+#                                   as a completed-phase log line. The
+#                                   next phase's row appears below.
+#                                   No-op unless setMax was called
+#                                   since the last hide.
+#
+# State is plain shell vars (BH_PROGRESS_MAX / _VALUE / _ARMED), so
+# a subshell that drives the methods (e.g. inside a pipe) sees the
+# correct max but its value updates don't propagate back -- that's
+# fine for the renders themselves; for end-of-step `printf '\n'`
+# the parent's _ARMED flag is what matters.
+
+bh_progress_setMax() {
+    BH_PROGRESS_MAX=$1
+    BH_PROGRESS_VALUE=0
+    BH_PROGRESS_DONE=0
+    BH_PROGRESS_ARMED=1
+}
+
+bh_progress_setValue() {
+    BH_PROGRESS_VALUE=$1
+}
+
+bh_progress_setDescription() {
+    BH_PROGRESS_DESC=$1
+}
+
+# bh_progress_setType <type>
+#
+# Switches the renderer between display shapes:
+#   "spinner" -- single-line `  [/] (step/total): description.`
+#                (description rides on the same row as the spinner)
+#   "bar"     -- two-line shape: description prints once as a header
+#                line, then `  [bar] X.XX %  (step/total)` updates in
+#                place on the next row. Re-printing of the header is
+#                tracked via BH_PROGRESS_HEADER_PRINTED so subsequent
+#                renders don't keep re-emitting the header text.
+#
+# Resets the header-printed flag so the next `bh_progress_render`
+# under "bar" emits the description header on a fresh row.
+bh_progress_setType() {
+    BH_PROGRESS_TYPE=$1
+    BH_PROGRESS_HEADER_PRINTED=0
+}
+
+# bh_progress_format_bracket
+#
+# Returns (on stdout) the content that goes between the `[` and `]`
+# in the next render -- a single spinner char in spinner mode, or
+# the 40-char bar-with-embedded-spinner in bar mode, or `√` in the
+# done state. Pure formatting, no TTY/no-progress gating, so this
+# is the testable seam the spec exercises.
+bh_progress_format_bracket() {
+    case $((${BH_PROGRESS_TICK:-0} % 4)) in
+        0) _bhpf_spin='|';;
+        1) _bhpf_spin='/';;
+        2) _bhpf_spin='-';;
+        3) _bhpf_spin='\';;
+    esac
+    if [ "${BH_PROGRESS_DONE:-0}" -eq 1 ]; then
+        printf '%s' "${BH_PROGRESS_DONE_GLYPH:-√}"
+        return 0
+    fi
+    if [ "${BH_PROGRESS_TYPE:-spinner}" = "bar" ] \
+        && [ "${BH_PROGRESS_MAX:-0}" -gt 0 ]; then
+        # A bar of BH_PROGRESS_BAR_CELLS chars (40 by default, see
+        # bh_progress_bar_cells). Centi-percent maps to 0..cells hashes.
+        # At full fill the spinner sits at the last position so its
+        # rotating frame is still visible (matters most for no-op
+        # builds where the bar lands at 100% immediately).
+        _bhpf_c=$((BH_PROGRESS_VALUE * 10000 / BH_PROGRESS_MAX))
+        [ "$_bhpf_c" -gt 10000 ] && _bhpf_c=10000
+        _bhpf_bars=$((_bhpf_c / 250))
+        if [ "$_bhpf_bars" -ge 40 ]; then
+            _bhpf_hash=$(printf '%*s' 39 '' | tr ' ' '#')
+            printf '%s%s' "$_bhpf_hash" "$_bhpf_spin"
+        else
+            _bhpf_hash=$(printf '%*s' "$_bhpf_bars" '' | tr ' ' '#')
+            # Bar's empty cells use `_` rather than `-` so the
+            # `-` frame of the embedded |/-\ spinner stays
+            # visually distinct against the bar's trough.
+            _bhpf_dash=$(printf '%*s' $((_bhpf_cells - _bhpf_bars - 1)) '' | tr ' ' '_')
+            printf '%s%s%s' "$_bhpf_hash" "$_bhpf_spin" "$_bhpf_dash"
+        fi
+    else
+        # Spinner mode: a single rotating frame.
+        printf '%s' "$_bhpf_spin"
+    fi
+}
+
+# bh_progress_active
+#
+# True (0) when a live progress display should be drawn -- progress
+# isn't disabled (`--no-progress`), the log level is at least normal
+# (level 0 / -q shows errors only), and stderr is an interactive tty.
+# The single predicate every render/poll site gates on; note it does
+# NOT cover bh_warning's `-t 2` check, which gates ANSI bold for the
+# warning text and should fire even under --no-progress.
+bh_progress_active() {
+    [ "${BH_NO_PROGRESS:-0}" -eq 0 ] && [ "${BH_LOG_LEVEL:-1}" -ge 1 ] \
+        && [ -t 2 ]
+}
+
+# bh_progress_tick
+#
+# Advances the |/-\ frame by one and draws the row. Only the loops that run
+# once per `BH_SPIN_INTERVAL` call it, hence the spinner turns at that steady
+# pace; a redraw for any other reason (a compile line, the first frame)
+# calls `bh_progress_render`, which keeps the frame.
+bh_progress_tick() {
+    BH_PROGRESS_TICK=$((${BH_PROGRESS_TICK:-0} + 1))
+    bh_progress_render
+}
+
+bh_progress_render() {
+    bh_progress_active || return 0
+    # Both modes animate |/-\ from the frame counter of `bh_progress_tick`,
+    # via `bh_progress_format_bracket`.
+    _bhp_bracket=$(bh_progress_format_bracket)
+
+    if [ "${BH_PROGRESS_TYPE:-spinner}" = "bar" ]; then
+        if [ "${BH_PROGRESS_DONE:-0}" -eq 1 ]; then
+            # DONE state collapses the two-row bar layout into a
+            # single `[√] (N/M): description` row -- matches the
+            # spinner-mode rows' shape so a scrollback of completed
+            # steps reads uniformly. If the description header was
+            # printed above the bar row during the active phase
+            # (header row at line N, bar row at line N+1), we
+            # clear both and write the settled row on the header
+            # row. Cursor sequence:
+            #   \r          col 0 of bar row
+            #   \033[K      clear bar row
+            #   \033[<H>A   up to the header's first row, of
+            #               its BH_PROGRESS_HEADER_LINES rows
+            #   \033[J      clear the header rows
+            #   \r          col 0
+            if [ "${BH_PROGRESS_HEADER_PRINTED:-0}" -eq 1 ]; then
+                printf '\r\033[K\033[%dA\033[J\r' "${BH_PROGRESS_HEADER_LINES:-1}" 1>&2
+                BH_PROGRESS_HEADER_PRINTED=0
+            else
+                printf '\r\033[K' 1>&2
+            fi
+            bh_progress_row "${_step:-}" "${BH_PROGRESS_DESC:-}"
+            printf '[%s]%s' "$_bhp_bracket" "$BH_PROGRESS_ROW" 1>&2
+        else
+            # Active bar: description sits on its own header row,
+            # the bar row updates in place on the next row. The
+            # split is needed because the bar row carries a live
+            # percent that updates per compile event -- packing
+            # description + bar + percent + counter onto one line
+            # blows past terminal width and visually thrashes.
+            if [ "${BH_PROGRESS_HEADER_PRINTED:-0}" -eq 0 ] \
+                && [ -n "${BH_PROGRESS_DESC:-}" ]; then
+                bh_progress_row_clear
+                bh_progress_row "${_step:-}" "$BH_PROGRESS_DESC"
+                printf '\r\033[K[R]%s\n' "$BH_PROGRESS_ROW" 1>&2
+                BH_PROGRESS_HEADER_LINES=$BH_PROGRESS_ROW_LINES
+                BH_PROGRESS_HEADER_PRINTED=1
+            fi
+            # Bar mode is only used when progress is *known* and
+            # computable -- unknown-progress phases (no-op builds,
+            # indeterminate work) go through spinner mode instead,
+            # so they never hit this branch and never see a
+            # misleading `100.00 %`.
+            _bhp_c=$((BH_PROGRESS_VALUE * 10000 / BH_PROGRESS_MAX))
+            [ "$_bhp_c" -gt 10000 ] && _bhp_c=10000
+            _bhp_int=$((_bhp_c / 100))
+            _bhp_frac=$((_bhp_c % 100))
+            printf '\r\033[K  [%s] %3d.%02d %%' \
+                "$_bhp_bracket" "$_bhp_int" "$_bhp_frac" 1>&2
+            printf ' (%d/%d)' "$BH_PROGRESS_VALUE" "$BH_PROGRESS_MAX" 1>&2
+            if [ -n "${BH_PROGRESS_CLOCK:-}" ]; then
+                printf ' %s' "$BH_PROGRESS_CLOCK" 1>&2
+            fi
+        fi
+    else
+        # Spinner mode: single line, `[sym] (step/total): desc`
+        # (flush-left -- bar mode keeps the 2-space indent so the
+        # bar row sits visually nested under its description header,
+        # but spinner-mode rows are top-level and don't want that).
+        bh_progress_row_clear
+        bh_progress_row "${_step:-}" "${BH_PROGRESS_DESC:-}"
+        printf '[%s]%s' "$_bhp_bracket" "$BH_PROGRESS_ROW" 1>&2
+        BH_PROGRESS_DRAWN=$BH_PROGRESS_ROW_LINES
+    fi
+}
+
+bh_progress_hide() {
+    [ "${BH_PROGRESS_ARMED:-0}" -eq 1 ] || return 0
+    BH_PROGRESS_ARMED=0
+    bh_progress_active || return 0
+    # Render once more in "done" mode so the row's bar/spinner is
+    # replaced by a status glyph, then `\n` to preserve the row and
+    # advance the cursor onto a fresh line for the next phase. Glyph
+    # defaults to `√` (success); callers pass `X` on step failure and
+    # `C` on user Ctrl+C so a scrollback reads as √/X/C at a glance.
+    BH_PROGRESS_DONE=1
+    BH_PROGRESS_DONE_GLYPH=${1:-√}
+    bh_progress_render
+    printf '\n' 1>&2
+    BH_PROGRESS_DRAWN=0
+}
+
+# bh_spin_until <pid>
+#
+# Foreground spinner: poll until the background <pid> exits, advancing
+# the rotating frame once per BH_SPIN_INTERVAL tick. `kill -0` is a
+# liveness probe (delivers no signal). The VALUE bump is a no-op in
+# spinner mode (the frame comes from BH_PROGRESS_TICK) -- it only
+# matters if a caller is in bar mode, so it's harmless here.
+bh_spin_until() {
+    while kill -0 "$1" 2>/dev/null; do
+        BH_PROGRESS_VALUE=$((BH_PROGRESS_VALUE + 1))
+        bh_progress_tick
+        sleep "$BH_SPIN_INTERVAL"
+    done
+}
+
+# bh_filter_errors <logfile>
+#
+# Print the error-ish lines (`BH_BUILD_ERROR_RE`) of a step log to stderr,
+# each after the `BH_BUILD_ERROR_CONTEXT` lines that precede it, in grep's
+# `-n -B` layout (`<n>:` for an error line, `<n>-` for a line before it, and
+# `--` between groups). A line longer than 300 characters (a compiler
+# command) is cut there. Falls back to the log's tail when nothing matches;
+# hence a failure never shows an empty filter.
+bh_filter_errors() {
+    if ! grep -qE "$BH_BUILD_ERROR_RE" "$1"; then
+        printf '  (no recognizable error lines; showing last 40 of %s)\n' "$1" 1>&2
+        tail -n 40 "$1" 1>&2
+    fi
+}
+
+# bh_dump_fail <logfile> <status>
+#
+# Shared tail of every "quiet step failed" path. Rather than spewing the
+# whole captured log, name the log file and -- when interactive -- offer
+# to (O)pen it in nano, (F)ilter it to just the error lines, or (I)gnore
+# and continue to the abort. Headless / non-tty runs can't prompt, so
+# they print the filtered errors (useful in CI without flooding it).
+# Either way the script then aborts with the step's exit status.
+bh_dump_fail() {
+    _bhdf_log=$1
+    _bhdf_status=$2
+
+    printf '\nBuild step failed (exit %s). Log:\n  %s\n' \
+        "$_bhdf_status" "$_bhdf_log" 1>&2
+
+    if [ "${BH_HEADLESS:-0}" -gt 0 ] || [ ! -t 0 ] || [ ! -t 2 ]; then
+        bh_filter_errors "$_bhdf_log"
+        exit "$_bhdf_status"
+    fi
+
+    # Interactive: loop so Filter-then-Open works; Ignore (or empty)
+    # falls through to the abort below.
+    while :; do
+        printf 'Open in nano, Filter errors, or Ignore? [o/f/i] ' 1>&2
+        read -r _bhdf_ans </dev/tty || _bhdf_ans=i
+        case "$_bhdf_ans" in
+            o|O)
+                if command -v nano >/dev/null 2>&1; then
+                    nano "$_bhdf_log" </dev/tty >/dev/tty 2>&1
+                else
+                    "${EDITOR:-vi}" "$_bhdf_log" </dev/tty >/dev/tty 2>&1
+                fi
+                ;;
+            f|F) bh_filter_errors "$_bhdf_log" ;;
+            i|I|"") break ;;
+            *) printf '  please answer o, f, or i.\n' 1>&2 ;;
+        esac
+    done
+    exit "$_bhdf_status"
+}
+
+
+# MARK: bh_run.
+
+# bh_run_silent_fg <description> <cmd...>
+#
+# Wrap a *foreground* command with a counted spinner row -- the
+# display reads `[/] (N/M): <description>` and `_step` advances
+# just like for any other phase. "Silent" here refers to the
+# absence of a log file -- the wrapped command's stdout/stderr
+# stays attached to the caller's, not captured to disk.
+#
+# Why foreground (not the bh_run background+poll pattern)?
+# Because the wrapped commands set caller-visible env vars
+# (`bh_parse_target` -> `BH_TARGET_NAME`; `bh_searchpath_plugins`
+# -> `QT_PLUGINS_STAGE`). Backgrounding them would lose those
+# assignments to a subshell. Instead the spinner runs in a small
+# background ticker subshell (`bh_ticker_start`), which is killed
+# when the command returns.
+#
+# set -e is toggled off around the wrapped command so a non-zero
+# return surfaces as our own `return $status` instead of an
+# opaque function-aborted-mid-spinner state -- the caller can
+# decide whether to exit or recover.
+bh_run_silent_fg() {
+    _bhsf_desc=$1
+    shift
+    if ! bh_progress_active; then
+        "$@"
+        return $?
+    fi
+    _step=$((${_step:-0} + 1))
+    bh_progress_setType spinner
+    bh_progress_setMax 0
+    bh_progress_setDescription "$_bhsf_desc"
+    bh_progress_render
+    bh_ticker_start
+    set +e
+    "$@"
+    _bhsf_status=$?
+    set -e
+    bh_ticker_stop
+    # Ctrl+C is handled by the global INT trap (renders `[C]` and exits);
+    # here we only distinguish clean success (√) from runner-reported
+    # failure (X) so a scrollback of completed steps reads at a glance.
+    if [ "$_bhsf_status" -eq 0 ]; then
+        bh_progress_hide
+    else
+        bh_progress_hide X
+    fi
+    return "$_bhsf_status"
+}
+
+# bh_tee_status <log> <command...>
+#
+# Runs <command>, showing its output and copying it into <log>, and returns
+# <command>'s own exit code; it returns once <command> exits, even when a
+# program <command> started keeps running.
+#
+# Such a program (MSVC's mspdbsrv.exe, a build daemon) inherits <command>'s
+# output, and a pipe stays open while any holder lives; hence, where `tail`
+# can follow a file until a process exits (see `bh_tail_follows_pid`),
+# <command> writes into <log>, and `bh_follow_until_eof` shows <log> until
+# <command> exits. <command> runs as the first command of a pipe, never in
+# the background, where a shell without job control makes it ignore Ctrl+C
+# and may give it no input. Elsewhere (macOS) <command> runs through `tee`.
+# Either way <command>'s exit code goes to a file beside <log>, which
+# decides: a shell reports the exit code of a pipe's LAST command unless
+# `pipefail` is on, which is best-effort in `bh_strict_mode` and missing
+# from e.g. Debian 12's dash.
+bh_tee_status() {
+    _bts_log=$1; shift
+    _bts_file=$_bts_log.status
+    rm -f "$_bts_file"
+    if bh_tail_follows_pid; then
+        : > "$_bts_log"
+        { "$@" >> "$_bts_log" 2>&1; echo "$?" > "$_bts_file"; } \
+            | bh_follow_until_eof "$_bts_log"
+    else
+        { "$@" 2>&1; echo "$?" > "$_bts_file"; } | tee "$_bts_log"
+    fi
+    _bts_status=$(cat "$_bts_file" 2>/dev/null || echo 1)
+    rm -f "$_bts_file"
+    return "$_bts_status"
+}
+
+# bh_follow_until_eof <file>
+#
+# Shows <file> from its first line as it grows, until standard input reaches
+# its end, and then shows what is left of <file>.
+#
+# A reader in the background waits for that end; `tail` follows <file> until
+# the reader exits, checking five times a second, then reads <file> once
+# more and exits too. The reader gets standard input through fd 3, since a
+# shell without job control may give a command in the background no input.
+bh_follow_until_eof() (
+    exec 3<&0
+    cat <&3 > /dev/null &
+    _bfue_reader=$!
+    exec 3<&-
+    tail -n +1 -f -s 0.2 --pid="$_bfue_reader" "$1"
+    # The `wait` keeps this shell the parent of the reader, to reap it once
+    # it ends: as the last command, `tail` may take the shell's place, and
+    # a reader nobody reaps still looks alive to `tail`.
+    wait "$_bfue_reader"
+)
+
+# bh_tail_follows_pid
+#
+# Tells whether this host's `tail` can follow a file until a process exits
+# (`--pid`, as GNU tail on Linux, MSYS and Cygwin has; macOS's lacks it),
+# checking at the interval of `bh_follow_until_eof`. Probed once per run.
+bh_tail_follows_pid() {
+    if [ -z "${_bh_tail_pid:-}" ]; then
+        if tail -s 0.2 --pid=$$ -n 0 /dev/null > /dev/null 2>&1; then
+            _bh_tail_pid=1
+        else
+            _bh_tail_pid=0
+        fi
+    fi
+    [ "$_bh_tail_pid" = 1 ]
+}
+
+# bh_run [--whole] <name> <cmd...>
+#
+# Run a named step. Stream goes to `$LOGS/<NN>-<name>.log`, in one of
+# three display modes:
+#
+#   - Verbose mode (`BH_LOG_LEVEL` >= 2): tee output to the terminal,
+#     hence the user sees everything; no spinner, which would clash
+#     with the stream.
+#   - Quiet + interactive (TTY stderr, `BH_NO_PROGRESS`=0): run the
+#     command in the foreground while a ticker in the background
+#     (`bh_ticker_start`) spins the indeterminate progress row, hence a
+#     long step (qmake on a big subdirs tree) shows it's alive.
+#   - Quiet + non-interactive (CI, redirected log, --no-progress):
+#     plain silent run; dump the log to stderr only on failure.
+#
+# All three paths exit with the wrapped command's status, dumping
+# the captured log on failure; hence a non-verbose step never hides
+# its error message.
+#
+# Ctrl+C stops <cmd> at once, unless `--whole` is given: then the step
+# runs to its end and the build stops right after (see
+# `bh_held_start`), for a step whose output the next run trusts as
+# whole (Makefiles, a record of finished projects, a merged binary).
+bh_run() {
+    _bhr_whole=0
+    if [ "$1" = --whole ]; then
+        _bhr_whole=1
+        shift
+    fi
+    _name=$1; shift
+    _step=$((_step + 1))
+    _log=$LOGS/$(printf '%02d-%s.log' "$_step" "$_name")
+
+    # Verbose (level 2+) tees live output; normal/quiet logs silently.
+    if [ "${BH_LOG_LEVEL:-1}" -ge 2 ]; then
+        # Returns the wrapped command's exit code, not tee's (see
+        # bh_tee_status). A bare `return 0` here would hide a failed step
+        # from any caller that checks (e.g. the per-test sweep) whenever
+        # -e is off, such as inside a subshell used as a condition.
+        if [ "$_bhr_whole" -eq 1 ]; then
+            bh_run_held bh_tee_status "$_log" "$@"
+            return $?
+        fi
+        bh_tee_status "$_log" "$@"
+        return $?
+    fi
+
+    if bh_progress_active; then
+        bh_progress_setType spinner
+        bh_progress_setMax 0
+        bh_progress_setDescription "$_name is running."
+        # The initial frame shows the row at once; the spinner then
+        # turns while the command runs.
+        bh_progress_render
+        _status=0
+        if [ "$_bhr_whole" -eq 1 ]; then
+            bh_held_start "$@" >"$_log" 2>&1
+            bh_spin_until "$_bh_held_pid"
+            bh_held_finish || _status=$?
+        else
+            bh_ticker_start
+            if "$@" >"$_log" 2>&1; then
+                :
+            else
+                _status=$?
+            fi
+            bh_ticker_stop
+        fi
+        if [ "$_status" -eq 0 ]; then
+            bh_progress_hide
+        else
+            bh_progress_hide X
+            bh_dump_fail "$_log" "$_status"
+        fi
+    else
+        _status=0
+        if [ "$_bhr_whole" -eq 1 ]; then
+            bh_held_start "$@" >"$_log" 2>&1
+            bh_held_finish || _status=$?
+        elif "$@" >"$_log" 2>&1; then
+            :
+        else
+            _status=$?
+        fi
+        if [ "$_status" -ne 0 ]; then
+            bh_dump_fail "$_log" "$_status"
+        fi
+    fi
+}
+
+# bh_newer_project_file <file>
+#
+# Prints the first .pro, .pri, or .prf under BH_ROOT (only .pro under
+# --ignore-pri) that is newer than <file>, or nothing when none is. `-H` walks
+# into BH_ROOT even when it is a link (a junction on Windows); a plain `find`
+# prints only the link itself then. Each walk of a root folder here takes `-H`
+# too.
+bh_newer_project_file() {
+    # `|| true`: `head -1` closes the pipe after the first match, so
+    # `find` is killed by SIGPIPE and pipefail (best-effort in
+    # bh_strict_mode) would surface 141 -- that must not abort this
+    # harmless freshness probe when many files are newer than <file>
+    # (e.g. a fresh checkout or a bulk touch). Same idiom as
+    # the `make -n | grep -c || true` precount below.
+    if [ "${BH_IGNORE_PRI:-0}" -eq 0 ]; then
+        find -H "$BH_ROOT" \
+            \( -name '*.pro' -o -name '*.pri' -o -name '*.prf' \) \
+            ! -path '*/build/*' ! -path '*/.git/*' \
+            -newer "$1" 2>/dev/null | head -1 || true
+    else
+        find -H "$BH_ROOT" -name '*.pro' \
+            ! -path '*/build/*' ! -path '*/.git/*' \
+            -newer "$1" 2>/dev/null | head -1 || true
+    fi
+}
+
+# bh_static_list_newer <makefile>
+#
+# Tells whether the `.qmake.static` list at the build root is newer than
+# <makefile>, which then may name the wrong projects for `qt_static` mode. The
+# list only changes when bh_static_record rewrites it, hence a Makefile that
+# qmake wrote since stays fresh.
+bh_static_list_newer() {
+    [ -f "$BUILD_DIR/.qmake.static" ] || return 1
+    [ -n "$(find "$BUILD_DIR/.qmake.static" -newer "$1" 2>/dev/null)" ]
+}
+
+# bh_run_qmake <name> <pro> [extra-qmake-args...]
+#
+# Quietly runs `$QMAKE -r -spec ... <pro> [extras]` with an
+# indeterminate (spinner) progress display. The qmake step doesn't
+# get a determinate bar because a meaningful denominator is
+# expensive to compute -- the cheap candidates (disk `.pro` count)
+# over-count, and the accurate one (recursive `qmake -E` walk) takes
+# minutes on big trees and felt like a hang to users. The spinner
+# is enough to show qmake is alive; bh_make's bar will show
+# determinate progress for the work that follows.
+#
+# See also docs of: bh_run, for the verbose / non-tty / --no-progress
+# path behavior (tee in verbose, silent log + dump-on-failure otherwise)
+# that this function mirrors.
+#
+# The qmake invocation carries `-r`. Without `-r` qmake only
+# writes the top-level dispatcher Makefile and defers per-subdir
+# qmake to make-time, which would surface as a flood of qmake
+# work happening silently inside the make step. Only BH_QMAKE_PLAIN=1
+# drops the `-r`, for a caller that runs that per-subdir qmake as a
+# step of its own (see bh_build_order_record).
+#
+# `$BH_MAKEFILE` names a Makefile other than the default one (see `bh_make`):
+# qmake then writes it through `-o`, and the checks below look at it.
+bh_run_qmake() {
+    _name=$1; _pro=$2; shift 2
+    # Ensure $QMAKE is set (idempotent; bootstraps qmake if missing). This
+    # used to be a side-effect of the always-on TARGET-resolve step, but
+    # that's now lazy (skipped unless --test/--run), so the qmake step
+    # must guarantee it for itself rather than depend on an earlier call.
+    bh_qmake_prepare
+    _step=$((_step + 1))
+    _log=$LOGS/$(printf '%02d-%s.log' "$_step" "$_name")
+    case "$_name" in
+        qmake)         _label=root-project ;;
+        test-qmake)    _label=tests ;;
+        *-qmake)       _label=${_name%-qmake} ;;
+        *)             _label=$_name ;;
+    esac
+
+
+    # Skip qmake when its output would be a no-op: Makefile in the
+    # cwd already exists and is fresher than every .pro / .pri /
+    # .prf file under the source tree. `--qmake` / `--refresh`
+    # force a re-run; a missing Makefile (post-`--wipe` or first
+    # build) also forces one, as does a Makefile made for another
+    # toolchain or variant (above): `qmake -r` then makes the
+    # sub-project Makefiles again too, which `make` would otherwise keep, as
+    # it runs qmake only for a missing one. A `.qmake.static` list newer
+    # than the Makefile forces one too (see `bh_static_list_newer`), as it
+    # may move projects in or out of `qt_static` mode; a Makefile that GNU make
+    # finds stale does too (see `bh_makefile_stale`). `--ignore-pri` narrows
+    # the freshness check back to just `.pro` files for cases where an
+    # unchanged-in-effect `.pri` keeps tripping a re-qmake
+    # (e.g. an IDE that `touch`-es a .pri on save).
+    bh_qmake_trace_inputs
+    if [ "${BH_FORCE_QMAKE:-0}" -eq 0 ] && [ -f Makefile ]; then
+        if [ "${BH_IGNORE_PRI:-0}" -eq 0 ]; then
+            _bhq_newer=$(find "$BH_ROOT" \
+                \( -name '*.pro' -o -name '*.pri' -o -name '*.prf' \) \
+                ! -path '*/build/*' ! -path '*/.git/*' \
+                -newer Makefile 2>/dev/null | head -1 || true)
+        else
+            _bhq_newer=$(find "$BH_ROOT" -name '*.pro' \
+                ! -path '*/build/*' ! -path '*/.git/*' \
+                -newer Makefile 2>/dev/null | head -1 || true)
+        fi
+        bh_qmake_trace_newer "$_bhq_newer"
+        if [ -z "$_bhq_newer" ]; then
+            bh_qmake_trace "Skips qmake."
+            # Treat the skip as a successful step: show the row
+            # with the checkmark + description so the user can see
+            # that qmake decided to skip.
+            bh_progress_setType spinner
+            bh_progress_setMax 0
+            bh_progress_setDescription "QMake skipped for $_label (Makefile is up-to-date,
+pass --qmake to force rerun it)."
+            bh_progress_hide
+            return 0
+        fi
+    fi
+    bh_qmake_trace "Runs qmake."
+
+    _bhq_r=-r
+    if [ "${BH_QMAKE_PLAIN:-0}" -ne 0 ]; then
+        _bhq_r=
+    fi
+    # qmake's recursive run prints a "Reading <pro> [<dir>]" line per
+    # subdir -- a firehose on a big tree -- so it's gated behind -vv
+    # (very-verbose, level 3); plain -v keeps it in the log.
+    # qmake runs to its end even on Ctrl+C (see `bh_held_start`), since a
+    # Makefile it leaves half-written looks up-to-date to the next run.
+    if [ "${BH_LOG_LEVEL:-1}" -ge 3 ]; then
+        # shellcheck disable=SC2086  # $_bhq_r is intentionally word-split.
+        _status=0
+        bh_run_held bh_tee_status "$_log" "$QMAKE" $_bhq_r -spec "$XD_DIR/mkspecs/$QMAKESPEC" \
+            -xspec "$XD_DIR/mkspecs/${BH_CROSS_SPEC:-$QMAKESPEC}" "$_pro" "$@"
+        return $?
+    fi
+
+    _status=0
+    if bh_progress_active; then
+        bh_progress_setType spinner
+        bh_progress_setMax 0
+        bh_progress_setDescription "QMake is generating Makefile(s) for $_label."
+        bh_held_start "$QMAKE" $_bhq_r -spec "$XD_DIR/mkspecs/$QMAKESPEC" -xspec "$XD_DIR/mkspecs/${BH_CROSS_SPEC:-$QMAKESPEC}" "$_pro" "$@" \
+            >"$_log" 2>&1
+        bh_progress_render                    # initial frame
+        bh_spin_until "$_bh_held_pid"
+        bh_held_finish || _status=$?
+        if [ "$_status" -eq 0 ]; then
+            bh_progress_hide
+        else
+            bh_progress_hide X
+            bh_dump_fail "$_log" "$_status"
+        fi
+    else
+        bh_held_start "$QMAKE" $_bhq_r -spec "$XD_DIR/mkspecs/$QMAKESPEC" -xspec "$XD_DIR/mkspecs/${BH_CROSS_SPEC:-$QMAKESPEC}" "$_pro" "$@" \
+            >"$_log" 2>&1
+        bh_held_finish || _status=$?
+        if [ "$_status" -ne 0 ]; then
+            bh_dump_fail "$_log" "$_status"
+        fi
+    fi
+    return "$_status"
+}
+
+
+# ---- build-dir lifecycle -----------------------------------------------
+
+# bh_wipe
+#
+# `rm -rf $BUILD_DIR`. The caller has signed up by passing `--wipe`,
+# so there's no confirmation prompt -- we just print what we're
+# wiping. No-op when the directory doesn't exist.
+#
+# Run BEFORE `bh_logs_init` (which would recreate the dir as a
+# side-effect of `mkdir -p`) so the post-wipe state is genuinely
+# empty; the build flow then rebuilds from scratch.
+bh_wipe() {
+    [ -n "${BUILD_DIR:-}" ] || bh_error "bh_wipe: BUILD_DIR not set"
+    # `bh_wipe` is *uncounted*: it runs before bh_logs_init so
+    # `_step` is still unset, which makes the spinner row read
+    # `[/]: Deleting ...` (no `(N/M)` between `]` and `:`).
+    # Treating --wipe as a counted phase would push every
+    # subsequent step number up by one without giving the user a
+    # meaningful prep-vs-build split -- delete is housekeeping,
+    # the actual build pipeline starts at Resolving.
+    if [ ! -d "$BUILD_DIR" ]; then
+        echo "Skipping --wipe: $BUILD_DIR does not exist"
+        return 0
+    fi
+    # `rm -rf` on a large build tree can take several seconds with no
+    # visible activity, so animate a spinner while it runs (no (N/M) --
+    # see the uncounted-phase note above). It runs to its end even on
+    # Ctrl+C (see `bh_held_start`), since the next run builds into a
+    # half-deleted folder as if it were whole.
+    # See also docs of: bh_spin_until, for the background-poll spinner.
+    if bh_progress_active; then
+        bh_progress_setType spinner
+        bh_progress_setMax 0
+        bh_progress_setDescription "Deleting $BUILD_DIR"
+        bh_held_start rm -rf "$BUILD_DIR"
+        bh_progress_render
+        bh_spin_until "$_bh_held_pid"
+        bh_held_finish || true
+        bh_progress_hide
+    else
+        echo "Deleting $BUILD_DIR"
+        bh_run_held rm -rf "$BUILD_DIR"
+    fi
+}
+
+# bh_clean
+#
+# `make clean` inside $BUILD_DIR -- the Makefile's own clean target.
+# Lighter than `--wipe`: removes object files and generated headers
+# but keeps the final binary and the Makefile itself, so the next
+# qmake pass is a no-op rather than a full regen.
+#
+# Best-effort. `make -k clean` keeps going past sub-Makefiles that
+# lack a `clean` target (e.g. XD's qmake bootstrap dir, which is
+# built by a hand-rolled Makefile.unix that doesn't define one), and
+# the trailing `|| true` swallows the non-zero exit so a single
+# missing target doesn't abort the whole wipe. The log
+# (`$LOGS/<NN>-clean.log`) still captures everything for inspection.
+# No-op when there's no Makefile (fresh checkout, or post-`--wipe`).
+#
+# Requires bh_logs_init to have run first (we manage $LOGS / $_step
+# directly here rather than via bh_run, so we can ignore the exit).
+#
+# $BH_CLEAN_EXTRA (optional): a whitespace/glob list of *auto-generated*
+# files outside the build dir that a fresh clone wouldn't carry -- e.g.
+# the generated `mkspecs/modules/static/qt_lib_*.pri`. A normal rebuild
+# must keep these (consumers read them), so they're only removed under
+# `--clean`, letting `--clean` simulate out-of-the-box state without a
+# real re-clone (which would also drop submodules like OpenSSL). Because
+# they're qmake *inputs*, removing them forces a qmake re-run so they're
+# regenerated this same build.
+bh_clean() {
+    [ -n "${BUILD_DIR:-}" ] || bh_error "bh_clean: BUILD_DIR not set"
+    if [ -n "${BH_CLEAN_EXTRA:-}" ]; then
+        echo "  removing auto-generated: $BH_CLEAN_EXTRA" 1>&2
+        # shellcheck disable=SC2086  # intentional glob + word-split.
+        rm -f $BH_CLEAN_EXTRA
+        BH_FORCE_QMAKE=1   # regenerate what we just removed
+    fi
+    if [ -f "$BUILD_DIR/Makefile" ]; then
+        _step=$((_step + 1))
+        _log=$LOGS/$(printf '%02d-%s.log' "$_step" clean)
+        echo "  make -k clean in $BUILD_DIR" 1>&2
+        if ! bh_make_run -C "$BUILD_DIR" -k clean >"$_log" 2>&1; then
+            echo "  (note: --clean had partial failures; see $_log)" 1>&2
+        fi
+    else
+        echo "Skipping --clean: no Makefile in $BUILD_DIR"
+    fi
+}
+
+
+# bh_makefile_of <pro>
+#
+# Prints the name of the Makefile qmake writes for <pro>: `Makefile`, or
+# `Makefile.<name>` for a .pro not named after its dir (several sharing one
+# dir).
+bh_makefile_of() {
+    _bmo_name=$(basename "$1" .pro)
+    if [ "$_bmo_name" != "$(basename "$(dirname "$1")")" ]; then
+        echo "Makefile.$_bmo_name"
+    else
+        echo Makefile
+    fi
+}
+
+# bh_xd_build_static
+#
+# Builds the XD framework in `qt_static` mode, through XD's own build.sh (see
+# bh_dependency_build_static), for a project that builds on XD under
+# --static, since its static projects link XD's static libraries. Does nothing
+# when the `.qmake.static` list at the build root names no project (see
+# bh_static_record, which runs first), when XD builds itself, or when XD has a
+# whole static build already (see bh_xd_missing); under --no-xd-build (or
+# --no-qt-build), XD's build gets --no-build, hence leaves XD as it is. A static
+# library that XD's build still lacks afterwards only warns, just like in
+# bh_xd_build.
+bh_xd_build_static() {
+    [ -s "$BUILD_DIR/.qmake.static" ] || return 0
+    [ "${BH_NO_XD_BUILD:-0}" -eq 0 ] || return 0
+    [ "$XD_DIR" != "$BH_ROOT" ] || return 0
+    _sxb_missing=$(bh_xd_missing static)
+    [ -n "$_sxb_missing" ] || return 0
+    echo "--static: XD at $XD_DIR has no static $_sxb_missing yet; building XD in static mode (pass --no-xd-build to skip)."
+    bh_dependency_build_static "$XD_DIR/build.sh"
+    _sxb_missing=$(bh_xd_missing static)
+    if [ -n "$_sxb_missing" ]; then
+        bh_warning "--static: XD's build.sh --static built no static $_sxb_missing under \"$XD_DIR\"." \
+            "The build goes on; a static project that needs it may fail to link."
+    fi
+}
+
+# bh_xd_arg_add <flag>
+#
+# Adds <flag> as one more line to BH_XD_ARGS (see bh_xd_dependency_build).
+bh_xd_arg_add() {
+    BH_XD_ARGS="${BH_XD_ARGS:+$BH_XD_ARGS
+}$1"
+}
+
+# bh_dependency_build_static <build.sh>
+#
+# Builds a framework that this project builds on in `qt_static` mode, through
+# bh_dependency_build with --static. Does nothing when the `.qmake.static`
+# list at the build root names no project, as no project then links static
+# libraries; hence a `build-deps` hook (see bh_hook) can call it on every run.
+bh_dependency_build_static() {
+    [ -s "$BUILD_DIR/.qmake.static" ] || return 0
+    bh_dependency_build "$1" --static
+}
+
+# bh_dependency_build <build.sh> [argument...]
+#
+# Builds a framework that this project builds on, by running the framework's
+# own <build.sh> (one that drives this handler, and hence takes its flags)
+# with the given arguments, then the flags of this run that bh_forward_note
+# kept, and the qmake arguments after them. Takes the path of that
+# <build.sh>; hence each framework a project needs, with a build.sh of its
+# own, builds the same way, for instance from a `build-deps` hook (see
+# bh_hook). Runs it in a subshell without the exported settings that describe
+# this project (its build dir, above all); every other exported setting
+# reaches that build as well. Stops the build when <build.sh> fails.
+bh_dependency_build() {
+    _db_script=$1
+    shift
+    # shellcheck disable=SC2046,SC2086  # intentional word-split of names.
+    (
+        set -f
+        _db_ifs=$IFS
+        IFS='
+'
+        set -- "$@" ${BH_FORWARD_ARGS:-} ${BH_FORWARD_TAIL:-}
+        IFS=$_db_ifs
+        unset BUILD_DIR BH_ROOT BH_SCRIPT_NAME BH_TEMPLATE BH_BUILD_DIR_SUFFIX \
+            BH_FILTER BH_REBUILD BH_STATIC BH_STATIC_ALL BH_CLEAN_EXTRA BH_GET \
+            BH_TEST_ROOT BH_TEST_GLOB BH_TEST_PATTERN BH_RUN_TESTS \
+            BH_RUN_TARGET BH_RUN_TARGET_PATH BH_TARGET_NAME \
+            BH_REMAINING_ARGS BH_FORWARD_ARGS BH_FORWARD_TAIL BH_MAKE_ARGS \
+            $(env | sed -n 's/^\(BH_HOOKS_[A-Za-z0-9_]*\)=.*/\1/p')
+        sh "$_db_script" "$@"
+    ) || bh_error "building through \"$_db_script\" failed (see the output above)"
+}
+
+# bh_xd_missing <shared|static>
+#
+# Prints the first part that XD's build of the given kind lacks, or nothing
+# when XD has a whole one: the module files that build generates (in
+# `mkspecs/modules/`, or `mkspecs/modules/static/` for the static build,
+# QtCore's among them), each with the library its `.module` line names (see
+# bh_xd_has_library). A module without a library of its own (no `.module`
+# value) needs none.
+bh_xd_missing() {
+    _xm_dir=$XD_DIR/mkspecs/modules
+    if [ "$1" = static ]; then
+        _xm_dir=$_xm_dir/static
+    fi
+    if [ ! -f "$_xm_dir/qt_lib_core.pri" ]; then
+        echo "QtCore module file (${_xm_dir#"$XD_DIR"/}/qt_lib_core.pri)"
+        return 0
+    fi
+    for _xm_pri in "$_xm_dir"/qt_lib_*.pri; do
+        _xm_module=$(sed -n 's/^QT\.[A-Za-z0-9_]*\.module *= *//p' "$_xm_pri")
+        [ -n "$_xm_module" ] || continue
+        _xm_staticlib=0
+        if grep -Eq '^QT\.[A-Za-z0-9_]*\.module_config *=(.*[[:space:]])?staticlib([[:space:]]|$)' \
+                "$_xm_pri"; then
+            _xm_staticlib=1
+        fi
+        if ! bh_xd_has_library "$1" "$_xm_module" "$_xm_staticlib"; then
+            echo "$_xm_module library"
+            return 0
+        fi
+    done
+}
+
+# bh_xd_has_library <shared|static> <module> <staticlib>
+#
+# Tells whether XD's `lib/` or `bin/` holds a library of <module> (such as
+# `Qt5Gui`, under any debug or 64-bit suffix) for its build of the given
+# kind: a `_static` `.a` or `.lib` for the static build; for the shared one, a
+# plain `.a` or `.lib` when <staticlib> is 1 (a module that only builds as a
+# static library), else the shared form of the platform the build targets (the
+# --cross-compile spec, or else the host): a `.dll` for Windows, a `.dylib` or
+# `.framework` for macOS, and a `.so` for the rest.
+bh_xd_has_library() {
+    case "${BH_CROSS_SPEC:-$(uname -s)}" in
+        win32-* | MINGW* | MSYS* | CYGWIN*) _xhl_os=windows ;;
+        macx-* | Darwin)                    _xhl_os=mac ;;
+        *)                                  _xhl_os=unix ;;
+    esac
+    for _xhl_lib in "$XD_DIR"/lib/*"$2"* "$XD_DIR"/bin/*"$2"*; do
+        [ -e "$_xhl_lib" ] || continue
+        case "$1:$3:$_xhl_os:${_xhl_lib##*/}" in
+            static:*_static*.a | static:*_static*.lib) return 0 ;;
+            static:* | *_static*) ;;
+            shared:1:*.a | shared:1:*.lib) return 0 ;;
+            shared:1:*) ;;
+            *:windows:*.dll | *:mac:*.dylib | *:mac:*.framework) return 0 ;;
+            *:unix:*.so | *:unix:*.so.*) return 0 ;;
+        esac
+    done
+    return 1
+}
+
+# bh_makefile_project <makefile>
+#
+# Prints the absolute path of the `.pro` that qmake wrote <makefile> for, as
+# the `# Project:` line of its header names it (relative to <makefile>, with
+# any backslash a Windows host's qmake writes turned into `/`), or nothing
+# when <makefile> has no such line (a hand-written Makefile) or the `.pro` is
+# gone.
+bh_makefile_project() {
+    _bmp_pro=$(sed -n '1,20s/^# Project:  *//p' "$1" 2>/dev/null \
+        | tr '\\' '/') || return 0
+    [ -n "$_bmp_pro" ] || return 0
+    if ! bh_is_path_absolute "$_bmp_pro"; then
+        _bmp_pro=$(dirname "$1")/$_bmp_pro
+    fi
+    _bmp_dir=$(cd "$(dirname "$_bmp_pro")" 2>/dev/null && pwd) || return 0
+    printf '%s/%s\n' "$_bmp_dir" "$(basename "$_bmp_pro")"
+}
+
+# MARK: make tool.
+
+# Usage: bh_make_find
+#
+# Finds, once, the make tool that runs the Makefiles qmake writes for the
+# target. Its absolute path goes in `BH_MAKE`, which every later make run
+# reuses, and its type in `BH_MAKE_TYPE` (`gnu`, `jom` or `nmake`), which
+# tells `bh_make_run` the arguments it takes. A caller may preset `BH_MAKE`;
+# its type then comes from its name, unless `BH_MAKE_TYPE` is preset too.
+#
+# The target spec, which names the target platform and compiler, decides: the
+# MSVC-style specs write Makefiles for nmake, in cmd.exe syntax
+# (`if not exist ... & ...`), which GNU make would hand to sh, hence a syntax
+# error. They take jom.exe, which runs those Makefiles as nmake does but with
+# jobs in parallel, else nmake.exe (see `bh_make_find_msvc`). Every other spec
+# writes them for GNU make (see `bh_make_find_gnu`).
+bh_make_find() {
+    if [ -n "${BH_MAKE:-}" ]; then
+        if [ -z "${BH_MAKE_TYPE:-}" ]; then
+            case "${BH_MAKE##*/}" in
+                [jJ][oO][mM]|[jJ][oO][mM].[eE][xX][eE])
+                    BH_MAKE_TYPE=jom ;;
+                [nN][mM][aA][kK][eE]|[nN][mM][aA][kK][eE].[eE][xX][eE])
+                    BH_MAKE_TYPE=nmake ;;
+                *)
+                    BH_MAKE_TYPE=gnu ;;
+            esac
+        fi
+        return 0
+    fi
+    case "${BH_CROSS_SPEC:-${QMAKESPEC:-}}" in
+        *msvc*|win32-icc*|wince*|winrt*|winphone*)
+            bh_make_find_msvc ;;
+        *)
+            bh_make_find_gnu ;;
+    esac
+}
+
+# Usage: bh_make_find_msvc
+#
+# Picks the make tool of an MSVC-style spec for `bh_make_find`: jom.exe when
+# it is on PATH and 1.0.16 or newer, else nmake.exe.
+#
+# Older jom releases can keep running after a command fails, with every
+# compiler already gone; jom 1.0.15 fixed a hang on error, and 1.0.16 a hang
+# on exit. Such a jom gives way to nmake.exe, or still runs when nmake.exe is
+# missing, since a build that does not fail ends fine; either way with a
+# warning. A jom that reports no version counts as new enough.
+bh_make_find_msvc() {
+    _bmfm_minimum=1.0.16
+    _bmfm_jom=$(command -v jom) || _bmfm_jom=
+    if [ -n "$_bmfm_jom" ]; then
+        _bmfm_jom_version=$(bh_jom_version "$_bmfm_jom")
+        if bh_version_at_least "${_bmfm_jom_version:-$_bmfm_minimum}" \
+            "$_bmfm_minimum"
+        then
+            BH_MAKE=$_bmfm_jom
+            BH_MAKE_TYPE=jom
+            return 0
+        fi
+    fi
+    if BH_MAKE=$(command -v nmake); then
+        BH_MAKE_TYPE=nmake
+        if [ -n "$_bmfm_jom" ]; then
+            bh_warning "jom $_bmfm_jom_version can hang once a command fails, hence" \
+                "nmake.exe runs the Makefiles instead." \
+                "Update jom to $_bmfm_minimum or newer to build in parallel:" \
+                "https://download.qt.io/official_releases/jom/"
+        fi
+        return 0
+    fi
+    if [ -n "$_bmfm_jom" ]; then
+        BH_MAKE=$_bmfm_jom
+        BH_MAKE_TYPE=jom
+        bh_warning "jom $_bmfm_jom_version can hang once a command fails, and" \
+            "no nmake.exe is on PATH to run instead." \
+            "Update jom to $_bmfm_minimum or newer:" \
+            "https://download.qt.io/official_releases/jom/"
+        return 0
+    fi
+    bh_error "spec '${BH_CROSS_SPEC:-${QMAKESPEC:-}}' needs jom.exe or nmake.exe on PATH -- run from a Visual Studio developer prompt (vcvarsall.bat), or pass --gcc for MinGW."
+}
+
+# Usage: bh_jom_version <jom>
+#
+# Prints the version <jom> reports (such as `1.0.13`), or nothing when it
+# reports none. Its `-VERSION` option keeps the leading `-`, since MSYS would
+# turn a leading `/` into a path.
+bh_jom_version() {
+    "$1" -VERSION 2>/dev/null \
+        | sed -n 's/^jom version \([0-9][0-9.]*\).*/\1/p'
+}
+
+# Usage: bh_version_at_least <version> <minimum>
+#
+# Succeeds when the dotted <version> (such as `1.0.13`) is <minimum> or
+# newer. Each part compares as a number, and a missing part counts as 0.
+bh_version_at_least() {
+    _bval_left=$1
+    _bval_minimum_left=$2
+    while [ -n "$_bval_left$_bval_minimum_left" ]; do
+        _bval_part=${_bval_left%%.*}
+        _bval_minimum_part=${_bval_minimum_left%%.*}
+        case "$_bval_left" in
+            *.*)
+                _bval_left=${_bval_left#*.} ;;
+            *)
+                _bval_left= ;;
+        esac
+        case "$_bval_minimum_left" in
+            *.*)
+                _bval_minimum_left=${_bval_minimum_left#*.} ;;
+            *)
+                _bval_minimum_left= ;;
+        esac
+        if [ "${_bval_part:-0}" -gt "${_bval_minimum_part:-0}" ]; then
+            return 0
+        fi
+        if [ "${_bval_part:-0}" -lt "${_bval_minimum_part:-0}" ]; then
+            return 1
+        fi
+    done
+    return 0
+}
+
+# Usage: bh_make_find_gnu
+#
+# Picks GNU make for `bh_make_run`, whatever the target spec, for a Makefile
+# written for GNU make by hand: its absolute path goes in `BH_MAKE`, and
+# `gnu` in `BH_MAKE_TYPE`. Where MinGW comes without a `make`, GNU make is
+# named `mingw32-make`.
+bh_make_find_gnu() {
+    BH_MAKE=$(command -v make || command -v mingw32-make) \
+        || bh_error "GNU make (make or mingw32-make) is not on PATH."
+    BH_MAKE_TYPE=gnu
+}
+
+# Usage: bh_make_run [-C <dir>] [make options and targets...]
+#
+# Runs the make tool of `bh_make_find`. It takes GNU make's options as the
+# standard form, and turns them into those of `BH_MAKE_TYPE`:
+# * `-C <dir>` (first) runs the tool in <dir>, for every type;
+# * `jom` reads the job count as an argument of its own, hence `-j<n>` turns
+#   into `-j <n>`, and a bare `-j` (no limit) is dropped, since jom already
+#   uses every core;
+# * `nmake` runs one job at a time, hence it drops `-j<n>` and `-j <n>`;
+# * `jom` and `nmake` get `-nologo`, to keep their banner out of the logs;
+# * the other options used here (`-f`, `-k`, `-n`) mean the same to every
+#   type; callers put targets last, since nmake reads options before targets.
+bh_make_run() {
+    bh_make_find
+    if [ "${1:-}" = -C ]; then
+        ( _bmr_dir=$2; shift 2; cd "$_bmr_dir" && bh_make_run "$@" )
+        return
+    fi
+    case "$BH_MAKE_TYPE" in
+        gnu)
+            "$BH_MAKE" "$@"
+            return ;;
+        jom|nmake)
+            ;;
+        *)
+            bh_error "BH_MAKE_TYPE '$BH_MAKE_TYPE' is none of: gnu, jom, nmake." ;;
+    esac
+    # Moves each option from the front to the back of the list, turned into
+    # the form of `BH_MAKE_TYPE`.
+    _bmr_left=$#
+    while [ "$_bmr_left" -gt 0 ]; do
+        _bmr_arg=$1
+        shift
+        _bmr_left=$((_bmr_left - 1))
+        case "$_bmr_arg" in
+            -j)
+                _bmr_jobs=
+                if [ "$_bmr_left" -gt 0 ]; then
+                    case "$1" in
+                        [0-9]*)
+                            _bmr_jobs=$1
+                            shift
+                            _bmr_left=$((_bmr_left - 1)) ;;
+                    esac
+                fi
+                if [ "$BH_MAKE_TYPE" = jom ] && [ -n "$_bmr_jobs" ]; then
+                    set -- "$@" -j "$_bmr_jobs"
+                fi
+                continue ;;
+            -j[0-9]*)
+                if [ "$BH_MAKE_TYPE" = jom ]; then
+                    set -- "$@" -j "${_bmr_arg#-j}"
+                fi
+                continue ;;
+        esac
+        set -- "$@" "$_bmr_arg"
+    done
+    # MSVC Makefiles call `link`, which Git Bash also ships, as a coreutils
+    # tool in `/usr/bin`; hence the folder of `cl` moves first on PATH.
+    _bmr_msvc_bin=$(bh_msvc_bin_dir)
+    if [ -n "$_bmr_msvc_bin" ]; then
+        PATH=$(bh_path_prepend "$_bmr_msvc_bin") "$BH_MAKE" -nologo "$@"
+        return
+    fi
+    "$BH_MAKE" -nologo "$@"
+}
+
+# Usage: bh_path_prepend <dir> [path]
+#
+# Prints [path] (`PATH` by default) with <dir> first, and with every other
+# copy of <dir> dropped, since Windows limits the length of PATH. Entries
+# match the way Windows compares folders: ignoring letter case and a
+# trailing slash. Empty entries stay.
+bh_path_prepend() {
+    _bpp_path=${2-$PATH}
+    if [ -z "$_bpp_path" ]; then
+        printf '%s' "$1"
+        return 0
+    fi
+    # Ends each entry with `:`, the record separator, hence an empty last
+    # entry is a record too; <dir> goes through the environment, which awk
+    # reads as is, while `awk -v` turns backslashes into escapes.
+    printf '%s:' "$_bpp_path" | BH_PATH_PREPEND_DIR=$1 awk '
+        function folder(entry) {
+            entry = tolower(entry)
+            sub(/\/+$/, "", entry)
+            return entry
+        }
+        BEGIN {
+            RS = ":"
+            ORS = ""
+            dir = ENVIRON["BH_PATH_PREPEND_DIR"]
+            result = dir
+            wanted = folder(dir)
+        }
+        {
+            if ($0 == "" || folder($0) != wanted) {
+                result = result ":" $0
+            }
+        }
+        END {
+            print result
+        }'
+}
+
+# Usage: bh_msvc_bin_dir
+#
+# Prints the folder of the MSVC compiler `cl` on PATH when MSVC's `link`
+# sits beside it, else nothing.
+bh_msvc_bin_dir() {
+    _bmbd_cl=$(command -v cl) || return 0
+    _bmbd_dir=${_bmbd_cl%/*}
+    if [ -f "$_bmbd_dir/link.exe" ] || [ -f "$_bmbd_dir/link" ]; then
+        echo "$_bmbd_dir"
+    fi
+}
+
+# ---- race-aware make wrapper -------------------------------------------
+
+# bh_mocables_prepass
+#
+# Generate every subproject's moc output *before* the main compile.
+#
+# QRemote projects (`CONFIG += remote`) run XD's moc, which emits an
+# undeclared side-output `<base>_remote.{h,cpp}` next to each Q_REMOTE
+# header. When one generated header #includes another -- e.g.
+# tbackend_remote.h pulls in tnetadapter_remote.h -- compiling the first
+# moc_<x>.cpp needs the second's _remote.h. qmake cannot see that
+# cross-dependency: on a clean build neither _remote.h exists at qmake
+# time, so nothing scans them and the moc_<x>.o rule ends up depending
+# only on its own moc_<x>.cpp. The compile then runs ahead of the moc
+# invocation that would have produced the sibling _remote.h and dies with
+# `'<y>_remote.h' file not found` -- deterministically, even at -j1,
+# because the object list is walked before the moc of the other header.
+#
+# qmake ships `mocables` (a moc-only pass) for exactly this, but the
+# subdirs Makefile does not propagate it, so drive it once per leaf.
+# Doing all moc up front also confines it to a retryable pre-phase, in
+# case of a stray moc crash -- the main compile then finds every
+# moc_<x>.cpp already current and never invokes moc, so the crash cannot
+# fail the real build.
+# Retry stays cheap because a crashed moc leaves its output unwritten
+# (make deletes the partial), so each retry only regenerates what is
+# still missing; already-current moc files are skipped.
+#
+# Run from the top build dir (bh_make's cwd). No-ops for non-moc trees:
+# leaves without a populated `compiler_moc_header_make_all` are skipped.
+bh_mocables_prepass() {
+    _mp_err=$LOGS/mocables.err
+    find . -name Makefile 2>/dev/null | while IFS= read -r _mp_mk; do
+        # Only leaves with real moc work: a subdirs Makefile has no
+        # `mocables:`, and a moc-less leaf lists no moc_*.cpp there.
+        grep -q '^mocables:' "$_mp_mk" 2>/dev/null || continue
+        grep -qE '^compiler_moc_header_make_all:.*moc_' "$_mp_mk" 2>/dev/null \
+            || continue
+        _mp_dir=$(dirname "$_mp_mk")
+        _mp_try=0
+        while :; do
+            bh_make_run -C "$_mp_dir" mocables >/dev/null 2>"$_mp_err" && break
+            _mp_try=$((_mp_try + 1))
+            # Retry only a moc crash (abort/core dump); a real moc error
+            # (bad header, etc.) must fall through so the main build
+            # reports it with full context rather than looping.
+            if [ "$_mp_try" -ge 8 ] \
+                || ! grep -qE 'double free|core dumped|Aborted' \
+                    "$_mp_err" 2>/dev/null
+            then
+                break
+            fi
+        done
+    done
+    rm -f "$_mp_err" 2>/dev/null || true
+}
+
+# bh_make <jobs> [target...]
+#
+# Plain `make -j$JOBS` races between `release-all` and `debug-all` when
+# a debug_and_release subproject emits its artifact into the build-dir
+# root and then `mv`s the file into the per-config DESTDIR -- both
+# configs collide on the same intermediate filename and one mv ends up
+# failing because the file was already moved by the other config (the
+# exact failure pattern XD's OpenSSL 1.0.1c subprojects, libeay32 +
+# ssleay32, hit on macOS / Linux).
+#
+# When the generated Makefile exposes both top-level targets, run them
+# sequentially -- each sub-make still parallelises internally via the
+# passed <jobs>, so the only thing serialised is the per-config link
+# / mv step. Otherwise fall back to a single `make`.
+bh_make() {
+    _bh_jobs=$1; shift
+    # Race-aware detection: cheap grep beats `make -n <tgt>` which
+    # would re-evaluate the full Makefile (seconds on a big tree).
+    if [ -f Makefile ] \
+        && grep -q '^release-all:' Makefile \
+        && grep -q '^debug-all:'   Makefile
+    then
+        # The split makes two bh_make_step calls instead of one,
+        # and each bh_make_step contributes two visible phases
+        # (computing + compiling) -- so the split adds two extra
+        # phases overall (release-computing + release-compiling
+        # vs. the single non-split pair). Bump BH_STEPS_TOTAL by 2
+        # so the counter walks all the way to N/N at the end of
+        # `make-debug compiling`. Templates seed assuming a single
+        # non-split bh_make.
+        if [ -n "${BH_STEPS_TOTAL:-}" ]; then
+            BH_STEPS_TOTAL=$((BH_STEPS_TOTAL + 2))
+        fi
+        # The second make run's build-plan step, when the progress mode
+        # hides it (see `bh_progress_plan_steps`).
+        bh_progress_plan_steps 1
+        bh_make_step make-release  release-all "$_bh_jobs" "$@"
+        bh_make_step make-debug    debug-all   "$_bh_jobs" "$@"
+    else
+        bh_make_step make ""        "$_bh_jobs" "$@"
+    fi
+}
+
+# bh_make_is_split <makefile>
+#
+# Tells whether <makefile> builds the release and the debug variant through
+# targets of their own (`release-all` and `debug-all`), which `bh_make`
+# then runs one after the other.
+bh_make_is_split() {
+    [ -f "$1" ] \
+        && grep -q '^release-all:' "$1" \
+        && grep -q '^debug-all:'   "$1"
+}
+
+# bh_make_step <log-name> <target-or-empty> <jobs> [extra-make-args...]
+#
+# Internal driver for one `make` invocation with a live progress bar.
+# Prefer `bh_make` for the top-level build (it auto-handles the
+# debug/release race-aware split); use this directly for one-off
+# sub-makes that don't need the split (test-make, helper builds).
+#
+# Bar mechanics. The denominator comes from a pre-flight `make -n` (dry
+# run); the numerator advances per build-step line during the real run --
+# both counted with the same pattern. Progress goes through the shared
+# `bh_progress_*` API; awk is only a stream filter (emit one-letter
+# tokens) so the shell loop has minimal per-line overhead. Each
+# `bh_progress_setMax` resets value to 0, so the bar resets cleanly
+# between phases.
+#
+# See also docs of:
+#   - BH_BUILD_STEP_RE, for which command lines count as build steps and
+#     why recursive driver lines (`cd X/ && make ...`) are excluded.
+#   - bh_run, for the shared output handling (tee to
+#     `$LOGS/NN-<log-name>.log`, verbose tee-to-terminal, dump-on-failure);
+#     the only addition here is the clear-line before each scrolled
+#     verbose line so the bar stays pinned at the bottom. Use bh_run
+#     directly for steps where progress doesn't matter.
+bh_make_step() {
+    _bh_name=$1; _bh_tgt=$2; _bh_jobs=$3; shift 3
+
+    # Phase 1 of two: "computing build plan", whose dry run of make sizes
+    # the bar of phase 2, in the mode that `BH_PROGRESS_MODE` picks (see
+    # `bh_progress_plan_start`).
+    _bh_precount=$LOGS/$(printf '%02d-%s.precount.tmp' "$((_step + 1))" "$_bh_name")
+    if [ -n "$_bh_tgt" ]; then
+        bh_progress_plan_start "$_bh_name" "$_bh_precount" "$@" "$_bh_tgt"
+    else
+        bh_progress_plan_start "$_bh_name" "$_bh_precount" "$@"
+    fi
+
+    # Phase 2 of two: "compiling source-codes". A separate step --
+    # increment again so the counter walks (qmake -> computing
+    # -> compiling), and pick a log slot that matches the step
+    # number for the actual make output.
+    _step=$((_step + 1))
+    _bh_log=$LOGS/$(printf '%02d-%s.log' "$_step" "$_bh_name")
+    # Starts as the build plan says (see `bh_progress_plan_start`): a bar
+    # of the build steps it counted, or a spinner while that is unknown.
+    bh_progress_setType "$BH_PLAN_TYPE"
+    if [ "$BH_PLAN_TYPE" = bar ]; then
+        bh_progress_setMax "$BH_PLAN_MAX"
+        if [ "$BH_PLAN_MAX" -le 0 ]; then
+            bh_progress_setMax 1
+        fi
+    else
+        bh_progress_setMax 0
+    fi
+    bh_progress_setDescription "Makefile runner ($_bh_name) is compiling source-codes."
+    bh_progress_render                # row appears immediately so
+                                      # there's no silent gap between
+                                      # the description header (bar)
+                                      # / inline desc (spinner) and the
+                                      # first compile-line render.
+
+    # Disable `set -e` for the pipeline so we can inspect $? ourselves
+    # and dump the log on failure -- pipefail (best-effort in
+    # bh_strict_mode) propagates the leftmost non-zero status, so we
+    # see the make exit code, not awk's. A shell without pipefail (e.g.
+    # Debian 12's dash) reports the last stage's status instead, so make's
+    # own exit code (from bh_tee_status) also goes to a file beside the log,
+    # which decides.
+    _bh_statusfile=$_bh_log.status
+    rm -f "$_bh_statusfile"
+    set +e
+    {
+        # Keepalive ticker: writes "KEEPALIVE" to stdout every
+        # BH_SPIN_INTERVAL so the embedded spinner advances even when
+        # compile events are sparse (slow link, heavy template
+        # instantiation, low CPU contention -- the bar would
+        # otherwise sit frozen on its current spinner frame for
+        # the whole stall). The ticker runs alongside make inside
+        # this brace group; its output is injected AFTER `tee`,
+        # so the .log file stays clean of KEEPALIVE markers.
+        # Killed on make exit; SIGPIPE from the awk-closed pipe is
+        # the backup exit path if kill races the sleep boundary.
+        ( while sleep "$BH_SPIN_INTERVAL"; do printf 'KEEPALIVE\n' || exit 0; done ) &
+        _bh_ticker_pid=$!
+        if [ -n "$_bh_tgt" ]; then
+            bh_tee_status "$_bh_log" bh_make_run -j"$_bh_jobs" "$@" "$_bh_tgt"
+        else
+            bh_tee_status "$_bh_log" bh_make_run -j"$_bh_jobs" "$@"
+        fi
+        _bh_make_st=$?
+        echo "$_bh_make_st" > "$_bh_statusfile"
+        kill "$_bh_ticker_pid" 2>/dev/null || true
+        wait "$_bh_ticker_pid" 2>/dev/null || true
+        exit "$_bh_make_st"
+    } | awk -v verbose="${BH_LOG_LEVEL:-1}" '
+            # Keepalive marker -> "K" sentinel (spinner tick, no
+            # VALUE change). Must come before the catch-all so
+            # verbose mode does not log "KEEPALIVE" as a build line.
+            /^KEEPALIVE$/ { print "K"; fflush(); next }
+            # Compile/link lines -> "P" sentinel (one per step). Same
+            # BH_BUILD_STEP_RE as the precount, read from the exported
+            # environment (ENVIRON) rather than `-v` so its `\\` and
+            # `[+]`/`[.]` survive the awk value-escape step. Verbose
+            # mode also forwards the original line with an "L " prefix
+            # so the shell loop can clear-line-then-print. `fflush()`
+            # defeats awk pipe-buffering -- without it, awk accumulates
+            # ~kB of output before the shell loop gets to read, so the
+            # bar appears to lag behind make.
+            $0 ~ ENVIRON["BH_BUILD_STEP_RE"] {
+                print "P"
+                if (verbose+0 >= 2) print "L " $0
+                fflush()
+                next
+            }
+            verbose+0 >= 2 { print "L " $0; fflush() }
+        ' | (
+            # Subshell: BH_PROGRESS_MAX inherits; VALUE updates stay
+            # local (which is fine -- renders happen here, the parent
+            # only needs the post-pipeline hide).
+            while IFS= read -r _bhm_line; do
+                case "$_bhm_line" in
+                    P)
+                        # Render on every compile-line. Earlier
+                        # versions throttled to per-integer-% which
+                        # made big trees (XD, 2k+ steps) feel stuck
+                        # because each redraw covered ~25 compiles
+                        # = ~30s of real time. Pure-shell render is
+                        # ~ms-fast, the rate is bounded by compile
+                        # throughput anyway.
+                        BH_PROGRESS_VALUE=$((BH_PROGRESS_VALUE + 1))
+                        bh_progress_render
+                        ;;
+                    "L "*)
+                        # Clear the bar's row, print the verbose
+                        # line on it, then re-render the bar on
+                        # the next row -- visually pins the bar
+                        # below the scrolling stream.
+                        bh_progress_row_clear
+                        printf '\r\033[K%s\n' "${_bhm_line#L }"
+                        bh_progress_render
+                        ;;
+                    K)
+                        # Keepalive, once per `BH_SPIN_INTERVAL`: the
+                        # only event that turns the spinner, hence it
+                        # keeps one pace whether compile lines come in
+                        # bursts or not at all. No `BH_PROGRESS_VALUE`
+                        # change, as no compile happened.
+                        bh_progress_plan_tick
+                        bh_progress_clock
+                        bh_progress_tick
+                        ;;
+                esac
+            done
+        )
+    _bh_status=$?
+    if [ -s "$_bh_statusfile" ]; then
+        _bh_make_status=$(cat "$_bh_statusfile")
+        [ "$_bh_make_status" -eq 0 ] || _bh_status=$_bh_make_status
+    fi
+    rm -f "$_bh_statusfile"
+    bh_progress_plan_finish
+    bh_progress_actions_performed "$_bh_log"
+    set -e
+    # The pipeline's `while read` ran in a subshell, so the
+    # BH_PROGRESS_VALUE increments per compile-line never reached
+    # this (parent) shell -- parent's VALUE is still 0. Snap it to
+    # MAX on success so `bh_progress_hide` renders the bar row's
+    # final state as `[√] (N/N)` instead of `[√] (0/N)`.
+    if [ "$_bh_status" -eq 0 ] && [ "$BH_PROGRESS_TYPE" = bar ]; then
+        BH_PROGRESS_VALUE=$BH_PROGRESS_MAX
+    fi
+    if [ "$_bh_status" -eq 0 ]; then
+        bh_progress_hide              # replaces row with [√] + (V/M) + \n
+    else
+        bh_progress_hide X            # [X] on make failure
+        bh_dump_fail "$_bh_log" "$_bh_status"
+    fi
+}
+
+
+# ---- qmake availability + thin wrapper ---------------------------------
+
+# bh_qmake_prepare
+#
+# Ensures $QMAKE points at a working qmake binary. The XD-tracked
+# binary at $XD_DIR/bin/qmake is the canonical answer; when it's
+# missing, we offer to build it via $XD_DIR/qmake/build.sh.
+#
+# Under --headless we skip the prompt and just build (matches the
+# Xcode-license behavior elsewhere -- headless = no interactive
+# blocking).
+#
+# Caller-set state used here:
+#   $XD_DIR        framework root that owns qmake/
+#   $BUILD_DIR     where the qmake bootstrap's intermediate objects
+#                  land (the framework's own build.sh uses
+#                  $XD_BUILD_DIR; we fall back to that when $BUILD_DIR
+#                  isn't set).
+#   $BH_HEADLESS   non-zero auto-builds without prompting.
+bh_qmake_prepare() {
+    # Pick the platform's qmake binary. bin/qmake itself is only the dispatch
+    # script (it forwards to one of these by host); we resolve the real binary
+    # here so the bootstrap-if-missing check below tests the actual executable.
+    # All three host binaries are committed -- bin/qmake-macos (Mach-O),
+    # bin/qmake.exe (PE), bin/qmake-linux (ELF) -- and qmake/build.sh rebuilds
+    # the host's on demand should it go missing, each under its own name so no
+    # build overwrites another's.
+    case "$(uname -s)" in
+        Darwin)               QMAKE=$XD_DIR/bin/qmake-macos ;;
+        MINGW*|MSYS*|CYGWIN*) QMAKE=$XD_DIR/bin/qmake.exe ;;
+        *)                    QMAKE=$XD_DIR/bin/qmake-linux ;;
+    esac
+    [ -x "$QMAKE" ] && return 0
+    echo
+    printf 'XD qmake not found at "%s".\n' "$QMAKE"
+    bh_yes_no "Build it now via \"$XD_DIR/qmake/build.sh\"? [Y/n]" \
+        || bh_error "XD qmake not found at \"$QMAKE\" -- aborting"
+    echo
+    _bh_intermediate=${BUILD_DIR:-${XD_BUILD_DIR:-$XD_DIR/build}}/qmake
+    bh_run bootstrap-qmake sh "$XD_DIR/qmake/build.sh" -d "$_bh_intermediate"
+    [ -x "$QMAKE" ] || bh_error "qmake build at \"$XD_DIR/qmake/build.sh\" did not produce \"$QMAKE\""
+}
+
+# bh_qmake <args...>
+#
+# Invokes qmake in evaluation mode (`-E`) with the project's standard
+# `-spec $XD_DIR/mkspecs/$QMAKESPEC` + `CONFIG+=$BH_MODE` baked in,
+# and qmake's stderr suppressed (`2>/dev/null`) so the caller's
+# downstream awk/grep doesn't have to deal with the warning noise an
+# unfocused `-E` run emits.
+#
+# Caller passes the .pro path -- plus any follow-up assignments
+# qmake should evaluate (extra `CONFIG+=...`, `TASK=...`,
+# `ARG1=...`) -- as <args>; everything is appended after the fixed
+# prefix:
+#
+#     "$QMAKE" -E -spec ".../<spec>" CONFIG+="$BH_MODE" <args> 2>/dev/null
+#
+# bh_qmake_prepare runs first so qmake is always ready.
+bh_qmake() {
+    bh_qmake_prepare
+    "$QMAKE" -E -spec "$XD_DIR/mkspecs/$QMAKESPEC" \
+        CONFIG+="${BH_MODE:-debug}" "$@" 2>/dev/null
+}
+
+# bh_qmake_task <task> [arg1] [arg2] [arg3] [arg4] [arg5]
+#
+# Shell-side mirror of `xd_taskHandlerRun` from
+# `mkspecs/features/xd_functions.prf`. Invokes qmake with
+# `XD/tools/task-handler/task-handler.pro` so the same TASK=...
+# ARG1=... ARG2=... pattern that .pro files use is reachable from
+# build.sh scripts -- handy for the rare cases where qmake's `-E`
+# can't reveal a derived variable (the task-handler can also be
+# extended with new TASK names without changing this wrapper).
+#
+# Currently unused by the rest of the handler (bh_parse_target gets
+# what it needs straight from `bh_qmake -E`); shipped here so future
+# callers don't have to re-derive the right invocation shape.
+bh_qmake_task() {
+    _bh_task=$1; shift
+    bh_qmake "$XD_DIR/tools/task-handler/task-handler.pro" \
+        "CONFIG+=force_only_debug" \
+        TASK="$_bh_task" \
+        ARG1="${1:-}" \
+        ARG2="${2:-}" \
+        ARG3="${3:-}" \
+        ARG4="${4:-}" \
+        ARG5="${5:-}" \
+        -o -
+}
+
+# ---- target resolution + launch ----------------------------------------
+
+# bh_parse_target <pro_path>
+#
+# Derives the app's target name (the executable basename qmake will
+# produce) from the project file. We evaluate the .pro via
+# `qmake -E ...` and read the resolved TARGET; that handles the case
+# where TARGET is set inside an included `.pri` (e.g. a
+# `tests/test.pro` picks up `TARGET = <App>-test-runner` from
+# `config/test-mode.pri`) rather than guessing from the .pro filename.
+#
+# The basename-of-.pro fallback covers the rare case where qmake -E
+# can't evaluate cleanly (the basename matches the conventional Qt
+# app naming for top-level `<App>.pro` files anyway).
+#
+# The result lives in BH_TARGET_NAME and is consumed by the test
+# step (`<BH_TARGET_NAME>-test-runner`) and by `bh_run_target`.
+#
+# Normally invoked lazily via bh_target_resolve (below), not directly.
+bh_parse_target() {
+    _pro=$1
+    # Pre-run bh_qmake_prepare in *this* shell so $QMAKE survives. The
+    # bh_qmake call below runs inside a `$(...)` substitution; any
+    # variable bh_qmake_prepare assigns inside that subshell would be
+    # discarded when the substitution closes, and later bh_run-qmake
+    # callers would see $QMAKE expand to empty (sh's "command not found"
+    # on a blank command).
+    bh_qmake_prepare
+    _bh_target=$(bh_qmake "$_pro" \
+                 | awk -F' = ' '/^TARGET / && ! found {print $2; found = 1}')
+    if [ -n "$_bh_target" ]; then
+        BH_TARGET_NAME=$_bh_target
+    else
+        _bh_base=$(basename "$_pro")
+        BH_TARGET_NAME=${_bh_base%.pro}
+    fi
+}
+
+# bh_target_resolve <pro_path>
+#
+# Lazy fetch of the project's TARGET name. Only `--test` / `--run` need
+# it, so bh_parse_args marks BH_TARGET_NAME=pending for those flags;
+# this runs the "Resolving project TARGET name" step (a ~1s `qmake -E`)
+# only when that sentinel is present, then caches the real name back
+# into BH_TARGET_NAME. A plain build never marks it pending, so it skips
+# the step entirely. Future flags that need the name just have
+# bh_parse_args mark BH_TARGET_NAME=pending; a caller may instead
+# pre-set BH_TARGET_NAME to a literal to skip resolution altogether.
+bh_target_resolve() {
+    [ "${BH_TARGET_NAME:-}" = pending ] || return 0
+    BH_TARGET_NAME=   # drop the sentinel so bh_parse_target sets the real one
+    bh_run_silent_fg 'Resolving project TARGET name (qmake -E)' \
+        bh_parse_target "$1"
+}
+
+# bh_run_target
+#
+# When BH_RUN_TARGET is set (i.e. the user passed `--run`), boots the
+# freshly-built target -- the executable named `$BH_TARGET_NAME` --
+# keeping stdout/stderr attached to this terminal so `qDebug()` output
+# is visible.
+#
+# On macOS the build produces a `<TARGET>.app` bundle; we exec the
+# inner binary rather than handing the bundle to `open`, because XD's
+# dylibs ship with bare-name install paths (no @rpath, no absolute
+# prefix) and `open` routes through launchd which strips DYLD_* env
+# vars for security -- the app would launch, fail to dlopen its Qt
+# libs, and die silently. The direct-exec path lets us inject
+# DYLD_LIBRARY_PATH and Qt's plugin-search vars so the cocoa platform
+# plugin and the linked dylibs all resolve.
+#
+# Assumes $BUILD_DIR, $XD_DIR, $QT_PLUGINS_STAGE are set (i.e. you've
+# either called bh_template_app or set them up yourself).
+bh_run_target() {
+    [ "${BH_RUN_TARGET:-0}" -gt 0 ] || return 0
+    if [ -x "$BUILD_DIR/bin/$BH_TARGET_NAME.app/Contents/MacOS/$BH_TARGET_NAME" ]; then
+        _bin=$BUILD_DIR/bin/$BH_TARGET_NAME.app/Contents/MacOS/$BH_TARGET_NAME
+    elif [ -x "$BUILD_DIR/bin/$BH_TARGET_NAME" ]; then
+        _bin=$BUILD_DIR/bin/$BH_TARGET_NAME
+    elif [ -x "$BUILD_DIR/bin/$BH_TARGET_NAME.exe" ]; then
+        _bin=$BUILD_DIR/bin/$BH_TARGET_NAME.exe
+    else
+        bh_error "no $BH_TARGET_NAME executable found under \"$BUILD_DIR/bin\""
+    fi
+    echo "Launching $_bin"
+    DYLD_LIBRARY_PATH=$XD_DIR/lib${DYLD_LIBRARY_PATH:+:$DYLD_LIBRARY_PATH} \
+    LD_LIBRARY_PATH=$XD_DIR/lib${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH} \
+    QT_PLUGIN_PATH=$QT_PLUGINS_STAGE${QT_PLUGIN_PATH:+:$QT_PLUGIN_PATH} \
+    QT_QPA_PLATFORM_PLUGIN_PATH=$QT_PLUGINS_STAGE/platforms \
+    "$_bin"
+}
+
+
+# ---- test orchestration -----------------------------------------------
+
+# bh_run_tests <target> [--subdirs]
+#
+# Drives the `--test` step for two test-project shapes:
+#
+# 1) Single testcase app (single-app style):
+#    `tests/test.pro` is `TEMPLATE = app` with `CONFIG += testcase`.
+#    Pass <target> = absolute path to the built test binary. We exec it
+#    directly: the caller has already resolved that path and exported the
+#    runtime env (DYLD_LIBRARY_PATH / QT_PLUGIN_PATH), so there's no need
+#    to drive a single binary through `make check` and qmake's generated
+#    `target_wrapper.sh` (which just sets the same env, then execs it).
+#
+#    Different consumers install the runner in different layouts
+#    (next to the host `.app`, inside `Contents/MacOS/`, flat under
+#    `bin/`), so we let the caller resolve the exact path rather
+#    than hard-coding a search list here.
+#
+# 2) Subdirs of testcase apps (the consumer's $BH_TEST_ROOT pointing at
+#    a `TEMPLATE = subdirs` .pro that recurses through many testcase apps):
+#    Pass <target> = that subdirs project's build dir and add `--subdirs`.
+#    `make check` is the canonical run -- qmake emits the recursive
+#    driver that walks each subdir's testcase. Caller must `cd` to
+#    <target> first (matches the bh_make / bh_run convention).
+bh_run_tests() {
+    _target=$1
+    bh_hook_run test-env
+    case "${2:-}" in
+        --subdirs)
+            bh_run tests bh_make_run -k check
+            ;;
+        *)
+            [ -x "$_target" ] || bh_error "test runner not found at '$_target'"
+            bh_run tests "$_target"
+            ;;
+    esac
+}
+
+# bh_run_one_test <abs-pro>
+#
+# Builds and runs one test project, in its own build and log subdir (so
+# parallel sweep entries don't clobber each other), and tallies the
+# outcome into the caller's _bh_tests_total / _bh_tests_failed. Runs the
+# build+run in a subshell so one failure stays contained (bh_dump_fail's
+# `exit`, or a propagated non-zero, ends only the subshell) and the sweep
+# goes on. Steps are chained with && so the first failure short-circuits
+# the subshell to a non-zero exit -- we do not lean on `set -e`, which
+# bash leaves disabled (and won't reliably re-arm) inside a subshell used
+# as a condition; `|| _rc=$?` captures it without tripping the outer -e.
+# `make check` recurses for a subdirs root and runs the one check rule
+# for a single testcase app (testcase.prf invokes qtAddTargetEnv's
+# ./target_wrapper.sh -- see qt_functions.prf).
+bh_run_one_test() {
+    _bhrot_pro=$1
+    [ -f "$_bhrot_pro" ] || bh_error "test project not found: $_bhrot_pro"
+    _bh_tests_total=$((_bh_tests_total + 1))
+    # Flat, unique name for this test's build + log subdirs.
+    _bhrot_name=$(printf '%s' "${_bhrot_pro#"$BH_ROOT"/}" | tr -c 'A-Za-z0-9' '_')
+    _bhrot_rc=0
+    # shellcheck disable=SC2086  # intentional split of forwarded args.
+    (
+        LOGS=$BUILD_DIR/logs/tests/$_bhrot_name
+        _bhrot_tb=$BUILD_DIR/tests-build/$_bhrot_name
+        _step=0
+        if [ "${BH_BUILD_TESTS:-1}" -eq 0 ]; then
+            # Don't (re)build the test -- assume it's already built and
+            # just run it. `make check` on an up-to-date tree only runs the
+            # test; a missing build makes it fail, the "fail if not really
+            # built" contract.
+            [ -e "$_bhrot_tb/Makefile" ] || bh_error \
+                "test '$_bhrot_name' isn't built yet (build it, or pass --build-tests)"
+            mkdir -p "$LOGS" \
+                && cd "$_bhrot_tb" \
+                && bh_run_tests "$_bhrot_tb" --subdirs
+        else
+            mkdir -p "$LOGS" "$_bhrot_tb" \
+                && cd "$_bhrot_tb" \
+                && bh_run_qmake test-qmake "$_bhrot_pro" $BH_REMAINING_ARGS \
+                && bh_make "$JOBS" \
+                && bh_run_tests "$_bhrot_tb" --subdirs
+        fi
+    ) || _bhrot_rc=$?
+    [ "$_bhrot_rc" -eq 0 ] || _bh_tests_failed=$((_bh_tests_failed + 1))
+}
+
+
+# ---- template helpers --------------------------------------------------
+
+# bh_searchpath_plugins
+#
+# Adjusts where Qt finds plugins at run/test time. Builds a per-mode
+# tree under `$BUILD_DIR/qt-plugins-$BH_MODE/` populated with only the
+# matching-variant plugin files, and exports `$QT_PLUGINS_STAGE`
+# pointing at it; later launch/test steps wire `QT_PLUGIN_PATH` and
+# `QT_QPA_PLATFORM_PLUGIN_PATH` from that variable. Skipped entirely
+# when `BH_SKIP_PLUGIN_STAGE=1` is set.
+#
+# Why per-mode rather than just pointing at `$XD_DIR/plugins/`: XD
+# ships both debug and release copies of every plugin (e.g. on macOS
+# `libqcocoa.dylib` *and* `libqcocoa_debug.dylib`; matching pairs on
+# Linux/Windows with the respective extension). `QFactoryLoader` walks
+# the entire search directory and dlopens every candidate just to read
+# its metadata, and the dlopen pulls in the plugin's linked Qt5*
+# library variant. On macOS that's the most explosive case: the
+# plugin's Objective-C `+load` methods run during dlopen, duplicate
+# class registrations clash ("Class RunLoopModeTracker is implemented
+# in both ..."), and the app segfaults during `QObject::moveToThread`.
+# Linux and Windows show subtler symptoms but the same per-mode tree
+# fixes them all.
+#
+# Cross-platform notes:
+#   - Library extension is picked by host (`.dylib` on macOS, `.so`
+#     on Linux/BSD, `.dll` on Windows incl. git-bash/MSYS/Cygwin);
+#     the `_debug` filename suffix is XD's convention everywhere (see
+#     `xd_suffix` in `mkspecs/features/xd_functions.prf`).
+#   - `ln -sf` is a real symlink on macOS/Linux and silently degrades
+#     to a plain file copy under MSYS / git-bash (no native symlink
+#     support without admin rights). The end state -- a plugin file
+#     findable under the staged tree -- is identical either way.
+#
+# Timing differs by template:
+#   - `bh_template_app` calls this BEFORE make (consumer apps consume
+#     XD's already-built plugins).
+#   - `bh_template_subdirs` calls it AFTER make so a project that
+#     BUILDS its own plugins (XD itself) actually has files to point
+#     the search path at.
+bh_searchpath_plugins() {
+    [ "${BH_SKIP_PLUGIN_STAGE:-0}" -eq 0 ] || return 0
+    case "$(uname -s)" in
+        Darwin)                _bh_ext=dylib ;;
+        CYGWIN*|MINGW*|MSYS*)  _bh_ext=dll ;;
+        *)                     _bh_ext=so ;;
+    esac
+    QT_PLUGINS_STAGE=$BUILD_DIR/qt-plugins-$BH_MODE
+    rm -rf "$QT_PLUGINS_STAGE"
+    for _bh_src_dir in "$XD_DIR/plugins"/*/; do
+        [ -d "$_bh_src_dir" ] || continue
+        _type=$(basename "$_bh_src_dir")
+        _dest=$QT_PLUGINS_STAGE/$_type
+        mkdir -p "$_dest"
+        for _src in "$_bh_src_dir"*."$_bh_ext"; do
+            [ -f "$_src" ] || continue
+            _base=$(basename "$_src")
+            case "$BH_MODE" in
+                debug)
+                    case "$_base" in *_debug."$_bh_ext") ln -sf "$_src" "$_dest/$_base";; esac;;
+                release)
+                    case "$_base" in *_debug."$_bh_ext") ;; *) ln -sf "$_src" "$_dest/$_base";; esac;;
+            esac
+        done
+    done
+}
+
+
+# ---- one-stop driver for app consumers --------------------------------
+# Exports the paths a test run loads from: XD's own `lib` folder, and the
+# plugins that `bh_searchpath_plugins` staged, when it staged them.
+bh_export_test_paths() {
+    export DYLD_LIBRARY_PATH=$XD_DIR/lib${DYLD_LIBRARY_PATH:+:$DYLD_LIBRARY_PATH}
+    export LD_LIBRARY_PATH=$XD_DIR/lib${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}
+    if [ -n "${QT_PLUGINS_STAGE:-}" ]; then
+        export QT_PLUGIN_PATH=$QT_PLUGINS_STAGE${QT_PLUGIN_PATH:+:$QT_PLUGIN_PATH}
+        export QT_QPA_PLATFORM_PLUGIN_PATH=$QT_PLUGINS_STAGE/platforms
+    fi
+}
+
+# Stops the build when a test project that `bh_run_one_test` ran failed.
+bh_fail_on_tests() {
+    if [ "$_bh_tests_failed" -gt 0 ]; then
+        bh_error "tests: $_bh_tests_failed of $_bh_tests_total test project(s) failed"
+    fi
+}
+
+
+# bh_template_app <pro_path> [argv...]
+#
+# All-in-one driver for a single-app Qt project. The consumer's
+# build.sh only resolves XD_DIR and points us at its .pro; everything
+# else (arg parsing, build dir, plugin staging, qmake, make, tests,
+# launch) lives here. Use this as the template for new app repos --
+# XD itself is the exception because it builds the framework, not a
+# consumer.
+#
+# Convention:
+#   - The app's executable name matches the .pro basename
+#     (`MyApp.pro` → `MyApp`).
+#   - Test runner (when `--test` runs) is named
+#     `<app-target>-test-runner` and lives in the install dir; for
+#     macOS we also look inside the host app bundle's `Contents/MacOS/`.
+#   - Test project lives at `<repo>/tests/test.pro` (with a fallback
+#     to the legacy `<repo>/test/test.pro` for not-yet-renamed repos).
+bh_template_app() {
+    _pro=$1; shift
+    BH_TEMPLATE=app
+    bh_parse_args "$@"
+    bh_strict_mode
+    bh_default_jobs
+    bh_default_qmakespec
+    bh_macos_developer_dir
+
+    # Pre-compute phase total for the "(N/M)" tail of the progress
+    # line. Each user-visible step (qmake, make, test-qmake,
+    # test-make, tests, run) is one phase; helper sub-steps (e.g.
+    # bh_make's debug/release split) inflate the counter slightly
+    # beyond the total -- the renderer just shows whatever (_step,
+    # BH_STEPS_TOTAL) is at the moment, accepting small drift.
+    # Base: bh_run_silent_fg (Staging) + qmake + make-computing +
+    # make-compiling = 4. The "Resolving TARGET name" step is added below
+    # only for --test/--run (the only consumers of BH_TARGET_NAME); a
+    # plain build skips it. --wipe is *not* counted -- see also docs of:
+    # bh_wipe, for why Deleting is an uncounted pre-build phase.
+    BH_STEPS_TOTAL=4
+    [ "${BH_CLEAN:-0}"       -gt 0 ] && BH_STEPS_TOTAL=$((BH_STEPS_TOTAL + 1))
+    # --test / --run share one "Resolving TARGET name" step.
+    if bh_has_tasks; then
+        BH_STEPS_TOTAL=$((BH_STEPS_TOTAL + 1))
+    fi
+    # `--test` adds: test-qmake + test-make-computing + test-make-compiling + tests = 4
+    [ "${BH_RUN_TESTS:-0}"   -gt 0 ] && BH_STEPS_TOTAL=$((BH_STEPS_TOTAL + 4))
+    [ "${BH_RUN_TARGET:-0}"  -gt 0 ] && BH_STEPS_TOTAL=$((BH_STEPS_TOTAL + 1))
+    # `bh_make` runs the moc pass as a step of its own (see
+    # bh_mocables_prepass), and the progress mode may hide the build-plan step
+    # of each make run (see bh_progress_plan_steps): the app's, and the tests'.
+    BH_STEPS_TOTAL=$((BH_STEPS_TOTAL + 1))
+    if [ "${BH_RUN_TESTS:-0}" -gt 0 ]; then
+        bh_progress_plan_steps 2
+    else
+        bh_progress_plan_steps 1
+    fi
+
+    # Consumer must have resolved the XD framework before calling us.
+    [ -n "${XD_DIR:-}" ] || bh_error "XD_DIR not set -- resolve the XD framework first"
+
+    # Per-mode build dir lives as a sibling to the source root (or to the
+    # outermost repo of its submodule chain, see bh_build_dir_root), under a
+    # shared `build/` folder named after this repo plus the build mode.
+    # Keeping the mode in the dir name lets debug and release artifacts
+    # coexist without stomping each other (the underlying Makefile
+    # carries different QMAKE_CXXFLAGS, library paths, and link names
+    # per mode). Under --static a `-static` comes before the mode (as in
+    # `<repo>-static-debug`), which keeps the shared build as it is.
+    : "${BUILD_DIR:=$(dirname "$BH_ROOT")/build/$(basename "$BH_ROOT")${BH_STATIC:+-static}-$BH_MODE}"
+    bh_handle_get   # --get=<what>: print a path and exit (no build)
+
+    # Show + gate. Same license-accept dance XD's build.sh runs, so
+    # both templates share one user-facing flow.
+    bh_build_dir_gate
+
+    # --wipe first, then bail early on `--wipe --no-build` so we
+    # don't immediately recreate the empty dir via the mkdir below.
+    if [ "${BH_WIPE:-0}" -gt 0 ]; then
+        bh_wipe
+        [ "${BH_NO_BUILD:-0}" -gt 0 ] && return 0
+    fi
+
+    mkdir -p "$BUILD_DIR"
+    bh_logs_init "$BUILD_DIR/logs"
+    # Picks the make tool once, here; hence the make runs in subshells share
+    # it, and its warning shows once.
+    bh_make_find
+
+    # --clean uses bh_run so it needs $LOGS in place; after `--wipe`
+    # there's no Makefile to clean so it prints a "skipping" notice.
+    [ "${BH_CLEAN:-0}" -gt 0 ] && bh_clean
+
+    # --no-build / --only-clean exit point: the user asked for the wipes
+    # above and nothing more. Exceptions where there's still work to do:
+    #   * `--qmake --no-build` regenerates Makefiles (qmake runs below).
+    #   * `--no-build --test` / `--no-build --run` mean "the build is
+    #     already done -- skip building, but still run the post-build
+    #     action". A build that isn't really done then surfaces as a
+    #     test/run failure rather than being silently rebuilt.
+    bh_can_exit pre-build && return 0
+
+    # cd into BUILD_DIR *before* qmake-via-bh_parse_target runs --
+    # qmake's `-E` mode (which bh_parse_target uses to extract the
+    # TARGET name) writes a `.qmake.stash` to its cwd as a side
+    # effect. If we resolve TARGET from the source root, the stash
+    # leaks into the repo and shows up under `git status`. Doing
+    # the cd here pins every qmake invocation in this template to
+    # BUILD_DIR, keeping the source tree clean.
+    cd "$BUILD_DIR"
+
+    # qmake gate + (lazy) TARGET resolution happen here -- both can
+    # require `bh_run` (bootstrap-qmake) so LOGS must already be
+    # initialised. bh_target_resolve runs `qmake -E` (~1 s) only when
+    # --test/--run marked BH_TARGET_NAME pending; bh_searchpath_plugins
+    # builds the per-mode symlink farm (~4 s for full Qt). Without
+    # spinners these looked like the script had hung after the `[√]` of
+    # the previous step, so each shows a spinner row.
+    bh_target_resolve "$_pro"
+    bh_run_silent_fg 'Staging Qt plugins for runtime search path' \
+        bh_searchpath_plugins
+
+    # Build the main app.
+    if [ "${BH_NO_BUILD:-0}" -eq 0 ]; then
+        # Normal build: (re)generate the Makefile, then compile.
+        # shellcheck disable=SC2086  # intentional word-split of forwarded args.
+        bh_run_qmake qmake "$_pro" CONFIG+="$BH_MODE" $BH_REMAINING_ARGS
+        bh_make "$JOBS"
+    elif [ "${BH_FORCE_QMAKE:-0}" -gt 0 ]; then
+        # `--qmake --no-build`: regenerate the Makefile only, no compile.
+        # shellcheck disable=SC2086  # intentional word-split of forwarded args.
+        bh_run_qmake qmake "$_pro" CONFIG+="$BH_MODE" $BH_REMAINING_ARGS
+        # With no post-build action requested, stop after qmake.
+        bh_can_exit post-qmake && return 0
+    fi
+    # else: --no-build with --test/--run and no --qmake -- skip the main
+    # build entirely and fall through to the post-build action below.
+
+    # Tests (--test / --tests).
+    if [ "$BH_RUN_TESTS" -gt 0 ]; then
+        _bhtest_pro=""
+        if [ -f "$BH_ROOT/tests/test.pro" ]; then
+            _bhtest_pro=$BH_ROOT/tests/test.pro
+        elif [ -f "$BH_ROOT/tests/tests.pro" ]; then
+            _bhtest_pro=$BH_ROOT/tests/tests.pro
+        elif [ -f "$BH_ROOT/test/test.pro" ]; then
+            # Backward-compat for repos still on the singular folder.
+            _bhtest_pro=$BH_ROOT/test/test.pro
+        fi
+        if [ -n "$_bhtest_pro" ]; then
+            # The test runner is conventionally installed *inside* the
+            # host app bundle's `Contents/MacOS/` so it can share Qt
+            # plugins / resources -- assert the host bundle is on disk
+            # before letting qmake/make populate paths under it.
+            case "$(uname -s)" in
+                Darwin)
+                    _bhhost_bin=$BUILD_DIR/bin/$BH_TARGET_NAME.app/Contents/MacOS/$BH_TARGET_NAME
+                    [ -x "$_bhhost_bin" ] || bh_error \
+                        "root app bundle missing at \"$_bhhost_bin\" -- regular build must complete first"
+                    ;;
+            esac
+
+            TEST_BUILD=$BUILD_DIR/tests
+            if [ "${BH_BUILD_TESTS:-1}" -gt 0 ]; then
+                mkdir -p "$TEST_BUILD"
+                cd "$TEST_BUILD"
+                bh_run_qmake test-qmake "$_bhtest_pro" CONFIG+="$BH_MODE"
+                # bh_make_step (not bh_make) because the test project is
+                # a single-config app -- no debug_and_release race to
+                # serialise. Live progress bar on the way through.
+                bh_make_step test-make "" "$JOBS"
+            fi
+            # When not building tests, the runner resolved below must
+            # already exist (else bh_error there) -- the "fail if not
+            # really built" contract.
+
+            # Export the runtime env once -- the test runner and the
+            # later --run step both want the same DYLD/plugin paths,
+            # and exporting at this scope (rather than a subshell)
+            # keeps `bh_run`'s _step counter intact across calls.
+            export DYLD_LIBRARY_PATH=$XD_DIR/lib${DYLD_LIBRARY_PATH:+:$DYLD_LIBRARY_PATH}
+            export LD_LIBRARY_PATH=$XD_DIR/lib${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}
+            export QT_PLUGIN_PATH=$QT_PLUGINS_STAGE${QT_PLUGIN_PATH:+:$QT_PLUGIN_PATH}
+            export QT_QPA_PLATFORM_PLUGIN_PATH=$QT_PLUGINS_STAGE/platforms
+
+            # `make check` would drive the runner through qmake's
+            # generated `target_wrapper.sh` (which just sets the runtime
+            # env, already exported above). We've resolved the runner's
+            # exact path, so exec it directly through bh_run_tests instead,
+            # so the step lands in $LOGS/NN-tests.log.
+            _runner=$BH_TARGET_NAME-test-runner
+            if [ -x "$BUILD_DIR/bin/$BH_TARGET_NAME.app/Contents/MacOS/$_runner" ]; then
+                _bhtest_bin=$BUILD_DIR/bin/$BH_TARGET_NAME.app/Contents/MacOS/$_runner
+            elif [ -x "$BUILD_DIR/bin/$_runner" ]; then
+                _bhtest_bin=$BUILD_DIR/bin/$_runner
+            elif [ -x "$BUILD_DIR/bin/$_runner.exe" ]; then
+                _bhtest_bin=$BUILD_DIR/bin/$_runner.exe
+            else
+                bh_error "test runner '$_runner' not found under \"$BUILD_DIR/bin\""
+            fi
+            bh_run_tests "$_bhtest_bin"
+            cd "$BUILD_DIR"
+        else
+            _step=$((_step + 1))
+            printf '(no tests/test.pro found -- nothing to run)\n' \
+                | tee "$LOGS/$(printf '%02d-%s.log' "$_step" tests-skipped)"
+        fi
+    fi
+
+    # Launch (--run).
+    bh_run_target
+}
+
+
+# ---- one-stop driver for subdirs (workspace) consumers ----------------
+
+# bh_template_subdirs <top-pro> [argv...]
+#
+# All-in-one driver for a `TEMPLATE = subdirs` Qt project (one .pro
+# orchestrating many SUBDIRS). XD's own build.sh uses this; so does
+# any workspace that recurses through multiple sub-.pros.
+#
+# Each numbered point below captures a structural assumption a
+# `TEMPLATE = subdirs` project violates if it tries to drive
+# `bh_template_app` instead, and how this driver handles it:
+#
+#   1. XD_DIR may point at the source root (when XD is *being*
+#      built, BH_ROOT == XD_DIR). The check below still requires it
+#      to be set so non-self-builders error out cleanly.
+#
+#   2. BUILD_DIR has NO -mode suffix (subdirs trees typically run
+#      debug_and_release + build_all, dropping both flavours into
+#      one tree). A project that genuinely wants per-mode dirs can
+#      pre-set $BH_BUILD_DIR_SUFFIX (e.g. "-${BH_MODE}").
+#
+#   3. qmake is NOT given CONFIG+=$BH_MODE -- the subdir .pro files
+#      decide mode themselves (debug_and_release, build_all, etc.).
+#      bh_make's race-aware release-all/debug-all split serialises
+#      the per-config link/mv race.
+#
+#   4. Plugin search path is adjusted AFTER make (postponed). For
+#      projects that BUILD their own plugins (XD itself), pre-make
+#      setup would point at an empty/partial tree; post-make works
+#      for both self-builders and external consumers. Skip entirely
+#      with BH_SKIP_PLUGIN_STAGE=1.
+#
+#   5. bh_qmake_prepare runs as normal: if the qmake binary is
+#      absent at $XD_DIR/bin/qmake, it self-bootstraps via
+#      $XD_DIR/qmake/build.sh -- works for XD-as-self-builder.
+#
+#   6. License gate is the shared bh_license_gate (identical
+#      interactive prompt as bh_template_app).
+#
+#   7. No top-level TARGET resolution -- subdirs has none. --run
+#      requires a subdir path and resolves TARGET from that subdir's
+#      .pro instead.
+#
+#   8. --test requires the consumer to have set $BH_TEST_ROOT to its
+#      test subdirs .pro. Builds in `$BUILD_DIR/tests-build/` and runs
+#      via `make -k check`. Skip with a notice when BH_TEST_ROOT is
+#      unset.
+#
+#   9. --run REQUIRES a relative subdir path
+#      (`./build.sh --run path/to/subdir`). The path is taken from
+#      $BH_RUN_TARGET_PATH (bh_parse_args consumes it when
+#      BH_TEMPLATE=subdirs). We .pro-eval that subdir to find its
+#      TARGET, then exec the binary out of $BUILD_DIR/<path>/.
+bh_template_subdirs() {
+    _pro=$1; shift
+    BH_TEMPLATE=subdirs
+    bh_parse_args "$@"
+    bh_strict_mode
+    bh_default_jobs
+    bh_default_qmakespec
+    bh_macos_developer_dir
+
+    # Phase total for the "(N/M)" tail of the progress line. Each
+    # bh_make_step contributes two visible phases (computing +
+    # compiling); bh_make's race-aware release/debug split adds
+    # two more via its own +=2 bump. Seed assuming a single,
+    # non-split bh_make.
+    # Base: qmake + make-computing + make-compiling = 3. Resolving
+    # and Staging are *conditional* in this template (they only
+    # run inside the --test / --run blocks) so they get folded
+    # into those flag bumps below, not the base. --wipe is uncounted
+    # -- see also docs of: bh_wipe, for why Deleting is uncounted.
+    BH_STEPS_TOTAL=3
+    [ "${BH_CLEAN:-0}"      -gt 0 ] && BH_STEPS_TOTAL=$((BH_STEPS_TOTAL + 1))
+    # `--test` runs a *dynamic* sweep -- N matched test projects, each
+    # built and run in its own subshell -- so its steps can't share this
+    # linear (N/M) counter (subshell `_step` increments don't flow back,
+    # and N isn't known up front). The --test block clears BH_STEPS_TOTAL
+    # and shows those steps label-only, so nothing is added here for it.
+    # `--run` adds: Resolving (bh_target_resolve) = 1; Staging is
+    # only counted here when --test didn't already cover it (its
+    # `[ -n QT_PLUGINS_STAGE ] ||` short-circuit skips the call).
+    [ "${BH_RUN_TARGET:-0}" -gt 0 ] && BH_STEPS_TOTAL=$((BH_STEPS_TOTAL + 1))
+    if [ "${BH_RUN_TARGET:-0}" -gt 0 ] && [ "${BH_RUN_TESTS:-0}" -eq 0 ]; then
+        BH_STEPS_TOTAL=$((BH_STEPS_TOTAL + 1))                    # Staging in --run block
+    fi
+    # `bh_make` runs the moc pass as a step of its own (see
+    # bh_mocables_prepass), and the progress mode may hide the build-plan step
+    # of its make run (see bh_progress_plan_steps).
+    BH_STEPS_TOTAL=$((BH_STEPS_TOTAL + 1))
+    bh_progress_plan_steps 1
+
+    [ -n "${XD_DIR:-}" ] || bh_error "XD_DIR not set -- resolve the XD framework first (or set XD_DIR=\$ROOT when building XD itself)"
+
+    : "${BUILD_DIR:=$(dirname "$BH_ROOT")/build/$(basename "$BH_ROOT")${BH_STATIC:+-static}${BH_BUILD_DIR_SUFFIX:-}}"
+    bh_handle_get   # --get=<what>: print a path and exit (no build)
+
+    bh_build_dir_gate
+
+    if [ "${BH_WIPE:-0}" -gt 0 ]; then
+        bh_wipe
+        [ "${BH_NO_BUILD:-0}" -gt 0 ] && return 0
+    fi
+
+    mkdir -p "$BUILD_DIR"
+    bh_logs_init "$BUILD_DIR/logs"
+    # Picks the make tool once, here; hence the make runs in subshells share
+    # it, and its warning shows once.
+    bh_make_find
+
+    [ "${BH_CLEAN:-0}" -gt 0 ] && bh_clean
+    # Plain --no-build (and --only-clean) stop here: clean/wipe only.
+    # Exceptions where there's still work to do:
+    #   * `--qmake --no-build` regenerates Makefiles (qmake runs below).
+    #   * `--no-build --test` / `--no-build --run` mean "the build is
+    #     already done -- skip building, but still run the post-build
+    #     action". A build that isn't really done then surfaces as a
+    #     test/run failure rather than being silently rebuilt.
+    bh_can_exit pre-build && return 0
+
+    bh_qmake_prepare
+
+    cd "$BUILD_DIR"
+    if [ "${BH_NO_BUILD:-0}" -eq 0 ]; then
+        # Normal build: (re)generate Makefiles, then compile.
+        # shellcheck disable=SC2086  # intentional word-split of forwarded args.
+        bh_run_qmake qmake "$_pro" $BH_REMAINING_ARGS
+        bh_make "$JOBS"
+    elif [ "${BH_FORCE_QMAKE:-0}" -gt 0 ]; then
+        # `--qmake --no-build`: regenerate Makefiles only, no compile.
+        # shellcheck disable=SC2086  # intentional word-split of forwarded args.
+        bh_run_qmake qmake "$_pro" $BH_REMAINING_ARGS
+        # With no post-build action requested, stop after qmake.
+        bh_can_exit post-qmake && return 0
+    fi
+    # else: --no-build with --test/--run and no --qmake -- skip the main
+    # build entirely and fall through to the post-build action below.
+
+    # Tests via BH_TEST_ROOT. It holds one project (the consumer's
+    # default subdirs test root, or a single `.pro`/literal path), or --
+    # when a glob matched -- a sorted, newline-separated list to vet and run
+    # (Jest-style: every real match runs). bh_run_one_test builds and runs
+    # each in its own build/log subdir and tallies the outcome; a non-zero
+    # exit is reported at the end if any test project failed.
+    if [ "${BH_RUN_TESTS:-0}" -gt 0 ]; then
+        if [ -z "${BH_TEST_ROOT:-}" ]; then
+            echo "  (no BH_TEST_ROOT set; skipping --test)" 1>&2
+        else
+            # The test sweep is dynamic and runs each test in its own
+            # subshell, so the linear (N/M) counter doesn't apply here --
+            # clear it so the staging + per-test steps render label-only
+            # (and don't all collide on the main build's last number).
+            BH_STEPS_TOTAL=
+            # Postponed plugin staging: only the --test / --run paths
+            # consume QT_PLUGINS_STAGE, so we wait until we know we need
+            # it. Done once, up front, since every test reuses it.
+            bh_run_silent_fg 'Staging Qt plugins for runtime search path' \
+                bh_searchpath_plugins
+            bh_export_test_paths
+
+            _bh_tests_total=0
+            _bh_tests_failed=0
+            if [ "${BH_TEST_GLOB:-0}" -gt 0 ]; then
+                # Glob: vet candidates for real-ness in the background
+                # while running the ones already vetted, so the checks of
+                # the many remaining candidates overlap the current
+                # build/run and the next real test is usually already
+                # waiting. A plain file queue carries vetted projects from
+                # the producer to this consumer in found order -- not a
+                # FIFO, since mkfifo named pipes are unreliable under MSYS
+                # / Git Bash. The producer appends each real project then
+                # writes a done marker; the consumer reads the next unseen
+                # line as it appears.
+                _bh_reals=0
+                _bh_q=$BUILD_DIR/.bh-test-queue
+                _bh_done=$BUILD_DIR/.bh-test-done
+                rm -f "$_bh_done"
+                # Create the queue empty up front so the consumer's `sed`
+                # always reads an existing file -- `sed` on a not-yet-
+                # created file exits non-zero, which under -e would abort
+                # the whole run before the producer's first append.
+                : > "$_bh_q"
+                # Producer: walk candidates in their fixed order, append
+                # only the real test projects, then mark completion. (A
+                # failed bh_is_testcase is the left side of &&, so -e
+                # leaves it alone. Each `printf` is one short append, so it
+                # lands atomically -- the consumer never sees a half line.)
+                (
+                    IFS='
+'
+                    for _bhp_c in $BH_TEST_ROOT; do
+                        bh_is_testcase "$_bhp_c" && printf '%s\n' "$_bhp_c" >> "$_bh_q"
+                    done
+                    : > "$_bh_done"
+                ) &
+                _bh_prod=$!
+                # Consumer: run each vetted project as its line appears.
+                # While waiting for the producer to surface the next test
+                # (before the first one, and in the gaps between), animate
+                # a "Searching for test-pattern" spinner; settle it the
+                # moment a test is found so that test's output -- including
+                # the full -v / -vv log up to the testcase exit -- prints
+                # clean below it, then the spinner resumes for the next.
+                _bh_line=0
+                _bh_searching=0
+                while :; do
+                    _bh_pro=$(sed -n "$((_bh_line + 1))p" "$_bh_q" 2>/dev/null)
+                    if [ -z "$_bh_pro" ]; then
+                        # Nothing new. The producer writes every line
+                        # before the done marker, so once that exists with
+                        # no line pending the queue is fully drained.
+                        [ -f "$_bh_done" ] && break
+                        if bh_progress_active; then
+                            if [ "$_bh_searching" -eq 0 ]; then
+                                _bh_searching=1
+                                bh_progress_setType spinner
+                                bh_progress_setMax 0
+                                bh_progress_setDescription \
+                                    "Searching for test-pattern: $BH_TEST_PATTERN"
+                            fi
+                            BH_PROGRESS_VALUE=$((BH_PROGRESS_VALUE + 1))
+                            bh_progress_tick
+                        fi
+                        sleep "$BH_SPIN_INTERVAL"
+                        continue
+                    fi
+                    # Found one: settle the spinner before the test runs so
+                    # its log starts on a clean row, undisturbed.
+                    if [ "$_bh_searching" -ne 0 ]; then
+                        bh_progress_hide
+                        _bh_searching=0
+                    fi
+                    _bh_line=$((_bh_line + 1))
+                    _bh_reals=$((_bh_reals + 1))
+                    bh_run_one_test "$_bh_pro"
+                done
+                # Clear a still-armed spinner (e.g. zero matches reached
+                # the done marker before any test was found).
+                [ "$_bh_searching" -ne 0 ] && bh_progress_hide
+                wait "$_bh_prod" 2>/dev/null || true
+                rm -f "$_bh_q" "$_bh_done"
+                [ "$_bh_reals" -gt 0 ] || \
+                    bh_error "--test: no test project (CONFIG += testcase) matched the glob"
+            else
+                # Literal `.pro` or the default subdirs root: trusted
+                # entr(y/ies), run as-is without real-ness vetting.
+                _bh_oldifs=$IFS
+                IFS='
+'
+                for _bh_pro in $BH_TEST_ROOT; do
+                    IFS=$_bh_oldifs
+                    bh_run_one_test "$_bh_pro"
+                    IFS='
+'
+                done
+                IFS=$_bh_oldifs
+            fi
+            cd "$BUILD_DIR"
+            bh_fail_on_tests
+        fi
+    fi
+
+    # --run for a specific subdir.
+    if [ "${BH_RUN_TARGET:-0}" -gt 0 ]; then
+        # If --test already staged plugins above, QT_PLUGINS_STAGE
+        # is set and bh_searchpath_plugins is a no-op-ish refresh.
+        [ -n "${QT_PLUGINS_STAGE:-}" ] || \
+            bh_run_silent_fg 'Staging Qt plugins for runtime search path' \
+                bh_searchpath_plugins
+        [ -n "${BH_RUN_TARGET_PATH:-}" ] || \
+            bh_error "--run under BH_TEMPLATE=subdirs needs a subdir path"
+        _bhsub_src=$BH_ROOT/$BH_RUN_TARGET_PATH
+        _bhsub_build=$BUILD_DIR/$BH_RUN_TARGET_PATH
+        [ -d "$_bhsub_build" ] || bh_error "subdir build not found: $_bhsub_build"
+        # Resolve the .pro: prefer Qt's foo/foo.pro convention, fall
+        # back to whatever single .pro lives in the subdir.
+        _bhsub_base=$(basename "$BH_RUN_TARGET_PATH")
+        if [ -f "$_bhsub_src/$_bhsub_base.pro" ]; then
+            _bhsub_pro=$_bhsub_src/$_bhsub_base.pro
+        else
+            # `|| true`: `head -1` closing the pipe SIGPIPEs `ls` when the
+            # subdir holds more than one .pro; pipefail would surface 141
+            # and abort. Same guard as the freshness probe in bh_run_qmake.
+            _bhsub_pro=$(ls "$_bhsub_src"/*.pro 2>/dev/null | head -1 || true)
+            [ -n "$_bhsub_pro" ] || bh_error "no .pro file found under $_bhsub_src"
+        fi
+        bh_target_resolve "$_bhsub_pro"
+        if [ -x "$_bhsub_build/$BH_TARGET_NAME.app/Contents/MacOS/$BH_TARGET_NAME" ]; then
+            _bin=$_bhsub_build/$BH_TARGET_NAME.app/Contents/MacOS/$BH_TARGET_NAME
+        elif [ -x "$_bhsub_build/$BH_TARGET_NAME" ]; then
+            _bin=$_bhsub_build/$BH_TARGET_NAME
+        elif [ -x "$_bhsub_build/$BH_TARGET_NAME.exe" ]; then
+            _bin=$_bhsub_build/$BH_TARGET_NAME.exe
+        else
+            bh_error "no $BH_TARGET_NAME executable found under $_bhsub_build"
+        fi
+        echo "Launching $_bin"
+        DYLD_LIBRARY_PATH=$XD_DIR/lib${DYLD_LIBRARY_PATH:+:$DYLD_LIBRARY_PATH} \
+        LD_LIBRARY_PATH=$XD_DIR/lib${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH} \
+        QT_PLUGIN_PATH=${QT_PLUGINS_STAGE:-}${QT_PLUGIN_PATH:+:$QT_PLUGIN_PATH} \
+        QT_QPA_PLATFORM_PLUGIN_PATH=${QT_PLUGINS_STAGE:-}/platforms \
+        "$_bin"
+    fi
+}
+
+
+# bh_template_makefile <drive-fn> <binary-path> [args...]
+#
+# Template for projects driven by a hand-rolled Makefile (no .pro, no
+# qmake step). The caller supplies:
+#   <drive-fn>     name of a shell function that runs make for one arch.
+#                  It runs with cwd = $BH_ARCH_BUILD_DIR and may read
+#                  $BH_CURRENT_ARCH / $BH_MODE / $JOBS to shape its
+#                  flags. Typical body calls `bh_make_step`.
+#   <binary-path>  absolute path of the binary the makefile writes
+#                  (used to copy per-arch outputs aside and lipo them
+#                  together on multi-arch macOS builds).
+#
+# Arch matrix is governed by $BH_ARCHS on macOS:
+#   unset / empty       -> host arch only (no lipo)
+#   "x86_64"            -> x86_64 only (no lipo)
+#   "x86_64 arm64"      -> per-arch builds + `lipo -create` to one fat binary
+# Non-macOS hosts always build the host arch once; BH_ARCHS is ignored.
+bh_template_makefile() {
+    _bhmkf_drive=$1
+    _bhmkf_binary=$2
+    shift 2
+    BH_TEMPLATE=makefile
+    bh_parse_args "$@"
+    bh_strict_mode
+    bh_default_jobs
+    bh_default_qmakespec
+    bh_macos_developer_dir
+
+    case "$(uname -s)" in
+        Darwin) BH_ARCH_LIST=${BH_ARCHS:-$(uname -m)} ;;
+        *)      BH_ARCH_LIST=$(uname -m) ;;
+    esac
+    # shellcheck disable=SC2086
+    set -- $BH_ARCH_LIST
+    BH_ARCH_COUNT=$#
+
+    BH_STEPS_TOTAL=$((BH_ARCH_COUNT * 2))            # computing + compiling per arch
+    [ "$BH_ARCH_COUNT" -gt 1 ] && BH_STEPS_TOTAL=$((BH_STEPS_TOTAL + 1))  # lipo
+    [ "${BH_CLEAN:-0}" -gt 0 ] && BH_STEPS_TOTAL=$((BH_STEPS_TOTAL + 1))
+    # The progress mode may hide the build-plan step of each arch's make run
+    # (see bh_progress_plan_steps).
+    bh_progress_plan_steps "$BH_ARCH_COUNT"
+
+    [ -n "${BH_ROOT:-}" ] || bh_error "BH_ROOT not set -- caller must set it to the source root"
+    : "${BUILD_DIR:=$(dirname "$BH_ROOT")/build/$(basename "$BH_ROOT")-$BH_MODE${BH_BUILD_DIR_SUFFIX:-}}"
+    bh_handle_get   # --get=<what>: print a path and exit (no build)
+
+    bh_build_dir_gate
+
+    if [ "${BH_WIPE:-0}" -gt 0 ]; then
+        bh_wipe
+        [ "${BH_NO_BUILD:-0}" -gt 0 ] && return 0
+    fi
+    mkdir -p "$BUILD_DIR"
+    # --clean and --rebuild build everything again, whatever their regexp: a
+    # hand-rolled Makefile is one project, and all it compiled sits in the
+    # build folder, which has no Makefile of qmake's for bh_clean to run.
+    if [ "${BH_CLEAN:-0}" -gt 0 ] || [ -n "${BH_REBUILD:-}" ]; then
+        echo "Removing what $BUILD_DIR holds, except its logs."
+        find -H "$BUILD_DIR" -mindepth 1 -maxdepth 1 ! -name logs -exec rm -rf {} +
+    fi
+    bh_logs_init "$BUILD_DIR/logs"
+    [ "${BH_NO_BUILD:-0}" -gt 0 ] && return 0
+
+    if [ "$BH_ARCH_COUNT" -le 1 ]; then
+        BH_CURRENT_ARCH=$BH_ARCH_LIST
+        BH_ARCH_BUILD_DIR=$BUILD_DIR
+        cd "$BH_ARCH_BUILD_DIR"
+        "$_bhmkf_drive"
+    else
+        _bhmkf_parts=
+        for _bhmkf_a in $BH_ARCH_LIST; do
+            BH_CURRENT_ARCH=$_bhmkf_a
+            BH_ARCH_BUILD_DIR=$BUILD_DIR/$_bhmkf_a
+            mkdir -p "$BH_ARCH_BUILD_DIR"
+            cd "$BH_ARCH_BUILD_DIR"
+            "$_bhmkf_drive"
+            # Copy this arch's binary aside before the next arch
+            # overwrites it at the makefile's hard-coded output path.
+            _bhmkf_part=$BUILD_DIR/parts/$_bhmkf_a/$(basename "$_bhmkf_binary")
+            mkdir -p "$(dirname "$_bhmkf_part")"
+            cp "$_bhmkf_binary" "$_bhmkf_part"
+            _bhmkf_parts="$_bhmkf_parts $_bhmkf_part"
+        done
+        # shellcheck disable=SC2086  # intentional word-split of part paths.
+        bh_run --whole lipo lipo -create $_bhmkf_parts -output "$_bhmkf_binary"
+    fi
+}
+
+
+# MARK: Libraries.
+
+# Usage: bh_tools_dir
+#
+# Prints the folder that holds this file, whose `shell-libs` folder holds the
+# libraries below: `BH_TOOLS_DIR` when a caller preset it, else the folder of
+# this file that bash names in `BASH_SOURCE`, else the `tools` folder of
+# `XD_DIR` or of `BH_ROOT`, else the folder of the running script, or its
+# `tools` folder; the first that holds `shell-libs` wins. Fails when none does.
+bh_tools_dir() {
+    for _btd_dir in "${BH_TOOLS_DIR:-}" "${BASH_SOURCE:+${BASH_SOURCE%[/\\]*}}" \
+        "${XD_DIR:+$XD_DIR/tools}" "${BH_ROOT:+$BH_ROOT/tools}" \
+        "$(dirname "$0")" "$(dirname "$0")/tools"
+    do
+        if [ -n "$_btd_dir" ] && [ -d "$_btd_dir/shell-libs" ]; then
+            echo "$_btd_dir"
+            return 0
+        fi
+    done
+    bh_error "build-handler.sh: no folder holds its shell-libs; set BH_TOOLS_DIR to its own folder."
+}
+
+# Loads build-handler's own shell dependencies.
+BH_TOOLS_DIR=$(bh_tools_dir)
+. "$BH_TOOLS_DIR/shell-libs/build-handler-progress.sh"
+. "$BH_TOOLS_DIR/shell-libs/build-handler-debug.sh"
+. "$BH_TOOLS_DIR/shell-libs/bh-filtering.sh"
+case "$(uname -s)" in
+    MINGW*|MSYS*|CYGWIN*)
+        . "$BH_TOOLS_DIR/shell-libs/build-handler-win.sh"
+        ;;
+esac
