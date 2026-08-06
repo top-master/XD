@@ -126,6 +126,12 @@ public:
 
     QByteArray sessionTicket() const;
     void setSessionTicket(const QByteArray &sessionTicket);
+
+    QByteArray preSharedKeyIdentityHint() const;
+    void setPreSharedKeyIdentityHint(const QByteArray &hint);
+
+    QByteArray sessionTicketKey() const;
+    void setSessionTicketKey(const QByteArray &key);
     int sessionTicketLifeTimeHint() const;
 
     // EC settings
@@ -154,6 +160,7 @@ public:
 
     static const char NextProtocolSpdy3_0[];
     static const char NextProtocolHttp1_1[];
+    static const char NextProtocolHttp2[];
 
 private:
     friend class QSslSocket;

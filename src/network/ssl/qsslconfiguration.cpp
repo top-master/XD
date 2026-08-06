@@ -49,6 +49,7 @@ const QSsl::SslOptions QSslConfigurationPrivate::defaultSslOptions = QSsl::SslOp
 
 const char QSslConfiguration::NextProtocolSpdy3_0[] = "spdy/3";
 const char QSslConfiguration::NextProtocolHttp1_1[] = "http/1.1";
+const char QSslConfiguration::NextProtocolHttp2[] = "h2";
 
 /*!
     \class QSslConfiguration
@@ -710,6 +711,49 @@ QByteArray QSslConfiguration::sessionTicket() const
 void QSslConfiguration::setSessionTicket(const QByteArray &sessionTicket)
 {
     d->sslSession = sessionTicket;
+}
+
+/*!
+  Returns the identity hint this configuration advertises to a peer when acting as a
+  PSK server, or an empty QByteArray if none has been set. \sa setPreSharedKeyIdentityHint()
+*/
+QByteArray QSslConfiguration::preSharedKeyIdentityHint() const
+{
+    return d->preSharedKeyIdentityHint;
+}
+
+/*!
+  Sets the identity \a hint a PSK server advertises to the connecting client. It is sent
+  during the TLS handshake and read by the client's preSharedKeyAuthenticationRequired()
+  handler as QSslPreSharedKeyAuthenticator::identityHint(). It has no effect on a client
+  configuration. \sa preSharedKeyIdentityHint()
+*/
+void QSslConfiguration::setPreSharedKeyIdentityHint(const QByteArray &hint)
+{
+    d->preSharedKeyIdentityHint = hint;
+}
+
+/*!
+  Returns the TLS session-ticket encryption key this configuration installs when acting as a
+  server, or an empty QByteArray if none has been set. \sa setSessionTicketKey()
+*/
+QByteArray QSslConfiguration::sessionTicketKey() const
+{
+    return d->sessionTicketKey;
+}
+
+/*!
+  Sets the TLS session-ticket encryption \a key (RFC 5077) a server uses to encrypt and decrypt
+  the session tickets it issues. By default OpenSSL gives every SSL_CTX a fresh random key, so a
+  server that builds a new context per connection cannot resume a ticket minted on another
+  connection; installing one fixed key across a server's sockets makes those tickets resumable
+  (session sharing / persistent-session reuse). The key must be exactly 80 bytes (a 16-byte key
+  name + a 32-byte HMAC key + a 32-byte AES key); it has no effect on a client configuration.
+  \sa sessionTicketKey()
+*/
+void QSslConfiguration::setSessionTicketKey(const QByteArray &key)
+{
+    d->sessionTicketKey = key;
 }
 
 /*!
