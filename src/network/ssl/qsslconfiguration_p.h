@@ -117,6 +117,14 @@ public:
     QByteArray nextNegotiatedProtocol;
     QSslConfiguration::NextProtocolNegotiationStatus nextProtocolNegotiationStatus;
 
+    // The identity hint a PSK server advertises to the client (empty by default).
+    QByteArray preSharedKeyIdentityHint;
+
+    /*! The server's fixed TLS session-ticket key (RFC 5077 STEK): 80 bytes, or empty for OpenSSL's
+        random per-context key (which gives no cross-socket resumption). Consulted in server mode only;
+        the full contract is on QSslConfiguration::setSessionTicketKey(). */
+    QByteArray sessionTicketKey;
+
     // in qsslsocket.cpp:
     static QSslConfiguration defaultConfiguration();
     static void setDefaultConfiguration(const QSslConfiguration &configuration);
