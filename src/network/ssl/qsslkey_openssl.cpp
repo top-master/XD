@@ -78,28 +78,44 @@ void QSslKeyPrivate::clear(bool deep)
 
 bool QSslKeyPrivate::fromEVP_PKEY(EVP_PKEY *pkey)
 {
-    if (pkey->type == EVP_PKEY_RSA) {
+#if OPENSSL_VERSION_NUMBER >= 0x10100000L
+    // EVP_PKEY is opaque in 1.1; EVP_PKEY_base_id() replaces pkey->type.
+    const int keyType = q_EVP_PKEY_base_id(pkey);
+#else
+    const int keyType = pkey->type;
+#endif
+    if (keyType == EVP_PKEY_RSA) {
         isNull = false;
         algorithm = QSsl::Rsa;
         type = QSsl::PrivateKey;
 
+#if OPENSSL_VERSION_NUMBER >= 0x10100000L
+        // RSA is opaque in 1.1; take an owned reference instead of byte-copying
+        // the struct (get1 increments the refcount, freed on clear()).
+        rsa = q_EVP_PKEY_get1_RSA(pkey);
+#else
         rsa = q_RSA_new();
         memcpy(rsa, q_EVP_PKEY_get1_RSA(pkey), sizeof(RSA));
+#endif
 
         return true;
     }
-    else if (pkey->type == EVP_PKEY_DSA) {
+    else if (keyType == EVP_PKEY_DSA) {
         isNull = false;
         algorithm = QSsl::Dsa;
         type = QSsl::PrivateKey;
 
+#if OPENSSL_VERSION_NUMBER >= 0x10100000L
+        dsa = q_EVP_PKEY_get1_DSA(pkey);
+#else
         dsa = q_DSA_new();
         memcpy(dsa, q_EVP_PKEY_get1_DSA(pkey), sizeof(DSA));
+#endif
 
         return true;
     }
 #ifndef OPENSSL_NO_EC
-    else if (pkey->type == EVP_PKEY_EC) {
+    else if (keyType == EVP_PKEY_EC) {
         isNull = false;
         algorithm = QSsl::Ec;
         type = QSsl::PrivateKey;
@@ -172,8 +188,14 @@ int QSslKeyPrivate::length() const
         return -1;
 
     switch (algorithm) {
+#if OPENSSL_VERSION_NUMBER >= 0x10100000L
+        // RSA/DSA are opaque in 1.1; read the modulus/prime via get0 accessors.
+        case QSsl::Rsa: return q_BN_num_bits(q_RSA_get0_n(rsa));
+        case QSsl::Dsa: return q_BN_num_bits(q_DSA_get0_p(dsa));
+#else
         case QSsl::Rsa: return q_BN_num_bits(rsa->n);
         case QSsl::Dsa: return q_BN_num_bits(dsa->p);
+#endif
 #ifndef OPENSSL_NO_EC
         case QSsl::Ec: return q_EC_GROUP_get_degree(q_EC_KEY_get0_group(ec));
 #endif
@@ -267,7 +289,13 @@ Qt::HANDLE QSslKeyPrivate::handle() const
 
 static QByteArray doCrypt(QSslKeyPrivate::Cipher cipher, const QByteArray &data, const QByteArray &key, const QByteArray &iv, int enc)
 {
-    EVP_CIPHER_CTX ctx;
+#if OPENSSL_VERSION_NUMBER >= 0x10100000L
+    // EVP_CIPHER_CTX is opaque in 1.1; it must be heap-allocated.
+    EVP_CIPHER_CTX *ctx = q_EVP_CIPHER_CTX_new();
+#else
+    EVP_CIPHER_CTX ctxObject;
+    EVP_CIPHER_CTX *ctx = &ctxObject;
+#endif
     const EVP_CIPHER* type = 0;
     int i = 0, len = 0;
 
@@ -285,21 +313,27 @@ static QByteArray doCrypt(QSslKeyPrivate::Cipher cipher, const QByteArray &data,
 
     QByteArray output;
     output.resize(data.size() + EVP_MAX_BLOCK_LENGTH);
-    q_EVP_CIPHER_CTX_init(&ctx);
-    q_EVP_CipherInit(&ctx, type, NULL, NULL, enc);
-    q_EVP_CIPHER_CTX_set_key_length(&ctx, key.size());
+#if OPENSSL_VERSION_NUMBER < 0x10100000L
+    q_EVP_CIPHER_CTX_init(ctx);
+#endif
+    q_EVP_CipherInit(ctx, type, NULL, NULL, enc);
+    q_EVP_CIPHER_CTX_set_key_length(ctx, key.size());
     if (cipher == QSslKeyPrivate::Rc2Cbc)
-        q_EVP_CIPHER_CTX_ctrl(&ctx, EVP_CTRL_SET_RC2_KEY_BITS, 8 * key.size(), NULL);
-    q_EVP_CipherInit(&ctx, NULL,
+        q_EVP_CIPHER_CTX_ctrl(ctx, EVP_CTRL_SET_RC2_KEY_BITS, 8 * key.size(), NULL);
+    q_EVP_CipherInit(ctx, NULL,
         reinterpret_cast<const unsigned char *>(key.constData()),
         reinterpret_cast<const unsigned char *>(iv.constData()), enc);
-    q_EVP_CipherUpdate(&ctx,
+    q_EVP_CipherUpdate(ctx,
         reinterpret_cast<unsigned char *>(output.data()), &len,
         reinterpret_cast<const unsigned char *>(data.constData()), data.size());
-    q_EVP_CipherFinal(&ctx,
+    q_EVP_CipherFinal(ctx,
         reinterpret_cast<unsigned char *>(output.data()) + len, &i);
     len += i;
-    q_EVP_CIPHER_CTX_cleanup(&ctx);
+#if OPENSSL_VERSION_NUMBER >= 0x10100000L
+    q_EVP_CIPHER_CTX_free(ctx);
+#else
+    q_EVP_CIPHER_CTX_cleanup(ctx);
+#endif
 
     return output.left(len);
 }
