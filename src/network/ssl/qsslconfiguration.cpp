@@ -49,6 +49,7 @@ const QSsl::SslOptions QSslConfigurationPrivate::defaultSslOptions = QSsl::SslOp
 
 const char QSslConfiguration::NextProtocolSpdy3_0[] = "spdy/3";
 const char QSslConfiguration::NextProtocolHttp1_1[] = "http/1.1";
+const char QSslConfiguration::NextProtocolHttp2[] = "h2";
 
 /*!
     \class QSslConfiguration
@@ -710,6 +711,26 @@ QByteArray QSslConfiguration::sessionTicket() const
 void QSslConfiguration::setSessionTicket(const QByteArray &sessionTicket)
 {
     d->sslSession = sessionTicket;
+}
+
+/*!
+  Returns the identity hint this configuration advertises to a peer when acting as a
+  PSK server, or an empty QByteArray if none has been set. \sa setPreSharedKeyIdentityHint()
+*/
+QByteArray QSslConfiguration::preSharedKeyIdentityHint() const
+{
+    return d->preSharedKeyIdentityHint;
+}
+
+/*!
+  Sets the identity \a hint a PSK server advertises to the connecting client. It is sent
+  during the TLS handshake and read by the client's preSharedKeyAuthenticationRequired()
+  handler as QSslPreSharedKeyAuthenticator::identityHint(). It has no effect on a client
+  configuration. \sa preSharedKeyIdentityHint()
+*/
+void QSslConfiguration::setPreSharedKeyIdentityHint(const QByteArray &hint)
+{
+    d->preSharedKeyIdentityHint = hint;
 }
 
 /*!

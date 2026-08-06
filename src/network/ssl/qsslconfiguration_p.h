@@ -117,6 +117,9 @@ public:
     QByteArray nextNegotiatedProtocol;
     QSslConfiguration::NextProtocolNegotiationStatus nextProtocolNegotiationStatus;
 
+    // The identity hint a PSK server advertises to the client (empty by default).
+    QByteArray preSharedKeyIdentityHint;
+
     // in qsslsocket.cpp:
     static QSslConfiguration defaultConfiguration();
     static void setDefaultConfiguration(const QSslConfiguration &configuration);

@@ -18,6 +18,7 @@ defineTest(has_feature) { return(false) }
 defineTest(copy_file) { }
 defineTest(copy_dir) { }
 defineTest(chop) { }
+defineTest(once) { }
 
 defineReplace(props) { }
 defineReplace(chop) { }

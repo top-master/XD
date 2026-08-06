@@ -363,7 +363,7 @@ QSslSocket::~QSslSocket()
 #ifdef QSSLSOCKET_DEBUG
     qCDebug(lcSsl) << "QSslSocket::~QSslSocket(), this =" << (void *)this;
 #endif
-    delete d->plainSocket;
+    deleteChild(d->plainSocket);
     d->plainSocket = 0;
 }
 
@@ -926,6 +926,7 @@ void QSslSocket::setSslConfiguration(const QSslConfiguration &configuration)
     d->configuration.nextAllowedProtocols = configuration.allowedNextProtocols();
     d->configuration.nextNegotiatedProtocol = configuration.nextNegotiatedProtocol();
     d->configuration.nextProtocolNegotiationStatus = configuration.nextProtocolNegotiationStatus();
+    d->configuration.preSharedKeyIdentityHint = configuration.d->preSharedKeyIdentityHint;
 
     // if the CA certificates were set explicitly (either via
     // QSslConfiguration::setCaCertificates() or QSslSocket::setCaCertificates(),
@@ -2223,6 +2224,7 @@ void QSslConfigurationPrivate::deepCopyDefaultConfiguration(QSslConfigurationPri
     ptr->peerVerifyDepth = global->peerVerifyDepth;
     ptr->sslOptions = global->sslOptions;
     ptr->ellipticCurves = global->ellipticCurves;
+    ptr->preSharedKeyIdentityHint = global->preSharedKeyIdentityHint;
 }
 
 /*!
