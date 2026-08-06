@@ -166,6 +166,18 @@ init_context:
         unsupportedProtocol = true;
 #endif
         break;
+    case QSsl::TlsV1_3:
+    case QSsl::TlsV1_3OrLater:
+#if OPENSSL_VERSION_NUMBER >= 0x10101000L
+        // TLS 1.3 requires OpenSSL 1.1.1. The exact version (1.3 only vs 1.3+)
+        // is pinned via SSL options (SSL_OP_NO_TLSv1_2 and below).
+        sslContext->ctx = q_SSL_CTX_new(client ? q_SSLv23_client_method() : q_SSLv23_server_method());
+#else
+        // TLS 1.3 not supported by the linked OpenSSL, but chosen deliberately -> error
+        sslContext->ctx = 0;
+        unsupportedProtocol = true;
+#endif
+        break;
     }
 
     if (!sslContext->ctx) {
@@ -173,8 +185,13 @@ init_context:
         // by re-initializing the library.
         if (!reinitialized) {
             reinitialized = true;
+#if OPENSSL_VERSION_NUMBER >= 0x10100000L
+            if (q_SSL_library_init(0, Q_NULLPTR) == 1)
+                goto init_context;
+#else
             if (q_SSL_library_init() == 1)
                 goto init_context;
+#endif
         }
 
         sslContext->errorStr = QSslSocket::tr("Error creating SSL context (%1)").arg(
@@ -185,8 +202,41 @@ init_context:
     }
 
     // Enable bug workarounds.
-    long options = QSslSocketBackendPrivate::setupOpenSslOptions(configuration.protocol(), configuration.d->sslOptions);
+    long options = QSslSocketBackendPrivate::setupOpenSslOptions(configuration.protocol(), configuration.d->sslOptions, !client);
     q_SSL_CTX_set_options(sslContext->ctx, options);
+
+    // Server session-ticket resumption across sockets. OpenSSL gives every SSL_CTX a random ticket
+    // key, so a session ticket minted on one connection cannot be resumed on the next (each server
+    // socket builds its own context). If the configuration carries a fixed 80-byte key (RFC 5077),
+    // install it so every server context encrypts/decrypts tickets identically -- the client's
+    // existing session-sharing/persistent-session paths then resume across sockets. Server-only, and
+    // a no-op unless a well-formed key was set (tickets themselves stay enabled unless the caller
+    // opted out via QSsl::SslOptionDisableSessionTickets, i.e. SSL_OP_NO_TICKET).
+    // The key is 80 bytes = 16-byte key-name + 32-byte HMAC key + 32-byte AES key, the exact length
+    // OpenSSL 1.1.1's SSL_CTRL_SET_TLSEXT_TICKET_KEYS handler demands -- it rejects any other length
+    // (returning 0 and queueing SSL_R_INVALID_TICKET_KEYS_LENGTH), so we pass 80 and CHECK the return
+    // before pinning the lifetime, rather than silently leaving the random key in place.
+#ifdef SSL_CTRL_SET_TLSEXT_TICKET_KEYS
+    if (!client && configuration.d->sessionTicketKey.size() == 80
+        && q_SSL_CTX_ctrl(sslContext->ctx, SSL_CTRL_SET_TLSEXT_TICKET_KEYS, 80,
+                          const_cast<char *>(configuration.d->sessionTicketKey.constData())) > 0) {
+        // Pin a bounded, deterministic ticket lifetime: OpenSSL's default 7200 s would be the
+        // ticket_lifetime_hint the client reads back, whereas a controlled fixed-key resumption
+        // server advertises the short, predictable lifetime RFC-5077 clients expect from a modern
+        // server (300 s). SSL_CTX_set_timeout is a function in OpenSSL 1.1 (no SSL_CTRL_SET_TIMEOUT
+        // macro), so call the resolved wrapper directly. Only reached once the fixed key installed.
+        q_SSL_CTX_set_timeout(sslContext->ctx, 300);
+        // Install a fixed session-id context. A server whose peerVerifyMode is not VerifyNone gets
+        // SSL_VERIFY_PEER (above), and OpenSSL 1.1.1 then REFUSES to resume any session on a context
+        // whose session-id context is unset (length 0) -- ssl_get_prev_session() raises
+        // SSL_R_SESSION_ID_CONTEXT_UNINITIALIZED. It also requires the resuming context's id to match
+        // the one baked into the ticket. Both are satisfied by stamping the SAME constant on every
+        // server context that pins the fixed key, so a ticket minted on one connection resumes on the
+        // next. (SSL_CTX_set_session_id_context is a real function, not an SSL_CTRL_* macro.)
+        static const unsigned char sessionIdContext[] = "qt-xd-ticket-resume";
+        q_SSL_CTX_set_session_id_context(sslContext->ctx, sessionIdContext, sizeof(sessionIdContext) - 1);
+    }
+#endif
 
 #if OPENSSL_VERSION_NUMBER >= 0x10000000L
     // Tell OpenSSL to release memory early
@@ -326,7 +376,11 @@ init_context:
 #ifndef OPENSSL_NO_EC
 #if OPENSSL_VERSION_NUMBER >= 0x10002000L
     if (q_SSLeay() >= 0x10002000L) {
+#if OPENSSL_VERSION_NUMBER >= 0x10100000L
+        // ECDH is auto-enabled by default in 1.1; SSL_CTRL_SET_ECDH_AUTO was removed.
+#else
         q_SSL_CTX_ctrl(sslContext->ctx, SSL_CTRL_SET_ECDH_AUTO, 1, NULL);
+#endif
     } else
 #endif
     {
@@ -399,6 +453,39 @@ static int next_proto_cb(SSL *, unsigned char **out, unsigned char *outlen,
     return SSL_TLSEXT_ERR_OK;
 }
 
+/*!
+    Server-side NPN: advertises the configured protocol list so a client can pick
+    one (e.g. spdy/3.0). OpenSSL calls this only during a server handshake.
+*/
+static int next_proto_advertised_cb(SSL *, const unsigned char **out,
+                                    unsigned int *outlen, void *arg)
+{
+    QSslContext::NPNContext *ctx = reinterpret_cast<QSslContext::NPNContext *>(arg);
+    *out = ctx->data;
+    *outlen = ctx->len;
+    return SSL_TLSEXT_ERR_OK;
+}
+
+/*!
+    Server-side ALPN (RFC 7301): picks, in our preference, the first of our protocols
+    the client also offered. HTTP/2 (h2) negotiates over ALPN, not NPN. OpenSSL calls
+    this only during a server handshake.
+*/
+static int alpn_select_cb(SSL *, const unsigned char **out, unsigned char *outlen,
+                          const unsigned char *in, unsigned int inlen, void *arg)
+{
+    QSslContext::NPNContext *ctx = reinterpret_cast<QSslContext::NPNContext *>(arg);
+    // q_SSL_select_next_proto picks the first of the 2nd list (ours) present in the
+    // 1st (the peer's offer). ALPN's callback hands us a const out; cast it away.
+    if (q_SSL_select_next_proto(const_cast<unsigned char **>(out), outlen,
+                                in, inlen, ctx->data, ctx->len) == OPENSSL_NPN_NEGOTIATED) {
+        ctx->status = QSslConfiguration::NextProtocolNegotiationNegotiated;
+        return SSL_TLSEXT_ERR_OK;
+    }
+    ctx->status = QSslConfiguration::NextProtocolNegotiationUnsupported;
+    return SSL_TLSEXT_ERR_NOACK;
+}
+
 QSslContext::NPNContext QSslContext::npnContext() const
 {
     return m_npnContext;
@@ -441,7 +528,15 @@ SSL* QSslContext::createSsl()
         m_npnContext.data = reinterpret_cast<unsigned char *>(m_supportedNPNVersions.data());
         m_npnContext.len = m_supportedNPNVersions.count();
         m_npnContext.status = QSslConfiguration::NextProtocolNegotiationNone;
+        // Client role: pick from the peer's advertised list.
         q_SSL_CTX_set_next_proto_select_cb(ctx, next_proto_cb, &m_npnContext);
+        // Server role: advertise our list (OpenSSL invokes only the callback that
+        // matches the handshake role, so registering both is safe).
+        q_SSL_CTX_set_next_protos_advertised_cb(ctx, next_proto_advertised_cb, &m_npnContext);
+        // ALPN uses the same wire format as NPN. Offer our list as a client, and
+        // register a selector for the server role. HTTP/2 requires ALPN.
+        q_SSL_set_alpn_protos(ssl, m_npnContext.data, m_npnContext.len);
+        q_SSL_CTX_set_alpn_select_cb(ctx, alpn_select_cb, &m_npnContext);
     }
 #endif // OPENSSL_VERSION_NUMBER >= 0x1000100fL ...
 
@@ -470,7 +565,11 @@ bool QSslContext::cacheSession(SSL* ssl)
             unsigned char *data = reinterpret_cast<unsigned char *>(m_sessionASN1.data());
             if (!q_i2d_SSL_SESSION(session, &data))
                 qCWarning(lcSsl, "could not store persistent version of SSL session");
+#if OPENSSL_VERSION_NUMBER >= 0x10100000L
+            m_sessionTicketLifeTimeHint = q_SSL_SESSION_get_ticket_lifetime_hint(session);
+#else
             m_sessionTicketLifeTimeHint = session->tlsext_tick_lifetime_hint;
+#endif
         }
     }
 

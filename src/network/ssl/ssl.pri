@@ -1,7 +1,6 @@
 # OpenSSL support; compile in QSslSocket.
 contains(QT_CONFIG, ssl) | contains(QT_CONFIG, openssl) | contains(QT_CONFIG, openssl-linked) {
-    load(extras)
-    MODULE_PRIVATE_INCLUDES += $$extras/lib/openssl-1.0.1c/include
+    MODULE_PRIVATE_INCLUDES += $$clean_path($$PWD/../../3rdparty/openssl-1.1.1w/include)
 
     HEADERS += ssl/qasn1element_p.h \
                ssl/qssl.h \
@@ -66,6 +65,21 @@ contains(QT_CONFIG, openssl) | contains(QT_CONFIG, openssl-linked) {
                ssl/qsslsocket_openssl_symbols.cpp
 
 android:!android-no-sdk: SOURCES += ssl/qsslsocket_openssl_android.cpp
+
+    # Fil-C: the memory-safe QtNetwork dlopens libssl.*/libcrypto.* at runtime
+    # and searches the Qt lib dir (a loaded-library path via dl_iterate_phdr).
+    # The bundled OpenSSL builds under lib/openssl with the Windows-era
+    # eay32/ssleay32 names, so it is invisible there -- and a native system
+    # OpenSSL cannot be called from Fil-C. Drop discoverable libssl/libcrypto
+    # symlinks beside the Qt libs (this module's $(DESTDIR)) so the tests load
+    # THIS Fil-C-built OpenSSL with no manual LD_LIBRARY_PATH. libeay32.so.1 is
+    # the SONAME the ssl lib records; the ssleay32 name is deliberately not
+    # symlinked so it cannot shadow libssl.* in Qt's "libssl.*" glob.
+    memory_safe:unix:!darwin {
+        QMAKE_POST_LINK += cd $(DESTDIR) && \
+            ln -sf openssl/release/libeay32.so libcrypto.so.1.1 && ln -sf libcrypto.so.1.1 libcrypto.so.1 && ln -sf libcrypto.so.1.1 libcrypto.so && ln -sf libcrypto.so.1.1 libeay32.so.1 && \
+            ln -sf openssl/release/libssleay32.so libssl.so.1.1 && ln -sf libssl.so.1.1 libssl.so.1 && ln -sf libssl.so.1.1 libssl.so || true$$escape_expand(\\n\\t)
+    }
 
     # Add optional SSL libs
     # Static linking of OpenSSL with msvc:

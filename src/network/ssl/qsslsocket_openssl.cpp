@@ -122,14 +122,25 @@ public:
           locksLocker(QMutex::Recursive)
     {
         QMutexLocker locker(&locksLocker);
+        // OpenSSL 1.1 locks itself and exposes no CRYPTO_num_locks(); the array
+        // below is only consulted by the pre-1.1 locking_function callback.
+#if OPENSSL_VERSION_NUMBER >= 0x10100000L
+        int numLocks = 1;
+#else
         int numLocks = q_CRYPTO_num_locks();
+#endif
         locks = new QMutex *[numLocks];
         memset(locks, 0, numLocks * sizeof(QMutex *));
     }
     inline ~QOpenSslLocks()
     {
         QMutexLocker locker(&locksLocker);
-        for (int i = 0; i < q_CRYPTO_num_locks(); ++i)
+#if OPENSSL_VERSION_NUMBER >= 0x10100000L
+        const int numLocks = 1;
+#else
+        const int numLocks = q_CRYPTO_num_locks();
+#endif
+        for (int i = 0; i < numLocks; ++i)
             delete locks[i];
         delete [] locks;
 
@@ -175,6 +186,11 @@ QString QSslSocketBackendPrivate::getErrorsFromOpenSsl()
 }
 
 extern "C" {
+#if OPENSSL_VERSION_NUMBER < 0x10100000L
+/*!
+    OpenSSL 1.1 installs no application locking/id callbacks (it locks itself),
+    so these are only needed for the pre-1.1 CRYPTO_set_*_callback() setup.
+*/
 static void locking_function(int mode, int lockNumber, const char *, int)
 {
     QMutex *mutex = openssl_locks()->lock(lockNumber);
@@ -189,6 +205,7 @@ static unsigned long id_function()
 {
     return (quintptr)QThread::currentThreadId();
 }
+#endif // OPENSSL_VERSION_NUMBER < 0x10100000L
 
 #if OPENSSL_VERSION_NUMBER >= 0x10001000L && !defined(OPENSSL_NO_PSK)
 static unsigned int q_ssl_psk_client_callback(SSL *ssl,
@@ -199,6 +216,15 @@ static unsigned int q_ssl_psk_client_callback(SSL *ssl,
     QSslSocketBackendPrivate *d = reinterpret_cast<QSslSocketBackendPrivate *>(q_SSL_get_ex_data(ssl, QSslSocketBackendPrivate::s_indexForSSLExtraData));
     Q_ASSERT(d);
     return d->tlsPskClientCallback(hint, identity, max_identity_len, psk, max_psk_len);
+}
+
+static unsigned int q_ssl_psk_server_callback(SSL *ssl,
+                                              const char *identity,
+                                              unsigned char *psk, unsigned int max_psk_len)
+{
+    QSslSocketBackendPrivate *d = reinterpret_cast<QSslSocketBackendPrivate *>(q_SSL_get_ex_data(ssl, QSslSocketBackendPrivate::s_indexForSSLExtraData));
+    Q_ASSERT(d);
+    return d->tlsPskServerCallback(identity, psk, max_psk_len);
 }
 #endif
 } // extern "C"
@@ -299,14 +325,23 @@ int q_X509Callback(int ok, X509_STORE_CTX *ctx)
     return 1;
 }
 
-long QSslSocketBackendPrivate::setupOpenSslOptions(QSsl::SslProtocol protocol, QSsl::SslOptions sslOptions)
+long QSslSocketBackendPrivate::setupOpenSslOptions(QSsl::SslProtocol protocol, QSsl::SslOptions sslOptions, bool isServer)
 {
     long options;
     if (protocol == QSsl::TlsV1SslV3)
         options = SSL_OP_ALL|SSL_OP_NO_SSLv2;
-    else if (protocol == QSsl::SecureProtocols)
-        options = SSL_OP_ALL|SSL_OP_NO_SSLv2|SSL_OP_NO_SSLv3;
-    else if (protocol == QSsl::TlsV1_0OrLater)
+    else if (protocol == QSsl::SecureProtocols) {
+        // XD security policy: the DEFAULT ("secure") protocol set is modern TLS only.
+        // SSLv2/SSLv3 are insecure and gone; TLS 1.0/1.1 are obsolete and dropped too.
+        // TLS 1.3 is the default. As a SERVER (we are the target being connected to)
+        // TLS 1.2 is ALSO forbidden -- an XD server accepts only TLS 1.3. As a client
+        // (connecting out to a destination) TLS 1.2 stays as a fallback for a peer that
+        // does not yet speak 1.3. Explicit QSsl::TlsV1_2/etc. selections are honoured
+        // elsewhere; this governs only the default SecureProtocols set.
+        options = SSL_OP_ALL|SSL_OP_NO_SSLv2|SSL_OP_NO_SSLv3|SSL_OP_NO_TLSv1|SSL_OP_NO_TLSv1_1;
+        if (isServer)
+            options |= SSL_OP_NO_TLSv1_2;
+    } else if (protocol == QSsl::TlsV1_0OrLater)
         options = SSL_OP_ALL|SSL_OP_NO_SSLv2|SSL_OP_NO_SSLv3;
 #if OPENSSL_VERSION_NUMBER >= 0x10001000L
     // Choosing Tlsv1_1OrLater or TlsV1_2OrLater on OpenSSL < 1.0.1
@@ -316,6 +351,12 @@ long QSslSocketBackendPrivate::setupOpenSslOptions(QSsl::SslProtocol protocol, Q
         options = SSL_OP_ALL|SSL_OP_NO_SSLv2|SSL_OP_NO_SSLv3|SSL_OP_NO_TLSv1;
     else if (protocol == QSsl::TlsV1_2OrLater)
         options = SSL_OP_ALL|SSL_OP_NO_SSLv2|SSL_OP_NO_SSLv3|SSL_OP_NO_TLSv1|SSL_OP_NO_TLSv1_1;
+#endif
+#if OPENSSL_VERSION_NUMBER >= 0x10101000L
+    // TlsV1_3 (exact) and TlsV1_3OrLater are identical while 1.3 is the newest
+    // protocol OpenSSL offers: disable everything up to and including TLS 1.2.
+    else if (protocol == QSsl::TlsV1_3 || protocol == QSsl::TlsV1_3OrLater)
+        options = SSL_OP_ALL|SSL_OP_NO_SSLv2|SSL_OP_NO_SSLv3|SSL_OP_NO_TLSv1|SSL_OP_NO_TLSv1_1|SSL_OP_NO_TLSv1_2;
 #endif
     else
         options = SSL_OP_ALL;
@@ -425,9 +466,15 @@ bool QSslSocketBackendPrivate::initSslContext()
 #endif
 
 #if OPENSSL_VERSION_NUMBER >= 0x10001000L && !defined(OPENSSL_NO_PSK)
-    // Set the client callback for PSK
-    if (q_SSLeay() >= 0x10001000L && mode == QSslSocket::SslClientMode)
+    // Set the PSK callback for whichever side we are. The server additionally advertises its
+    // identity hint (if configured) so the peer's providePsk() can see it.
+    if (q_SSLeay() >= 0x10001000L && mode == QSslSocket::SslClientMode) {
         q_SSL_set_psk_client_callback(ssl, &q_ssl_psk_client_callback);
+    } else if (q_SSLeay() >= 0x10001000L && mode == QSslSocket::SslServerMode) {
+        q_SSL_set_psk_server_callback(ssl, &q_ssl_psk_server_callback);
+        if (!configuration.preSharedKeyIdentityHint.isEmpty())
+            q_SSL_use_psk_identity_hint(ssl, configuration.preSharedKeyIdentityHint.constData());
+    }
 #endif
 
     return true;
@@ -447,9 +494,13 @@ void QSslSocketBackendPrivate::destroySslContext()
 */
 void QSslSocketPrivate::deinitialize()
 {
+#if OPENSSL_VERSION_NUMBER < 0x10100000L
+    // OpenSSL 1.1 manages its own threading and error-string lifetime; the
+    // per-application locking callbacks and ERR_free_strings() are gone.
     q_CRYPTO_set_id_callback(0);
     q_CRYPTO_set_locking_callback(0);
     q_ERR_free_strings();
+#endif
 }
 
 /*!
@@ -476,14 +527,26 @@ bool QSslSocketPrivate::ensureLibraryLoaded()
         s_libraryLoaded = true;
 
         // Initialize OpenSSL.
+#if OPENSSL_VERSION_NUMBER >= 0x10100000L
+        // OpenSSL 1.1 replaced the explicit init dance (locking callbacks,
+        // SSL_library_init, SSL_load_error_strings, OpenSSL_add_all_algorithms)
+        // with a single call that also loads strings and algorithms on demand.
+        if (q_SSL_library_init(0, Q_NULLPTR) != 1)
+            return false;
+#else
         q_CRYPTO_set_id_callback(id_function);
         q_CRYPTO_set_locking_callback(locking_function);
         if (q_SSL_library_init() != 1)
             return false;
         q_SSL_load_error_strings();
         q_OpenSSL_add_all_algorithms();
+#endif
 
-#if OPENSSL_VERSION_NUMBER >= 0x10001000L
+#if OPENSSL_VERSION_NUMBER >= 0x10100000L
+        // SSL_get_ex_new_index is a macro over CRYPTO_get_ex_new_index in 1.1.
+        QSslSocketBackendPrivate::s_indexForSSLExtraData =
+                q_SSL_get_ex_new_index(CRYPTO_EX_INDEX_SSL, 0L, NULL, NULL, NULL, NULL);
+#elif OPENSSL_VERSION_NUMBER >= 0x10001000L
         if (q_SSLeay() >= 0x10001000L)
             QSslSocketBackendPrivate::s_indexForSSLExtraData = q_SSL_get_ex_new_index(0L, NULL, NULL, NULL, NULL);
 #endif
@@ -1132,6 +1195,27 @@ bool QSslSocketBackendPrivate::startHandshake()
             qCDebug(lcSsl) << "QSslSocketBackendPrivate::startHandshake: error!" << errorString;
 #endif
             setErrorAndEmit(QAbstractSocket::SslHandshakeFailedError, errorString);
+            // A failed handshake leaves a fatal TLS alert queued in the write BIO (e.g. a PSK
+            // server that rejects the identity/key, or any peer that declines the handshake).
+            // abort() would close the socket with an RST and discard that alert, so the far end
+            // sees only a bare connection close (RemoteHostClosedError) instead of a handshake
+            // failure. Drain the alert to the socket and flush it out first, so the peer learns
+            // the handshake was refused (SslHandshakeFailedError). This matches what a real
+            // server does and is what tst_QSslSocket::simplePskConnect's rejection rows expect.
+            if (plainSocket && plainSocket->isValid()
+                    && plainSocket->state() == QAbstractSocket::ConnectedState) {
+                QVarLengthArray<char, 4096> alert;
+                int pendingBytes;
+                while ((pendingBytes = q_BIO_pending(writeBio)) > 0) {
+                    alert.resize(pendingBytes);
+                    const int alertBytes = q_BIO_read(writeBio, alert.data(), pendingBytes);
+                    if (alertBytes <= 0)
+                        break;
+                    if (plainSocket->write(alert.constData(), alertBytes) < 0)
+                        break;
+                }
+                plainSocket->flush();
+            }
             q->abort();
         }
         return false;
@@ -1321,6 +1405,33 @@ unsigned int QSslSocketBackendPrivate::tlsPskClientCallback(const char *hint,
     ::memcpy(identity, authenticator.identity().constData(), identityLength);
     identity[identityLength] = 0;
 
+    const int pskLength = qMin(authenticator.preSharedKey().length(), authenticator.maximumPreSharedKeyLength());
+    ::memcpy(psk, authenticator.preSharedKey().constData(), pskLength);
+    return pskLength;
+}
+
+unsigned int QSslSocketBackendPrivate::tlsPskServerCallback(const char *identity,
+                                                            unsigned char *psk, unsigned int max_psk_len)
+{
+    QSslPreSharedKeyAuthenticator authenticator;
+
+    // Fill in the read-only fields the server side sees: the identity hint we advertised and
+    // the identity the client selected.
+    authenticator.d->identityHint = configuration.preSharedKeyIdentityHint;
+    if (identity)
+        authenticator.d->identity = QByteArray::fromRawData(identity, int(::strlen(identity)));
+    authenticator.d->maximumIdentityLength = 0; // the server does not choose the identity
+    authenticator.d->maximumPreSharedKeyLength = int(max_psk_len);
+
+    // Let the server provide the key for this identity...
+    Q_Q(QSslSocket);
+    emit q->preSharedKeyAuthenticationRequired(&authenticator);
+
+    // No PSK set? Return now to make the handshake fail
+    if (authenticator.preSharedKey().isEmpty())
+        return 0;
+
+    // Copy the key back into OpenSSL
     const int pskLength = qMin(authenticator.preSharedKey().length(), authenticator.maximumPreSharedKeyLength());
     ::memcpy(psk, authenticator.preSharedKey().constData(), pskLength);
     return pskLength;
@@ -1555,6 +1666,10 @@ QSsl::SslProtocol QSslSocketBackendPrivate::sessionProtocol() const
         return QSsl::TlsV1_1;
     case 0x303:
         return QSsl::TlsV1_2;
+#if OPENSSL_VERSION_NUMBER >= 0x10101000L
+    case 0x304: // TLS1_3_VERSION
+        return QSsl::TlsV1_3;
+#endif
     }
 
     return QSsl::UnknownProtocol;
@@ -1567,7 +1682,11 @@ void QSslSocketBackendPrivate::continueHandshake()
     if (readBufferMaxSize)
         plainSocket->setReadBufferSize(readBufferMaxSize);
 
+#if OPENSSL_VERSION_NUMBER >= 0x10100000L
+    if (q_SSL_session_reused(ssl))
+#else
     if (q_SSL_ctrl((ssl), SSL_CTRL_GET_SESSION_REUSED, 0, NULL))
+#endif
         configuration.peerSessionShared = true;
 
 #ifdef QT_DECRYPT_SSL_TRAFFIC
@@ -1620,18 +1739,27 @@ void QSslSocketBackendPrivate::continueHandshake()
 
 #if OPENSSL_VERSION_NUMBER >= 0x1000100fL && !defined(OPENSSL_NO_NEXTPROTONEG)
 
-    configuration.nextProtocolNegotiationStatus = sslContextPointer->npnContext().status;
-    if (sslContextPointer->npnContext().status == QSslConfiguration::NextProtocolNegotiationUnsupported) {
-        // we could not agree -> be conservative and use HTTP/1.1
-        configuration.nextNegotiatedProtocol = QByteArrayLiteral("http/1.1");
+    // Prefer ALPN (RFC 7301, the IETF-standard mechanism HTTP/2 requires) over the
+    // older NPN. If the peer selected a protocol via ALPN, use it; otherwise fall
+    // back to the NPN outcome recorded by the context callback (e.g. for SPDY).
+    const unsigned char *proto = 0;
+    unsigned int proto_len = 0;
+    q_SSL_get0_alpn_selected(ssl, &proto, &proto_len);
+    if (proto_len) {
+        configuration.nextNegotiatedProtocol = QByteArray(reinterpret_cast<const char *>(proto), proto_len);
+        configuration.nextProtocolNegotiationStatus = QSslConfiguration::NextProtocolNegotiationNegotiated;
     } else {
-        const unsigned char *proto = 0;
-        unsigned int proto_len = 0;
-        q_SSL_get0_next_proto_negotiated(ssl, &proto, &proto_len);
-        if (proto_len)
-            configuration.nextNegotiatedProtocol = QByteArray(reinterpret_cast<const char *>(proto), proto_len);
-        else
-            configuration.nextNegotiatedProtocol.clear();
+        configuration.nextProtocolNegotiationStatus = sslContextPointer->npnContext().status;
+        if (sslContextPointer->npnContext().status == QSslConfiguration::NextProtocolNegotiationUnsupported) {
+            // we could not agree -> be conservative and use HTTP/1.1
+            configuration.nextNegotiatedProtocol = QByteArrayLiteral("http/1.1");
+        } else {
+            q_SSL_get0_next_proto_negotiated(ssl, &proto, &proto_len);
+            if (proto_len)
+                configuration.nextNegotiatedProtocol = QByteArray(reinterpret_cast<const char *>(proto), proto_len);
+            else
+                configuration.nextNegotiatedProtocol.clear();
+        }
     }
 #endif // OPENSSL_VERSION_NUMBER >= 0x1000100fL ...
 
@@ -1695,7 +1823,12 @@ QList<QSslError> QSslSocketBackendPrivate::verify(const QList<QSslCertificate> &
     QMutexLocker sslErrorListMutexLocker(&_q_sslErrorList()->mutex);
 
     // Register a custom callback to get all verification errors.
+#if OPENSSL_VERSION_NUMBER >= 0x10100000L
+    // The X509_STORE_set_verify_cb_func macro was removed in 1.1.
+    q_X509_STORE_set_verify_cb(certStore, q_X509Callback);
+#else
     X509_STORE_set_verify_cb_func(certStore, q_X509Callback);
+#endif
 
     // Build the chain of intermediate certificates
     STACK_OF(X509) *intermediates = 0;
@@ -1825,7 +1958,7 @@ bool QSslSocketBackendPrivate::importPkcs12(QIODevice *device,
     // Convert to Qt types
     if (!key->d->fromEVP_PKEY(pkey)) {
         qCWarning(lcSsl, "Unable to convert private key");
-        q_sk_pop_free(reinterpret_cast<STACK *>(ca), reinterpret_cast<void(*)(void*)>(q_sk_free));
+        q_sk_pop_free(reinterpret_cast<STACK *>(ca), reinterpret_cast<void(*)(void*)>(q_X509_free));
         q_X509_free(x509);
         q_EVP_PKEY_free(pkey);
         q_PKCS12_free(p12);
@@ -1840,7 +1973,7 @@ bool QSslSocketBackendPrivate::importPkcs12(QIODevice *device,
         *caCertificates = QSslSocketBackendPrivate::STACKOFX509_to_QSslCertificates(ca);
 
     // Clean up
-    q_sk_pop_free(reinterpret_cast<STACK *>(ca), reinterpret_cast<void(*)(void*)>(q_sk_free));
+    q_sk_pop_free(reinterpret_cast<STACK *>(ca), reinterpret_cast<void(*)(void*)>(q_X509_free));
     q_X509_free(x509);
     q_EVP_PKEY_free(pkey);
     q_PKCS12_free(p12);
