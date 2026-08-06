@@ -166,6 +166,18 @@ init_context:
         unsupportedProtocol = true;
 #endif
         break;
+    case QSsl::TlsV1_3:
+    case QSsl::TlsV1_3OrLater:
+#if OPENSSL_VERSION_NUMBER >= 0x10101000L
+        // TLS 1.3 requires OpenSSL 1.1.1. The exact version (1.3 only vs 1.3+)
+        // is pinned via SSL options (SSL_OP_NO_TLSv1_2 and below).
+        sslContext->ctx = q_SSL_CTX_new(client ? q_SSLv23_client_method() : q_SSLv23_server_method());
+#else
+        // TLS 1.3 not supported by the linked OpenSSL, but chosen deliberately -> error
+        sslContext->ctx = 0;
+        unsupportedProtocol = true;
+#endif
+        break;
     }
 
     if (!sslContext->ctx) {
@@ -173,8 +185,13 @@ init_context:
         // by re-initializing the library.
         if (!reinitialized) {
             reinitialized = true;
+#if OPENSSL_VERSION_NUMBER >= 0x10100000L
+            if (q_SSL_library_init(0, Q_NULLPTR) == 1)
+                goto init_context;
+#else
             if (q_SSL_library_init() == 1)
                 goto init_context;
+#endif
         }
 
         sslContext->errorStr = QSslSocket::tr("Error creating SSL context (%1)").arg(
@@ -326,7 +343,11 @@ init_context:
 #ifndef OPENSSL_NO_EC
 #if OPENSSL_VERSION_NUMBER >= 0x10002000L
     if (q_SSLeay() >= 0x10002000L) {
+#if OPENSSL_VERSION_NUMBER >= 0x10100000L
+        // ECDH is auto-enabled by default in 1.1; SSL_CTRL_SET_ECDH_AUTO was removed.
+#else
         q_SSL_CTX_ctrl(sslContext->ctx, SSL_CTRL_SET_ECDH_AUTO, 1, NULL);
+#endif
     } else
 #endif
     {
@@ -399,6 +420,35 @@ static int next_proto_cb(SSL *, unsigned char **out, unsigned char *outlen,
     return SSL_TLSEXT_ERR_OK;
 }
 
+// Server-side NPN: advertise the configured protocol list so a client can pick
+// one (e.g. spdy/3.0). OpenSSL calls this only during a server handshake.
+static int next_proto_advertised_cb(SSL *, const unsigned char **out,
+                                    unsigned int *outlen, void *arg)
+{
+    QSslContext::NPNContext *ctx = reinterpret_cast<QSslContext::NPNContext *>(arg);
+    *out = ctx->data;
+    *outlen = ctx->len;
+    return SSL_TLSEXT_ERR_OK;
+}
+
+// Server-side ALPN (RFC 7301): pick, in our preference, the first of our protocols
+// the client also offered. HTTP/2 (h2) negotiates over ALPN, not NPN. OpenSSL calls
+// this only during a server handshake.
+static int alpn_select_cb(SSL *, const unsigned char **out, unsigned char *outlen,
+                          const unsigned char *in, unsigned int inlen, void *arg)
+{
+    QSslContext::NPNContext *ctx = reinterpret_cast<QSslContext::NPNContext *>(arg);
+    // q_SSL_select_next_proto picks the first of the 2nd list (ours) present in the
+    // 1st (the peer's offer). ALPN's callback hands us a const out; cast it away.
+    if (q_SSL_select_next_proto(const_cast<unsigned char **>(out), outlen,
+                                in, inlen, ctx->data, ctx->len) == OPENSSL_NPN_NEGOTIATED) {
+        ctx->status = QSslConfiguration::NextProtocolNegotiationNegotiated;
+        return SSL_TLSEXT_ERR_OK;
+    }
+    ctx->status = QSslConfiguration::NextProtocolNegotiationUnsupported;
+    return SSL_TLSEXT_ERR_NOACK;
+}
+
 QSslContext::NPNContext QSslContext::npnContext() const
 {
     return m_npnContext;
@@ -441,7 +491,15 @@ SSL* QSslContext::createSsl()
         m_npnContext.data = reinterpret_cast<unsigned char *>(m_supportedNPNVersions.data());
         m_npnContext.len = m_supportedNPNVersions.count();
         m_npnContext.status = QSslConfiguration::NextProtocolNegotiationNone;
+        // Client role: pick from the peer's advertised list.
         q_SSL_CTX_set_next_proto_select_cb(ctx, next_proto_cb, &m_npnContext);
+        // Server role: advertise our list (OpenSSL invokes only the callback that
+        // matches the handshake role, so registering both is safe).
+        q_SSL_CTX_set_next_protos_advertised_cb(ctx, next_proto_advertised_cb, &m_npnContext);
+        // ALPN uses the same wire format as NPN. Offer our list as a client, and
+        // register a selector for the server role. HTTP/2 requires ALPN.
+        q_SSL_set_alpn_protos(ssl, m_npnContext.data, m_npnContext.len);
+        q_SSL_CTX_set_alpn_select_cb(ctx, alpn_select_cb, &m_npnContext);
     }
 #endif // OPENSSL_VERSION_NUMBER >= 0x1000100fL ...
 
@@ -470,7 +528,11 @@ bool QSslContext::cacheSession(SSL* ssl)
             unsigned char *data = reinterpret_cast<unsigned char *>(m_sessionASN1.data());
             if (!q_i2d_SSL_SESSION(session, &data))
                 qCWarning(lcSsl, "could not store persistent version of SSL session");
+#if OPENSSL_VERSION_NUMBER >= 0x10100000L
+            m_sessionTicketLifeTimeHint = q_SSL_SESSION_get_ticket_lifetime_hint(session);
+#else
             m_sessionTicketLifeTimeHint = session->tlsext_tick_lifetime_hint;
+#endif
         }
     }
 

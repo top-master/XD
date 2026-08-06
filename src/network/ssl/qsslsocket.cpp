@@ -363,7 +363,7 @@ QSslSocket::~QSslSocket()
 #ifdef QSSLSOCKET_DEBUG
     qCDebug(lcSsl) << "QSslSocket::~QSslSocket(), this =" << (void *)this;
 #endif
-    delete d->plainSocket;
+    deleteChild(d->plainSocket);
     d->plainSocket = 0;
 }
 

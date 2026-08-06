@@ -228,7 +228,14 @@ int q_EC_GROUP_get_degree(const EC_GROUP* g);
 int q_CRYPTO_num_locks();
 void q_CRYPTO_set_locking_callback(void (*a)(int, int, const char *, int));
 void q_CRYPTO_set_id_callback(unsigned long (*a)());
+#if OPENSSL_VERSION_NUMBER >= 0x10100000L
+void q_CRYPTO_free(void *a, const char *file, int line);
+/// Frees via OpenSSL's OPENSSL_free() convention -- the caller omits the debug file/line.
+#define q_OPENSSL_free(addr) q_CRYPTO_free(addr, Q_NULLPTR, 0)
+#else
 void q_CRYPTO_free(void *a);
+#define q_OPENSSL_free(addr) q_CRYPTO_free(addr)
+#endif
 DSA *q_DSA_new();
 void q_DSA_free(DSA *a);
 X509 *q_d2i_X509(X509 **a, const unsigned char **b, long c);
@@ -300,6 +307,12 @@ int q_PEM_write_bio_EC_PUBKEY(BIO *a, EC_KEY *b);
 void q_RAND_seed(const void *a, int b);
 int q_RAND_status();
 RSA *q_RSA_new();
+#if OPENSSL_VERSION_NUMBER >= 0x10100000L
+const BIGNUM *q_RSA_get0_n(const RSA *d);
+const BIGNUM *q_DSA_get0_p(const DSA *d);
+EVP_CIPHER_CTX *q_EVP_CIPHER_CTX_new();
+void q_EVP_CIPHER_CTX_free(EVP_CIPHER_CTX *a);
+#endif // OPENSSL_VERSION_NUMBER >= 0x10100000L
 void q_RSA_free(RSA *a);
 int q_sk_num(STACK *a);
 void q_sk_pop_free(STACK *a, void (*b)(void *));
@@ -321,6 +334,11 @@ int q_SSL_CIPHER_get_bits(SSL_CIPHER *a, int *b);
 int q_SSL_connect(SSL *a);
 int q_SSL_CTX_check_private_key(const SSL_CTX *a);
 long q_SSL_CTX_ctrl(SSL_CTX *a, int b, long c, void *d);
+#if OPENSSL_VERSION_NUMBER >= 0x10100000L
+unsigned long q_SSL_CTX_set_options(SSL_CTX *ctx, unsigned long op);
+int q_SSL_session_reused(SSL *a);
+unsigned long q_SSL_SESSION_get_ticket_lifetime_hint(const SSL_SESSION *a);
+#endif // OPENSSL_VERSION_NUMBER >= 0x10100000L
 void q_SSL_CTX_free(SSL_CTX *a);
 #if OPENSSL_VERSION_NUMBER >= 0x10000000L
 SSL_CTX *q_SSL_CTX_new(const SSL_METHOD *a);
@@ -349,7 +367,15 @@ int q_SSL_get_error(SSL *a, int b);
 STACK_OF(X509) *q_SSL_get_peer_cert_chain(SSL *a);
 X509 *q_SSL_get_peer_certificate(SSL *a);
 long q_SSL_get_verify_result(const SSL *a);
+// OpenSSL 1.1 folded the explicit SSL_library_init()/SSL_load_error_strings()/
+// OpenSSL_add_all_algorithms() startup dance into a single OPENSSL_init_ssl(). We keep
+// the familiar q_SSL_library_init name and bind it to whichever real symbol the linked
+// OpenSSL exports (see the RESOLVEFUNC guard); only its signature changes with version.
+#if OPENSSL_VERSION_NUMBER >= 0x10100000L
+int q_SSL_library_init(uint64_t opts, const OPENSSL_INIT_SETTINGS *settings); // -> OPENSSL_init_ssl
+#else
 int q_SSL_library_init();
+#endif
 void q_SSL_load_error_strings();
 SSL *q_SSL_new(SSL_CTX *a);
 long q_SSL_ctrl(SSL *ssl,int cmd, long larg, void *parg);
@@ -363,7 +389,13 @@ void q_SSL_SESSION_free(SSL_SESSION *ses);
 SSL_SESSION *q_SSL_get1_session(SSL *ssl);
 SSL_SESSION *q_SSL_get_session(const SSL *ssl);
 #if OPENSSL_VERSION_NUMBER >= 0x10001000L
+#if OPENSSL_VERSION_NUMBER >= 0x10100000L
+// In 1.1 SSL_get_ex_new_index() is a macro over CRYPTO_get_ex_new_index(); keep the
+// familiar q_ name, take the extra class-index arg and bind it to that symbol.
+int q_SSL_get_ex_new_index(int class_index, long argl, void *argp, CRYPTO_EX_new *new_func, CRYPTO_EX_dup *dup_func, CRYPTO_EX_free *free_func);
+#else
 int q_SSL_get_ex_new_index(long argl, void *argp, CRYPTO_EX_new *new_func, CRYPTO_EX_dup *dup_func, CRYPTO_EX_free *free_func);
+#endif
 int q_SSL_set_ex_data(SSL *ssl, int idx, void *arg);
 void *q_SSL_get_ex_data(const SSL *ssl, int idx);
 #endif
@@ -449,9 +481,21 @@ X509_NAME_ENTRY *q_X509_NAME_get_entry(X509_NAME *a,int b);
 ASN1_STRING *q_X509_NAME_ENTRY_get_data(X509_NAME_ENTRY *a);
 ASN1_OBJECT *q_X509_NAME_ENTRY_get_object(X509_NAME_ENTRY *a);
 EVP_PKEY *q_X509_PUBKEY_get(X509_PUBKEY *a);
+#if OPENSSL_VERSION_NUMBER >= 0x10100000L
+// Accessors for structs that OpenSSL 1.1 made opaque.
+int q_X509_digest(const X509 *cert, const EVP_MD *type, unsigned char *md, unsigned int *len);
+const EVP_MD *q_EVP_sha1();
+long q_X509_get_version(X509 *a);
+ASN1_INTEGER *q_X509_get_serialNumber(X509 *a);
+X509_PUBKEY *q_X509_get_X509_PUBKEY(X509 *a);
+int q_EVP_PKEY_base_id(EVP_PKEY *a);
+#endif // OPENSSL_VERSION_NUMBER >= 0x10100000L
 void q_X509_STORE_free(X509_STORE *store);
 X509_STORE *q_X509_STORE_new();
 int q_X509_STORE_add_cert(X509_STORE *ctx, X509 *x);
+#if OPENSSL_VERSION_NUMBER >= 0x10100000L
+void q_X509_STORE_set_verify_cb(X509_STORE *ctx, X509_STORE_CTX_verify_cb verify_cb);
+#endif // OPENSSL_VERSION_NUMBER >= 0x10100000L
 void q_X509_STORE_CTX_free(X509_STORE_CTX *storeCtx);
 int q_X509_STORE_CTX_init(X509_STORE_CTX *ctx, X509_STORE *store,
                           X509 *x509, STACK_OF(X509) *chain);
@@ -510,7 +554,12 @@ DSA *q_d2i_DSAPrivateKey(DSA **a, unsigned char **pp, long length);
         PEM_ASN1_write_bio((int (*)(void*, unsigned char**))q_i2d_DSAPrivateKey,PEM_STRING_DSA,\
                            bp,(char *)x,enc,kstr,klen,cb,u)
 #endif
+#if OPENSSL_VERSION_NUMBER >= 0x10100000L
+// SSL_CTX_set_options is a real function in 1.1 (the SSL_CTRL_OPTIONS ctrl was
+// removed); it is declared with the other q_ prototypes and wrapped via DEFINEFUNC.
+#else
 #define q_SSL_CTX_set_options(ctx,op) q_SSL_CTX_ctrl((ctx),SSL_CTRL_OPTIONS,(op),NULL)
+#endif
 #define q_SSL_CTX_set_mode(ctx,op) q_SSL_CTX_ctrl((ctx),SSL_CTRL_MODE,(op),NULL)
 #define q_SKM_sk_num(type, st) ((int (*)(const STACK_OF(type) *))q_sk_num)(st)
 #define q_SKM_sk_value(type, st,i) ((type * (*)(const STACK_OF(type) *, int))q_sk_value)(st, i)
@@ -522,8 +571,17 @@ DSA *q_d2i_DSAPrivateKey(DSA **a, unsigned char **pp, long length);
 #define q_sk_SSL_CIPHER_value(st, i) q_SKM_sk_value(SSL_CIPHER, (st), (i))
 #define q_SSL_CTX_add_extra_chain_cert(ctx,x509) \
         q_SSL_CTX_ctrl(ctx,SSL_CTRL_EXTRA_CHAIN_CERT,0,(char *)x509)
+#if OPENSSL_VERSION_NUMBER >= 0x10100000L
+// 1.1: X509 is opaque and these are real functions (the struct-access macros
+// were removed); route through resolved wrappers.
+ASN1_TIME *q_X509_getm_notAfter(X509 *a);
+ASN1_TIME *q_X509_getm_notBefore(X509 *a);
+#define q_X509_get_notAfter(x) q_X509_getm_notAfter(x)
+#define q_X509_get_notBefore(x) q_X509_getm_notBefore(x)
+#else
 #define q_X509_get_notAfter(x) X509_get_notAfter(x)
 #define q_X509_get_notBefore(x) X509_get_notBefore(x)
+#endif
 #define q_EVP_PKEY_assign_RSA(pkey,rsa) q_EVP_PKEY_assign((pkey),EVP_PKEY_RSA,\
                                         (char *)(rsa))
 #define q_EVP_PKEY_assign_DSA(pkey,dsa) q_EVP_PKEY_assign((pkey),EVP_PKEY_DSA,\
@@ -547,8 +605,19 @@ void q_SSL_CTX_set_next_proto_select_cb(SSL_CTX *s,
                                                    const unsigned char *in,
                                                    unsigned int inlen, void *arg),
                                         void *arg);
+void q_SSL_CTX_set_next_protos_advertised_cb(SSL_CTX *s,
+                                             int (*cb) (SSL *ssl, const unsigned char **out,
+                                                        unsigned int *outlen, void *arg),
+                                             void *arg);
 void q_SSL_get0_next_proto_negotiated(const SSL *s, const unsigned char **data,
                                       unsigned *len);
+int q_SSL_set_alpn_protos(SSL *s, const unsigned char *protos, unsigned len);
+void q_SSL_get0_alpn_selected(const SSL *s, const unsigned char **data, unsigned *len);
+void q_SSL_CTX_set_alpn_select_cb(SSL_CTX *s,
+                                  int (*cb) (SSL *ssl, const unsigned char **out,
+                                             unsigned char *outlen, const unsigned char *in,
+                                             unsigned int inlen, void *arg),
+                                  void *arg);
 #endif // OPENSSL_VERSION_NUMBER >= 0x1000100fL ...
 
 // Helper function

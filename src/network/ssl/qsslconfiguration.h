@@ -154,6 +154,7 @@ public:
 
     static const char NextProtocolSpdy3_0[];
     static const char NextProtocolHttp1_1[];
+    static const char NextProtocolHttp2[];
 
 private:
     friend class QSslSocket;

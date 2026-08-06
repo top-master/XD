@@ -3,27 +3,7 @@
 # which under other are needed for `QMAKE_DIR_REPLACE`.
 #
 
-
-# once(my_unique_key)
-#
-# Returns `true` only "once" for each key,
-# which's possible because `spec_post.prf` runs only once-for-all QMake-passes,
-# where `spec_post.prf` clears old `QMAKE_SKIP_FILE` file's entries.
-#
-defineTest(once) {
-    qtc_run: return(false)
-    requireSkipFile()|return(false)
-
-    QMAKE_SKIP_LIST = $$fromfile($$QMAKE_SKIP_FILE, QMAKE_SKIP_LIST)
-    !contains(QMAKE_SKIP_LIST, $$1) {
-        line = "QMAKE_SKIP_LIST += $$1"
-        write_file($$QMAKE_SKIP_FILE, line, append)
-        QMAKE_SKIP_LIST += $$1
-        export(QMAKE_SKIP_LIST)
-        return(true)
-    }
-    return(false)
-}
+load(once_fn)
 
 # addExclusiveBuildsProper(config_key, builds)
 #

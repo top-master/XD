@@ -49,6 +49,7 @@ const QSsl::SslOptions QSslConfigurationPrivate::defaultSslOptions = QSsl::SslOp
 
 const char QSslConfiguration::NextProtocolSpdy3_0[] = "spdy/3";
 const char QSslConfiguration::NextProtocolHttp1_1[] = "http/1.1";
+const char QSslConfiguration::NextProtocolHttp2[] = "h2";
 
 /*!
     \class QSslConfiguration
