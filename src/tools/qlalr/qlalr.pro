@@ -1,4 +1,6 @@
 option(host_build)
+# TRACE/tools cross-compile: link to cross-target's bootstrap lib #3.
+CONFIG += force_bootstrap
 
 SOURCES += \
     compress.cpp \

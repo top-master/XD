@@ -11,7 +11,15 @@ win32 {
 } else:mac {
     include($$PWD/../cocoa/cocoa.pro)
 } else {
-    error("Platform not supported.")
+    # On Unix, bake in the headless "offscreen" platform, plus each native
+    # windowing plugin QT_CONFIG enables (xcb/X11), so a static app has one.
+    include($$PWD/../offscreen/offscreen.pro)
+    contains(QT_CONFIG, xcb) {
+        include($$PWD/../xcb/xcb-plugin.pro)
+        add_static_lib(QtXcbQpa)
+    }
+    contains(QT_CONFIG, eglfs):   include($$PWD/../eglfs/eglfs.pro)
+    contains(QT_CONFIG, linuxfb): include($$PWD/../linuxfb/linuxfb.pro)
 }
 
 HEADERS += $$PWD/static-platform.h
