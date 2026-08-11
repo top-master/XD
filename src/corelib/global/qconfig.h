@@ -214,9 +214,17 @@
 # define QT_NO_TSLIB
 #endif
 
+// Dynamic OpenGL (runtime choice between desktop WGL and ANGLE/EGL) is a
+// Windows feature that needs ANGLE's EGL/GLESv2 headers and import libraries.
+// The MinGW toolchain ships neither, so -- as upstream Qt does -- a MinGW build
+// uses desktop OpenGL (opengl32) and must NOT define QT_OPENGL_DYNAMIC, or the
+// windows platform plugin pulls in <EGL/egl.h> via qwindowseglcontext.h and
+// fails to compile. MSVC (and every non-Windows host) keeps dynamic GL. Gate on
+// __MINGW32__ (a compiler builtin, defined for both 32- and 64-bit mingw-w64,
+// and available this early since qglobal.h has not run yet).
 #if defined(QT_OPENGL_DYNAMIC) && defined(QT_NO_OPENGL_DYNAMIC)
 # undef QT_OPENGL_DYNAMIC
-#elif !defined(QT_OPENGL_DYNAMIC)
+#elif !defined(QT_OPENGL_DYNAMIC) && !defined(QT_NO_OPENGL_DYNAMIC) && !defined(__MINGW32__)
 # define QT_OPENGL_DYNAMIC
 #endif
 

@@ -107,6 +107,8 @@ QMAKE_LFLAGS += $$QMAKE_LFLAGS_NOUNDEF
 # `run_depends`, hence promoting into QT here forces qt.prf to
 # resolve modules not yet qmake'd (gui -> printsupport -> widgets -> gui).
 !qt_static: QT += $$QT_FOR_PRIVATE
+# A static module still compiles against the headers of `QT_FOR_PRIVATE`.
+qt_static: INCLUDEPATH += $$qtModuleIncludes($$QT_FOR_PRIVATE)
 unset(QT_FOR_PRIVATE)
 
 !internal_module:CONFIG += create_cmake

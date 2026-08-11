@@ -100,7 +100,7 @@
 #  include <QtCore/qt_windows.h>
 #  include <QtCore/QLibraryInfo>
 # if defined(Q_OS_WINPHONE)
-#   include <Objbase.h>
+#   include <objbase.h>
 # endif
 #endif // Q_OS_WIN && !Q_OS_WINCE
 
