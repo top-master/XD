@@ -1,4 +1,6 @@
 option(host_build)
+# TRACE/tools cross-compile: link to cross-target's bootstrap lib #2.
+CONFIG += force_bootstrap
 QT = core-private
 force_bootstrap: QT += bootstrap_dbus-private
 else: QT += dbus-private

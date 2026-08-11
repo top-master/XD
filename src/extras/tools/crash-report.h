@@ -38,7 +38,7 @@
 #       include <windows.h>
 #   endif
 #   include <tchar.h>
-#   include <DbgHelp.h>
+#   include <dbghelp.h>
 #   include <crtdbg.h>
 #endif
 
