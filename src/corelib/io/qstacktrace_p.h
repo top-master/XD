@@ -33,7 +33,7 @@
 #  include <qt_windows.h>
 //#  define DBGHELP_TRANSLATE_TCHAR // Forces Unicode version of DbgHelp functions.
 //#  pragma comment( lib, "dbghelp.lib" )
-#  include <DbgHelp.h>
+#  include <dbghelp.h>
 #endif
 
 
@@ -108,7 +108,7 @@ public:
     unsigned short frameCount;
 
 
-    IMAGEHLP_LINE *line;
+    IMAGEHLP_LINE64 *line;
     SYMBOL_INFO *symbol;
 #endif
 

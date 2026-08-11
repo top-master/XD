@@ -5,6 +5,10 @@
 # the `features/win32/qt_config.prf` file, which loads
 # the `$$PWD/modules/qt_*.pri` modules right after this file.
 #
+# WARNING: important CONFIG values like win32 or winrt or msvc are
+# not set when this file loads, at least when cross-compiling,
+# hence move platform matters to for example: features/win32/default_pre.prf
+#
 
 # TRACE/mkspecs note: By default `release` is added to `CONFIG`,
 # but with the command-line `CONFIG+=debug`, `release` will be considered removed,
@@ -36,23 +40,6 @@ QT_CONFIG += sql
 
 ## Qt would disable text-codecs for Windows, XD keeps it always if possible.
 QT_CONFIG += codecs
-
-# TRACE/gui: disables OpenGL usages for Windows, except if either:
-# its included into the compiler's normally used Windows-SDK,
-# or, DirectX-SDK is installed.
-#
-# Sync below DirectX checks with: src/angle/src/common/common.pri
-#
-win32: !if(force_angle | force_opengl) {
-    winrt | if(msvc: greaterThan(MSC_VER, 1699)) {
-        # DirectX is included in the Windows 8 Kit -- nothing to disable.
-    } else {
-        TMP = $$(DXSDK_DIR)
-        isEmpty(TMP) {
-            QT_CONFIG -= angle dynamicgl opengl
-        }
-    }
-}
 
 # Improves auto-tests if debug-build.
 !CONFIG(debug, release|debug) {

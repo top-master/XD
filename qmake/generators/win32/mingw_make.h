@@ -44,7 +44,7 @@ public:
     MingwMakefileGenerator();
     ~MingwMakefileGenerator();
 protected:
-    QString escapeDependencyPath(const QString &path) const;
+    QString escapeDependencyPath(const QString &path, bool fixSeparators = false) const;
     ProString escapeDependencyPath(const ProString &path) const { return MakefileGenerator::escapeDependencyPath(path); }
     virtual ProString fixLibFlag(const ProString &lib);
     virtual QString getManifestFileForRcFile() const;
