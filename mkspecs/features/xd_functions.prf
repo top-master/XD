@@ -79,7 +79,9 @@ defineReplace(xd_module) {
     return( $$xd_suffix($$name) )
 }
 
-equals(MAKEFILE_GENERATOR, MSBUILD) {
+# Emit `first.depends` one per line via a "\" make line-continuation on the
+# generators that support it (MinGW/MSBUILD/Unix), else a bare newline.
+contains(MAKEFILE_GENERATOR, "^(MINGW|MSBUILD|UNIX)$") {
     xd_depend_newline = \\$$escape_expand(\\n)
 } else {
     xd_depend_newline = $$escape_expand(\\n)

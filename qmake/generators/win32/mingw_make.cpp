@@ -48,9 +48,12 @@ MingwMakefileGenerator::MingwMakefileGenerator() : Win32MakefileGenerator()
     m_name = QByteArray("MingwMakefileGenerator");
 }
 
-QString MingwMakefileGenerator::escapeDependencyPath(const QString &path) const
+QString MingwMakefileGenerator::escapeDependencyPath(const QString &path, bool fixSeparators) const
 {
-    QString ret = path;
+    // A make line-continuation; keep it verbatim.
+    if (path == QLatin1String("\\\n"))
+        return path;
+    QString ret = fixSeparators ? Option::fixPathToTargetOS(path, false) : path;
     ret.replace('\\', "/");  // ### this shouldn't be here
     ret.replace(' ', QLatin1String("\\ "));
     return ret;
@@ -68,7 +71,11 @@ ProString MingwMakefileGenerator::fixLibFlag(const ProString &lib)
     if (lib.startsWith("-L"))  // Lib search path. Needed only by -l above.
         return QLatin1String("-L")
                 + escapeFilePath(Option::fixPathToTargetOS(lib.mid(2).toQString(), false));
-    if (lib.startsWith("lib"))  // Fallback for unresolved MSVC-style libs.
+    // Fallback for unresolved MSVC-style libs (libfoo -> -lfoo), but never for
+    // object files: a lib-prefixed RES_FILE like libeay32_resource_res.o is a
+    // linker input, not a library, so -l-mangling it makes the link fail with
+    // "cannot find -leay32_resource_res.o". Let such .o/.obj fall through below.
+    if (lib.startsWith("lib") && !lib.endsWith(".o") && !lib.endsWith(".obj"))
         return QLatin1String("-l") + escapeFilePath(lib.mid(3).toQString());
     return escapeFilePath(Option::fixPathToTargetOS(lib.toQString(), false));
 }
