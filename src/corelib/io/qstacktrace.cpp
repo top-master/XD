@@ -150,15 +150,17 @@ bool QStackTrace::next()
 #ifdef Q_OS_WIN
     // Reserves memory for line (if not already).
     if (d->line == Q_NULLPTR) {
-        d->line = reinterpret_cast<IMAGEHLP_LINE *>(calloc( sizeof(IMAGEHLP_LINE), 1 ));
+        d->line = reinterpret_cast<IMAGEHLP_LINE64 *>(calloc( sizeof(IMAGEHLP_LINE64), 1 ));
     } else {
-        ::memset(d->line, 0, sizeof(IMAGEHLP_LINE));
+        ::memset(d->line, 0, sizeof(IMAGEHLP_LINE64));
     }
-    d->line->SizeOfStruct = sizeof(IMAGEHLP_LINE);
+    d->line->SizeOfStruct = sizeof(IMAGEHLP_LINE64);
 
     DWORD dwDisplacement = 0;
     // Source-code file-names should not contain any unicode.
-    SymGetLineFromAddr(d->process, (DWORD)(d->stack[d->currentIndex]), &dwDisplacement, d->line);
+    // Use the *64 address API so a 64-bit pointer is not truncated to DWORD
+    // (matches the DWORD64 SymFromAddr call in qstacktrace_p.h).
+    SymGetLineFromAddr64(d->process, reinterpret_cast<DWORD64>(d->stack[d->currentIndex]), &dwDisplacement, d->line);
 
     // If not first try, check symbol.
     if (d->currentIndex - d->beginIndex > 0) {

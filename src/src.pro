@@ -86,7 +86,7 @@ src_network.subdir = $$PWD/network
 src_network.target = sub-network
 src_network.depends = src_corelib
 
-src_openssl.file = $$PWD/extras/lib/openssl-1.0.1c/openssl.pro
+src_openssl.file = $$PWD/3rdparty/openssl-1.1.1w/openssl.pro
 src_openssl.target = sub-openssl
 
 src_testlib.subdir = $$PWD/testlib
@@ -151,16 +151,20 @@ contains(QT_CONFIG, zlib)|cross_compile {
     }
 }
 SUBDIRS += src_tools_bootstrap src_tools_moc src_tools_rcc
-# `idc` (the ActiveQt IDC tool) is Windows-only -- main.cpp includes
-# `<windows.h>`, so building it on Mac/Linux fails to find the header.
-win32: SUBDIRS += src_tools_idc
 !contains(QT_DISABLED_FEATURES, regularexpression):pcre {
     SUBDIRS += src_3rdparty_pcre
     src_corelib.depends += src_3rdparty_pcre
 }
 SUBDIRS += src_corelib src_tools_qlalr
 TOOLS = src_tools_moc src_tools_rcc src_tools_qlalr
-win32: TOOLS += src_tools_idc
+# `idc` (the ActiveQt IDC tool) is Windows-only -- main.cpp includes
+# `<windows.h>`, so building it on Mac/Linux fails to find the header.
+# It is `host_build`, so the header must come from the *host*: gate on the host
+# being Windows, not just the target, or a cross build from Linux still fails.
+win32:equals(QMAKE_HOST.os, Windows) {
+    SUBDIRS += src_tools_idc
+    TOOLS += src_tools_idc
+}
 win32:SUBDIRS += src_winmain
 SUBDIRS += src_network src_xml src_testlib
 

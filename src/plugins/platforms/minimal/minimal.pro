@@ -2,6 +2,12 @@ TARGET = qminimal
 
 QT += core-private gui-private platformsupport-private
 
+# qminimal references QBasicFontDatabase (from the static platformsupport), whose
+# FreeType dependency is private and not propagated by the module system, so link
+# FreeType here, as the windows plugin does (see docs/mkspecs/linking.md).
+contains(QT_CONFIG, freetype): \
+    include($$QT_SOURCE_TREE/src/3rdparty/freetype_dependency.pri)
+
 SOURCES =   main.cpp \
             qminimalintegration.cpp \
             qminimalbackingstore.cpp
