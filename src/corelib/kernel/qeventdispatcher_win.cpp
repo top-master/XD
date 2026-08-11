@@ -49,8 +49,8 @@
 #include <private/qthread_p.h>
 #include <private/qmutexpool_p.h>
 
-#include <WinSock2.h>
-#include <WinUser.h>
+#include <winsock2.h>
+#include <winuser.h>
 
 
 QT_BEGIN_NAMESPACE

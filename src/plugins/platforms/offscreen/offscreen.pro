@@ -2,6 +2,13 @@ TARGET = qoffscreen
 
 QT += core-private gui-private platformsupport-private
 
+# The basic font database pulled in from the static platformsupport uses FreeType
+# (qfontengine_ft). A static internal_module does not propagate its private
+# -lqtfreetype to consumers, so link it here, as the windows plugin does in
+# windows.pri (see docs/mkspecs/linking.md).
+contains(QT_CONFIG, freetype): \
+    include($$QT_SOURCE_TREE/src/3rdparty/freetype_dependency.pri)
+
 SOURCES =   main.cpp \
             qoffscreenintegration.cpp \
             qoffscreenwindow.cpp \

@@ -124,3 +124,6 @@ if(!host_build|!cross_compile):if(c++11|c++14|c++1z) {
 
 QMAKE_INCDIR += $$QMAKE_INCDIR_POST
 QMAKE_LIBDIR += $$QMAKE_LIBDIR_POST
+
+# IMPORTANT: Below needs to be after any other QMAKE_POST_LINK.
+save_space: include($$PWD/../xd/save_space.prf)

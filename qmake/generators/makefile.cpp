@@ -2701,9 +2701,12 @@ MakefileGenerator::writeSubTargets(QTextStream &t, QList<MakefileGenerator::SubT
         const ProStringList &deplist = project->values(ProKey(*qut_it + ".depends"));
         for (ProStringList::ConstIterator dep_it = deplist.begin(); dep_it != deplist.end(); ++dep_it) {
             QString dep = var(ProKey(*dep_it + ".target"));
-            if(dep.isEmpty())
-                dep = Option::fixPathToTargetOS((*dep_it).toQString(), false);
-            deps += ' ' + escapeDependencyPath(dep);
+            const bool isEmpty = dep.isEmpty();
+            if(isEmpty)
+                dep = (*dep_it).toQString();
+            // fixSeparators only for a literal path (the `.target`-less fallback),
+            // matching the original; a resolved target name is not a path.
+            deps += ' ' + escapeDependencyPath(dep, isEmpty);
         }
         if (config.indexOf("recursive") != -1) {
             QSet<QString> recurse;
@@ -2900,6 +2903,24 @@ MakefileGenerator::escapeFilePaths(const ProStringList &paths) const
     for (int i = 0; i < count; ++i)
         ret.append(escapeFilePath(paths.at(i)));
     return ret;
+}
+
+/*!
+    Escapes one dependency-list entry for writing into the makefile.
+
+    A "\<newline>" entry is a make line-continuation, injected to format the
+    dependency list one entry per line; it is returned verbatim, since
+    normalizing or escaping it would rewrite the backslash and corrupt the
+    continuation. Otherwise, when \a fixSeparators is set, a literal path is
+    first normalized to the target OS (the debug_and_release meta-Makefile
+    writer needs this; the extra-targets writer does not), then escaped.
+*/
+QString
+MakefileGenerator::escapeDependencyPath(const QString &path, bool fixSeparators) const
+{
+    if (path == QLatin1String("\\\n"))
+        return path;
+    return escapeFilePath(fixSeparators ? Option::fixPathToTargetOS(path, false) : path);
 }
 
 ProString
