@@ -136,7 +136,11 @@ typedef struct tagUPDATELAYEREDWINDOWINFO {
  * are present in the Windows SDK's, but not in older MSVC Express
  * versions. */
 
-#if defined(Q_CC_MINGW) || !defined(TOUCHEVENTF_MOVE)
+/* TOUCHEVENTF_MOVE is the SDK proxy for "touch input is declared" (TOUCHINPUT
+ * etc.). Do NOT force these stubs on for MinGW: modern MinGW-w64 declares
+ * TOUCHINPUT/TOUCHEVENTF_MOVE (at _WIN32_WINNT >= 0x0601), so redefining them
+ * conflicts. The proxy already covers the ancient-MinGW/old-MSVC case. */
+#if !defined(TOUCHEVENTF_MOVE)
 
 #define WM_TOUCH 0x0240
 
@@ -164,7 +168,7 @@ typedef TOUCHINPUT const * PCTOUCHINPUT;
 #    define TOUCHINPUTMASKF_CONTACTAREA 0x0004
 #    define TOUCHINPUTMASKF_EXTRAINFO 0x0002
 
-#endif // if defined(Q_CC_MINGW) || !defined(TOUCHEVENTF_MOVE)
+#endif // if !defined(TOUCHEVENTF_MOVE)
 
 #ifndef WM_GESTURE
 #  define WM_GESTURE 0x0119

@@ -1,3 +1,23 @@
 CONFIG = rtti_off incremental_off windows $$CONFIG
 load(default_pre)
 
+# TRACE/gui: disables OpenGL usages for Windows, except if either:
+# its included into the compiler's normally used Windows-SDK,
+# or, DirectX-SDK is installed.
+#
+# Sync below DirectX checks with: src/angle/src/common/common.pri
+#
+win32: !if(force_angle | force_opengl) {
+    winrt | if(msvc: greaterThan(MSC_VER, 1699)) {
+        # DirectX is included in the Windows 8 Kit -- nothing to disable.
+    } else {
+        TMP = $$(DXSDK_DIR)
+        isEmpty(TMP) {
+            QT_CONFIG -= angle dynamicgl
+            # Desktop opengl32 needs no DirectX and ships with MinGW, so keep it
+            # there; MSVC keeps its original behavior of dropping it too.
+            msvc: QT_CONFIG -= opengl
+        }
+    }
+}
+

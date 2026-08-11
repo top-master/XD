@@ -68,7 +68,7 @@
 #endif
 
 #ifdef Q_OS_WINRT
-#include <Ws2tcpip.h>
+#include <ws2tcpip.h>
 #endif // Q_OS_WINRT
 
 #if defined(Q_OS_VXWORKS) && defined(_WRS_KERNEL)
@@ -1995,7 +1995,7 @@ const QSysInfo::MacVersion QSysInfo::MacintoshVersion = QSysInfo::macVersion();
 
 QT_BEGIN_INCLUDE_NAMESPACE
 #include "qt_windows.h"
-#include <WinSock2.h>
+#include <winsock2.h>
 QT_END_INCLUDE_NAMESPACE
 
 #  ifndef QT_BOOTSTRAPPED

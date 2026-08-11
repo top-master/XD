@@ -97,6 +97,49 @@ defineReplace(qtModuleIdFromKey) {
     return($$1)
 }
 
+# Converts a "`QT` variable compatible" keyword to the `-l`-usable library base
+# name of that module, e.g. `core` -> `Qt5Core` (`Qt5Cored` in a debug build).
+#
+# Args: a single QT keyword (`core`, `gui`, `widgets`, `testlib`,
+# `core-private`, ...).
+#
+# It resolves the module-ID with qtModuleIdFromKey (so a `qt_static` `_static`
+# rename is handled), reads the module's stable UNversioned name `QT.<id>.name`
+# (`QtCore`, and `QtTest` for `testlib`), and runs it through qt5LibraryTarget,
+# which inserts Qt's own major version plus the debug/platform suffix (and gets
+# macOS frameworks right). So nothing here hardcodes the version, and it does
+# NOT use `QT.<name>.module` (which `qt_static` renames and a static-only build
+# may not have set). Use it for a raw `-l`, e.g. `LIBS += -l$$qtModuleLib(core)`.
+#
+# If that module's .pri never loaded (QT.<id>.name is empty), it warns once and
+# falls back to constructing a usable name itself, so an unbuilt or unknown
+# module still yields something.
+defineReplace(qtModuleLib) {
+    id = $$qtModuleIdFromKey($$1)
+    name = $$eval(QT.$${id}.name)
+
+    isEmpty(name) {
+        pri = $$[QMAKE_MKSPECS]/modules/qt_lib_$${id}.pri
+        once(qtModuleLib_$$1) {
+            warning("Failed to find $$1 module's .pri file at $$pri (ensure it's built).")
+        }
+
+        # No module metadata: construct the UNversioned name directly -- strip
+        # -private, map testlib -> test, upper-case the first letter, and prefix
+        # Qt (qt5LibraryTarget inserts the version below, so none here).
+        name = $$lower($$1)
+        name = $$replace(name, -private$,)
+        equals(name, testlib): name = test
+        letter = $$name
+        letter ~= s|^(.).*|\\1|g
+        name ~= s|^.(.*)|\\1|g
+        name = $$upper("$$letter")$$name
+        name = Qt$$name
+    }
+
+    return($$qt5LibraryTarget($$name))
+}
+
 defineTest(qtHaveModule) {
     isEmpty(QT.$$qtModuleIdFromKey($$1).name): \
         return(false)
@@ -215,16 +258,19 @@ defineTest(qtAddToolEnv) {
             mkpath($$OUT_PWD)
             !write_file($$OUT_PWD/$$batch_name, batch_cont, exe): error("Aborting.")
         }
-        batch_path = $$makefile_relative($$batch_name)
-        isEmpty(3) {
-            # The wrapper sits next to the makefile and is invoked by make
-            # itself, hence reference it via an explicit `./` (otherwise,
-	    # non-Windows platforms would require its dir to be on `$PATH`).
-            !contains(batch_path, [/\\\\]): batch_path = ./$$batch_path
-
+        # Reference the wrapper by ABSOLUTE path. It normally sits next to the
+        # makefile and is invoked from there (moc/uic/rcc), where a makefile-
+        # relative `./wrapper` worked. But testcase.prf prepends `cd
+        # $$TESTRUN_CWD` (the test's DESTDIR) to the command, and a DESTDIR that
+        # differs from OUT_PWD then left `./x64/target_wrapper.sh` resolving
+        # against the wrong dir (file-not-found -> `make check` exit 127). An
+        # absolute path is invariant to any such cd, and is invoked directly so
+        # it needs no $PATH lookup either (which the old `./` prefix guarded).
+        batch_path = $$absolute_path($$batch_name, $$OUT_PWD)
+        isEmpty(3): \
             $$1 += $$shell_quote($$shell_path($$batch_path))
-        } else: \
-            $$1 += $$system_quote($$system_path($$OUT_PWD/$$batch_name))
+        else: \
+            $$1 += $$system_quote($$system_path($$batch_path))
         QMAKE_DISTCLEAN += $$batch_path
     }
     export($$1)

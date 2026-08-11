@@ -42,7 +42,7 @@ QT_BEGIN_NAMESPACE
 
 #ifndef QT_NO_SHAREDMEMORY
 
-#include <Sddl.h> //for ConvertStringSecurityDescriptorToSecurityDescriptorW
+#include <sddl.h> //for ConvertStringSecurityDescriptorToSecurityDescriptorW
 
 //#define QSHAREDMEMORY_DEBUG
 

@@ -11,7 +11,21 @@ win32 {
 } else:mac {
     include($$PWD/../cocoa/cocoa.pro)
 } else {
-    error("Platform not supported.")
+    # Linux and the other Unixes: always bake in the headless "offscreen" platform
+    # -- it has no external windowing-system dependencies, so a static build always
+    # links and a console/QCoreApplication app (which never loads a platform) is
+    # happy. In addition, bake in every native windowing plugin this configuration
+    # actually enables, so a static GUI app on Ubuntu/Debian/Fedora also gets its
+    # real platform (xcb/X11, the desktop default) rather than only the headless
+    # fallback. Each is guarded on QT_CONFIG, so a build that did not configure a
+    # given plugin (e.g. a headless box with no X11) simply keeps offscreen.
+    include($$PWD/../offscreen/offscreen.pro)
+    contains(QT_CONFIG, xcb) {
+        include($$PWD/../xcb/xcb-plugin.pro)
+        add_static_lib(QtXcbQpa)
+    }
+    contains(QT_CONFIG, eglfs):   include($$PWD/../eglfs/eglfs.pro)
+    contains(QT_CONFIG, linuxfb): include($$PWD/../linuxfb/linuxfb.pro)
 }
 
 HEADERS += $$PWD/static-platform.h
