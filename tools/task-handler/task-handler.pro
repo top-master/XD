@@ -34,3 +34,8 @@ equals(TASK, "touch") {
             warning(Failed to find Makefile or $$tmp at: \"$$OUT_PWD\" for file: \"$$ARG1\")
     }
 }
+
+# NOTE: --save-space recording used to live here as a "save_space_started" task
+# invoked at post-link. It now happens instantly at qmake time in
+# mkspecs/xd/save_space.prf (write_file straight into the marker), so no task is
+# needed -- the marker is written in dependency order as qmake -r walks the tree.

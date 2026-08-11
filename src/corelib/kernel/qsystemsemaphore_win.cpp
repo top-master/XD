@@ -40,7 +40,7 @@
 #ifndef QT_NO_SYSTEMSEMAPHORE
 
 #include <qt_windows.h>
-#include <Sddl.h> // For ConvertStringSecurityDescriptorToSecurityDescriptorW.
+#include <sddl.h> // For ConvertStringSecurityDescriptorToSecurityDescriptorW.
 
 QT_BEGIN_NAMESPACE
 

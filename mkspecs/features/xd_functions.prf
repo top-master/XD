@@ -79,7 +79,17 @@ defineReplace(xd_module) {
     return( $$xd_suffix($$name) )
 }
 
-equals(MAKEFILE_GENERATOR, MSBUILD) {
+# `first.depends` entries are emitted one per line for readability, separated by
+# a make line-continuation. The UNIX generator and MSBUILD accept a trailing
+# backslash before the newline. The MINGW generator instead normalizes any
+# backslash in a dependency to "/" (it treats it as a path separator), which
+# would leave a stray "/" and break the rule -- so there we drop the separator
+# and let qmake space-join the entries on one line (equally valid for make).
+# Without this, a bare newline starts the next line with whitespace and make
+# reports "missing separator".
+equals(MAKEFILE_GENERATOR, MINGW) {
+    xd_depend_newline =
+} else:equals(MAKEFILE_GENERATOR, MSBUILD)|equals(MAKEFILE_GENERATOR, UNIX) {
     xd_depend_newline = \\$$escape_expand(\\n)
 } else {
     xd_depend_newline = $$escape_expand(\\n)
