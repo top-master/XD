@@ -842,6 +842,11 @@ bh_parse_args() {
                 BH_PROGRESS_MODE=estimate
                 BH_ESTIMATED_ACTIONS="${1#*=}"
                 shift;;
+            # --libc=<static|musl|...>: how the C runtime is linked (resolved
+            # below into BH_LIBC_CC / BH_LIBC_LDFLAGS that build scripts apply).
+            # --musl is an alias for --libc=musl.
+            --libc=*)         BH_LIBC="${1#*=}"; shift;;
+            --musl)           BH_LIBC=musl; shift;;
             --clean)          BH_CLEAN=1; shift;;
             --wipe)         BH_WIPE=1; shift;;
             --no-build)       BH_NO_BUILD=1; shift;;
@@ -948,6 +953,20 @@ bh_parse_args() {
 
     # Lets a build.sh adjust what the flags set (see bh_hook).
     bh_hook_run args-parsed
+
+    # --libc / --musl (parsed above): resolve the chosen C runtime into the
+    # compiler a build should prefer (BH_LIBC_CC, may be empty) and the extra
+    # link flags to add (BH_LIBC_LDFLAGS):
+    #   static -- the compiler's default libc, linked statically.
+    #   musl   -- musl libc, statically; needs a musl C++ toolchain (default
+    #             x86_64-linux-musl-g++, override via CXX -- e.g. CXX=g++ on a
+    #             musl-native host such as Alpine).
+    # Anything else (or unset) keeps the compiler default, dynamically linked.
+    BH_LIBC_CC=; BH_LIBC_LDFLAGS=
+    case "${BH_LIBC:-}" in
+        static) BH_LIBC_LDFLAGS="-static" ;;
+        musl)   BH_LIBC_CC="x86_64-linux-musl-g++"; BH_LIBC_LDFLAGS="-static" ;;
+    esac
 
     # Resolve whether the test step builds each test. Unless --build-tests
     # / --no-build-tests set it explicitly (or a caller pre-set it), it
@@ -1708,6 +1727,12 @@ bh_run_qmake() {
     # (e.g. an IDE that `touch`-es a .pri on save).
     bh_qmake_trace_inputs
     if [ "${BH_FORCE_QMAKE:-0}" -eq 0 ] && [ -f Makefile ]; then
+        # `|| true`: `head -1` closes the pipe after the first match, so
+        # `find` is killed by SIGPIPE and pipefail (best-effort in
+        # bh_strict_mode) would surface 141 -- that must not abort this
+        # harmless freshness probe when many files are newer than the
+        # Makefile (e.g. a fresh checkout or a bulk touch). Same idiom as
+        # the `make -n | grep -c || true` precount below.
         if [ "${BH_IGNORE_PRI:-0}" -eq 0 ]; then
             _bhq_newer=$(find "$BH_ROOT" \
                 \( -name '*.pro' -o -name '*.pri' -o -name '*.prf' \) \

@@ -1,0 +1,40 @@
+#!/bin/sh
+
+# License: Apache 2.0 without attribution need.
+
+# Dispatch to the host's XD qmake binary. Each host builds/commits qmake under
+# its own name so no build overwrites another's (see qmake/build.sh's BIN_SUFFIX
+# and .gitignore's bin/qmake* rule): macOS -> qmake-macos (Mach-O), Windows ->
+# qmake.exe (PE), everything else -> qmake-linux (ELF).
+here=$(dirname "$0")
+case "$(uname -s)" in
+    Darwin)               real=$here/qmake-macos ;;
+    MINGW*|MSYS*|CYGWIN*) real=$here/qmake.exe ;;
+    *)                    real=$here/qmake-linux ;;
+esac
+
+# Bootstrap build mode: release by default. A leading --debug switches the
+# bootstrap to a debug build -- but only when qmake has no --debug of its own.
+# Qt qmake answers "Unknown option --debug", so the flag is ours: we consume it
+# (strip it from "$@" below, or qmake would reject it). Should some qmake ever
+# grow a real --debug we leave it in the argument list untouched and never
+# override qmake's own command line.
+build_mode=--release
+if [ "$1" = "--debug" ] \
+   && ! { [ -x "$real" ] && "$real" -help 2>&1 | grep -q -- '--debug'; }; then
+    build_mode=--debug
+    shift
+fi
+
+# Bootstrap the host binary on first use. qmake/build.sh writes exactly the
+# name picked above; run it silently -- headless (no prompt) with its output
+# hushed -- so a caller reading qmake's stdout gets only qmake. Surface the
+# bootstrap path on failure so the build error stays reproducible.
+if [ ! -x "$real" ]; then
+    BH_HEADLESS=1 "$here/../qmake/build.sh" "$build_mode" >/dev/null 2>&1 || {
+        printf '%s: qmake bootstrap failed; run "%s" to see why\n' \
+            "$0" "$here/../qmake/build.sh" >&2
+        exit 127
+    }
+fi
+exec "$real" "$@"
