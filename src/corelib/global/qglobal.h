@@ -120,6 +120,7 @@
 #ifdef __cplusplus
 
 #include <algorithm>
+#include <limits>
 
 #if !defined(QT_NAMESPACE) || defined(Q_MOC_RUN) /* user namespace */
 

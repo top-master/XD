@@ -1421,16 +1421,31 @@ ProStringList QMakeEvaluator::evaluateBuiltinExpand(
                 // TRACE/qmake improve: let `spec_pre.prf` know build directory's path #2,
                 // but for backward compatibility, for now only `$$props(OUT_PWD)` returns it,
                 // also `QMAKE_GENERATE_PROJECT` mode should not alter `OUT_PWD`.
-#if defined(QT_BUILD_QMAKE) && defined(QT_DEBUG)
+                //
+                // Notes: m_outputDir is only assigned once project evaluation reaches
+                // project.cpp's setOutputDir(); before that -- e.g. while reading a
+                // project's .qmake.conf -- both m_outputDir and m_buildRoot are empty and
+                // that even though the build dir is already known from qmake's command line,
+                // so fall back to that (Option::output_dir). This only ever happens for
+                // the root project: hence no need to worry about said command-line being
+                // only valid for the root-project.
+                //
+                result = m_outputDir;
                 if (Option::qmake_mode == Option::QMAKE_GENERATE_PROJECT) {
+#if defined(QT_BUILD_QMAKE) && defined(QT_DEBUG)
                     Q_ASSERT_X(m_outputDir.isEmpty(),
                                "props", "Output folder should never be set when generating .pro file.");
-                } else {
-                    Q_ASSERT_X(m_outputDir.startsWith(Option::output_dir),
-                               "props", "Project's path is never set.");
-                }
 #endif
-                result = m_outputDir;
+                } else {
+                    if (m_outputDir.isEmpty()) {
+                        // Fallback; see above notes.
+                        result = Option::output_dir;
+                    }
+#if defined(QT_BUILD_QMAKE) && defined(QT_DEBUG)
+                    Q_ASSERT_X(result.startsWith(Option::output_dir, qFileCaseSensitivity),
+                               "props", "Project's path is never set.");
+#endif
+                }
             } else if (key.compare("is_fake_pass", Qt::CaseInsensitive) == 0) {
                 // TRACE/qmake improve: fake-loads set `fake_pass` in `CONFIG` #3,
                 // hence supported by `$$props(is_fake_run)` script here.
@@ -1889,8 +1904,12 @@ QMakeEvaluator::VisitReturn QMakeEvaluator::evaluateBuiltinConditional(
             } else {
                 // TRACE/qmake Add: any warning will reveal its location.
                 if(func_t != T_MESSAGE) {
-                    int type = func_t == T_WARNING ? QMakeHandler::EvalWarnLogic
-                                                   : QMakeHandler::EvalError;
+                    // The int() casts keep the two enumerators comparable:
+                    // they come from different unnamed enums (one lives in
+                    // the QMakeParserHandler base), which GCC's
+                    // -Wenum-compare flags in a bare conditional.
+                    int type = func_t == T_WARNING ? int(QMakeHandler::EvalWarnLogic)
+                                                   : int(QMakeHandler::EvalError);
                     if (m_cumulative) {
                         type |= QMakeHandler::CumulativeEvalMessage;
                     }

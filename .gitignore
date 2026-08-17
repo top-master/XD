@@ -102,7 +102,7 @@ bin/qmake*
 bin/*.rar
 # Windows.
 !bin/qmake.exe
-# Linux.
+# The cross-platform dispatch script (forwards to qmake-macos/.exe/-linux by host).
 !bin/qmake
 bin/qdoc*
 bin/qt3to4*

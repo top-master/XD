@@ -263,7 +263,7 @@ class QObjectPrivateScoped
 
     QObjectPrivate *d;
 public:
-    Q_DECL_CONSTEXPR explicit inline QObjectPrivateScoped(Qt::Initialization)
+    explicit inline QObjectPrivateScoped(Qt::Initialization)
     {
     }
 

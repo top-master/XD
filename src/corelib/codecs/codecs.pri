@@ -41,6 +41,11 @@ contains(QT_CONFIG,icu) {
         codecs/qbig5codec.cpp
 
     unix:!qnx:!mac:!ios:!linux-android-* {
+            # Any Unix-like platform needs to link against at least one form of
+            # the iconv library to build QtCore.
+            !contains(QT_CONFIG, ^(gnu-lib|sun-lib)?iconv$) {
+                    QT_CONFIG += iconv
+            }
             contains(QT_CONFIG,iconv) {
                     HEADERS += codecs/qiconvcodec_p.h
                     SOURCES += codecs/qiconvcodec.cpp

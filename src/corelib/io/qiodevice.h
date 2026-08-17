@@ -185,7 +185,7 @@ namespace QtPrivate {
 } // namespace QtPrivate
 
 #if defined(QT_WARN_FLUSH)
-Q_DECL_CONSTEXPR Q_ALWAYS_INLINE void qWarnFlushIfNeeded(const char *scope)
+Q_ALWAYS_INLINE void qWarnFlushIfNeeded(const char *scope)
     { QtPrivate::qWarnFlushOnce(scope); }
 #else
 Q_DECL_CONSTEXPR Q_ALWAYS_INLINE void qWarnFlushIfNeeded(const char *) { }
