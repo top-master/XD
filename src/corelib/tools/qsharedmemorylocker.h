@@ -96,7 +96,7 @@ class QSharedMemoryLocker : public QSharedMemoryLockerBase
 {
     typedef QSharedMemoryLockerBase super;
 #ifndef Q_CC_NOKIAX86
-    typedef T *QSharedMemoryLocker:: *SafeBool;
+    typedef quintptr QSharedMemoryLocker:: *SafeBool;
 #endif
 public:
     /// Constructs the class of type "T" at given QSharedMemory and locks it, or
@@ -148,10 +148,10 @@ public:
 
 #if defined(Q_CC_NOKIAX86) || defined(Q_QDOC)
     inline operator bool() const
-        { return super::isNull() ? 0 : &super::memory()->constData(); }
+        { return super::memory()->constData() != Q_NULLPTR; }
 #else
     inline operator SafeBool() const
-        { return super::isNull() ? 0 : &super::memory()->constData(); }
+        { return super::memory()->constData() ? &QSharedMemoryLocker::val : Q_NULLPTR; }
 #endif
 
     inline T *data() const
