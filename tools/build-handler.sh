@@ -575,6 +575,11 @@ bh_parse_args() {
             --release)        BH_MODE=release; shift;;
             --headless)       BH_HEADLESS=1; shift;;
             --no-progress)    BH_NO_PROGRESS=1; shift;;
+            # --libc=<static|musl|...>: how the C runtime is linked (resolved
+            # below into BH_LIBC_CC / BH_LIBC_LDFLAGS that build scripts apply).
+            # --musl is an alias for --libc=musl.
+            --libc=*)         BH_LIBC="${1#*=}"; shift;;
+            --musl)           BH_LIBC=musl; shift;;
             --clean)          BH_CLEAN=1; shift;;
             --wipe)         BH_WIPE=1; shift;;
             --no-build)       BH_NO_BUILD=1; shift;;
@@ -608,6 +613,19 @@ bh_parse_args() {
     done
     BH_REMAINING_ARGS="$*"
 
+    # --libc / --musl (parsed above): resolve the chosen C runtime into the
+    # compiler a build should prefer (BH_LIBC_CC, may be empty) and the extra
+    # link flags to add (BH_LIBC_LDFLAGS):
+    #   static -- the compiler's default libc, linked statically.
+    #   musl   -- musl libc, statically; needs a musl C++ toolchain (default
+    #             x86_64-linux-musl-g++, override via CXX -- e.g. CXX=g++ on a
+    #             musl-native host such as Alpine).
+    # Anything else (or unset) keeps the compiler default, dynamically linked.
+    BH_LIBC_CC=; BH_LIBC_LDFLAGS=
+    case "${BH_LIBC:-}" in
+        static) BH_LIBC_LDFLAGS="-static" ;;
+        musl)   BH_LIBC_CC="x86_64-linux-musl-g++"; BH_LIBC_LDFLAGS="-static" ;;
+    esac
     # Resolve whether the test step builds each test. Unless --build-tests
     # / --no-build-tests set it explicitly (or a caller pre-set it), it
     # follows the now-final main build: build tests when building, skip
@@ -1137,15 +1155,21 @@ bh_run_qmake() {
     # unchanged-in-effect `.pri` keeps tripping a re-qmake
     # (e.g. an IDE that `touch`-es a .pri on save).
     if [ "${BH_FORCE_QMAKE:-0}" -eq 0 ] && [ -f Makefile ]; then
+        # `|| true`: `head -1` closes the pipe after the first match, so
+        # `find` is killed by SIGPIPE and pipefail (best-effort in
+        # bh_strict_mode) would surface 141 -- that must not abort this
+        # harmless freshness probe when many files are newer than the
+        # Makefile (e.g. a fresh checkout or a bulk touch). Same idiom as
+        # the `make -n | grep -c || true` precount below.
         if [ "${BH_IGNORE_PRI:-0}" -eq 0 ]; then
             _bhq_newer=$(find "$BH_ROOT" \
                 \( -name '*.pro' -o -name '*.pri' -o -name '*.prf' \) \
                 ! -path '*/build/*' ! -path '*/.git/*' \
-                -newer Makefile 2>/dev/null | head -1)
+                -newer Makefile 2>/dev/null | head -1 || true)
         else
             _bhq_newer=$(find "$BH_ROOT" -name '*.pro' \
                 ! -path '*/build/*' ! -path '*/.git/*' \
-                -newer Makefile 2>/dev/null | head -1)
+                -newer Makefile 2>/dev/null | head -1 || true)
         fi
         if [ -z "$_bhq_newer" ]; then
             # Treat the skip as a successful step: show the row
@@ -1551,7 +1575,18 @@ bh_make_step() {
 #                  isn't set).
 #   $BH_HEADLESS   non-zero auto-builds without prompting.
 bh_qmake_prepare() {
-    QMAKE=$XD_DIR/bin/qmake
+    # Pick the platform's qmake binary. bin/qmake itself is only the dispatch
+    # script (it forwards to one of these by host); we resolve the real binary
+    # here so the bootstrap-if-missing check below tests the actual executable.
+    # All three host binaries are committed -- bin/qmake-macos (Mach-O),
+    # bin/qmake.exe (PE), bin/qmake-linux (ELF) -- and qmake/build.sh rebuilds
+    # the host's on demand should it go missing, each under its own name so no
+    # build overwrites another's.
+    case "$(uname -s)" in
+        Darwin)               QMAKE=$XD_DIR/bin/qmake-macos ;;
+        MINGW*|MSYS*|CYGWIN*) QMAKE=$XD_DIR/bin/qmake.exe ;;
+        *)                    QMAKE=$XD_DIR/bin/qmake-linux ;;
+    esac
     [ -x "$QMAKE" ] && return 0
     echo
     printf 'XD qmake not found at "%s".\n' "$QMAKE"
@@ -2341,7 +2376,10 @@ bh_template_subdirs() {
         if [ -f "$_bhsub_src/$_bhsub_base.pro" ]; then
             _bhsub_pro=$_bhsub_src/$_bhsub_base.pro
         else
-            _bhsub_pro=$(ls "$_bhsub_src"/*.pro 2>/dev/null | head -1)
+            # `|| true`: `head -1` closing the pipe SIGPIPEs `ls` when the
+            # subdir holds more than one .pro; pipefail would surface 141
+            # and abort. Same guard as the freshness probe in bh_run_qmake.
+            _bhsub_pro=$(ls "$_bhsub_src"/*.pro 2>/dev/null | head -1 || true)
             [ -n "$_bhsub_pro" ] || bh_error "no .pro file found under $_bhsub_src"
         fi
         bh_target_resolve "$_bhsub_pro"

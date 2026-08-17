@@ -73,7 +73,12 @@
 #include <net/if.h>
 #endif
 
-#define QT_USE_XOPEN_LFS_EXTENSIONS
+// The X/Open LFS extensions (the transitional *64 names) only exist on
+// glibc. Musl has a 64-bit off_t already and declares no *64 names, so
+// non-glibc builds stay on the plain POSIX branch.
+#if defined(__GLIBC__)
+#  define QT_USE_XOPEN_LFS_EXTENSIONS
+#endif
 #include "../common/posix/qplatformdefs.h"
 
 #undef QT_SOCKLEN_T

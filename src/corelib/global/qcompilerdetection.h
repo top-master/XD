@@ -1131,7 +1131,11 @@
 
 #if defined(__cplusplus) && defined(__has_cpp_attribute)
 // Clang's `[[nodiscard]]` has issue: https://bugs.llvm.org/show_bug.cgi?id=33518
-#  if __has_cpp_attribute(nodiscard) && (!defined(Q_CC_CLANG) || __cplusplus > 201402L)
+// GNU-family compilers keep `__attribute__((__warn_unused_result__))` from
+// above: call sites also place Q_REQUIRED_RESULT after the declaration, where
+// the GNU attribute still applies but `[[nodiscard]]` is invalid and ignored.
+#  if __has_cpp_attribute(nodiscard) && !defined(Q_CC_GNU) \
+        && (!defined(Q_CC_CLANG) || __cplusplus > 201402L)
 #      undef Q_REQUIRED_RESULT
 #      define Q_REQUIRED_RESULT [[nodiscard]]
 #    endif
@@ -1288,15 +1292,34 @@
 #  endif
 #endif
 
+/*
+ * MSVC's __pragma(...) and clang's diagnostic pragmas may sit inside an
+ * expression (clang consumes them while lexing); GCC turns _Pragma(...) into
+ * a #pragma directive and rejects it mid-expression. So the
+ * expression-wrapping helpers below may only embed
+ * QT_WARNING_PUSH/QT_WARNING_POP on the compilers that allow it there.
+ */
+#if defined(Q_CC_MSVC) || defined(Q_CC_CLANG)
+#  define QT_PRAGMA_IN_EXPRESSION
+#endif
+
 #ifdef Q_COMPILER_RVALUE_REFS
-#define qMove(x) (QT_WARNING_PUSH QT_WARNING_SUPPRESS_MOVE std::move(x) QT_WARNING_POP)
+#  ifdef QT_PRAGMA_IN_EXPRESSION
+#    define qMove(x) (QT_WARNING_PUSH QT_WARNING_SUPPRESS_MOVE std::move(x) QT_WARNING_POP)
+#  else
+#    define qMove(x) std::move(x)
+#  endif
 #else
 #define qMove(x) (x)
 #endif
 
 // Use this to call a deprecated symbol (function, member, constant) without
 // the `-Wdeprecated-declarations` (or MSVC C4996) warning.
-#define qUndeprecate(x) (QT_WARNING_PUSH QT_WARNING_SUPPRESS_DEPRECATED (x) QT_WARNING_POP)
+#ifdef QT_PRAGMA_IN_EXPRESSION
+#  define qUndeprecate(x) (QT_WARNING_PUSH QT_WARNING_SUPPRESS_DEPRECATED (x) QT_WARNING_POP)
+#else
+#  define qUndeprecate(x) (x)
+#endif
 
 #define Q_UNREACHABLE() \
     do {\
@@ -1382,8 +1405,9 @@
     QT_WARNING_DISABLE_CLANG("-Wunused-function") \
     QT_WARNING_DISABLE_CLANG("-Wunused-parameter")
 #elif defined(Q_CC_GNU)
+/* No "-Wunused-private-field" here: that warning is clang-only and GCC
+ * reports the unknown option itself via -Wpragmas. */
 #  define QT_WARNING_SUPPRESS_UNUSED \
-    QT_WARNING_DISABLE_GCC("-Wunused-private-field") \
     QT_WARNING_DISABLE_GCC("-Wunused-const-variable") \
     QT_WARNING_DISABLE_GCC("-Wunused-variable") \
     QT_WARNING_DISABLE_GCC("-Wunused-function") \
@@ -1415,7 +1439,8 @@
     QT_WARNING_DISABLE_CLANG("-Wreturn-stack-address")
 #elif defined(Q_CC_GNU) && !defined(Q_CC_INTEL) && Q_CC_GNU >= 900
 #  define QT_WARNING_SUPPRESS_MOVE \
-    QT_WARNING_DISABLE_GCC("-Wpessimizing-move")
+    QT_WARNING_DISABLE_GCC("-Wpessimizing-move") \
+    QT_WARNING_DISABLE_GCC("-Wreturn-local-addr")
 #else
 #  define QT_WARNING_SUPPRESS_MOVE
 #endif

@@ -42,6 +42,9 @@
 #pragma qt_no_master_include
 #endif
 
+// For the `va_list` type used by the qt_message() declaration below.
+#include <cstdarg>
+
 QT_BEGIN_NAMESPACE
 
 /*
@@ -65,8 +68,11 @@ public:
 
     void copy(const QMessageLogContext &logContext);
 #ifdef Q_COMPILER_RVALUE_REFS
+QT_WARNING_PUSH
+QT_WARNING_SUPPRESS_MOVE
     Q_ALWAYS_INLINE QMessageLogContext&& clone() const
     { return qMove(QMessageLogContext(this->file, this->line, this->function, this->category)); }
+QT_WARNING_POP
 #endif
 
     int version;
