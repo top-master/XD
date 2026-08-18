@@ -79,22 +79,48 @@ template <class Key, class T> struct QMapData;
 
 struct Q_CORE_EXPORT QMapNodeBase
 {
+    enum Color { Red = 0, Black = 1 };
+    // Reserve the second bit as well.
+    enum { Mask = 3 };
+
+#if QT_PTR_TAGGING
+    // Parent pointer with the red/black colour packed into its low bits.
     quintptr p;
+#else
+    // Fil-C: the parent stays a whole pointer so its capability survives; the
+    // red/black colour lives in the m_color bit below instead.
+    QMapNodeBase *p;
+#endif
     QMapNodeBase *left;
     QMapNodeBase *right;
-
-    enum Color { Red = 0, Black = 1 };
-    enum { Mask = 3 }; // reserve the second bit as well
+#if !QT_PTR_TAGGING
+private:
+    // Red/black colour, kept out of the pointer in a single bit under Fil-C.
+    quint8 m_color : 1;
+public:
+    // A private colour makes QMapNodeBase a non-aggregate, so this
+    // constant-expression constructor lets shared_null stay statically
+    // initialised.
+    Q_DECL_CONSTEXPR QMapNodeBase() Q_DECL_NOTHROW
+        : p(Q_NULLPTR), left(Q_NULLPTR), right(Q_NULLPTR), m_color(Red) {}
+#endif
 
     const QMapNodeBase *nextNode() const;
     QMapNodeBase *nextNode() { return const_cast<QMapNodeBase *>(const_cast<const QMapNodeBase *>(this)->nextNode()); }
     const QMapNodeBase *previousNode() const;
     QMapNodeBase *previousNode() { return const_cast<QMapNodeBase *>(const_cast<const QMapNodeBase *>(this)->previousNode()); }
 
+#if QT_PTR_TAGGING
     Color color() const { return Color(p & 1); }
     void setColor(Color c) { if (c == Black) p |= Black; else p &= ~Black; }
     QMapNodeBase *parent() const { return reinterpret_cast<QMapNodeBase *>(p & ~Mask); }
     void setParent(QMapNodeBase *pp) { p = (p & Mask) | quintptr(pp); }
+#else
+    Color color() const { return Color(m_color); }
+    void setColor(Color c) { m_color = quint8(c); }
+    QMapNodeBase *parent() const { return p; }
+    void setParent(QMapNodeBase *pp) { p = pp; }
+#endif
 
     template <typename T>
     static typename QtPrivate::QEnableIf<QTypeInfo<T>::isComplex>::Type

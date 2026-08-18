@@ -100,6 +100,15 @@
 #define QT_HAS_THREAD_PRIORITY_SCHEDULING
 #endif
 
+#ifdef QT_PTR_TRACKING
+// Fil-C's runtime rejects the thread-scheduling syscalls (sched_setscheduler,
+// x86-64 syscall 144) that musl's pthread_create issues once the attributes
+// carry PTHREAD_EXPLICIT_SCHED. Drop explicit priority scheduling under Fil-C
+// so QThread::start() creates threads with inherited priority instead of
+// aborting the process; priority is only a hint and the tests do not rely on it.
+#  undef QT_HAS_THREAD_PRIORITY_SCHEDULING
+#endif
+
 
 QT_BEGIN_NAMESPACE
 
@@ -304,7 +313,14 @@ static void setCurrentThreadName(pthread_t threadId, const char *name)
 {
 #  if defined(Q_OS_LINUX) && !defined(QT_LINUXBASE)
     Q_UNUSED(threadId);
+#    ifndef QT_PTR_TRACKING
     prctl(PR_SET_NAME, (unsigned long)name, 0, 0, 0);
+#    else
+    // Pass the pointer straight through so Fil-C keeps its capability; the
+    // (unsigned long) cast the normal build uses would strip it, and prctl's
+    // memory-safe wrapper then rejects the nameless integer.
+    prctl(PR_SET_NAME, name, 0, 0, 0);
+#    endif
 #  elif defined(Q_OS_MAC)
     Q_UNUSED(threadId);
     pthread_setname_np(name);

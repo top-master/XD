@@ -58,8 +58,11 @@ public:
     // compiler-generated copy/move ctors/assignment operators are fine!
     Q_DECL_CONSTEXPR inline int row() const Q_DECL_NOTHROW { return r; }
     Q_DECL_CONSTEXPR inline int column() const Q_DECL_NOTHROW { return c; }
-    Q_DECL_CONSTEXPR inline quintptr internalId() const Q_DECL_NOTHROW { return i; }
-    inline void *internalPointer() const Q_DECL_NOTHROW { return reinterpret_cast<void*>(i); }
+    // Not Q_DECL_CONSTEXPR: the pointer->integer reinterpret_cast is rejected in a
+    // constexpr function by Clang (and Fil-C); GCC only tolerates it. Nothing forms a
+    // QModelIndex at compile time anyway (createIndex() is not constexpr), so no loss.
+    inline quintptr internalId() const Q_DECL_NOTHROW { return reinterpret_cast<quintptr>(i); }
+    inline void *internalPointer() const Q_DECL_NOTHROW { return i; }
     inline QModelIndex parent() const;
     inline QModelIndex sibling(int row, int column) const;
     inline QModelIndex child(int row, int column) const;
@@ -84,11 +87,13 @@ public:
         }
 private:
     inline QModelIndex(int arow, int acolumn, void *ptr, const QAbstractItemModel *amodel) Q_DECL_NOTHROW
-        : r(arow), c(acolumn), i(reinterpret_cast<quintptr>(ptr)), m(amodel) {}
-    Q_DECL_CONSTEXPR inline QModelIndex(int arow, int acolumn, quintptr id, const QAbstractItemModel *amodel) Q_DECL_NOTHROW
-        : r(arow), c(acolumn), i(id), m(amodel) {}
+        : r(arow), c(acolumn), i(ptr), m(amodel) {}
+    inline QModelIndex(int arow, int acolumn, quintptr id, const QAbstractItemModel *amodel) Q_DECL_NOTHROW
+        : r(arow), c(acolumn), i(reinterpret_cast<void *>(id)), m(amodel) {}
     int r, c;
-    quintptr i;
+    // A real void * (not the upstream quintptr) so a pointer payload keeps its Fil-C
+    // capability; internalId() reads the integer form back out.
+    void *i;
     const QAbstractItemModel *m;
 };
 Q_DECLARE_TYPEINFO(QModelIndex, Q_MOVABLE_TYPE);

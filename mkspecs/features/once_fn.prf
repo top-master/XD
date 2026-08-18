@@ -17,7 +17,7 @@ defineTest(requireSkipFile) {
 
     # Ensures not user edited.
     exists($$QMAKE_SKIP_FILE) {
-        tmp = $$fromfile($$QMAKE_SKIP_FILE, Auto_Delete_This)
+        tmp = $$skipFileValue(Auto_Delete_This)
         !equals(tmp, yes) {
             win32: QMAKE_SKIP_FILE ~= s,/,\\,gi
             error("Auto-delete is disabled, manually remove file at:" $$QMAKE_SKIP_FILE)
@@ -34,6 +34,19 @@ defineTest(requireSkipFile) {
     return(true)
 }
 
+# skipFileValue(name)
+#
+# Reads the variable <name> from `QMAKE_SKIP_FILE`. That file is this build's
+# own record, not an input of the project; hence it stays out of the files the
+# Makefile depends on. nmake can also read the empty rule of such a file
+# (`.qmake.pro.user:`) as an inference rule, and stop.
+defineReplace(skipFileValue) {
+    value = $$fromfile($$QMAKE_SKIP_FILE, $$1)
+    QMAKE_INTERNAL_INCLUDED_FILES -= $$QMAKE_SKIP_FILE
+    export(QMAKE_INTERNAL_INCLUDED_FILES)
+    return($$value)
+}
+
 #
 # once(my_unique_key)
 #
@@ -45,7 +58,7 @@ defineTest(once) {
     qtc_run: return(false)
     requireSkipFile()|return(false)
 
-    QMAKE_SKIP_LIST = $$fromfile($$QMAKE_SKIP_FILE, QMAKE_SKIP_LIST)
+    QMAKE_SKIP_LIST = $$skipFileValue(QMAKE_SKIP_LIST)
     !contains(QMAKE_SKIP_LIST, $$1) {
         line = "QMAKE_SKIP_LIST += $$1"
         write_file($$QMAKE_SKIP_FILE, line, append)
