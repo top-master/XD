@@ -126,4 +126,6 @@ QMAKE_INCDIR += $$QMAKE_INCDIR_POST
 QMAKE_LIBDIR += $$QMAKE_LIBDIR_POST
 
 # IMPORTANT: Below needs to be after any other QMAKE_POST_LINK.
+save_space: CONFIG += save_order
+save_order: include($$PWD/../xd/save_order.prf)
 save_space: include($$PWD/../xd/save_space.prf)
