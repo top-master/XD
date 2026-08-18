@@ -469,17 +469,27 @@ static __forceinline unsigned long _bit_scan_forward(uint val)
 static inline __attribute__((always_inline))
 unsigned _bit_scan_reverse(unsigned val)
 {
+#ifndef QT_PTR_TRACKING
     unsigned result;
     asm("bsr %1, %0" : "=r" (result) : "r" (val));
     return result;
+#else
+    // Fil-C cannot model the flag-setting bsr/bsf asm; the compiler builtins
+    // compute the same bit index (both are undefined for val == 0, as is the asm).
+    return 31u - unsigned(__builtin_clz(val));
+#endif
 }
 
 static inline __attribute__((always_inline))
 unsigned _bit_scan_forward(unsigned val)
 {
+#ifndef QT_PTR_TRACKING
     unsigned result;
     asm("bsf %1, %0" : "=r" (result) : "r" (val));
     return result;
+#else
+    return unsigned(__builtin_ctz(val));
+#endif
 }
 #  endif
 #endif // Q_PROCESSOR_X86

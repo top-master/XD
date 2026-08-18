@@ -4,6 +4,7 @@ HEADERS +=  \
 	global/qglobal.h \
         global/qsystemdetection.h \
         global/qcompilerdetection.h \
+        global/qmemorysafety.h \
         global/qprocessordetection.h \
 	global/qnamespace.h \
         global/qendian.h \
@@ -26,6 +27,7 @@ SOURCES += \
         global/qglobalstatic.cpp \
         global/qlibraryinfo.cpp \
 	global/qmalloc.cpp \
+        global/qmemorysafety.cpp \
         global/qnumeric.cpp \
         global/qlogging.cpp \
         global/qhooks.cpp

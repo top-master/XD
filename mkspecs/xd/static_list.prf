@@ -1,0 +1,60 @@
+# static_list.prf
+#
+# Turns on `qt_static` mode for each project that build.sh names in the
+# `.qmake.static` list at the build root. It is included from default_pre.prf,
+# hence the choice is made before the project file and every feature it loads.
+#
+# build.sh (tools/build-handler.sh) writes the list at the build root for its
+# `--static[=<regexp>]` option, one `.pro` path per line, before it runs any
+# qmake. A build without the list, or a project the list does not name, keeps
+# `qt_static` as it was.
+
+# staticListFile()
+#
+# Finds the `.qmake.static` list at the build root, walking up from `OUT_PWD`
+# one directory at a time; prints nothing when this build has none.
+defineReplace(staticListFile) {
+    dir = $$OUT_PWD
+    for(ever) {
+        exists($$dir/.qmake.static): return($$dir/.qmake.static)
+        up = $$section(dir, /, 0, -2)
+        isEmpty(up)|equals(up, $$dir): return()
+        dir = $$up
+    }
+}
+
+# staticListPath(path)
+#
+# Prints `path` the way the list writes paths, for comparing: `path` itself, but
+# on a Windows host lower-cased, with an MSYS (`/c/`) or Cygwin
+# (`/cygdrive/c/`) drive turned into `c:/`, as the shells that run build.sh
+# there name a drive that way, while qmake writes `C:/`.
+defineReplace(staticListPath) {
+    path = $$1
+    equals(QMAKE_HOST.os, Windows) {
+        path = $$replace(path, ^/cygdrive/([a-zA-Z])/, \\1:/)
+        path = $$replace(path, ^/([a-zA-Z])/, \\1:/)
+        path = $$lower($$path)
+    }
+    return($$path)
+}
+
+# staticListApply()
+#
+# Enables `qt_static` when the list names the project being evaluated.
+defineTest(staticListApply) {
+    list = $$staticListFile()
+    isEmpty(list): return(true)
+    project = $$staticListPath($$_PRO_FILE_)
+    names = $$cat($$list, lines)
+    for(name, names) {
+        equals(project, $$staticListPath($$name)) {
+            CONFIG *= qt_static
+            export(CONFIG)
+            return(true)
+        }
+    }
+    return(true)
+}
+
+staticListApply()

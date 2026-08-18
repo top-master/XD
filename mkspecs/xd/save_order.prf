@@ -1,0 +1,104 @@
+# save_order.prf
+#
+# XD's build-order log, enabled by CONFIG save_order. It is loaded by an
+# explicit include() from default_post.prf, and deliberately lives in
+# mkspecs/xd/ (outside mkspecs/features/) so that default_post.prf stays in
+# charge of when it runs. CONFIG save_space enables save_order as well, and
+# builds on it (see save_space.prf); save_order never enables save_space, it
+# only shares the same cache file.
+#
+# INSTANT ORDER LOG. The moment qmake generates a leaf lib/app (have_target),
+# write one line "<pro>\t<variant>\t<resolved-target>" to the root
+# .qmake.save_space cache, unless the cache holds that line already. build.sh
+# qmakes the entire project one subdir at a time, each as a build reaches it,
+# so the cache ends up listing every project in BUILD ORDER, dependencies
+# first. XD's build.sh (tools/build-handler.sh) then builds per project in
+# that order, instead of the filesystem order a `find | sort` would give --
+# which could build a consumer before its dependency. The recorded
+# <resolved-target> lets build.sh notice a target that went missing since it
+# was built.
+#
+# An order line stays in the cache from run to run, and no run writes it
+# twice. build.sh only ever reads the order lines; every one of them is
+# written from here.
+#
+# The cache file is created by build.sh before it runs qmake; when it is
+# absent (caching off) the upward search below finds nothing and this is a
+# silent no-op, so including the file unconditionally is harmless.
+
+# saveOrderCacheFile()
+#
+# Returns the build's root .qmake.save_space cache, found by walking up from
+# OUT_PWD one directory at a time, or nothing when this build has none.
+defineReplace(saveOrderCacheFile) {
+    dir = $$OUT_PWD
+    for(ever) {
+        exists($$dir/.qmake.save_space): return($$dir/.qmake.save_space)
+        up = $$section(dir, /, 0, -2)
+        isEmpty(up)|equals(up, $$dir): return()
+        dir = $$up
+    }
+}
+
+# saveOrderTarget()
+#
+# Returns the actual target FILE of the variant being generated, so build.sh
+# can test its existence. resolve_target's win32 branch assumes MSVC naming for
+# a static library ("Foo.lib"), but the MinGW toolchain writes "libFoo.a"
+# (QMAKE_PREFIX_STATICLIB + QMAKE_EXTENSION_STATICLIB). So a static lib's path
+# is computed directly, and only shared libs, plugins, and apps, which
+# resolve_target gets right (a MinGW DLL/exe has no "lib" prefix either), use
+# QMAKE_RESOLVED_TARGET.
+defineReplace(saveOrderTarget) {
+    contains(TEMPLATE, .*lib):static {
+        return($$absolute_path($$DESTDIR, $$OUT_PWD)/$${QMAKE_PREFIX_STATICLIB}$${TARGET}.$${QMAKE_EXTENSION_STATICLIB})
+    }
+    load(resolve_target)
+    return($$QMAKE_RESOLVED_TARGET)
+}
+
+# saveOrderLine()
+#
+# Returns the order line of the variant being generated,
+# "<pro>\t<variant>\t<resolved-target>". Tab-separated so a path with a space
+# (rare, but legal) survives; the variant tag never contains a tab.
+defineReplace(saveOrderLine) {
+    tab = $$escape_expand(\\t)
+    tag =
+    debug_and_release: tag = debug_and_release:
+    CONFIG(debug, debug|release): tag = $${tag}debug
+    else:                         tag = $${tag}release
+    line = $$_PRO_FILE_$${tab}$${tag}$${tab}$$saveOrderTarget()
+    return($$line)
+}
+
+# saveOrderAppendOnce(file, line)
+#
+# Appends the text of the variable named by `line` to `file` as one line,
+# unless `file` already holds that very line.
+defineTest(saveOrderAppendOnce) {
+    wanted = $$eval($$2)
+    existing = $$cat($$1, lines)
+    for(each, existing): equals(each, $$wanted): return(true)
+    write_file($$1, wanted, append)
+    return(true)
+}
+
+# saveOrder()
+#
+# Logs the build order of the leaf lib/app being generated.
+defineTest(saveOrder) {
+    cache = $$saveOrderCacheFile()
+    isEmpty(cache): return(true)
+    # A debug_and_release project is evaluated once per variant (build_pass)
+    # plus once for the meta pass that only dispatches to the two
+    # sub-Makefiles. The meta pass has no target of its own, so skip it and log
+    # only the real per-variant passes (a single-config project has no
+    # build_pass and logs its one pass).
+    debug_and_release:!build_pass: return(true)
+    line = $$saveOrderLine()
+    saveOrderAppendOnce($$cache, line)
+    return(true)
+}
+
+have_target: saveOrder()
