@@ -41,6 +41,9 @@ protected:
     {
         unlock();
         this->val = 0;
+#if !QT_PTR_TAGGING
+        this->m_locked = false;
+#endif
     }
 
     typedef void *(*Constructor)(void *);
@@ -55,14 +58,22 @@ protected:
     bool connect(Constructor constructor, int size);
 
     inline QSharedMemory *memory() const {
+#if QT_PTR_TAGGING
         return reinterpret_cast<QSharedMemory *>(val & ~quintptr(1u));
+#else
+        return val;
+#endif
     }
 
 public:
 
     bool unlock();
 
+#if QT_PTR_TAGGING
     inline bool isLocked() const { return((val & quintptr(1u)) == quintptr(1u)); }
+#else
+    inline bool isLocked() const { return m_locked; }
+#endif
 
     inline bool isNull() const
         { return !memory()->constData(); }
@@ -78,6 +89,9 @@ public:
     {
         QSharedMemory *oldD = memory();
         val = 0;
+#if !QT_PTR_TAGGING
+        m_locked = false;
+#endif
         return oldD;
     }
 
@@ -88,7 +102,12 @@ private:
 
 protected:
     const void* o;
+#if QT_PTR_TAGGING
     quintptr val;
+#else
+    QSharedMemory *val;
+    bool m_locked;
+#endif
 };
 
 template <typename T>
@@ -96,7 +115,11 @@ class QSharedMemoryLocker : public QSharedMemoryLockerBase
 {
     typedef QSharedMemoryLockerBase super;
 #ifndef Q_CC_NOKIAX86
+#if QT_PTR_TAGGING
     typedef quintptr QSharedMemoryLocker:: *SafeBool;
+#else
+    typedef QSharedMemory *QSharedMemoryLocker:: *SafeBool;
+#endif
 #endif
 public:
     /// Constructs the class of type "T" at given QSharedMemory and locks it, or
@@ -160,6 +183,9 @@ public:
     inline void swap(QSharedMemoryLocker<T> &other)
     {
         qSwap(val, other.val);
+#if !QT_PTR_TAGGING
+        qSwap(m_locked, other.m_locked);
+#endif
     }
 
     typedef T *pointer;

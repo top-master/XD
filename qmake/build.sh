@@ -67,7 +67,12 @@ esac
 # static libc breaks. The chosen libc's compiler/flags land in BH_LIBC_CC /
 # BH_LIBC_LDFLAGS (see drive_qmake_build).
 if [ "$HOST_OS" = Linux ]; then
-    case " $* " in *" --libc="*|*" --musl "*) : ;; *) set -- "$@" --libc=static ;; esac
+    # Fil-C (--memory-safe / --watch-memory) links against its own libc, so a
+    # forced --libc=static would clash; leave those builds to Fil-C's linker.
+    case " $* " in
+        *" --libc="*|*" --musl "*|*" --memory-safe"*|*" --watch-memory "*) : ;;
+        *) set -- "$@" --libc=static ;;
+    esac
 fi
 
 QTOBJS="qfilesystemengine_unix.o qfilesystemiterator_unix.o qfsfileengine_unix.o qlocale_unix.o $MAC_OBJS"
@@ -77,9 +82,11 @@ $QT_DIR/src/corelib/io/qfsfileengine_unix.cpp \
 $QT_DIR/src/corelib/tools/qlocale_unix.cpp $MAC_SRCS"
 
 drive_qmake_build() {
-    # CXX: an explicit CXX wins; else the libc's preferred compiler (BH_LIBC_CC,
-    # e.g. musl's -- resolved by bh_parse_args from --libc/--musl); else g++
-    # (Darwin already pinned clang++). Validated here, once args are parsed.
+    # CXX: an explicit CXX wins; else the memory-safe compiler (BH_MEMSAFE_CXX,
+    # Fil-C, from --memory-safe); else the libc's preferred compiler (BH_LIBC_CC,
+    # e.g. musl's, from --libc/--musl); else g++ (Darwin already pinned clang++).
+    # Validated here, once args are parsed.
+    : "${CXX:=$BH_MEMSAFE_CXX}"
     : "${CXX:=$BH_LIBC_CC}"
     : "${CXX:=g++}"
     command -v "$CXX" >/dev/null 2>&1 \
@@ -88,6 +95,8 @@ drive_qmake_build() {
         release) MODE_CXXFLAGS="-std=c++14 -O2" ;;
         debug)   MODE_CXXFLAGS="-std=c++14 -O0 -g" ;;
     esac
+    # --release-debug (BH_DEBUG_INFO) keeps -g on an otherwise -O2 build.
+    [ "${BH_DEBUG_INFO:-0}" = 1 ] && MODE_CXXFLAGS="$MODE_CXXFLAGS -g"
     ARCH_CXXFLAGS=
     ARCH_LFLAGS=
     if [ "$HOST_OS" = Darwin ]; then

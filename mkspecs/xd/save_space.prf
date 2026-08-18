@@ -1,0 +1,93 @@
+# save_space.prf
+#
+# XD's --save-space feature, factored out of default_post.prf. It is loaded by
+# an explicit include() from default_post.prf, and deliberately lives in
+# mkspecs/xd/ (outside mkspecs/features/) so that default_post.prf stays in charge
+# of when it runs;
+# default_post.prf include()s it LAST, because job 2 below appends to
+# QMAKE_POST_LINK and the object wipe must run after every other post-link step
+# (the project's own, breakpad/strip, ...) has finished with the objects.
+#
+# Two jobs, both only for a leaf lib/app (have_target); a subdirs project has no
+# target of its own.
+#
+#   1. INSTANT ORDER LOG. The moment qmake generates this project, append one
+#      line "<pro>\t<variant>\t<resolved-target>" to the root .qmake.save_space
+#      marker. build.sh runs a single recursive `qmake -r`, which walks SUBDIRS
+#      in dependency order, so the marker ends up listing every project in the
+#      correct BUILD ORDER. XD's build.sh (tools/build-handler.sh) then builds
+#      (and skips) per project in that order, instead of the filesystem order a
+#      `find | sort` would give -- which could build a consumer before its
+#      dependency. The recorded <resolved-target> lets build.sh decide "already
+#      built" by testing whether that file exists (it survives the object wipe
+#      below), so no separate completion record is needed.
+#
+#   2. RECLAIM SPACE. At post-link, drop the object files plus the moc/rcc/uic
+#      output. It does NOT run the Makefile `clean` target: on win32 a shared
+#      library links with `--out-implib lib<name>.a`, and `clean` deletes that
+#      import library, which a dependent (e.g. ssleay32 against libeay32) still
+#      needs to link. Dropping just the objects and compiler-generated files
+#      reclaims the same space while keeping $(TARGET) and the import library.
+#
+# The marker is created by build.sh before the recursive qmake; when it is
+# absent (caching off) the upward search below finds nothing and this is a
+# silent no-op, so including the file unconditionally is harmless.
+
+have_target {
+    # --- 1. instant order log -------------------------------------------------
+    # A debug_and_release project is evaluated once per variant (build_pass) plus
+    # once for the meta pass that only dispatches to the two sub-Makefiles. The
+    # meta pass has no target of its own, so skip it and log only the real
+    # per-variant passes (a single-config project has no build_pass and logs its
+    # one pass).
+    if(!debug_and_release|build_pass) {
+        debug_and_release {
+            CONFIG(debug, debug|release): ss_tag = debug_and_release:debug
+            else:                         ss_tag = debug_and_release:release
+        } else {
+            CONFIG(debug, debug|release): ss_tag = debug
+            else:                         ss_tag = release
+        }
+
+        # Resolve the actual target FILE for this variant so build.sh can test its
+        # existence to decide whether the project is already built. resolve_target's
+        # win32 branch assumes MSVC naming for a static library ("Foo.lib"), but the
+        # MinGW toolchain writes "libFoo.a" (QMAKE_PREFIX_STATICLIB +
+        # QMAKE_EXTENSION_STATICLIB). So compute a static lib's path directly and only
+        # fall back to QMAKE_RESOLVED_TARGET for shared libs, plugins, and apps, which
+        # resolve_target gets right (a MinGW DLL/exe has no "lib" prefix either).
+        if(contains(TEMPLATE, .*lib):static) {
+            ss_target = $$absolute_path($$DESTDIR, $$OUT_PWD)/$${QMAKE_PREFIX_STATICLIB}$${TARGET}.$${QMAKE_EXTENSION_STATICLIB}
+        } else {
+            load(resolve_target)
+            ss_target = $$QMAKE_RESOLVED_TARGET
+        }
+
+        # The build root is not known here, so walk up from OUT_PWD one directory
+        # at a time until the root .qmake.save_space marker is found.
+        ss_dir = $$OUT_PWD
+        ss_marker =
+        for(ever) {
+            exists($$ss_dir/.qmake.save_space) {
+                ss_marker = $$ss_dir/.qmake.save_space
+                break()
+            }
+            ss_up = $$section(ss_dir, /, 0, -2)
+            isEmpty(ss_up):          break()
+            equals(ss_up, $$ss_dir): break()
+            ss_dir = $$ss_up
+        }
+
+        !isEmpty(ss_marker) {
+            # Tab-separated so a path with a space (rare, but legal) survives; the
+            # variant tag never contains a tab. write_file appends one line.
+            ss_line = $$_PRO_FILE_$$escape_expand(\\t)$$ss_tag$$escape_expand(\\t)$$ss_target
+            write_file($$ss_marker, ss_line, append)
+        }
+    }
+
+    # --- 2. reclaim space at post-link ---------------------------------------
+    !isEmpty(QMAKE_POST_LINK):QMAKE_POST_LINK = $$QMAKE_POST_LINK$$escape_expand(\\n\\t)
+    QMAKE_POST_LINK = $$QMAKE_POST_LINK$$quote($(MAKE) -f $(MAKEFILE) compiler_clean)$$escape_expand(\\n\\t)
+    QMAKE_POST_LINK = $$QMAKE_POST_LINK$$quote(-$(DEL_FILE) $(OBJECTS))
+}

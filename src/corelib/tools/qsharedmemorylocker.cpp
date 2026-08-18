@@ -32,9 +32,14 @@ QSharedMemoryLockerBase::QSharedMemoryLockerBase(QSharedMemory *ptr, const void 
 {
     // Intentionally NOT in header, else for some compilers the
     // assert may fail even if `ptr` is aligned correctly.
+#if QT_PTR_TAGGING
     Q_ASSERT_X((reinterpret_cast<quintptr>(ptr) & quintptr(1u)) == quintptr(0),
                "QSharedMemoryLocker", "QSharedMemory pointer is misaligned");
     val = reinterpret_cast<quintptr>(ptr);
+#else
+    val = ptr;
+    m_locked = false;
+#endif
 }
 
 class QSharedMemoryLockerList : public QList< QPair< const void* , quintptr > >
@@ -63,7 +68,7 @@ bool QSharedMemoryLockerBase::connect(QSharedMemoryLockerBase::Constructor const
     if (mem) {
         QSharedMemoryLockerList *list = staticList();
         QMutexLocker _(o ? &list->mutex : Q_NULLPTR);
-        if ( ! o || ! list->contains(qMakePair(o, val))) {
+        if ( ! o || ! list->contains(qMakePair(o, reinterpret_cast<quintptr>(memory())))) {
             QLatin1String error;
             if (mem->isAttached()) {
                 locked = mem->lock();
@@ -88,8 +93,12 @@ bool QSharedMemoryLockerBase::connect(QSharedMemoryLockerBase::Constructor const
             }
             if (locked) {
                 if (o)
-                    list->append(qMakePair(o, val));
+                    list->append(qMakePair(o, reinterpret_cast<quintptr>(memory())));
+#if QT_PTR_TAGGING
                 val |= quintptr(1u);
+#else
+                m_locked = true;
+#endif
             } else {
                 // Error reporting.
                 QSharedMemoryPrivate *memD = QSharedMemoryPrivate::get(mem);
@@ -124,8 +133,12 @@ bool QSharedMemoryLockerBase::unlock()
         QSharedMemoryLockerList *list = staticList();
         QMutexLocker _(&list->mutex);
         if (isLocked()) {
+#if QT_PTR_TAGGING
             val &= ~quintptr(1u);
-            if (o) list->removeOne(qMakePair(o, val));
+#else
+            m_locked = false;
+#endif
+            if (o) list->removeOne(qMakePair(o, reinterpret_cast<quintptr>(memory())));
             return memory()->unlock();
         }
     }

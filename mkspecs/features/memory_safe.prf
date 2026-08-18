@@ -1,0 +1,16 @@
+# memory_safe.prf
+#
+# Loaded for a --memory-safe build: tools/build-handler.sh forwards
+# CONFIG+=memory_safe to every qmake call, which auto-loads this feature. Its job
+# is to turn that bare flag into the actual memory-safe compiler FAMILY, recorded
+# in the `memory_safe` variable, so build files can branch on the real toolchain
+# rather than re-sniffing it each time:
+#
+#     contains(memory_safe, ^Fil-C$) { ... }   # e.g. OpenSSL drops its asm
+#
+# Fil-C is a clang whose --version banner names it ("... (Fil-C x.yz ...)"); the
+# short mode string ("filc", how --memory-safe=filc spells it) is kept alongside
+# the canonical family name ("Fil-C"). Detection is by banner, not spec name,
+# because a plain clang uses the very same *-clang mkspec.
+_ms_banner = $$system($$QMAKE_CXX --version 2>/dev/null)
+contains(_ms_banner, .*Fil-C.*): memory_safe = filc Fil-C

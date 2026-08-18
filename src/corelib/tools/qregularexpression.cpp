@@ -1112,6 +1112,7 @@ static pcre16_jit_stack *qtPcreCallback(void *)
 */
 static bool isJitEnabled()
 {
+#ifndef QT_PTR_TRACKING
     QByteArray jitEnvironment = qgetenv("QT_ENABLE_REGEXP_JIT");
     if (!jitEnvironment.isEmpty()) {
         bool ok;
@@ -1124,6 +1125,11 @@ static bool isJitEnabled()
 #else
     return true;
 #endif
+#else
+    // PCRE's JIT emits raw native machine code that runs outside Fil-C's
+    // instrumentation and is not memory-safe, so keep to the interpreter.
+    return false;
+#endif // QT_PTR_TRACKING
 }
 
 /*!
