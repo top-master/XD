@@ -159,7 +159,12 @@ for(ever) {
                 lib = $$MODULE_MODULE$$qtPlatformTargetSuffix()
                 LIBS$$var_sfx += -l$$lib
 
-                contains(MODULE_CONFIG, staticlib): \
+                # TRACE/mkspecs: added `qt_static` build-mode support #5,
+                # hence under qt_static each module is a static archive too:
+                # the static module .pri files carry no `staticlib`, yet the
+                # archive has to be a link input, else a rebuilt archive (whose
+                # .prl stays untouched) never relinks an app against it.
+                contains(MODULE_CONFIG, staticlib)|qt_static: \
                     PRE_TARGETDEPS *= $$MODULE_LIBS/$${QMAKE_PREFIX_STATICLIB}$${lib}.$${QMAKE_EXTENSION_STATICLIB}
 
                 !isEmpty(QMAKE_LSB) {

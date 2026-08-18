@@ -7,7 +7,10 @@
 # qmake/make/sudo/Xcode being usable -- so this file can run on any
 # POSIX shell host. Stateful methods (argument parsing, progress
 # bookkeeping, defaults) are verified by-value; rendering methods
-# (which gate on `[ -t 2 ]`) are checked for code path coverage.
+# (which gate on `[ -t 2 ]`) are checked for code path coverage. The
+# last section builds a small project end to end through every build
+# mode; it needs XD's qmake, make, and a C++ compiler, and is skipped
+# where one is missing.
 #
 # Run: `sh build-handler.spec.sh`
 # Exit: number of failed specs (0 = all pass).
@@ -37,11 +40,11 @@ test_begin 'build-handler.spec'
 
 test_section 'bh_parse_args -- defaults'
 
-unset BH_MODE BH_VERBOSE BH_HEADLESS BH_RUN_TESTS BH_RUN_TARGET
-unset BH_NO_PROGRESS BH_CLEAN BH_WIPE BH_NO_BUILD BH_FORCE_QMAKE
+unset BH_MODE BH_VERBOSE BH_LOG_LEVEL BH_HEADLESS BH_RUN_TESTS BH_RUN_TARGET
+unset BH_NO_PROGRESS BH_CLEAN BH_WIPE BH_NO_BUILD BH_FORCE_QMAKE BH_PREFER_PATH
 bh_parse_args
 expect 'BH_MODE default is debug'           debug "$BH_MODE"
-expect 'BH_VERBOSE default is 0'            0     "$BH_VERBOSE"
+expect 'BH_LOG_LEVEL default is 1 (normal)' 1     "$BH_LOG_LEVEL"
 expect 'BH_HEADLESS default is 0'           0     "$BH_HEADLESS"
 expect 'BH_RUN_TESTS default is 0'          0     "$BH_RUN_TESTS"
 expect 'BH_RUN_TARGET default is 0'         0     "$BH_RUN_TARGET"
@@ -51,17 +54,24 @@ expect 'BH_WIPE default is 0'               0     "$BH_WIPE"
 expect 'BH_NO_BUILD default is 0'           0     "$BH_NO_BUILD"
 expect 'BH_FORCE_QMAKE default is 0'        0     "$BH_FORCE_QMAKE"
 expect 'BH_IGNORE_PRI default is 0'         0     "$BH_IGNORE_PRI"
+expect 'BH_PREFER_PATH default is 0'        0     "$BH_PREFER_PATH"
 
 test_section 'bh_parse_args -- individual flags'
 
 unset BH_MODE BH_WIPE BH_FORCE_QMAKE BH_CLEAN BH_HEADLESS BH_VERBOSE
-unset BH_RUN_TESTS BH_RUN_TARGET BH_NO_PROGRESS BH_NO_BUILD
+unset BH_LOG_LEVEL BH_RUN_TESTS BH_RUN_TARGET BH_NO_PROGRESS BH_NO_BUILD
 bh_parse_args --verbose
-expect '--verbose sets BH_VERBOSE=1'        1 "$BH_VERBOSE"
+expect '--verbose sets BH_LOG_LEVEL=2'      2 "$BH_LOG_LEVEL"
 
-unset BH_VERBOSE
+unset BH_LOG_LEVEL
 bh_parse_args -v
-expect '-v sets BH_VERBOSE=1'               1 "$BH_VERBOSE"
+expect '-v sets BH_LOG_LEVEL=2'             2 "$BH_LOG_LEVEL"
+
+unset BH_LOG_LEVEL BH_VERBOSE
+BH_VERBOSE=1
+bh_parse_args
+expect 'an old truthy BH_VERBOSE maps to BH_LOG_LEVEL=2' 2 "$BH_LOG_LEVEL"
+unset BH_VERBOSE
 
 unset BH_RUN_TESTS
 bh_parse_args --test
@@ -127,6 +137,27 @@ BH_MODE=release
 bh_parse_args
 expect 'env BH_MODE=release survives bh_parse_args' release "$BH_MODE"
 
+# A given mode builds a subdirs tree in that one variant; without one, the
+# tree's own configuration decides, and an app takes CONFIG+=$BH_MODE.
+unset BH_MODE BH_MODE_GIVEN BH_DEBUG_INFO BH_SAVE_SPACE BH_MEMSAFE
+BH_TEMPLATE=subdirs
+bh_parse_args --debug -- CONFIG+=x
+expect '--debug: a subdirs tree builds the debug variant only' \
+    'CONFIG+=no_debug_and_release CONFIG-=debug_and_release CONFIG-=build_all CONFIG-=release CONFIG+=debug CONFIG+=x' \
+    "$BH_REMAINING_ARGS"
+unset BH_MODE BH_MODE_GIVEN BH_DEBUG_INFO
+bh_parse_args --release-debug
+expect '--release-debug: the release variant, with debug info' \
+    'CONFIG+=no_debug_and_release CONFIG-=debug_and_release CONFIG-=build_all CONFIG-=debug CONFIG+=release CONFIG+=force_debug_info' \
+    "$BH_REMAINING_ARGS"
+unset BH_MODE BH_MODE_GIVEN BH_DEBUG_INFO
+bh_parse_args -- CONFIG+=x
+expect 'no mode: a subdirs tree keeps its own variants' 'CONFIG+=x' "$BH_REMAINING_ARGS"
+unset BH_TEMPLATE BH_MODE BH_MODE_GIVEN BH_DEBUG_INFO
+bh_parse_args --debug -- CONFIG+=x
+expect '--debug: an app gets no variant values here' 'CONFIG+=x' "$BH_REMAINING_ARGS"
+unset BH_MODE BH_MODE_GIVEN BH_REMAINING_ARGS
+
 test_section 'bh_parse_args -- remaining args'
 
 unset BH_REMAINING_ARGS
@@ -138,6 +169,533 @@ unset BH_REMAINING_ARGS
 bh_parse_args --headless CONFIG+=qux
 expect 'first non-flag positional also lands in BH_REMAINING_ARGS' \
     'CONFIG+=qux' "$BH_REMAINING_ARGS"
+
+
+# MARK: specs: bh_find_filc.
+
+test_section 'bh_find_filc -- Fil-C-Light first, else the first working Fil-C'
+
+# Fake toolchains in a sandbox stand in for the installed one and for the
+# trees around a checkout at `top/mid/xd`; each fake `clang++` names its own
+# toolchain in its Fil-C version banner, hence a case reads which one won.
+
+_bh_spec_sandbox=$(mktemp -d)
+mkdir -p "$_bh_spec_sandbox/top/mid/xd"
+
+# Writes a fake Fil-C compiler at <file> that names <tag> in its banner.
+_bh_spec_fake_filc() {
+    mkdir -p "${1%/*}"
+    printf '#!/bin/sh\necho "clang version 20 (Fil-C 0.686) %s"\n' "$2" > "$1"
+    chmod +x "$1"
+}
+
+# Makes a fake tree at `top/<path>`; a second argument `light` adds the
+# marker of a Fil-C-Light toolchain.
+_bh_spec_filc_tree() {
+    _bh_spec_fake_filc "$_bh_spec_sandbox/top/$1/build/bin/clang++" "$1"
+    if [ "${2:-}" = light ]; then
+        mkdir -p "$_bh_spec_sandbox/top/$1/build/share"
+        : > "$_bh_spec_sandbox/top/$1/build/share/fil-c-light.ini"
+    fi
+}
+
+# Runs the search for the sandbox checkout, in a subshell, and prints the
+# banner tag of the `clang++` it put first on `PATH`, or `none`.
+_bh_spec_find_filc() (
+    BH_ROOT=$_bh_spec_sandbox/top/mid/xd
+    BH_FILC_OPT_DIR=$_bh_spec_sandbox/opt
+    XDG_CACHE_HOME=$_bh_spec_sandbox/cache
+    _bh_spec_path=$PATH
+    if bh_find_filc; then
+        clang++ --version | sed 's/.*) //'
+    elif [ "$PATH" = "$_bh_spec_path" ]; then
+        echo none
+    else
+        echo "none, yet PATH changed"
+    fi
+)
+
+_bh_spec_links=$_bh_spec_sandbox/cache/build-handler/filc-links/filcc-clang-20
+
+expect 'no toolchain anywhere -> none, PATH kept' none "$(_bh_spec_find_filc)"
+
+_bh_spec_fake_filc "$_bh_spec_sandbox/opt/bin/filcc-clang-20" opt
+expect 'only an upstream installed toolchain -> it, through clang links' \
+    opt "$(_bh_spec_find_filc)"
+expect 'the clang++ link names the installed compiler' \
+    "$_bh_spec_sandbox/opt/bin/filcc-clang-20" \
+    "$(readlink "$_bh_spec_links/clang++")"
+expect 'the clang link names the installed compiler' \
+    "$_bh_spec_sandbox/opt/bin/filcc-clang-20" \
+    "$(readlink "$_bh_spec_links/clang")"
+_bh_spec_inode=$(ls -id "$_bh_spec_links/clang++")
+_bh_spec_find_filc > /dev/null
+expect 'a link that already names the compiler is not made again' \
+    "$_bh_spec_inode" "$(ls -id "$_bh_spec_links/clang++")"
+
+_bh_spec_filc_tree mid/filc
+expect 'an upstream tree loses to the earlier installed one' \
+    opt "$(_bh_spec_find_filc)"
+
+_bh_spec_filc_tree filc-light light
+expect 'a Fil-C-Light tree one level higher wins over upstream ones' \
+    filc-light "$(_bh_spec_find_filc)"
+
+_bh_spec_filc_tree mid/fil-c-light
+expect 'an unmarked tree, though named Light, loses to a marked one' \
+    filc-light "$(_bh_spec_find_filc)"
+
+_bh_spec_filc_tree fil-c-light light
+expect '../../fil-c-light comes before ../../filc-light' \
+    fil-c-light "$(_bh_spec_find_filc)"
+
+mkdir -p "$_bh_spec_sandbox/opt/share"
+: > "$_bh_spec_sandbox/opt/share/fil-c-light.ini"
+expect 'a Fil-C-Light installed toolchain comes first' \
+    opt "$(_bh_spec_find_filc)"
+
+rm -rf "$_bh_spec_sandbox/opt"
+expect 'a relative BH_ROOT still puts an absolute folder on PATH' \
+    "$_bh_spec_sandbox/top/fil-c-light/build/bin/clang++" \
+    "$(cd "$_bh_spec_sandbox/top" && BH_ROOT=mid/xd \
+        BH_FILC_OPT_DIR=$_bh_spec_sandbox/opt bh_find_filc && command -v clang++)"
+
+rm -rf "$_bh_spec_sandbox"
+
+
+test_section 'bh_parse_args -- --prefer-path takes a Fil-C clang++ already on PATH'
+
+# A Fil-C-Light tree sits beside the sandbox checkout, while another Fil-C
+# `clang++`, or a plain one, comes first on `PATH`; each case prints the
+# compiler `--memory-safe` settles on, relative to the sandbox.
+
+_bh_spec_sandbox=$(mktemp -d)
+mkdir -p "$_bh_spec_sandbox/top/mid/xd"
+_bh_spec_filc_tree fil-c-light light
+_bh_spec_fake_filc "$_bh_spec_sandbox/filc-path/clang++" path
+mkdir -p "$_bh_spec_sandbox/plain-path"
+printf '#!/bin/sh\necho "clang version 20.1.8 (plain)"\n' \
+    > "$_bh_spec_sandbox/plain-path/clang++"
+chmod +x "$_bh_spec_sandbox/plain-path/clang++"
+
+# Runs `bh_parse_args --memory-safe <arguments>` in a subshell, with the
+# folder <first on PATH> of the sandbox ahead of the rest of `PATH`.
+_bh_spec_memsafe() (
+    _bh_spec_first=$1
+    shift
+    PATH=$_bh_spec_sandbox/$_bh_spec_first:$PATH
+    BH_ROOT=$_bh_spec_sandbox/top/mid/xd
+    BH_FILC_OPT_DIR=$_bh_spec_sandbox/opt
+    XDG_CACHE_HOME=$_bh_spec_sandbox/cache
+    unset BH_PREFER_PATH BH_MEMSAFE
+    bh_parse_args --headless --memory-safe "$@" > /dev/null 2>&1
+    echo "${BH_MEMSAFE_CXX#"$_bh_spec_sandbox"/}"
+)
+
+expect 'without --prefer-path a Fil-C-Light tree beats a Fil-C on PATH' \
+    top/fil-c-light/build/bin/clang++ "$(_bh_spec_memsafe filc-path)"
+expect '--prefer-path takes the Fil-C on PATH' \
+    filc-path/clang++ "$(_bh_spec_memsafe filc-path --prefer-path)"
+expect '--prefer-path passes over a clang++ on PATH that is no Fil-C one' \
+    top/fil-c-light/build/bin/clang++ "$(_bh_spec_memsafe plain-path --prefer-path)"
+
+rm -rf "$_bh_spec_sandbox"
+
+
+# MARK: specs: bh_make_find and bh_make_run.
+
+test_section 'bh_make_run -- the make tool of the spec, with arguments it takes'
+
+# Fake `make`, `nmake` and `jom` print their name, the folder they run in and
+# their arguments; each case runs in a subshell with no make tool picked yet.
+# The fake `jom` joins in last, once the cases of nmake alone are done.
+
+_bh_spec_sandbox=$(mktemp -d)
+mkdir -p "$_bh_spec_sandbox/bin" "$_bh_spec_sandbox/sub"
+for _bh_spec_tool in make nmake jom; do
+    printf '#!/bin/sh\necho "%s ${PWD##*/} $*"\n' "$_bh_spec_tool" \
+        > "$_bh_spec_sandbox/bin/$_bh_spec_tool"
+    chmod +x "$_bh_spec_sandbox/bin/$_bh_spec_tool"
+done
+mv "$_bh_spec_sandbox/bin/jom" "$_bh_spec_sandbox/jom"
+
+# Runs `bh_make_run` with <arguments> under the target spec <spec>, from the
+# sandbox, with the fake tools first on `PATH`.
+_bh_spec_make() (
+    unset BH_MAKE BH_MAKE_TYPE BH_CROSS_SPEC
+    QMAKESPEC=$1
+    shift
+    PATH=$_bh_spec_sandbox/bin:$PATH
+    cd "$_bh_spec_sandbox" && bh_make_run "$@"
+)
+
+expect 'a GNU make spec runs make with the arguments as given' \
+    "make ${_bh_spec_sandbox##*/} -j4 -k qmake_all" \
+    "$(_bh_spec_make linux-g++ -j4 -k qmake_all)"
+expect '-C <dir> runs the tool in <dir>' \
+    'make sub -k clean' "$(_bh_spec_make linux-g++ -C sub -k clean)"
+expect 'an MSVC spec runs nmake, without -j<n>' \
+    "nmake ${_bh_spec_sandbox##*/} -nologo -f Makefile.Release release-all" \
+    "$(_bh_spec_make win32-msvc2017 -j4 -f Makefile.Release release-all)"
+expect 'nmake also drops -j <n>, and keeps a number that is no job count' \
+    "nmake ${_bh_spec_sandbox##*/} -nologo -n 7" \
+    "$(_bh_spec_make win32-msvc2015 -j 2 -n 7)"
+expect 'nmake drops a trailing -j' \
+    "nmake ${_bh_spec_sandbox##*/} -nologo 8 -k" \
+    "$(_bh_spec_make win32-msvc2015 8 -k -j)"
+expect '-C <dir> runs nmake in <dir>' \
+    'nmake sub -nologo mocables' "$(_bh_spec_make win32-msvc2017 -C sub mocables)"
+expect 'the cross target spec decides over the host one' \
+    "make ${_bh_spec_sandbox##*/} all" \
+    "$(BH_CROSS_SPEC=win32-g++; QMAKESPEC=win32-msvc2017; unset BH_MAKE BH_MAKE_TYPE
+       PATH=$_bh_spec_sandbox/bin:$PATH; cd "$_bh_spec_sandbox" && bh_make_run all)"
+expect 'the tool found is kept by absolute path, with its type' \
+    "$_bh_spec_sandbox/bin/nmake nmake" \
+    "$(unset BH_MAKE BH_MAKE_TYPE BH_CROSS_SPEC; QMAKESPEC=win32-msvc2017
+       PATH=$_bh_spec_sandbox/bin:$PATH; bh_make_find; echo "$BH_MAKE $BH_MAKE_TYPE")"
+expect 'a GNU make spec keeps make by absolute path, as type gnu' \
+    "$_bh_spec_sandbox/bin/make gnu" \
+    "$(unset BH_MAKE BH_MAKE_TYPE BH_CROSS_SPEC; QMAKESPEC=linux-g++
+       PATH=$_bh_spec_sandbox/bin:$PATH; bh_make_find; echo "$BH_MAKE $BH_MAKE_TYPE")"
+expect 'a preset BH_MAKE is kept, its type taken from its name' \
+    "nmake ${_bh_spec_sandbox##*/} -nologo all" \
+    "$(BH_MAKE=nmake QMAKESPEC=linux-g++; unset BH_MAKE_TYPE
+       PATH=$_bh_spec_sandbox/bin:$PATH; cd "$_bh_spec_sandbox" && bh_make_run all)"
+expect 'a preset BH_MAKE_TYPE decides how the options are passed' \
+    "nmake ${_bh_spec_sandbox##*/} -j4 all" \
+    "$(BH_MAKE=nmake BH_MAKE_TYPE=gnu; PATH=$_bh_spec_sandbox/bin:$PATH
+       cd "$_bh_spec_sandbox" && bh_make_run -j4 all)"
+expect_returns 'an unknown BH_MAKE_TYPE is an error' \
+    1 sh -c 'BH_MAKE=make BH_MAKE_TYPE=bsd
+             . "'"$_spec_dir"'/build-handler.sh"; bh_make_run all'
+
+mv "$_bh_spec_sandbox/jom" "$_bh_spec_sandbox/bin/jom"
+expect 'an MSVC spec takes jom over nmake, by absolute path' \
+    "$_bh_spec_sandbox/bin/jom jom" \
+    "$(unset BH_MAKE BH_MAKE_TYPE BH_CROSS_SPEC; QMAKESPEC=win32-msvc2017
+       PATH=$_bh_spec_sandbox/bin:$PATH; bh_make_find; echo "$BH_MAKE $BH_MAKE_TYPE")"
+expect 'jom gets -j<n> as -j <n>' \
+    "jom ${_bh_spec_sandbox##*/} -nologo -j 4 -f Makefile.Release release-all" \
+    "$(_bh_spec_make win32-msvc2017 -j4 -f Makefile.Release release-all)"
+expect 'jom keeps -j <n>, and drops a bare -j' \
+    "jom ${_bh_spec_sandbox##*/} -nologo -j 2 -k all" \
+    "$(_bh_spec_make win32-msvc2017 -j 2 -k -j all)"
+expect '-C <dir> runs jom in <dir>' \
+    'jom sub -nologo -k clean' "$(_bh_spec_make win32-msvc2015 -C sub -k clean)"
+expect 'a preset BH_MAKE named jom is of type jom' \
+    "jom ${_bh_spec_sandbox##*/} -nologo -j 3 all" \
+    "$(BH_MAKE=jom; unset BH_MAKE_TYPE; PATH=$_bh_spec_sandbox/bin:$PATH
+       cd "$_bh_spec_sandbox" && bh_make_run -j3 all)"
+expect 'bh_make_find_gnu picks GNU make even for an MSVC spec' \
+    "make ${_bh_spec_sandbox##*/} -j2 -f Makefile.unix" \
+    "$(unset BH_MAKE BH_MAKE_TYPE BH_CROSS_SPEC; QMAKESPEC=win32-msvc2017
+       PATH=$_bh_spec_sandbox/bin:$PATH; cd "$_bh_spec_sandbox" && bh_make_find_gnu \
+       && bh_make_run -j2 -f Makefile.unix)"
+mv "$_bh_spec_sandbox/bin/make" "$_bh_spec_sandbox/bin/mingw32-make"
+expect 'GNU make named mingw32-make serves where make is missing' \
+    "$_bh_spec_sandbox/bin/mingw32-make gnu" \
+    "$(unset BH_MAKE BH_MAKE_TYPE BH_CROSS_SPEC; QMAKESPEC=win32-g++
+       PATH=$_bh_spec_sandbox/bin; bh_make_find; echo "$BH_MAKE $BH_MAKE_TYPE")"
+mv "$_bh_spec_sandbox/bin/mingw32-make" "$_bh_spec_sandbox/bin/make"
+rm "$_bh_spec_sandbox/bin/nmake"
+expect 'jom alone serves an MSVC spec' \
+    "jom ${_bh_spec_sandbox##*/} -nologo all" \
+    "$(_bh_spec_make win32-msvc2017 all)"
+rm "$_bh_spec_sandbox/bin/jom"
+expect_returns 'an MSVC spec with neither jom nor nmake on PATH is an error' \
+    1 _bh_spec_make win32-msvc2017 all
+
+# Writes a fake `jom` that reports <version>, ended the way a Windows program
+# ends a line (`\r\n`), for `-VERSION`, as the real one does.
+_bh_spec_versioned_jom() {
+    printf '#!/bin/sh\nif [ "$1" = -VERSION ]; then\n    printf "jom version %s\\r\\n"\n    exit 0\nfi\necho "jom ${PWD##*/} $*"\n' \
+        "$1" > "$_bh_spec_sandbox/bin/jom"
+    chmod +x "$_bh_spec_sandbox/bin/jom"
+}
+
+# Runs `bh_make_find` under an MSVC spec, then prints the tool it picked and,
+# below it, the warnings it wrote.
+_bh_spec_find_msvc() (
+    unset BH_MAKE BH_MAKE_TYPE BH_CROSS_SPEC
+    QMAKESPEC=win32-msvc2017
+    PATH=$_bh_spec_sandbox/bin:$PATH
+    bh_make_find 2>"$_bh_spec_sandbox/warnings"
+    echo "$BH_MAKE $BH_MAKE_TYPE"
+    cat "$_bh_spec_sandbox/warnings"
+)
+
+printf '#!/bin/sh\necho "nmake ${PWD##*/} $*"\n' > "$_bh_spec_sandbox/bin/nmake"
+chmod +x "$_bh_spec_sandbox/bin/nmake"
+_bh_spec_versioned_jom 1.1.3
+expect 'a jom newer than 1.0.16 is taken over nmake' \
+    "$_bh_spec_sandbox/bin/jom jom" "$(_bh_spec_find_msvc)"
+_bh_spec_versioned_jom 1.0.16
+expect 'jom 1.0.16 is taken over nmake' \
+    "$_bh_spec_sandbox/bin/jom jom" "$(_bh_spec_find_msvc)"
+_bh_spec_versioned_jom 1.0.13
+expect 'an older jom gives way to nmake, with a warning' \
+    "$_bh_spec_sandbox/bin/nmake nmake
+
+WARNING: jom 1.0.13 can hang once a command fails, hence
+         nmake.exe runs the Makefiles instead.
+         Update jom to 1.0.16 or newer to build in parallel:
+         https://download.qt.io/official_releases/jom/" \
+    "$(_bh_spec_find_msvc)"
+rm "$_bh_spec_sandbox/bin/nmake"
+expect 'an older jom still runs when nmake is missing, with a warning' \
+    "$_bh_spec_sandbox/bin/jom jom
+
+WARNING: jom 1.0.13 can hang once a command fails, and
+         no nmake.exe is on PATH to run instead.
+         Update jom to 1.0.16 or newer:
+         https://download.qt.io/official_releases/jom/" \
+    "$(_bh_spec_find_msvc)"
+
+rm -rf "$_bh_spec_sandbox"
+
+test_section 'bh_make_run -- the folder of cl comes first for MSVC Makefiles'
+
+# A fake `nmake` prints which `link` it finds; a `link` like Git Bash's sits
+# earlier on PATH than the folder of the fake `cl` and its `link`.
+_bh_spec_sandbox=$(mktemp -d)
+mkdir -p "$_bh_spec_sandbox/usr-bin" "$_bh_spec_sandbox/msvc"
+for _bh_spec_tool in usr-bin/link msvc/cl msvc/link msvc/nmake; do
+    printf '#!/bin/sh\ncommand -v link\n' > "$_bh_spec_sandbox/$_bh_spec_tool"
+    chmod +x "$_bh_spec_sandbox/$_bh_spec_tool"
+done
+
+expect "nmake finds the link beside cl, not Git Bash's" \
+    "$_bh_spec_sandbox/msvc/link" \
+    "$(unset BH_MAKE BH_MAKE_TYPE BH_CROSS_SPEC; QMAKESPEC=win32-msvc2010
+       PATH=$_bh_spec_sandbox/usr-bin:$_bh_spec_sandbox/msvc:$PATH
+       bh_make_run all)"
+expect 'the PATH of the script stays as it was' \
+    "$_bh_spec_sandbox/usr-bin/link" \
+    "$(unset BH_MAKE BH_MAKE_TYPE BH_CROSS_SPEC; QMAKESPEC=win32-msvc2010
+       PATH=$_bh_spec_sandbox/usr-bin:$_bh_spec_sandbox/msvc:$PATH
+       bh_make_run all >/dev/null; command -v link)"
+rm "$_bh_spec_sandbox/msvc/link"
+expect 'with no link beside cl, PATH stays as it was for nmake too' \
+    "$_bh_spec_sandbox/usr-bin/link" \
+    "$(unset BH_MAKE BH_MAKE_TYPE BH_CROSS_SPEC; QMAKESPEC=win32-msvc2010
+       PATH=$_bh_spec_sandbox/usr-bin:$_bh_spec_sandbox/msvc:$PATH
+       bh_make_run all)"
+rm -rf "$_bh_spec_sandbox"
+
+test_section 'bh_path_prepend -- a folder moves first, with no copy left'
+
+expect 'the folder moves first, and its copies in other letter case go' \
+    '/d/WinDDK/VC/bin:/usr/bin:/c/x:/c/y' \
+    "$(bh_path_prepend /d/WinDDK/VC/bin '/usr/bin:/D/WINDDK/vc/bin:/c/x:/d/winddk/VC/bin:/c/y')"
+expect 'a copy with a trailing slash goes too' \
+    '/d/vc:/usr/bin' "$(bh_path_prepend /d/vc '/usr/bin:/d/vc/')"
+expect 'a folder not on PATH is only added' \
+    '/a/b:/c:/d' "$(bh_path_prepend /a/b '/c:/d')"
+expect 'empty entries stay' \
+    '/a/b:/c::/d' "$(bh_path_prepend /a/b '/c::/a/b:/d')"
+expect 'a folder that only starts like another one stays' \
+    '/a/b:/a/bc:/a/b/c' "$(bh_path_prepend /a/b '/a/bc:/a/b/c')"
+expect 'PATH is used when no path is given' \
+    "/a/b:/c:$PATH" "$(PATH=/c:$PATH; bh_path_prepend /a/b)"
+expect 'an empty last entry stays' \
+    '/a/b:/c:' "$(bh_path_prepend /a/b '/c:/a/b:')"
+expect 'an empty path gives the folder alone' \
+    /a/b "$(bh_path_prepend /a/b '')"
+expect 'a backslash in the folder stays as it is' \
+    '/a\tb:/c' "$(bh_path_prepend '/a\tb' /c)"
+
+test_section 'bh_msvc_spec -- the mkspec of the Visual Studio on PATH'
+
+# Fake `cl` that prints the banner of the compiler <version>, as the real one
+# does on stderr when it gets no source.
+_bh_spec_sandbox=$(mktemp -d)
+_bh_spec_fake_cl() {
+    printf '#!/bin/sh\necho "Microsoft (R) C/C++ Optimizing Compiler Version %s for x64" 1>&2\n' \
+        "$1" > "$_bh_spec_sandbox/cl"
+    chmod +x "$_bh_spec_sandbox/cl"
+}
+
+# Runs `bh_msvc_spec` with the fake `cl` first on `PATH`, and no
+# `VisualStudioVersion`.
+_bh_spec_msvc_spec() (
+    unset VisualStudioVersion
+    PATH=$_bh_spec_sandbox:$PATH
+    bh_msvc_spec
+)
+
+for _bh_spec_pair in 14.00.50727.762:win32-msvc2005 \
+        15.00.30729.01:win32-msvc2008 16.00.40219.01:win32-msvc2010 \
+        17.00.61030:win32-msvc2012 18.00.40629:win32-msvc2013 \
+        19.00.24215.1:win32-msvc2015 19.16.27045:win32-msvc2017 \
+        19.29.30154:win32-msvc2017; do
+    _bh_spec_fake_cl "${_bh_spec_pair%%:*}"
+    expect "cl ${_bh_spec_pair%%:*} takes ${_bh_spec_pair#*:}" \
+        "${_bh_spec_pair#*:}" "$(_bh_spec_msvc_spec)"
+done
+expect 'VisualStudioVersion 10.0 takes win32-msvc2010, whatever cl says' \
+    win32-msvc2010 "$(VisualStudioVersion=10.0 PATH=$_bh_spec_sandbox:$PATH bh_msvc_spec)"
+expect 'VisualStudioVersion 11.0 takes win32-msvc2012' \
+    win32-msvc2012 "$(VisualStudioVersion=11.0 PATH=$_bh_spec_sandbox:$PATH bh_msvc_spec)"
+rm -rf "$_bh_spec_sandbox"
+
+test_section 'bh_makefile_spec_differs -- a Makefile made for other specs'
+
+# Writes a Makefile whose `# Command:` line is the qmake call <command>, the
+# way qmake heads the Makefiles it writes.
+_bh_spec_sandbox=$(mktemp -d)
+_bh_spec_command_makefile() {
+    printf '%s\n' '#####' '# Makefile for building: x' \
+        "# Command: $1" '#####' 'all:' > "$_bh_spec_sandbox/Makefile"
+}
+
+_bh_spec_command_makefile 'D:/xd/bin/qmake.exe -r -spec D:/xd/mkspecs/win32-msvc2015 -xspec D:/xd/mkspecs/win32-msvc2015 -o Makefile D:\xd\XD-mini.pro'
+expect_returns 'a Makefile for win32-msvc2015 differs from win32-msvc2010' \
+    0 sh -c '. "'"$_spec_dir"'/build-handler.sh"; QMAKESPEC=win32-msvc2010
+             bh_makefile_spec_differs "'"$_bh_spec_sandbox"'/Makefile"'
+expect_returns 'a Makefile for the current spec does not differ' \
+    1 sh -c '. "'"$_spec_dir"'/build-handler.sh"; QMAKESPEC=win32-msvc2015
+             bh_makefile_spec_differs "'"$_bh_spec_sandbox"'/Makefile"'
+_bh_spec_command_makefile 'D:\xd\bin\qmake.exe -spec D:\xd\mkspecs\win32-msvc2010 -o Makefile x.pro'
+expect_returns 'a spec path with backslashes is read by its last folder' \
+    1 sh -c '. "'"$_spec_dir"'/build-handler.sh"; QMAKESPEC=win32-msvc2010
+             bh_makefile_spec_differs "'"$_bh_spec_sandbox"'/Makefile"'
+_bh_spec_command_makefile '/xd/bin/qmake -r -spec /xd/mkspecs/linux-g++ -xspec /xd/mkspecs/win32-g++ x.pro'
+expect_returns 'a Makefile for another cross target differs' \
+    0 sh -c '. "'"$_spec_dir"'/build-handler.sh"; QMAKESPEC=linux-g++
+             BH_CROSS_SPEC=win32-clang
+             bh_makefile_spec_differs "'"$_bh_spec_sandbox"'/Makefile"'
+expect_returns 'a Makefile for the current cross target does not differ' \
+    1 sh -c '. "'"$_spec_dir"'/build-handler.sh"; QMAKESPEC=linux-g++
+             BH_CROSS_SPEC=win32-g++
+             bh_makefile_spec_differs "'"$_bh_spec_sandbox"'/Makefile"'
+_bh_spec_command_makefile '/xd/bin/qmake -o Makefile x.pro'
+expect_returns 'a Makefile that names no spec counts as current' \
+    1 sh -c '. "'"$_spec_dir"'/build-handler.sh"; QMAKESPEC=linux-g++
+             bh_makefile_spec_differs "'"$_bh_spec_sandbox"'/Makefile"'
+_bh_spec_command_makefile "/x d/bin/qmake -r -spec '/x d/mkspecs/linux-g++' -xspec '/x d/mkspecs/linux-g++' -o Makefile x.pro"
+expect_returns 'a spec path in single quotes, holding a space, is current' \
+    1 sh -c '. "'"$_spec_dir"'/build-handler.sh"; QMAKESPEC=linux-g++
+             bh_makefile_spec_differs "'"$_bh_spec_sandbox"'/Makefile"'
+_bh_spec_command_makefile 'D:\x d\bin\qmake.exe -spec "D:/x d/mkspecs/win32-msvc2015" -xspec "D:/x d/mkspecs/win32-msvc2015" -o Makefile x.pro'
+expect_returns 'a spec path in double quotes, holding a space, is read too' \
+    0 sh -c '. "'"$_spec_dir"'/build-handler.sh"; QMAKESPEC=win32-msvc2010
+             bh_makefile_spec_differs "'"$_bh_spec_sandbox"'/Makefile"'
+_bh_spec_command_makefile '/xd/bin/qmake -r -spec /xd/mkspecs/linux-clang -xspec /xd/mkspecs/linux-clang CONFIG+=memory_safe -o Makefile x.pro'
+expect_returns 'a memory-safe Makefile is of another toolchain than a plain run' \
+    0 sh -c '. "'"$_spec_dir"'/build-handler.sh"; QMAKESPEC=linux-clang
+             bh_makefile_toolchain_differs "'"$_bh_spec_sandbox"'/Makefile"'
+expect_returns 'but of the same as a memory-safe run' \
+    1 sh -c '. "'"$_spec_dir"'/build-handler.sh"; QMAKESPEC=linux-clang
+             BH_MEMSAFE=filc
+             bh_makefile_toolchain_differs "'"$_bh_spec_sandbox"'/Makefile"'
+_bh_spec_command_makefile '/xd/bin/qmake -r -spec /xd/mkspecs/linux-clang -xspec /xd/mkspecs/linux-clang -o Makefile x.pro'
+expect_returns 'a plain Makefile is of another toolchain than a memory-safe run' \
+    0 sh -c '. "'"$_spec_dir"'/build-handler.sh"; QMAKESPEC=linux-clang
+             BH_MEMSAFE=filc
+             bh_makefile_toolchain_differs "'"$_bh_spec_sandbox"'/Makefile"'
+expect_returns 'a Makefile for other specs is of another toolchain too' \
+    0 sh -c '. "'"$_spec_dir"'/build-handler.sh"; QMAKESPEC=linux-g++
+             bh_makefile_toolchain_differs "'"$_bh_spec_sandbox"'/Makefile"'
+expect_returns 'a Makefile naming no variant is of the variant of a run with none' \
+    1 sh -c '. "'"$_spec_dir"'/build-handler.sh"; BH_REMAINING_ARGS=CONFIG+=x
+             bh_makefile_variant_differs "'"$_bh_spec_sandbox"'/Makefile"'
+expect_returns 'but of another variant than a --debug run' \
+    0 sh -c '. "'"$_spec_dir"'/build-handler.sh"; BH_MODE=debug
+             BH_REMAINING_ARGS=$(bh_variant_qmake_args)
+             bh_makefile_variant_differs "'"$_bh_spec_sandbox"'/Makefile"'
+_bh_spec_command_makefile '/xd/bin/qmake -r -spec /xd/mkspecs/linux-clang -xspec /xd/mkspecs/linux-clang CONFIG+=memory_safe CONFIG+=no_debug_and_release CONFIG-=debug_and_release CONFIG-=build_all CONFIG-=release CONFIG+=debug -o Makefile x.pro'
+expect_returns 'a debug-only Makefile is of the variant of a --debug run' \
+    1 sh -c '. "'"$_spec_dir"'/build-handler.sh"; BH_MODE=debug
+             BH_REMAINING_ARGS=$(bh_variant_qmake_args)
+             bh_makefile_variant_differs "'"$_bh_spec_sandbox"'/Makefile"'
+expect_returns 'but of another variant than a --release run' \
+    0 sh -c '. "'"$_spec_dir"'/build-handler.sh"; BH_MODE=release
+             BH_REMAINING_ARGS=$(bh_variant_qmake_args)
+             bh_makefile_variant_differs "'"$_bh_spec_sandbox"'/Makefile"'
+expect_returns 'and of another build than a memory-safe --release run' \
+    0 sh -c '. "'"$_spec_dir"'/build-handler.sh"; QMAKESPEC=linux-clang
+             BH_MEMSAFE=filc BH_MODE=release
+             BH_REMAINING_ARGS="CONFIG+=memory_safe $(bh_variant_qmake_args)"
+             bh_makefile_build_differs "'"$_bh_spec_sandbox"'/Makefile"'
+expect_returns 'not of another build than a memory-safe --debug run' \
+    1 sh -c '. "'"$_spec_dir"'/build-handler.sh"; QMAKESPEC=linux-clang
+             BH_MEMSAFE=filc BH_MODE=debug
+             BH_REMAINING_ARGS="CONFIG+=memory_safe $(bh_variant_qmake_args)"
+             bh_makefile_build_differs "'"$_bh_spec_sandbox"'/Makefile"'
+rm -rf "$_bh_spec_sandbox"
+
+test_section 'bh_command_option -- the argument after an option'
+
+expect 'a plain argument' /xd/mkspecs/linux-g++ \
+    "$(bh_command_option 'qmake -spec /xd/mkspecs/linux-g++ -o Makefile x.pro' -spec)"
+expect 'an argument in single quotes, without them' '/x d/mkspecs/linux-g++' \
+    "$(bh_command_option "qmake -spec '/x d/mkspecs/linux-g++' x.pro" -spec)"
+expect 'an argument in double quotes, without them' 'D:/x d/mkspecs/win32-g++' \
+    "$(bh_command_option 'qmake -xspec "D:/x d/mkspecs/win32-g++" x.pro' -xspec)"
+expect '-spec does not read the argument of -xspec' '' \
+    "$(bh_command_option 'qmake -xspec /xd/mkspecs/win32-g++ x.pro' -spec)"
+expect 'nothing when the option is missing' '' \
+    "$(bh_command_option 'qmake -o Makefile x.pro' -spec)"
+
+test_section 'bh_template_makefile -- --rebuild builds everything again'
+
+# The drive function only lists what the build folder holds when it runs.
+_bh_spec_sandbox=$(mktemp -d)
+_bh_spec_makefile_build() {
+    ( . "$_spec_dir/build-handler.sh"
+      _bh_spec_drive() { ls "$BUILD_DIR" | tr '\n' ' '; }
+      unset BH_WIPE BH_CLEAN BH_REBUILD BH_NO_BUILD BH_GET BH_MODE BH_FILTER
+      BH_ROOT=$_bh_spec_sandbox/src BUILD_DIR=$_bh_spec_sandbox/bd
+      bh_template_makefile _bh_spec_drive "$_bh_spec_sandbox/bin" --headless \
+          --no-progress "$@" 2>/dev/null | tail -1 )
+}
+mkdir -p "$_bh_spec_sandbox/src" "$_bh_spec_sandbox/bd"
+: > "$_bh_spec_sandbox/bd/main.o"
+expect 'a build keeps the objects of the last one' 'logs main.o ' \
+    "$(_bh_spec_makefile_build)"
+expect '--rebuild removes them first, keeping the logs' 'logs ' \
+    "$(_bh_spec_makefile_build --rebuild)"
+: > "$_bh_spec_sandbox/bd/main.o"
+expect '--clean removes them too' 'logs ' "$(_bh_spec_makefile_build --clean)"
+rm -rf "$_bh_spec_sandbox"
+
+test_section 'bh_command_variant -- the one build variant of a qmake call'
+
+expect 'debug' debug "$(bh_command_variant \
+    'qmake CONFIG+=no_debug_and_release CONFIG-=release CONFIG+=debug x.pro')"
+expect 'release' release "$(bh_command_variant \
+    'qmake CONFIG+=no_debug_and_release CONFIG-=debug CONFIG+=release -o Makefile')"
+expect 'release with debug info' release-debug-info "$(bh_command_variant \
+    'qmake CONFIG+=no_debug_and_release CONFIG+=release CONFIG+=force_debug_info')"
+expect 'nothing without no_debug_and_release' '' \
+    "$(bh_command_variant 'qmake CONFIG+=debug x.pro')"
+expect 'a later CONFIG+= wins, as in qmake' release "$(bh_command_variant \
+    'qmake CONFIG+=no_debug_and_release CONFIG+=debug CONFIG+=release')"
+expect 'a later CONFIG-= drops the variant' '' "$(bh_command_variant \
+    'qmake CONFIG+=no_debug_and_release CONFIG+=debug CONFIG-=debug')"
+_bh_spec_sandbox=$(mktemp -d)
+: > "$_bh_spec_sandbox/CONFIG+=release"
+expect 'an argument such as * stays a word, never a file name' debug \
+    "$(cd "$_bh_spec_sandbox" && bh_command_variant \
+        'qmake CONFIG+=no_debug_and_release CONFIG+=debug *')"
+rm -rf "$_bh_spec_sandbox"
+
+test_section 'bh_version_at_least -- dotted versions compare part by part'
+
+expect_returns 'a version equal to the minimum is enough' \
+    0 bh_version_at_least 1.0.16 1.0.16
+expect_returns 'a newer minor part is enough, whatever the patch part' \
+    0 bh_version_at_least 1.1.0 1.0.16
+expect_returns 'parts compare as numbers, not as text' \
+    1 bh_version_at_least 1.0.9 1.0.16
+expect_returns 'an older patch part is not enough' \
+    1 bh_version_at_least 1.0.13 1.0.16
+expect_returns 'a missing part counts as 0' \
+    0 bh_version_at_least 1.0 1.0.0
+expect_returns 'a missing part is older than a nonzero one' \
+    1 bh_version_at_least 1.0 1.0.1
+expect_returns 'a newer major part is enough' \
+    0 bh_version_at_least 2 1.9.9
 
 
 # ---- specs: bh_default_jobs / bh_default_qmakespec --------------------
@@ -204,6 +762,30 @@ expect 'bh_license_accept does NOT re-implement the WARNING layout' '' \
     "$(printf '%s\n' "$_bh_spec_lic_body" | grep -F 'WARNING:' | head -1)"
 expect_int_gt 'bh_license_accept keeps plain `sudo` on the interactive path' \
     "$(printf '%s\n' "$_bh_spec_lic_body" | grep -cE '^[[:space:]]*sudo xcodebuild')" 0
+
+
+test_section 'bh_license_gate -- names the Xcode license on macOS only'
+
+# Prints the question the gate asks on a host whose `uname -s` is <name>,
+# with the prompt, the message and the license step stubbed out.
+_bh_spec_gate_question() (
+    eval "uname() { echo $1; }"
+    bh_yes_no() { echo "$1"; }
+    bh_license_message() { :; }
+    bh_license_accept() { :; }
+    BH_HEADLESS=0
+    bh_license_gate
+)
+
+expect 'on Windows the gate asks about the build directory alone' \
+    'Continue with this build directory? [Y/n]' \
+    "$(_bh_spec_gate_question MINGW64_NT-10.0-19045)"
+expect 'on Linux the gate asks about the build directory alone' \
+    'Continue with this build directory? [Y/n]' \
+    "$(_bh_spec_gate_question Linux)"
+expect 'on macOS the gate also asks to accept the Xcode license' \
+    'Continue with this build directory and accept the Xcode license? [Y/n]' \
+    "$(_bh_spec_gate_question Darwin)"
 
 
 test_section 'bh_yes_no -- under --headless'
@@ -434,33 +1016,549 @@ test_section 'bh_run_qmake -- freshness check walks .pro / .pri / .prf'
 
 _bh_spec_runqmake_body=$(awk '/^bh_run_qmake\(\) \{/,/^\}$/' \
     "$_spec_dir/build-handler.sh")
+_bh_spec_newer_body=$(awk '/^bh_newer_project_file\(\) \{/,/^\}$/' \
+    "$_spec_dir/build-handler.sh")
 
+expect_int_gt 'freshness check goes through bh_newer_project_file' \
+    "$(printf '%s\n' "$_bh_spec_runqmake_body" | grep -c 'bh_newer_project_file Makefile')" 0
 expect_int_gt 'freshness `find` looks for `.pri` (default path)' \
-    "$(printf '%s\n' "$_bh_spec_runqmake_body" | grep -cE "name '\\*\\.pri'")" 0
+    "$(printf '%s\n' "$_bh_spec_newer_body" | grep -cE "name '\\*\\.pri'")" 0
 expect_int_gt 'freshness `find` looks for `.prf` (default path)' \
-    "$(printf '%s\n' "$_bh_spec_runqmake_body" | grep -cE "name '\\*\\.prf'")" 0
+    "$(printf '%s\n' "$_bh_spec_newer_body" | grep -cE "name '\\*\\.prf'")" 0
 expect_int_gt 'freshness check gates `.pri`/`.prf` walk on `BH_IGNORE_PRI`' \
-    "$(printf '%s\n' "$_bh_spec_runqmake_body" | grep -cE 'BH_IGNORE_PRI')" 0
+    "$(printf '%s\n' "$_bh_spec_newer_body" | grep -cE 'BH_IGNORE_PRI')" 0
+
+
+test_section '--rebuild -- --filter is the base filter, --rebuild the sub-filter'
+
+# bh_filter_candidate sorts one path; bh_save_space_forget (a filtered
+# --clean) drops the finished lines of what both filters name, and keeps
+# every order line in its place.
+
+_bh_spec_root=$BH_ROOT
+_bh_spec_build_dir=${BUILD_DIR:-}
+_bh_spec_sandbox=$(mktemp -d)
+BH_ROOT=/r
+BUILD_DIR=$_bh_spec_sandbox
+_bh_spec_tab=$(printf '\t')
+
+BH_FILTER='src/' BH_REBUILD='b'
+bh_filter_candidate 'src/a/a.pro'
+expect 'base-filter match, sub-filter miss -> build' build "$BH_CANDIDATE"
+bh_filter_candidate 'src/b/b.pro'
+expect 'base-filter match, sub-filter match -> rebuild' rebuild "$BH_CANDIDATE"
+bh_filter_candidate 'tests/b/b.pro'
+expect 'base-filter miss -> skip, even if the sub-filter matches' \
+    skip "$BH_CANDIDATE"
+BH_FILTER='' BH_REBUILD=''
+bh_filter_candidate 'tests/x/x.pro'
+expect 'no filters -> build' build "$BH_CANDIDATE"
+
+# Writes a cache with two order lines and four finished lines.
+_bh_spec_forget_cache() {
+    printf '%s\n' \
+        "/r/src/a/a.pro${_bh_spec_tab}debug${_bh_spec_tab}/t/a" \
+        "/r/src/b/b.pro${_bh_spec_tab}debug${_bh_spec_tab}/t/b" \
+        "/r/src/a/a.pro${_bh_spec_tab}debug${_bh_spec_tab}/t/a${_bh_spec_tab}T1" \
+        "/r/src/b/b.pro${_bh_spec_tab}debug${_bh_spec_tab}/t/b${_bh_spec_tab}T2" \
+        "/r/tests/x/x.pro${_bh_spec_tab}debug${_bh_spec_tab}/t/x${_bh_spec_tab}T3" \
+        "/r/src/ab/ab.pro${_bh_spec_tab}debug${_bh_spec_tab}/t/ab${_bh_spec_tab}T4" \
+        > "$BUILD_DIR/.qmake.save_space"
+}
+
+# Runs bh_save_space_forget under <filter> and <rebuild>, then prints the
+# projects whose finished lines are left, relative to /r.
+_bh_spec_forget() {
+    _bh_spec_forget_cache
+    BH_FILTER=$1 BH_REBUILD=$2
+    bh_save_space_forget
+    awk -F'\t' 'NF >= 4 { sub(/^\/r\//, "", $1); printf "%s ", $1 }' \
+        "$BUILD_DIR/.qmake.save_space"
+}
+
+expect 'forget, base filter only: drops its matches' \
+    'src/b/b.pro tests/x/x.pro src/ab/ab.pro ' "$(_bh_spec_forget 'src/a/' '')"
+expect 'forget, both filters: drops only what both name' \
+    'src/a/a.pro tests/x/x.pro ' "$(_bh_spec_forget 'src/' 'b')"
+expect 'forget, sub-filter only: drops its matches' \
+    'src/a/a.pro src/b/b.pro src/ab/ab.pro ' "$(_bh_spec_forget '' 'tests/')"
+expect 'forget, bare --rebuild: drops every base-filter match' \
+    'tests/x/x.pro ' "$(_bh_spec_forget 'src/' '^.*$')"
+expect 'forget, no match: drops nothing' \
+    'src/a/a.pro src/b/b.pro tests/x/x.pro src/ab/ab.pro ' \
+    "$(_bh_spec_forget 'nomatch' '')"
+_bh_spec_forget 'src/' '^.*$' > /dev/null
+expect 'forget keeps every order line, in its place' \
+    "/r/src/a/a.pro${_bh_spec_tab}debug${_bh_spec_tab}/t/a /r/src/b/b.pro${_bh_spec_tab}debug${_bh_spec_tab}/t/b" \
+    "$(awk -F'\t' 'NF == 3' "$BUILD_DIR/.qmake.save_space" | tr '\n' ' ' | sed 's/ $//')"
+
+# A variant recorded again with another target (a later qmake run in another
+# build mode, or a renamed target) counts with its latest target only.
+: > "$BUILD_DIR/new"
+printf '%s\n' \
+    "/r/src/c/c.pro${_bh_spec_tab}debug${_bh_spec_tab}$BUILD_DIR/old" \
+    "/r/src/c/c.pro${_bh_spec_tab}debug${_bh_spec_tab}$BUILD_DIR/new" \
+    "/r/src/c/c.pro${_bh_spec_tab}debug${_bh_spec_tab}$BUILD_DIR/new${_bh_spec_tab}T5" \
+    > "$BUILD_DIR/.qmake.save_space"
+expect_returns 'is_finished: the latest target of a re-recorded variant counts' \
+    0 bh_save_space_is_finished /r/src/c/c.pro
+expect_returns 'mark_finished: a superseded target of the variant is not demanded' \
+    0 bh_save_space_mark_finished /r/src/c/c.pro "$BUILD_DIR/Makefile"
+rm -f "$BUILD_DIR/new"
+expect_returns 'mark_finished: the latest target missing still fails' \
+    1 bh_save_space_mark_finished /r/src/c/c.pro "$BUILD_DIR/Makefile"
+
+# After a switch from debug_and_release to a single config, the dual mode's
+# lines (whose targets may be gone) no longer count.
+: > "$BUILD_DIR/single"
+printf '%s\n' \
+    "/r/src/d/d.pro${_bh_spec_tab}debug_and_release:release${_bh_spec_tab}$BUILD_DIR/gone" \
+    "/r/src/d/d.pro${_bh_spec_tab}debug_and_release:debug${_bh_spec_tab}$BUILD_DIR/goned" \
+    "/r/src/d/d.pro${_bh_spec_tab}debug${_bh_spec_tab}$BUILD_DIR/single" \
+    "/r/src/d/d.pro${_bh_spec_tab}debug${_bh_spec_tab}$BUILD_DIR/single${_bh_spec_tab}T6" \
+    > "$BUILD_DIR/.qmake.save_space"
+expect_returns 'is_finished: only the latest build mode counts' \
+    0 bh_save_space_is_finished /r/src/d/d.pro
+expect_returns 'mark_finished: targets of the other build mode are not demanded' \
+    0 bh_save_space_mark_finished /r/src/d/d.pro "$BUILD_DIR/Makefile"
+
+# Under --save-space, a build root made for another variant starts its cache
+# anew before qmake records the order again; one of the same variant keeps the
+# cache, and so does a run without --save-space. The qmake run itself is
+# stubbed out.
+printf '%s\n' '# Command: /xd/bin/qmake -spec /xd/mkspecs/linux-g++ CONFIG+=no_debug_and_release CONFIG-=debug CONFIG+=release x.pro' \
+    > "$BUILD_DIR/Makefile"
+# _bh_spec_record <save-space> <mode>: records the order the way a run with
+# that --save-space setting and mode flag does, without running qmake.
+_bh_spec_record() {
+    ( QMAKESPEC=linux-g++; BH_SAVE_SPACE=$1; BH_FORCE_QMAKE=0; BH_MODE=$2
+      BH_REMAINING_ARGS=$(bh_variant_qmake_args)
+      bh_qmake_in_build_order() { :; }
+      bh_build_order_record /r/x.pro > /dev/null )
+}
+_bh_spec_forget_cache
+_bh_spec_record 1 debug
+expect 'a --save-space --debug run over a release-only build root empties the cache' \
+    0 "$(awk 'END { print NR }' "$BUILD_DIR/.qmake.save_space")"
+_bh_spec_forget_cache
+_bh_spec_record 1 release
+expect 'a --save-space --release run over it keeps every line' \
+    6 "$(awk 'END { print NR }' "$BUILD_DIR/.qmake.save_space")"
+_bh_spec_forget_cache
+_bh_spec_record 0 debug
+expect 'a --debug run without --save-space keeps every line too' \
+    6 "$(awk 'END { print NR }' "$BUILD_DIR/.qmake.save_space")"
+unset -f _bh_spec_record
+rm -f "$BUILD_DIR/Makefile"
+
+rm -rf "$_bh_spec_sandbox"
+BH_ROOT=$_bh_spec_root
+BUILD_DIR=$_bh_spec_build_dir
+unset BH_FILTER BH_REBUILD BH_CANDIDATE
+
+
+test_section '--static -- a sub-filter of --filter, just like --rebuild'
+
+unset BH_STATIC BH_NO_XD_BUILD
+bh_parse_args
+expect 'BH_STATIC is unset by default' '' "${BH_STATIC:-}"
+expect 'BH_NO_XD_BUILD default is 0' 0 "$BH_NO_XD_BUILD"
+bh_parse_args --static
+expect '--static alone accepts every project' '^.*$' "$BH_STATIC"
+bh_parse_args --static='src/(a|b)/'
+expect '--static=<regexp> keeps its regexp' 'src/(a|b)/' "$BH_STATIC"
+BH_STATIC='^.*$'
+bh_parse_args --no-static
+expect '--no-static clears a preset BH_STATIC' '' "$BH_STATIC"
+BH_NO_XD_BUILD=0
+bh_parse_args --no-xd-build
+expect '--no-xd-build sets BH_NO_XD_BUILD=1' 1 "$BH_NO_XD_BUILD"
+BH_NO_XD_BUILD=0
+bh_parse_args --no-qt-build
+expect '--no-qt-build is an alias of --no-xd-build' 1 "$BH_NO_XD_BUILD"
+BH_NO_XD_BUILD=0
+
+BH_FILTER='src/' BH_REBUILD='' BH_STATIC='b'
+bh_filter_candidate 'src/a/a.pro'
+expect 'base-filter match, static miss -> shared' \
+    'build 0' "$BH_CANDIDATE $BH_CANDIDATE_STATIC"
+bh_filter_candidate 'src/b/b.pro'
+expect 'base-filter match, static match -> static' \
+    'build 1' "$BH_CANDIDATE $BH_CANDIDATE_STATIC"
+bh_filter_candidate 'tests/b/b.pro'
+expect 'base-filter miss -> shared, even if --static matches' \
+    'skip 0' "$BH_CANDIDATE $BH_CANDIDATE_STATIC"
+BH_FILTER='' BH_REBUILD='b' BH_STATIC=''
+bh_filter_candidate 'src/b/b.pro'
+expect '--rebuild alone marks nothing static' \
+    'rebuild 0' "$BH_CANDIDATE $BH_CANDIDATE_STATIC"
+BH_FILTER='' BH_REBUILD='' BH_STATIC=''
+
+# bh_xd_build and bh_xd_build_static against a fake XD whose build.sh records
+# its arguments and the BUILD_DIR, BH_ROOT, and BH_HEADLESS it sees, then
+# leaves its libraries behind: under --static a static QtCore and QtGui (only
+# the module file of QtGui while a `no-gui` file exists), else a shared QtCore
+# in the form the host takes (or `.dll` under --cross-compile) and the static
+# library of a `staticlib` module.
+_bh_spec_fake_xd=$(mktemp -d)
+_bh_spec_xd_bd=$(mktemp -d)
+cat > "$_bh_spec_fake_xd/build.sh" <<'EOF'
+cd "${0%/*}" || exit 1
+echo "$* [${BUILD_DIR:-}|${BH_ROOT:-}|${BH_HEADLESS:-}]" > args
+case " $* " in
+    *" --static "*)
+        mkdir -p lib mkspecs/modules/static
+        echo 'QT.core_static.module = Qt5Core' > mkspecs/modules/static/qt_lib_core.pri
+        echo 'QT.gui_static.module = Qt5Gui' > mkspecs/modules/static/qt_lib_gui.pri
+        echo 'QT.gui_private_static.module =' > mkspecs/modules/static/qt_lib_gui_private.pri
+        : > lib/libQt5Core_static.a
+        if [ ! -f no-gui ]; then
+            : > lib/libQt5Gui_static.a
+        fi
+        ;;
+    *)
+        case " $*:$(uname -s)" in
+            *" --cross-compile"* | *:MINGW* | *:MSYS* | *:CYGWIN*) ext=dll ;;
+            *:Darwin) ext=dylib ;;
+            *) ext=so ;;
+        esac
+        mkdir -p lib mkspecs/modules
+        echo 'QT.core.module = Qt5Core' > mkspecs/modules/qt_lib_core.pri
+        printf '%s\n' 'QT.bootstrap_private.module = Qt5Bootstrap' \
+            'QT.bootstrap_private.module_config = v2 staticlib internal_module' \
+            > mkspecs/modules/qt_lib_bootstrap_private.pri
+        : > "lib/libQt5Core.$ext"
+        : > lib/libQt5Bootstrap.a
+        ;;
+esac
+EOF
+# _bh_spec_xd_build [flags...]
+# Parses the flags in a subshell, under the fake XD and an exported BUILD_DIR
+# and BH_ROOT (which XD's build must not see), with no BH_HEADLESS unless
+# `_bh_spec_headless_env` is set, and with a `.qmake.static` list
+# that names one project under --static (the projects of
+# `_bh_spec_static_list` when set) and none without, then runs
+# bh_xd_build_static; prints what the fake build.sh recorded, or `none` when
+# it did not run.
+_bh_spec_xd_build() (
+    rm -f "$_bh_spec_fake_xd/args"
+    XD_DIR=$_bh_spec_fake_xd
+    export BUILD_DIR=$_bh_spec_xd_bd BH_ROOT=/r
+    unset BH_STATIC BH_NO_XD_BUILD BH_MODE BH_DEBUG_INFO BH_LOG_LEVEL BH_VERBOSE
+    unset BH_NO_PROGRESS BH_SAVE_SPACE BH_NO_BUILD BH_TEMPLATE BH_CROSS_SPEC
+    if [ -z "${_bh_spec_headless_env:-}" ]; then
+        unset BH_HEADLESS
+    fi
+    bh_parse_args "$@"
+    _bh_spec_names=${_bh_spec_static_list-/r/a/a.pro}
+    if [ -n "${BH_STATIC:-}" ] && [ -n "$_bh_spec_names" ]; then
+        printf '%s\n' "$_bh_spec_names" > "$BUILD_DIR/.qmake.static"
+    else
+        : > "$BUILD_DIR/.qmake.static"
+    fi
+    bh_xd_build_static > /dev/null
+    cat "$_bh_spec_fake_xd/args" 2>/dev/null || echo none
+)
+# _bh_spec_no_gui
+# Takes the static QtGui library away; hence XD lacks a whole static build
+# again.
+_bh_spec_no_gui() {
+    rm -f "$_bh_spec_fake_xd/lib/libQt5Gui_static.a"
+}
+expect 'without --static, XD is not built in static mode' none \
+    "$(_bh_spec_xd_build)"
+expect 'a --static that names no project leaves XD alone' none \
+    "$(_bh_spec_static_list=; _bh_spec_xd_build --static=nothing)"
+expect '--no-xd-build leaves a non-static XD alone' none \
+    "$(_bh_spec_xd_build --static --no-xd-build)"
+expect '--static builds XD with a plain --static, without our BUILD_DIR' \
+    '--static [||]' "$(_bh_spec_xd_build --static=app)"
+expect 'and not again, once XD has a static build' none \
+    "$(_bh_spec_xd_build --static)"
+_bh_spec_no_gui
+expect 'a static build missing one module library builds again' \
+    '--static [||]' "$(_bh_spec_xd_build --static)"
+_bh_spec_no_gui
+expect 'every flag goes along as given, with its value' \
+    '--static --release -v --no-progress --save-space --headless --get build-dir [||]' \
+    "$(_bh_spec_xd_build --release -v --static --no-progress --save-space \
+        --headless --get build-dir)"
+_bh_spec_no_gui
+expect 'so do --clean, --rebuild, --qmake, and the qmake arguments' \
+    '--static --clean --rebuild=x --qmake --libc=musl --cross-compile -- CONFIG+=a b [||]' \
+    "$(_bh_spec_xd_build --static --clean --rebuild=x --qmake --libc=musl \
+        --cross-compile -- CONFIG+=a b)"
+_bh_spec_no_gui
+expect 'but no flag that names this project'"'"'s own paths or steps' \
+    '--static --release [||]' \
+    "$(_bh_spec_xd_build --filter src/ --only=src --static=app --test \
+        --tests --run --release)"
+_bh_spec_no_gui
+expect '--test-review passes on its defaults only, ahead of the other flags' \
+    '--static --headless --verbose --no-build --no-verbose --build [||]' \
+    "$(_bh_spec_xd_build --static --no-verbose --test-review --build)"
+_bh_spec_no_gui
+expect 'a run that is not headless builds XD too, just without --headless' \
+    '--static [||]' "$(_bh_spec_xd_build --static)"
+_bh_spec_no_gui
+expect 'an exported setting reaches XD'"'"'s build as well' \
+    '--static [||1]' "$(export BH_HEADLESS=1; _bh_spec_headless_env=1
+        _bh_spec_xd_build --static)"
+_bh_spec_no_gui
+: > "$_bh_spec_fake_xd/no-gui"
+expect 'a static XD build that leaves a library out warns, naming it' \
+    "--static: XD's build.sh --static built no static Qt5Gui library under \"$_bh_spec_fake_xd\"." \
+    "$(_bh_spec_xd_build --static 2>&1 >/dev/null | sed -n 's/^WARNING: //p')"
+expect 'XD building itself never recurses' none "$(
+    XD_DIR=/r BH_ROOT=/r BH_NO_XD_BUILD=0 BUILD_DIR=$_bh_spec_xd_bd
+    printf '/r/a/a.pro\n' > "$BUILD_DIR/.qmake.static"
+    bh_xd_build_static
+    echo none
+)"
+
+# _bh_spec_xd_shared_build [flags...]
+# Parses the flags in a subshell, under the fake XD and an exported BUILD_DIR
+# and BH_ROOT, sets BH_STATIC_ALL to `_bh_spec_static_all` (0 when unset), then
+# runs bh_xd_build; prints what the fake build.sh recorded, or `none` when it
+# did not run.
+_bh_spec_xd_shared_build() (
+    rm -f "$_bh_spec_fake_xd/args"
+    XD_DIR=$_bh_spec_fake_xd
+    export BUILD_DIR=$_bh_spec_xd_bd BH_ROOT=/r
+    unset BH_STATIC BH_NO_XD_BUILD BH_TEMPLATE BH_HEADLESS BH_CROSS_SPEC
+    bh_parse_args "$@"
+    BH_STATIC_ALL=${_bh_spec_static_all:-0}
+    bh_xd_build > /dev/null
+    cat "$_bh_spec_fake_xd/args" 2>/dev/null || echo none
+)
+expect '--no-xd-build leaves an unbuilt XD alone' none \
+    "$(_bh_spec_xd_shared_build --no-xd-build)"
+expect 'a run whose every project builds static needs no shared XD' none \
+    "$(_bh_spec_static_all=1; _bh_spec_xd_shared_build)"
+expect 'without --static, an unbuilt XD builds, with this run'"'"'s flags' \
+    '--release [||]' "$(_bh_spec_xd_shared_build --release)"
+expect 'and not again, once XD has a shared build' none \
+    "$(_bh_spec_xd_shared_build)"
+rm "$_bh_spec_fake_xd/lib/libQt5Bootstrap.a"
+expect 'a static-only module of a shared build needs its static library' \
+    '--debug [||]' "$(_bh_spec_xd_shared_build --debug)"
+expect 'a cross build needs the library form of its target' \
+    '--cross-compile [||]' "$(_bh_spec_xd_shared_build --cross-compile)"
+expect 'and not again, once XD has that form' none \
+    "$(_bh_spec_xd_shared_build --cross-compile)"
+expect 'XD building itself never builds XD' none "$(
+    XD_DIR=/r BH_ROOT=/r BH_NO_XD_BUILD=0 BH_STATIC_ALL=0
+    bh_xd_build
+    echo none
+)"
+
+# bh_dependency_build runs the build.sh it is given, for any framework a
+# project builds on, here a second fake one that records its arguments and
+# fails while a `fail` file exists; bh_dependency_build_static does it with
+# --static, once the `.qmake.static` list names a project.
+_bh_spec_other=$(mktemp -d)
+cat > "$_bh_spec_other/build.sh" <<'EOF'
+cd "${0%/*}" || exit 1
+echo "$* [${BUILD_DIR:-}|${BH_ROOT:-}]" > args
+[ ! -f fail ]
+EOF
+# _bh_spec_dependency_build <function> [project...]
+# Runs <function> on the second fake framework in a subshell, under an
+# exported BUILD_DIR and BH_ROOT, the forwarded flags `--release` and
+# `CONFIG+=a`, and a `.qmake.static` list that names the given projects;
+# prints what the fake build.sh recorded, or `none` when it did not run.
+_bh_spec_dependency_build() (
+    rm -f "$_bh_spec_other/args"
+    export BUILD_DIR=$_bh_spec_xd_bd BH_ROOT=/r
+    _bh_spec_function=$1
+    shift
+    : > "$BUILD_DIR/.qmake.static"
+    if [ $# -gt 0 ]; then
+        printf '%s\n' "$@" > "$BUILD_DIR/.qmake.static"
+    fi
+    BH_FORWARD_ARGS=$(printf '%s\n' --release -- CONFIG+=a)
+    "$_bh_spec_function" "$_bh_spec_other/build.sh"
+    cat "$_bh_spec_other/args" 2>/dev/null || echo none
+)
+expect 'bh_dependency_build runs the build.sh it is given, with the flags' \
+    '--release -- CONFIG+=a [|]' \
+    "$(_bh_spec_dependency_build bh_dependency_build)"
+expect 'bh_dependency_build_static adds --static' \
+    '--static --release -- CONFIG+=a [|]' \
+    "$(_bh_spec_dependency_build bh_dependency_build_static /r/a/a.pro)"
+expect 'but runs nothing while no project builds static' none \
+    "$(_bh_spec_dependency_build bh_dependency_build_static)"
+: > "$_bh_spec_other/fail"
+expect 'a failed build names its build.sh' \
+    "building through \"$_bh_spec_other/build.sh\" failed (see the output above)" \
+    "$(_bh_spec_dependency_build bh_dependency_build 2>&1 \
+        | sed -n 's/^.*: error: //p')"
+rm -rf "$_bh_spec_other"
+unset -f _bh_spec_dependency_build
+
+# bh_static_record sets BH_STATIC_ALL when its list names every `.pro` that
+# --filter keeps.
+_bh_spec_tree=$(mktemp -d)
+mkdir -p "$_bh_spec_tree/src/a" "$_bh_spec_tree/src/b" "$_bh_spec_tree/bd"
+: > "$_bh_spec_tree/src/top.pro"
+: > "$_bh_spec_tree/src/a/a.pro"
+: > "$_bh_spec_tree/src/b/b.pro"
+# _bh_spec_static_all <filter> <static>
+# Prints the BH_STATIC_ALL that bh_static_record sets under the given
+# --filter and --static regexps, for the tree above.
+_bh_spec_static_all() (
+    BH_ROOT=$_bh_spec_tree/src BUILD_DIR=$_bh_spec_tree/bd
+    rm -f "$BUILD_DIR/.qmake.static"
+    BH_FILTER=$1 BH_STATIC=$2
+    bh_static_record > /dev/null 2>&1
+    echo "$BH_STATIC_ALL"
+)
+expect 'a bare --static builds every project static' 1 \
+    "$(_bh_spec_static_all '' '^.*$')"
+expect 'a regexp that leaves a project shared does not' 0 \
+    "$(_bh_spec_static_all '' 'a/')"
+expect 'nor does a run without --static' 0 "$(_bh_spec_static_all '' '')"
+expect 'nor a regexp that names no project' 0 \
+    "$(_bh_spec_static_all '' 'nothing')"
+expect 'a regexp that names every project --filter keeps does' 1 \
+    "$(_bh_spec_static_all 'a/' 'a/')"
+rm -rf "$_bh_spec_tree"
+unset -f _bh_spec_static_all
+
+rm -rf "$_bh_spec_fake_xd" "$_bh_spec_xd_bd"
+unset -f _bh_spec_xd_build _bh_spec_xd_shared_build _bh_spec_no_gui
+
+# The default build dir: `-static` comes before the mode (app) or the preset
+# suffix (subdirs).
+# _bh_spec_build_dir <template> [flags...]
+# Prints the build dir that template picks for a project at /p/ws.
+_bh_spec_build_dir() (
+    unset BUILD_DIR BH_STATIC BH_MODE
+    BH_ROOT=/p/ws XD_DIR=/x
+    _bh_spec_template=$1
+    shift
+    "$_bh_spec_template" /p/ws/ws.pro "$@" --get=build-dir
+)
+expect 'app: a shared build dir names the mode' /p/build/ws-debug \
+    "$(_bh_spec_build_dir bh_template_app)"
+expect 'app: --static puts -static before the mode' /p/build/ws-static-release \
+    "$(_bh_spec_build_dir bh_template_app --static=x --release)"
+expect 'subdirs: --static adds -static' /p/build/ws-static \
+    "$(_bh_spec_build_dir bh_template_subdirs --static)"
+expect 'subdirs: ahead of a preset suffix' /p/build/ws-static-debug \
+    "$(BH_BUILD_DIR_SUFFIX=-debug; _bh_spec_build_dir bh_template_subdirs --static)"
+unset -f _bh_spec_build_dir
+
+
+test_section 'bh_filter_add -- joins a regexp to --filter from an args-parsed hook'
+
+_bh_spec_nl='
+'
+expect_returns 'a regexp matches anywhere in the path' 0 \
+    bh_regexp_matches 'tools/moc/moc.pro' '(moc|rcc)/'
+expect_returns 'two lines: both match' 0 \
+    bh_regexp_matches 'src/corelib/corelib.pro' "src/${_bh_spec_nl}corelib"
+expect_returns 'two lines: one misses' 1 \
+    bh_regexp_matches 'tools/corelib/corelib.pro' "src/${_bh_spec_nl}corelib"
+expect_returns 'three lines: the last misses' 1 \
+    bh_regexp_matches 'src/corelib/corelib.pro' "src/${_bh_spec_nl}core${_bh_spec_nl}gui"
+expect_returns 'three lines: every line matches' 0 \
+    bh_regexp_matches 'src/corelib/corelib.pro' "src/${_bh_spec_nl}core${_bh_spec_nl}\\.pro\$"
+expect 'a message quotes a regexp' "'core'" "$(bh_regexp_text core)"
+expect 'and each line of a joined one' "'src/' and 'core|gui'" \
+    "$(bh_regexp_text "src/${_bh_spec_nl}core|gui")"
+
+BH_FILTER=
+bh_filter_add 'core'
+expect 'without --filter, the regexp becomes the filter' core "$BH_FILTER"
+bh_filter_add 'src/'
+expect 'with a --filter, the regexp joins it as one more line' \
+    "core${_bh_spec_nl}src/" "$BH_FILTER"
+bh_filter_add 'lib'
+expect 'each join adds one line' "core${_bh_spec_nl}src/${_bh_spec_nl}lib" \
+    "$BH_FILTER"
+bh_filter_add ''
+expect 'an empty regexp changes nothing' "core${_bh_spec_nl}src/${_bh_spec_nl}lib" \
+    "$BH_FILTER"
+bh_filter_candidate 'src/corelib/corelib.pro'
+expect 'a joined filter keeps what every line accepts' build "$BH_CANDIDATE"
+bh_filter_candidate 'src/gui/gui.pro'
+expect 'and skips what one line rejects' skip "$BH_CANDIDATE"
+BH_FILTER=
+
+# _bh_spec_hooked
+# Adds two args-parsed hooks, the first narrowing --filter and the second
+# noting the filter it sees, then parses `--filter src/`; prints what the
+# second hook saw and the final filter.
+_bh_spec_hooked() (
+    BH_HOOKS_args_parsed=
+    bh_hook args-parsed <<'}'
+    bh_filter_add 'corelib'
+}
+    bh_hook args-parsed <<'}'
+    _bh_spec_seen=$BH_FILTER
+}
+    BH_FILTER=
+    bh_parse_args --filter 'src/'
+    printf '%s|%s' "$_bh_spec_seen" "$BH_FILTER"
+)
+expect 'args-parsed hooks narrow the parsed --filter, in the order added' \
+    "src/${_bh_spec_nl}corelib|src/${_bh_spec_nl}corelib" "$(_bh_spec_hooked)"
+_bh_spec_when=added
+bh_hook spec-stage <<'}'
+    echo "$_bh_spec_when"
+}
+_bh_spec_when=run
+expect 'a hook reads its variables when it runs' run "$(bh_hook_run spec-stage)"
+expect 'a stage without hooks runs nothing' '' "$(bh_hook_run no-such-stage)"
+
+# _bh_spec_hook_function
+# The function a spec stage calls through bh_hook_add; prints the variable
+# as it is when the stage runs.
+_bh_spec_hook_function() {
+    printf 'function:%s' "$_bh_spec_when"
+}
+_bh_spec_when=added
+bh_hook_add spec-added _bh_spec_hook_function
+_bh_spec_when=run
+expect 'bh_hook_add calls its function when the stage runs' \
+    function:run "$(bh_hook_run spec-added)"
+
+# _bh_spec_test_env
+# Adds a test-env hook, then runs a test with bh_run stubbed out; prints
+# what ran, in order.
+_bh_spec_test_env() (
+    BH_HOOKS_test_env=
+    bh_run() { printf 'ran %s|' "$2"; }
+    _bh_spec_env_hook() { printf 'env|'; }
+    bh_hook_add test-env _bh_spec_env_hook
+    bh_run_tests /bin/true
+)
+expect 'bh_run_tests runs the test-env hooks before the test' \
+    'env|ran /bin/true|' "$(_bh_spec_test_env)"
+unset -f _bh_spec_hooked _bh_spec_hook_function _bh_spec_test_env
+unset BH_HOOKS_spec_stage BH_HOOKS_spec_added _bh_spec_when
 
 
 test_section 'bh_wipe -- shows a spinner during rm -rf'
 
 # Regression guard: bh_wipe must use the background-poll spinner pattern
-# (spawn, poll via `kill -0`, render, hide), plus keep a non-TTY fallback.
+# (spawn, poll through bh_spin_until, render, hide), plus keep a fallback
+# for when no progress display is active.
 
 _bh_spec_wipe_body=$(awk '/^bh_wipe\(\) \{/,/^\}$/' \
     "$_spec_dir/build-handler.sh")
 
 expect_int_gt 'bh_wipe backgrounds `rm -rf "$BUILD_DIR"`' \
     "$(printf '%s\n' "$_bh_spec_wipe_body" | grep -cE 'rm -rf "\$BUILD_DIR" &')" 0
-expect_int_gt 'bh_wipe polls with `kill -0`' \
-    "$(printf '%s\n' "$_bh_spec_wipe_body" | grep -cE 'while kill -0')" 0
-expect_int_gt 'bh_wipe renders the spinner inside the poll loop' \
-    "$(printf '%s\n' "$_bh_spec_wipe_body" | grep -c 'bh_progress_render')" 1
+expect_int_gt 'bh_wipe polls through bh_spin_until' \
+    "$(printf '%s\n' "$_bh_spec_wipe_body" | grep -c 'bh_spin_until')" 0
+expect_int_gt 'bh_wipe renders the first spinner frame itself' \
+    "$(printf '%s\n' "$_bh_spec_wipe_body" | grep -c 'bh_progress_render')" 0
 expect_int_gt 'bh_wipe ends with `bh_progress_hide` (-> [√])' \
     "$(printf '%s\n' "$_bh_spec_wipe_body" | grep -c 'bh_progress_hide')" 0
-expect_int_gt 'bh_wipe keeps a non-TTY fallback' \
-    "$(printf '%s\n' "$_bh_spec_wipe_body" | grep -cE '\[ -t 2 \]')" 0
+expect_int_gt 'bh_wipe keeps a fallback for no progress display' \
+    "$(printf '%s\n' "$_bh_spec_wipe_body" | grep -c 'if bh_progress_active')" 0
 # `--wipe` is housekeeping that runs before bh_logs_init has
 # initialised `_step`, so the row reads `[√]: Deleting ...`
 # without a (N/M) tail. If a future change bumps `_step` here it
@@ -483,11 +1581,11 @@ expect_int_gt 'bh_run_silent_fg bumps `_step`' \
 expect_int_gt 'bh_run_silent_fg runs the command in foreground (no `&`)' \
     "$(printf '%s\n' "$_bh_spec_silent_body" | grep -cE '^[[:space:]]+"\$@"$')" 0
 expect_int_gt 'bh_run_silent_fg spawns a background ticker' \
-    "$(printf '%s\n' "$_bh_spec_silent_body" | grep -cE 'bh_progress_render')" 1
+    "$(printf '%s\n' "$_bh_spec_silent_body" | grep -cE 'bh_progress_tick')" 0
 expect_int_gt 'bh_run_silent_fg `kill` ticker is `|| true`-guarded' \
     "$(printf '%s\n' "$_bh_spec_silent_body" | grep -cE 'kill .*_bhsf_pid.*\|\| true')" 0
-expect_int_gt 'bh_run_silent_fg keeps a non-TTY fallback' \
-    "$(printf '%s\n' "$_bh_spec_silent_body" | grep -cE 'BH_NO_PROGRESS.*\[ ! -t 2 \]')" 0
+expect_int_gt 'bh_run_silent_fg keeps a fallback for no progress display' \
+    "$(printf '%s\n' "$_bh_spec_silent_body" | grep -c 'if ! bh_progress_active')" 0
 
 
 test_section 'bh_template_app -- BH_STEPS_TOTAL accounts for Resolving + Staging'
@@ -500,8 +1598,8 @@ _bh_spec_app_body=$(awk '/^bh_template_app\(\) \{/,/^\}$/' \
 _bh_spec_subdirs_body=$(awk '/^bh_template_subdirs\(\) \{/,/^\}$/' \
     "$_spec_dir/build-handler.sh")
 
-expect_int_gt 'bh_template_app sets BH_STEPS_TOTAL=5' \
-    "$(printf '%s\n' "$_bh_spec_app_body" | grep -cE '^[[:space:]]+BH_STEPS_TOTAL=5')" 0
+expect_int_gt 'bh_template_app seeds BH_STEPS_TOTAL=4 (qmake + make + Resolving + Staging)' \
+    "$(printf '%s\n' "$_bh_spec_app_body" | grep -cE '^[[:space:]]+BH_STEPS_TOTAL=4')" 0
 expect 'bh_template_app does NOT bump BH_STEPS_TOTAL for --wipe' '' \
     "$(printf '%s\n' "$_bh_spec_app_body" | grep -E 'BH_WIPE.*BH_STEPS_TOTAL \+' | head -1)"
 expect 'bh_template_subdirs does NOT bump BH_STEPS_TOTAL for --wipe' '' \
@@ -510,28 +1608,49 @@ expect 'bh_template_subdirs does NOT bump BH_STEPS_TOTAL for --wipe' '' \
 
 test_section 'bh_make_step -- "computing build plan" phase polls in background'
 
-# Regression guard: "computing build plan" must background `make -n` and
-# foreground-poll via `kill -0` + `bh_progress_render` + `sleep 0.15`.
+# Regression guard: "computing build plan" must background `bh_make_run -n`
+# and foreground-poll through bh_spin_until (`kill -0` + `bh_progress_render`
+# + a `sleep` of BH_SPIN_INTERVAL).
 
 _bh_spec_body=$(awk '/^bh_make_step\(\) \{/,/^\}$/' \
     "$_spec_dir/build-handler.sh")
 
-expect_int_gt 'body contains `make -n` (the precount itself)' \
-    "$(printf '%s\n' "$_bh_spec_body" | grep -cE '\bmake -n\b')" 0
-expect_int_gt 'body backgrounds `make -n` (`( make -n ... ) &`)' \
-    "$(printf '%s\n' "$_bh_spec_body" | grep -cE '\( *make -n.*\) *&')" 0
-expect_int_gt 'body has a `while kill -0` polling loop' \
-    "$(printf '%s\n' "$_bh_spec_body" | grep -cE '^[[:space:]]*while kill -0')" 0
-# The poll loop must call `bh_progress_render` so each tick
-# advances the spinner frame. We can't verify it's *inside* the
-# loop with plain grep, but its presence within the body is a
-# necessary precondition -- removing it (or moving it outside
-# the loop) is the exact regression we're guarding against.
-expect_int_gt 'body calls bh_progress_render somewhere' \
-    "$(printf '%s\n' "$_bh_spec_body" | grep -c 'bh_progress_render')" 0
-# And one `sleep 0.15` for the 6.7 Hz spinner cadence.
-expect_int_gt 'body uses `sleep 0.15` to pace the poll' \
-    "$(printf '%s\n' "$_bh_spec_body" | grep -c 'sleep 0\.15')" 0
+expect_int_gt 'body contains `bh_make_run -n` (the precount itself)' \
+    "$(printf '%s\n' "$_bh_spec_body" | grep -cE '\bbh_make_run -n\b')" 0
+expect_int_gt 'body backgrounds `bh_make_run -n` (`( bh_make_run -n ... ) &`)' \
+    "$(printf '%s\n' "$_bh_spec_body" | grep -cE '\( *bh_make_run -n.*\) *&')" 0
+expect_int_gt 'body polls through bh_spin_until' \
+    "$(printf '%s\n' "$_bh_spec_body" | grep -c 'bh_spin_until')" 0
+_bh_spec_spin_body=$(awk '/^bh_spin_until\(\) \{/,/^\}$/' \
+    "$_spec_dir/build-handler.sh")
+expect_int_gt 'bh_spin_until has a `while kill -0` polling loop' \
+    "$(printf '%s\n' "$_bh_spec_spin_body" | grep -cE '^[[:space:]]*while kill -0')" 0
+# The poll loop must call `bh_progress_tick` to advance the spinner frame
+# on each pass. We can't verify it's *inside* the loop with plain grep,
+# but its presence within the body is a necessary precondition -- removing
+# it (or moving it outside the loop) is the exact regression we're guarding
+# against.
+expect_int_gt 'bh_spin_until calls bh_progress_tick' \
+    "$(printf '%s\n' "$_bh_spec_spin_body" | grep -c 'bh_progress_tick')" 0
+
+# The spinner turns once per `BH_SPIN_INTERVAL`: only `bh_progress_tick`
+# advances the frame, while a redraw for a compile line keeps it.
+_bh_spec_render_only_body=$(awk '/^bh_progress_render\(\) \{/,/^\}$/' \
+    "$_spec_dir/build-handler.sh")
+expect 'bh_progress_render keeps the spinner frame' 0 \
+    "$(printf '%s\n' "$_bh_spec_render_only_body" | grep -c 'BH_PROGRESS_TICK=')"
+expect 'bh_progress_tick advances the spinner frame by one' 6 \
+    "$(BH_PROGRESS_TICK=5; bh_progress_tick 2>/dev/null; echo "$BH_PROGRESS_TICK")"
+_bh_spec_compile_loop=$(awk '/^bh_make_step\(\) \{/,/^\}$/' \
+    "$_spec_dir/build-handler.sh" | sed -n '/^ *P)$/,/^ *;;$/p')
+expect_int_gt 'a compile line redraws the row' \
+    "$(printf '%s\n' "$_bh_spec_compile_loop" | grep -c 'bh_progress_render')" 0
+expect 'a compile line redraws without turning the spinner' 0 \
+    "$(printf '%s\n' "$_bh_spec_compile_loop" | grep -c 'bh_progress_tick')"
+# And one `sleep` of BH_SPIN_INTERVAL (0.15 s, the 6.7 Hz spinner cadence).
+expect_int_gt 'bh_spin_until sleeps BH_SPIN_INTERVAL to pace the poll' \
+    "$(printf '%s\n' "$_bh_spec_spin_body" | grep -c 'sleep "\$BH_SPIN_INTERVAL"')" 0
+expect 'BH_SPIN_INTERVAL is 0.15' 0.15 "$BH_SPIN_INTERVAL"
 
 
 test_section 'bh_make -- race-aware split bumps BH_STEPS_TOTAL'
@@ -597,6 +1716,409 @@ expect_returns 'bh_strict_mode aborts subshell on first failure' 1 sh -c '
     false
     echo "should-not-print"
 '
+
+
+
+# ---- specs: build modes, end to end ------------------------------------
+
+test_section 'build modes -- --filter / --save-space / --rebuild / --clean, end to end'
+
+# Drives bh_template_subdirs on a small project in a sandbox: a static lib,
+# an app that needs it (listed before it), a debug_and_release app, two test
+# apps outside the root, and an optional broken project. None of them uses
+# Qt; hence --static needs no static XD libraries. Needs XD's qmake, a C++
+# compiler, and make; skipped as a whole where one is missing. Every run goes
+# through a subshell; hence a bh_error ends only that run.
+
+_bh_spec_qmake=$_spec_dir/../bin/qmake
+if [ ! -x "$_bh_spec_qmake" ] || ! command -v make >/dev/null 2>&1 \
+        || ! command -v c++ >/dev/null 2>&1; then
+    test_skip 'build modes end to end' 'needs XD qmake, make, and c++'
+else
+    _bh_spec_sandbox=$(mktemp -d)
+    _bh_spec_src=$_bh_spec_sandbox/src
+    _bh_spec_bd=$_bh_spec_sandbox/bd
+    mkdir -p "$_bh_spec_src/zlib" "$_bh_spec_src/app" "$_bh_spec_src/dr" \
+        "$_bh_spec_src/tests/t1" "$_bh_spec_src/tests/t2" "$_bh_spec_src/broken"
+    printf 'TEMPLATE = subdirs\nSUBDIRS = app zlib dr\napp.depends = zlib\n' \
+        > "$_bh_spec_src/top.pro"
+    printf 'TEMPLATE = lib\nCONFIG += staticlib\nQT =\nSOURCES = z.cpp\n' \
+        > "$_bh_spec_src/zlib/zlib.pro"
+    echo 'int z() { return 1; }' > "$_bh_spec_src/zlib/z.cpp"
+    printf 'TEMPLATE = app\nQT =\nSOURCES = m.cpp\nLIBS += -L$$OUT_PWD/../zlib -lzlib\n' \
+        > "$_bh_spec_src/app/app.pro"
+    echo 'int z(); int main() { return z() - 1; }' > "$_bh_spec_src/app/m.cpp"
+    printf 'TEMPLATE = app\nCONFIG += debug_and_release\nQT =\nSOURCES = m.cpp\n' \
+        > "$_bh_spec_src/dr/dr.pro"
+    echo 'int main() { return 0; }' > "$_bh_spec_src/dr/m.cpp"
+    printf 'TEMPLATE = subdirs\nSUBDIRS = t1 t2\n' > "$_bh_spec_src/tests/tests.pro"
+    for _bh_spec_t in t1 t2; do
+        printf 'TEMPLATE = app\nQT =\nSOURCES = m.cpp\n' \
+            > "$_bh_spec_src/tests/$_bh_spec_t/$_bh_spec_t.pro"
+        cp "$_bh_spec_src/dr/m.cpp" "$_bh_spec_src/tests/$_bh_spec_t/"
+    done
+    printf 'error(this project is broken)\n' > "$_bh_spec_src/broken/broken.pro"
+    _bh_spec_tab=$(printf '\t')
+
+    # _bh_spec_build [flags...]
+    # Runs one build of the sandbox project, headless and without progress
+    # display, under the spec in `_bh_spec_qmakespec` when set. Keeps the
+    # output in _bh_spec_out and the exit status in _bh_spec_rc.
+    _bh_spec_xd_dir=$(cd "$_spec_dir/.." && pwd)
+    _bh_spec_build() {
+        _bh_spec_out=$(
+            # A fresh copy of the script, since earlier sections stub parts
+            # of it (bh_make_step) in this shell.
+            . "$_bh_spec_xd_dir/tools/build-handler.sh"
+            cd "$_bh_spec_src" || exit 1
+            BH_ROOT=$_bh_spec_src
+            XD_DIR=$_bh_spec_xd_dir
+            BUILD_DIR=$_bh_spec_bd
+            BH_SCRIPT_NAME=build.sh
+            BH_HEADLESS=1 BH_NO_PROGRESS=1
+            # Earlier sections leave their own settings behind (a fake
+            # QMAKESPEC, remaining args, counters); start clean.
+            unset BH_FILTER BH_REBUILD BH_SAVE_SPACE BH_CLEAN BH_WIPE
+            unset BH_STATIC BH_NO_XD_BUILD
+            unset BH_NO_BUILD BH_FORCE_QMAKE BH_QMAKE_KEEP_GOING BH_MODE
+            unset BH_MODE_GIVEN BH_DEBUG_INFO
+            unset BH_REMAINING_ARGS BH_TEST_ROOT BH_RUN_TESTS BH_RUN_TARGET
+            unset BH_STEPS_TOTAL BH_LOG_LEVEL BH_VERBOSE BH_MEMSAFE
+            unset QMAKESPEC BH_CROSS_SPEC QMAKE JOBS LOGS _step
+            # The sandbox builds on the real XD, which the spec never builds.
+            BH_NO_XD_BUILD=1
+            QMAKESPEC=${_bh_spec_qmakespec:-}
+            bh_template_subdirs "$_bh_spec_src/top.pro" "$@" </dev/null 2>&1
+        )
+        _bh_spec_rc=$?
+    }
+    # _bh_spec_built
+    # Prints the projects the last build built, in order, space-separated.
+    _bh_spec_built() {
+        printf '%s\n' "$_bh_spec_out" \
+            | sed -n 's/^Filtered build\( \[[0-9/]*\]\)\{0,1\}: //p; s/^--save-space build \[[0-9/]*\]: //p' \
+            | tr '\n' ' '
+    }
+    # _bh_spec_lines <order|finished|unfinished>
+    # Prints the projects of that kind of cache line, in order.
+    _bh_spec_lines() {
+        awk -F'\t' -v kind="$1" '
+            (kind == "order"      && NF == 3) ||
+            (kind == "finished"   && NF >= 4 && $4 != "") ||
+            (kind == "unfinished" && NF >= 4 && $4 == "") {
+                sub(/^.*\/src\//, "", $1); printf "%s ", $1
+            }' "$_bh_spec_bd/.qmake.save_space" 2>/dev/null
+    }
+
+    _bh_spec_build
+    expect 'plain build succeeds' 0 "$_bh_spec_rc"
+    expect 'plain build writes no cache' '' \
+        "$(ls "$_bh_spec_bd/.qmake.save_space" 2>/dev/null)"
+
+    _bh_spec_build --wipe --no-build
+    expect '--wipe removes the build dir' '' "$(ls -d "$_bh_spec_bd" 2>/dev/null)"
+
+    _bh_spec_build --filter 'zlib|app|dr|tests/t1'
+    expect '--filter on a fresh dir succeeds' 0 "$_bh_spec_rc"
+    expect '--filter records the order first' 1 \
+        "$(printf '%s\n' "$_bh_spec_out" | grep -c '^Recording build order')"
+    expect '--filter builds in dependency order, then the unrecorded match' \
+        'zlib/zlib.pro app/app.pro dr/dr.pro tests/t1/t1.pro ' "$(_bh_spec_built)"
+    expect 'the cache lists one order line per variant' \
+        'zlib/zlib.pro app/app.pro dr/dr.pro dr/dr.pro ' "$(_bh_spec_lines order)"
+    expect 'without --save-space no finished line is written' '' \
+        "$(_bh_spec_lines finished)"
+
+    _bh_spec_build --filter 'zlib|app'
+    expect '--filter again reuses the order (no qmake run)' 0 \
+        "$(printf '%s\n' "$_bh_spec_out" | grep -c '^Recording build order')"
+    expect '--filter again builds only its matches' \
+        'zlib/zlib.pro app/app.pro ' "$(_bh_spec_built)"
+
+    _bh_spec_build --filter 'tests/t2'
+    expect 'an unrecorded single match builds alone' 'tests/t2/t2.pro ' \
+        "$(_bh_spec_built)"
+
+    _bh_spec_build --filter 'tests/tests.pro'
+    expect 'a subdirs .pro the filter names builds too' 'tests/tests.pro ' \
+        "$(_bh_spec_built)"
+
+    _bh_spec_build --filter 'nothing-here'
+    expect 'a filter that matches nothing fails' 1 "$_bh_spec_rc"
+
+    _bh_spec_build --qmake --filter 'app'
+    expect '--qmake with --filter records again, then filters' 1 \
+        "$(printf '%s\n' "$_bh_spec_out" | grep -c '^Recording build order')"
+    expect '--qmake keeps the order lines' \
+        'zlib/zlib.pro app/app.pro dr/dr.pro dr/dr.pro ' "$(_bh_spec_lines order)"
+
+    _bh_spec_build --filter 'zlib|app' --rebuild=app
+    expect 'without --save-space, --rebuild builds every match, in order' \
+        'zlib/zlib.pro app/app.pro ' "$(_bh_spec_built)"
+    expect 'and cleans the ones the sub-filter names first' \
+        '--rebuild: app/app.pro matches; building it again.' \
+        "$(printf '%s\n' "$_bh_spec_out" | grep '^--rebuild:')"
+    expect 'and it still writes no finished line' '' "$(_bh_spec_lines finished)"
+    _bh_spec_build --rebuild
+    expect 'a bare --rebuild alone rebuilds the whole root in order' \
+        'zlib/zlib.pro app/app.pro dr/dr.pro ' "$(_bh_spec_built)"
+    expect 'cleaning each project first' 3 \
+        "$(printf '%s\n' "$_bh_spec_out" | grep -c '^--rebuild:')"
+    _bh_spec_build --rebuild=tests/t2
+    expect '--rebuild alone builds the root, then reaches its unrecorded match' \
+        'zlib/zlib.pro app/app.pro dr/dr.pro tests/t2/t2.pro ' "$(_bh_spec_built)"
+    expect 'cleaning only that match' 1 \
+        "$(printf '%s\n' "$_bh_spec_out" | grep -c '^--rebuild:')"
+
+    rm -rf "$_bh_spec_bd"
+    _bh_spec_build --save-space
+    expect '--save-space on a fresh dir succeeds' 0 "$_bh_spec_rc"
+    expect '--save-space builds the whole root in order' \
+        'zlib/zlib.pro app/app.pro dr/dr.pro ' "$(_bh_spec_built)"
+    expect '--save-space writes a finished line per variant' \
+        'zlib/zlib.pro app/app.pro dr/dr.pro dr/dr.pro ' "$(_bh_spec_lines finished)"
+    expect '--save-space leaves no object file' 0 \
+        "$(find "$_bh_spec_bd" -name '*.o' | wc -l | tr -d ' ')"
+
+    _bh_spec_build --save-space
+    expect '--save-space again skips every finished project' '' "$(_bh_spec_built)"
+    expect '--save-space again reports the skips' 1 \
+        "$(printf '%s\n' "$_bh_spec_out" | grep -c 'built 0, skipped 3 up-to-date, of 3')"
+
+    _bh_spec_build --save-space --rebuild
+    expect 'bare --rebuild builds every project again' \
+        'zlib/zlib.pro app/app.pro dr/dr.pro ' "$(_bh_spec_built)"
+    expect '--rebuild leaves no emptied finished line behind' '' \
+        "$(_bh_spec_lines unfinished)"
+
+    _bh_spec_build --save-space --rebuild=zlib
+    expect '--rebuild=<regexp> builds only its matches again' 'zlib/zlib.pro ' \
+        "$(_bh_spec_built)"
+
+    _bh_spec_build --save-space --filter 'zlib|app' --rebuild=app
+    expect '--rebuild narrows on top of --filter' 'app/app.pro ' "$(_bh_spec_built)"
+
+    _bh_spec_build --save-space --filter 'zlib' --rebuild=app
+    expect '--rebuild cannot reach past --filter' '' "$(_bh_spec_built)"
+
+    _bh_spec_build --save-space --filter 'zlib|tests/t1'
+    expect 'an unrecorded match builds alone under --save-space' 'tests/t1/t1.pro ' \
+        "$(_bh_spec_built)"
+    _bh_spec_build --save-space --filter 'zlib|tests/t1'
+    expect 'and counts as recorded and finished from then on' '' "$(_bh_spec_built)"
+    _bh_spec_build --save-space --filter 'tests/t1' --rebuild
+    expect 'until --rebuild names it' 'tests/t1/t1.pro ' "$(_bh_spec_built)"
+
+    _bh_spec_build --save-space --filter 'tests/'
+    expect 'under --save-space a matched subdirs .pro is passed over' 0 "$_bh_spec_rc"
+    expect 'while its unfinished leaves build alone' 'tests/t2/t2.pro ' \
+        "$(_bh_spec_built)"
+    expect 'saying why the subdirs .pro itself did not build' 1 \
+        "$(printf '%s\n' "$_bh_spec_out" \
+            | grep -c '^--save-space: tests/tests.pro is a subdirs project')"
+    _bh_spec_build --save-space --filter 'tests/'
+    expect 'and nothing builds again after that' '' "$(_bh_spec_built)"
+
+    _bh_spec_build --save-space --qmake
+    expect '--qmake keeps every finished line' \
+        'app/app.pro dr/dr.pro dr/dr.pro tests/t1/t1.pro tests/t2/t2.pro zlib/zlib.pro ' \
+        "$(_bh_spec_lines finished | tr ' ' '\n' | sort | tr '\n' ' ')"
+
+    _bh_spec_build --save-space --clean --filter 'app'
+    expect 'a filtered --clean forgets only its matches' 'app/app.pro ' \
+        "$(_bh_spec_built)"
+    _bh_spec_build --save-space --clean --filter 'zlib|dr' --rebuild=dr
+    expect 'a filtered --clean honours --rebuild as the sub-filter' 'dr/dr.pro ' \
+        "$(_bh_spec_built)"
+
+    rm -f "$_bh_spec_bd/zlib/libzlib.a"
+    _bh_spec_build --save-space --filter 'zlib'
+    expect 'a finished project whose target went missing builds again' \
+        'zlib/zlib.pro ' "$(_bh_spec_built)"
+
+    # An explicit mode builds the tree in that one variant, and a switch to
+    # the other one builds every project again, as both variants
+    # write to the same files.
+    rm -rf "$_bh_spec_bd"
+    _bh_spec_build --save-space --debug
+    expect '--debug builds the whole root' \
+        'zlib/zlib.pro app/app.pro dr/dr.pro ' "$(_bh_spec_built)"
+    expect 'as debug only' 0 \
+        "$(grep -c -- '-DQT_NO_DEBUG' "$_bh_spec_bd/zlib/Makefile")"
+    _bh_spec_build --save-space --debug
+    expect '--debug again skips every finished project' '' "$(_bh_spec_built)"
+    _bh_spec_build --save-space --release
+    expect '--release over it builds every project again' \
+        'zlib/zlib.pro app/app.pro dr/dr.pro ' "$(_bh_spec_built)"
+    expect 'as release only' 1 \
+        "$(grep -c -- '-DQT_NO_DEBUG' "$_bh_spec_bd/zlib/Makefile")"
+    _bh_spec_build --filter 'zlib' --debug
+    expect 'without --save-space, a switch makes the Makefile again' 0 \
+        "$(grep -c -- '-DQT_NO_DEBUG' "$_bh_spec_bd/zlib/Makefile")"
+    expect 'cleaning what the other variant built first' 1 \
+        "$(printf '%s\n' "$_bh_spec_out" | grep -c 'made for another toolchain or variant')"
+
+    _bh_spec_build --clean --no-build
+    expect 'a bare --clean removes the cache' '' \
+        "$(ls "$_bh_spec_bd/.qmake.save_space" 2>/dev/null)"
+
+    # --clean scoped by the filters, on a plain build (which keeps objects).
+    # _bh_spec_objects <dir>: the object files under that build subdir.
+    _bh_spec_objects() {
+        find "$_bh_spec_bd/$1" -name '*.o' 2>/dev/null | wc -l | tr -d ' '
+    }
+    rm -rf "$_bh_spec_bd"
+    _bh_spec_build --filter 'zlib|app|dr|tests/t1'
+    expect 'a plain build keeps its objects' 1 "$(_bh_spec_objects zlib)"
+    _bh_spec_build --clean --no-build --filter 'app'
+    expect '--clean with --filter cleans only the matches (app)' 0 \
+        "$(_bh_spec_objects app)"
+    expect 'and leaves the rest (zlib, dr, t1) alone' \
+        "1 $(_bh_spec_objects dr) 1" \
+        "$(_bh_spec_objects zlib) $(_bh_spec_objects dr) $(_bh_spec_objects tests/t1)"
+    _bh_spec_build --clean --no-build --filter 'zlib|dr' --rebuild=dr
+    expect '--clean with both filters cleans only what both name (dr)' 0 \
+        "$(_bh_spec_objects dr)"
+    expect 'and leaves the base-filter-only match (zlib) alone' 1 \
+        "$(_bh_spec_objects zlib)"
+    _bh_spec_build --clean --no-build --rebuild=tests/t1
+    expect '--clean with --rebuild alone cleans its match (t1)' 0 \
+        "$(_bh_spec_objects tests/t1)"
+    expect 'and leaves zlib alone' 1 "$(_bh_spec_objects zlib)"
+    _bh_spec_build --clean --no-build
+    expect 'a bare --clean cleans the whole root' 0 "$(_bh_spec_objects zlib)"
+    unset -f _bh_spec_objects
+
+    # Switching between the two modes on one build dir.
+    rm -rf "$_bh_spec_bd"
+    _bh_spec_build --filter 'zlib|app|dr|tests/t1'
+    _bh_spec_build --save-space --filter 'zlib|app|dr|tests/t1'
+    expect 'a project built without --save-space gets marked finished by it' \
+        'zlib/zlib.pro app/app.pro dr/dr.pro dr/dr.pro tests/t1/t1.pro ' \
+        "$(_bh_spec_lines finished)"
+    _bh_spec_build --save-space --filter 'zlib|app|dr|tests/t1'
+    expect 'and is skipped from then on' '' "$(_bh_spec_built)"
+    _bh_spec_build --filter 'zlib|app|dr|tests/t1'
+    expect 'back without --save-space, the Makefiles lose its hooks' 0 \
+        "$(grep -c '^save_space_finished:' "$_bh_spec_bd/app/Makefile" \
+            "$_bh_spec_bd/tests/t1/Makefile" | awk -F: '{ n += $2 } END { print n + 0 }')"
+
+    # --static: projects that switch to and from `qt_static` mode, through a
+    # filtered build (each project qmaked alone) and a plain one (one
+    # recursive qmake of the root).
+    # _bh_spec_static <dir>: 1 when the Makefiles of that build subdir compile
+    # in `qt_static` mode, else 0.
+    _bh_spec_static() {
+        if cat "$_bh_spec_bd/$1"/Makefile* 2>/dev/null \
+                | grep -q '^DEFINES .*-DQT_STATIC'; then
+            echo 1
+        else
+            echo 0
+        fi
+    }
+    rm -rf "$_bh_spec_bd"
+    _bh_spec_build --filter 'zlib|app' --static=zlib --no-xd-build
+    expect '--static=<regexp> with --filter succeeds' 0 "$_bh_spec_rc"
+    expect 'and lists only its match' "$_bh_spec_src/zlib/zlib.pro" \
+        "$(cat "$_bh_spec_bd/.qmake.static")"
+    expect 'a fresh build dir has no switch to report' '' \
+        "$(printf '%s\n' "$_bh_spec_out" | grep '^--static:')"
+    expect 'its match is qmaked in qt_static mode, the rest shared' '1 0' \
+        "$(_bh_spec_static zlib) $(_bh_spec_static app)"
+    rm -rf "$_bh_spec_bd"
+    _bh_spec_build --filter 'zlib|app'
+    expect 'a build without --static makes no static list' '' \
+        "$(ls "$_bh_spec_bd/.qmake.static" 2>/dev/null)"
+    _bh_spec_build --filter 'zlib|app' --static=zlib --no-xd-build
+    expect 'a match built shared before reports its switch' \
+        '--static: zlib/zlib.pro switches to qt_static mode; cleaning zlib/Makefile.' \
+        "$(printf '%s\n' "$_bh_spec_out" | grep '^--static:')"
+    expect 'the match is qmaked again in qt_static mode, the rest shared' '1 0' \
+        "$(_bh_spec_static zlib) $(_bh_spec_static app)"
+    _bh_spec_build --filter 'zlib|app' --static=zlib --no-xd-build
+    expect 'the same --static again switches nothing' '' \
+        "$(printf '%s\n' "$_bh_spec_out" | grep '^--static:')"
+    _bh_spec_build --filter 'zlib|app'
+    expect 'without --static the match switches back to shared' \
+        '--static: zlib/zlib.pro switches to shared mode; cleaning zlib/Makefile.' \
+        "$(printf '%s\n' "$_bh_spec_out" | grep '^--static:')"
+    expect 'and is qmaked again shared' '0 0' \
+        "$(_bh_spec_static zlib) $(_bh_spec_static app)"
+    expect 'leaving an empty list behind' '' "$(cat "$_bh_spec_bd/.qmake.static")"
+    _bh_spec_build --static='app|dr' --no-xd-build
+    expect 'a plain build with --static=<regexp> succeeds' 0 "$_bh_spec_rc"
+    expect 'its recursive qmake applies the regexp per project' '0 1 1' \
+        "$(_bh_spec_static zlib) $(_bh_spec_static app) $(_bh_spec_static dr)"
+    _bh_spec_build --static --filter 'zlib' --no-xd-build
+    expect '--static narrows on --filter like --rebuild (zlib only)' \
+        "$_bh_spec_src/zlib/zlib.pro" "$(cat "$_bh_spec_bd/.qmake.static")"
+    _bh_spec_build --no-static --no-xd-build
+    expect '--no-static builds every project shared again' '0 0 0' \
+        "$(_bh_spec_static zlib) $(_bh_spec_static app) $(_bh_spec_static dr)"
+    unset -f _bh_spec_static
+
+    # A build-deps hook runs when the run builds, before any qmake, and not
+    # under --no-build.
+    bh_hook build-deps <<'}'
+    echo "build-deps hook ran"
+}
+    _bh_spec_build --qmake --filter 'zlib'
+    expect 'a build-deps hook runs when the run builds' 1 \
+        "$(printf '%s\n' "$_bh_spec_out" | grep -c '^build-deps hook ran$')"
+    expect 'before any qmake runs' 'build-deps hook ran' \
+        "$(printf '%s\n' "$_bh_spec_out" \
+            | grep -m1 -E '^build-deps hook ran$|^Recording build order')"
+    _bh_spec_build --no-build
+    expect 'but not under --no-build' 0 \
+        "$(printf '%s\n' "$_bh_spec_out" | grep -c '^build-deps hook ran$')"
+    unset BH_HOOKS_build_deps
+
+    # A build dir switched to another toolchain is cleaned before qmake runs
+    # again; hence no object of the old toolchain reaches the new link.
+    if [ "$(uname -s)" = Linux ] && command -v clang++ >/dev/null 2>&1 \
+            && command -v readelf >/dev/null 2>&1; then
+        # _bh_spec_compiler <dir>: the compiler the `.comment` section of
+        # that build subdir's object names, `GCC` or `clang`.
+        _bh_spec_compiler() {
+            readelf -p .comment "$_bh_spec_bd/$1"/*.o 2>/dev/null \
+                | grep -oE 'clang|GCC' | head -1
+        }
+        rm -rf "$_bh_spec_bd"
+        _bh_spec_build --filter 'zlib|app'
+        expect 'the default spec compiles with GCC' 'GCC GCC' \
+            "$(_bh_spec_compiler zlib) $(_bh_spec_compiler app)"
+        _bh_spec_qmakespec=linux-clang
+        _bh_spec_build --filter 'zlib|app'
+        unset _bh_spec_qmakespec
+        expect 'a build with another spec succeeds' 0 "$_bh_spec_rc"
+        expect 'after cleaning what the old toolchain built, project by project' 2 \
+            "$(printf '%s\n' "$_bh_spec_out" | grep -c 'made for another toolchain')"
+        expect 'and compiles everything again with the new one' 'clang clang' \
+            "$(_bh_spec_compiler zlib) $(_bh_spec_compiler app)"
+        unset -f _bh_spec_compiler
+    else
+        test_skip 'a toolchain switch cleans the old objects' 'needs Linux, clang++, and readelf'
+    fi
+
+    # A broken project the filter leaves out.
+    printf 'TEMPLATE = subdirs\nSUBDIRS = app broken zlib dr\napp.depends = zlib\n' \
+        > "$_bh_spec_src/top.pro"
+    rm -rf "$_bh_spec_bd"
+    _bh_spec_build --filter 'zlib|app'
+    expect 'a broken unrelated project only warns under --filter' 0 "$_bh_spec_rc"
+    expect 'and the recording stops at it (app pulls zlib in first)' \
+        'zlib/zlib.pro app/app.pro ' "$(_bh_spec_lines order)"
+    expect 'while every match still builds' 'zlib/zlib.pro app/app.pro ' \
+        "$(_bh_spec_built)"
+    _bh_spec_build --force-qmake --filter 'zlib|app'
+    expect '--force-qmake records past the broken project' \
+        'zlib/zlib.pro app/app.pro dr/dr.pro dr/dr.pro ' "$(_bh_spec_lines order)"
+    _bh_spec_build --save-space
+    expect 'a broken project fails a --save-space build' 2 "$_bh_spec_rc"
+
+    rm -rf "$_bh_spec_sandbox"
+    unset -f _bh_spec_build _bh_spec_built _bh_spec_lines
+fi
 
 
 test_end

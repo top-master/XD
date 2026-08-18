@@ -167,8 +167,12 @@ them.
 
 | Flag | What it means |
 | ---- | ------------- |
-| `--debug` | Build the easy-to-inspect version. **This is the default.** |
-| `--release` | Build the fast version. |
+| `--debug` \
+| Build only the easy-to-inspect version. **This is the default** for an app. \
+  Without a flag, a project made of sub-projects, such as XD, builds the \
+  versions its settings name: for XD, both versions on Windows and macOS, and \
+  only the fast one on Linux (since both versions would share one file name). |
+| `--release` | Build only the fast version. |
 | `--test [file.pro \| glob]` / `--tests` | Build, then build and run the tests. You may name one test `.pro` file, or a glob; a glob runs **every** test it matches (e.g. `'**/*qmake*'`). Without one, the project's default tests run. See "Finding a test by glob" below. |
 | `--test-review <file.pro \| glob>` | Shortcut for `--test <file.pro> --headless --verbose --no-build`. Takes a `.pro` path or a glob, same as `--test`. Each of those three defaults can be flipped (see the table above). |
 | `--run [subdir]` | Run the built program. A multi-part project needs the `subdir` to say which one. |
@@ -184,12 +188,40 @@ them.
 | `--only-clean` | The same as `--clean --no-build` together. |
 | `--qmake` / `--refresh` | Only redo the build plans (Makefiles); don't compile. |
 | `--ignore-pri` | When deciding if the plans are out of date, look only at `.pro` files and ignore `.pri` file times. Handy when an editor keeps "touching" a `.pri`. |
+| `--static[=<regexp>]` \
+| Build in *static* mode (`qt_static`): the program carries the framework \
+  inside it instead of needing its library files next to it. Without a value \
+  every project builds static; with one, only the projects whose path matches \
+  the regexp (`grep -E`). With `--filter`, it only picks among the projects \
+  `--filter` keeps, just like `--rebuild`. When a new regexp moves a project \
+  in or out of static mode, that project is cleaned first; hence nothing \
+  compiled for the other mode is left. It builds into its own folder, with \
+  `-static` before the mode (for example `jom-static-debug`); hence the normal \
+  build stays as it is. When any project builds static, a project built on XD \
+  also gets XD built in static mode first (XD's own `build.sh --static`, given \
+  every flag and qmake argument of this run, except the ones that name this \
+  project's own paths or steps: `--filter`, the `--static` regexp, `--test`, \
+  `--run`, and `-d`), unless XD already has a whole static build. |
+| `--no-static` \
+| Build every project in the normal (shared) mode again, even if the project's \
+  `build.sh` turned `--static` on by default. |
+| `--no-xd-build` / `--no-qt-build` \
+| Never build XD itself, even when it has no build yet (or, with `--static`, \
+  no static build yet). |
 | `-d <dir>` / `--directory <dir>` | Build into a different folder than the usual one. A relative folder is measured from where you run the command; an absolute one (including a Windows path like `C:\…`) is kept as-is. |
 
 ### Smart shortcuts the robot already knows
 
 - It **skips qmake** when the plans are still newer than every project file, so
   it doesn't redo work for nothing. `--qmake` forces it anyway.
+- It **redoes qmake** when `--static=<regexp>` picks other projects than when
+  the plans were made; hence the new choice always takes effect.
+- It **cleans first** when a build folder was made with another toolchain
+  (another spec, or `--memory-safe` turned on or off), then redoes qmake; hence
+  nothing the old compiler built ends up in the new link.
+- It **builds XD first** when a project built on XD finds XD's build
+  incomplete: XD's own `build.sh` runs with this run's flags, except the ones
+  that name this project's own paths or steps. `--no-xd-build` skips that.
 - `--no-build` plus `--test` (or `--run`) still does the test/run part — it only
   skips rebuilding the main app.
 - `--test-review` turns on its three defaults **first**, then your other flags
@@ -229,6 +261,52 @@ values to change behavior. A few useful ones:
 - `BH_BUILD_DIR_SUFFIX` — add a suffix to the build folder name (XD uses
   `-static` for its static build).
 - `BH_VERBOSE` — same as `--verbose` if set to something other than `0`.
+- `BH_STATIC`: same as `--static=<regexp>`, which lets a project build
+  static by default (`BH_STATIC='^.*$'` for every project); `--no-static`
+  still turns it off.
+
+A `build.sh` can also run its own code once the flags are read, while that
+code can still change what the flags set:
+
+```sh
+bh_hook args-parsed <<'}'
+    bh_filter_add "$my_regexp"
+}
+```
+
+The code between the first line and the lone `}` runs right after the flags
+are read. Here, `bh_filter_add` keeps only the projects that both `--filter`
+and `my_regexp` match: it adds the regexp to the filter as one more line, and
+a filter of several lines keeps only what every line matches. XD's `build.sh`
+uses this to turn its `--static=<regexp>` into a filter.
+
+A `build-deps` hook runs later: when the run builds, right before the first
+qmake. That is the place to build the other frameworks a project needs.
+`bh_dependency_build` builds one through its own `build.sh`, with this run's
+flags; `bh_dependency_build_static` does the same in static mode, and only
+when some project builds static:
+
+```sh
+bh_hook build-deps <<'}'
+    bh_dependency_build "$other_framework/build.sh"
+    bh_dependency_build_static "$other_framework/build.sh"
+}
+```
+
+A `test-env` hook runs right before each test that `--test` runs; it is the
+place to export what the test binaries read from their environment.
+
+A function the `build.sh` already defined can be a hook too: `bh_hook_add`
+adds a call of it to a stage, and the call runs just like the code `bh_hook`
+adds:
+
+```sh
+my_prepare_tests() {
+    MY_TEST_SETTING=on
+    export MY_TEST_SETTING
+}
+bh_hook_add test-env my_prepare_tests
+```
 
 That's it. Start with **Part 1**, and reach for **Part 2** only when you want to
 know exactly what a flag does.
