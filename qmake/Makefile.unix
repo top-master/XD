@@ -23,6 +23,7 @@ OBJS=project.o option.o property.o main.o ioutils.o proitems.o \
 #qt code
 QOBJS=qtextcodec.o qutfcodec.o qstring.o qstring_compat.o qstringbuilder.o qtextstream.o qiodevice.o \
       qringbuffer.o qdebug.o qmalloc.o qglobal.o \
+      qmemorysafety.o \
       qarraydata.o qbytearray.o qbytearraymatcher.o qdatastream.o qbuffer.o qlist.o qfiledevice.o qfile.o \
       qfilesystementry.o qfilesystemengine.o qfsfileengine.o qfsfileengine_iterator.o qregexp.o qvector.o \
       qbitarray.o qdir.o qdiriterator.o quuid.o qhash.o qfileinfo.o qdatetime.o qstringlist.o \
@@ -56,6 +57,7 @@ DEPEND_SRC = \
 	   $(SOURCE_PATH)/src/corelib/tools/qringbuffer.cpp \
 	   $(SOURCE_PATH)/src/corelib/io/qdebug.cpp \
 	   $(SOURCE_PATH)/src/corelib/global/qmalloc.cpp \
+	   $(SOURCE_PATH)/src/corelib/global/qmemorysafety.cpp \
 	   $(SOURCE_PATH)/src/corelib/global/qglobal.cpp $(SOURCE_PATH)/src/corelib/tools/qregexp.cpp \
 	   $(SOURCE_PATH)/src/corelib/tools/qarraydata.cpp $(SOURCE_PATH)/src/corelib/tools/qbytearray.cpp\
 	   $(SOURCE_PATH)/src/corelib/tools/qbytearraymatcher.cpp \
@@ -270,6 +272,9 @@ qmalloc.o: $(SOURCE_PATH)/src/corelib/global/qmalloc.cpp
 
 qglobal.o: $(SOURCE_PATH)/src/corelib/global/qglobal.cpp
 	$(CXX) -c -o $@ $(CXXFLAGS) $(SOURCE_PATH)/src/corelib/global/qglobal.cpp
+
+qmemorysafety.o: $(SOURCE_PATH)/src/corelib/global/qmemorysafety.cpp
+	$(CXX) -c -o $@ $(CXXFLAGS) $(SOURCE_PATH)/src/corelib/global/qmemorysafety.cpp
 
 qarraydata.o: $(SOURCE_PATH)/src/corelib/tools/qarraydata.cpp
 	$(CXX) -c -o $@ $(CXXFLAGS) $(SOURCE_PATH)/src/corelib/tools/qarraydata.cpp

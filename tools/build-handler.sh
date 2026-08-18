@@ -81,6 +81,99 @@ bh_warning() {
 }
 
 
+# ---- optional tool auto-install ----------------------------------------
+
+# Usage: bh_install_tools <tool-name>
+#
+# True (exit 0) when <tool-name> is allowed to be auto-installed, per the
+# caller's --install-tools selection (BH_INSTALL_TOOLS). `--install-tools` with
+# no value opts everything in (the pattern defaults to `^.*$`). The value is a
+# REGEXP when it both starts with `^` and ends with `$` (e.g. `^(filc|gdb)$`);
+# otherwise it is a plain tool name matched exactly. Unset -> nothing installs.
+#
+# Each caller gates its own install with this, e.g.
+#     if bh_install_tools filc; then bh_install_filc; fi
+# and each install routine itself no-ops when the tool is already present, so a
+# gate that passes still does no work on a machine that already has the tool.
+bh_install_tools() {
+    _bit_tool=$1
+    [ -n "${BH_INSTALL_TOOLS:-}" ] || return 1
+    case "$BH_INSTALL_TOOLS" in
+        '^'*'$') printf '%s\n' "$_bit_tool" | grep -Eq "$BH_INSTALL_TOOLS" ;;
+        *)       [ "$_bit_tool" = "$BH_INSTALL_TOOLS" ] ;;
+    esac
+}
+
+# Usage: bh_sudo <command> [args...]
+#
+# Runs a command with root privileges only when the current user is not already
+# root: through `sudo` (with `-n` under --headless, so an unattended build fails
+# fast rather than blocking on a password prompt). As root, or where sudo is
+# absent, runs it directly. Kept in one place so per-platform install steps never
+# re-implement the root-escalation dance.
+bh_sudo() {
+    if [ "$(id -u)" = 0 ]; then "$@"
+    elif command -v sudo >/dev/null 2>&1; then
+        if [ "${BH_HEADLESS:-0}" = 1 ]; then sudo -n "$@"; else sudo "$@"; fi
+    else "$@"; fi
+}
+
+# Usage: bh_pkg_install <package> [package...]
+#
+# Installs OS packages by name through whichever package manager the host
+# actually has -- apt (Debian/Ubuntu), apk (Alpine), pacman (Arch), dnf (Fedora)
+# or brew (macOS). This is the SINGLE place per-platform package commands live,
+# so every install routine stays platform-agnostic and just says
+# `bh_pkg_install <pkg>`.
+bh_pkg_install() {
+    if   command -v apt-get >/dev/null 2>&1; then bh_sudo apt-get update -qq >/dev/null 2>&1; bh_sudo apt-get install -y "$@"
+    elif command -v apk     >/dev/null 2>&1; then bh_sudo apk add "$@"
+    elif command -v pacman  >/dev/null 2>&1; then bh_sudo pacman -Sy --needed --noconfirm "$@"
+    elif command -v dnf     >/dev/null 2>&1; then bh_sudo dnf install -y "$@"
+    elif command -v brew    >/dev/null 2>&1; then brew install "$@"
+    else bh_error "no supported package manager found (need one of: apt, apk, pacman, dnf, brew) to install: $*"
+    fi
+}
+
+# Usage: bh_install_filc
+#
+# Installs the Fil-C memory-safe toolchain (https://github.com/pizlonator/fil-c)
+# under $BH_FILC_DIR and prepends its compilers to PATH, so a later
+# `command -v clang++` resolves to Fil-C's. No-ops when a Fil-C clang++ is
+# already reachable. Fil-C ships only for Linux x86_64 / arm64 -- anything else
+# is a fatal error. The caller gates this with `bh_install_tools filc`.
+bh_install_filc() {
+    if command -v clang++ >/dev/null 2>&1 && clang++ --version 2>/dev/null | grep -qi "Fil-C"; then
+        return 0
+    fi
+    [ "$(uname -s)" = Linux ] || bh_error "Fil-C only supports Linux (x86_64/arm64); this host is $(uname -s)."
+    case "$(uname -m)" in
+        x86_64|amd64)  _filc_arch=x86_64 ;;
+        aarch64|arm64) _filc_arch=aarch64 ;;
+        *) bh_error "Fil-C has no build for $(uname -m) (only x86_64 / aarch64)." ;;
+    esac
+    _filc_ver=0.683
+    _filc_dir=${BH_FILC_DIR:-$HOME/.fil-c}
+    _filc_root=$_filc_dir/filc-$_filc_ver-linux-$_filc_arch
+    if [ ! -x "$_filc_root/build/bin/clang++" ]; then
+        _filc_tar=filc-$_filc_ver-linux-$_filc_arch.tar.xz
+        mkdir -p "$_filc_dir"
+        command -v curl >/dev/null 2>&1 || bh_pkg_install curl
+        command -v xz   >/dev/null 2>&1 || bh_pkg_install xz-utils
+        curl -fsSL -o "$_filc_dir/$_filc_tar" \
+            "https://github.com/pizlonator/fil-c/releases/download/v$_filc_ver/$_filc_tar" \
+            || bh_error "Fil-C download failed."
+        tar -C "$_filc_dir" -xf "$_filc_dir/$_filc_tar" || bh_error "Fil-C extract failed."
+        rm -f "$_filc_dir/$_filc_tar"
+    fi
+    # setup.sh wires the pizfix rpaths + os-include symlinks; it needs patchelf.
+    command -v patchelf >/dev/null 2>&1 || bh_pkg_install patchelf
+    ( cd "$_filc_root" && rm -rf pizfix/os-include && sh setup.sh >/dev/null 2>&1 ) \
+        || bh_error "Fil-C setup.sh failed."
+    PATH="$_filc_root/build/bin:$PATH"; export PATH
+}
+
+
 # ---- strict mode -------------------------------------------------------
 
 # `pipefail` isn't in POSIX 2008 (it landed in Issue 8 / 2024), so try
@@ -155,12 +248,77 @@ bh_default_jobs() {
     fi
 }
 
-# Pick the mkspec by host. macx-clang on Darwin, linux-g++ otherwise.
-bh_default_qmakespec() {
-    case "$(uname -s)" in
-        Darwin) : "${QMAKESPEC:=macx-clang}";;
-        *)      : "${QMAKESPEC:=linux-g++}";;
+# Pick the mkspec by host: macx-clang on Darwin, win32-g++ on a Windows host
+# (git-bash / MSYS / Cygwin, where `uname -s` is MINGW*/MSYS*/CYGWIN*), linux-g++
+# otherwise.
+#
+# --memory-safe=filc needs the clang-family spec instead of the g++ one: Fil-C
+# IS a clang, so linux-clang / win32-clang drive qmake's QMAKE_CXX (= clang++)
+# and QMAKE_LINK (= $$QMAKE_CXX) by bare name, which resolve via PATH to the
+# Fil-C compiler bh_parse_args already verified and placed first. linux-g++ /
+# win32-g++ would instead compile and (crucially) LINK with g++, which fails
+# against the Fil-C-built Qt. The swap is purely textual (`*-g++` -> `*-clang`),
+# so it also covers a native Windows host and any win32-g++ cross target -- Fil-C
+# has no win32 runtime YET, but the plumbing is ready for when it does. macx-clang
+# is already clang. Explicit QMAKESPEC / --cross-build values still win (:=).
+# On a Windows host choose between the MSVC and the MinGW/g++ mkspec. MSVC is
+# preferred -- it is the usual Qt-on-Windows toolchain and what a vcvars*.bat
+# shell puts on PATH (as `cl`), while g++ is often absent. Resolution order:
+#   --msvc        -> win32-msvc<ver>   (forced)
+#   --gcc         -> win32-g++         (forced)
+#   `cl` on PATH  -> win32-msvc<ver>   (auto; also wins when both cl and g++ are)
+#   `g++` on PATH -> win32-g++         (auto; only MinGW present)
+#   neither       -> win32-msvc<ver>   (Windows default is MSVC)
+bh_win_host_spec() {
+    case "${BH_WIN_TOOLCHAIN:-}" in
+        msvc) bh_msvc_spec; return ;;
+        gcc)  echo win32-g++; return ;;
     esac
+    if command -v cl >/dev/null 2>&1; then bh_msvc_spec
+    elif command -v g++ >/dev/null 2>&1; then echo win32-g++
+    else bh_msvc_spec
+    fi
+}
+
+# Map the active Visual Studio (vcvars' $VisualStudioVersion, else the `cl`
+# banner) to the newest matching Qt 5.6 mkspec present under mkspecs/. Falls
+# back to win32-msvc2015, the common Qt-5.6 baseline. `cl </dev/null` prints
+# its banner (to stderr) without waiting for source on stdin.
+bh_msvc_spec() {
+    _vs="${VisualStudioVersion:-}"
+    if [ -z "$_vs" ] && command -v cl >/dev/null 2>&1; then
+        _clv=$(cl </dev/null 2>&1 | sed -n 's/.*Version \([0-9][0-9]*\.[0-9][0-9]*\).*/\1/p' | head -1)
+        case "$_clv" in
+            19.0|19.00*) _vs=14.0 ;;
+            19.1*)       _vs=15.0 ;;
+            19.2*)       _vs=16.0 ;;
+            19.3*|19.4*) _vs=17.0 ;;
+        esac
+    fi
+    case "$_vs" in
+        12.0)                  echo win32-msvc2013 ;;
+        14.0)                  echo win32-msvc2015 ;;
+        15.0)                  echo win32-msvc2017 ;;
+        1[6-9].0|[2-9][0-9].0) echo win32-msvc2017 ;;  # VS2019/2022+ -> newest spec here
+        *)                     echo win32-msvc2015 ;;   # sensible Qt-5.6 default
+    esac
+}
+
+bh_default_qmakespec() {
+    _bh_host_spec=
+    case "$(uname -s)" in
+        Darwin)               _bh_host_spec=macx-clang ;;
+        MINGW*|MSYS*|CYGWIN*) _bh_host_spec=$(bh_win_host_spec) ;;
+        *)                    _bh_host_spec=linux-g++ ;;
+    esac
+    if [ "${BH_MEMSAFE:-}" = filc ]; then
+        case "$_bh_host_spec" in
+            *-g++) _bh_host_spec="${_bh_host_spec%-g++}-clang" ;;  # linux/win32-g++ -> -clang
+        esac
+        # Mirror the same g++->clang swap onto a win32-g++ cross target.
+        [ "${BH_CROSS_SPEC:-}" = win32-g++ ] && BH_CROSS_SPEC=win32-clang
+    fi
+    : "${QMAKESPEC:=$_bh_host_spec}"
 }
 
 
@@ -322,6 +480,7 @@ bh_macos_developer_dir() {
 #   --run              launch the freshly-built app
 #   --debug            build in debug mode (default)
 #   --release          build in release mode
+#   --release-debug    release mode (-O2) but with debug info (-g) kept
 #   --headless         skip interactive prompts (XD-style scripts use this)
 #   --no-progress      disable bh_make_step's live progress bar (silent
 #                      make output instead, dump-on-failure as bh_run)
@@ -348,6 +507,16 @@ bh_macos_developer_dir() {
 #                      when an unchanged-in-effect `.pri` keeps
 #                      tripping a re-qmake because some IDE keeps
 #                      `touch`-ing it on save
+#   --save-space       reclaim disk while building -- each lib/exe drops
+#                      its build artifacts (object files, moc/rcc output)
+#                      right after it links, keeping only the binary
+#                      (qmake CONFIG+=save_space; see mkspecs/xd/save_space.prf)
+#   --cross-compile[=<spec>]  build the target for another platform (default
+#                      win32-g++) while host tools stay on the native host spec;
+#                      alias --cross-build (passed to qmake as -xspec)
+#   --filter=<regexp>  build only projects whose path matches the extended
+#                      regexp (grep -E), each qmaked+made alone; alias --only.
+#                      Alternation gives multiple patterns, e.g. 'tools/(moc|rcc)/'
 #   --                 stop parsing; rest forwarded as BH_REMAINING_ARGS
 #
 # True (exit 0) when there are post-build tasks to run -- i.e. --test or
@@ -503,6 +672,8 @@ bh_parse_args() {
     : "${BH_FORCE_QMAKE:=0}"
     : "${BH_IGNORE_PRI:=0}"
     : "${BH_TEST_GLOB:=0}"
+    : "${BH_GET:=}"
+    : "${BH_SAVE_SPACE:=0}"
 
     # --test-review is a review shortcut that pre-sets headless + verbose
     # + no-build. We apply those defaults *before* the parse loop so that
@@ -573,6 +744,12 @@ bh_parse_args() {
                 ;;
             --debug)          BH_MODE=debug; shift;;
             --release)        BH_MODE=release; shift;;
+            # --release-debug: an optimized (release) build that still carries
+            # debug info -- BH_MODE=release plus BH_DEBUG_INFO, so a build script
+            # adds -g without dropping -O2 (good for profiling, post-mortem cores,
+            # or readable Fil-C panics). BH_DEBUG_INFO is the switch build scripts
+            # read.
+            --release-debug)  BH_MODE=release; BH_DEBUG_INFO=1; shift;;
             --headless)       BH_HEADLESS=1; shift;;
             --no-progress)    BH_NO_PROGRESS=1; shift;;
             # --libc=<static|musl|...>: how the C runtime is linked (resolved
@@ -580,6 +757,22 @@ bh_parse_args() {
             # --musl is an alias for --libc=musl.
             --libc=*)         BH_LIBC="${1#*=}"; shift;;
             --musl)           BH_LIBC=musl; shift;;
+            # --memory-safe[=filc]: build with a memory-safe toolchain so every
+            # memory-safety violation becomes a deterministic panic instead of
+            # rare undefined behaviour. `filc` (the default, and only mode)
+            # selects Fil-C (https://github.com/pizlonator/fil-c);
+            # --watch-memory is an alias. The Fil-C toolchain must already be on
+            # PATH -- this handler locates it, it does not install it.
+            --memory-safe)    BH_MEMSAFE=filc; shift;;
+            --memory-safe=*)  BH_MEMSAFE="${1#*=}"; shift;;
+            --watch-memory)   BH_MEMSAFE=filc; shift;;
+            # --install-tools[=<name|regexp>]: let this build auto-install tools
+            # it needs but the host lacks. No value = allow all (`^.*$`). A value
+            # that starts with `^` and ends with `$` is a regexp, else an exact
+            # tool name. Each tool's install is gated by bh_install_tools and
+            # only runs when that tool is actually required.
+            --install-tools)   BH_INSTALL_TOOLS='^.*$'; shift;;
+            --install-tools=*) BH_INSTALL_TOOLS="${1#*=}"; shift;;
             --clean)          BH_CLEAN=1; shift;;
             --wipe)         BH_WIPE=1; shift;;
             --no-build)       BH_NO_BUILD=1; shift;;
@@ -595,6 +788,41 @@ bh_parse_args() {
             # Two spellings for the same force-qmake behaviour.
             --qmake|--refresh) BH_FORCE_QMAKE=1; shift;;
             --ignore-pri)     BH_IGNORE_PRI=1; shift;;
+            # --save-space: reclaim disk as we go -- each lib/exe drops its
+            # build artifacts (objects, moc/rcc output) right after it links,
+            # keeping only the binary. Forwarded to qmake as CONFIG+=save_space
+            # (see mkspecs/xd/save_space.prf). Handy for a big build on
+            # a tight disk, e.g. cross-building the whole framework.
+            --save-space)     BH_SAVE_SPACE=1; shift;;
+            # --cross-compile[=<spec>] (alias --cross-build): build the target
+            # for a different platform than the host. Host tools (moc/rcc/uic and
+            # the qmake bootstrap) keep building with the native host spec, while
+            # the target uses <spec> (default win32-g++). Passed to qmake as a
+            # separate -xspec, so host_build stays on the host spec instead of
+            # the target's, and the target spec's flags never reach the native
+            # host toolchain.
+            --cross-compile=*|--cross-build=*) BH_CROSS_SPEC="${1#*=}"; shift;;
+            --cross-compile|--cross-build)     BH_CROSS_SPEC=win32-g++; shift;;
+            # --gcc / --msvc: on a Windows host, force the target toolchain and
+            # mkspec (win32-g++ vs win32-msvc*). Optional -- with neither, the
+            # host default prefers MSVC when it is on PATH (see bh_win_host_spec).
+            # No effect on a Linux/macOS host (their spec is fixed).
+            --gcc)            BH_WIN_TOOLCHAIN=gcc; shift;;
+            --msvc)           BH_WIN_TOOLCHAIN=msvc; shift;;
+            # --filter=<regexp> (alias --only): build only the projects whose
+            # path relative to the build root matches the extended regexp
+            # (grep -E), so `a|b` builds multiple patterns at once (e.g.
+            # --filter='tools/(moc|rcc|uic)/'). This skips the whole-tree qmake,
+            # so an unrelated broken .pro (one that needs an SDK we lack, say)
+            # cannot block the subset asked for.
+            --filter=*|--only=*) BH_FILTER="${1#*=}"; shift;;
+            --filter|--only)     [ $# -ge 2 ] || bh_error "$1 requires a regexp"; BH_FILTER="$2"; shift 2;;
+            # --get=<what>: print a single resolved path and exit without
+            # building, so a caller can capture and forward it (e.g. bind-mount
+            # XD's already-built dirs into a cross-build container instead of
+            # rebuilding XD). Values -- see bh_handle_get: build-dir|bin-dir|lib-dir.
+            --get=*)          BH_GET="${1#--get=}"; shift;;
+            --get)            [ $# -ge 2 ] || bh_error "--get requires a value"; BH_GET="$2"; shift 2;;
             -d|--directory)
                 # Override BUILD_DIR; consumed by all templates' :- default.
                 # Absolutise a relative value: templates `cd` around before
@@ -626,6 +854,43 @@ bh_parse_args() {
         static) BH_LIBC_LDFLAGS="-static" ;;
         musl)   BH_LIBC_CC="x86_64-linux-musl-g++"; BH_LIBC_LDFLAGS="-static" ;;
     esac
+
+    # --memory-safe (parsed above): locate the memory-safe compiler on PATH.
+    # Fil-C is NOT installed here -- it must be pre-added to PATH; this only
+    # finds and uses it. A build script that honours BH_MEMSAFE_CXX gets the
+    # memory-safe compiler (and should leave the C runtime to Fil-C rather than
+    # forcing -static).
+    BH_MEMSAFE_CC=; BH_MEMSAFE_CXX=
+    case "${BH_MEMSAFE:-}" in
+        "")   ;;
+        filc) # Fil-C's clang / clang++ ARE the compilers -- filcc / filcpp are
+              # only its preprocessor front-ends (the "cpp" in filcpp puts clang
+              # in -E mode), so they must not compile or link. Auto-install Fil-C
+              # when it is missing and --install-tools allows, then require a real
+              # Fil-C clang++ (not a system clang that happens to be on PATH).
+              command -v clang++ >/dev/null 2>&1 && clang++ --version 2>/dev/null | grep -qi "Fil-C" \
+                  || { bh_install_tools filc && bh_install_filc; }
+              if command -v clang++ >/dev/null 2>&1 && clang++ --version 2>/dev/null | grep -qi "Fil-C"; then
+                  BH_MEMSAFE_CXX=$(command -v clang++)
+                  BH_MEMSAFE_CC=$(command -v clang)
+              else
+                  bh_error "--memory-safe=filc: no Fil-C clang++ on PATH -- add Fil-C's build/bin to PATH ahead of any system clang, or pass --install-tools to auto-install it (https://github.com/pizlonator/fil-c)."
+              fi ;;
+        *)    bh_error "--memory-safe: unknown mode '$BH_MEMSAFE' (supported: filc)." ;;
+    esac
+
+    # --save-space forwards to every qmake call as a CONFIG flag, so each
+    # target's post-link object wipe fires (mkspecs/xd/save_space.prf; it is
+    # deliberately NOT the Makefile `clean` target -- see that file).
+    [ "${BH_SAVE_SPACE:-0}" -eq 1 ] && \
+        BH_REMAINING_ARGS="CONFIG+=save_space${BH_REMAINING_ARGS:+ $BH_REMAINING_ARGS}"
+    # --memory-safe forwards CONFIG+=memory_safe to every qmake call. The feature
+    # mkspecs/features/memory_safe.prf then detects the actual memory-safe compiler
+    # family (Fil-C via its --version banner) and records it in the `memory_safe`
+    # variable, so build files can branch on it, e.g. contains(memory_safe, ^Fil-C$)
+    # (OpenSSL uses that to drop its asm, which Fil-C cannot assemble).
+    [ -n "${BH_MEMSAFE:-}" ] && \
+        BH_REMAINING_ARGS="CONFIG+=memory_safe${BH_REMAINING_ARGS:+ $BH_REMAINING_ARGS}"
     # Resolve whether the test step builds each test. Unless --build-tests
     # / --no-build-tests set it explicitly (or a caller pre-set it), it
     # follows the now-final main build: build tests when building, skip
@@ -659,6 +924,29 @@ bh_parse_args() {
     if [ "$BH_HEADLESS" -gt 0 ] && [ "${BH_NO_BUILD:-0}" -eq 0 ]; then
         bh_license_accept
     fi
+}
+
+
+# bh_handle_get
+#
+# When --get=<what> was passed, print a single resolved path to stdout and exit
+# 0 -- no banner, no build -- so a caller can capture and forward it (for
+# example bind-mount XD's already-built dirs into a cross-build container instead
+# of rebuilding XD). Every template driver calls this right after $BUILD_DIR is
+# resolved. Values:
+#   build-dir  the shadow build directory ($BUILD_DIR)
+#   bin-dir    $XD_DIR/bin  (built framework binaries: qmake-linux, ...)
+#   lib-dir    $XD_DIR/lib  (built framework libraries)
+bh_handle_get() {
+    [ -n "${BH_GET:-}" ] || return 0
+    _bh_xd="${XD_DIR:-$BH_ROOT}"
+    case "$BH_GET" in
+        build-dir) printf '%s\n' "$BUILD_DIR" ;;
+        bin-dir)   printf '%s\n' "$_bh_xd/bin" ;;
+        lib-dir)   printf '%s\n' "$_bh_xd/lib" ;;
+        *) echo "unknown --get value: '$BH_GET' (build-dir | bin-dir | lib-dir)" >&2; exit 2 ;;
+    esac
+    exit 0
 }
 
 
@@ -1187,7 +1475,7 @@ bh_run_qmake() {
     # subdir -- a firehose on a big tree -- so it's gated behind -vv
     # (very-verbose, level 3); plain -v keeps it in the log.
     if [ "${BH_LOG_LEVEL:-1}" -ge 3 ]; then
-        "$QMAKE" -r -spec "$XD_DIR/mkspecs/$QMAKESPEC" "$_pro" "$@" 2>&1 \
+        "$QMAKE" -r -spec "$XD_DIR/mkspecs/$QMAKESPEC" -xspec "$XD_DIR/mkspecs/${BH_CROSS_SPEC:-$QMAKESPEC}" "$_pro" "$@" 2>&1 \
             | tee "$_log"
         return $?
     fi
@@ -1196,7 +1484,7 @@ bh_run_qmake() {
         bh_progress_setType spinner
         bh_progress_setMax 0
         bh_progress_setDescription "QMake is generating Makefile(s) for $_label."
-        "$QMAKE" -r -spec "$XD_DIR/mkspecs/$QMAKESPEC" "$_pro" "$@" \
+        "$QMAKE" -r -spec "$XD_DIR/mkspecs/$QMAKESPEC" -xspec "$XD_DIR/mkspecs/${BH_CROSS_SPEC:-$QMAKESPEC}" "$_pro" "$@" \
             >"$_log" 2>&1 &
         _pid=$!
         bh_progress_render                    # initial frame
@@ -1210,7 +1498,7 @@ bh_run_qmake() {
             bh_dump_fail "$_log" "$_status"
         fi
     else
-        if "$QMAKE" -r -spec "$XD_DIR/mkspecs/$QMAKESPEC" "$_pro" "$@" \
+        if "$QMAKE" -r -spec "$XD_DIR/mkspecs/$QMAKESPEC" -xspec "$XD_DIR/mkspecs/${BH_CROSS_SPEC:-$QMAKESPEC}" "$_pro" "$@" \
             >"$_log" 2>&1; then
             :
         else
@@ -1293,6 +1581,11 @@ bh_wipe() {
 # regenerated this same build.
 bh_clean() {
     [ -n "${BUILD_DIR:-}" ] || bh_error "bh_clean: BUILD_DIR not set"
+    # Drop the --save-space caching marker and its .order scratch sibling:
+    # --clean should truly reset, and a stale marker would make the next
+    # --save-space build skip real work.
+    rm -f "$BUILD_DIR/.qmake.save_space" \
+          "$BUILD_DIR/.qmake.save_space.order"
     if [ -n "${BH_CLEAN_EXTRA:-}" ]; then
         echo "  removing auto-generated: $BH_CLEAN_EXTRA" 1>&2
         # shellcheck disable=SC2086  # intentional glob + word-split.
@@ -1314,6 +1607,61 @@ bh_clean() {
 
 # ---- race-aware make wrapper -------------------------------------------
 
+# bh_mocables_prepass
+#
+# Generate every subproject's moc output *before* the main compile.
+#
+# QRemote projects (`CONFIG += remote`) run XD's moc, which emits an
+# undeclared side-output `<base>_remote.{h,cpp}` next to each Q_REMOTE
+# header. When one generated header #includes another -- e.g.
+# tbackend_remote.h pulls in tnetadapter_remote.h -- compiling the first
+# moc_<x>.cpp needs the second's _remote.h. qmake cannot see that
+# cross-dependency: on a clean build neither _remote.h exists at qmake
+# time, so nothing scans them and the moc_<x>.o rule ends up depending
+# only on its own moc_<x>.cpp. The compile then runs ahead of the moc
+# invocation that would have produced the sibling _remote.h and dies with
+# `'<y>_remote.h' file not found` -- deterministically, even at -j1,
+# because the object list is walked before the moc of the other header.
+#
+# qmake ships `mocables` (a moc-only pass) for exactly this, but the
+# subdirs Makefile does not propagate it, so drive it once per leaf.
+# Doing all moc up front also confines it to a retryable pre-phase, in
+# case of a stray moc crash -- the main compile then finds every
+# moc_<x>.cpp already current and never invokes moc, so the crash cannot
+# fail the real build.
+# Retry stays cheap because a crashed moc leaves its output unwritten
+# (make deletes the partial), so each retry only regenerates what is
+# still missing; already-current moc files are skipped.
+#
+# Run from the top build dir (bh_make's cwd). No-ops for non-moc trees:
+# leaves without a populated `compiler_moc_header_make_all` are skipped.
+bh_mocables_prepass() {
+    _mp_err=$LOGS/mocables.err
+    find . -name Makefile 2>/dev/null | while IFS= read -r _mp_mk; do
+        # Only leaves with real moc work: a subdirs Makefile has no
+        # `mocables:`, and a moc-less leaf lists no moc_*.cpp there.
+        grep -q '^mocables:' "$_mp_mk" 2>/dev/null || continue
+        grep -qE '^compiler_moc_header_make_all:.*moc_' "$_mp_mk" 2>/dev/null \
+            || continue
+        _mp_dir=$(dirname "$_mp_mk")
+        _mp_try=0
+        while :; do
+            make -C "$_mp_dir" mocables >/dev/null 2>"$_mp_err" && break
+            _mp_try=$((_mp_try + 1))
+            # Retry only a moc crash (abort/core dump); a real moc error
+            # (bad header, etc.) must fall through so the main build
+            # reports it with full context rather than looping.
+            if [ "$_mp_try" -ge 8 ] \
+                || ! grep -qE 'double free|core dumped|Aborted' \
+                    "$_mp_err" 2>/dev/null
+            then
+                break
+            fi
+        done
+    done
+    rm -f "$_mp_err" 2>/dev/null || true
+}
+
 # bh_make <jobs> [target...]
 #
 # Plain `make -j$JOBS` races between `release-all` and `debug-all` when
@@ -1330,6 +1678,9 @@ bh_clean() {
 # / mv step. Otherwise fall back to a single `make`.
 bh_make() {
     _bh_jobs=$1; shift
+    # Pre-generate all moc output (fixes QRemote _remote.h ordering and,
+    # in case of a moc crash, isolates it). See bh_mocables_prepass.
+    bh_mocables_prepass
     # Race-aware detection: cheap grep beats `make -n <tgt>` which
     # would re-evaluate the full Makefile (seconds on a big tree).
     if [ -f Makefile ] \
@@ -1952,6 +2303,7 @@ bh_template_app() {
     # carries different QMAKE_CXXFLAGS, library paths, and link names
     # per mode).
     : "${BUILD_DIR:=$(dirname "$BH_ROOT")/build/$(basename "$BH_ROOT")-$BH_MODE}"
+    bh_handle_get   # --get=<what>: print a path and exit (no build)
 
     # Show + gate. Same license-accept dance XD's build.sh runs, so
     # both templates share one user-facing flow.
@@ -2148,6 +2500,143 @@ bh_template_app() {
 #      $BH_RUN_TARGET_PATH (bh_parse_args consumes it when
 #      BH_TEMPLATE=subdirs). We .pro-eval that subdir to find its
 #      TARGET, then exec the binary out of $BUILD_DIR/<path>/.
+# bh_save_space_build
+#
+# The --save-space build path. Rather than the filesystem-ordered per-project
+# loop (bh_collect_filter_pros), it drives the build from the `.qmake.save_space`
+# marker so projects build in the correct DEPENDENCY order:
+#
+#   1. Truncate the marker, then run one recursive `qmake -r`. save_space.prf
+#      (include()d by default_post.prf) appends "<pro>\t<variant>\t<target>" for
+#      every leaf as qmake generates it; because qmake -r walks SUBDIRS in
+#      dependency order, the marker lists the whole tree in build order.
+#   2. Walk the marker's unique .pro entries in that order and `make` each in its
+#      shadow build dir -- skipping any whose recorded target file(s) already
+#      exist. The object wipe (save_space.prf, at post-link) leaves the target in
+#      place, so its presence is a reliable "already built" signal, which is what
+#      lets a killed build resume without repeating finished projects.
+#
+# An optional user --filter regexp narrows the set (matched on the path relative
+# to BH_ROOT). No-op-safe: an empty marker means nothing to build.
+bh_save_space_build() {
+    _ssb_pro=$1
+    _ssb_marker=$BUILD_DIR/.qmake.save_space
+    : > "$_ssb_marker"
+    # Drop stale EMPTY .qmake.cache files first. A killed build or a
+    # force_bootstrap sub-build can leave a 0-byte .qmake.cache in a subdir; a
+    # fresh top-level `qmake -r` then treats that subdir as a project root and
+    # searches its mkspecs before .qmake.conf, missing MODULE_VERSION and dying
+    # with "Module does not define version." They hold no config (0 bytes), so
+    # removing them is safe -- qmake recreates the real root marker as needed.
+    find "$BUILD_DIR" -name .qmake.cache -size 0 -delete 2>/dev/null || :
+    echo "--save-space: recording build order via recursive qmake..."
+    # Force the recursive qmake to actually run. bh_run_qmake normally SKIPS
+    # qmake when the Makefiles are already up-to-date, but the marker is
+    # truncated every run and only save_space.prf (which fires during qmake)
+    # repopulates it -- a skipped qmake would leave it empty ("nothing to
+    # build"). Regenerating unchanged Makefiles is cheap and harmless.
+    _ssb_saved_fq=${BH_FORCE_QMAKE:-0}
+    BH_FORCE_QMAKE=1
+    # shellcheck disable=SC2086  # intentional word-split of forwarded args.
+    bh_run_qmake qmake "$_ssb_pro" $BH_REMAINING_ARGS
+    BH_FORCE_QMAKE=$_ssb_saved_fq
+    if [ ! -s "$_ssb_marker" ]; then
+        echo "--save-space: no leaf projects recorded; nothing to build."
+        return 0
+    fi
+
+    # Collapse to one line per project, in first-seen (build) order, carrying all
+    # of that project's recorded target files: "<pro>\t<target>\t<target>...".
+    # A failed or empty collapse of a non-empty marker must FAIL, not silently
+    # "build 0 projects" as if everything were done.
+    _ssb_order=$_ssb_marker.order
+    awk -F'\t' '
+        !seen[$1]++ { order[++n] = $1 }
+        { tgt[$1] = tgt[$1] "\t" $3 }
+        END { for (i = 1; i <= n; i++) print order[i] tgt[order[i]] }
+    ' "$_ssb_marker" > "$_ssb_order" \
+        || bh_error "--save-space: failed to derive the build order from $_ssb_marker"
+    [ -s "$_ssb_order" ] \
+        || bh_error "--save-space: empty build order derived from non-empty $_ssb_marker"
+
+    _ssb_tab=$(printf '\t')
+    # Project count for the "[N/count]" progress tail.
+    _ssb_count=$(wc -l < "$_ssb_order" | tr -d ' ')
+    _ssb_total=0 _ssb_made=0 _ssb_skipped=0
+    # Read the order list on fd 3 so the inner target checks keep stdin free and
+    # the loop runs in THIS shell (no pipe subshell) -- so a bh_error propagates
+    # and the counters survive.
+    while IFS= read -r _ssb_line <&3; do
+        [ -n "$_ssb_line" ] || continue
+        _ssb_p=${_ssb_line%%"$_ssb_tab"*}
+        _ssb_tgts=${_ssb_line#*"$_ssb_tab"}
+        [ "$_ssb_tgts" = "$_ssb_line" ] && _ssb_tgts=   # line had no target field
+        _ssb_rel=${_ssb_p#"$BH_ROOT"/}
+        if [ -n "${BH_FILTER:-}" ]; then
+            printf '%s\n' "$_ssb_rel" | grep -Eq -- "$BH_FILTER" || continue
+        fi
+        _ssb_total=$((_ssb_total + 1))
+        # Already built when every recorded target for this .pro is present.
+        _ssb_missing=0
+        _ssb_oldifs=$IFS; IFS=$_ssb_tab
+        for _ssb_t in $_ssb_tgts; do
+            { [ -n "$_ssb_t" ] && [ -f "$_ssb_t" ]; } || _ssb_missing=1
+        done
+        IFS=$_ssb_oldifs
+        if [ -n "$_ssb_tgts" ] && [ "$_ssb_missing" -eq 0 ]; then
+            _ssb_skipped=$((_ssb_skipped + 1))
+            continue
+        fi
+        _ssb_bd=$BUILD_DIR/$(dirname "$_ssb_rel")
+        echo "--save-space build [$_ssb_total/$_ssb_count]: $_ssb_rel"
+        ( cd "$_ssb_bd" && bh_make "$JOBS" ) \
+            || bh_error "--save-space: build failed for $_ssb_rel"
+        _ssb_made=$((_ssb_made + 1))
+    done 3< "$_ssb_order"
+    # $_ssb_order is derived scratch, rewritten from the marker every run (so a
+    # resume never depends on the old copy); left in place, cleared by --clean.
+    echo "--save-space: built $_ssb_made, skipped $_ssb_skipped already-present, of $_ssb_total project(s)."
+    return 0
+}
+
+# bh_collect_filter_pros
+#
+# Fills BH_FILTER_PROS (newline-separated) with every `.pro` under BH_ROOT
+# whose path relative to BH_ROOT matches the BH_FILTER extended regexp. Uses
+# `grep -E`, so alternation (`a|b`) expresses multiple patterns at once, and it
+# stays portable (grep -E is external, so it works under macOS's /bin/sh too).
+# Errors out if nothing matches.
+bh_collect_filter_pros() {
+    _bhf_rels=
+    _bhf_oldifs=$IFS
+    set -f
+    IFS='
+'
+    for _bhf_pro in $(find "$BH_ROOT" -name '*.pro' \
+            ! -path '*/build/*' ! -path '*/.git/*' 2>/dev/null | sort); do
+        _bhf_rels="${_bhf_rels:+$_bhf_rels
+}${_bhf_pro#"$BH_ROOT"/}"
+    done
+    IFS=$_bhf_oldifs
+    set +f
+    # Apply the user's --filter regexp when one was given. A --save-space-only
+    # skip has no user filter, so it starts from every .pro.
+    if [ -n "${BH_FILTER:-}" ]; then
+        _bhf_rels=$(printf '%s\n' "$_bhf_rels" | grep -E -- "$BH_FILTER") \
+            || bh_error "--filter: no .pro under '$BH_ROOT' matches the regexp '$BH_FILTER'"
+    fi
+    _bhf_roots=
+    _bhf_oldifs=$IFS
+    IFS='
+'
+    for _bhf_rel in $_bhf_rels; do
+        _bhf_roots="${_bhf_roots:+$_bhf_roots
+}$BH_ROOT/$_bhf_rel"
+    done
+    IFS=$_bhf_oldifs
+    BH_FILTER_PROS=$_bhf_roots
+}
+
 bh_template_subdirs() {
     _pro=$1; shift
     BH_TEMPLATE=subdirs
@@ -2185,6 +2674,7 @@ bh_template_subdirs() {
     [ -n "${XD_DIR:-}" ] || bh_error "XD_DIR not set -- resolve the XD framework first (or set XD_DIR=\$ROOT when building XD itself)"
 
     : "${BUILD_DIR:=$(dirname "$BH_ROOT")/build/$(basename "$BH_ROOT")${BH_BUILD_DIR_SUFFIX:-}}"
+    bh_handle_get   # --get=<what>: print a path and exit (no build)
 
     echo "Build directory:"
     echo "  $BUILD_DIR"
@@ -2212,7 +2702,41 @@ bh_template_subdirs() {
     bh_qmake_prepare
 
     cd "$BUILD_DIR"
-    if [ "${BH_NO_BUILD:-0}" -eq 0 ]; then
+    if [ "${BH_SAVE_SPACE:-0}" -eq 1 ] && [ "${BH_NO_BUILD:-0}" -eq 0 ]; then
+        # --save-space: build every project in the dependency order recorded in
+        # .qmake.save_space (written by save_space.prf during the recursive qmake),
+        # skipping any whose target already exists. See bh_save_space_build.
+        bh_save_space_build "$_pro"
+    elif [ -n "${BH_FILTER:-}" ] && [ "${BH_NO_BUILD:-0}" -eq 0 ]; then
+        # --filter/--only: build the matching projects one at a time, each qmaked
+        # and made in its own out-of-source dir (mirroring the source layout under
+        # BUILD_DIR). Cross-project deps are not pulled in automatically -- widen
+        # the regexp if a dependency is missing. Order is find|sort, not dependency
+        # order; use --save-space when the build order matters.
+        bh_collect_filter_pros
+        [ -n "$BH_FILTER_PROS" ] || \
+            bh_error "--filter: no .pro under '$BH_ROOT' left to build"
+        _bhf_oldifs=$IFS
+        set -f
+        IFS='
+'
+        for _bhf_pro in $BH_FILTER_PROS; do
+            IFS=$_bhf_oldifs
+            set +f
+            _bhf_bd=$BUILD_DIR/$(dirname "${_bhf_pro#"$BH_ROOT"/}")
+            echo "Filtered build: ${_bhf_pro#"$BH_ROOT"/}"
+            # shellcheck disable=SC2086  # intentional word-split of forwarded args.
+            ( mkdir -p "$_bhf_bd" && cd "$_bhf_bd" \
+                && bh_run_qmake qmake "$_bhf_pro" $BH_REMAINING_ARGS \
+                && bh_make "$JOBS" ) \
+                || bh_error "--filter: build failed for ${_bhf_pro#"$BH_ROOT"/}"
+            set -f
+            IFS='
+'
+        done
+        IFS=$_bhf_oldifs
+        set +f
+    elif [ "${BH_NO_BUILD:-0}" -eq 0 ]; then
         # Normal build: (re)generate Makefiles, then compile.
         # shellcheck disable=SC2086  # intentional word-split of forwarded args.
         bh_run_qmake qmake "$_pro" $BH_REMAINING_ARGS
@@ -2444,6 +2968,7 @@ bh_template_makefile() {
 
     [ -n "${BH_ROOT:-}" ] || bh_error "BH_ROOT not set -- caller must set it to the source root"
     : "${BUILD_DIR:=$(dirname "$BH_ROOT")/build/$(basename "$BH_ROOT")-$BH_MODE${BH_BUILD_DIR_SUFFIX:-}}"
+    bh_handle_get   # --get=<what>: print a path and exit (no build)
 
     echo "Build directory:"
     echo "  $BUILD_DIR"

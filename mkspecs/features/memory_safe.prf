@@ -1,0 +1,50 @@
+# memory_safe.prf
+#
+# Loaded for a --memory-safe build: tools/build-handler.sh forwards
+# CONFIG+=memory_safe to every qmake call, which auto-loads this feature. Its job
+# is to turn that bare flag into the actual memory-safe compiler FAMILY, recorded
+# in the `memory_safe` variable, so build files can branch on the real toolchain
+# rather than re-sniffing it each time:
+#
+#     contains(memory_safe, ^Fil-C$) { ... }   # e.g. OpenSSL drops its asm
+#
+# Fil-C is a clang whose --version banner names it ("... (Fil-C x.yz ...)"); the
+# short mode string ("filc", how --memory-safe=filc spells it) is kept alongside
+# the canonical family name ("Fil-C"). Detection is by banner, not spec name,
+# because a plain clang uses the very same *-clang mkspec.
+_ms_banner = $$system($$QMAKE_CXX --version 2>/dev/null)
+contains(_ms_banner, .*Fil-C.*): memory_safe = filc Fil-C
+
+# Host tools (moc, rcc, uic, the bootstrap lib, qmake) must stay NATIVE even in a
+# Fil-C build: they run at build time, and a Fil-C-compiled tool carries
+# QT_PTR_TRACKING, whose QPtrSafetyTable references do not resolve against the
+# tool bootstrap, and it would need the Fil-C runtime just to run. Under
+# --memory-safe=filc the host spec is *-clang and Fil-C's clang is first on PATH,
+# so a host_build here would pick up Fil-C by bare name; pin it back to the
+# system clang.
+host_build:contains(memory_safe, filc) {
+    QMAKE_CC         = /usr/bin/clang
+    QMAKE_CXX        = /usr/bin/clang++
+    QMAKE_LINK       = /usr/bin/clang++
+    QMAKE_LINK_SHLIB = /usr/bin/clang++
+    QMAKE_LINK_C     = /usr/bin/clang
+} else:contains(memory_safe, Fil-C) {
+    # Target (non-host) libraries must LINK with Fil-C, not just compile with it.
+    # The *-clang mkspec leaves QMAKE_LINK as the bare name `clang++`, resolved
+    # through PATH at *make* time. A target rebuilt by a make invoked outside
+    # build.sh's PATH (e.g. a stray `--filter openssl` relink) would then bind the
+    # bare `clang++` to the system compiler and silently emit a NATIVE .so -- which
+    # links against libc.so.6 instead of Fil-C's libc.so.6666 + libpizlo and mixes
+    # catastrophically with the Fil-C Qt libraries (this is exactly how the openssl
+    # .so regressed to native). Bake the ABSOLUTE Fil-C clang path into the
+    # Makefile so the link is PATH-independent and reproducible. Non-C++ targets
+    # (openssl is CONFIG-=qt C) still link via QMAKE_LINK, so pinning it is enough;
+    # QMAKE_LINK_C is pinned too for the C-linker path.
+    _ms_filc_cxx = $$system(command -v clang++)
+    _ms_filc_cc  = $$system(command -v clang)
+    !isEmpty(_ms_filc_cxx) {
+        QMAKE_LINK       = $$_ms_filc_cxx
+        QMAKE_LINK_SHLIB = $$_ms_filc_cxx
+    }
+    !isEmpty(_ms_filc_cc): QMAKE_LINK_C = $$_ms_filc_cc
+}
