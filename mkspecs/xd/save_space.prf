@@ -1,0 +1,110 @@
+# save_space.prf
+#
+# XD's --save-space feature, factored out of default_post.prf. It is loaded by
+# an explicit include() from default_post.prf, and deliberately lives in
+# mkspecs/xd/ (outside mkspecs/features/) so that default_post.prf stays in charge
+# of when it runs;
+# default_post.prf include()s it LAST, because it appends to
+# QMAKE_POST_LINK and the object wipe must run after every other post-link step
+# (the project's own, breakpad/strip, ...) has finished with the objects.
+#
+# It builds on save_order.prf, which CONFIG save_space enables as well and
+# which default_post.prf include()s first: that one logs the build order, one
+# "<pro>\t<variant>\t<resolved-target>" line per variant of a leaf lib/app, in
+# the root .qmake.save_space cache.
+#
+# RECLAIM SPACE, only for a leaf lib/app (have_target); a subdirs project has
+# no target of its own. At post-link, drop the object files plus the
+# moc/rcc/uic output. It does NOT run the Makefile `clean` target: on win32 a
+# shared library links with `--out-implib lib<name>.a`, and `clean` deletes
+# that import library, which a dependent (e.g. ssleay32 against libeay32) still
+# needs to link. Dropping just the objects and compiler-generated files
+# reclaims the same space while keeping $(TARGET) and the import library.
+# Last, append the variant's order line again with a fourth column, the UTC
+# time, to the same root .qmake.save_space cache: a four-column line is
+# build.sh's "finished once" signal (post-link only runs once every object is
+# built and linked), so the project is skipped from then on (unless asked to
+# via --rebuild), while a project that failed, or was killed, before its
+# post-link ran has no such line and is built again. A build that linked
+# nothing, its target being up to date already, gets the same reclaim and
+# line from the `save_space_finished` make target, which build.sh asks for.
+# Neither the target's date nor its inputs' dates play any part; make itself
+# decides what a build
+# compiles. build.sh only ever reads this cache, empties a finished line's
+# time to build that project again (--rebuild), or drops finished lines
+# (--clean), both only for the projects its filters name; every line is
+# appended from these two files, and no line changes its place.
+#
+# So the cache holds two kinds of tab-separated lines, told apart by width:
+#   <pro>\t<variant>\t<target>          written by qmake: build order
+#   <pro>\t<variant>\t<target>\t<time>  written at post-link: finished
+
+# saveSpaceFinishedCommand()
+#
+# Returns the make command that appends the finished line of the variant
+# being generated to the cache `cache`: the order line plus the UTC time. The
+# shell that runs it is the one spec_post.prf picks the spec's commands for:
+# cmd.exe for an MSVC project generator or when no sh.exe is on PATH (QMAKE_SH
+# empty), else sh, Windows hosts included. cmd's echo prints its text as is,
+# tabs included, and the redirection goes first so a time ending in a digit is
+# never read as a handle number (`2>>`).
+defineReplace(saveSpaceFinishedCommand) {
+    tab = $$escape_expand(\\t)
+    line = $$saveOrderLine()
+    equals(MAKEFILE_GENERATOR, MSBUILD) \
+    |equals(MAKEFILE_GENERATOR, MSVC.NET) \
+    |isEmpty(QMAKE_SH) {
+        return(>> $$shell_quote($$cache) echo $${line}$${tab}%DATE% %TIME%)
+    }
+    return(echo $$shell_quote($$line)$$shell_quote($$tab)`date -u +%Y-%m-%dT%H:%M:%SZ` >> $$shell_quote($$cache))
+}
+
+# saveSpaceExportFinishedTarget(commands)
+#
+# Exports the `save_space_finished` make target, running the text of the
+# variable named by `commands`.
+defineTest(saveSpaceExportFinishedTarget) {
+    save_space_finished.target = save_space_finished
+    save_space_finished.commands = $$eval($$1)
+    QMAKE_EXTRA_TARGETS += save_space_finished
+    export(save_space_finished.target)
+    export(save_space_finished.commands)
+    export(QMAKE_EXTRA_TARGETS)
+    return(true)
+}
+
+# saveSpace()
+#
+# Reclaims space for the leaf lib/app being generated: exports the extended
+# QMAKE_POST_LINK, and the same steps as the `save_space_finished` make target
+# for build.sh to ask for when a build linked nothing (its target was already
+# up to date), so post-link never ran.
+defineTest(saveSpace) {
+    cache = $$saveOrderCacheFile()
+    newline = $$escape_expand(\\n\\t)
+
+    # The meta pass of a debug_and_release project has no target of its own,
+    # so its `save_space_finished` only hands on to both variants' Makefiles,
+    # as build.sh builds both (through `release-all` and `debug-all`).
+    debug_and_release:!build_pass:!isEmpty(cache) {
+        commands = $$quote($(MAKE) -f $(MAKEFILE).Release save_space_finished)
+        commands = $${commands}$${newline}$$quote($(MAKE) -f $(MAKEFILE).Debug save_space_finished)
+        saveSpaceExportFinishedTarget(commands)
+        return(true)
+    }
+
+    # The reclaim, then the finished line (only a pass with a target of its
+    # own has an order line to repeat).
+    recipe = $$quote($(MAKE) -f $(MAKEFILE) compiler_clean)$${newline}$$quote(-$(DEL_FILE) $(OBJECTS))
+    if(!debug_and_release|build_pass):!isEmpty(cache) {
+        finished = $$saveSpaceFinishedCommand()
+        recipe = $${recipe}$${newline}$$quote($$finished)
+        saveSpaceExportFinishedTarget(recipe)
+    }
+    !isEmpty(QMAKE_POST_LINK): QMAKE_POST_LINK = $$QMAKE_POST_LINK$$newline
+    QMAKE_POST_LINK = $$QMAKE_POST_LINK$$recipe
+    export(QMAKE_POST_LINK)
+    return(true)
+}
+
+have_target: saveSpace()

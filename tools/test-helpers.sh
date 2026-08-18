@@ -21,6 +21,7 @@
 #     expect 'desc' "$expected" "$actual"    # string equality
 #     expect_int_gt 'desc' "$actual" "$min"  # actual > floor
 #     expect_returns 'desc' 0 my_func arg    # exit status of <cmd>
+#     test_skip 'desc' 'why'                 # counted as skipped
 #
 #     test_end                               # totals + duration + exit
 #
@@ -119,6 +120,14 @@ expect_returns() {
     fi
 }
 
+# test_skip <description> <reason>
+# Marks one assertion as skipped, in QtTest's `SKIP   :` shape, when
+# the host lacks what it needs (a tool, a compiler); counted apart.
+test_skip() {
+    _th_skipped=$((_th_skipped + 1))
+    printf 'SKIP   : %s (%s)\n' "$1" "$2"
+}
+
 # test_end
 # Emits Totals / Duration / "Finished testing of ..." and exits with
 # the failure count. Call once at the end of the spec file.
@@ -131,8 +140,8 @@ test_end() {
     _th_passed=$((_th_total - _th_failed))
 
     echo
-    printf 'Totals: %d passed, %d failed, 0 skipped, 0 blacklisted\n' \
-        "$_th_passed" "$_th_failed"
+    printf 'Totals: %d passed, %d failed, %d skipped, 0 blacklisted\n' \
+        "$_th_passed" "$_th_failed" "${_th_skipped:-0}"
     printf 'Duration: %02d:%02d.%03d second(s)\n' \
         "$_th_mm" "$_th_ss" "$_th_msec"
     printf '********* Finished testing of %s *********\n' "$_th_name"
