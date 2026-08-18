@@ -36,13 +36,23 @@ BH_TEST_ROOT=$ROOT/tests/auto/auto.pro
 #   * `BH_BUILD_DIR_SUFFIX=-static` is the documented hook
 #     bh_template_subdirs reads when composing $BUILD_DIR, so no
 #     tools/build-handler.sh change is needed.
-#   * `--static` is consumed here and stripped from the
-#     forwarded argv -- otherwise bh_parse_args would treat it
-#     as an unknown positional and fold it into the qmake
-#     remaining-args.
+#   * `--static` and `--static=<regexp>` are consumed here and
+#     stripped from the forwarded argv; hence the generic
+#     `--static` of tools/build-handler.sh (`qt_static` mode per
+#     matching project) never applies to XD itself. The regexp
+#     narrows the static build to the projects it matches, as a
+#     --filter (joined with a given --filter by bh_filter_add).
 _xd_pro=$ROOT/XD-mini.pro
 _xd_static=0
-# Consumes `--static` and forwards the rest to bh_template_subdirs.
+_xd_static_filter=
+
+# Adds the `--static=<regexp>` regexp to --filter, once bh_parse_args has
+# read the --filter flag itself.
+bh_hook args-parsed <<'}'
+    bh_filter_add "$_xd_static_filter"
+}
+
+# Consumes `--static[=<regexp>]` and forwards the rest to bh_template_subdirs.
 #
 # We rotate the args through the positional parameters (pop the front with
 # `shift`, push keepers to the back) rather than joining them into one
@@ -57,10 +67,13 @@ while [ "$_xd_argc" -gt 0 ]; do
     shift
     _xd_argc=$((_xd_argc - 1))
     case "$_xd_arg" in
-        --static)
+        --static | --static=*)
             _xd_pro=$ROOT/XD-static.pro
             BH_BUILD_DIR_SUFFIX=-static
             _xd_static=1
+            case "$_xd_arg" in
+                --static=*) _xd_static_filter=${_xd_arg#*=} ;;
+            esac
             ;;
         *)
             set -- "$@" "$_xd_arg"

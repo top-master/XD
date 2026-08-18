@@ -326,13 +326,27 @@ XD_TASK_HANDLER = $$absolute_path(../../tools/task-handler/task-handler.pro, $$P
     error("Failed to find file: $$XD_TASK_HANDLER")
 }
 
+# xd_taskHandlerCommand(name, arguments)
+#
+# Returns the make command that executes task-handler's task `name` with given
+# arguments, for a recipe such as QMAKE_POST_LINK. Its output goes to the null
+# device of the shell that spec_post.prf picks the spec's commands for.
+defineReplace(xd_taskHandlerCommand) {
+    equals(MAKEFILE_GENERATOR, MSBUILD) \
+    |equals(MAKEFILE_GENERATOR, MSVC.NET) \
+    |isEmpty(QMAKE_SH) {
+        nil = >NUL
+    } else {
+        nil = >/dev/null
+    }
+    return($(QMAKE) $$xd_escape($$XD_TASK_HANDLER) -spec \"$$shell_path($$QMAKESPEC)\" \"CONFIG+=force_only_debug\" TASK=\"$$1\" ARG1=\"$$2\" ARG2=\"$$3\" ARG3=\"$$4\" ARG4=\"$$5\" ARG5=\"$$6\" -o - $$nil)
+}
+
 # xd_taskRun(name, arguments)
 #
-# Executes task-handler with given arguments.
+# Executes task-handler with given arguments, before caller project is built.
 defineTest(xd_taskHandlerRun) {
-    win32: nil = nul
-    else: nil = /dev/null
-    qmakeRun($$XD_TASK_HANDLER, \"CONFIG+=force_only_debug\" TASK=\"$$1\" ARG1=\"$$2\" ARG2=\"$$3\" ARG3=\"$$4\" ARG4=\"$$5\" ARG5=\"$$6\" -o - > $$nil )
+    xd_prebuild(xd_qmakeRun, $$xd_taskHandlerCommand($$1, $$2, $$3, $$4, $$5, $$6))
 }
 
 # Args: filePath

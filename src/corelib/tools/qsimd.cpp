@@ -246,6 +246,14 @@ static void xgetbv(uint in, uint &eax, uint &edx)
 
 static quint64 detectProcessorFeatures()
 {
+#ifdef QT_PTR_TRACKING
+    // Fil-C cannot execute the cpuid detection asm below: the `xchg %rbx; cpuid; xchg %rbx`
+    // sequence names a literal register the instrumentation pass rejects, so it panics the
+    // moment this runs at startup. Skip runtime detection and report only the features the
+    // compiler already guaranteed. qCpuHasFeature ORs this with the same compile-time baseline,
+    // so every SIMD path built into the binary still runs -- natively, no cpuid needed.
+    return qCompilerCpuFeatures;
+#endif
     // Flags from the CR0 / XCR0 state register
     enum XCR0Flags {
         X87             = 1 << 0,
@@ -685,9 +693,15 @@ void qDetectCpuFeatures()
         }
     }
 
-#ifdef RUNNING_ON_VALGRIND
+#if defined(RUNNING_ON_VALGRIND) && !defined(QT_PTR_TRACKING)
     bool runningOnValgrind = RUNNING_ON_VALGRIND;
 #else
+    // Assume not under Valgrind: the Valgrind client-request asm (the rolq magic)
+    // takes a pointer argument the Fil-C instrumentation pass cannot compile, so
+    // RUNNING_ON_VALGRIND is unavailable here.
+    //
+    // If a Fil-C binary is itself run under Valgrind, the only effect is that the
+    // CPU-feature check below is not relaxed for it.
     bool runningOnValgrind = false;
 #endif
     if (!runningOnValgrind && (minFeature != 0 && (f & minFeature) != minFeature)) {
