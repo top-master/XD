@@ -450,32 +450,39 @@ static int ucstrncmp(const QChar *a, const QChar *b, int l)
     }
 #endif // __mips_dsp
 #ifdef __SSE2__
-    const char *ptr = reinterpret_cast<const char*>(a);
-    qptrdiff distance = reinterpret_cast<const char*>(b) - ptr;
-    a += l & ~7;
-    b += l & ~7;
-    l &= 7;
-
-    // we're going to read ptr[0..15] (16 bytes)
-    for ( ; ptr + 15 < reinterpret_cast<const char *>(a); ptr += 16) {
-        __m128i a_data = _mm_loadu_si128((const __m128i*)ptr);
-        __m128i b_data = _mm_loadu_si128((const __m128i*)(ptr + distance));
-        __m128i result = _mm_cmpeq_epi16(a_data, b_data);
-        uint mask = ~_mm_movemask_epi8(result);
-        if (ushort(mask)) {
-            // found a different byte
-            uint idx = uint(_bit_scan_forward(mask));
-            return reinterpret_cast<const QChar *>(ptr + idx)->unicode()
-                    - reinterpret_cast<const QChar *>(ptr + distance + idx)->unicode();
+    // SIMD fast path: 8 code units (16 bytes) per step. Each step loads a fixed
+    // 16 bytes per side, so it must stop a whole step short of either string's
+    // end -- reserve a 16-unit margin here and let the exact scalar path below
+    // compare that reserved tail. Without the margin the 16-byte load reads past
+    // the string end (undefined, and a fault under a memory-safe runtime or on
+    // the unlucky layout where the buffer ends against an unmapped page).
+    if (l >= 16) {
+        // Walk one cursor per string so each 16-byte load stays inside its own
+        // object. (Reaching the second string through the first string's pointer
+        // plus a byte-distance keeps the first string's bounds, which a
+        // memory-safe runtime rejects once the two strings live in different
+        // allocations.)
+        const char *aptr = reinterpret_cast<const char*>(a);
+        const char *bptr = reinterpret_cast<const char*>(b);
+        // Rounds down to a multiple of 8, keeping the reserved margin.
+        const int lsse = (l - 16) & ~7;
+        const char *end = aptr + 2 * lsse;
+        for ( ; aptr + 15 < end; aptr += 16, bptr += 16) {
+            __m128i a_data = _mm_loadu_si128((const __m128i*)aptr);
+            __m128i b_data = _mm_loadu_si128((const __m128i*)bptr);
+            __m128i result = _mm_cmpeq_epi16(a_data, b_data);
+            uint mask = ~_mm_movemask_epi8(result);
+            if (ushort(mask)) {
+                // Found a different byte.
+                uint idx = uint(_bit_scan_forward(mask));
+                return reinterpret_cast<const QChar *>(aptr + idx)->unicode()
+                        - reinterpret_cast<const QChar *>(bptr + idx)->unicode();
+            }
         }
+        a += lsse;
+        b += lsse;
+        l -= lsse;
     }
-#  if defined(Q_COMPILER_LAMBDA) && !defined(__OPTIMIZE_SIZE__)
-    const auto &lambda = [=](int i) -> int {
-        return reinterpret_cast<const QChar *>(ptr)[i].unicode()
-                - reinterpret_cast<const QChar *>(ptr + distance)[i].unicode();
-    };
-    return UnrollTailLoop<7>::exec(l, 0, lambda, lambda);
-#  endif
 #endif
     if (!l)
         return 0;
@@ -8174,6 +8181,14 @@ bool QString::isRightToLeft() const
 */
 QString QString::fromRawData(const QChar *unicode, int size)
 {
+    // TRACE/corelib/memory-safety QArrayData: fromRawData and setRawData alias a
+    // caller's buffer without copying. A normal build records a plain byte offset
+    // from the QArrayData header; under Fil-C recovering the pointer from that offset
+    // would drop the buffer's capability, so the buffer is kept in
+    // QPtrSafetyTable::forTypedData() -- a WEAK exact ptrtable that recovers the
+    // capability on decode yet never owns the buffer -- with its table index stashed
+    // as a NEGATIVE offset. QArrayData::fromRawData encodes whichever form applies and
+    // QArrayData::data() decodes it, so this one path serves both builds.
     Data *x;
     if (!unicode) {
         x = Data::sharedNull();
@@ -8203,6 +8218,7 @@ QString QString::fromRawData(const QChar *unicode, int size)
 */
 QString &QString::setRawData(const QChar *unicode, int size)
 {
+#ifndef QT_PTR_TRACKING
     if (d->ref.isShared() || d->alloc) {
         *this = fromRawData(unicode, size);
     } else {
@@ -8214,6 +8230,11 @@ QString &QString::setRawData(const QChar *unicode, int size)
             d->size = 0;
         }
     }
+#else
+    // TRACE/corelib/memory-safety QArrayData: raw-data alias kept in a weak ptrtable #2,
+    // hence alias through fromRawData rather than storing a raw header offset here.
+    *this = fromRawData(unicode, size);
+#endif
     return *this;
 }
 

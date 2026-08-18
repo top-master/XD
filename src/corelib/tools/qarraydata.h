@@ -35,6 +35,7 @@
 #define QARRAYDATA_H
 
 #include <QtCore/qrefcount.h>
+#include <QtCore/qmemorysafety.h>
 #include <string.h>
 
 QT_BEGIN_NAMESPACE
@@ -52,6 +53,13 @@ struct Q_CORE_EXPORT QArrayData
     {
         Q_ASSERT(size == 0
                 || offset < 0 || size_t(offset) >= sizeof(QArrayData));
+#ifdef QT_PTR_TRACKING
+        // TRACE/corelib/memory-safety QArrayData: raw-data alias kept in a weak ptrtable #3,
+        // hence a negative offset is a weak-table index: decode it back to the
+        // aliased buffer (capability intact) instead of adding it to the header.
+        if (offset < 0)
+            return QPtrSafetyTable::decodeTypedData(-offset);
+#endif
         return reinterpret_cast<char *>(this) + offset;
     }
 
@@ -59,6 +67,12 @@ struct Q_CORE_EXPORT QArrayData
     {
         Q_ASSERT(size == 0
                 || offset < 0 || size_t(offset) >= sizeof(QArrayData));
+#ifdef QT_PTR_TRACKING
+        // TRACE/corelib/memory-safety QArrayData: raw-data alias kept in a weak ptrtable #4,
+        // the const mirror of #3.
+        if (offset < 0)
+            return QPtrSafetyTable::decodeTypedData(-offset);
+#endif
         return reinterpret_cast<const char *>(this) + offset;
     }
 
@@ -232,8 +246,15 @@ struct QTypedArrayData
         if (result) {
             Q_ASSERT(!result->ref.isShared()); // No shared empty, please!
 
+#ifndef QT_PTR_TRACKING
             result->offset = reinterpret_cast<const char *>(data)
                 - reinterpret_cast<const char *>(result);
+#else
+            // TRACE/corelib/memory-safety QArrayData: raw-data alias kept in a weak ptrtable #5,
+            // hence encode the buffer into the weak table and stash its index as a
+            // negative offset (decoded by #3/#4).
+            result->offset = -QPtrSafetyTable::encodeTypedData(const_cast<T *>(data));
+#endif
             result->size = int(n);
         }
         return result;

@@ -43,7 +43,14 @@
 
 QT_BEGIN_NAMESPACE
 
+#if QT_PTR_TAGGING
 const QMapDataBase QMapDataBase::shared_null = { Q_REFCOUNT_INITIALIZE_STATIC, 0, { 0, 0, 0 }, 0 };
+#else
+// Fil-C: the header's colour is a private bit, so QMapNodeBase is not an
+// aggregate here; its constant-expression constructor supplies the null,
+// red-coloured header.
+const QMapDataBase QMapDataBase::shared_null = { Q_REFCOUNT_INITIALIZE_STATIC, 0, QMapNodeBase(), 0 };
+#endif
 
 const QMapNodeBase *QMapNodeBase::nextNode() const
 {
@@ -365,6 +372,10 @@ QMapDataBase *QMapDataBase::createData()
     d->size = 0;
 
     d->header.p = 0;
+#if !QT_PTR_TAGGING
+    // Colour lives in its own field under Fil-C.
+    d->header.setColor(QMapNodeBase::Red);
+#endif
     d->header.left = 0;
     d->header.right = 0;
     d->mostLeftNode = &(d->header);
