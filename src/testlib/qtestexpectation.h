@@ -567,10 +567,19 @@ public:
     }
 
 protected:
+#if !defined(Q_CC_MSVC) || Q_CC_MSVC >= 1900
+    template <typename T>
+    static inline bool m_isNull(T *ptr) {
+        return ptr == Q_NULLPTR;
+    }
+    template <typename T>
+    static inline bool m_isNull(const T &) { return false; }
+#else
     static inline bool m_isNull(const void *ptr) {
         return ptr == Q_NULLPTR;
     }
     static inline bool m_isNull(...) { return false; }
+#endif
 };
 
 /// Ensures users don't mix `.` and `->` operators, use #qExpect macro instead.

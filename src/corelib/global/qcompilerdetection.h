@@ -1497,4 +1497,51 @@
 #  define QT_UNDERLYING_TYPE(x) x
 #endif
 
+/*!
+    \macro QT_PTR_TRACKING
+    \internal
+
+    Defined (to 1) when the compiler ties a bounds and a capability to every pointer,
+    i.e. under Fil-C, and left UNDEFINED on a normal build -- so it is tested with
+    \c{#ifdef QT_PTR_TRACKING} / \c{#ifndef QT_PTR_TRACKING}, never a value, and there
+    is no easily-missed \c{!} to overlook. A two-branch site writes the plain code
+    under \c{#ifndef QT_PTR_TRACKING} and the tracked form in its \c{#else}.
+
+    Under Fil-C a pointer rebuilt from an integer keeps neither bound nor capability
+    and cannot be dereferenced, so a site that plays such a trick -- rebuilding a
+    pointer from a base plus a byte-offset, or punning one pointer to read several
+    elements at once, beyond the bit-packing \l QT_PTR_TAGGING covers -- gives a
+    plain, per-element form on the normal side.
+
+    This is the one place Qt spells the raw Fil-C build test: every guard elsewhere
+    goes through \c QT_PTR_TRACKING (or \l QT_PTR_TAGGING, defined from it), never
+    \c __FILC__ directly.
+*/
+#if defined(__FILC__)
+#  define QT_PTR_TRACKING 1
+#endif
+
+/*!
+    \macro QT_PTR_TAGGING
+    \internal
+
+    Whether Qt may store a small integer in a pointer's spare low bits and
+    recover the pointer later by masking those bits off. It expands to \c 1 on a
+    normal build, where this pointer tagging is allowed, and to \c 0 under Fil-C,
+    where the small value must live in its own field instead.
+
+    Fil-C (a memory-safe C/C++ dialect) carries each pointer's bounds and
+    capability beside the C value invisibly, so a
+    "pointer to quintptr to masked-off bits back to pointer" round-trip drops
+    that capability and leaves a pointer that can no longer be dereferenced.
+    Every pointer-tagging site therefore keeps its tagged form under
+    \c{#if QT_PTR_TAGGING} and supplies an untagged, separate-field form under
+    the \c{#else}. Tagging is safe exactly when pointers are untracked.
+*/
+#ifdef QT_PTR_TRACKING
+#  define QT_PTR_TAGGING 0
+#else
+#  define QT_PTR_TAGGING 1
+#endif
+
 #endif /* QCOMPILERDETECTION_H */

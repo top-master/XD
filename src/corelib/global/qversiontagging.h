@@ -54,8 +54,11 @@ QT_BEGIN_NAMESPACE
  * There will only be one copy of the section in the output library or application.
  */
 
-#if defined(QT_BUILD_CORE_LIB) || defined(QT_BOOTSTRAPPED) || defined(QT_NO_VERSION_TAGGING) || defined(QT_STATIC)
-// don't make tags in QtCore, bootstrapped systems or if the user asked not to
+#if defined(QT_BUILD_CORE_LIB) || defined(QT_BOOTSTRAPPED) || defined(QT_NO_VERSION_TAGGING) || defined(QT_STATIC) || defined(QT_PTR_TRACKING)
+// don't make tags in QtCore, bootstrapped systems or if the user asked not to.
+// Under Fil-C (QT_PTR_TRACKING) the module-level `asm(".section .qtversion ...")` is not
+// parseable by the Fil-C instrumentation pass (FilPizlonator MATokenizer), so the
+// version-tagging asm is suppressed there for every module and consumer.
 #elif defined(Q_CC_GNU) && !defined(Q_OS_ANDROID)
 #  if defined(Q_PROCESSOR_X86) && (defined(Q_OS_LINUX) || defined(Q_OS_FREEBSD_KERNEL))
 #    if defined(Q_PROCESSOR_X86_64) && QT_POINTER_SIZE == 8     // x86-64 64-bit

@@ -4079,8 +4079,15 @@ QByteArray &QByteArray::setRawData(const char *data, uint size)
         *this = fromRawData(data, size);
     } else {
         if (data) {
+#ifndef QT_PTR_TRACKING
             d->size = size;
             d->offset = data - reinterpret_cast<char *>(d);
+#else
+            // Re-alias through fromRawData so the buffer stays in the weak
+            // ptrtable: a raw (data - d) offset would give data() a pointer with
+            // this header's capability, not the buffer's (see QArrayData::data()).
+            *this = fromRawData(data, size);
+#endif
         } else {
             d->offset = sizeof(QByteArrayData);
             d->size = 0;

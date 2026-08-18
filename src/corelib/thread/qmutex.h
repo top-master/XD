@@ -146,14 +146,22 @@ public:
 
     inline void unlock() Q_DECL_NOTHROW
     {
+#if QT_PTR_TAGGING
         if ((val & quintptr(1u)) == quintptr(1u)) {
             val &= ~quintptr(1u);
             mutex()->unlock();
         }
+#else
+        if (m_locked) {
+            m_locked = false;
+            mutex()->unlock();
+        }
+#endif
     }
 
     inline bool relock() QT_MUTEX_LOCK_NOEXCEPT
     {
+#if QT_PTR_TAGGING
         if (val) {
             if ((val & quintptr(1u)) == quintptr(0u)) {
                 mutex()->lock();
@@ -161,6 +169,15 @@ public:
                 return true;
             }
         }
+#else
+        if (val) {
+            if (!m_locked) {
+                mutex()->lock();
+                m_locked = true;
+                return true;
+            }
+        }
+#endif
         return false;
     }
 
@@ -169,9 +186,14 @@ public:
     /// although that's not this helper-class's responsibility we picked the
     /// name "wasLocked" instead of "isLocked" (to notify users).
     Q_ALWAYS_INLINE bool wasLocked() const Q_DECL_NOTHROW {
+#if QT_PTR_TAGGING
         return (val & quintptr(1u)) == quintptr(1u);
+#else
+        return m_locked;
+#endif
     }
 
+#if QT_PTR_TAGGING
 #if defined(Q_CC_MSVC)
 #pragma warning( push )
 #pragma warning( disable : 4312 ) // ignoring the warning from /Wp64
@@ -185,30 +207,55 @@ public:
 #if defined(Q_CC_MSVC)
 #pragma warning( pop )
 #endif
+#else
+    inline QMutex *mutex() const
+    {
+        return val;
+    }
+#endif
 
 protected:
 
     inline void init(QBasicMutex *m) QT_MUTEX_LOCK_NOEXCEPT
     {
+#if QT_PTR_TAGGING
         Q_ASSERT_X((reinterpret_cast<quintptr>(m) & quintptr(1u)) == quintptr(0),
                    "QMutexLocker", "QMutex pointer is misaligned");
         val = quintptr(m);
         if (Q_LIKELY(m)) {
-            // call QMutex::lock() instead of QBasicMutex::lock()
+            // Call QMutex::lock() instead of QBasicMutex::lock().
             static_cast<QMutex *>(m)->lock();
             val |= 1;
         }
+#else
+        val = static_cast<QMutex *>(m);
+        m_locked = false;
+        if (Q_LIKELY(m)) {
+            // Call QMutex::lock() instead of QBasicMutex::lock().
+            val->lock();
+            m_locked = true;
+        }
+#endif
     }
 
     Q_ALWAYS_INLINE explicit QMutexLocker(Qt::Initialization) Q_DECL_NOTHROW
+#if QT_PTR_TAGGING
         : val(0)
+#else
+        : val(0), m_locked(false)
+#endif
     {
     }
 
 private:
     Q_DISABLE_COPY(QMutexLocker)
 protected:
+#if QT_PTR_TAGGING
     quintptr val;
+#else
+    QMutex *val;
+    bool m_locked;
+#endif
 };
 
 #else // QT_NO_THREAD or Q_QDOC

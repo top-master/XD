@@ -223,6 +223,14 @@ them.
 
 - It **skips qmake** when the plans are still newer than every file qmake read,
   so it doesn't redo work for nothing. `--qmake` forces it anyway.
+- It **redoes qmake** when `--static=<regexp>` picks other projects than when
+  the plans were made; hence the new choice always takes effect.
+- It **cleans** when a build folder was made with another toolchain (another
+  spec, or `--memory-safe` turned on or off), right after it redoes qmake;
+  hence nothing the old compiler built ends up in the new link.
+- It **builds XD first** when a project built on XD finds XD's build
+  incomplete: XD's own `build.sh` runs with this run's flags, except the ones
+  that name this project's own paths or steps. `--no-xd-build` skips that.
 - `--no-build` plus `--test` (or `--run`) still does the test/run part — it only
   skips rebuilding the main app.
 - `--test-review` turns on its three defaults **first**, then your other flags

@@ -15,6 +15,136 @@ bh_pro_files() {
         ! -path "$BH_ROOT/todo/*" 2>/dev/null || true; } | sort
 }
 
+# bh_build_in_order <pro>
+#
+# The build path of --save-space and of --filter. It drives the build from the
+# one `.qmake.save_space` cache at the build root, which save_order.prf and
+# save_space.prf (include()d by default_post.prf) fill with two kinds of
+# tab-separated lines: the three-column "<pro>\t<variant>\t<target>" written
+# once for every leaf as qmake generates it, and, under --save-space only, the
+# same line plus a fourth column, the time, appended at post-link once that
+# variant linked. A finished line whose time is empty counts as not finished.
+# An order line stays in the cache from run to run, and is never written
+# twice. This script only reads the cache, empties a finished line's time
+# (--rebuild) and drops that emptied line once post-link appended a fresh one,
+# or drops finished lines (--clean), all only for the projects its filters
+# name; it never appends and never moves a line:
+#
+#   0. Without --save-space and --filter, a --rebuild still comes here, so
+#      its matches build again in the recorded order.
+#   1. Record the build order when needed (see bh_build_order_record): one
+#      qmake run over <pro>, the entire project, lists the whole tree in build
+#      order, dependencies first. No earlier build is needed. With --filter
+#      and/or --rebuild, qmake then the parts of the tree that this recording
+#      did not reach but the filters name (see bh_build_order_extend).
+#   2. Walk the cache in that order (see bh_build_walk) and `make` each project
+#      that --filter keeps, in its shadow build dir. Under --save-space, a
+#      project with a finished line for each of its variants (and whose
+#      recorded targets still exist) is skipped, which is what lets a killed
+#      build resume without repeating finished projects. A project missing one
+#      failed, or was killed, before its post-link ran, so it is built again;
+#      only that project, never the whole tree. Dates play no part: make
+#      decides what a build compiles, and --rebuild[=<regexp>] is how a
+#      finished project is built again on purpose (its finished lines get an
+#      empty time first, and post-link appends a fresh one once it links).
+#   3. With --filter and/or --rebuild, go on with the projects that have no
+#      order line but that a subdirs project lists, or that have none above
+#      them (see bh_build_unrecorded); --filter filters what qmake lists, hence
+#      a project that no subdirs project lists on this platform is left out.
+bh_build_in_order() {
+    BH_ORDER_ROOT=$1
+    # Without --filter, only a --rebuild that names its matches reaches the
+    # projects the cache does not list; the root project covers the rest.
+    if [ -z "${BH_FILTER:-}" ] \
+            && { [ -z "${BH_REBUILD:-}" ] || [ "$BH_REBUILD" = '^.*$' ]; }; then
+        _bio_unrecorded=0
+    fi
+    # Counts those projects too, hence the counter of each line covers both.
+    if [ "$_bio_unrecorded" -eq 1 ]; then
+        _bw_count=$((_bw_count + $(bh_build_unrecorded count)))
+    fi
+    bh_build_walk build
+    if [ "${BH_SAVE_SPACE:-0}" -eq 1 ]; then
+        echo "--save-space: built $_bw_made, skipped $_bw_skipped up-to-date, of $_bw_total project(s)."
+    fi
+    _bio_status=0
+    bh_build_unrecorded || _bio_status=$?
+    case "$_bio_status" in
+        0) ;;
+        10)
+            [ "$_bw_total" -gt 0 ] || bh_error \
+                "--filter: no project of the build under '$BH_ROOT' matches $(bh_regexp_text "$BH_FILTER")"
+            ;;
+        *) exit "$_bio_status" ;;
+    esac
+}
+
+# bh_build_order_record <pro>
+#
+# Records the build order into the `.qmake.save_space` cache at the build
+# root, creating the cache when it is missing. It qmakes the entire project
+# the way a build does: a plain qmake of <pro> (no `-r`), then `make
+# qmake_all`, which runs a plain qmake for each subdir as it reaches it,
+# dependencies first. Under CONFIG save_order, save_order.prf then writes one
+# order line per variant of every leaf project, in build order.
+#
+# Under --save-space that qmake runs on every run, as it is also what adds
+# the post-link steps. Else it only runs when the cache holds no order line,
+# or when --qmake/--refresh asks; otherwise the recorded order is reused, and
+# make itself runs qmake again for a project whose Makefile is out of date.
+# The lines of earlier runs stay, so a run only adds the order lines the
+# cache lacks.
+#
+# Without --save-space, a recording that fails (say, a broken project that the
+# filter leaves out) only warns: the projects it reached keep their recorded
+# order, and bh_build_unrecorded builds the rest.
+bh_build_order_record() {
+    _bor_pro=$1
+    # Under --save-space, a build root made for another toolchain or variant
+    # starts its cache anew, and qmake records the order again below: both
+    # builds write to the same files (XD's `lib/` on Linux, for one), hence a
+    # finished line names what the other build made, and an order line the
+    # other variant's target. Without --save-space no line counts as finished;
+    # each project the filters name is cleaned on its own instead (see
+    # `bh_build_candidate`).
+    if [ "${BH_SAVE_SPACE:-0}" -eq 1 ] && [ -f "$BUILD_DIR/Makefile" ] \
+            && bh_makefile_build_differs "$BUILD_DIR/Makefile"; then
+        : > "$BUILD_DIR/.qmake.save_space"
+    fi
+    if [ "${BH_SAVE_SPACE:-0}" -ne 1 ] && [ "${BH_FORCE_QMAKE:-0}" -eq 0 ] \
+            && bh_save_space_has_line 'NF == 3'; then
+        return 0
+    fi
+    if [ ! -f "$BUILD_DIR/.qmake.save_space" ]; then
+        : > "$BUILD_DIR/.qmake.save_space"
+    fi
+    # Drop stale EMPTY .qmake.cache files first. A killed build or a
+    # force_bootstrap sub-build can leave a 0-byte .qmake.cache in a subdir; a
+    # fresh top-level qmake then treats that subdir as a project root and
+    # searches its mkspecs before .qmake.conf, missing MODULE_VERSION and dying
+    # with "Module does not define version." They hold no config (0 bytes), so
+    # removing them is safe -- qmake recreates the real root marker as needed.
+    find -H "$BUILD_DIR" -name .qmake.cache -size 0 -delete 2>/dev/null || :
+    echo "Recording build order via qmake..."
+    if [ "${BH_SAVE_SPACE:-0}" -eq 1 ]; then
+        bh_qmake_in_build_order "$_bor_pro"
+        return 0
+    fi
+    # In a subshell, since a failed step exits its shell.
+    _bor_status=0
+    ( bh_qmake_in_build_order "$_bor_pro" CONFIG+=save_order ) \
+        || _bor_status=$?
+    if [ "$_bor_status" -ne 0 ]; then
+        _bor_hint="Pass --force-qmake to record the projects after the failed one too."
+        if [ "${BH_QMAKE_KEEP_GOING:-0}" -ne 0 ]; then
+            _bor_hint="Every project but the failed one(s) is recorded."
+        fi
+        bh_warning "Recording the build order failed (exit $_bor_status)." \
+            "The projects it reached build in their recorded order, the rest after them." \
+            "$_bor_hint"
+    fi
+}
+
 # bh_qmake_in_build_order <pro> [extra-qmake-args...]
 #
 # Qmakes the entire project of <pro> in the cwd, each subdir in the order a
@@ -107,12 +237,206 @@ bh_filter_add() {
 }$1"
 }
 
+# bh_build_walk <prepare|build>
+#
+# Walks the order lines of the `.qmake.save_space` cache at the build root, one
+# build candidate at a time and in the cache's own order, asking
+# bh_filter_candidate about each; nothing is collected first. A project with
+# one order line per variant is one candidate, as those lines follow each
+# other. `prepare` only counts the candidates the filter keeps into _bw_total,
+# and empties the time of every finished line of each `rebuild` candidate, all
+# before any is built, so a rebuild cut short leaves every match not yet
+# rebuilt unfinished, and the next run, rebuild or not, builds them. `build`
+# hands each kept candidate to bh_build_candidate, tallying _bw_made and
+# _bw_skipped. Both modes share this one walk, so the count always matches the
+# projects the build visits.
+bh_build_walk() {
+    _bw_mode=$1
+    _bw_tab=$(printf '\t')
+    _bw_last=
+    _bw_total=0 _bw_made=0 _bw_skipped=0
+    # Reads the cache on fd 3, so the build keeps stdin free and the loop runs
+    # in THIS shell (no pipe subshell) -- so a bh_error propagates and the
+    # counters survive. A cache rewritten meanwhile is a new file, which leaves
+    # the one being read as it was.
+    while IFS= read -r _bw_line <&3; do
+        # An order line has exactly three columns.
+        _bw_pro=${_bw_line%%"$_bw_tab"*}
+        _bw_rest=${_bw_line#*"$_bw_tab"}
+        [ "$_bw_rest" != "$_bw_line" ] || continue
+        _bw_target=${_bw_rest#*"$_bw_tab"}
+        [ "$_bw_target" != "$_bw_rest" ] || continue
+        case "$_bw_target" in
+            *"$_bw_tab"*) continue ;;
+        esac
+        if [ -z "$_bw_pro" ] || [ "$_bw_pro" = "$_bw_last" ]; then
+            continue
+        fi
+        _bw_last=$_bw_pro
+        # A line may outlive its project.
+        [ -f "$_bw_pro" ] || continue
+        _bw_rel=${_bw_pro#"$BH_ROOT"/}
+        bh_filter_candidate "$_bw_rel"
+        [ "$BH_CANDIDATE" != skip ] || continue
+        _bw_total=$((_bw_total + 1))
+        if [ "$_bw_mode" = build ]; then
+            bh_build_candidate "$_bw_pro" "$_bw_rel"
+        elif [ "$BH_CANDIDATE" = rebuild ]; then
+            bh_save_space_unfinish "$_bw_pro"
+        fi
+    done 3< "$BUILD_DIR/.qmake.save_space"
+}
+
+# bh_build_candidate <pro> <path>
+#
+# Builds the one candidate bh_build_walk kept, <path> being <pro> relative to
+# BH_ROOT: makes it in its shadow build dir, from the Makefile the recorded
+# qmake run wrote there, or builds it alone when that Makefile is missing.
+# Under --save-space a finished project is skipped.
+bh_build_candidate() {
+    _bc_pro=$1
+    _bc_rel=$2
+    if [ "${BH_SAVE_SPACE:-0}" -eq 1 ] && bh_save_space_is_finished "$_bc_pro"; then
+        _bw_skipped=$((_bw_skipped + 1))
+        return 0
+    fi
+    _bw_made=$((_bw_made + 1))
+    _bc_bd=$BUILD_DIR/$(dirname "$_bc_rel")
+    _bc_makefile=$(bh_makefile_of "$_bc_pro")
+    # bh_build_alone is where qmake runs, hence --qmake (and/or --refresh)
+    # takes this way too, else a Makefile that exists is never regenerated.
+    if [ ! -f "$_bc_bd/$_bc_makefile" ] \
+            || bh_makefile_mode_differs "$_bc_bd/$_bc_makefile" \
+            || bh_makefile_build_differs "$_bc_bd/$_bc_makefile" \
+            || bh_static_list_newer "$_bc_bd/$_bc_makefile" \
+            || bh_makefile_stale "$_bc_bd/$_bc_makefile" \
+            || [ "${BH_FORCE_QMAKE:-0}" -gt 0 ]; then
+        bh_build_alone "$_bc_pro" "$_bc_rel" "[$_bw_total/$_bw_count]"
+        return 0
+    fi
+    if [ "${BH_SAVE_SPACE:-0}" -ne 1 ]; then
+        if [ "$BH_CANDIDATE" = rebuild ]; then
+            bh_build_alone "$_bc_pro" "$_bc_rel" "[$_bw_total/$_bw_count]"
+            return 0
+        fi
+        echo "Filtered build [$_bw_total/$_bw_count]: $_bc_rel"
+        ( cd "$_bc_bd" && BH_MAKEFILE=$_bc_makefile bh_make "$JOBS" ) \
+            || bh_error "--filter: build failed for $_bc_rel"
+        return 0
+    fi
+    if [ "$BH_CANDIDATE" = rebuild ]; then
+        echo "--rebuild: $_bc_rel matches; building it again."
+    else
+        echo "--save-space: $_bc_rel has no finished build on record; building it again."
+    fi
+    # Empties the time of this project's finished lines first, so a build that
+    # dies before post-link leaves the project unfinished and the next run
+    # builds it again.
+    bh_save_space_unfinish "$_bc_pro"
+    echo "--save-space build [$_bw_total/$_bw_count]: $_bc_rel"
+    ( cd "$_bc_bd" && BH_MAKEFILE=$_bc_makefile bh_make "$JOBS" ) \
+        || bh_error "--save-space: build failed for $_bc_rel"
+    bh_save_space_mark_finished "$_bc_pro" "$_bc_bd/$_bc_makefile"
+}
+
 # bh_pro_is_subdirs <pro>
 #
 # Tells whether <pro> sets `TEMPLATE = subdirs`, so it has no target of its
 # own, only subprojects.
 bh_pro_is_subdirs() {
     grep -Eq '^[[:space:]]*TEMPLATE[[:space:]]*=[[:space:]]*subdirs[[:space:]]*$' "$1" 2>/dev/null
+}
+
+# bh_build_alone <pro> <path> [<counter>]
+#
+# Builds one project alone, <path> being <pro> relative to BH_ROOT: makes it
+# in its own out-of-source dir (mirroring the source layout under BUILD_DIR),
+# from the Makefile `bh_makefile_of` names for it, after a qmake of just that
+# project when none ran for it yet, when its Makefile was made for the other
+# --save-space mode, or when --qmake/--refresh asks. A `rebuild` candidate is
+# cleaned in its qmake step, unless --save-space (which keeps no objects)
+# already asked for it. Under --save-space it then makes sure the project is
+# marked finished. Cross-project deps are not pulled in automatically.
+# <counter>, such as `[3/9]`, goes into the line that names the project.
+bh_build_alone() {
+    _ba_bd=$BUILD_DIR/$(dirname "$2")
+    _ba_mf=$(bh_makefile_of "$1")
+    _ba_force=${BH_FORCE_QMAKE:-0}
+    if [ -f "$_ba_bd/$_ba_mf" ] && bh_makefile_mode_differs "$_ba_bd/$_ba_mf"; then
+        _ba_force=1
+    fi
+    _ba_clean=0
+    if [ "$BH_CANDIDATE" = rebuild ] && [ "${BH_SAVE_SPACE:-0}" -ne 1 ]; then
+        echo "--rebuild: $2 matches; building it again."
+        _ba_clean=1
+    fi
+    echo "Filtered build${3:+ $3}: $2"
+    # shellcheck disable=SC2086  # intentional word-split of forwarded args.
+    ( mkdir -p "$_ba_bd" && cd "$_ba_bd" \
+        && BH_MAKEFILE=$_ba_mf BH_FORCE_QMAKE=$_ba_force BH_QMAKE_CLEAN=$_ba_clean \
+            bh_run_qmake qmake "$1" $BH_REMAINING_ARGS \
+        && BH_MAKEFILE=$_ba_mf bh_make "$JOBS" ) \
+        || bh_error "--filter: build failed for $2"
+    if [ "${BH_SAVE_SPACE:-0}" -eq 1 ]; then
+        bh_save_space_mark_finished "$1" "$_ba_bd/$_ba_mf"
+    fi
+}
+
+# bh_build_unrecorded [mode-tag]
+#
+# Goes on, after bh_build_walk, with the projects the `.qmake.save_space`
+# cache at the build root does not list: every `.pro` under BH_ROOT, one at a
+# time as `find | sort` hands them over, that bh_filter_candidate keeps, that
+# has no order line, and that bh_order_reach finds `listed` or `alone` is
+# built alone (see bh_build_alone); one that it finds `left-out` is reported
+# and skipped. Nothing is collected first. Without --filter only the `rebuild` candidates count, as
+# the root project already covers a plain build (and a bare --rebuild, whose
+# regexp is `^.*$`, does not come here at all). Under --save-space such a project gets its finished line
+# too, so it is skipped from then on, unless --rebuild names it; a subdirs
+# project is passed over there, as it has no target to finish and its leaves
+# are the projects that build (recorded ones through bh_build_walk, the rest
+# here on their own). The loop runs
+# at the end of a pipe, in its own shell, so it answers through its exit
+# status: 0 when a project was left for it, 10 when none was, and the failed
+# step's own status else.
+bh_build_unrecorded() {
+    # fd 4 keeps the caller's stdin for the build steps, while the loop reads
+    # the pipe on fd 3. `|| true`: a `find` that could not read some dir still
+    # listed the rest.
+    {
+        bh_pro_files \
+        | {
+            _bu_total=0
+            while IFS= read -r _bu_pro <&3; do
+                _bu_rel=${_bu_pro#"$BH_ROOT"/}
+                bh_filter_candidate "$_bu_rel"
+                [ "$BH_CANDIDATE" != skip ] || continue
+                if [ -z "${BH_FILTER:-}" ] && [ "$BH_CANDIDATE" != rebuild ]; then
+                    continue
+                fi
+                if BU_PRO=$_bu_pro bh_save_space_has_line \
+                        'NF == 3 && $1 == ENVIRON["BU_PRO"]'; then
+                    continue
+                fi
+                _bu_total=$((_bu_total + 1))
+                if [ "${BH_SAVE_SPACE:-0}" -eq 1 ] && bh_pro_is_subdirs "$_bu_pro"; then
+                    echo "--save-space: $_bu_rel is a subdirs project; its subprojects build on their own."
+                    continue
+                fi
+                if [ "${BH_SAVE_SPACE:-0}" -eq 1 ]; then
+                    if [ "$BH_CANDIDATE" != rebuild ] \
+                            && bh_save_space_is_finished "$_bu_pro"; then
+                        echo "--save-space: $_bu_rel finished once; skipping it."
+                        continue
+                    fi
+                    bh_save_space_unfinish "$_bu_pro"
+                fi
+                bh_build_alone "$_bu_pro" "$_bu_rel" \
+                    "[$((_bw_total + _bu_total))/$_bw_count]"
+            done
+            [ "$_bu_total" -gt 0 ] || exit 10
+        } 3<&0 0<&4
+    } 4<&0
 }
 
 # bh_save_space_has_line <awk-test>

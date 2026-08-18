@@ -63,7 +63,7 @@ extern uint qGlobalPostedEventsCount();
 enum WarnTypes {
     WarnInstance = 0x0010
 };
-static QBasicAtomicFlags<WarnTypes> warnSkip = Q_BASIC_ATOMIC_INITIALIZER(0);
+static QBasicAtomicFlags<WarnTypes> warnSkip = Q_BASIC_ATOMIC_FLAGS(0);
 
 
 // TRACE/corelib BugFix: Windows's `GWLP_USERDATA` is NOT for window-authors #1

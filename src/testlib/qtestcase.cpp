@@ -1445,7 +1445,7 @@ namespace QTest
         FailureHandledFlag = 0x50
     };
     // TRACE/corelib #Q_BASIC_ATOMIC_INITIALIZER; nest braces.
-    static QBasicAtomicFlags<CaseFlags, int> globalFlags = { { 0 } };
+    static QBasicAtomicFlags<CaseFlags, int> globalFlags = Q_BASIC_ATOMIC_FLAGS(0);
 
     class WatchDog;
 
@@ -2883,7 +2883,12 @@ FatalSignalHandler::FatalSignalHandler()
     // interfere with normal .bss symbols
     __attribute__((section(".lbss.altstack"), aligned(4096)))
 #  endif
+#  ifdef __FILC__
+    // Fil-C's runtime requires the alternate signal stack to be at least 64 KiB.
+    static char alternate_stack[64 * 1024];
+#  else
     static char alternate_stack[16 * 1024];
+#  endif
     stack_t stack;
     stack.ss_flags = 0;
     stack.ss_size = sizeof alternate_stack;

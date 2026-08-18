@@ -82,9 +82,11 @@ $QT_DIR/src/corelib/io/qfsfileengine_unix.cpp \
 $QT_DIR/src/corelib/tools/qlocale_unix.cpp $MAC_SRCS"
 
 drive_qmake_build() {
-    # CXX: an explicit CXX wins; else the libc's preferred compiler (BH_LIBC_CC,
-    # e.g. musl's -- resolved by bh_parse_args from --libc/--musl); else g++
-    # (Darwin already pinned clang++). Validated here, once args are parsed.
+    # CXX: an explicit CXX wins; else the memory-safe compiler (BH_MEMSAFE_CXX,
+    # Fil-C, from --memory-safe); else the libc's preferred compiler (BH_LIBC_CC,
+    # e.g. musl's, from --libc/--musl); else g++ (Darwin already pinned clang++).
+    # Validated here, once args are parsed.
+    : "${CXX:=$BH_MEMSAFE_CXX}"
     : "${CXX:=$BH_LIBC_CC}"
     : "${CXX:=g++}"
     command -v "$CXX" >/dev/null 2>&1 \

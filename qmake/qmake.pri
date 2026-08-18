@@ -55,6 +55,7 @@ bootstrap { #Qt code
         qfsfileengine_iterator.cpp \
         qfunction.cpp \
         qglobal.cpp \
+        qmemorysafety.cpp \
         qnumeric.cpp \
         qhash.cpp \
         qiodevice.cpp \
