@@ -83,37 +83,67 @@ public:
 
     inline void unlock()
     {
+#if QT_PTR_TAGGING
         if (q_val) {
             if ((q_val & quintptr(1u)) == quintptr(1u)) {
                 q_val &= ~quintptr(1u);
                 readWriteLock()->unlock();
             }
         }
+#else
+        if (q_val && m_locked) {
+            m_locked = false;
+            q_val->unlock();
+        }
+#endif
     }
 
     inline void relock()
     {
+#if QT_PTR_TAGGING
         if (q_val) {
             if ((q_val & quintptr(1u)) == quintptr(0u)) {
                 readWriteLock()->lockForRead();
                 q_val |= quintptr(1u);
             }
         }
+#else
+        if (q_val && !m_locked) {
+            q_val->lockForRead();
+            m_locked = true;
+        }
+#endif
     }
 
+#if QT_PTR_TAGGING
     inline QReadWriteLock *readWriteLock() const
     { return reinterpret_cast<QReadWriteLock *>(q_val & ~quintptr(1u)); }
+#else
+    inline QReadWriteLock *readWriteLock() const
+    { return q_val; }
+#endif
 
 private:
     Q_DISABLE_COPY(QReadLocker)
+#if QT_PTR_TAGGING
     quintptr q_val;
+#else
+    QReadWriteLock *q_val;
+    bool m_locked;
+#endif
 };
 
 inline QReadLocker::QReadLocker(QReadWriteLock *areadWriteLock)
+#if QT_PTR_TAGGING
     : q_val(reinterpret_cast<quintptr>(areadWriteLock))
+#else
+    : q_val(areadWriteLock), m_locked(false)
+#endif
 {
+#if QT_PTR_TAGGING
     Q_ASSERT_X((q_val & quintptr(1u)) == quintptr(0),
                "QReadLocker", "QReadWriteLock pointer is misaligned");
+#endif
     relock();
 }
 
@@ -127,38 +157,68 @@ public:
 
     inline void unlock()
     {
+#if QT_PTR_TAGGING
         if (q_val) {
             if ((q_val & quintptr(1u)) == quintptr(1u)) {
                 q_val &= ~quintptr(1u);
                 readWriteLock()->unlock();
             }
         }
+#else
+        if (q_val && m_locked) {
+            m_locked = false;
+            q_val->unlock();
+        }
+#endif
     }
 
     inline void relock()
     {
+#if QT_PTR_TAGGING
         if (q_val) {
             if ((q_val & quintptr(1u)) == quintptr(0u)) {
                 readWriteLock()->lockForWrite();
                 q_val |= quintptr(1u);
             }
         }
+#else
+        if (q_val && !m_locked) {
+            q_val->lockForWrite();
+            m_locked = true;
+        }
+#endif
     }
 
+#if QT_PTR_TAGGING
     inline QReadWriteLock *readWriteLock() const
     { return reinterpret_cast<QReadWriteLock *>(q_val & ~quintptr(1u)); }
+#else
+    inline QReadWriteLock *readWriteLock() const
+    { return q_val; }
+#endif
 
 
 private:
     Q_DISABLE_COPY(QWriteLocker)
+#if QT_PTR_TAGGING
     quintptr q_val;
+#else
+    QReadWriteLock *q_val;
+    bool m_locked;
+#endif
 };
 
 inline QWriteLocker::QWriteLocker(QReadWriteLock *areadWriteLock)
+#if QT_PTR_TAGGING
     : q_val(reinterpret_cast<quintptr>(areadWriteLock))
+#else
+    : q_val(areadWriteLock), m_locked(false)
+#endif
 {
+#if QT_PTR_TAGGING
     Q_ASSERT_X((q_val & quintptr(1u)) == quintptr(0),
                "QWriteLocker", "QReadWriteLock pointer is misaligned");
+#endif
     relock();
 }
 

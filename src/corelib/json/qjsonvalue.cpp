@@ -257,6 +257,12 @@ QJsonValue::QJsonValue(const QJsonValue &other)
     t = other.t;
     d = other.d;
     ui = other.ui;
+#ifdef QT_PTR_TRACKING
+    if (t == String)
+        stringData = other.stringData;
+    else if (t == Array || t == Object)
+        base = other.base;
+#endif
     if (d)
         d->ref.ref();
 
@@ -271,7 +277,11 @@ QJsonValue &QJsonValue::operator =(const QJsonValue &other)
 {
     QJsonValue copy(other);
     // swap(copy);
+#ifndef QT_PTR_TRACKING
     qSwap(dbl, copy.dbl);
+#else
+    qSwap(stringData, copy.stringData);
+#endif
     qSwap(d,   copy.d);
     qSwap(t,   copy.t);
     return *this;
