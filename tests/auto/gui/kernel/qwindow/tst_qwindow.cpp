@@ -38,6 +38,7 @@
 #include <private/qhighdpiscaling_p.h>
 #include <QtGui/QPainter>
 
+#include <QtGui/QGuiApplication>
 #include <QtTest/QtTest>
 
 #include <QEvent>
@@ -1627,6 +1628,8 @@ void tst_QWindow::initialSize()
 
 void tst_QWindow::modalDialog()
 {
+    if (QGuiApplication::platformName() == QLatin1String("offscreen"))
+        QSKIP("requires a real windowing platform; unavailable on the offscreen platform");
     if (!QGuiApplication::platformName().compare(QLatin1String("wayland"), Qt::CaseInsensitive))
         QSKIP("Wayland: This fails. Figure out why.");
 
@@ -1653,6 +1656,8 @@ void tst_QWindow::modalDialog()
 
 void tst_QWindow::modalDialogClosingOneOfTwoModal()
 {
+    if (QGuiApplication::platformName() == QLatin1String("offscreen"))
+        QSKIP("requires a real windowing platform; unavailable on the offscreen platform");
     if (!QGuiApplication::platformName().compare(QLatin1String("wayland"), Qt::CaseInsensitive))
         QSKIP("Wayland: This fails. Figure out why.");
 
@@ -1771,6 +1776,8 @@ void tst_QWindow::modalWindowPosition()
 #ifndef QT_NO_CURSOR
 void tst_QWindow::modalWindowEnterEventOnHide_QTBUG35109()
 {
+    if (QGuiApplication::platformName() == QLatin1String("offscreen"))
+        QSKIP("requires a real windowing platform; unavailable on the offscreen platform");
     if (QGuiApplication::platformName() == QLatin1String("cocoa"))
         QSKIP("This test fails on OS X on CI");
 

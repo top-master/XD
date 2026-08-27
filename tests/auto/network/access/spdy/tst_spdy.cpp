@@ -44,8 +44,20 @@
 #endif // QT_BUILD_INTERNAL && !QT_NO_OPENSSL
 
 #include "../../../network-settings.h"
+#include "../../../helpers/testenv.h" // bundled server-dummy fleet (TLS/SPDY + files) + TestServer::port()
 
 Q_DECLARE_METATYPE(QAuthenticator*)
+
+// server-dummy binds the unprivileged TestServer::port() stand-ins (4433 for https, 8080 for
+// http) rather than the privileged 443/80, so remap each request URL's default port
+// onto the same stand-in the server actually listens on. A URL that already carries an
+// explicit port (proxy fixtures, etc.) is left untouched.
+static QUrl withTestPort(QUrl url)
+{
+    if (url.port() == -1)
+        url.setPort(TestServer::port(url.scheme() == QLatin1String("https") ? 443 : 80));
+    return url;
+}
 
 class tst_Spdy: public QObject
 {
@@ -78,6 +90,7 @@ private:
     int m_multipleRequestsCount;
     int m_multipleRepliesFinishedCount;
     const QString m_rfc3252FilePath;
+    QRef<TestServer> m_fleet; // server-dummy fleet: TLS/SPDY + proxies + serves rfc3252.txt
 
 protected Q_SLOTS:
     void proxyAuthenticationRequired(const QNetworkProxy &, QAuthenticator *authenticator);
@@ -105,7 +118,9 @@ tst_Spdy::~tst_Spdy()
 void tst_Spdy::initTestCase()
 {
     QVERIFY(!m_rfc3252FilePath.isEmpty());
-    QVERIFY(QtNetworkSettings::verifyTestNetworkSettings());
+    // The fleet serves /qtest/* from the folder holding the reference file (so bodies round-trip
+    // byte-for-byte) and exposes the HTTP/SOCKS5 proxies the download/upload proxy rows tunnel through.
+    m_fleet = TestEnv::getServer(TestServer::Fleet, QFileInfo(m_rfc3252FilePath).absolutePath());
 }
 
 void tst_Spdy::settingsAndNegotiation_data()
@@ -145,7 +160,7 @@ void tst_Spdy::settingsAndNegotiation()
     QFETCH(bool, setAttribute);
     QFETCH(bool, enabled);
 
-    QNetworkRequest request(url);
+    QNetworkRequest request(withTestPort(url));
 
     if (setAttribute) {
         request.setAttribute(QNetworkRequest::SpdyAllowedAttribute, QVariant(enabled));
@@ -249,7 +264,7 @@ void tst_Spdy::download()
     QFETCH(QString, fileName);
     QFETCH(QNetworkProxy, proxy);
 
-    QNetworkRequest request(url);
+    QNetworkRequest request(withTestPort(url));
     request.setAttribute(QNetworkRequest::SpdyAllowedAttribute, true);
 
     if (proxy.type() != QNetworkProxy::DefaultProxy) {
@@ -303,7 +318,7 @@ void tst_Spdy::download()
 void tst_Spdy::headerFields()
 {
     QUrl url(QUrl("https://" + QtNetworkSettings::serverName()));
-    QNetworkRequest request(url);
+    QNetworkRequest request(withTestPort(url));
     request.setAttribute(QNetworkRequest::SpdyAllowedAttribute, true);
 
     QNetworkReply *reply = m_manager.get(request);
@@ -461,7 +476,7 @@ void tst_Spdy::upload_data()
 void tst_Spdy::upload()
 {
     QFETCH(QUrl, url);
-    QNetworkRequest request(url);
+    QNetworkRequest request(withTestPort(url));
     request.setAttribute(QNetworkRequest::SpdyAllowedAttribute, true);
 
     QFETCH(QByteArray, data);
@@ -573,7 +588,7 @@ void tst_Spdy::errors()
     QFETCH(bool, ignoreSslErrors);
     QFETCH(int, expectedReplyError);
 
-    QNetworkRequest request(url);
+    QNetworkRequest request(withTestPort(url));
     request.setAttribute(QNetworkRequest::SpdyAllowedAttribute, true);
 
     disconnect(&m_manager, SIGNAL(proxyAuthenticationRequired(const QNetworkProxy &, QAuthenticator *)),
@@ -640,7 +655,7 @@ void tst_Spdy::multipleRequests()
     QList<QSignalSpy *> finishedSpies;
 
     foreach (const QUrl &url, urls) {
-        QNetworkRequest request(url);
+        QNetworkRequest request(withTestPort(url));
         request.setAttribute(QNetworkRequest::SpdyAllowedAttribute, true);
         QNetworkReply *reply = m_manager.get(request);
         replies.append(reply);

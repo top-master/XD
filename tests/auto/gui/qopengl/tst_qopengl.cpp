@@ -72,6 +72,7 @@ class tst_QOpenGL : public QObject
 Q_OBJECT
 
 private slots:
+    void initTestCase();
     void sharedResourceCleanup_data();
     void sharedResourceCleanup();
     void multiGroupSharedResourceCleanup_data();
@@ -215,6 +216,14 @@ static void common_data()
 
     QTest::newRow("Using QWindow") << int(QSurface::Window);
     QTest::newRow("Using QOffscreenSurface") << int(QSurface::Offscreen);
+}
+
+void tst_QOpenGL::initTestCase()
+{
+    // Gate on whether this platform can actually create a GL context.
+    QOpenGLContext glProbe;
+    if (!glProbe.create())
+        QSKIP("OpenGL is not available on this platform");
 }
 
 void tst_QOpenGL::sharedResourceCleanup_data()

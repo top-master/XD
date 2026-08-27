@@ -228,7 +228,19 @@ void QHttpNetworkConnectionChannel::abort()
 
 bool QHttpNetworkConnectionChannel::sendRequest()
 {
-    Q_ASSERT(!protocolHandler.isNull());
+    // TRACE/network http-channel null-handler: drop the call when protocolHandler is null #3,
+    // same rationale as _q_receiveReply/_q_readyRead below. An SSL channel has no protocol
+    // handler until its handshake negotiates one (HTTP/1.1, SPDY, or HTTP/2); a queued
+    // _q_startNextRequest -- posted while a request was pending -- can arrive after the
+    // handshake FAILED and left the handler null (e.g. tst_QNetworkReply::httpProxyCommands's
+    // https-via-proxy row, where the CONNECT proxy never completes a real TLS handshake).
+    // Dropping the stale send is correct; dereferencing the null handler reads through a null
+    // pointer (a deterministic Fil-C panic, a flaky crash on a native build). The Q_ASSERT_X
+    // stays so a genuinely-unexpected null still trips in a debug build.
+    if (protocolHandler.isNull()) {
+        Q_ASSERT_X(false, Q_NULLPTR, "protocolHandler should be yet non-null.");
+        return false;
+    }
     return protocolHandler->sendRequest();
 }
 

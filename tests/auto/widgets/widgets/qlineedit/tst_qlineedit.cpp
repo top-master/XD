@@ -32,6 +32,7 @@
 ****************************************************************************/
 
 
+#include <QtGui/QGuiApplication>
 #include <QtTest/QtTest>
 #include "qlineedit.h"
 #include "qapplication.h"
@@ -1449,6 +1450,8 @@ void tst_QLineEdit::undo_keypressevents_data()
 
 void tst_QLineEdit::undo_keypressevents()
 {
+    if (QGuiApplication::platformName() == QLatin1String("offscreen"))
+        QSKIP("requires a real windowing platform; unavailable on the offscreen platform");
     QFETCH(QTestEventList, keys);
     QFETCH(QStringList, expectedString);
 
@@ -3285,6 +3288,8 @@ void tst_QLineEdit::charWithAltOrCtrlModifier()
 
 void tst_QLineEdit::leftKeyOnSelectedText()
 {
+    if (QGuiApplication::platformName() == QLatin1String("offscreen"))
+        QSKIP("requires a real windowing platform; unavailable on the offscreen platform");
     QLineEdit *testWidget = ensureTestWidget();
     testWidget->clear();
     testWidget->setText("0123");

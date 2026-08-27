@@ -146,6 +146,7 @@ class QFtpPI : public QObject
 
 public:
     QFtpPI(QObject *parent = 0);
+    ~QFtpPI();
 
     void connectToHost(const QString &host, quint16 port);
 
@@ -805,6 +806,21 @@ QFtpPI::QFtpPI(QObject *parent) :
 
     connect(&dtp, SIGNAL(connectState(int)),
              SLOT(dtpConnectState(int)));
+}
+
+QFtpPI::~QFtpPI()
+{
+    // Members are destroyed in reverse declaration order, so commandSocket (declared after dtp)
+    // is already gone by the time dtp is torn down. Without the disconnects below, tearing down
+    // dtp would reenter this half-destroyed object:
+    // * destroying dtp's active-mode listener closes its data socket;
+    // * the socket's disconnected() runs QFtpDTP::socketConnectionClosed();
+    // * that chains connectState(CsClosed) -> dtpConnectState() -> readyRead();
+    // * readyRead() then reads the already-freed commandSocket.
+    // Sever every callback from our sockets into this PI before any member is destroyed, so a
+    // member's own teardown can never reenter this half-destroyed object.
+    disconnect(&commandSocket, 0, this, 0);
+    disconnect(&dtp, 0, this, 0);
 }
 
 void QFtpPI::connectToHost(const QString &host, quint16 port)

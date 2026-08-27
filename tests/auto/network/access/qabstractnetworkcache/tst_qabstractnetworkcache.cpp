@@ -33,8 +33,11 @@
 
 #include <QTemporaryDir>
 #include <QtTest/QtTest>
+
+#include "../../../helpers/assertion.h"
 #include <QtNetwork/QtNetwork>
 #include "../../../network-settings.h"
+#include "../../../helpers/testenv.h" // bundled server-dummy answering the cache CGIs
 
 #ifndef QT_NO_BEARERMANAGEMENT
 #include <QtNetwork/qnetworkconfigmanager.h>
@@ -81,6 +84,8 @@ private slots:
 private:
     void runTest();
     void checkSynchronous();
+
+    QRef<TestServer> httpServer; // server-dummy serving /qtest/cgi-bin/httpcachetest_*
 
 #ifndef QT_NO_BEARERMANAGEMENT
     QNetworkConfigurationManager *netConfMan;
@@ -134,13 +139,13 @@ void tst_QAbstractNetworkCache::initTestCase()
 {
     if (!QtNetworkSettings::verifyTestNetworkSettings())
         QSKIP("No network test server available");
+    httpServer = TestEnv::getServer(TestServer::WebProxy); // answers the cache CGIs below
 #ifndef QT_NO_BEARERMANAGEMENT
     netConfMan = new QNetworkConfigurationManager(this);
     networkConfiguration = netConfMan->defaultConfiguration();
     networkSession.reset(new QNetworkSession(networkConfiguration));
     if (!networkSession->isOpen()) {
-        networkSession->open();
-        QVERIFY(networkSession->waitForOpened(30000));
+        qExpect(networkSession)->to<OpenBefore>(30000);
     }
 #endif
 }
@@ -299,6 +304,7 @@ void tst_QAbstractNetworkCache::runTest()
     QCOMPARE(diskCache->gotData, false);
 
     QUrl realUrl = url.contains("://") ? url : TESTFILE + url;
+    realUrl.setPort(httpServer->port()); // reach the bundled server-dummy
     QNetworkRequest request(realUrl);
 
     // prime the cache
@@ -337,8 +343,6 @@ void tst_QAbstractNetworkCache::runTest()
 
 void tst_QAbstractNetworkCache::checkSynchronous()
 {
-    QSKIP("not working yet, see QTBUG-15221");
-
     QFETCH(QNetworkRequest::CacheLoadControl, cacheLoadControl);
     QFETCH(QString, url);
     QFETCH(bool, fetchFromCache);
@@ -350,6 +354,7 @@ void tst_QAbstractNetworkCache::checkSynchronous()
     QCOMPARE(diskCache->gotData, false);
 
     QUrl realUrl = url.contains("://") ? url : TESTFILE + url;
+    realUrl.setPort(httpServer->port()); // reach the bundled server-dummy
     QNetworkRequest request(realUrl);
 
     request.setAttribute(

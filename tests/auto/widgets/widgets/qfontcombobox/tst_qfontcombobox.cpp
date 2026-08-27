@@ -32,6 +32,7 @@
 ****************************************************************************/
 
 
+#include <QtGui/QFontDatabase>
 #include <QtTest/QtTest>
 #include <qfontcombobox.h>
 
@@ -134,6 +135,8 @@ void tst_QFontComboBox::currentFont_data()
 // public QFont currentFont() const
 void tst_QFontComboBox::currentFont()
 {
+    if (QFontDatabase().families().isEmpty())
+        QSKIP("no fonts installed in this environment; font metrics/rendering are degenerate");
     QFETCH(QFont, currentFont);
 
     SubQFontComboBox box;

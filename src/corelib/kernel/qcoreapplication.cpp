@@ -2266,6 +2266,41 @@ qint64 QCoreApplication::applicationPid()
 }
 
 /*!
+    Returns \c true when the process runs with administrative privileges.
+
+    On Windows this means the process token is elevated; on Unix it means the
+    effective user is root (uid 0). An elevated process may bind privileged
+    (below 1024) ports and reach root-only resources, so callers can use this to
+    decide whether to attempt a privileged action or fall back to an
+    unprivileged alternative.
+*/
+bool QCoreApplication::isElevated()
+{
+#if defined(Q_OS_WIN)
+    // Windows: the process token carries an elevation flag, read via GetTokenInformation.
+    bool result = false;
+    HANDLE hToken = NULL;
+    if (OpenProcessToken(GetCurrentProcess(), TOKEN_QUERY, &hToken)) {
+        TOKEN_ELEVATION elevationInfo;
+        DWORD returnedSize = sizeof( TOKEN_ELEVATION );
+        if( GetTokenInformation( hToken, TokenElevation, &elevationInfo, sizeof( elevationInfo ), &returnedSize ) ) {
+            result = elevationInfo.TokenIsElevated != 0;
+        }
+    }
+    if( hToken ) {
+        CloseHandle( hToken );
+    }
+    return result;
+#elif defined(Q_OS_UNIX)
+    // On Unix, root (uid 0) is the equivalent of an elevated token: it is what
+    // lets the process bind privileged ports.
+    return ::geteuid() == 0;
+#else
+    return false;
+#endif
+}
+
+/*!
     \since 4.1
 
     Returns the list of command-line arguments.

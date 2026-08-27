@@ -22,6 +22,6 @@ win32 {
   }
 }
 
-QT = core network testlib
+QT = core network-private testlib
 
 MOC_DIR=tmp

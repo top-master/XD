@@ -511,6 +511,15 @@ void QHttpSocketEngine::slotSocketConnected()
 
 void QHttpSocketEngine::slotSocketDisconnected()
 {
+    Q_D(QHttpSocketEngine);
+    // Once the CONNECT tunnel is up this engine is transparent, so a close of the underlying
+    // proxy connection means the tunnelled peer went away. Surface it upward as a read
+    // notification: the socket's next read() then returns 0 (EOF) -- after draining any final
+    // bytes such as a TLS close_notify -- so it can finish a graceful shutdown instead of
+    // hanging in ClosingState until waitForDisconnected() times out. Before the tunnel is up the
+    // header-parsing paths in slotSocketReadNotification() already handle a premature close.
+    if (d->state == Connected && d->readNotificationEnabled)
+        emitReadNotification();
 }
 
 void QHttpSocketEngine::slotSocketReadNotification()

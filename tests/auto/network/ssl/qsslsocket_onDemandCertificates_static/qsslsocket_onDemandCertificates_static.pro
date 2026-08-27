@@ -1,7 +1,8 @@
 CONFIG += testcase
 CONFIG += parallel_test
 
-SOURCES += tst_qsslsocket_onDemandCertificates_static.cpp
+SOURCES += tst_qsslsocket_onDemandCertificates_static.cpp \
+           ../../../helpers/testserver.cpp   # TestServer::installTrustSystemWide()
 win32:!wince: LIBS += -lws2_32
 QT = core core-private network-private testlib
 

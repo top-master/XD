@@ -42,6 +42,7 @@ class tst_QOpenGLWindow : public QObject
     Q_OBJECT
 
 private slots:
+    void initTestCase();
     void create();
     void basic();
     void painter();
@@ -49,6 +50,14 @@ private slots:
     void partial();
     void underOver();
 };
+
+void tst_QOpenGLWindow::initTestCase()
+{
+    // Gate on whether this platform can actually create a GL context.
+    QOpenGLContext glProbe;
+    if (!glProbe.create())
+        QSKIP("OpenGL is not available on this platform");
+}
 
 void tst_QOpenGLWindow::create()
 {

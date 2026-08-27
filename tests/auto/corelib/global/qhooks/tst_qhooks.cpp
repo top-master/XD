@@ -40,9 +40,14 @@ class tst_QHooks: public QObject
     Q_OBJECT
 
 private slots:
+    void initTestCase();
     void testVersion();
     void testAddRemoveObject();
 };
+
+void tst_QHooks::initTestCase()
+{
+}
 
 void tst_QHooks::testVersion()
 {

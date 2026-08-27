@@ -32,6 +32,7 @@
 ****************************************************************************/
 
 
+#include <QtGui/QFontDatabase>
 #include <QtTest/QtTest>
 #include <QLineEdit>
 #include <QStyle>
@@ -302,6 +303,8 @@ void tst_QGroupBox::enabledChildPropagation()
 
 void tst_QGroupBox::sizeHint()
 {
+    if (QFontDatabase().families().isEmpty())
+        QSKIP("no fonts installed; font-dependent geometry is degenerate");
     QGroupBox testWidget1(0);
     QEXPECT_WARN("QKeySequence::mnemonic: \"&0&0&0&0&0&0&0&0&0&0\" contains multiple occurrences of '&'");
     testWidget1.setTitle("&0&0&0&0&0&0&0&0&0&0");
