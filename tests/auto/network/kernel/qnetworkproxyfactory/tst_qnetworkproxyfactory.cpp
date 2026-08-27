@@ -49,6 +49,9 @@
 #include <QSysInfo>
 #include <QThread>
 
+#include "../../../helpers/testenv.h"
+#include "../../../helpers/testbearer.h"
+
 class tst_QNetworkProxyFactory : public QObject {
     Q_OBJECT
 
@@ -70,6 +73,7 @@ public:
     };
 
 private slots:
+    void initTestCase();
     void systemProxyForQueryCalledFromThread();
     void systemProxyForQuery_data();
     void systemProxyForQuery() const;
@@ -85,6 +89,8 @@ private slots:
 private:
     QString formatProxyName(const QNetworkProxy & proxy) const;
     QDebugProxyFactory *factory;
+    QRef<TestServer> m_server;
+    QRef<TestBearer> m_bearer;
 };
 
 int tst_QNetworkProxyFactory::QDebugProxyFactory::requestCounter = 0;
@@ -338,23 +344,34 @@ void tst_QNetworkProxyFactory::inNetworkAccessManager()
     QFETCH(QNetworkConfiguration, config);
     QFETCH(QList<QNetworkProxy>, proxies);
 
+    // Installs the counting factory again, since `systemProxyForQuery_local()`
+    // replaced it through `setApplicationProxy()`, which deletes the factory.
+    if (!factory) {
+        factory = new QDebugProxyFactory;
+        QNetworkProxyFactory::setApplicationProxyFactory(factory);
+    }
+
     int count = QDebugProxyFactory::requestCounter;
 
     QNetworkAccessManager manager;
     manager.setConfiguration(config);
 
-    //using an internet server, because cellular APs won't have a route to the test server.
-    QNetworkRequest req(QUrl(QString("http://qt-project.org")));
+    QUrl url;
+    url.setScheme(QLL("http"));
+    url.setHost(m_server->domainName());
+    url.setPort(m_server->port());
+    QNetworkRequest req(url);
     QNetworkReply *reply = manager.get(req);
     connect(reply, SIGNAL(finished()), &QTestEventLoop::instance(), SLOT(exitLoop()));
     QTestEventLoop::instance().enterLoop(30);
+    const QNetworkReply::NetworkError error = reply->error();
+    const QString errorString = reply->errorString();
     delete reply;
 
-    if (count == QDebugProxyFactory::requestCounter) {
-        //RND phones are preconfigured with several test access points which won't work without a matching SIM
-        //If the network fails to start, QNAM won't ask the factory for proxies so we can't test.
-        QSKIP("network configuration didn't start");
-    }
+    QVERIFY2(count != QDebugProxyFactory::requestCounter, qPrintable(QString(QLL(
+        "Proxy factory was not queried for network configuration '%1' "
+        "(state=0x%2); request error %3: %4"
+    )).arg(config.name()).arg(int(config.state()), 0, 16).arg(int(error)).arg(errorString)));
     QVERIFY(factory);
 
     qDebug() << "testing network configuration for" << config.name();
@@ -428,6 +445,21 @@ public:
     QNetworkProxyQuery query;
     QList<QNetworkProxy> proxies;
 };
+
+void tst_QNetworkProxyFactory::initTestCase()
+{
+    // Gives `QNetworkConfigurationManager` the bearer plugins (generic and the
+    // others) of XD's own plugins dir; hence the configuration rows find this
+    // host's network interfaces.
+    TestEnv::addBearerPluginPath();
+    m_server = TestEnv::getServer(TestServer::WebProxy);
+    QVERIFY(m_server && m_server->isRunning());
+    const QString fixture = QFINDTESTDATA("bearer-config.ini");
+    QVERIFY( ! fixture.isEmpty());
+    m_bearer = QRef<TestBearer>(new TestBearer, &TestBearer::dispose);
+    m_bearer->setConfigFile(fixture);
+    QVERIFY(m_bearer->start());
+}
 
 //regression test for QTBUG-18799
 void tst_QNetworkProxyFactory::systemProxyForQueryCalledFromThread()

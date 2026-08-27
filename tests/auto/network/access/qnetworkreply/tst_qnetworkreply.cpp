@@ -90,6 +90,7 @@ Q_DECLARE_METATYPE(QSharedPointer<char>)
 
 #include "../../../network-settings.h"
 #include "../../../helpers/testenv.h"
+#include "../../../helpers/testbearer.h"
 
 // Non-OpenSSL backends are not able to report a specific error code
 // for self-signed certificates.
@@ -151,6 +152,12 @@ class tst_QNetworkReply: public QObject
     QString uniqueExtension;
 #ifndef QT_NO_NETWORKPROXY
     QList<ProxyData> proxies;
+#endif
+#ifndef QT_NO_BEARERMANAGEMENT
+    /// Starts the bearer-dummy daemon before `manager`, whose construction
+    /// loads the bearer engines; hence the background-request rows find
+    /// activatable configurations.
+    bool bearerStarted;
 #endif
     QNetworkAccessManager manager;
     MyCookieJar *cookieJar;
@@ -1252,7 +1259,20 @@ protected:
 };
 
 
+#ifndef QT_NO_BEARERMANAGEMENT
+/// Starts the bearer-dummy daemon once per process, before the first
+/// QNetworkConfigurationManager loads the bearer engines.
+static bool startTestBearer()
+{
+    static QRef<TestBearer > bearer(new TestBearer, &TestBearer::dispose);
+    return bearer->isRunning() || bearer->start();
+}
+#endif
+
 tst_QNetworkReply::tst_QNetworkReply()
+#ifndef QT_NO_BEARERMANAGEMENT
+    : bearerStarted(startTestBearer())
+#endif
 {
     qRegisterMetaType<QNetworkReply *>(); // for QSignalSpy
     qRegisterMetaType<QAuthenticator *>();
@@ -1557,6 +1577,7 @@ void tst_QNetworkReply::initTestCase()
     QSslSocket::defaultCaCertificates(); //preload certificates
 #endif
 #ifndef QT_NO_BEARERMANAGEMENT
+    QVERIFY2(bearerStarted, "the bearer-dummy daemon did not start");
     netConfMan = new QNetworkConfigurationManager(this);
     networkConfiguration = netConfMan->defaultConfiguration();
     networkSession.reset(new QNetworkSession(networkConfiguration));

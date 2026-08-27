@@ -31,8 +31,10 @@
 **
 ****************************************************************************/
 
+#include <QtNetwork/QNetworkConfigurationManager>
 #include <QtTest/QtTest>
 #include "../qbearertestcommon.h"
+#include "../../../helpers/testbearer.h"
 
 #ifndef QT_NO_BEARERMANAGEMENT
 #include <QtNetwork/qnetworkconfiguration.h>
@@ -46,12 +48,24 @@ class tst_QNetworkConfigurationManager : public QObject
 
 private slots:
 #ifndef QT_NO_BEARERMANAGEMENT
+    void initTestCase();
     void usedInThread(); // this test must be first, or it will falsely pass
     void allConfigurations();
     void defaultConfiguration();
     void configurationFromIdentifier();
 #endif
 };
+
+#ifndef QT_NO_BEARERMANAGEMENT
+// Start the bearer-dummy daemon and point the qbearerdummy engine at it (via $QT_BEARER_DUMMY_PORT)
+// BEFORE any QNetworkConfigurationManager is constructed, so this environment has a controllable set
+// of activatable configurations instead of none.
+void tst_QNetworkConfigurationManager::initTestCase()
+{
+    static QRef<TestBearer> bearer(new TestBearer, &TestBearer::dispose);
+    bearer->start();
+}
+#endif
 
 #ifndef QT_NO_BEARERMANAGEMENT
 void printConfigurationDetails(const QNetworkConfiguration& p)
@@ -63,6 +77,8 @@ void printConfigurationDetails(const QNetworkConfiguration& p)
 
 void tst_QNetworkConfigurationManager::allConfigurations()
 {
+    if (QNetworkConfigurationManager().allConfigurations().isEmpty())
+        QSKIP("no network (bearer) configurations in this environment");
     QNetworkConfigurationManager manager;
     QList<QNetworkConfiguration> preScanConfigs = manager.allConfigurations();
 

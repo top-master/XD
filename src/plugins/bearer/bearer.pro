@@ -1,5 +1,11 @@
 TEMPLATE = subdirs
 
+# XD test-support bearer engine (pairs with the bearer-dummy daemon + TestBearer): a controllable
+# set of fake, activatable network configurations so the headless bearer tests have configurations
+# and QNetworkSession can actually open/close one. Publishes nothing unless $QT_BEARER_DUMMY_PORT
+# points at a running bearer-dummy, so it is inert in normal use.
+SUBDIRS += dummy
+
 !android:linux*:qtHaveModule(dbus) {
     SUBDIRS += generic
     SUBDIRS += connman networkmanager
