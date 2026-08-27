@@ -45,6 +45,8 @@
 #endif
 
 #include <QtTest/QtTest>
+
+#include "../../../helpers/assertion.h"
 #include <qcoreapplication.h>
 #include <QDebug>
 #include <QTcpSocket>
@@ -179,15 +181,13 @@ tst_QHostInfo::~tst_QHostInfo()
 
 void tst_QHostInfo::initTestCase()
 {
-    QVERIFY(QtNetworkSettings::verifyTestNetworkSettings());
 #ifndef QT_NO_BEARERMANAGEMENT
     //start the default network
     netConfMan = new QNetworkConfigurationManager(this);
     networkConfiguration = netConfMan->defaultConfiguration();
     networkSession.reset(new QNetworkSession(networkConfiguration));
     if (!networkSession->isOpen()) {
-        networkSession->open();
-        QVERIFY(networkSession->waitForOpened(30000));
+        qExpect(networkSession.data())->to<OpenBefore>(5000);
     }
 #endif
 
@@ -342,8 +342,11 @@ void tst_QHostInfo::reverseLookup_data()
     QTest::addColumn<int>("err");
     QTest::addColumn<bool>("ipv6");
 
-    QTest::newRow("google-public-dns-a.google.com") << QString("8.8.8.8") << QStringList(QString("google-public-dns-a.google.com")) << 0 << false;
-    QTest::newRow("gitorious.org") << QString("87.238.52.168") << QStringList(QString("gitorious.org")) << 0 << false;
+    QTest::newRow("dns.google") << QString("8.8.8.8") << QStringList(QString("dns.google")) << 0 << false;
+    // A bare website domain such as example.com would read more naturally here, but a reverse
+    // lookup checks the address's PTR record, and example.com's (now CDN-hosted) address has no
+    // PTR at all; hence 1.1.1.1, which reverses cleanly and stably to one.one.one.one.
+    QTest::newRow("one.one.one.one") << QString("1.1.1.1") << QStringList(QString("one.one.one.one")) << 0 << false;
     QTest::newRow("bogus-name") << QString("1::2::3::4") << QStringList() << 1 << true;
 }
 

@@ -31,6 +31,7 @@
 **
 ****************************************************************************/
 
+#include <QtGui/QGuiApplication>
 #include <QtTest/QtTest>
 
 #include <private/qguiapplication_p.h>
@@ -289,6 +290,8 @@ void tst_qinputmethod::inputDirection()
 
 void tst_qinputmethod::inputMethodAccepted()
 {
+    if (QGuiApplication::platformName() == QLatin1String("offscreen"))
+        QSKIP("requires a real windowing platform; unavailable on the offscreen platform");
     if (!QGuiApplication::platformName().compare(QLatin1String("wayland"), Qt::CaseInsensitive))
         QSKIP("Wayland: This fails. Figure out why.");
 

@@ -112,6 +112,41 @@ public:
 
     // MARK: Condition helpers.
 
+    /// Runs a custom matcher: `qExpect(x)->to<MyMatcher>(arg1, ...)`. MyMatcher is
+    /// a class template on the actual's type; it is instantiated here as
+    /// MyMatcher<TActual>, a QExpectMatcher<TActual> subclass whose run() performs
+    /// the check. Up to 9 arguments are forwarded as QVariant.
+    template <template <typename> class TMatcher>
+    inline Self *to(const QVariant &arg1 = QVariant(), const QVariant &arg2 = QVariant(),
+                    const QVariant &arg3 = QVariant(), const QVariant &arg4 = QVariant(),
+                    const QVariant &arg5 = QVariant(), const QVariant &arg6 = QVariant(),
+                    const QVariant &arg7 = QVariant(), const QVariant &arg8 = QVariant(),
+                    const QVariant &arg9 = QVariant()) {
+        QT_QEXPECT_BEGIN
+
+        // Fail early with a clear message when the matcher does not derive it.
+        Q_STATIC_ASSERT_X((QtPrivate::is_base_of<QExpectMatcherBase, TMatcher<TActual> >::value),
+                          "qExpect(x)->to<M>(): M<actual-type> must be a QExpectMatcher subclass.");
+
+        const QVariant argv[9] = { arg1, arg2, arg3, arg4, arg5, arg6, arg7, arg8, arg9 };
+
+        TMatcher<TActual> matcher;
+        // Bind the matcher to this expectation for typed access to `actual`.
+        matcher.owner = this;
+        // Hand the matcher its arguments; prepare() sets its const args/argCount.
+        internalPrepare(&matcher, argv);
+
+        if (isFailed(matcher.run()) && pendingMessage.isEmpty()) {
+            messenger.fail(
+                QStringLiteral("Expectation not met."),
+                QStringLiteral("expected"), QStringLiteral("the matcher to pass"),
+                QStringLiteral("but"), QStringLiteral("it did not"));
+        }
+
+        inTestee = false;
+        return this;
+    }
+
     inline Self *toBeTruthy() {
         QT_QEXPECT_BEGIN
 
@@ -580,6 +615,28 @@ protected:
     }
     static inline bool m_isNull(...) { return false; }
 #endif
+};
+
+/// Typed base for a custom matcher (see QExpectMatcherBase). Adds access to the
+/// owning expectation, hence to the expected value (`owner->actual`) and to
+/// failure reporting, so a subclass's run() can check `owner->actual` against
+/// whatever it expects. Subclass this as a template on the actual type; see
+/// tests/auto/helpers/assertion.h (OpenBefore).
+template <typename TActual>
+class QExpectMatcher : public QExpectMatcherBase {
+public:
+    inline QExpectMatcher() : owner(Q_NULLPTR) {}
+
+    /// The qExpect(...) instance under test; set by Expectation::to().
+    Expectation<TActual> *owner;
+
+protected:
+    void reportFail(const QString &message) Q_DECL_OVERRIDE {
+        owner->messenger.fail(
+            QStringLiteral("Expectation not met."),
+            QStringLiteral("expected"), message,
+            QStringLiteral("but"), QStringLiteral("it was not"));
+    }
 };
 
 /// Ensures users don't mix `.` and `->` operators, use #qExpect macro instead.

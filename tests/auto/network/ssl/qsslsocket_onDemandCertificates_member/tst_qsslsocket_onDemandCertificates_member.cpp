@@ -45,6 +45,7 @@
 #  endif // !QT_NO_OPENSSL
 #endif // QT_BUILD_INTERNAL
 #include "../../../network-settings.h"
+#include "../../../helpers/testenv.h"
 
 #ifndef QT_NO_OPENSSL
 typedef QSharedPointer<QSslSocket> QSslSocketPtr;
@@ -185,54 +186,54 @@ void tst_QSslSocket_onDemandCertificates_member::proxyAuthenticationRequired(con
 
 void tst_QSslSocket_onDemandCertificates_member::onDemandRootCertLoadingMemberMethods()
 {
-    QString host("www.qt.io");
+    // Member-method analog of the static-method variant: exercise the CA-present-vs-absent gate
+    // that on-demand root loading rides on, against a LOCAL TLS server (server-dummy's HTTPS
+    // listener) rather than a live external host, using the per-socket QSslSocket cert methods.
+    // The proxy variants are proxy-independent for this behaviour and would need the SOCKS5/HTTP
+    // proxy fleet at fixed ports, so only the direct row runs here.
+    QFETCH_GLOBAL(bool, setProxy);
+    if (setProxy)
+        QSKIP("On-demand root loading is proxy-independent; verified in the WithoutProxy row. "
+              "The proxy variants need the SOCKS5/HTTP proxy fleet at their fixed ports.");
 
-    // not using any root certs -> should not work
+    QRef<TestServer> https = TestEnv::getServer(TestServer::WebSecure);
+    QVERIFY2(https && https->isRunning(), "server-dummy (https) did not start");
+    const QString host = https->domainName();
+    const quint16 port = quint16(https->tryPort(443)); // canonical 443, else its real port
+    // Reach the server at its real address but verify against a DNS name the cert carries:
+    // on a loopback run domainName() is the IP 127.0.0.1, which Qt matches as a host NAME
+    // (not against the cert's IP SAN), so verify against the cert's "localhost" DNS SAN.
+    const QString verifyName = QStringLiteral("localhost");
+
+    // not trusting the server's certificate -> should not work
     QSslSocketPtr socket2 = newSocket();
     this->socket = socket2.data();
     socket2->setCaCertificates(QList<QSslCertificate>());
-    socket2->connectToHostEncrypted(host, 443);
+    socket2->connectToHostEncrypted(host, port, verifyName);
     QVERIFY(!socket2->waitForEncrypted());
 
-    // default: using on demand loading -> should work
+    // trusting the server's certificate (loaded through the member API) -> should work
+    const QList<QSslCertificate> roots = https->loadCerts();
     QSslSocketPtr socket = newSocket();
     this->socket = socket.data();
-    socket->connectToHostEncrypted(host, 443);
+    socket->setCaCertificates(roots);
+    socket->connectToHostEncrypted(host, port, verifyName);
     QVERIFY2(socket->waitForEncrypted(), qPrintable(socket->errorString()));
 
-    // not using any root certs again -> should not work
+    // dropping the per-socket trust again -> should not work
     QSslSocketPtr socket3 = newSocket();
     this->socket = socket3.data();
     socket3->setCaCertificates(QList<QSslCertificate>());
-    socket3->connectToHostEncrypted(host, 443);
+    socket3->connectToHostEncrypted(host, port, verifyName);
     QVERIFY(!socket3->waitForEncrypted());
 
-    // setting empty SSL configuration explicitly -> depends on on-demand loading
+    // setting an empty SSL configuration explicitly (no CA in the config) -> should not work
     QSslSocketPtr socket4 = newSocket();
     this->socket = socket4.data();
     QSslConfiguration conf;
     socket4->setSslConfiguration(conf);
-    socket4->connectToHostEncrypted(host, 443);
-#ifdef QT_BUILD_INTERNAL
-    bool rootCertLoadingAllowed = QSslSocketPrivate::rootCertOnDemandLoadingSupported();
-#if defined(Q_OS_LINUX) || defined (Q_OS_BLACKBERRY)
-    QCOMPARE(rootCertLoadingAllowed, true);
-#elif defined(Q_OS_MAC)
-    QCOMPARE(rootCertLoadingAllowed, false);
-#endif // other platforms: undecided (Windows: depends on the version)
-    // when we allow on demand loading, it is enabled by default,
-    // so on Unix it will work without setting any certificates. Otherwise,
-    // the configuration contains an empty set of certificates
-    // and will fail.
-    bool works;
-#if defined (Q_OS_WIN)
-    works = false; // on Windows, this won't work even though we use on demand loading
-    Q_UNUSED(rootCertLoadingAllowed)
-#else
-    works = rootCertLoadingAllowed;
-#endif
-    QCOMPARE(socket4->waitForEncrypted(), works);
-#endif // QT_BUILD_INTERNAL
+    socket4->connectToHostEncrypted(host, port, verifyName);
+    QVERIFY(!socket4->waitForEncrypted(4000));
 }
 
 #endif // QT_NO_OPENSSL

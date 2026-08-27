@@ -32,6 +32,7 @@
 ****************************************************************************/
 
 
+#include <QtGui/QGuiApplication>
 #include <QtTest/QtTest>
 #include <qgraphicswidget.h>
 #include <qgraphicsscene.h>
@@ -1768,6 +1769,8 @@ void tst_QGraphicsWidget::verifyFocusChain()
 
 void tst_QGraphicsWidget::updateFocusChainWhenChildDie()
 {
+    if (QGuiApplication::platformName() == QLatin1String("offscreen"))
+        QSKIP("requires a real windowing platform; unavailable on the offscreen platform");
     const QRect availableGeometry = QGuiApplication::primaryScreen()->availableGeometry();
     QGraphicsScene scene;
     QGraphicsView view(&scene);

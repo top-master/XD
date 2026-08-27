@@ -32,6 +32,7 @@
 ****************************************************************************/
 
 
+#include <QtGui/QGuiApplication>
 #include <QtTest/QtTest>
 
 #include <qtextedit.h>
@@ -2211,6 +2212,8 @@ void tst_QTextEdit::preserveCharFormatAfterUnchangingSetPosition()
 // Regression test for QTBUG-4696
 void tst_QTextEdit::twoSameInputMethodEvents()
 {
+    if (QGuiApplication::platformName() == QLatin1String("offscreen"))
+        QSKIP("requires a real windowing platform; unavailable on the offscreen platform");
     ed->setText("testLine");
     ed->show();
     QList<QInputMethodEvent::Attribute> attributes;

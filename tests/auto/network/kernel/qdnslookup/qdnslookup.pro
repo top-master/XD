@@ -5,4 +5,4 @@ TARGET = tst_qdnslookup
 
 SOURCES  += tst_qdnslookup.cpp
 
-QT = core network testlib
+QT = core network-private testlib

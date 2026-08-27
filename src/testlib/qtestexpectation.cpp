@@ -61,6 +61,64 @@ ExpectationBase::~ExpectationBase() Q_DECL_NOEXCEPT_EXPR(false)
     throwIfPending();
 }
 
+// Hands a matcher its call arguments (this class is QExpectMatcherBase's friend,
+// so it can drive the private prepare that keeps args/argCount const).
+void ExpectationBase::internalPrepare(QExpectMatcherBase *matcher,
+                                      const QVariant *args) const
+{
+    matcher->prepare(args);
+}
+
+// QExpectMatcherBase members are defined out-of-line so its vtable is anchored here.
+
+QExpectMatcherBase::QExpectMatcherBase()
+    : args(Q_NULLPTR)
+    , argCount(-1)
+{
+}
+
+QExpectMatcherBase::~QExpectMatcherBase()
+{
+}
+
+/// Sets the const #args (via const_cast) and, unless a subclass already preset
+/// #argCount, derives #argCount from the args. Reached only by ExpectationBase
+/// (its friend) through internalPrepare().
+void QExpectMatcherBase::prepare(const QVariant *argsArg)
+{
+    // Only this setter mutates the const members.
+    const_cast<const QVariant *&>(args) = argsArg;
+
+    // A subclass may preset argCount; -1 means it did not, so derive it from the
+    // args, where the last valid one determines the count (argsArg is the fixed
+    // QVariant[9] that Expectation::to() fills).
+    if (argCount == -1) {
+        int derived = 0;
+        for (int i = 0; i < 9; ++i) {
+            if (argsArg[i].isValid())
+                derived = i + 1;
+        }
+        const_cast<int &>(argCount) = derived;
+    }
+}
+
+bool QExpectMatcherBase::requireArgCount(int count)
+{
+    if (argCount == count)
+        return true;
+    reportFail(QStringLiteral("wrong argument count (expected ")
+               + QString::number(count) + QStringLiteral(", got ")
+               + QString::number(argCount) + QStringLiteral(")"));
+    return false;
+}
+
+void QExpectMatcherBase::reportFail(const QString &message)
+{
+    // Fallback for a matcher not derived from QExpectMatcher<TActual> (which
+    // overrides this to fail through the expectation's typed messenger).
+    qWarning("qExpect matcher failed: %s", qPrintable(message));
+}
+
 void QTest::ExpectationBase::throwIfPending()
 {
     const QString &message = this->pendingMessage;

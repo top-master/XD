@@ -32,6 +32,7 @@
 ****************************************************************************/
 
 
+#include <QtGui/QGuiApplication>
 #include <QtTest/QtTest>
 
 #include <private/qgraphicsitem_p.h>
@@ -11122,6 +11123,8 @@ void tst_QGraphicsItem::deviceCoordinateCache_simpleRotations()
 
 void tst_QGraphicsItem::QTBUG_5418_textItemSetDefaultColor()
 {
+    if (QGuiApplication::platformName() == QLatin1String("offscreen"))
+        QSKIP("requires a real windowing platform; unavailable on the offscreen platform");
     struct Item : public QGraphicsTextItem
     {
         int painted;

@@ -31,6 +31,7 @@
 **
 ****************************************************************************/
 
+#include <QtGui/QFontDatabase>
 #include <QtTest/QtTest>
 #include <QtGui/QGuiApplication>
 #include <QtGui/QPainter>
@@ -163,6 +164,8 @@ void tst_QStaticText::drawToPoint_data()
 
 void tst_QStaticText::drawToPoint()
 {
+    if (QFontDatabase().families().isEmpty())
+        QSKIP("no fonts installed in this environment; font metrics/rendering are degenerate");
     QFETCH(QStaticText::PerformanceHint, performanceHint);
 
     QPixmap imageDrawText(1000, 1000);
@@ -196,6 +199,8 @@ void tst_QStaticText::drawToRect_data()
 
 void tst_QStaticText::drawToRect()
 {
+    if (QFontDatabase().families().isEmpty())
+        QSKIP("no fonts installed in this environment; font metrics/rendering are degenerate");
     QFETCH(QStaticText::PerformanceHint, performanceHint);
 
     QPixmap imageDrawText(1000, 1000);
@@ -228,6 +233,8 @@ void tst_QStaticText::drawToRect()
 
 void tst_QStaticText::prepareToCorrectData()
 {
+    if (QFontDatabase().families().isEmpty())
+        QSKIP("no fonts installed in this environment; font metrics/rendering are degenerate");
     QTransform transform;
     transform.scale(2.0, 2.0);
     transform.translate(100, 10);
@@ -266,6 +273,8 @@ void tst_QStaticText::prepareToCorrectData()
 
 void tst_QStaticText::prepareToWrongData()
 {
+    if (QFontDatabase().families().isEmpty())
+        QSKIP("no fonts installed in this environment; font metrics/rendering are degenerate");
     QTransform transform;
     transform.scale(2.0, 2.0);
     transform.rotate(90, Qt::ZAxis);
@@ -294,6 +303,8 @@ void tst_QStaticText::prepareToWrongData()
 
 void tst_QStaticText::setFont()
 {
+    if (QFontDatabase().families().isEmpty())
+        QSKIP("no fonts installed in this environment; font metrics/rendering are degenerate");
     QFont font = QGuiApplication::font();
     font.setBold(true);
     font.setPointSize(28);
@@ -334,6 +345,8 @@ void tst_QStaticText::setFont()
 
 void tst_QStaticText::setTextWidth()
 {
+    if (QFontDatabase().families().isEmpty())
+        QSKIP("no fonts installed in this environment; font metrics/rendering are degenerate");
     QPixmap imageDrawText(1000, 1000);
     imageDrawText.fill(Qt::white);
     {
@@ -357,6 +370,8 @@ void tst_QStaticText::setTextWidth()
 
 void tst_QStaticText::translatedPainter()
 {
+    if (QFontDatabase().families().isEmpty())
+        QSKIP("no fonts installed in this environment; font metrics/rendering are degenerate");
     QPixmap imageDrawText(1000, 1000);
     imageDrawText.fill(Qt::white);
     {
@@ -391,6 +406,8 @@ bool tst_QStaticText::supportsTransformations() const
 
 void tst_QStaticText::rotatedPainter()
 {
+    if (QFontDatabase().families().isEmpty())
+        QSKIP("no fonts installed in this environment; font metrics/rendering are degenerate");
     QPixmap imageDrawText(1000, 1000);
     imageDrawText.fill(Qt::white);
     {
@@ -424,6 +441,8 @@ void tst_QStaticText::rotatedPainter()
 
 void tst_QStaticText::scaledPainter()
 {
+    if (QFontDatabase().families().isEmpty())
+        QSKIP("no fonts installed in this environment; font metrics/rendering are degenerate");
     QPixmap imageDrawText(1000, 1000);
     imageDrawText.fill(Qt::white);
     {
@@ -538,6 +557,8 @@ void tst_QStaticText::rotatedScaledAndTranslatedPainter()
 
 void tst_QStaticText::transformationChanged()
 {
+    if (QFontDatabase().families().isEmpty())
+        QSKIP("no fonts installed in this environment; font metrics/rendering are degenerate");
     QPixmap imageDrawText(1000, 1000);
     imageDrawText.fill(Qt::white);
     {
@@ -581,6 +602,8 @@ void tst_QStaticText::transformationChanged()
 
 void tst_QStaticText::plainTextVsRichText()
 {
+    if (QFontDatabase().families().isEmpty())
+        QSKIP("no fonts installed in this environment; font metrics/rendering are degenerate");
     QPixmap imagePlainText(1000, 1000);
     imagePlainText.fill(Qt::white);
     {
