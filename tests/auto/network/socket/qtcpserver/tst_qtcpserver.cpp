@@ -45,6 +45,9 @@
 
 #include <QtTest/QtTest>
 
+#include "../../../helpers/assertion.h"
+#include "../../../helpers/testenv.h"
+
 #ifndef Q_OS_WIN
 #include <unistd.h>
 #include <sys/ioctl.h>
@@ -120,6 +123,8 @@ private slots:
 private:
 #ifndef QT_NO_BEARERMANAGEMENT
     QNetworkSession *networkSession;
+    QRef<TestServer> m_proxyServer; // server-dummy providing the SOCKS5 proxy for the WithSocks5Proxy rows
+    quint16 m_socksPort;
 #endif
     QString crashingServerDir;
 };
@@ -168,9 +173,17 @@ void tst_QTcpServer::initTestCase()
 #ifndef QT_NO_BEARERMANAGEMENT
     QNetworkConfigurationManager man;
     networkSession = new QNetworkSession(man.defaultConfiguration(), this);
-    networkSession->open();
-    QVERIFY(networkSession->waitForOpened());
+    qExpect(networkSession)->to<OpenBefore>(30000);
 #endif
+    // The SOCKS5 rows drive an application proxy; provide it via server-dummy rather than
+    // a hard-coded port. tryPort aims for the canonical 1080 but falls back to a free port,
+    // and the SOCKS5 service listens on the secondary (echo) port.
+    m_socksPort = 1080;
+    m_proxyServer = TestEnv::getServer(TestServer::WebProxy);
+    if (m_proxyServer && m_proxyServer->isRunning()) {
+        m_proxyServer->tryPort(1080);
+        m_socksPort = m_proxyServer->echoPort();
+    }
 }
 
 void tst_QTcpServer::init()
@@ -180,7 +193,7 @@ void tst_QTcpServer::init()
 #ifndef QT_NO_NETWORKPROXY
         QFETCH_GLOBAL(int, proxyType);
         if (proxyType == QNetworkProxy::Socks5Proxy) {
-            QNetworkProxy::setApplicationProxy(QNetworkProxy(QNetworkProxy::Socks5Proxy, QtNetworkSettings::serverName(), 1080));
+            QNetworkProxy::setApplicationProxy(QNetworkProxy(QNetworkProxy::Socks5Proxy, m_proxyServer->domainName(), m_socksPort));
         }
 #else // !QT_NO_NETWORKPROXY
         QSKIP("No proxy support");
@@ -472,8 +485,14 @@ void tst_QTcpServer::waitForConnectionTest()
 #endif // QT_NO_NETWORKPROXY
     }
 
+    // Discover the local address an outbound TCP connection uses. Upstream connects to the
+    // public test server's IMAP port for this; on a loopback-only (Fil-C) run there is no
+    // such routable host, and that always resolves to 127.0.0.1 anyway. Connect to a
+    // throwaway local listener instead -- same purpose, no external dependency.
+    QTcpServer localProbe;
+    QVERIFY(localProbe.listen(QHostAddress(QHostAddress::LocalHost)));
     QTcpSocket findLocalIpSocket;
-    findLocalIpSocket.connectToHost(QtNetworkSettings::serverName(), 143);
+    findLocalIpSocket.connectToHost(localProbe.serverAddress(), localProbe.serverPort());
     QVERIFY(findLocalIpSocket.waitForConnected(5000));
 
     QTcpServer server;
@@ -568,9 +587,6 @@ void tst_QTcpServer::addressReusable()
 #ifdef QT_NO_PROCESS
     QSKIP("No qprocess support", SkipAll);
 #else
-#ifdef Q_OS_LINUX
-    QSKIP("The addressReusable test is unstable on Linux. See QTBUG-39985.");
-#endif
     QFETCH_GLOBAL(bool, setProxy);
     if (setProxy) {
 #ifndef QT_NO_NETWORKPROXY

@@ -31,6 +31,7 @@
 **
 ****************************************************************************/
 
+#include <QtGui/QFontDatabase>
 #include <QtTest/QtTest>
 
 #include <qfontdatabase.h>
@@ -221,6 +222,8 @@ void tst_QFontDatabase::addAppFont_data()
 
 void tst_QFontDatabase::addAppFont()
 {
+    if (QFontDatabase().families().isEmpty())
+        QSKIP("no fonts installed in this environment; font metrics/rendering are degenerate");
     QFETCH(bool, useMemoryFont);
     QSignalSpy fontDbChangedSpy(QGuiApplication::instance(), SIGNAL(fontDatabaseChanged()));
 
@@ -269,6 +272,8 @@ void tst_QFontDatabase::addAppFont()
 
 void tst_QFontDatabase::aliases()
 {
+    if (QFontDatabase().families().isEmpty())
+        QSKIP("no fonts installed in this environment; font metrics/rendering are degenerate");
     QFontDatabase db;
     const QStringList families = db.families();
     QVERIFY(!families.isEmpty());
@@ -282,6 +287,8 @@ void tst_QFontDatabase::aliases()
 
 void tst_QFontDatabase::fallbackFonts()
 {
+    if (QFontDatabase().families().isEmpty())
+        QSKIP("no fonts installed in this environment; font metrics/rendering are degenerate");
     QTextLayout layout;
     QString s;
     s.append(QChar(0x31));

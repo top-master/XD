@@ -32,6 +32,7 @@
 ****************************************************************************/
 
 
+#include <QtGui/QImageReader>
 #include <QtTest/QtTest>
 #include <qpixmap.h>
 #include <qbitmap.h>
@@ -1410,6 +1411,8 @@ void tst_QPixmap::fromImageReaderAnimatedGif_data()
 
 void tst_QPixmap::fromImageReaderAnimatedGif()
 {
+    if (!QImageReader::supportedImageFormats().contains("gif"))
+        QSKIP("no GIF image handler available in this build");
     QFETCH(QString, imagePath);
 
     const QString path = m_loadFromData + imagePath;

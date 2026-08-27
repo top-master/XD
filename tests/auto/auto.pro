@@ -1,6 +1,9 @@
 TEMPLATE = subdirs
 
+include($$PWD/helpers/test-env.pri)
+
 SUBDIRS += \
+    helpers \
     corelib \
     dbus \
     gui \

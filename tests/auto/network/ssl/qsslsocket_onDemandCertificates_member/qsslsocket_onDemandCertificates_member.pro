@@ -2,7 +2,8 @@ CONFIG += testcase
 CONFIG += parallel_test
 testcase.timeout = 300 # this test is slow
 
-SOURCES += tst_qsslsocket_onDemandCertificates_member.cpp
+SOURCES += tst_qsslsocket_onDemandCertificates_member.cpp \
+           ../../../helpers/testserver.cpp   # TestServer::loadCerts()/installTrustSystemWide()
 win32:!wince: LIBS += -lws2_32
 QT = core core-private network-private testlib
 
