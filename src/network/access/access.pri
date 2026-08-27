@@ -10,6 +10,7 @@ HEADERS += \
     access/qabstractprotocolhandler_p.h \
     access/qhttpprotocolhandler_p.h \
     access/qspdyprotocolhandler_p.h \
+    access/qhttp2protocolhandler_p.h \
     access/qnetworkaccessauthenticationmanager_p.h \
     access/qnetworkaccessmanager.h \
     access/qnetworkaccessmanager_p.h \
@@ -49,6 +50,7 @@ SOURCES += \
     access/qabstractprotocolhandler.cpp \
     access/qhttpprotocolhandler.cpp \
     access/qspdyprotocolhandler.cpp \
+    access/qhttp2protocolhandler.cpp \
     access/qnetworkaccessauthenticationmanager.cpp \
     access/qnetworkaccessmanager.cpp \
     access/qnetworkaccesscache.cpp \
@@ -73,3 +75,4 @@ SOURCES += \
 mac: LIBS_PRIVATE += -framework Security
 
 include($$PWD/../../3rdparty/zlib_dependency.pri)
+include($$PWD/http2/http2.pri)
