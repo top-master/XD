@@ -1,6 +1,6 @@
 CONFIG += testcase
 TARGET = tst_qiodevice
-QT = core network testlib
+QT = core-private network-private testlib
 SOURCES = tst_qiodevice.cpp
 
 TESTDATA += tst_qiodevice.cpp

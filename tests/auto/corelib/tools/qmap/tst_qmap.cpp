@@ -34,6 +34,10 @@
 #include <qmap.h>
 #include <QtTest/QtTest>
 #include <QDebug>
+#if defined(Q_OS_LINUX)
+#  include <cstdio>    // popen/fread/pclose for the iterator past-end death-test
+#  include <unistd.h>  // readlink("/proc/self/exe")
+#endif
 
 
 class tst_QMap : public QObject
@@ -80,6 +84,8 @@ private slots:
     void testInsertWithHint();
     void testInsertMultiWithHint();
     void eraseValidIteratorOnSharedMap();
+    void eraseAdvancedIteratorWalkUseAfterFree();
+    void iteratorFetchPastEndAsserts();
 };
 
 struct IdentityTracker {
@@ -1469,6 +1475,104 @@ void tst_QMap::eraseValidIteratorOnSharedMap()
     QCOMPARE(ms1.size(), 2);
     QCOMPARE(ms2.size(), 2);
     QCOMPARE(ms3.size(), 3);
+}
+
+void tst_QMap::eraseAdvancedIteratorWalkUseAfterFree()
+{
+    // erase(it++) is unsafe on a QMap: the post-increment advances the iterator to
+    // the successor node first, then erase() frees the current node and red-black
+    // rebalances -- a rebalance that can free the very node the advanced iterator now
+    // holds. Dereferencing it on the next turn, and a later find() (which walks
+    // findNode() down from the root over the same tree), then read a freed node. A
+    // multi-valued key with several siblings is the shape that reaches such a node.
+    QMultiMap<int, int> map;
+    for (int priority = 0; priority < 8; ++priority) {
+        for (int sibling = 0; sibling < 4; ++sibling)
+            map.insertMulti(priority, priority * 100 + sibling);
+    }
+
+    const int toErase = map.size() / 2;
+    QMultiMap<int, int>::iterator it = map.begin();
+    for (int a = 0; a < toErase; ++a) {
+        // Reads the iterator the previous turn advanced; a freed node here is the
+        // use-after-free.
+        volatile int sink = it.value();
+        Q_UNUSED(sink);
+        map.erase(it++);
+    }
+
+    // find() walks findNode() from the root; over the tree the dangling erase left
+    // behind it lands on a freed node.
+    for (int priority = 0; priority < 8; ++priority) {
+        QMultiMap<int, int>::iterator found = map.find(priority);
+        for (; found != map.end() && found.key() == priority; ++found) {
+            volatile int sink = found.value();
+            Q_UNUSED(sink);
+        }
+    }
+}
+
+// end() is the map header (a bare QMapNodeBase with no key/value) and an iterator advanced past it
+// is null; fetching key()/value()/operator* from either is out of bounds and, under a bounds-checked
+// runtime like Fil-C, a hard panic with no context. qmap.h now guards every fetch with
+// Q_ASSERT_X(i && i->parent(), ...). This death-test reproduces each illegal fetch in a child process
+// and requires it to abort with that guard's message -- never a silent read, never an opaque panic.
+void tst_QMap::iteratorFetchPastEndAsserts()
+{
+#if !defined(Q_OS_LINUX)
+    QSKIP("death-test relies on /proc/self/exe + popen (Linux only)");
+#elif defined(QT_NO_DEBUG)
+    QSKIP("Q_ASSERT_X is compiled out (QT_NO_DEBUG); the past-end guard only fires in an assert-enabled build");
+#else
+    const QByteArray scenario = qgetenv("QMAP_DEATH_SCENARIO");
+    if (!scenario.isEmpty()) {
+        // CHILD: perform one illegal fetch. The guard must abort before the out-of-bounds read;
+        // reaching the fprintf means it failed to fire.
+        QMap<int, QString> m;
+        m.insert(1, QStringLiteral("one"));
+        m.insert(2, QStringLiteral("two"));
+        QMultiMap<int, int> mm;
+        mm.insertMulti(5, 50);
+        if (scenario == "deref-end") {
+            const QString &v = *m.constEnd(); Q_UNUSED(v);
+        } else if (scenario == "key-end") {
+            const int k = m.constEnd().key(); Q_UNUSED(k);
+        } else if (scenario == "past-end") {
+            QMap<int, QString>::const_iterator e = m.constEnd();
+            ++e;                               // advancing to a past-the-end (null) iterator is allowed
+            const QString &v = e.value(); Q_UNUSED(v); // ... fetching from it is not
+        } else if (scenario == "mm-deref-end") {
+            const int v = *mm.constEnd(); Q_UNUSED(v);
+        }
+        std::fprintf(stderr, "NO-ABORT\n");
+        std::fflush(stderr);
+        return;
+    }
+
+    // PARENT: relaunch this one test function per scenario and require the guard's message.
+    char exe[4096];
+    const ssize_t n = ::readlink("/proc/self/exe", exe, sizeof(exe) - 1);
+    QVERIFY(n > 0);
+    exe[n] = '\0';
+    const QList<QByteArray> scenarios = QList<QByteArray>()
+        << "deref-end" << "key-end" << "past-end" << "mm-deref-end";
+    for (int i = 0; i < scenarios.size(); ++i) {
+        const QByteArray cmd = "QMAP_DEATH_SCENARIO=" + scenarios.at(i) + " '" + QByteArray(exe)
+                             + "' iteratorFetchPastEndAsserts -nocrashhandler 2>&1";
+        FILE *p = popen(cmd.constData(), "r");
+        QVERIFY(p);
+        QByteArray out;
+        char buf[512];
+        size_t r;
+        while ((r = fread(buf, 1, sizeof(buf), p)) > 0)
+            out.append(buf, int(r));
+        pclose(p);
+        QVERIFY2(out.contains("iterator is end() or past it"),
+                 (scenarios.at(i) + ": expected the past-end guard assert; got: " + out.left(400)).constData());
+        QVERIFY2(!out.contains("NO-ABORT"),
+                 (scenarios.at(i) + ": fetching past end() did not abort").constData());
+    }
+#endif
 }
 
 QTEST_APPLESS_MAIN(tst_QMap)

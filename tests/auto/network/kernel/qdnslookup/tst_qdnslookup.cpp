@@ -33,8 +33,15 @@
 
 
 #include <QtTest/QtTest>
+#include <QtCore/QSet>
+#include <QtCore/QScopedPointer>
 #include <QtNetwork/QDnsLookup>
+#include <QtNetwork/QDnsOverride>
 #include <QtNetwork/QHostAddress>
+#include <QtNetwork/QHostInfo>
+
+#include "../../../helpers/testenv.h"
+#include "../../../helpers/testcoverage.h"
 
 static bool waitForDone(QDnsLookup *lookup)
 {
@@ -54,14 +61,28 @@ class tst_QDnsLookup: public QObject
     QString domainName(const QString &input);
     QString domainNameList(const QString &input);
     QStringList domainNameListAlternatives(const QString &input);
+    // Soft verification: returns true iff every record matched; on the first mismatch it fills
+    // *detail and returns false instead of hard-failing, so a failed real-internet attempt can be
+    // downgraded to a skip rather than a test failure.
+    bool runLookup(const QHostAddress &nameserver, quint16 port, QString *detail = 0);
+
+    /// Lets the internet-facing lookup() skip, without internet, a row the bundled
+    /// server-dummy DNS already verified.
+    OfflineCoverageRow m_serverDummyCoverage;
+    QRef<TestServer> m_dnsServer;
 public slots:
     void initTestCase();
 
 private slots:
     void lookup_data();
+    // The offline server-dummy variant runs first (declaration order) so lookup() can skip
+    // any row it already verified.
+    void lookupServerDummy_data();
+    void lookupServerDummy();
     void lookup();
     void lookupReuse();
     void lookupAbortRetry();
+    void hostInfoOverride();
 };
 
 void tst_QDnsLookup::initTestCase()
@@ -209,6 +230,68 @@ static QByteArray msgDnsLookup(QDnsLookup::Error actualError,
 
 void tst_QDnsLookup::lookup()
 {
+    // The plain lookup uses the system resolver (the real internet); the qt-project.org test
+    // zone is still served publicly, hence most rows really do verify online. A failed online
+    // attempt skips only when the offline server-dummy sibling already proved the row:
+    // * without internet, since the row cannot run;
+    // * for an ANY row, since a public resolver may refuse or shrink an ANY query on purpose
+    //   (RFC 8482), whatever our code does.
+    // Any other failure with internet fails, such as a retired record.
+    //
+    // An ANY row asks a public resolver that answers ANY in full (Quad9)
+    // instead, where the system resolver may be one that refuses it.
+    // That resolver still drops a query now and then, and a drop is random;
+    // hence an ANY row asks up to 3 times before it gives up, but only
+    // once without internet, where every attempt would fail the same way.
+    static const char anyResolver[] = "9.9.9.9";
+    QFETCH(int, type);
+    const bool any = type == int(QDnsLookup::ANY);
+    const QHostAddress resolver = any
+        ? QHostAddress(QLatin1String(anyResolver)) : QHostAddress();
+    const int attempts = any ? 3 : 1;
+    QString detail;
+    for (int attempt = 0; attempt < attempts; ++attempt) {
+        if (runLookup(resolver, 53, &detail)) {
+            return;
+        }
+        if (attempt == 0 && attempts > 1 && ! TestEnv::hasInternet()) {
+            break;
+        }
+    }
+    if (m_serverDummyCoverage.isCovered()) {
+        TestEnv::assertInternet(QLL("Already verified against the bundled server-dummy DNS."), detail);
+        if (type == int(QDnsLookup::ANY)) {
+            QSKIP(qPrintable(QStringLiteral("The public resolver refused or shrank this ANY query (")
+                             + detail + QStringLiteral("), as RFC 8482 allows; already verified against the bundled server-dummy DNS.")));
+        }
+    }
+    QVERIFY2(false, qPrintable(QStringLiteral("Real-internet lookup failed: ") + detail));
+}
+
+void tst_QDnsLookup::lookupServerDummy_data()
+{
+    lookup_data();
+}
+
+void tst_QDnsLookup::lookupServerDummy()
+{
+    // Point QDnsLookup at the bundled server-dummy DNS on loopback via the nameserver-port
+    // API, so the whole zone the test needs is answered locally without any internet.
+    m_dnsServer = TestEnv::getServer(TestServer::NameLookup);
+    QVERIFY2(m_dnsServer && m_dnsServer->isRunning(), "server-dummy (dns) did not start");
+    QString detail;
+    const bool ok = runLookup(QHostAddress(QHostAddress::LocalHost), m_dnsServer->port(), &detail);
+    // server-dummy is our own code and must match exactly, so here a mismatch IS a hard failure.
+    QVERIFY2(ok, qPrintable(QStringLiteral("server-dummy DNS mismatch: ") + detail));
+    m_serverDummyCoverage.cover();
+}
+
+// Soft check for runLookup(): on a miss, record why in *detail and bail with false instead of
+// hard-failing, so the caller can turn a failed real-internet attempt into a skip.
+#define DNS_SOFT(cond, msg) do { if (!(cond)) { if (detail) *detail = (msg); return false; } } while (0)
+
+bool tst_QDnsLookup::runLookup(const QHostAddress &nameserver, quint16 port, QString *detail)
+{
     QFETCH(int, type);
     QFETCH(QString, domain);
     QFETCH(int, error);
@@ -231,33 +314,45 @@ void tst_QDnsLookup::lookup()
     QStringList mx_alternatives = domainNameListAlternatives(mx);
     QStringList srv_alternatives = domainNameListAlternatives(srv);
 
-    QDnsLookup lookup;
+    // The plain `QDnsLookup` asks the system resolver for a null nameserver, and asks one on
+    // port 53 through `QDnsLookup::setNameserver()`. It asks port 53 only; hence any other port
+    // is reached over UDP through `QDnsOverride`, which IS a `QDnsLookup`.
+    QScopedPointer<QDnsLookup> lookupHolder(
+        nameserver.isNull() || port == 53 ? new QDnsLookup
+                                          : new QDnsOverride(
+                                              nameserver,
+                                              port
+                                          ));
+    QDnsLookup &lookup = *lookupHolder;
+    if ( ! nameserver.isNull() && port == 53) {
+        lookup.setNameserver(nameserver);
+    }
     lookup.setType(static_cast<QDnsLookup::Type>(type));
     lookup.setName(domain);
     lookup.lookup();
-    QVERIFY(waitForDone(&lookup));
-    QVERIFY(lookup.isFinished());
+    DNS_SOFT(waitForDone(&lookup), QStringLiteral("lookup did not finish in time"));
+    DNS_SOFT(lookup.isFinished(), QStringLiteral("lookup is not finished"));
 
 #if defined(Q_OS_ANDROID)
     if (lookup.errorString() == QStringLiteral("Not yet supported on Android"))
-        QEXPECT_FAIL("", "Not yet supported on Android", Abort);
+        DNS_SOFT(false, QStringLiteral("Not yet supported on Android"));
 #endif
 
-    QVERIFY2(int(lookup.error()) == error,
-             msgDnsLookup(lookup.error(), error, domain, cname, host, srv, mx, ns, ptr, lookup.errorString()));
+    DNS_SOFT(int(lookup.error()) == error,
+             QString::fromUtf8(msgDnsLookup(lookup.error(), error, domain, cname, host, srv, mx, ns, ptr, lookup.errorString())));
     if (error == QDnsLookup::NoError)
-        QVERIFY(lookup.errorString().isEmpty());
-    QCOMPARE(int(lookup.type()), type);
-    QCOMPARE(lookup.name(), domain);
+        DNS_SOFT(lookup.errorString().isEmpty(), QStringLiteral("unexpected error string: ") + lookup.errorString());
+    DNS_SOFT(int(lookup.type()) == type, QStringLiteral("type mismatch"));
+    DNS_SOFT(lookup.name() == domain, QStringLiteral("name mismatch: ") + lookup.name());
 
     // canonical names
     if (!cname.isEmpty()) {
-        QVERIFY(!lookup.canonicalNameRecords().isEmpty());
+        DNS_SOFT(!lookup.canonicalNameRecords().isEmpty(), QStringLiteral("missing CNAME record"));
         const QDnsDomainNameRecord cnameRecord = lookup.canonicalNameRecords().first();
-        QCOMPARE(cnameRecord.name(), domain);
-        QCOMPARE(cnameRecord.value(), cname);
+        DNS_SOFT(cnameRecord.name() == domain, QStringLiteral("CNAME owner mismatch"));
+        DNS_SOFT(cnameRecord.value() == cname, QStringLiteral("CNAME value mismatch"));
     } else {
-        QVERIFY(lookup.canonicalNameRecords().isEmpty());
+        DNS_SOFT(lookup.canonicalNameRecords().isEmpty(), QStringLiteral("unexpected CNAME record"));
     }
 
     // host addresses
@@ -269,16 +364,17 @@ void tst_QDnsLookup::lookup()
             addresses << record.value().toString().toLower();
     }
     addresses.sort();
-    QCOMPARE(addresses.join(';'), host);
+    DNS_SOFT(addresses.join(';') == host,
+             QStringLiteral("host addresses: got '") + addresses.join(';') + QStringLiteral("' want '") + host + QLatin1Char('\''));
 
     // mail exchanges
     QStringList mailExchanges;
     foreach (const QDnsMailExchangeRecord &record, lookup.mailExchangeRecords()) {
-        QCOMPARE(record.name(), domain);
+        DNS_SOFT(record.name() == domain, QStringLiteral("MX owner mismatch"));
         mailExchanges << QString("%1 %2").arg(QString::number(record.preference()), record.exchange());
     }
-    QVERIFY2(mx_alternatives.contains(mailExchanges.join(';')),
-             qPrintable("Actual: " + mailExchanges.join(';') + "\nExpected one of:\n" + mx_alternatives.join('\n')));
+    DNS_SOFT(mx_alternatives.contains(mailExchanges.join(';')),
+             QStringLiteral("MX: got '") + mailExchanges.join(';') + QStringLiteral("' want one of '") + mx_alternatives.join(QLatin1Char('|')) + QLatin1Char('\''));
 
     // name servers
     QStringList nameServers;
@@ -288,35 +384,36 @@ void tst_QDnsLookup::lookup()
             nameServers << record.value();
     }
     nameServers.sort();
-    QCOMPARE(nameServers.join(';'), ns);
+    DNS_SOFT(nameServers.join(';') == ns,
+             QStringLiteral("NS: got '") + nameServers.join(';') + QStringLiteral("' want '") + ns + QLatin1Char('\''));
 
     // pointers
     if (!ptr.isEmpty()) {
-        QVERIFY(!lookup.pointerRecords().isEmpty());
+        DNS_SOFT(!lookup.pointerRecords().isEmpty(), QStringLiteral("missing PTR record"));
         const QDnsDomainNameRecord ptrRecord = lookup.pointerRecords().first();
-        QCOMPARE(ptrRecord.name(), domain);
-        QCOMPARE(ptrRecord.value(), ptr);
+        DNS_SOFT(ptrRecord.name() == domain, QStringLiteral("PTR owner mismatch"));
+        DNS_SOFT(ptrRecord.value() == ptr, QStringLiteral("PTR value mismatch"));
     } else {
-        QVERIFY(lookup.pointerRecords().isEmpty());
+        DNS_SOFT(lookup.pointerRecords().isEmpty(), QStringLiteral("unexpected PTR record"));
     }
 
     // services
     QStringList services;
     foreach (const QDnsServiceRecord &record, lookup.serviceRecords()) {
-        QCOMPARE(record.name(), domain);
+        DNS_SOFT(record.name() == domain, QStringLiteral("SRV owner mismatch"));
         services << QString("%1 %2 %3 %4").arg(
                 QString::number(record.priority()),
                 QString::number(record.weight()),
                 QString::number(record.port()),
                 record.target());
     }
-    QVERIFY2(srv_alternatives.contains(services.join(';')),
-             qPrintable("Actual: " + services.join(';') + "\nExpected one of:\n" + srv_alternatives.join('\n')));
+    DNS_SOFT(srv_alternatives.contains(services.join(';')),
+             QStringLiteral("SRV: got '") + services.join(';') + QStringLiteral("' want one of '") + srv_alternatives.join(QLatin1Char('|')) + QLatin1Char('\''));
 
     // text
     QStringList texts;
     foreach (const QDnsTextRecord &record, lookup.textRecords()) {
-        QCOMPARE(record.name(), domain);
+        DNS_SOFT(record.name() == domain, QStringLiteral("TXT owner mismatch"));
         QString text;
         foreach (const QByteArray &ba, record.values()) {
             if (!text.isEmpty())
@@ -326,12 +423,19 @@ void tst_QDnsLookup::lookup()
         texts << text;
     }
     texts.sort();
-    QCOMPARE(texts.join(';'), txt);
+    DNS_SOFT(texts.join(';') == txt, QStringLiteral("TXT mismatch: got '") + texts.join(';') + QStringLiteral("' want '") + txt + QLatin1Char('\''));
+
+    return true;
 }
+#undef DNS_SOFT
 
 void tst_QDnsLookup::lookupReuse()
 {
-    QDnsLookup lookup;
+    // Resolve against the bundled server-dummy DNS (offline, deterministic) via QDnsOverride, so the
+    // reuse semantics are exercised without depending on the system resolver or the real internet.
+    m_dnsServer = TestEnv::getServer(TestServer::NameLookup);
+    QVERIFY2(m_dnsServer && m_dnsServer->isRunning(), "server-dummy (dns) did not start");
+    QDnsOverride lookup(QHostAddress(QHostAddress::LocalHost), m_dnsServer->port());
 
     // first lookup
     lookup.setType(QDnsLookup::A);
@@ -365,7 +469,12 @@ void tst_QDnsLookup::lookupReuse()
 
 void tst_QDnsLookup::lookupAbortRetry()
 {
-    QDnsLookup lookup;
+    // Resolve against the bundled server-dummy DNS (offline, deterministic) via QDnsOverride. abort()
+    // stays race-safe on instant loopback: it nulls the runnable before any event-loop spin, and
+    // _q_lookupFinished ignores the stale completion (runnable == sender() guard).
+    m_dnsServer = TestEnv::getServer(TestServer::NameLookup);
+    QVERIFY2(m_dnsServer && m_dnsServer->isRunning(), "server-dummy (dns) did not start");
+    QDnsOverride lookup(QHostAddress(QHostAddress::LocalHost), m_dnsServer->port());
 
     // try and abort the lookup
     lookup.setType(QDnsLookup::A);
@@ -393,6 +502,29 @@ void tst_QDnsLookup::lookupAbortRetry()
     QVERIFY(!lookup.hostAddressRecords().isEmpty());
     QCOMPARE(lookup.hostAddressRecords().first().name(), domainName("aaaa-single"));
     QCOMPARE(lookup.hostAddressRecords().first().value(), QHostAddress("2001:db8::1"));
+}
+
+void tst_QDnsLookup::hostInfoOverride()
+{
+    // Verify the QHostInfoOverride wiring end-to-end: install one (pointed at the bundled server-dummy
+    // DNS) on the per-application lookup manager, then confirm QHostInfo::fromName resolves a name
+    // through it. This exercises the install path and the fromName override-consult seam; the UDP
+    // resolution itself is the same engine the QDnsOverride rows above already validate.
+    m_dnsServer = TestEnv::getServer(TestServer::NameLookup);
+    QVERIFY2(m_dnsServer && m_dnsServer->isRunning(), "server-dummy (dns) did not start");
+
+    QHostInfoLookupManager *mgr =
+        static_cast<QHostInfoLookupManager *>(QAbstractHostInfoLookupManager::globalInstance());
+    QVERIFY(mgr);
+    mgr->setOverride(QSharedPointer<QHostInfoOverride>::create(
+                         QHostAddress(QHostAddress::LocalHost), m_dnsServer->port()));
+
+    const QHostInfo info = QHostInfo::fromName(QStringLiteral("qt-local-server.test"));
+    mgr->setOverride(QSharedPointer<QHostInfoOverride>()); // uninstall so later rows are unaffected
+
+    QCOMPARE(int(info.error()), int(QHostInfo::NoError));
+    QVERIFY(!info.addresses().isEmpty());
+    QVERIFY(info.addresses().contains(QHostAddress(QHostAddress::LocalHost)));
 }
 
 QTEST_MAIN(tst_QDnsLookup)

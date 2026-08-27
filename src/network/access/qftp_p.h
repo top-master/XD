@@ -165,7 +165,8 @@ private:
     enum AbortState {
         None,
         AbortStarted,
-        WaitForAbortToFinish
+        WaitForAbortToFinish,
+        WaitForTransferReply
     };
 
     bool processReply();
@@ -194,6 +195,7 @@ public:
 
     inline QFtpPrivate() : close_waitForStateChange(false), state(QFtp::Unconnected),
                            transferMode(QFtp::Passive), error(QFtp::NoError)
+                           , runningId(-1)
     { }
 
     ~QFtpPrivate();
@@ -222,6 +224,8 @@ public:
     quint16 port;
     QString proxyHost;
     quint16 proxyPort;
+    /// Names the command that started and did not finish yet; -1 while none runs.
+    int runningId;
 };
 
 QT_END_NAMESPACE
