@@ -36,6 +36,7 @@
 #include <QLocalSocket>
 #include <QTimer>
 #include "../../qbearertestcommon.h"
+#include "../../../../helpers/testbearer.h"
 
 #ifndef QT_NO_BEARERMANAGEMENT
 #include <QtNetwork/qnetworkconfigmanager.h>
@@ -361,7 +362,10 @@ void tst_QNetworkSession::userChoiceSession_data()
 {
     QTest::addColumn<QNetworkConfiguration>("configuration");
 
+    // The bundled dummy bearer offers a user choice as its default on request.
+    qputenv("QT_BEARER_DUMMY_DEFAULT", "userchoice");
     QNetworkConfiguration config = manager.defaultConfiguration();
+    qunsetenv("QT_BEARER_DUMMY_DEFAULT");
     if (config.type() == QNetworkConfiguration::UserChoice)
         QTest::newRow("UserChoice") << config;
     else
@@ -500,9 +504,6 @@ void tst_QNetworkSession::sessionOpenCloseStop()
 {
     QFETCH(QNetworkConfiguration, configuration);
     QFETCH(bool, forceSessionStop);
-#if defined(Q_OS_LINUX) && !defined(Q_OS_ANDROID)
-    QSKIP("Deadlocks on Linux due to QTBUG-45655");
-#endif
 
     QNetworkSession session(configuration);
 
@@ -922,7 +923,7 @@ void tst_QNetworkSession::outOfProcessSession()
     // First remove possible earlier listening address which would cause listen to fail
     // (e.g. previously abruptly ended unit test might cause this)
     QLocalServer::removeServer("tst_qnetworksession");
-    oopServer.listen("tst_qnetworksession");
+    QVERIFY(oopServer.listen("tst_qnetworksession"));
 
     QProcess lackey;
     QString lackeyExe = lackeyDir + "/lackey";
@@ -930,7 +931,8 @@ void tst_QNetworkSession::outOfProcessSession()
     QVERIFY2(lackey.waitForStarted(), qPrintable(
         QString::fromLatin1("Could not start %1: %2").arg(lackeyExe, lackey.errorString())));
 
-    QVERIFY(oopServer.waitForNewConnection(-1));
+    QVERIFY2(oopServer.waitForNewConnection(30000),
+             qPrintable(QString::fromLocal8Bit(lackey.readAllStandardError())));
     QLocalSocket *oopSocket = oopServer.nextPendingConnection();
 
     do {
@@ -978,7 +980,9 @@ void tst_QNetworkSession::outOfProcessSession()
             QVERIFY(!afterStop.contains(changed));
 
             oopSocket->disconnectFromServer();
-            oopSocket->waitForDisconnected(-1);
+            if (oopSocket->state() != QLocalSocket::UnconnectedState) {
+                QVERIFY(oopSocket->waitForDisconnected(30000));
+            }
 
             lackey.waitForFinished();
         }
@@ -988,6 +992,9 @@ void tst_QNetworkSession::outOfProcessSession()
     // Workaround: the socket in the lackey will disconnect on exit
     } while (oopSocket->state() == QLocalSocket::ConnectedState);
 
+    if (lackey.state() != QProcess::NotRunning) {
+        QVERIFY(lackey.waitForFinished(30000));
+    }
     switch (lackey.exitCode()) {
     case 0:
         qDebug("Lackey returned exit success (0)");
@@ -1300,5 +1307,26 @@ void tst_QNetworkSession::usagePolicies()
 
 #endif
 
-QTEST_MAIN(tst_QNetworkSession)
+// Custom main (not QTEST_MAIN): tst_QNetworkSession holds a QNetworkConfigurationManager member,
+// which loads the bearer engines the moment it is constructed. So the bearer-dummy daemon must be
+// started -- and $QT_BEARER_DUMMY_PORT published -- BEFORE the test object exists, i.e. here,
+// after QCoreApplication but before "tst_QNetworkSession tc". initTestCase() would be too late.
+int main(int argc, char *argv[])
+{
+#ifndef QT_NO_BEARERMANAGEMENT
+    QCoreApplication app(argc, argv);
+    const QString fixture = QFINDTESTDATA("../bearer-config.ini");
+    TestBearer bearer;
+    bearer.setConfigFile(fixture);
+    if (fixture.isEmpty() || ! bearer.start()) {
+        qFatal("bearer-dummy did not start with bearer-config.ini");
+    }
+    tst_QNetworkSession tc;
+    QTEST_SET_MAIN_SOURCE_PATH
+    return QTest::qExec(&tc, argc, argv);
+#else
+    Q_UNUSED(argc); Q_UNUSED(argv);
+    return 0;
+#endif
+}
 #include "tst_qnetworksession.moc"

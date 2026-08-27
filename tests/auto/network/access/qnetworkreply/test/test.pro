@@ -35,3 +35,5 @@ contains(QT_CONFIG,xcb): CONFIG+=insignificant_test  # unstable, QTBUG-21102
 win32:CONFIG += insignificant_test # QTBUG-24226
 
 !winrt: TEST_HELPER_INSTALLS = ../echo/echo
+
+include($$QT_SOURCE_TREE/tests/auto/helpers/testbearer.pri)
