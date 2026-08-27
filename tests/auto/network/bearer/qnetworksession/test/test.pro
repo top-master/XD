@@ -16,3 +16,7 @@ CONFIG(debug_and_release) {
 }
 
 !winrt: TEST_HELPER_INSTALLS = ../lackey/lackey
+
+TESTDATA += ../bearer-config.ini
+
+include($$QT_SOURCE_TREE/tests/auto/helpers/testbearer.pri)

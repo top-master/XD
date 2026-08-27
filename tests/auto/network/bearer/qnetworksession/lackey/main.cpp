@@ -57,6 +57,12 @@ int main(int argc, char** argv)
     QCoreApplication app(argc, argv);
 
 #ifndef QT_NO_BEARERMANAGEMENT
+    QLocalSocket oopSocket;
+    oopSocket.connectToServer("tst_qnetworksession");
+    if ( ! oopSocket.waitForConnected(30000)) {
+        return SESSION_OPEN_ERROR;
+    }
+
     // Update configurations so that everything is up to date for this process too.
     // Event loop is used to wait for awhile.
     QNetworkConfigurationManager manager;
@@ -77,13 +83,6 @@ int main(int argc, char** argv)
         qDebug("Lackey: no discovered configurations, returning empty error.");
         return NO_DISCOVERED_CONFIGURATIONS_ERROR;
     }
-
-    // Cannot read/write to processes on WinCE.
-    // Easiest alternative is to use sockets for IPC.
-    QLocalSocket oopSocket;
-
-    oopSocket.connectToServer("tst_qnetworksession");
-    oopSocket.waitForConnected(-1);
 
     qDebug() << "Lackey started";
 
