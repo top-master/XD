@@ -37,6 +37,7 @@
 #include <QtCore/qbytearray.h>
 #include <QtCore/qfile.h>
 #include <QtCore/qset.h>
+#include <QtCore/qmap.h>
 #include <QtCore/qcoreapplication.h>
 #include <QtCore/qvariant.h>
 #include <QtCore/QSysInfo>
@@ -154,6 +155,63 @@ static QSet<QByteArray> keywords()
             return set;
 }
 
+/*!
+    Normalizes a "<platform>-<version>" key so versions that differ only in leading
+    zeros compare equal, for example ubuntu-14.04 and ubuntu-14.4.
+
+    The version is the part after the last '-'. When it is purely numeric and some
+    dot-separated part carries a strippable leading zero such as 04, the key is rebuilt
+    with those zeros removed. A key already in minimal form, one with no version, or one
+    with a non-numeric tail such as developer-build comes back unchanged with no copy, so
+    this only loosens matching and every exact key still matches.
+*/
+static QByteArray normalizedCondition(const QByteArray &key)
+{
+    const int dash = key.lastIndexOf('-');
+    if (dash <= 0 || dash == key.size() - 1) {
+        return key;
+    }
+
+    // Checks the trailing version is purely numeric and whether any dot-separated part
+    // has a strippable leading zero; with none there is nothing to rebuild.
+    bool needsStrip = false;
+    bool atPartStart = true;
+    for (int i = dash + 1; i < key.size(); ++i) {
+        const char ch = key.at(i);
+        if (ch == '.') {
+            atPartStart = true;
+            continue;
+        }
+        if (ch < '0' || ch > '9') {
+            return key;
+        }
+        if (atPartStart && ch == '0' && i + 1 < key.size() && key.at(i + 1) != '.') {
+            needsStrip = true;
+        }
+        atPartStart = false;
+    }
+    if (!needsStrip) {
+        return key;
+    }
+
+    // Rebuilds the key with leading zeros stripped from each dot-separated part, keeping
+    // a lone "0".
+    QByteArray out = key.left(dash + 1);
+    const QList<QByteArray> parts = key.mid(dash + 1).split('.');
+    for (int i = 0; i < parts.size(); ++i) {
+        if (i) {
+            out += '.';
+        }
+        const QByteArray &p = parts.at(i);
+        int j = 0;
+        while (j + 1 < p.size() && p.at(j) == '0') {
+            ++j;
+        }
+        out += p.mid(j);
+    }
+    return out;
+}
+
 static QSet<QByteArray> activeConditions()
 {
     QSet<QByteArray> result = keywords();
@@ -164,15 +222,19 @@ static QSet<QByteArray> activeConditions()
         if (result.find(distributionName) == result.end())
             result.insert(distributionName);
         if (!distributionRelease.isEmpty()) {
+            // Adds the version key in leading-zero-stripped form; checkCondition normalizes
+            // the blacklist side too, so 14.04 and 14.4 match either way from this one entry.
             QByteArray versioned = distributionName + "-" + distributionRelease;
-            if (result.find(versioned) == result.end())
-                result.insert(versioned);
+            result.insert(normalizedCondition(versioned));
         }
     }
 
     if (qEnvironmentVariableIsSet("QTEST_ENVIRONMENT")) {
-        foreach (const QByteArray &k, qgetenv("QTEST_ENVIRONMENT").split(' '))
-            result.insert(k);
+        // Normalizes injected keys too, so every key in the set is in one form and a single
+        // normalized lookup in checkCondition matches all of them.
+        foreach (const QByteArray &k, qgetenv("QTEST_ENVIRONMENT").split(' ')) {
+            result.insert(normalizedCondition(k));
+        }
     }
 
     return result;
@@ -189,7 +251,10 @@ static bool checkCondition(const QByteArray &condition)
         if (result)
             c = c.mid(1);
 
-        result ^= matchedConditions.contains(c);
+        // The set holds keys in version-normalized form, so normalize the condition too and
+        // do one lookup; that makes 14.04 and 14.4 the same key.
+        const bool present = matchedConditions.contains(normalizedCondition(c));
+        result ^= present;
         if (!result)
             return false;
     }
@@ -198,6 +263,12 @@ static bool checkCondition(const QByteArray &condition)
 
 static bool ignoreAll = false;
 static std::set<QByteArray> *ignoredTests = 0;
+/*!
+    Reason a blacklisted entry is ignored, from its BLACKLIST comment: ignoreAllReason for a
+    whole-testcase ignore, ignoredTestReasons keyed by function name for a per-function ignore.
+*/
+static QByteArray ignoreAllReason;
+static QMap<QByteArray, QByteArray> *ignoredTestReasons = 0;
 static std::set<QByteArray> *gpuFeatures = 0;
 
 Q_TESTLIB_EXPORT std::set<QByteArray> *(*qgpu_features_ptr)(const QString &) = 0;
@@ -226,26 +297,59 @@ void parseBlackList()
     if (!ignored.open(QIODevice::ReadOnly))
         return;
 
+    // A comment seen while parsing becomes the reason shown for the entry it precedes:
+    // groupComment for a whole [group], comment for the next single condition line.
     QByteArray function;
+    QByteArray groupComment;
+    QByteArray comment;
 
     while (!ignored.atEnd()) {
         QByteArray line = ignored.readLine().simplified();
-        if (line.isEmpty() || line.startsWith('#'))
+        if (line.isEmpty())
             continue;
+        // A '#' line is a reason comment; accumulate it for the entry it precedes.
+        if (line.startsWith('#')) {
+            const QByteArray c = line.mid(1).trimmed();
+            if (!c.isEmpty()) {
+                comment += c;
+                comment += ' ';
+            }
+            continue;
+        }
+        // Removes extra space (is no-op if empty).
+        comment.chop(1);
         if (line.startsWith('[')) {
             function = line.mid(1, line.length() - 2);
+            // The comment before this group is the reason for the whole group.
+            groupComment = comment;
+            comment.clear();
             continue;
         }
         bool condition = checkCondition(line);
         if (condition) {
+            // Prefixes the test-case reason (the comment before the [group]) to the platform
+            // reason (the comment before this condition); shows just one when the other is empty.
+            QByteArray reason = groupComment;
+            if (!comment.isEmpty()) {
+                reason = reason.isEmpty() ? comment : reason + ' ' + comment;
+            }
             if (!function.size()) {
                 ignoreAll = true;
+                if (ignoreAllReason.isEmpty())
+                    ignoreAllReason = reason;
             } else {
                 if (!ignoredTests)
                     ignoredTests = new std::set<QByteArray>;
                 ignoredTests->insert(function);
+                if (!reason.isEmpty()) {
+                    if (!ignoredTestReasons)
+                        ignoredTestReasons = new QMap<QByteArray, QByteArray>;
+                    (*ignoredTestReasons)[function] = reason;
+                }
             }
         }
+        // A comment applies only to the next entry it precedes.
+        comment.clear();
     }
 }
 
@@ -263,18 +367,30 @@ void parseGpuBlackList()
 void checkBlackLists(const char *slot, const char *data)
 {
     bool ignore = ignoreAll;
+    QByteArray matched;
 
     if (!ignore && ignoredTests) {
         QByteArray s = slot;
-        ignore = (ignoredTests->find(s) != ignoredTests->end());
+        if (ignoredTests->find(s) != ignoredTests->end()) { ignore = true; matched = s; }
         if (!ignore && data) {
             s += ':';
             s += data;
-            ignore = (ignoredTests->find(s) != ignoredTests->end());
+            if (ignoredTests->find(s) != ignoredTests->end()) { ignore = true; matched = s; }
         }
     }
 
-    QTestResult::setBlacklistCurrentTest(ignore);
+    // Recovers the reason from the BLACKLIST comment so the row can log why it is ignored.
+    QByteArray reason;
+    if (ignore) {
+        if (ignoreAll && matched.isEmpty()) {
+            reason = ignoreAllReason;
+        } else if (ignoredTestReasons && !matched.isEmpty()) {
+            const QMap<QByteArray, QByteArray>::const_iterator it = ignoredTestReasons->find(matched);
+            if (it != ignoredTestReasons->end())
+                reason = it.value();
+        }
+    }
+    QTestResult::setBlacklistCurrentTest(ignore, reason);
 
     // Tests blacklisted in GPU_BLACKLIST are to be skipped. Just ignoring the result is
     // not sufficient since these are expected to crash or behave in undefined ways.
