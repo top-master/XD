@@ -31,6 +31,7 @@
 **
 ****************************************************************************/
 
+#include <QtNetwork/QNetworkConfigurationManager>
 #include <QtTest/QtTest>
 #include "../qbearertestcommon.h"
 
@@ -45,6 +46,7 @@
   Qt 4.7+ which has a QNetworkConfiguration enabled QNetworkAccessManager
 */
 #include <QNetworkAccessManager>
+#include "../../../helpers/testbearer.h"
 
 QT_USE_NAMESPACE
 
@@ -54,6 +56,7 @@ class tst_QNetworkConfiguration : public QObject
 
 private slots:
 #ifndef QT_NO_BEARERMANAGEMENT
+    void initTestCase();
     void invalidPoint();
     void comparison();
     void children();
@@ -62,6 +65,14 @@ private slots:
 };
 
 #ifndef QT_NO_BEARERMANAGEMENT
+// Start the bearer-dummy daemon and point the qbearerdummy engine at it BEFORE any
+// QNetworkConfigurationManager is constructed, so this environment has real configurations.
+void tst_QNetworkConfiguration::initTestCase()
+{
+    static QRef<TestBearer> bearer(new TestBearer, &TestBearer::dispose);
+    bearer->start();
+}
+
 void tst_QNetworkConfiguration::invalidPoint()
 {
     QNetworkConfiguration pt;
@@ -87,6 +98,8 @@ void tst_QNetworkConfiguration::invalidPoint()
 
 void tst_QNetworkConfiguration::comparison()
 {
+    if (QNetworkConfigurationManager().allConfigurations().isEmpty())
+        QSKIP("no network (bearer) configurations in this environment");
     //test copy constructor and assignment operator
     //compare invalid connection points
     QNetworkConfiguration pt1;
