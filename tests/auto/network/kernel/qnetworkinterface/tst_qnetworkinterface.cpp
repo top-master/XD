@@ -42,6 +42,7 @@
 #include <QNetworkSession>
 #endif
 #include "../../../network-settings.h"
+#include "../../../helpers/testenv.h"
 
 class tst_QNetworkInterface : public QObject
 {
@@ -81,6 +82,9 @@ tst_QNetworkInterface::~tst_QNetworkInterface()
 
 void tst_QNetworkInterface::initTestCase()
 {
+    // Serves the HTTP endpoint `localAddress()` connects to through the bundled
+    // server-dummy fleet, hence the test needs no web server of the host.
+    TestEnv::getServerForClass(TestServer::Fleet);
     if (!QtNetworkSettings::verifyTestNetworkSettings())
         QSKIP("No network test server available");
 #ifndef QT_NO_BEARERMANAGEMENT
@@ -193,7 +197,7 @@ void tst_QNetworkInterface::loopbackIPv6()
 void tst_QNetworkInterface::localAddress()
 {
     QTcpSocket socket;
-    socket.connectToHost(QtNetworkSettings::serverName(), 80);
+    socket.connectToHost(QtNetworkSettings::serverName(), TestServer::port(80));
     QVERIFY(socket.waitForConnected(5000));
 
     QHostAddress local = socket.localAddress();

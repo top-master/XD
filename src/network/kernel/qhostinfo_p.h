@@ -193,7 +193,7 @@ public:
 };
 
 
-class QAbstractHostInfoLookupManager : public QObject
+class Q_AUTOTEST_EXPORT QAbstractHostInfoLookupManager : public QObject
 {
     Q_OBJECT
 
@@ -212,7 +212,7 @@ protected:
 
 };
 
-class QHostInfoLookupManager : public QAbstractHostInfoLookupManager
+class Q_AUTOTEST_EXPORT QHostInfoLookupManager : public QAbstractHostInfoLookupManager
 {
     Q_OBJECT
 public:

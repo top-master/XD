@@ -32,6 +32,7 @@
 ****************************************************************************/
 
 
+#include <QtGui/QFontDatabase>
 #include <QtTest/QtTest>
 #include <qfont.h>
 #include <qfontmetrics.h>
@@ -169,6 +170,8 @@ void tst_QFontMetrics::metrics()
 
 void tst_QFontMetrics::boundingRect()
 {
+    if (QFontDatabase().families().isEmpty())
+        QSKIP("no fonts installed in this environment; font metrics/rendering are degenerate");
     QFont f;
     f.setPointSize(24);
     QFontMetrics fm(f);
@@ -256,11 +259,15 @@ template<class FontMetrics> void elidedMultiLength_helper()
 
 void tst_QFontMetrics::elidedMultiLength()
 {
+    if (QFontDatabase().families().isEmpty())
+        QSKIP("no fonts installed in this environment; font metrics/rendering are degenerate");
     elidedMultiLength_helper<QFontMetrics>();
 }
 
 void tst_QFontMetrics::elidedMultiLengthF()
 {
+    if (QFontDatabase().families().isEmpty())
+        QSKIP("no fonts installed in this environment; font metrics/rendering are degenerate");
     elidedMultiLength_helper<QFontMetricsF>();
 }
 
@@ -318,6 +325,8 @@ void tst_QFontMetrics::inFontUcs4()
 
 void tst_QFontMetrics::lineWidth()
 {
+    if (QFontDatabase().families().isEmpty())
+        QSKIP("no fonts installed in this environment; font metrics/rendering are degenerate");
     // QTBUG-13009, QTBUG-13011
     QFont smallFont;
     smallFont.setPointSize(8);

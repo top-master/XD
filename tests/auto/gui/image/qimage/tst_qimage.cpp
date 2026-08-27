@@ -32,6 +32,7 @@
 ****************************************************************************/
 
 
+#include <QtGui/QImageReader>
 #include <QtTest/QtTest>
 
 #include <qimage.h>
@@ -1191,6 +1192,8 @@ void tst_QImage::copy()
 
 void tst_QImage::load()
 {
+    if (!QImageReader::supportedImageFormats().contains("jpeg"))
+        QSKIP("no JPEG image handler available in this build");
     const QString filePath = m_prefix + QLatin1String("image.jpg");
 
     QImage dest(filePath);
@@ -1203,6 +1206,8 @@ void tst_QImage::load()
 
 void tst_QImage::loadFromData()
 {
+    if (!QImageReader::supportedImageFormats().contains("jpeg"))
+        QSKIP("no JPEG image handler available in this build");
     const QString filePath = m_prefix + QLatin1String("image.jpg");
 
     QImage original(filePath);
@@ -1229,6 +1234,8 @@ void tst_QImage::loadFromData()
 #if !defined(QT_NO_DATASTREAM)
 void tst_QImage::loadFromDataStream()
 {
+    if (!QImageReader::supportedImageFormats().contains("jpeg"))
+        QSKIP("no JPEG image handler available in this build");
     const QString filePath = m_prefix + QLatin1String("image.jpg");
 
     QImage original(filePath);
@@ -2946,6 +2953,8 @@ QT_USE_NAMESPACE
 
 void tst_QImage::exifOrientation()
 {
+    if (!QImageReader::supportedImageFormats().contains("jpeg"))
+        QSKIP("no JPEG image handler available in this build");
     QFETCH(QString, fileName);
     QFETCH(int, orientation);
     QFETCH(int, dpmx);
@@ -2975,6 +2984,8 @@ void tst_QImage::exifOrientation()
 
 void tst_QImage::exif_QTBUG45865()
 {
+    if (!QImageReader::supportedImageFormats().contains("jpeg"))
+        QSKIP("no JPEG image handler available in this build");
     QFile file(m_prefix + "jpeg_exif_QTBUG-45865.jpg");
     QVERIFY(file.open(QIODevice::ReadOnly));
     QByteArray byteArray = file.readAll();
@@ -2994,6 +3005,8 @@ void tst_QImage::exifInvalidData_data()
 
 void tst_QImage::exifInvalidData()
 {
+    if (!QImageReader::supportedImageFormats().contains("jpeg"))
+        QSKIP("no JPEG image handler available in this build");
     QImage image;
     QVERIFY(image.load(m_prefix + "jpeg_exif_invalid_data_" + QTest::currentDataTag() + ".jpg"));
     QVERIFY(!image.isNull());

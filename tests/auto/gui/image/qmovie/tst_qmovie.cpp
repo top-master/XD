@@ -32,6 +32,7 @@
 ****************************************************************************/
 
 
+#include <QtGui/QImageReader>
 #include <QtTest/QtTest>
 
 
@@ -141,6 +142,8 @@ void tst_QMovie::playMovie_data()
 
 void tst_QMovie::playMovie()
 {
+    if (!QImageReader::supportedImageFormats().contains("gif"))
+        QSKIP("no GIF image handler available in this build");
     QFETCH(QString, fileName);
     QFETCH(int, frameCount);
 
@@ -184,6 +187,8 @@ void tst_QMovie::jumpToFrame_data()
 
 void tst_QMovie::jumpToFrame()
 {
+    if (!QImageReader::supportedImageFormats().contains("gif"))
+        QSKIP("no GIF image handler available in this build");
     QFETCH(QString, fileName);
     QMovie movie(QFINDTESTDATA(fileName));
     movie.start();

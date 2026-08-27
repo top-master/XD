@@ -41,6 +41,8 @@
 
 #include <QtCore/QDebug>
 
+#include "../../../helpers/testbearer.h"
+
 #ifndef QT_NO_BEARERMANAGEMENT
 Q_DECLARE_METATYPE(QNetworkAccessManager::NetworkAccessibility)
 #endif
@@ -55,10 +57,24 @@ public:
 private slots:
     void networkAccessible();
     void alwaysCacheRequest();
+
+#ifndef QT_NO_BEARERMANAGEMENT
+private:
+    /// Gives the managers below network configurations to report the
+    /// accessibility of; started before the first of them loads the bearer
+    /// engines.
+    QRef<TestBearer> bearer;
+#endif
 };
 
 tst_QNetworkAccessManager::tst_QNetworkAccessManager()
+#ifndef QT_NO_BEARERMANAGEMENT
+    : bearer(new TestBearer, &TestBearer::dispose)
+#endif
 {
+#ifndef QT_NO_BEARERMANAGEMENT
+    bearer->start();
+#endif
 }
 
 void tst_QNetworkAccessManager::networkAccessible()

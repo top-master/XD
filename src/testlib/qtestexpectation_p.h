@@ -33,6 +33,7 @@
 #include "qtestcase.h"
 
 #include <QtCore/qstring.h>
+#include <QtCore/qvariant.h>
 #include <QtCore/qexception.h>
 #include <QtCore/qlist.h>
 #include <QtCore/qfunction.h>
@@ -52,6 +53,7 @@ typedef QFunction<bool (*) ()> DefaultBool;
 // MARK: Base classes.
 
 class MessagesBase;
+class QExpectMatcherBase;
 
 template <typename T>
 class Expectation;
@@ -76,6 +78,11 @@ public:
     }
 
     void throwIfPending();
+
+    // Hands a matcher (used by qExpect(x)->to<M>(...)) its call arguments. Kept
+    // here so it can drive QExpectMatcherBase::prepare (this class is its friend),
+    // which lets the matcher keep args/argCount const.
+    void internalPrepare(QExpectMatcherBase *matcher, const QVariant *args) const;
 
 protected:
     friend class QT_PREPEND_NAMESPACE(QTest)::MessagesBase;
@@ -422,6 +429,46 @@ public:
 };
 
 } // namespace MixIns
+
+/// Base of a custom matcher run via `qExpect(x)->to<MyMatcher>(args...)`.
+///
+/// A matcher subclasses QExpectMatcher<TActual> (which adds typed access to the
+/// expected value); this non-template base holds the pieces that don't depend on
+/// TActual: the (up to 9) call arguments, and the run/report contract. See
+/// tests/auto/helpers/assertion.h for an example (OpenBefore).
+class Q_TESTLIB_EXPORT QExpectMatcherBase {
+public:
+    QExpectMatcherBase();
+    virtual ~QExpectMatcherBase();
+
+    /// The arguments passed to `to<Matcher>(...)`: a caller-owned QVariant[9], of
+    /// which the first #argCount are meaningful. Const to callers; only prepare()
+    /// sets it.
+    const QVariant *const args;
+
+    /// How many of #args are meaningful. Const to callers; prepare() derives it
+    /// from the args. A subclass may preset it (through const_cast) before
+    /// prepare() runs, in which case prepare() keeps that value; -1 means unset.
+    const int argCount;
+
+    /// Runs the check; returns true when the expectation holds. Implemented by
+    /// the matcher subclass.
+    virtual bool run() = 0;
+
+protected:
+    /// A matcher's run() calls this first to require exactly @p count arguments;
+    /// reports a failure (and returns false) when the count differs.
+    bool requireArgCount(int count);
+
+    /// Reports a failure against the owning expectation. The default is a bare
+    /// fallback; QExpectMatcher<TActual> overrides it to use the expectation's
+    /// typed messenger.
+    virtual void reportFail(const QString &message);
+
+private:
+    friend class ExpectationBase;
+    void prepare(const QVariant *args);
+};
 
 } // namespace QTest
 

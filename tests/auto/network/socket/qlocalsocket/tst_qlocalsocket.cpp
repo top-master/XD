@@ -967,6 +967,17 @@ void tst_QLocalSocket::processConnection()
     QList<QProcess*> consumers;
     producer.start(socketProcess, serverArguments);
     QVERIFY2(producer.waitForStarted(-1), qPrintable(producer.errorString()));
+    // Starts the clients once the server listens, hence none of them gives up
+    // on a server that is still starting while many processes start at once.
+    QByteArray producerOutput;
+    QElapsedTimer listenTimer;
+    listenTimer.start();
+    while (!producerOutput.contains("server: listening")) {
+        QVERIFY2(producer.state() == QProcess::Running && listenTimer.elapsed() < 30000,
+                 producerOutput.constData());
+        producer.waitForReadyRead(1000);
+        producerOutput += producer.readAllStandardOutput();
+    }
     for (int i = 0; i < processes; ++i) {
         QStringList arguments = QStringList() << "--client";
         QProcess *p = new QProcess;

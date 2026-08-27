@@ -32,6 +32,7 @@
 ****************************************************************************/
 
 
+#include <QtGui/QGuiApplication>
 #include <QtTest/QtTest>
 
 #include <qapplication.h>
@@ -113,6 +114,8 @@ void tst_QWindowContainer::testShow()
 
 void tst_QWindowContainer::testPositionAndSize()
 {
+    if (QGuiApplication::platformName() == QLatin1String("offscreen"))
+        QSKIP("requires a real windowing platform; unavailable on the offscreen platform");
     QWindow *window = new QWindow();
     window->setGeometry(m_availableGeometry.x() + 300, m_availableGeometry.y() + 400, 500, 600);
 
@@ -246,6 +249,8 @@ void tst_QWindowContainer::testUnparenting()
 
 void tst_QWindowContainer::testAncestorChange()
 {
+    if (QGuiApplication::platformName() == QLatin1String("offscreen"))
+        QSKIP("requires a real windowing platform; unavailable on the offscreen platform");
     QWidget root;
     root.setWindowTitle(QStringLiteral("Root ") + QTest::currentTestFunction());
     QWidget *left = new QWidget(&root);

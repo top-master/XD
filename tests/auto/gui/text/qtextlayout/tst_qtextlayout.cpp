@@ -37,6 +37,7 @@
     Please don't save this file in emacs. It contains utf8 text sequences emacs will
     silently convert to a series of question marks.
  */
+#include <QtGui/QFontDatabase>
 #include <QtTest/QtTest>
 
 
@@ -1886,6 +1887,8 @@ void tst_QTextLayout::widthOfTabs()
 
 void tst_QTextLayout::columnWrapWithTabs()
 {
+    if (QFontDatabase().families().isEmpty())
+        QSKIP("no fonts installed in this environment; font metrics/rendering are degenerate");
     QTextLayout textLayout;
     {
         QTextOption textOption;

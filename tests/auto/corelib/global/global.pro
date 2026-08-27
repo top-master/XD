@@ -9,5 +9,6 @@ SUBDIRS=\
     qlogging \
     qtendian \
     qglobalstatic \
+    qptrmacros \
     qhooks \
     qlibraryinfo

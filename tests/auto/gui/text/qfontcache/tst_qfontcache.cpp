@@ -32,6 +32,7 @@
 ****************************************************************************/
 
 
+#include <QtGui/QFontDatabase>
 #include <QtTest/QtTest>
 
 
@@ -118,6 +119,8 @@ void tst_QFontCache::engineData()
 
 void tst_QFontCache::clear()
 {
+    if (QFontDatabase().families().isEmpty())
+        QSKIP("no fonts installed in this environment; font metrics/rendering are degenerate");
 #ifdef QT_BUILD_INTERNAL
     QFontEngine_startCollectingEngines();
 #else
