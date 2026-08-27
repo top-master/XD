@@ -1,25 +1,4 @@
-[multicast:same bind, group ipv6 address]
-*
-[multicast]
-osx
-[writeDatagramToNonExistingPeer]
-windows
-osx
-[asyncReadDatagram]
-windows
-osx
-[multicastLeaveAfterClose]
-osx
-[readyRead]
-osx
-[readyReadForEmptyDatagram]
-osx
-[echo]
-linux
-osx
-[ipv6Loop]
-osx
-[loop]
-osx
+# QTQAINFRA-1042 / QTBUG-76340 -- link-local IPv6 datagrams are not received on RHEL 6.6
+# (neutralReadSpy stays 0); an old-kernel/CI networking limitation, not a QUdpSocket fault.
 [linkLocalIPv6]
 redhatenterpriselinuxworkstation-6.6

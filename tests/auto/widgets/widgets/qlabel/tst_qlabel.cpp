@@ -32,6 +32,7 @@
 ****************************************************************************/
 
 
+#include <QtGui/QFontDatabase>
 #include <QtTest/QtTest>
 
 
@@ -346,6 +347,8 @@ void tst_QLabel::task190318_sizes()
 
 void tst_QLabel::sizeHint()
 {
+    if (QFontDatabase().families().isEmpty())
+        QSKIP("no fonts installed; font-dependent geometry is degenerate");
     QLabel label(QLatin1String("Test"));
     label.setIndent(0);
     label.setMargin(0);

@@ -41,6 +41,7 @@
 #include "private/qhostinfo_p.h"
 
 #include "../../../network-settings.h"
+#include "../../../helpers/testenv.h"
 
 #ifndef QT_NO_OPENSSL
 typedef QSharedPointer<QSslSocket> QSslSocketPtr;
@@ -181,30 +182,48 @@ void tst_QSslSocket_onDemandCertificates_static::proxyAuthenticationRequired(con
 
 void tst_QSslSocket_onDemandCertificates_static::onDemandRootCertLoadingStaticMethods()
 {
-    QString host("www.qt.io");
+    // This exercises the CA-present-vs-absent gate that on-demand root loading rides on,
+    // against a LOCAL TLS server (server-dummy's HTTPS listener) rather than a live external
+    // host. The proxy variants are proxy-independent for this behaviour and would need the
+    // SOCKS5/HTTP proxy fleet at fixed ports, so only the direct row runs here.
+    QFETCH_GLOBAL(bool, setProxy);
+    if (setProxy)
+        QSKIP("On-demand root loading is proxy-independent; verified in the WithoutProxy row. "
+              "The proxy variants need the SOCKS5/HTTP proxy fleet at their fixed ports.");
 
-    // not using any root certs -> should not work
+    QRef<TestServer> https = TestEnv::getServer(TestServer::WebSecure);
+    QVERIFY2(https && https->isRunning(), "server-dummy (https) did not start");
+    const QString host = https->domainName();
+    const quint16 port = quint16(https->tryPort(443)); // canonical 443, else its real port
+    // Reach the server at its real address but verify against a DNS name the cert carries:
+    // on a loopback run domainName() is the IP 127.0.0.1, which Qt matches as a host NAME
+    // (not against the cert's IP SAN), so verify against the cert's "localhost" DNS SAN.
+    const QString verifyName = QStringLiteral("localhost");
+
+    // not trusting the server's certificate -> should not work
     QSslSocket::setDefaultCaCertificates(QList<QSslCertificate>());
     QSslSocketPtr socket = newSocket();
     this->socket = socket.data();
-    socket->connectToHostEncrypted(host, 443);
+    socket->connectToHostEncrypted(host, port, verifyName);
     QVERIFY(!socket->waitForEncrypted());
 
-    // using system root certs -> should work
-    QSslSocket::setDefaultCaCertificates(QSslSocket::systemCaCertificates());
+    // trusting the server's certificate -> should work. By default the cert is trusted only
+    // inside this process (no privilege); test-env.ini REAL_CA_CERT=true instead installs it
+    // OS-wide (an elevated process, otherwise the test fails here rather than pass falsely).
+    const QList<QSslCertificate> roots = https->loadCerts();
     QSslSocketPtr socket2 = newSocket();
     this->socket = socket2.data();
-    socket2->connectToHostEncrypted(host, 443);
+    socket2->connectToHostEncrypted(host, port, verifyName);
     QVERIFY2(socket2->waitForEncrypted(), qPrintable(socket2->errorString()));
 
-    // not using any root certs again -> should not work
+    // dropping the trust again -> should not work
     QSslSocket::setDefaultCaCertificates(QList<QSslCertificate>());
     QSslSocketPtr socket3 = newSocket();
     this->socket = socket3.data();
-    socket3->connectToHostEncrypted(host, 443);
+    socket3->connectToHostEncrypted(host, port, verifyName);
     QVERIFY(!socket3->waitForEncrypted());
 
-    QSslSocket::setDefaultCaCertificates(QSslSocket::systemCaCertificates());
+    QSslSocket::setDefaultCaCertificates(roots);
 
     // setting empty default configuration -> should not work
     QSslConfiguration conf;
@@ -212,9 +231,9 @@ void tst_QSslSocket_onDemandCertificates_static::onDemandRootCertLoadingStaticMe
     QSslConfiguration::setDefaultConfiguration(conf);
     QSslSocketPtr socket4 = newSocket();
     this->socket = socket4.data();
-    socket4->connectToHostEncrypted(host, 443);
+    socket4->connectToHostEncrypted(host, port, verifyName);
     QVERIFY(!socket4->waitForEncrypted(4000));
-    QSslConfiguration::setDefaultConfiguration(originalDefaultConf); // restore old behaviour for run with proxies etc.
+    QSslConfiguration::setDefaultConfiguration(originalDefaultConf); // restore for other rows
 }
 
 #endif // QT_NO_OPENSSL

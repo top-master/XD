@@ -178,6 +178,8 @@ void tst_QStyle::cleanupTestCase()
 
 void tst_QStyle::testStyleFactory()
 {
+    if (!QStyleFactory::keys().contains(QLatin1String("Windows")))
+        QSKIP("QProxyStyle's base-style fallback is null when this build has no \"windows\" style (QStyleFactory reports no such key, e.g. a QT_NO_STYLE_WINDOWS build); ensureBaseStyle() then dereferences null. Build the windows style in to run this test.");
     QStringList keys = QStyleFactory::keys();
 #ifndef QT_NO_STYLE_FUSION
     QVERIFY(keys.contains("Fusion"));
@@ -214,6 +216,8 @@ class CustomProxy : public QProxyStyle
 
 void tst_QStyle::testProxyStyle()
 {
+    if (!QStyleFactory::keys().contains(QLatin1String("Windows")))
+        QSKIP("QProxyStyle needs the \"Windows\" base style, which this build does not provide (QStyleFactory reports no such key); without it QProxyStylePrivate has no base style to forward to.");
     QProxyStyle *proxyStyle = new QProxyStyle();
     QVERIFY(proxyStyle->baseStyle());
     QStyle *style = QStyleFactory::create("Windows");
@@ -374,6 +378,8 @@ void tst_QStyle::testFusionStyle()
 
 void tst_QStyle::testWindowsStyle()
 {
+    if (!QStyleFactory::keys().contains(QLatin1String("Windows")))
+        QSKIP("QWindowsStyle is a Windows-only style; QStyleFactory returns null on Linux (would fail on any Linux build).");
     QStyle *wstyle = QStyleFactory::create("Windows");
     QVERIFY(testAllFunctions(wstyle));
     lineUpLayoutTest(wstyle);
@@ -709,6 +715,8 @@ void tst_QStyle::lineUpLayoutTest(QStyle *style)
 
 void tst_QStyle::defaultFont()
 {
+    if (!QStyleFactory::keys().contains(QLatin1String("Windows")))
+        QSKIP("QProxyStyle's base-style fallback is null when this build has no \"windows\" style (QStyleFactory reports no such key, e.g. a QT_NO_STYLE_WINDOWS build); ensureBaseStyle() then dereferences null. Build the windows style in to run this test.");
     QFont defaultFont = qApp->font();
     QFont pointFont = defaultFont;
     pointFont.setPixelSize(9);
@@ -739,6 +747,8 @@ public:
 
 void tst_QStyle::testDrawingShortcuts()
 {
+    if (!QStyleFactory::keys().contains(QLatin1String("Windows")))
+        QSKIP("QProxyStyle's base-style fallback is null when this build has no \"windows\" style (QStyleFactory reports no such key, e.g. a QT_NO_STYLE_WINDOWS build); ensureBaseStyle() then dereferences null. Build the windows style in to run this test.");
     {
         QWidget w;
         setFrameless(&w);
@@ -792,6 +802,8 @@ public:
 
 void tst_QStyle::testFrameOnlyAroundContents()
 {
+    if (!QStyleFactory::keys().contains(QLatin1String("Windows")))
+        QSKIP("QProxyStyle's base-style fallback is null when this build has no \"windows\" style (QStyleFactory reports no such key, e.g. a QT_NO_STYLE_WINDOWS build); ensureBaseStyle() then dereferences null. Build the windows style in to run this test.");
     QScrollArea area;
     area.setGeometry(0, 0, 200, 200);
     QStyle *winStyle = QStyleFactory::create("Windows");
@@ -830,6 +842,8 @@ public:
 
 void tst_QStyle::testProxyCalled()
 {
+    if (!QStyleFactory::keys().contains(QLatin1String("Windows")))
+        QSKIP("QProxyStyle's base-style fallback is null when this build has no \"windows\" style (QStyleFactory reports no such key, e.g. a QT_NO_STYLE_WINDOWS build); ensureBaseStyle() then dereferences null. Build the windows style in to run this test.");
     QToolButton b;
     b.setArrowType(Qt::DownArrow);
     QStyleOptionToolButton opt;

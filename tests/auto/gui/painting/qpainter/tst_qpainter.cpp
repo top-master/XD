@@ -32,6 +32,7 @@
 ****************************************************************************/
 
 
+#include <QtGui/QGuiApplication>
 #include <QtTest/QtTest>
 #include <qpainter.h>
 #ifndef QT_NO_WIDGETS
@@ -1733,6 +1734,8 @@ void tst_QPainter::combinedMatrix()
 
 void tst_QPainter::textOnTransparentImage()
 {
+    if (QGuiApplication::platformName() == QLatin1String("offscreen"))
+        QSKIP("requires a real windowing platform; unavailable on the offscreen platform");
     bool foundPixel = false;
     QImage image(10, 10, QImage::Format_ARGB32_Premultiplied);
     image.fill(qRgba(0, 0, 0, 0)); // transparent
@@ -4733,6 +4736,8 @@ void tst_QPainter::drawTextOutsideGuiThread()
 
 void tst_QPainter::drawTextWithComplexBrush()
 {
+    if (QGuiApplication::platformName() == QLatin1String("offscreen"))
+        QSKIP("requires a real windowing platform; unavailable on the offscreen platform");
     QImage texture(10, 10, QImage::Format_ARGB32_Premultiplied);
     texture.fill(Qt::red);
 
