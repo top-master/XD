@@ -76,7 +76,7 @@ QHttpNetworkConnectionPrivate::QHttpNetworkConnectionPrivate(const QString &host
   networkLayerState(Unknown),
   hostName(hostName), port(port), encrypt(encrypt), delayIpv4(true)
 #ifndef QT_NO_SSL
-, channelCount((type == QHttpNetworkConnection::ConnectionTypeSPDY) ? 1 : defaultHttpChannelCount)
+, channelCount(((type == QHttpNetworkConnection::ConnectionTypeSPDY) || (type == QHttpNetworkConnection::ConnectionTypeHTTP2)) ? 1 : defaultHttpChannelCount)
 #else
 , channelCount(defaultHttpChannelCount)
 #endif // QT_NO_SSL
@@ -932,7 +932,11 @@ void QHttpNetworkConnectionPrivate::removeReply(QHttpNetworkReply *reply)
         QMultiMap<int, HttpMessagePair>::iterator end = channels[i].spdyRequestsToSend.end();
         for (; it != end; ++it) {
             if (it.value().second == reply) {
-                channels[i].spdyRequestsToSend.remove(it.key());
+                // TRACE/network spdy-sendqueue-iterator: erase only THIS entry, by iterator #2.
+                // remove(it.key()) drops every entry sharing this priority (sibling requests) and
+                // reaches the node through findNode() from the root -- the walk that lands on a
+                // freed node here. erase(it) removes just the matching pair and never re-walks.
+                channels[i].spdyRequestsToSend.erase(it);
 
                 QMetaObject::invokeMethod(q, "_q_startNextRequest", Qt::QueuedConnection);
                 return;
@@ -1010,6 +1014,7 @@ void QHttpNetworkConnectionPrivate::_q_startNextRequest()
         }
         break;
     }
+    case QHttpNetworkConnection::ConnectionTypeHTTP2:
     case QHttpNetworkConnection::ConnectionTypeSPDY: {
 #ifndef QT_NO_SSL
         if (channels[0].spdyRequestsToSend.isEmpty())
@@ -1176,7 +1181,8 @@ void QHttpNetworkConnectionPrivate::_q_hostLookupFinished(QHostInfo info)
             networkLayerState = QHttpNetworkConnectionPrivate::Unknown;
         }
 #ifndef QT_NO_SSL
-        else if (connectionType == QHttpNetworkConnection::ConnectionTypeSPDY) {
+        else if (connectionType == QHttpNetworkConnection::ConnectionTypeSPDY
+                 || connectionType == QHttpNetworkConnection::ConnectionTypeHTTP2) {
             QList<HttpMessagePair> spdyPairs = channels[0].spdyRequestsToSend.values();
             for (int a = 0; a < spdyPairs.count(); ++a) {
                 // emit error for all replies
@@ -1297,6 +1303,12 @@ QHttpNetworkConnection::QHttpNetworkConnection(quint16 connectionCount, const QS
 
 QHttpNetworkConnection::~QHttpNetworkConnection()
 {
+    // TRACE/network http-reply dangling-connection: detach guarded pointers before teardown #5.
+    // A reply may outlive this connection yet still hold a QPointer to it and, from its own
+    // destructor, call connection->removeReply(). Null every guard to this connection now, at the
+    // very start of teardown, so such a reply reads a null connection and skips removeReply()
+    // rather than dereferencing our about-to-be-freed private.
+    detachSharedRefCount();
 }
 
 QString QHttpNetworkConnection::hostName() const
@@ -1447,14 +1459,15 @@ void QHttpNetworkConnectionPrivate::emitProxyAuthenticationRequired(const QHttpN
     // Also pause the connection because socket notifiers may fire while an user
     // dialog is displaying
     pauseConnection();
-    QHttpNetworkReply *reply;
+    QHttpNetworkReply *reply = 0;
 #ifndef QT_NO_SSL
-    if (connectionType == QHttpNetworkConnection::ConnectionTypeSPDY) {
+    if (connectionType == QHttpNetworkConnection::ConnectionTypeSPDY
+            || connectionType == QHttpNetworkConnection::ConnectionTypeHTTP2) {
         // we choose the reply to emit the proxyAuth signal from somewhat arbitrarily,
         // but that does not matter because the signal will ultimately be emitted
         // by the QNetworkAccessManager.
-        Q_ASSERT(chan->spdyRequestsToSend.count() > 0);
-        reply = chan->spdyRequestsToSend.cbegin().value().second;
+        if (!chan->spdyRequestsToSend.isEmpty())
+            reply = chan->spdyRequestsToSend.cbegin().value().second;
     } else { // HTTP
 #endif // QT_NO_SSL
         reply = chan->reply;
@@ -1462,8 +1475,13 @@ void QHttpNetworkConnectionPrivate::emitProxyAuthenticationRequired(const QHttpN
     }
 #endif // QT_NO_SSL
 
-    Q_ASSERT(reply);
-    emit reply->proxyAuthenticationRequired(proxy, auth);
+    // The proxy may demand authentication before any request has been queued on
+    // the channel (e.g. a 407 to the initial CONNECT). With no reply to relay
+    // through, there is nothing to emit here; the connection then fails with
+    // ProxyAuthenticationRequiredError, which is the correct outcome. Emitting
+    // through a null (HTTP) or absent (SPDY) reply would dereference garbage.
+    if (reply)
+        emit reply->proxyAuthenticationRequired(proxy, auth);
     resumeConnection();
     int i = indexOf(chan->socket);
     copyCredentials(i, auth, true);
