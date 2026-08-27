@@ -32,6 +32,7 @@
 ****************************************************************************/
 
 
+#include <QtGui/QFontDatabase>
 #include <QtTest/QtTest>
 
 
@@ -698,6 +699,8 @@ void tst_QFont::defaultFamily_data()
 
 void tst_QFont::defaultFamily()
 {
+    if (QFontDatabase().families().isEmpty())
+        QSKIP("no fonts installed in this environment; font metrics/rendering are degenerate");
     QFETCH(QFont::StyleHint, styleHint);
     QFETCH(QStringList, acceptableFamilies);
 

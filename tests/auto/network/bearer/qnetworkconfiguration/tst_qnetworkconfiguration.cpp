@@ -31,6 +31,7 @@
 **
 ****************************************************************************/
 
+#include <QtNetwork/QNetworkConfigurationManager>
 #include <QtTest/QtTest>
 #include "../qbearertestcommon.h"
 
@@ -87,6 +88,8 @@ void tst_QNetworkConfiguration::invalidPoint()
 
 void tst_QNetworkConfiguration::comparison()
 {
+    if (QNetworkConfigurationManager().allConfigurations().isEmpty())
+        QSKIP("no network (bearer) configurations in this environment");
     //test copy constructor and assignment operator
     //compare invalid connection points
     QNetworkConfiguration pt1;

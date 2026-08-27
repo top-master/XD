@@ -31,7 +31,14 @@
 **
 ****************************************************************************/
 
+// TRACE/network/tests network-settings include-guard: guard against double inclusion
+// Without a guard this header double-defines QtNetworkSettings when a test pulls it in
+// both directly and through testserver.h.
+#ifndef QT_NETWORK_SETTINGS_H
+#define QT_NETWORK_SETTINGS_H
+
 #include <QString>
+#include "helpers/test-ports.h"
 #ifdef QT_NETWORK_LIB
 #include <QtNetwork/QHostInfo>
 #include <QtNetwork/QHostAddress>
@@ -57,8 +64,18 @@ public:
     {
         return QString("qt-test-net");
     }
+    /// Where to reach the bundled server-dummy on the local machine. An ordinary
+    /// unprivileged run -- and every memory-safe (Fil-C) run -- talks to plain
+    /// 127.0.0.1 (isLoopbackOnly()): XD has no cross-platform way to map a fake
+    /// public name onto loopback, so it does not try. A privileged run instead uses
+    /// the fake host NAME qt-test-server.qt-test-net, exercising a real host lookup
+    /// (HostLookupState) and name-based certificate checks; that run is expected to
+    /// resolve the name to the server out of band. server-dummy's certificate carries
+    /// the fake name plus 127.0.0.1/::1/localhost in its SANs, so either form verifies.
     static QString serverName()
     {
+        if (isLoopbackOnly())
+            return QStringLiteral("127.0.0.1");
         return serverLocalName() + "." + serverDomainName();
     }
     static QString winServerName()
@@ -75,7 +92,13 @@ public:
     {
         const QHostInfo info = QHostInfo::fromName(serverName());
         if (info.error()) {
+            // This header is shared with the non-test server-dummy binary, which does not
+            // link testlib; only reach for QTest::qFail where testlib is actually present.
+#if defined(QT_TESTLIB_LIB) || defined(QT_TESTCASE_BUILDDIR)
             QTest::qFail(qPrintable(info.errorString()), __FILE__, __LINE__);
+#else
+            qWarning("QtNetworkSettings::serverIP: %s", qPrintable(info.errorString()));
+#endif
             return QHostAddress();
         }
         return info.addresses().constFirst();
@@ -159,3 +182,5 @@ public:
     }
 #endif // QT_NETWORK_LIB
 };
+
+#endif // QT_NETWORK_SETTINGS_H

@@ -35,6 +35,8 @@
 
 #include <QtTest/QtTest>
 
+#include "../../../helpers/assertion.h"
+
 #include <qcoreapplication.h>
 #include <qfileinfo.h>
 #include <qdatastream.h>
@@ -182,8 +184,7 @@ void tst_QUdpSocket::initTestCase_data()
     networkConfiguration = netConfMan->defaultConfiguration();
     networkSession = QSharedPointer<QNetworkSession>(new QNetworkSession(networkConfiguration));
     if (!networkSession->isOpen()) {
-        networkSession->open();
-        QVERIFY(networkSession->waitForOpened(30000));
+        qExpect(networkSession)->to<OpenBefore>(30000);
     }
 #endif
 }

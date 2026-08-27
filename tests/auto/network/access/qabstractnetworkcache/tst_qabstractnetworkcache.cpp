@@ -33,6 +33,8 @@
 
 #include <QTemporaryDir>
 #include <QtTest/QtTest>
+
+#include "../../../helpers/assertion.h"
 #include <QtNetwork/QtNetwork>
 #include "../../../network-settings.h"
 
@@ -139,8 +141,7 @@ void tst_QAbstractNetworkCache::initTestCase()
     networkConfiguration = netConfMan->defaultConfiguration();
     networkSession.reset(new QNetworkSession(networkConfiguration));
     if (!networkSession->isOpen()) {
-        networkSession->open();
-        QVERIFY(networkSession->waitForOpened(30000));
+        qExpect(networkSession)->to<OpenBefore>(30000);
     }
 #endif
 }

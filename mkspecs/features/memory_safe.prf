@@ -14,3 +14,18 @@
 # because a plain clang uses the very same *-clang mkspec.
 _ms_banner = $$system($$QMAKE_CXX --version 2>/dev/null)
 contains(_ms_banner, .*Fil-C.*): memory_safe = filc Fil-C
+
+# Host tools (moc, rcc, uic, the bootstrap lib, qmake) must stay NATIVE even in a
+# Fil-C build: they run at build time, and a Fil-C-compiled tool carries
+# QT_PTR_TRACKING, whose QPtrSafetyTable references do not resolve against the
+# tool bootstrap, and it would need the Fil-C runtime just to run. Under
+# --memory-safe=filc the host spec is *-clang and Fil-C's clang is first on PATH,
+# so a host_build here would pick up Fil-C by bare name; pin it back to the
+# system clang.
+host_build:contains(memory_safe, filc) {
+    QMAKE_CC         = /usr/bin/clang
+    QMAKE_CXX        = /usr/bin/clang++
+    QMAKE_LINK       = /usr/bin/clang++
+    QMAKE_LINK_SHLIB = /usr/bin/clang++
+    QMAKE_LINK_C     = /usr/bin/clang
+}

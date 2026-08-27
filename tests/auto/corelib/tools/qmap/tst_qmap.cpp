@@ -80,6 +80,7 @@ private slots:
     void testInsertWithHint();
     void testInsertMultiWithHint();
     void eraseValidIteratorOnSharedMap();
+    void eraseAdvancedIteratorWalkUseAfterFree();
 };
 
 struct IdentityTracker {
@@ -1469,6 +1470,41 @@ void tst_QMap::eraseValidIteratorOnSharedMap()
     QCOMPARE(ms1.size(), 2);
     QCOMPARE(ms2.size(), 2);
     QCOMPARE(ms3.size(), 3);
+}
+
+void tst_QMap::eraseAdvancedIteratorWalkUseAfterFree()
+{
+    // erase(it++) is unsafe on a QMap: the post-increment advances the iterator to
+    // the successor node first, then erase() frees the current node and red-black
+    // rebalances -- a rebalance that can free the very node the advanced iterator now
+    // holds. Dereferencing it on the next turn, and a later find() (which walks
+    // findNode() down from the root over the same tree), then read a freed node. A
+    // multi-valued key with several siblings is the shape that reaches such a node.
+    QMultiMap<int, int> map;
+    for (int priority = 0; priority < 8; ++priority) {
+        for (int sibling = 0; sibling < 4; ++sibling)
+            map.insertMulti(priority, priority * 100 + sibling);
+    }
+
+    const int toErase = map.size() / 2;
+    QMultiMap<int, int>::iterator it = map.begin();
+    for (int a = 0; a < toErase; ++a) {
+        // Reads the iterator the previous turn advanced; a freed node here is the
+        // use-after-free.
+        volatile int sink = it.value();
+        Q_UNUSED(sink);
+        map.erase(it++);
+    }
+
+    // find() walks findNode() from the root; over the tree the dangling erase left
+    // behind it lands on a freed node.
+    for (int priority = 0; priority < 8; ++priority) {
+        QMultiMap<int, int>::iterator found = map.find(priority);
+        for (; found != map.end() && found.key() == priority; ++found) {
+            volatile int sink = found.value();
+            Q_UNUSED(sink);
+        }
+    }
 }
 
 QTEST_APPLESS_MAIN(tst_QMap)

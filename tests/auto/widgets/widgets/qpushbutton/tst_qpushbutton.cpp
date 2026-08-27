@@ -32,6 +32,7 @@
 ****************************************************************************/
 
 
+#include <QtGui/QFontDatabase>
 #include <QtTest/QtTest>
 
 
@@ -562,6 +563,8 @@ void tst_QPushButton::sizeHint_data()
 
 void tst_QPushButton::sizeHint()
 {
+    if (QFontDatabase().families().isEmpty())
+        QSKIP("no fonts installed; font-dependent geometry is degenerate");
     QFETCH(QString, stylename);
 
     QStyle *style = QStyleFactory::create(stylename);

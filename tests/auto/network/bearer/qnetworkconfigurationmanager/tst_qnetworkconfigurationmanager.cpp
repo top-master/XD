@@ -31,6 +31,7 @@
 **
 ****************************************************************************/
 
+#include <QtNetwork/QNetworkConfigurationManager>
 #include <QtTest/QtTest>
 #include "../qbearertestcommon.h"
 
@@ -63,6 +64,8 @@ void printConfigurationDetails(const QNetworkConfiguration& p)
 
 void tst_QNetworkConfigurationManager::allConfigurations()
 {
+    if (QNetworkConfigurationManager().allConfigurations().isEmpty())
+        QSKIP("no network (bearer) configurations in this environment");
     QNetworkConfigurationManager manager;
     QList<QNetworkConfiguration> preScanConfigs = manager.allConfigurations();
 

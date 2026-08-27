@@ -45,6 +45,8 @@
 
 #include <QtTest/QtTest>
 
+#include "../../../helpers/assertion.h"
+
 #ifndef Q_OS_WIN
 #include <unistd.h>
 #include <sys/ioctl.h>
@@ -168,8 +170,7 @@ void tst_QTcpServer::initTestCase()
 #ifndef QT_NO_BEARERMANAGEMENT
     QNetworkConfigurationManager man;
     networkSession = new QNetworkSession(man.defaultConfiguration(), this);
-    networkSession->open();
-    QVERIFY(networkSession->waitForOpened());
+    qExpect(networkSession)->to<OpenBefore>(30000);
 #endif
 }
 

@@ -2110,7 +2110,12 @@ public slots:
 #if defined(Q_OS_MAC)
         pthread_yield_np();
 #elif defined Q_OS_LINUX && !defined Q_OS_ANDROID
+#  ifndef QT_PTR_TRACKING
         pthread_yield();
+#  else
+        // Fil-C's libc drops the deprecated pthread_yield().
+        sched_yield();
+#  endif
 #endif
         if (!sock->waitForConnected()) {
             networkTimeout = true;

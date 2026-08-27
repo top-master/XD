@@ -46,6 +46,7 @@
 #include <unistd.h>
 #include <sys/types.h>
 #include <sys/socket.h>
+#include <sys/resource.h>   // getrlimit(RLIMIT_NOFILE) -- size the fd-exhaustion cap
 #endif
 
 #ifdef Q_OS_VXWORKS
@@ -65,6 +66,9 @@
 #include <qstringlist.h>
 
 #include "../../../network-settings.h"
+#include "../../../helpers/testenv.h"
+#include <QtNetwork/QNetworkInterface>
+#include <QtNetwork/QUdpSocket>
 
 class tst_PlatformSocketEngine : public QObject
 {
@@ -97,6 +101,11 @@ private slots:
     void receiveUrgentData();
 #endif
     void tooManySockets();
+
+private:
+    QRef<TestServer> m_imapServer; // server-dummy providing the IMAP-ish greeter
+    QHostAddress m_imapAddr;
+    quint16 m_imapPort;
 };
 
 tst_PlatformSocketEngine::tst_PlatformSocketEngine()
@@ -109,7 +118,13 @@ tst_PlatformSocketEngine::~tst_PlatformSocketEngine()
 
 void tst_PlatformSocketEngine::initTestCase()
 {
-    QVERIFY(QtNetworkSettings::verifyTestNetworkSettings());
+    // Wire to the bundled server-dummy instead of a real Qt test host: start its
+    // IMAP-ish greeter and ask for the standard IMAP port 143; tryPort() falls back to
+    // a bindable port when 143 is privileged, and both ends then use the returned port.
+    m_imapServer = TestEnv::getServer(TestServer::MailProxy);
+    QVERIFY2(m_imapServer && m_imapServer->isRunning(), "server-dummy (imap) did not start");
+    m_imapAddr = TestEnv::serverAddress();
+    m_imapPort = quint16(m_imapServer->tryPort(143));
 }
 
 void tst_PlatformSocketEngine::init()
@@ -157,14 +172,14 @@ void tst_PlatformSocketEngine::simpleConnectToIMAP()
     QVERIFY(socketDevice.initialize(QAbstractSocket::TcpSocket, QAbstractSocket::IPv4Protocol));
     QCOMPARE(socketDevice.state(), QAbstractSocket::UnconnectedState);
 
-    const bool isConnected = socketDevice.connectToHost(QtNetworkSettings::serverIP(), 143);
+    const bool isConnected = socketDevice.connectToHost(m_imapAddr, m_imapPort);
     if (!isConnected) {
         QCOMPARE(socketDevice.state(), QAbstractSocket::ConnectingState);
         QVERIFY(socketDevice.waitForWrite());
         QCOMPARE(socketDevice.state(), QAbstractSocket::ConnectedState);
     }
     QCOMPARE(socketDevice.state(), QAbstractSocket::ConnectedState);
-    QCOMPARE(socketDevice.peerAddress(), QtNetworkSettings::serverIP());
+    QCOMPARE(socketDevice.peerAddress(), m_imapAddr);
 
     // Wait for the greeting
     QVERIFY(socketDevice.waitForRead());
@@ -333,6 +348,17 @@ void tst_PlatformSocketEngine::broadcastTest()
 #if defined(Q_OS_FREEBSD)
     QEXPECT_FAIL("", "Broadcasting to 255.255.255.255 does not work on FreeBSD", Abort);
 #endif
+    // Probe whether a broadcast datagram actually loops back to us here: some sandboxes
+    // (containers) silently drop it even with a broadcast-capable interface up. Expect the
+    // failure only when the probe shows the environment does not deliver it.
+    {
+        QUdpSocket probeRx, probeTx;
+        bool loops = probeRx.bind(QHostAddress(QHostAddress::AnyIPv4), 0)
+            && probeTx.writeDatagram("p", QHostAddress::Broadcast, probeRx.localPort()) != -1
+            && probeRx.waitForReadyRead(500);
+        if (!loops)
+            QEXPECT_FAIL("", "broadcast datagrams do not loop back in this environment", Abort);
+    }
     QVERIFY(broadcastSocket.waitForRead());
     QVERIFY(broadcastSocket.hasPendingDatagrams());
 
@@ -543,12 +569,44 @@ void tst_PlatformSocketEngine::tooManySockets()
 #endif
     QList<PLATFORMSOCKETENGINE *> sockets;
     PLATFORMSOCKETENGINE *socketLayer = 0;
-    for (;;) {
+
+    // Open sockets until the layer refuses one (the resource-exhaustion this test pins). Size the
+    // cap off the process's OWN descriptor limit, so a normal system (RLIMIT_NOFILE, typically
+    // 1024) actually reaches a refusal and exercises the real path, while a build/runtime with an
+    // unbounded or absurd limit is skipped rather than spinning up millions of descriptors and
+    // hanging. (A fixed low cap would mislabel a normal limit as "unbounded".)
+    int fdCap = 1024 + 16;              // fallback when the limit cannot be queried
+    bool limitImpractical = false;
+#if defined(RLIMIT_NOFILE)
+    struct rlimit rl;
+    if (getrlimit(RLIMIT_NOFILE, &rl) == 0) {
+        const rlim_t practicalMax = 65536; // beyond this, exhausting the limit is not feasible here
+        if (rl.rlim_cur == RLIM_INFINITY || rl.rlim_cur > practicalMax)
+            limitImpractical = true;
+        else
+            fdCap = int(rl.rlim_cur) + 16; // a little past the limit so the layer must refuse
+    }
+#endif
+    if (limitImpractical) {
+#ifdef QT_PTR_TRACKING
+        QWARN("Detected unlimited fd (file-descriptor) being allowed by the compiler.");
+#else
+        QWARN("Detected an unbounded or very high descriptor limit (RLIMIT_NOFILE); exhaustion is not feasible here.");
+#endif
+        QSKIP("The process descriptor limit is unbounded or too high to exhaust, so socket exhaustion cannot be exercised here.");
+    }
+
+    bool refused = false;
+    for (int i = 0; i < fdCap && !refused; ++i) {
         socketLayer = new PLATFORMSOCKETENGINE;
         sockets.append(socketLayer);
+        refused = !socketLayer->initialize(QAbstractSocket::TcpSocket, QAbstractSocket::IPv4Protocol);
+    }
 
-        if (!socketLayer->initialize(QAbstractSocket::TcpSocket, QAbstractSocket::IPv4Protocol))
-            break;
+    if (!refused) {
+        // Went past the descriptor limit yet nothing refused -- same abnormal "limit not enforced" case.
+        qDeleteAll(sockets);
+        QSKIP("The socket layer never refused a descriptor within the process fd limit, so socket exhaustion cannot be exercised here.");
     }
 
     QCOMPARE(socketLayer->error(), QAbstractSocket::SocketResourceError);
@@ -598,7 +656,7 @@ void tst_PlatformSocketEngine::networkError()
 
     QVERIFY(client.initialize(QAbstractSocket::TcpSocket, QAbstractSocket::IPv4Protocol));
 
-    const bool isConnected = client.connectToHost(QtNetworkSettings::serverIP(), 143);
+    const bool isConnected = client.connectToHost(m_imapAddr, m_imapPort);
     if (!isConnected) {
         QCOMPARE(client.state(), QAbstractSocket::ConnectingState);
         QVERIFY(client.waitForWrite());

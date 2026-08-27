@@ -33,6 +33,8 @@
 
 
 #include <QtTest/QtTest>
+
+#include "../../../helpers/assertion.h"
 #include <QtCore/QCryptographicHash>
 #include <QtCore/QDataStream>
 #include <QtCore/QUrl>
@@ -1451,12 +1453,18 @@ int tst_QNetworkReply::waitForFinish(QNetworkReplyPtr &reply)
 
 void tst_QNetworkReply::finished()
 {
-    loop->exit(returnCode = Success);
+    // `loop` is a reused member, null between waits. A reply that outlives its
+    // wait -- XD's parent-strong-ref keeps a QSharedPointer-covered reply alive and
+    // still running after the test drops its pointer -- can emit finished() when no
+    // wait is active, so guard the deref instead of crashing on a null `loop`.
+    if (loop)
+        loop->exit(returnCode = Success);
 }
 
 void tst_QNetworkReply::gotError()
 {
-    loop->exit(returnCode = Failure);
+    if (loop)
+        loop->exit(returnCode = Failure);
     disconnect(QObject::sender(), SIGNAL(finished()), this, 0);
 }
 
@@ -1469,7 +1477,7 @@ void tst_QNetworkReply::initTestCase()
     if (!QtNetworkSettings::verifyTestNetworkSettings())
         QSKIP("No network test server available");
 #if !defined Q_OS_WIN
-    wronlyFileName = testDataDir + "/write-only" + uniqueExtension;
+    wronlyFileName = QDir::tempPath() + "/write-only" + uniqueExtension;
     QFile wr(wronlyFileName);
     QVERIFY(wr.open(QIODevice::WriteOnly | QIODevice::Truncate));
     wr.setPermissions(QFile::WriteOwner | QFile::WriteUser);
@@ -1485,8 +1493,7 @@ void tst_QNetworkReply::initTestCase()
     networkConfiguration = netConfMan->defaultConfiguration();
     networkSession.reset(new QNetworkSession(networkConfiguration));
     if (!networkSession->isOpen()) {
-        networkSession->open();
-        QVERIFY(networkSession->waitForOpened(30000));
+        qExpect(networkSession)->to<OpenBefore>(30000);
     }
 #endif
 
