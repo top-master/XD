@@ -82,6 +82,8 @@ public:
         SpdyWasUsedAttribute,
         EmitAllUploadProgressSignalsAttribute,
         FollowRedirectsAttribute,
+        Http2AllowedAttribute,
+        Http2WasUsedAttribute,
 
         User = 1000,
         UserMax = 32767
