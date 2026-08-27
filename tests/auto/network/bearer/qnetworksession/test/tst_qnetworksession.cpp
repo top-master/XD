@@ -36,6 +36,7 @@
 #include <QLocalSocket>
 #include <QTimer>
 #include "../../qbearertestcommon.h"
+#include "../../../../helpers/testbearer.h"
 
 #ifndef QT_NO_BEARERMANAGEMENT
 #include <QtNetwork/qnetworkconfigmanager.h>
@@ -1300,5 +1301,22 @@ void tst_QNetworkSession::usagePolicies()
 
 #endif
 
-QTEST_MAIN(tst_QNetworkSession)
+// Custom main (not QTEST_MAIN): tst_QNetworkSession holds a QNetworkConfigurationManager member,
+// which loads the bearer engines the moment it is constructed. So the bearer-dummy daemon must be
+// started -- and $QT_BEARER_DUMMY_PORT published -- BEFORE the test object exists, i.e. here,
+// after QCoreApplication but before "tst_QNetworkSession tc". initTestCase() would be too late.
+int main(int argc, char *argv[])
+{
+#ifndef QT_NO_BEARERMANAGEMENT
+    QCoreApplication app(argc, argv);
+    TestBearer bearer;
+    bearer.start();
+    tst_QNetworkSession tc;
+    QTEST_SET_MAIN_SOURCE_PATH
+    return QTest::qExec(&tc, argc, argv);
+#else
+    Q_UNUSED(argc); Q_UNUSED(argv);
+    return 0;
+#endif
+}
 #include "tst_qnetworksession.moc"
