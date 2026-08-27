@@ -46,6 +46,7 @@
 //
 
 #include <QtTest/qtest_global.h>
+#include <QtCore/qbytearray.h>
 
 QT_BEGIN_NAMESPACE
 
@@ -68,7 +69,7 @@ public:
     static void finishedCurrentTestFunction();
     static void reset();
     static bool isCurrentTestBlacklisted();
-    static void setBlacklistCurrentTest(bool b);
+    static void setBlacklistCurrentTest(bool b, const QByteArray &reason = QByteArray());
 
     static void addFailure(const char *message, const char *file, int line);
     static bool compare(bool success, const char *failureMsg,
