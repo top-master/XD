@@ -140,6 +140,8 @@ public:
     static QString applicationFilePath();
     static qint64 applicationPid();
 
+    static bool isElevated();
+
 #ifndef QT_NO_LIBRARY
     static void setLibraryPaths(const QStringList &);
     static QStringList libraryPaths();

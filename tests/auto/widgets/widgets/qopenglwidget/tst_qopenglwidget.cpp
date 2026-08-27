@@ -42,6 +42,7 @@
 #include <QtWidgets/QVBoxLayout>
 #include <QtWidgets/QPushButton>
 #include <QtWidgets/QStackedWidget>
+#include <QtGui/QOpenGLContext>
 #include <QtTest/QtTest>
 #include <QSignalSpy>
 
@@ -50,6 +51,7 @@ class tst_QOpenGLWidget : public QObject
     Q_OBJECT
 
 private slots:
+    void initTestCase();
     void create();
     void clearAndGrab();
     void clearAndResizeAndGrab();
@@ -64,6 +66,14 @@ private slots:
     void nativeWindow();
     void stackWidgetOpaqueChildIsVisible();
 };
+
+void tst_QOpenGLWidget::initTestCase()
+{
+    // Gate on whether this platform can actually create a GL context.
+    QOpenGLContext glProbe;
+    if (!glProbe.create())
+        QSKIP("OpenGL is not available on this platform");
+}
 
 void tst_QOpenGLWidget::create()
 {
