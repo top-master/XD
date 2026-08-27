@@ -8,7 +8,28 @@ QT = core-private network-private testlib
 RESOURCES += ../qnetworkreply.qrc
 
 TESTDATA += ../empty ../rfc3252.txt ../resource ../bigfile ../*.jpg ../certs \
-            ../index.html ../smb-file.txt
+            ../index.html ../smb-file.txt ../element.xml
+
+# Copy the fixture data NEXT TO THE BINARY ($$OUT_PWD/.. is where TARGET=../tst_qnetworkreply lands,
+# i.e. QCoreApplication::applicationDirPath()). QFINDTESTDATA() prefers the binary dir over the source
+# tree, so with the data present here the bundled server's --folder resolves to this WRITABLE build
+# dir. That matters because the server now mutates its config at run time -- test-driven edits plus
+# the IniWatcher's lastPull ack -- and those writes must never touch the checked-in server-config.ini.
+serverdata.files = $$PWD/../rfc3252.txt $$PWD/../bigfile $$PWD/../index.html \
+                   $$PWD/../smb-file.txt $$PWD/../empty $$PWD/../resource \
+                   $$PWD/../element.xml $$files($$PWD/../*.jpg)
+serverdata.path = $$OUT_PWD/..
+COPIES += serverdata
+# The whole certs/ directory goes next to the binary too. COPIES cannot mix files and directories,
+# and a COPIES directory also skips once its destination exists -- so a changed cert would not
+# re-copy. copyDirLater (xd_functions.prf) copies the directory post-build every time, so each run
+# starts from the pristine committed certs, matching server-config.ini's copyFileLater below.
+copyDirLater($$PWD/../certs, $$OUT_PWD/..)
+# server-config.ini is rewritten at run time (edits + lastPull), so COPIES -- which skips once the
+# destination is newer than the source -- would leave a stale copy after the first run. copyFileLater
+# (xd_functions.prf) copies post-link on every build, so each run starts from the pristine committed
+# config; it also spares us the hand-rolled $$QMAKE_COPY / shell_path / escape_expand incantation.
+copyFileLater($$PWD/../server-config.ini, $$OUT_PWD/..)
 
 contains(QT_CONFIG,xcb): CONFIG+=insignificant_test  # unstable, QTBUG-21102
 win32:CONFIG += insignificant_test # QTBUG-24226

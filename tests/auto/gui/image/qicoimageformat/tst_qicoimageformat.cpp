@@ -30,6 +30,7 @@
 ** $QT_END_LICENSE$
 **
 ****************************************************************************/
+#include <QtGui/QImageReader>
 #include <QtTest/QtTest>
 #include <QtGui>
 #include <QtCore>
@@ -140,6 +141,8 @@ void tst_QIcoImageFormat::canRead_data()
 
 void tst_QIcoImageFormat::canRead()
 {
+    if (!QImageReader::supportedImageFormats().contains("ico"))
+        QSKIP("no ICO image handler available in this build");
     QFETCH(QString, fileName);
     QFETCH(int, isValid);
 
@@ -174,6 +177,8 @@ void tst_QIcoImageFormat::SequentialFile_data()
 
 void tst_QIcoImageFormat::SequentialFile()
 {
+    if (!QImageReader::supportedImageFormats().contains("ico"))
+        QSKIP("no ICO image handler available in this build");
     QFETCH(QString, fileName);
     QFETCH(int, isValid);
 
@@ -211,6 +216,8 @@ void tst_QIcoImageFormat::imageCount_data()
 
 void tst_QIcoImageFormat::imageCount()
 {
+    if (!QImageReader::supportedImageFormats().contains("ico"))
+        QSKIP("no ICO image handler available in this build");
     QFETCH(QString, fileName);
     QFETCH(int, count);
 
@@ -239,6 +246,8 @@ void tst_QIcoImageFormat::jumpToNextImage_data()
 
 void tst_QIcoImageFormat::jumpToNextImage()
 {
+    if (!QImageReader::supportedImageFormats().contains("ico"))
+        QSKIP("no ICO image handler available in this build");
     QFETCH(QString, fileName);
     QFETCH(int, count);
 
@@ -262,6 +271,8 @@ void tst_QIcoImageFormat::loopCount_data()
 
 void tst_QIcoImageFormat::loopCount()
 {
+    if (!QImageReader::supportedImageFormats().contains("ico"))
+        QSKIP("no ICO image handler available in this build");
     QFETCH(QString, fileName);
     QFETCH(int, count);
 
@@ -290,6 +301,8 @@ void tst_QIcoImageFormat::nextImageDelay_data()
 
 void tst_QIcoImageFormat::nextImageDelay()
 {
+    if (!QImageReader::supportedImageFormats().contains("ico"))
+        QSKIP("no ICO image handler available in this build");
     QFETCH(QString, fileName);
     QFETCH(int, count);
 
@@ -317,6 +330,8 @@ void tst_QIcoImageFormat::pngCompression_data()
 
 void tst_QIcoImageFormat::pngCompression()
 {
+    if (!QImageReader::supportedImageFormats().contains("ico"))
+        QSKIP("no ICO image handler available in this build");
     QFETCH(QString, fileName);
     QFETCH(int, index);
     QFETCH(int, width);
@@ -350,6 +365,8 @@ void tst_QIcoImageFormat::write_data()
 
 void tst_QIcoImageFormat::write()
 {
+    if (!QImageReader::supportedImageFormats().contains("ico"))
+        QSKIP("no ICO image handler available in this build");
     QFETCH(QSize, inSize);
     QFETCH(QSize, outSize);
 

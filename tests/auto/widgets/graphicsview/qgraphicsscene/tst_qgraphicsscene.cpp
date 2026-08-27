@@ -32,6 +32,7 @@
 ****************************************************************************/
 
 
+#include <QtGui/QGuiApplication>
 #include <QtTest/QtTest>
 #if defined(Q_OS_WINCE)
 #include <ceconfig.h>
@@ -1195,6 +1196,8 @@ else
 
 void tst_QGraphicsScene::addPixmap()
 {
+    if (QGuiApplication::platformName() == QLatin1String("offscreen"))
+        QSKIP("requires a real windowing platform; unavailable on the offscreen platform");
     QGraphicsScene scene;
     QPixmap pix(":/Ash_European.jpg");
     QGraphicsPixmapItem *pixmap = scene.addPixmap(pix);
@@ -3380,6 +3383,8 @@ void tst_QGraphicsScene::tabFocus_sceneWithNestedFocusWidgets()
 
 void tst_QGraphicsScene::style()
 {
+    if (QGuiApplication::platformName() == QLatin1String("offscreen"))
+        QSKIP("requires a real windowing platform; unavailable on the offscreen platform");
     QPointer<QStyle> windowsStyle = QStyleFactory::create("windows");
 
     QGraphicsScene scene;

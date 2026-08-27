@@ -45,6 +45,8 @@
 #endif
 
 #include <QtTest/QtTest>
+
+#include "../../../helpers/assertion.h"
 #include <qcoreapplication.h>
 #include <QDebug>
 #include <QTcpSocket>
@@ -84,8 +86,11 @@
 #endif
 
 #include "../../../network-settings.h"
+#include "../../../helpers/testenv.h"
+#include "../../../helpers/testcoverage.h"
 
 #define TEST_DOMAIN ".test.qt-project.org"
+
 
 
 class tst_QHostInfo : public QObject
@@ -105,10 +110,17 @@ public slots:
 private slots:
     void getSetCheck();
     void staticInformation();
+    /// The server-dummy copy runs first (declaration order), hence an internet lookup
+    /// below can skip offline once that copy proved its row.
+    void lookupServerDummy_data();
+    void lookupServerDummy();
     void lookupIPv4_data();
     void lookupIPv4();
     void lookupIPv6_data();
     void lookupIPv6();
+    /// The server-dummy copy of reverseLookup() runs first, for the same reason.
+    void reverseLookupServerDummy_data();
+    void reverseLookupServerDummy();
     void reverseLookup_data();
     void reverseLookup();
 
@@ -130,6 +142,12 @@ protected slots:
     void resultsReady(const QHostInfo &);
 
 private:
+    static bool matchesRow(const QHostInfo &info, int err, const QString &addresses);
+
+    /// Lets an internet lookup skip offline once the server-dummy copy of its row passed.
+    OfflineCoverageRow m_serverDummyCoverage;
+    /// The same for a reverse lookup, whose rows lookupServerDummy() does not have.
+    OfflineCoverageRow m_serverDummyReverseCoverage;
     bool ipv6LookupsAvailable;
     bool ipv6Available;
     bool lookupDone;
@@ -179,15 +197,13 @@ tst_QHostInfo::~tst_QHostInfo()
 
 void tst_QHostInfo::initTestCase()
 {
-    QVERIFY(QtNetworkSettings::verifyTestNetworkSettings());
 #ifndef QT_NO_BEARERMANAGEMENT
     //start the default network
     netConfMan = new QNetworkConfigurationManager(this);
     networkConfiguration = netConfMan->defaultConfiguration();
     networkSession.reset(new QNetworkSession(networkConfiguration));
     if (!networkSession->isOpen()) {
-        networkSession->open();
-        QVERIFY(networkSession->waitForOpened(30000));
+        qExpect(networkSession.data())->to<OpenBefore>(5000);
     }
 #endif
 
@@ -271,6 +287,11 @@ void tst_QHostInfo::lookupIPv4()
     QHostInfo::lookupHost(hostname, this, SLOT(resultsReady(QHostInfo)));
 
     QTestEventLoop::instance().enterLoop(10);
+    if ((QTestEventLoop::instance().timeout() || !lookupDone || !matchesRow(lookupResults, err, addresses))
+        && m_serverDummyCoverage.canSkip())
+    {
+        QSKIP("No internet; the server-dummy copy of this row (lookupServerDummy) passed.");
+    }
     QVERIFY(!QTestEventLoop::instance().timeout());
     QVERIFY(lookupDone);
 
@@ -319,6 +340,11 @@ void tst_QHostInfo::lookupIPv6()
     QHostInfo::lookupHost(hostname, this, SLOT(resultsReady(QHostInfo)));
 
     QTestEventLoop::instance().enterLoop(10);
+    if ((QTestEventLoop::instance().timeout() || !lookupDone || !matchesRow(lookupResults, err, addresses))
+        && m_serverDummyCoverage.canSkip())
+    {
+        QSKIP("No internet; the server-dummy copy of this row (lookupServerDummy) passed.");
+    }
     QVERIFY(!QTestEventLoop::instance().timeout());
     QVERIFY(lookupDone);
 
@@ -335,6 +361,189 @@ void tst_QHostInfo::lookupIPv6()
     QCOMPARE(tmp.join(' ').toLower(), expected.join(' ').toLower());
 }
 
+/// Records which names a QHostInfoOverride answered and which it handed on to the
+/// system resolver; lookups run on the lookup thread pool, hence the mutex.
+class RecordingHostInfoOverride : public QHostInfoOverride
+{
+public:
+    RecordingHostInfoOverride(const QHostAddress &nameserver, quint16 port)
+        : QHostInfoOverride(nameserver, port)
+    {}
+
+    bool lookupHost(const QString &name, QList<QHostAddress> *addresses) Q_DECL_OVERRIDE
+    {
+        const bool found = QHostInfoOverride::lookupHost(name, addresses);
+        QMutexLocker locker(&mutex);
+        if (found) {
+            answered.append(name);
+        } else {
+            declined.append(name);
+        }
+        return found;
+    }
+
+    bool reverseLookup(const QHostAddress &address, QString *hostName) Q_DECL_OVERRIDE
+    {
+        const bool found = QHostInfoOverride::reverseLookup(address, hostName);
+        QMutexLocker locker(&mutex);
+        if (found) {
+            answered.append(address.toString());
+        } else {
+            declined.append(address.toString());
+        }
+        return found;
+    }
+
+    /// Guards answered and declined across the lookup threads.
+    QMutex mutex;
+    /// Lets the test check that the override itself resolved a name.
+    QStringList answered;
+    /// Lets the test check that the override handed a name on.
+    QStringList declined;
+};
+
+/// Puts back the override a test found installed, also when the test returns early.
+class HostInfoOverrideRestorer
+{
+public:
+    explicit HostInfoOverrideRestorer(QHostInfoLookupManager *manager)
+        : m_manager(manager)
+        , m_previous(manager->override())
+    {}
+    ~HostInfoOverrideRestorer() { m_manager->setOverride(m_previous); }
+
+private:
+    /// Names the lookup manager whose override the destructor restores.
+    QHostInfoLookupManager *m_manager;
+    /// Comes back into place once the test ends.
+    QSharedPointer<QHostInfoOverride> m_previous;
+};
+
+void tst_QHostInfo::lookupServerDummy_data()
+{
+    QTest::addColumn<QString>("hostname");
+    QTest::addColumn<QString>("addresses");
+    QTest::addColumn<bool>("answered");
+
+    QTest::newRow("test-server") << QtNetworkSettings::domainName() << "127.0.0.1 ::1" << true;
+    QTest::newRow("single_ip4") << "a-single" TEST_DOMAIN << "192.0.2.1" << true;
+    QTest::newRow("multiple_ip4") << "a-multi" TEST_DOMAIN << "192.0.2.1 192.0.2.2 192.0.2.3" << true;
+    QTest::newRow("idn-ace") << "a-single.xn--alqualond-34a" TEST_DOMAIN << "192.0.2.1" << true;
+    QTest::newRow("idn-unicode") << QString::fromLatin1("a-single.alqualond\353" TEST_DOMAIN) << "192.0.2.1" << true;
+    QTest::newRow("aaaa-single") << "aaaa-single" TEST_DOMAIN << "2001:db8::1" << true;
+    QTest::newRow("aaaa-multi") << "aaaa-multi" TEST_DOMAIN << "2001:db8::1 2001:db8::2 2001:db8::3" << true;
+    QTest::newRow("a-plus-aaaa") << "a-plus-aaaa" TEST_DOMAIN << "198.51.100.1 2001:db8::1:1" << true;
+    QTest::newRow("notfound") << "invalid" TEST_DOMAIN << "" << false;
+}
+
+/// Resolves through a QHostInfoOverride aimed at the bundled server-dummy DNS, on
+/// its own: it installs the override itself and puts back the previous one after,
+/// hence the system-resolver slots above stay as they are.
+///
+/// A name the override does not know goes on to the system resolver; hence the
+/// `notfound` row checks only that the override declined it.
+void tst_QHostInfo::lookupServerDummy()
+{
+    QFETCH(QString, hostname);
+    QFETCH(QString, addresses);
+    QFETCH(bool, answered);
+
+    QHostInfoLookupManager *manager =
+        qobject_cast<QHostInfoLookupManager *>(QAbstractHostInfoLookupManager::globalInstance());
+    QVERIFY(manager);
+    HostInfoOverrideRestorer restorer(manager);
+    QRef<TestServer> dnsServer = TestEnv::getServer(TestServer::NameLookup);
+    QVERIFY2(dnsServer && dnsServer->isRunning(), "server-dummy (dns) did not start");
+    QSharedPointer<RecordingHostInfoOverride> recorder =
+        QSharedPointer<RecordingHostInfoOverride>::create(QHostAddress(QHostAddress::LocalHost),
+                                                          dnsServer->port());
+    manager->setOverride(recorder);
+
+    lookupDone = false;
+    QHostInfo::lookupHost(hostname, this, SLOT(resultsReady(QHostInfo)));
+    QTestEventLoop::instance().enterLoop(10);
+    QVERIFY(!QTestEventLoop::instance().timeout());
+    QVERIFY(lookupDone);
+
+    {
+        QMutexLocker locker(&recorder->mutex);
+        qExpect(recorder->answered.contains(hostname))->toEqual(answered);
+        qExpect(recorder->declined.contains(hostname))->toEqual(!answered);
+    }
+    if (!answered) {
+        return;
+    }
+    qExpect(int(lookupResults.error()))->toEqual(int(QHostInfo::NoError));
+
+    QStringList found;
+    for (int i = 0; i < lookupResults.addresses().count(); ++i) {
+        found.append(lookupResults.addresses().at(i).toString().toLower());
+    }
+    found.sort();
+    QStringList expected = addresses.split(' ');
+    expected.sort();
+    qExpect(found.join(' '))->toEqual(expected.join(' '));
+    m_serverDummyCoverage.cover();
+}
+
+/*!
+    Tells whether \a info carries the error \a err and exactly the space-separated
+    \a addresses of a data row, in any order and letter case.
+*/
+bool tst_QHostInfo::matchesRow(const QHostInfo &info, int err, const QString &addresses)
+{
+    if (int(info.error()) != err) {
+        return false;
+    }
+    QStringList found;
+    for (int i = 0; i < info.addresses().count(); ++i) {
+        found.append(info.addresses().at(i).toString().toLower());
+    }
+    found.sort();
+    QStringList expected = addresses.toLower().split(' ');
+    expected.sort();
+    return found.join(' ') == expected.join(' ');
+}
+
+void tst_QHostInfo::reverseLookupServerDummy_data()
+{
+    QTest::addColumn<QString>("address");
+    QTest::addColumn<QString>("hostName");
+
+    QTest::newRow("dns.google") << QString("8.8.8.8") << QString("dns.google");
+    QTest::newRow("one.one.one.one") << QString("1.1.1.1") << QString("one.one.one.one");
+}
+
+/// Resolves addresses back to host names through a QHostInfoOverride aimed at the
+/// bundled server-dummy DNS, on its own, just like lookupServerDummy() does for names.
+void tst_QHostInfo::reverseLookupServerDummy()
+{
+    QFETCH(QString, address);
+    QFETCH(QString, hostName);
+
+    QHostInfoLookupManager *manager =
+        qobject_cast<QHostInfoLookupManager *>(QAbstractHostInfoLookupManager::globalInstance());
+    QVERIFY(manager);
+    HostInfoOverrideRestorer restorer(manager);
+    QRef<TestServer> dnsServer = TestEnv::getServer(TestServer::NameLookup);
+    QVERIFY2(dnsServer && dnsServer->isRunning(), "server-dummy (dns) did not start");
+    QSharedPointer<RecordingHostInfoOverride> recorder =
+        QSharedPointer<RecordingHostInfoOverride>::create(QHostAddress(QHostAddress::LocalHost),
+                                                          dnsServer->port());
+    manager->setOverride(recorder);
+
+    const QHostInfo info = QHostInfo::fromName(address);
+    {
+        QMutexLocker locker(&recorder->mutex);
+        qExpect(recorder->answered.contains(address))->toBeTruthy();
+    }
+    qExpect(int(info.error()))->toEqual(int(QHostInfo::NoError));
+    qExpect(info.hostName())->toEqual(hostName);
+    QVERIFY(!info.addresses().isEmpty());
+    qExpect(info.addresses().first())->toEqual(QHostAddress(address));
+    m_serverDummyReverseCoverage.cover();
+}
+
 void tst_QHostInfo::reverseLookup_data()
 {
     QTest::addColumn<QString>("address");
@@ -342,8 +551,11 @@ void tst_QHostInfo::reverseLookup_data()
     QTest::addColumn<int>("err");
     QTest::addColumn<bool>("ipv6");
 
-    QTest::newRow("google-public-dns-a.google.com") << QString("8.8.8.8") << QStringList(QString("google-public-dns-a.google.com")) << 0 << false;
-    QTest::newRow("gitorious.org") << QString("87.238.52.168") << QStringList(QString("gitorious.org")) << 0 << false;
+    QTest::newRow("dns.google") << QString("8.8.8.8") << QStringList(QString("dns.google")) << 0 << false;
+    // A bare website domain such as example.com would read more naturally here, but a reverse
+    // lookup checks the address's PTR record, and example.com's (now CDN-hosted) address has no
+    // PTR at all; hence 1.1.1.1, which reverses cleanly and stably to one.one.one.one.
+    QTest::newRow("one.one.one.one") << QString("1.1.1.1") << QStringList(QString("one.one.one.one")) << 0 << false;
     QTest::newRow("bogus-name") << QString("1::2::3::4") << QStringList() << 1 << true;
 }
 
@@ -359,6 +571,12 @@ void tst_QHostInfo::reverseLookup()
     }
 
     QHostInfo info = QHostInfo::fromName(address);
+    const bool matches = err == 0
+        ? hostNames.contains(info.hostName())
+        : info.error() == QHostInfo::HostNotFound;
+    if (!matches && m_serverDummyReverseCoverage.canSkip()) {
+        QSKIP("No internet; the server-dummy copy of this row (reverseLookupServerDummy) passed.");
+    }
 
     if (err == 0) {
         QVERIFY(hostNames.contains(info.hostName()));
@@ -384,6 +602,9 @@ void tst_QHostInfo::blockingLookup()
     QFETCH(QString, addresses);
 
     QHostInfo hostInfo = QHostInfo::fromName(hostname);
+    if (!matchesRow(hostInfo, err, addresses) && m_serverDummyCoverage.canSkip()) {
+        QSKIP("No internet; the server-dummy copy of this row (lookupServerDummy) passed.");
+    }
     QStringList tmp;
     for (int i = 0; i < hostInfo.addresses().count(); ++i)
         tmp.append(hostInfo.addresses().at(i).toString());

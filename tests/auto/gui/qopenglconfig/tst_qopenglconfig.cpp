@@ -39,6 +39,7 @@
 #include <qpa/qplatformnativeinterface.h>
 #include <private/qopengl_p.h>
 
+#include <QtGui/QOpenGLContext>
 #include <QtTest/QtTest>
 
 #include <QtCore/QSysInfo>
@@ -105,6 +106,7 @@ class tst_QOpenGlConfig : public QObject
     Q_OBJECT
 
 private slots:
+    void initTestCase();
     void testConfiguration();
     void testGlConfiguration();
     void testBugList();
@@ -165,6 +167,14 @@ static void dumpConfiguration(QTextStream &str)
                 str << "\nGPU:\n" << description << "\n\n";
         }
     }
+}
+
+void tst_QOpenGlConfig::initTestCase()
+{
+    // Gate on whether this platform can actually create a GL context.
+    QOpenGLContext glProbe;
+    if (!glProbe.create())
+        QSKIP("OpenGL is not available on this platform");
 }
 
 void tst_QOpenGlConfig::testConfiguration()

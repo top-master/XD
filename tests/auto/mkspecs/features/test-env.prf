@@ -1,0 +1,1 @@
+include($$PWD/../../helpers/test-env.pri)

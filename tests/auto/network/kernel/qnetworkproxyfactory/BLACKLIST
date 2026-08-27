@@ -1,2 +1,4 @@
+# The generic system-proxy backend (gsettings/libproxy) resolves differently on Ubuntu 14.04, so
+# genericSystemProxy is unreliable there (cf. QTQAINFRA-1200 system-proxy hangs). Exact ticket uncertain.
 [genericSystemProxy]
 ubuntu-14.04
