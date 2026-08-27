@@ -91,7 +91,8 @@ public:
 
     enum ConnectionType {
         ConnectionTypeHTTP,
-        ConnectionTypeSPDY
+        ConnectionTypeSPDY,
+        ConnectionTypeHTTP2
     };
 
 #ifndef QT_NO_BEARERMANAGEMENT
@@ -155,6 +156,7 @@ private:
     friend class QHttpNetworkConnectionChannel;
     friend class QHttpProtocolHandler;
     friend class QSpdyProtocolHandler;
+    friend class QHttp2ProtocolHandler;
 
     Q_PRIVATE_SLOT(d_func(), void _q_startNextRequest())
     Q_PRIVATE_SLOT(d_func(), void _q_hostLookupFinished(QHostInfo))

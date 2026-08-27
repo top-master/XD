@@ -751,6 +751,9 @@ void QNetworkReplyHttpImplPrivate::postRequest(const QNetworkRequest &newHttpReq
     if (request.attribute(QNetworkRequest::SpdyAllowedAttribute).toBool())
         httpRequest.setSPDYAllowed(true);
 
+    if (request.attribute(QNetworkRequest::Http2AllowedAttribute).toBool())
+        httpRequest.setHTTP2Allowed(true);
+
     if (static_cast<QNetworkRequest::LoadControl>
         (newHttpRequest.attribute(QNetworkRequest::AuthenticationReuseAttribute,
                              QNetworkRequest::Automatic).toInt()) == QNetworkRequest::Manual)
@@ -1178,7 +1181,12 @@ void QNetworkReplyHttpImplPrivate::replyDownloadMetaData
     }
 
     q->setAttribute(QNetworkRequest::HttpPipeliningWasUsedAttribute, pu);
-    q->setAttribute(QNetworkRequest::SpdyWasUsedAttribute, spdyWasUsed);
+    // "spdyWasUsed" really means "a multiplexed protocol handler ran". A request
+    // opts into exactly one of SPDY or HTTP/2, so report the matching attribute.
+    if (q->request().attribute(QNetworkRequest::Http2AllowedAttribute).toBool())
+        q->setAttribute(QNetworkRequest::Http2WasUsedAttribute, spdyWasUsed);
+    else
+        q->setAttribute(QNetworkRequest::SpdyWasUsedAttribute, spdyWasUsed);
 
     // reconstruct the HTTP header
     QList<QPair<QByteArray, QByteArray> > headerMap = hm;
