@@ -273,6 +273,20 @@ QSpdyProtocolHandler::QSpdyProtocolHandler(QHttpNetworkConnectionChannel *channe
 
 QSpdyProtocolHandler::~QSpdyProtocolHandler()
 {
+    // TRACE/network http-reply dangling-connection: clear in-flight replies' connection at teardown #4.
+    // This handler dies as the connection tears down, but a still-in-flight reply is owned by its
+    // backend, not by m_inFlightStreams, so it outlives us and is deleted later. Its connection is a
+    // QPointer that has not nulled yet (the connection's ~QObject has not run), while the connection
+    // private is already being freed -- so ~QHttpNetworkReply would call removeReply() straight into
+    // freed memory. Null the back-pointer now, while the reply is still valid, to break that path.
+    const QList<HttpMessagePair> inflight = m_inFlightStreams.values();
+    for (int i = 0; i < inflight.count(); ++i) {
+        QHttpNetworkReply *reply = inflight.at(i).second;
+        if (reply) {
+            reply->d_func()->connection = 0;
+            reply->d_func()->connectionChannel = 0;
+        }
+    }
     deflateEnd(&m_deflateStream);
     deflateEnd(&m_inflateStream);
 }
@@ -308,7 +322,11 @@ bool QSpdyProtocolHandler::sendRequest()
         connect(currentReply, SIGNAL(destroyed(QObject*)), this, SLOT(_q_replyDestroyed(QObject*)));
 
         sendSYN_STREAM(currentPair, streamID, /* associatedToStreamID = */ 0);
-        m_channel->spdyRequestsToSend.erase(it++);
+        // TRACE/network spdy-sendqueue-iterator: erase must consume the iterator it returns #1.
+        // erase(it++) leaves the pre-advanced `it` dangling once QMap rebalances the tree, so the
+        // next loop turn (and a later removeReply() walk of this same map) dereferences a freed
+        // node. Take the iterator erase() hands back instead.
+        it = m_channel->spdyRequestsToSend.erase(it);
     }
     m_channel->state = QHttpNetworkConnectionChannel::IdleState;
     return true;
@@ -1271,6 +1289,8 @@ void QSpdyProtocolHandler::replyFinished(QHttpNetworkReply *httpReply, qint32 st
     int streamsRemoved = m_inFlightStreams.remove(streamID);
     Q_ASSERT(streamsRemoved == 1);
     Q_UNUSED(streamsRemoved); // silence -Wunused-variable
+    // TRACE/network http-reply dangling-connection: clear the reply's connection on finish #2,
+    httpReply->d_func()->connection = 0;
     emit httpReply->finished();
 }
 
@@ -1285,6 +1305,8 @@ void QSpdyProtocolHandler::replyFinishedWithError(QHttpNetworkReply *httpReply, 
     int streamsRemoved = m_inFlightStreams.remove(streamID);
     Q_ASSERT(streamsRemoved == 1);
     Q_UNUSED(streamsRemoved); // silence -Wunused-variable
+    // TRACE/network http-reply dangling-connection: clear the reply's connection on finish #3,
+    httpReply->d_func()->connection = 0;
     emit httpReply->finishedWithError(errorCode, QSpdyProtocolHandler::tr(errorMessage));
 }
 

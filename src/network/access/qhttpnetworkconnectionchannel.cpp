@@ -43,6 +43,7 @@
 
 #include <private/qhttpprotocolhandler_p.h>
 #include <private/qspdyprotocolhandler_p.h>
+#include <private/qhttp2protocolhandler_p.h>
 
 #ifndef QT_NO_SSL
 #    include <QtNetwork/qsslkey.h>
@@ -234,13 +235,24 @@ bool QHttpNetworkConnectionChannel::sendRequest()
 
 void QHttpNetworkConnectionChannel::_q_receiveReply()
 {
-    Q_ASSERT(!protocolHandler.isNull());
+    // TRACE/network http-channel null-handler: drop the call when protocolHandler is null #1,
+    // protocolHandler is legitimately null when there is nothing to receive on. An SSL
+    // channel has none until its handshake picks the protocol (HTTP/1.1, SPDY, or HTTP/2),
+    // and a queued _q_receiveReply() -- posted when the server closes a no-content or
+    // unknown-length connection -- can arrive on the HTTP thread after the channel was
+    // reset or its reply timed out and was aborted. Dropping the stale call is correct;
+    // dereferencing the null handler instead reads through a null pointer (a deterministic
+    // Fil-C panic, and a flaky crash on a native build).
+    if (protocolHandler.isNull())
+        return;
     protocolHandler->_q_receiveReply();
 }
 
 void QHttpNetworkConnectionChannel::_q_readyRead()
 {
-    Q_ASSERT(!protocolHandler.isNull());
+    // TRACE/network http-channel null-handler: drop the call when protocolHandler is null #2,
+    if (protocolHandler.isNull())
+        return;
     protocolHandler->_q_readyRead();
 }
 
@@ -1036,6 +1048,12 @@ void QHttpNetworkConnectionChannel::_q_encrypted()
                 connection->setConnectionType(QHttpNetworkConnection::ConnectionTypeSPDY);
                 // no need to re-queue requests, if SPDY was enabled on the request it
                 // has gone to the SPDY queue already
+                break;
+            } else if (nextProtocol == QSslConfiguration::NextProtocolHttp2) {
+                protocolHandler.reset(new QHttp2ProtocolHandler(this));
+                connection->setConnectionType(QHttpNetworkConnection::ConnectionTypeHTTP2);
+                // like SPDY, an HTTP/2 request has already gone to the multiplexed
+                // (spdyRequestsToSend) queue, so no re-queue is needed here.
                 break;
             } else {
                 emitFinishedWithError(QNetworkReply::SslHandshakeFailedError,

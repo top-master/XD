@@ -288,6 +288,13 @@ void QHttpThreadDelegate::startRequest()
         nextProtocols << QSslConfiguration::NextProtocolSpdy3_0
                       << QSslConfiguration::NextProtocolHttp1_1;
         incomingSslConfiguration.setAllowedNextProtocols(nextProtocols);
+    } else if (httpRequest.isHTTP2Allowed() && ssl) {
+        connectionType = QHttpNetworkConnection::ConnectionTypeHTTP2;
+        urlCopy.setScheme(QStringLiteral("h2")); // to differentiate HTTP/2 requests from HTTPS requests
+        QList<QByteArray> nextProtocols;
+        nextProtocols << QSslConfiguration::NextProtocolHttp2
+                      << QSslConfiguration::NextProtocolHttp1_1;
+        incomingSslConfiguration.setAllowedNextProtocols(nextProtocols);
     }
 #endif // QT_NO_SSL
 
