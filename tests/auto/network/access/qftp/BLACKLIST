@@ -1,14 +1,14 @@
-# QTBUG-15111
-
+# QTBUG-15111 -- FTP active-mode transfer is unreliable here: the server's back-connect to the
+# client's data port is blocked, so the active-mode row hangs.
 [activeMode:WithoutProxy]
+# openSUSE 13.1 64-bit CI firewalls the inbound data connection.
 opensuse-13.1 64bit
+# RHEL 6.6 CI blocks the same back-connect.
 redhatenterpriselinuxworkstation-6.6
-osx-10.10
 
+# QTBUG-15111 -- the same active-mode back-connect failure, run through a network session.
 [activeMode:WithoutProxyWithSession]
+# openSUSE 13.1 64-bit CI firewalls the inbound data connection.
 opensuse-13.1 64bit
+# RHEL 6.6 CI blocks the same back-connect.
 redhatenterpriselinuxworkstation-6.6
-osx-10.10
-
-[list:epsvNotSupported]
-*

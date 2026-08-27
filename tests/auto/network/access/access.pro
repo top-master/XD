@@ -8,6 +8,7 @@ SUBDIRS=\
    qhttpnetworkconnection \
    qnetworkreply \
    spdy \
+   http2 \
    qnetworkcachemetadata \
    qftp \
    qhttpnetworkreply \

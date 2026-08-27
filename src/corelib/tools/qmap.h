@@ -443,10 +443,31 @@ public:
         inline iterator() : i(Q_NULLPTR) { }
         inline iterator(Node *node) : i(node) { }
 
-        inline const Key &key() const { return i->key; }
-        inline T &value() const { return i->value; }
-        inline T &operator*() const { return i->value; }
-        inline T *operator->() const { return &i->value; }
+        // end() (and anything advanced past it) must never have its data fetched: the end node is
+        // the map header, which is a bare QMapNodeBase with no key/value, and a past-the-end iterator
+        // is null. Reading either is out of bounds -- under a bounds-checked runtime (Fil-C) that is a
+        // hard panic -- so guard every fetch. The header is the one node with no parent (every real
+        // node chains up to it), so "i && i->parent()" means "a real, dereferenceable node".
+        inline const Key &key() const
+        {
+            Q_ASSERT_X(i && i->parent(), "QMap::iterator::key", "iterator is end() or past it");
+            return i->key;
+        }
+        inline T &value() const
+        {
+            Q_ASSERT_X(i && i->parent(), "QMap::iterator::value", "iterator is end() or past it");
+            return i->value;
+        }
+        inline T &operator*() const
+        {
+            Q_ASSERT_X(i && i->parent(), "QMap::iterator::operator*", "iterator is end() or past it");
+            return i->value;
+        }
+        inline T *operator->() const
+        {
+            Q_ASSERT_X(i && i->parent(), "QMap::iterator::operator->", "iterator is end() or past it");
+            return &i->value;
+        }
         inline bool operator==(const iterator &o) const { return i == o.i; }
         inline bool operator!=(const iterator &o) const { return i != o.i; }
 
@@ -506,10 +527,29 @@ public:
 #endif
         { i = o.i; }
 
-        inline const Key &key() const { return i->key; }
-        inline const T &value() const { return i->value; }
-        inline const T &operator*() const { return i->value; }
-        inline const T *operator->() const { return &i->value; }
+        // See QMap::iterator above: fetching from end() (the header, no key/value) or a past-the-end
+        // (null) iterator is out of bounds and panics under Fil-C -- guard it. "i && i->parent()"
+        // identifies a real node (only the header has no parent).
+        inline const Key &key() const
+        {
+            Q_ASSERT_X(i && i->parent(), "QMap::const_iterator::key", "iterator is end() or past it");
+            return i->key;
+        }
+        inline const T &value() const
+        {
+            Q_ASSERT_X(i && i->parent(), "QMap::const_iterator::value", "iterator is end() or past it");
+            return i->value;
+        }
+        inline const T &operator*() const
+        {
+            Q_ASSERT_X(i && i->parent(), "QMap::const_iterator::operator*", "iterator is end() or past it");
+            return i->value;
+        }
+        inline const T *operator->() const
+        {
+            Q_ASSERT_X(i && i->parent(), "QMap::const_iterator::operator->", "iterator is end() or past it");
+            return &i->value;
+        }
         inline bool operator==(const const_iterator &o) const { return i == o.i; }
         inline bool operator!=(const const_iterator &o) const { return i != o.i; }
 

@@ -54,6 +54,10 @@ bool runServer(int numberOfConnections)
         fprintf(stderr, "server: listen failed: %s\n", qPrintable(server->errorString()));
         return false;
     }
+    // Tells the test that clients may connect now; stdout is a pipe there,
+    // hence the flush.
+    printf("server: listening\n");
+    fflush(stdout);
     for (int i = 1; i <= numberOfConnections; ++i) {
         printf("server: wait for connection %d\n", i);
         if (!server->waitForNewConnection(30000)) {

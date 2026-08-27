@@ -36,6 +36,7 @@
 #include <QtTest/QtTest>
 
 #include "../../../network-settings.h"
+#include "../../../helpers/testenv.h"
 
 class tst_QIODevice : public QObject
 {
@@ -69,6 +70,14 @@ private:
 
 void tst_QIODevice::initTestCase()
 {
+    // Bring up the bundled server-dummy fleet so the loopback IMAP endpoint that
+    // `constructing_QTcpSocket()` drives, and the HTTP endpoint `unget()` reads,
+    // are served locally. Ports 143 and 80 are privileged and unavailable
+    // unelevated; hence both the fleet and the connect sites use
+    // `TestServer::port()`, their bindable stand-ins. Pinned for the whole class
+    // by the testlib, which drops it when the class finishes.
+    TestEnv::getServerForClass(TestServer::Fleet);
+
 #if defined(Q_OS_ANDROID) && !defined(Q_OS_ANDROID_NO_SDK)
     QVERIFY(QFileInfo(QStringLiteral("./tst_qiodevice.cpp")).exists()
             || QFile::copy(QStringLiteral(":/tst_qiodevice.cpp"), QStringLiteral("./tst_qiodevice.cpp")));
@@ -114,7 +123,7 @@ void tst_QIODevice::constructing_QTcpSocket()
 
     QVERIFY(!device->isOpen());
 
-    socket.connectToHost(QtNetworkSettings::serverName(), 143);
+    socket.connectToHost(QtNetworkSettings::serverName(), TestServer::port(143));
     QVERIFY(socket.waitForConnected(30000));
     QVERIFY(device->isOpen());
 
@@ -128,7 +137,7 @@ void tst_QIODevice::constructing_QTcpSocket()
     QCOMPARE(socket.pos(), qlonglong(0));
 
     socket.close();
-    socket.connectToHost(QtNetworkSettings::serverName(), 143);
+    socket.connectToHost(QtNetworkSettings::serverName(), TestServer::port(143));
     QVERIFY(socket.waitForConnected(30000));
     QVERIFY(device->isOpen());
 
@@ -274,7 +283,7 @@ void tst_QIODevice::unget()
         } else {
             if (!QtNetworkSettings::verifyTestNetworkSettings())
                 QSKIP("No network test server available");
-            socket.connectToHost(QtNetworkSettings::serverName(), 80);
+            socket.connectToHost(QtNetworkSettings::serverName(), TestServer::port(80));
             socket.write("GET / HTTP/1.0\r\n\r\n");
             QVERIFY(socket.waitForReadyRead());
             dev = &socket;

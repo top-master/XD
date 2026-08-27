@@ -45,6 +45,9 @@
 
 #include <QtTest/QtTest>
 
+#include "../../../helpers/assertion.h"
+#include "../../../helpers/testenv.h"
+
 #ifndef Q_OS_WIN
 #include <unistd.h>
 #include <sys/ioctl.h>
@@ -60,6 +63,7 @@
 #include <qhostinfo.h>
 
 #include <QNetworkProxy>
+#include <QTemporaryDir>
 
 #include <QNetworkSession>
 #include <QNetworkConfiguration>
@@ -90,6 +94,7 @@ private slots:
     void ipv6ServerMapped();
     void crashTests();
     void maxPendingConnections();
+    void listenError_data();
     void listenError();
     void waitForConnectionTest();
 #ifndef Q_OS_WINRT
@@ -121,6 +126,9 @@ private:
 #ifndef QT_NO_BEARERMANAGEMENT
     QNetworkSession *networkSession;
 #endif
+    QTemporaryDir m_proxySettings;
+    QRef<TestServer> m_proxyServer; // server-dummy providing the SOCKS5 proxy for the WithSocks5Proxy rows
+    quint16 m_socksPort;
     QString crashingServerDir;
 };
 
@@ -168,9 +176,18 @@ void tst_QTcpServer::initTestCase()
 #ifndef QT_NO_BEARERMANAGEMENT
     QNetworkConfigurationManager man;
     networkSession = new QNetworkSession(man.defaultConfiguration(), this);
-    networkSession->open();
-    QVERIFY(networkSession->waitForOpened());
+    qExpect(networkSession)->to<OpenBefore>(30000);
 #endif
+    // The SOCKS5 rows drive an application proxy; provide it via server-dummy rather than
+    // a hard-coded port. tryPort aims for the canonical 1080 but falls back to a free port,
+    // and the SOCKS5 service listens on the secondary (echo) port.
+    m_socksPort = 1080;
+    QVERIFY(m_proxySettings.isValid());
+    m_proxyServer = TestEnv::getServer(TestServer::WebProxy, m_proxySettings.path());
+    if (m_proxyServer && m_proxyServer->isRunning()) {
+        m_proxyServer->tryPort(1080);
+        m_socksPort = m_proxyServer->echoPort();
+    }
 }
 
 void tst_QTcpServer::init()
@@ -178,9 +195,12 @@ void tst_QTcpServer::init()
     QFETCH_GLOBAL(bool, setProxy);
     if (setProxy) {
 #ifndef QT_NO_NETWORKPROXY
+        if ( ! m_proxyServer || ! m_proxyServer->isRunning()) {
+            QSKIP("No proxy server available");
+        }
         QFETCH_GLOBAL(int, proxyType);
         if (proxyType == QNetworkProxy::Socks5Proxy) {
-            QNetworkProxy::setApplicationProxy(QNetworkProxy(QNetworkProxy::Socks5Proxy, QtNetworkSettings::serverName(), 1080));
+            QNetworkProxy::setApplicationProxy(QNetworkProxy(QNetworkProxy::Socks5Proxy, m_proxyServer->domainName(), m_socksPort));
         }
 #else // !QT_NO_NETWORKPROXY
         QSKIP("No proxy support");
@@ -299,14 +319,19 @@ void tst_QTcpServer::dualStack_data()
 
 void tst_QTcpServer::dualStack()
 {
-    QFETCH_GLOBAL(bool, setProxy);
-    if (setProxy)
-        QSKIP("test server proxy doesn't support ipv6");
     if (!QtNetworkSettings::hasIPv6())
         QSKIP("system doesn't support ipv6!");
     QFETCH(QHostAddress, bindAddress);
     QFETCH(bool, v4ok);
     QFETCH(bool, v6ok);
+    QFETCH_GLOBAL(bool, setProxy);
+    TestServerEditUndoer undo(setProxy ? m_proxyServer.data() : Q_NULLPTR);
+    if (setProxy) {
+        m_proxyServer->edit().add(
+            QLL("Connection.dualStack"),
+            bindAddress == QHostAddress(QHostAddress::Any)
+        ).save();
+    }
 
     QTcpServer server;
     QVERIFY(server.listen(bindAddress));
@@ -314,8 +339,15 @@ void tst_QTcpServer::dualStack()
     QTcpSocket v4client;
     v4client.connectToHost(QHostAddress::LocalHost, server.serverPort());
 
+    QTcpServer secondServer;
+    quint16 v6Port = server.serverPort();
+    if (setProxy && v4ok && v6ok) {
+        // A SOCKS BIND listener accepts one connection per request.
+        QVERIFY(secondServer.listen(bindAddress));
+        v6Port = secondServer.serverPort();
+    }
     QTcpSocket v6client;
-    v6client.connectToHost(QHostAddress::LocalHostIPv6, server.serverPort());
+    v6client.connectToHost(QHostAddress::LocalHostIPv6, v6Port);
 
     QCOMPARE(v4client.waitForConnected(5000), v4ok);
     QCOMPARE(v6client.waitForConnected(5000), v6ok);
@@ -408,23 +440,52 @@ void tst_QTcpServer::maxPendingConnections()
     QVERIFY(server.nextPendingConnection());
 }
 
-//----------------------------------------------------------------------------------
+void tst_QTcpServer::listenError_data()
+{
+    QTest::addColumn<int >("bindError");
+    QTest::addColumn<int >("expectedError");
+    QTest::addColumn<QString >("expectedMessage");
+    QTest::addColumn<QHostAddress >("address");
+    QList<QHostAddress > addresses;
+    addresses << QHostAddress(QLL("1.2.3.4"));
+    if (QtNetworkSettings::hasIPv6()) {
+        addresses << QHostAddress(QLL("2001:db8::bad"));
+    }
+    for (int i = 0; i < addresses.size(); ++i) {
+        const QByteArray family = i == 0
+            ? QByteArray("ipv4") : QByteArray("ipv6");
+        QTest::newRow((QByteArray("direct-") + family).constData())
+            << 0 << int(QAbstractSocket::SocketAddressNotAvailableError)
+            << QString(QLL("The address is not available")) << addresses.at(i);
+        QTest::newRow((QByteArray("denied-") + family).constData())
+            << 2 << int(QAbstractSocket::SocketAccessError)
+            << QString(QLL("Connection not allowed by SOCKSv5 server")) << addresses.at(i);
+        QTest::newRow((QByteArray("refused-") + family).constData())
+            << 5 << int(QAbstractSocket::ConnectionRefusedError)
+            << QString(QLL("Connection refused")) << addresses.at(i);
+    }
+}
+
 void tst_QTcpServer::listenError()
 {
     QFETCH_GLOBAL(bool, setProxy);
+    QFETCH(int, bindError);
+    QFETCH(int, expectedError);
+    QFETCH(QString, expectedMessage);
+    QFETCH(QHostAddress, address);
+    if (setProxy != (bindError != 0)) {
+        QSKIP(setProxy
+            ? "With socks5 we can not make hard requirements on the address or port"
+            : "The proxy's reply code needs a proxy");
+    }
+    TestServerEditUndoer undo(setProxy ? m_proxyServer.data() : Q_NULLPTR);
     if (setProxy) {
-#ifndef QT_NO_NETWORKPROXY
-        QFETCH_GLOBAL(int, proxyType);
-        if (proxyType == QNetworkProxy::Socks5Proxy)
-            QSKIP("With socks5 we can not make hard requirements on the address or port");
-#else // !QT_NO_NETWORKPROXY
-        QSKIP("No proxy support");
-#endif //QT_NO_NETWORKPROXY
+        m_proxyServer->edit().add(QLL("Connection.bindError"), bindError).save();
     }
     QTcpServer server;
-    QVERIFY(!server.listen(QHostAddress("1.2.3.4"), 0));
-    QCOMPARE(server.serverError(), QAbstractSocket::SocketAddressNotAvailableError);
-    QCOMPARE(server.errorString().toLatin1().constData(), "The address is not available");
+    QVERIFY( ! server.listen(address, 0));
+    QCOMPARE(int(server.serverError()), expectedError);
+    QCOMPARE(server.errorString(), expectedMessage);
 }
 
 class ThreadConnector : public QThread
@@ -460,20 +521,14 @@ private:
 //----------------------------------------------------------------------------------
 void tst_QTcpServer::waitForConnectionTest()
 {
-
-    QFETCH_GLOBAL(bool, setProxy);
-    if (setProxy) {
-#ifndef QT_NO_NETWORKPROXY
-        QFETCH_GLOBAL(int, proxyType);
-        if (proxyType == QNetworkProxy::Socks5Proxy)
-            QSKIP("Localhost servers don't work well with SOCKS5");
-#else // !QT_NO_NETWORKPROXY
-        QSKIP("No proxy support");
-#endif // QT_NO_NETWORKPROXY
-    }
-
+    // Discover the local address an outbound TCP connection uses. Upstream connects to the
+    // public test server's IMAP port for this; on a loopback-only (Fil-C) run there is no
+    // such routable host, and that always resolves to 127.0.0.1 anyway. Connect to a
+    // throwaway local listener instead -- same purpose, no external dependency.
+    QTcpServer localProbe;
+    QVERIFY(localProbe.listen(QHostAddress(QHostAddress::LocalHost)));
     QTcpSocket findLocalIpSocket;
-    findLocalIpSocket.connectToHost(QtNetworkSettings::serverName(), 143);
+    findLocalIpSocket.connectToHost(localProbe.serverAddress(), localProbe.serverPort());
     QVERIFY(findLocalIpSocket.waitForConnected(5000));
 
     QTcpServer server;
@@ -568,9 +623,6 @@ void tst_QTcpServer::addressReusable()
 #ifdef QT_NO_PROCESS
     QSKIP("No qprocess support", SkipAll);
 #else
-#ifdef Q_OS_LINUX
-    QSKIP("The addressReusable test is unstable on Linux. See QTBUG-39985.");
-#endif
     QFETCH_GLOBAL(bool, setProxy);
     if (setProxy) {
 #ifndef QT_NO_NETWORKPROXY
@@ -657,7 +709,8 @@ void tst_QTcpServer::invalidProxy_data()
     QTest::newRow("no-such-host") << int(QNetworkProxy::Socks5Proxy)
                                   << "invalid.test.qt-project.org" << 1080
                                   << int(QAbstractSocket::ProxyNotFoundError);
-    QTest::newRow("socks5-on-http") << int(QNetworkProxy::Socks5Proxy) << fluke << 3128
+    QTest::newRow("socks5-on-http") << int(QNetworkProxy::Socks5Proxy) << fluke
+        << int(m_proxyServer ? m_proxyServer->port() : 3128)
                                     << int(QAbstractSocket::SocketTimeoutError);
 }
 
@@ -720,14 +773,15 @@ void tst_QTcpServer::proxyFactory_data()
 
     // tests that do get to listen
 
-    proxyList << QNetworkProxy(QNetworkProxy::Socks5Proxy, QtNetworkSettings::serverName(), 1080);
+    proxyList
+        << QNetworkProxy(QNetworkProxy::Socks5Proxy, QtNetworkSettings::serverName(), m_socksPort);
     QTest::newRow("socks5")
         << proxyList << proxyList.at(0)
         << false << int(QAbstractSocket::UnknownSocketError);
 
     proxyList.clear();
     proxyList << QNetworkProxy(QNetworkProxy::HttpCachingProxy, QtNetworkSettings::serverName(), 3128)
-              << QNetworkProxy(QNetworkProxy::Socks5Proxy, QtNetworkSettings::serverName(), 1080);
+        << QNetworkProxy(QNetworkProxy::Socks5Proxy, QtNetworkSettings::serverName(), m_socksPort);
     QTest::newRow("cachinghttp+socks5")
         << proxyList << proxyList.at(1)
         << false << int(QAbstractSocket::UnknownSocketError);
@@ -735,7 +789,7 @@ void tst_QTcpServer::proxyFactory_data()
     proxyList.clear();
     proxyList << QNetworkProxy(QNetworkProxy::FtpCachingProxy, QtNetworkSettings::serverName(), 2121)
               << QNetworkProxy(QNetworkProxy::HttpCachingProxy, QtNetworkSettings::serverName(), 3128)
-              << QNetworkProxy(QNetworkProxy::Socks5Proxy, QtNetworkSettings::serverName(), 1080);
+              << QNetworkProxy(QNetworkProxy::Socks5Proxy, QtNetworkSettings::serverName(), m_socksPort);
     QTest::newRow("ftp+cachinghttp+socks5")
         << proxyList << proxyList.at(2)
         << false << int(QAbstractSocket::UnknownSocketError);
