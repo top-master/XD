@@ -55,6 +55,10 @@ namespace QTest
     static bool failed = false;
     static bool skipCurrentTest = false;
     static bool blacklistCurrentTest = false;
+    /*!
+        Reason a blacklisted row is ignored, taken from its BLACKLIST comment; empty when none.
+    */
+    static QByteArray blacklistReason;
 
     static const char *expectFailComment = 0;
     static int expectFailMode = 0;
@@ -71,6 +75,7 @@ void QTestResult::reset()
     QTest::expectFailComment = 0;
     QTest::expectFailMode = 0;
     QTest::blacklistCurrentTest = false;
+    QTest::blacklistReason.clear();
 
     QTestLog::resetCounters();
 }
@@ -80,9 +85,10 @@ bool QTestResult::isCurrentTestBlacklisted()
     return QTest::blacklistCurrentTest;
 }
 
-void QTestResult::setBlacklistCurrentTest(bool b)
+void QTestResult::setBlacklistCurrentTest(bool b, const QByteArray &reason)
 {
     QTest::blacklistCurrentTest = b;
+    QTest::blacklistReason = b ? reason : QByteArray();
 }
 
 bool QTestResult::currentTestFailed()
@@ -149,7 +155,7 @@ void QTestResult::finishedCurrentTestDataCleanup()
     // If the current test hasn't failed or been skipped, then it passes.
     if (!QTest::failed && !QTest::skipCurrentTest) {
         if (QTest::blacklistCurrentTest)
-            QTestLog::addBPass("");
+            QTestLog::addBPass(QTest::blacklistReason.constData());
         else
             QTestLog::addPass("");
     }
@@ -304,10 +310,15 @@ void QTestResult::addFailure(const char *message, const char *file, int line)
 {
     clearExpectFail();
 
-    if (QTest::blacklistCurrentTest)
-        QTestLog::addBFail(message, file, line);
-    else
+    if (QTest::blacklistCurrentTest) {
+        // Prefixes the reason this row is ignored to the failure message, so a blacklisted
+        // fail still shows why it was ignored.
+        QByteArray m = QTest::blacklistReason.isEmpty() ? QByteArray(message)
+                        : QTest::blacklistReason + " -- " + message;
+        QTestLog::addBFail(m.constData(), file, line);
+    } else {
         QTestLog::addFail(message, file, line);
+    }
     QTest::failed = true;
 }
 
