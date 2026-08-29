@@ -56,6 +56,7 @@
 #include "QtCore/qvariant.h"
 #include "QtCore/qreadwritelock.h"
 #include "QtCore/qrecursivemutex.h"
+#include "QtCore/qfunction.h"
 
 QT_BEGIN_NAMESPACE
 
@@ -182,7 +183,9 @@ public:
     bool detachParentStrongRef(bool isDisowned);
     void emitDestroyed();
     void deleteChildrenEarly();
+    void deleteChild(QObject *child);
     void deleteChildren();
+    void deleteChildrenIf(const QFunction<bool (QObject *)> &filter);
 
     static inline const QObjectPrivate *get(const QObject *o) { return o->d_func(); }
 
