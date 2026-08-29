@@ -982,13 +982,13 @@ QSocks5SocketEngine::~QSocks5SocketEngine()
 
     if (d->data) {
         delete d->data->authenticator;
-        delete d->data->controlSocket;
+        deleteChild(d->data->controlSocket);
     }
     if (d->connectData)
         delete d->connectData;
 #ifndef QT_NO_UDPSOCKET
     if (d->udpData) {
-        delete d->udpData->udpSocket;
+        deleteChild(d->udpData->udpSocket);
         delete d->udpData;
     }
 #endif

@@ -964,7 +964,7 @@ QSplitter::QSplitter(Qt::Orientation orientation, QWidget *parent)
 QSplitter::~QSplitter()
 {
     Q_D(QSplitter);
-    delete d->rubberBand;
+    deleteChild(d->rubberBand);
     while (!d->list.isEmpty())
         delete d->list.takeFirst();
 }
