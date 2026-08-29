@@ -84,7 +84,7 @@ QCocoaMenuBar::~QCocoaMenuBar()
         // Delete the children first so they do not cause
         // the native menu items to be hidden after
         // the menu bar was updated
-        qDeleteAll(children());
+        deleteChildren();
         updateMenuBarImmediately();
     }
 }

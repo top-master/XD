@@ -78,6 +78,7 @@ class QObjectUserData;
 #endif
 class QObjectDecor;
 struct QDynamicMetaObjectData;
+template <typename Func1> class QFunction;
 
 typedef QList<QObject*> QObjectList;
 
@@ -144,7 +145,9 @@ public:
 
     uint isDebugging : 1;
 
-    uint unused : 4;
+    uint didDetachSharedRefCount : 1;           // set once by QObjectPrivate::detachSharedRefCount()
+
+    uint unused : 3;
 
     int postedEvents;
     QDynamicMetaObjectData *metaObject;
@@ -485,6 +488,12 @@ protected:
     int senderSignalIndex() const;
     int receivers(const char* signal) const;
     bool isSignalConnected(const QMetaMethod &signal) const;
+
+    void deleteChild(QObject *child);
+    void deleteChildren();
+    void deleteChildrenIf(const QFunction<bool (QObject *)> &filter);
+
+    void detachSharedRefCount();
 
     virtual void timerEvent(QTimerEvent *event);
     virtual void childEvent(QChildEvent *event);
