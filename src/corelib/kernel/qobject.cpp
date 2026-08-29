@@ -224,6 +224,7 @@ QObjectPrivate::QObjectPrivate(int version)
     remoteTimeout = QtPrivate::remoteTimeout / remoteMiliSecPerTimeout;
     remoteTimeoutExpired = false;
     wasDeleted = false;                         // double-delete catcher
+    didDetachSharedRefCount = false;            // one-shot guard for detachSharedRefCount()
     wasDeleteSignaled = false;
     isDeletingChildren = false;                 // set by deleteChildren()
     sendChildEvents = true;                     // if we should send ChildInsert and ChildRemove events to parent
@@ -1088,6 +1089,16 @@ QObject::~QObject()
 void QObjectPrivate::detachSharedRefCount() {
     this->wasDeleted = true;
 
+    // Idempotent: a subclass destructor may call this early and the base
+    // ~QObject calls it again. Guard the one-shot detach with our own bit, so
+    // the self weak-ref is released exactly once -- a second release would drop
+    // it below zero and free the data too soon while QPointers still reference
+    // it. wasDeleted cannot serve as the guard, since other teardown paths
+    // (deleteChildrenEarly) set it too.
+    if (this->didDetachSharedRefCount)
+        return;
+    this->didDetachSharedRefCount = true;
+
     QtSharedPointer::ExternalRefCountData *sharedRefcount = this->sharedRefcount.load();
     if (sharedRefcount) {
         if (sharedRefcount->strongref.load() > 0) {
@@ -1126,6 +1137,23 @@ void QObjectPrivate::detachSharedRefCount() {
             this->sharedRefcount.store(Q_NULLPTR);
         }
     }
+}
+
+/*!
+    \internal
+    Detaches every QPointer / QWeakPointer guarding this object NOW, so from
+    here on they read as null. \c{~QObject} already does this (see the call in
+    the destructor), but a subclass whose destructor is about to free state that
+    a still-live guarded pointer could follow -- a threaded connection tearing
+    down while replies elsewhere still hold a QPointer to it -- calls this first,
+    from its own destructor, to close that window. It forwards to
+    QObjectPrivate::detachSharedRefCount(), which is idempotent, so the base
+    destructor's later call is a no-op.
+*/
+void QObject::detachSharedRefCount()
+{
+    Q_D(QObject);
+    d->detachSharedRefCount();
 }
 
 bool QObjectPrivate::detachParentStrongRef(bool isDisowned) {
@@ -2243,6 +2271,36 @@ void QObject::setParent(QObject *parent)
     d->setParent_helper(parent);
 }
 
+/*!
+    \internal
+    Deletes one \a child the strong-ref-safe way: a child that is under a QSharedPointer
+    (its parent-strong-ref set) is released to that pointer via setParent_helper() rather
+    than deleted directly; any other child is deleted. Uses deleteChildren()'s teardown
+    discipline. Does nothing if \a child is not a child of this object.
+*/
+void QObjectPrivate::deleteChild(QObject *child)
+{
+    Q_Q(QObject);
+    if ( ! child || child->parent() != q)
+        return;
+    Q_ASSERT_X(!isDeletingChildren, "QObjectPrivate::deleteChild()", "isDeletingChildren already set, did this function recurse?");
+    isDeletingChildren = true;
+    const int i = children.indexOf(child);
+    if (i >= 0)
+        children[i] = Q_NULLPTR;
+    currentChildBeingDeleted = child;
+    // TRACE/QObject/parent-ref 3: detaches child from parent's strong-ref.
+    Q_REGISTER QObjectPrivate *childData = QObjectPrivate::get(child);
+    if (childData->hasParentStrongRef) {
+        childData->setParent_helper(Q_NULLPTR);
+    } else {
+        delete child;
+    }
+    children.removeAll(Q_NULLPTR);
+    currentChildBeingDeleted = Q_NULLPTR;
+    isDeletingChildren = false;
+}
+
 void QObjectPrivate::deleteChildren()
 {
     Q_ASSERT_X(!isDeletingChildren, "QObjectPrivate::deleteChildren()", "isDeletingChildren already set, did this function recurse?");
@@ -2274,6 +2332,78 @@ void QObjectPrivate::deleteChildren()
     children.clear();
     currentChildBeingDeleted = Q_NULLPTR;
     isDeletingChildren = false;
+}
+
+/*!
+    \internal
+    Deletes only the children \a filter selects, leaving the rest for
+    deleteChildren() to free later. Applies the same parent-strong-ref skip as
+    deleteChildren(), so a shared child is released rather than deleted directly.
+    Lets an owner destroy a specific kind of child from its OWN destructor, while
+    it is still fully valid, instead of leaving it to ~QObject -- too late for a
+    child whose destructor still reaches back into the half-destroyed owner.
+*/
+void QObjectPrivate::deleteChildrenIf(const QFunction<bool (QObject *)> &filter)
+{
+    Q_ASSERT_X(!isDeletingChildren, "QObjectPrivate::deleteChildrenIf()", "isDeletingChildren already set, did this function recurse?");
+    // Same teardown discipline as deleteChildren() (isDeletingChildren +
+    // currentChildBeingDeleted), just restricted to the children `filter` picks.
+    isDeletingChildren = true;
+    for (int i = 0; i < children.count(); ++i) {
+        Q_REGISTER QObject *child = children.at(i);
+        if ( ! child || ! filter(child)) {
+            // Already taken by a sibling's destructor, or not selected -- leave it.
+            continue;
+        }
+        currentChildBeingDeleted = child;
+        children[i] = Q_NULLPTR;
+        // TRACE/QObject/parent-ref 3: detaches child from parent's strong-ref.
+        Q_REGISTER QObjectPrivate *childData = QObjectPrivate::get(child);
+        if (childData->hasParentStrongRef) {
+            childData->setParent_helper(Q_NULLPTR);
+        } else {
+            delete child;
+        }
+    }
+
+    // Unlike deleteChildren() we keep the unselected children; only compact out the
+    // slots we just nulled so nothing walks a hole later.
+    children.removeAll(Q_NULLPTR);
+    currentChildBeingDeleted = Q_NULLPTR;
+    isDeletingChildren = false;
+}
+
+/*!
+    \internal
+    Protected helper so a ~QObject subclass can delete one child the strong-ref-safe way
+    before its own base ~QObject runs -- e.g. an object whose destructor must outlive a
+    resource that a specific child touches on the way down.
+*/
+void QObject::deleteChild(QObject *child)
+{
+    Q_D(QObject);
+    d->deleteChild(child);
+}
+
+/*!
+    \internal
+    Protected helper: delete all of this object's children the strong-ref-safe way.
+*/
+void QObject::deleteChildren()
+{
+    Q_D(QObject);
+    d->deleteChildren();
+}
+
+/*!
+    \internal
+    Protected helper: delete only the children \a filter selects, the strong-ref-safe way,
+    leaving the rest for the base ~QObject.
+*/
+void QObject::deleteChildrenIf(const QFunction<bool (QObject *)> &filter)
+{
+    Q_D(QObject);
+    d->deleteChildrenIf(filter);
 }
 
 void QObjectPrivate::setParent_helper(QObject *o)

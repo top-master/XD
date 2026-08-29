@@ -489,14 +489,18 @@ QNetworkAccessManager::~QNetworkAccessManager()
     delete d_func()->proxyFactory;
 #endif
 
-    // Delete the QNetworkReply children first.
-    // Else a QAbstractNetworkCache might get deleted in ~QObject
-    // before a QNetworkReply that accesses the QAbstractNetworkCache
-    // object in its destructor.
-    qDeleteAll(findChildren<QNetworkReply *>());
-    // The other children will be deleted in this ~QObject
-    // FIXME instead of this "hack" make the QNetworkReplyImpl
-    // properly watch the cache deletion, e.g. via a QWeakPointer.
+    // Delete the QNetworkReply children now, while the manager is still fully valid:
+    // a reply's destructor can still reach back into the manager (its cache, session,
+    // etc.), which ~QObject -- where the remaining children are freed -- is too late
+    // for, since the QNetworkAccessManager subobject is already gone by then.
+    // deleteChildrenIf() frees only the replies and, crucially, does it through the
+    // parent-strong-ref path: a reply with no strong ref is deleted, while one still
+    // held by a QSharedPointer is merely released (never deleted directly, which
+    // under XD's ownership model is malformed and the source of a flaky crash).
+    deleteChildrenIf([](QObject *child) -> bool {
+        return qobject_cast<QNetworkReply *>(child) != Q_NULLPTR;
+    });
+    // The other children (cache, cookie jar, ...) are freed in this ~QObject.
 }
 
 #ifndef QT_NO_NETWORKPROXY
