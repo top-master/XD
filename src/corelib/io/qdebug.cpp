@@ -151,8 +151,9 @@ QDebug::~QDebug()
 void QDebug::flush()
 {
     if(!stream->buffer.isEmpty()) {
-        if (stream->space && stream->buffer.endsWith(QLatin1Char(' ')))
+        if (stream->testFlag(Stream::Spaces) && stream->buffer.endsWith(QLatin1Char(' '))) {
             stream->buffer.chop(1);
+        }
         if (stream->message_output) {
             QT_TRY {
                 qt_message_output(stream->type,
@@ -360,10 +361,7 @@ void QDebug::putByteArray(const char *begin, size_t length, Latin1Content conten
 QDebug &QDebug::resetFormat()
 {
     stream->ts.reset();
-    stream->space = true;
-    if (stream->context.version > 1)
-        stream->flags = 0;
-    stream->setVerbosity(Stream::defaultVerbosity);
+    stream->state = QDebugState();
     return *this;
 }
 
@@ -787,39 +785,36 @@ class QDebugStateSaverPrivate
 public:
     QDebugStateSaverPrivate(QDebug &dbg)
         : m_dbg(dbg),
-          m_spaces(dbg.autoInsertSpaces()),
-          m_flags(0),
+          m_state(dbg.stream->state),
           m_streamParams(dbg.stream->ts.d_ptr->params)
     {
-        if (m_dbg.stream->context.version > 1)
-            m_flags = m_dbg.stream->flags;
     }
     void restoreState()
     {
         const bool currentSpaces = m_dbg.autoInsertSpaces();
-        if (currentSpaces && !m_spaces)
-            if (m_dbg.stream->buffer.endsWith(QLatin1Char(' ')))
+        if (currentSpaces && !m_state.flags.includes(Spaces)) {
+            if (m_dbg.stream->buffer.endsWith(QLatin1Char(' '))) {
                 m_dbg.stream->buffer.chop(1);
+            }
+        }
 
-        m_dbg.setAutoInsertSpaces(m_spaces);
+        m_dbg.stream->state = m_state;
         m_dbg.stream->ts.d_ptr->params = m_streamParams;
-        if (m_dbg.stream->context.version > 1)
-            m_dbg.stream->flags = m_flags;
 
-        if (!currentSpaces && m_spaces)
+        if (!currentSpaces && m_state.flags.includes(Spaces))
             m_dbg.stream->ts << ' ';
     }
 
     enum {
-        NoQuotes = QDebug::Stream::NoQuotes
+        NoQuotes = QDebug::Stream::NoQuotes,
+        Spaces   = QDebug::Stream::Spaces
     };
 
 public:
     QDebug &m_dbg;
 
     // QDebug state
-    const bool m_spaces;
-    int m_flags;
+    const QDebugState m_state;
 
     // QTextStream state
     const QTextStreamPrivate::Params m_streamParams;
@@ -850,15 +845,12 @@ QDebugStateSaver::~QDebugStateSaver()
 
 bool QDebugStateSaver::hadQuotes() const Q_DECL_NOTHROW
 {
-    if (d->m_dbg.context().version > 1) {
-        return ! (d->m_flags & QDebugStateSaverPrivate::NoQuotes);
-    }
-    return false;
+    return !d->m_state.flags.includes(QDebugStateSaverPrivate::NoQuotes);
 }
 
 bool QDebugStateSaver::hadSpace() const Q_DECL_NOTHROW
 {
-    return d->m_spaces;
+    return d->m_state.flags.includes(QDebugStateSaverPrivate::Spaces);
 }
 
 #ifndef QT_NO_QOBJECT

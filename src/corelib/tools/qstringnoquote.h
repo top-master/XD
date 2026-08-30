@@ -43,8 +43,9 @@ QT_BEGIN_NAMESPACE
 // an integer) reads like its printf counterpart -- 0x1f4, 500 -- rather than a quoted "0x1f4". Its
 // QDebug operator<< suppresses quoting for just this value and restores the stream's prior quote state
 // -- a following QString still quotes when quoting was on, and an already-unquoted stream stays
-// unquoted -- and it is a plain QString in every other respect. The operator<< is declared before
-// <QtCore/qdebug.h> so it out-resolves QString's overload on strict compilers.
+// unquoted -- and it is a plain QString in every other respect. QDebug declares that operator<< as a
+// member ahead of its QString overload (so it out-resolves it on every compiler); this header carries
+// the operator's out-of-line body, hence streaming a QStringNoQuote needs this header included.
 class Q_CORE_EXPORT QStringNoQuote : public QString
 {
 public:
@@ -55,11 +56,6 @@ public:
 #endif
 };
 
-#ifndef QT_NO_DEBUG_STREAM
-class QDebug;
-QDebug operator<<(QDebug debug, const QStringNoQuote &string);
-#endif
-
 QT_END_NAMESPACE
 
 #include <QtCore/qdebug.h>
@@ -67,16 +63,16 @@ QT_END_NAMESPACE
 QT_BEGIN_NAMESPACE
 
 #ifndef QT_NO_DEBUG_STREAM
-Q_ALWAYS_INLINE QDebug operator<<(QDebug debug, const QStringNoQuote &string)
+Q_ALWAYS_INLINE QDebug &QDebug::operator<<(const QStringNoQuote & t)
 {
-    if (debug.hasQuotes()) {
-        debug.noquote();
-        debug << static_cast<const QString &>(string);
-        debug.quote();
+    if (this->autoInsertQuotes()) {
+        this->noquote();
+        *this << static_cast<const QString &>(t);
+        this->quote();
     } else {
-        debug << static_cast<const QString &>(string);
+        *this << static_cast<const QString &>(t);
     }
-    return debug;
+    return *this;
 }
 #endif
 
