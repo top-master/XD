@@ -163,7 +163,9 @@ public:
     static const QLocaleData *findLocaleData(QLocale::Language language,
                                              QLocale::Script script,
                                              QLocale::Country country);
-    static const QLocaleData *c();
+    Q_CORE_EXPORT static const QLocaleData *classic();
+    // Historical spelling kept as alias to be compatible.
+    static Q_ALWAYS_INLINE const QLocaleData *c() { return classic(); }
 
     enum DoubleForm {
         DFExponent = 0,
@@ -221,10 +223,15 @@ public:
                              int base = 10,
                              int width = -1,
                              unsigned flags = NoFlags) const;
-    QString unsLongLongToString(quint64 l, int precision = -1,
-                                int base = 10,
-                                int width = -1,
-                                unsigned flags = NoFlags) const;
+    Q_CORE_EXPORT QString formatULongLong(quint64 l, int precision = -1,
+                                          int base = 10,
+                                          int width = -1,
+                                          unsigned flags = NoFlags) const;
+    // Historical spelling kept as alias to be compatible.
+    Q_ALWAYS_INLINE QString unsLongLongToString(quint64 l, int precision = -1,
+                                                int base = 10, int width = -1,
+                                                unsigned flags = NoFlags) const
+    { return formatULongLong(l, precision, base, width, flags); }
 
     // this function is meant to be called with the result of stringToDouble or bytearrayToDouble
     static float convertDoubleToFloat(double d, bool *ok)

@@ -40,6 +40,8 @@
 #include <qthreadstorage.h>
 #include <qurl.h>
 
+#include "qnetwork-debug.h"
+
 #include <algorithm>
 
 QT_BEGIN_NAMESPACE
@@ -122,10 +124,8 @@ static void qt_qdnsservicerecord_sort(QList<QDnsServiceRecord> &records)
             sliceWeight += records[j].weight();
             slice << records[j];
         }
-#ifdef QDNSLOOKUP_DEBUG
-        qDebug("qt_qdnsservicerecord_sort() : priority %i (size: %i, total weight: %i)",
-               slicePriority, slice.size(), sliceWeight);
-#endif
+        qDebug_DNS << "qt_qdnsservicerecord_sort() : priority" << slicePriority
+                   << "(size:" << slice.size() << ", total weight:" << sliceWeight << ")";
 
         // Order the slice of records.
         while (!slice.isEmpty()) {
@@ -134,11 +134,8 @@ static void qt_qdnsservicerecord_sort(QList<QDnsServiceRecord> &records)
             for (int j = 0; j < slice.size(); ++j) {
                 summedWeight += slice[j].weight();
                 if (summedWeight >= weightThreshold) {
-#ifdef QDNSLOOKUP_DEBUG
-                    qDebug("qt_qdnsservicerecord_sort() : adding %s %i (weight: %i)",
-                           qPrintable(slice[j].target()), slice[j].port(),
-                           slice[j].weight());
-#endif
+                    qDebug_DNS << "qt_qdnsservicerecord_sort() : adding" << slice[j].target()
+                               << slice[j].port() << "(weight:" << slice[j].weight() << ")";
                     // Adjust the slice weight and take the current record.
                     sliceWeight -= slice[j].weight();
                     records[i++] = slice.takeAt(j);
@@ -991,9 +988,7 @@ void QDnsLookupPrivate::_q_lookupFinished(const QDnsLookupReply &_reply)
 {
     Q_Q(QDnsLookup);
     if (runnable == q->sender()) {
-#ifdef QDNSLOOKUP_DEBUG
-        qDebug("DNS reply for %s: %i (%s)", qPrintable(name), _reply.error, qPrintable(_reply.errorString));
-#endif
+        qDebug_DNS << "DNS reply for" << name << ":" << int(_reply.error) << "(" << _reply.errorString << ")";
         reply = _reply;
         runnable = 0;
         isFinished = true;
