@@ -134,7 +134,7 @@ QList<QNetworkProxy> QNetworkProxyFactory::systemProxyForQuery(const QNetworkPro
     } else if (protocol == QLatin1String("ftp")) {
         proxy.setType(QNetworkProxy::FtpCachingProxy);
     } else { // assume http proxy
-        qDebug("Proxy type: %s assumed to be http proxy", qPrintable(protocol));
+        qWarning("Proxy type: %s assumed to be http proxy", qPrintable(protocol));
         proxy.setType((QNetworkProxy::HttpProxy));
     }
 

@@ -33,7 +33,7 @@
 ****************************************************************************/
 
 
-//#define QSSLSOCKET_DEBUG
+#include "qnetwork-debug.h"
 
 /*!
     \class QSslSocket

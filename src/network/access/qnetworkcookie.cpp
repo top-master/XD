@@ -45,6 +45,7 @@
 #include "QtCore/qurl.h"
 #include "QtNetwork/qhostaddress.h"
 #include "private/qobject_p.h"
+#include "qnetwork-debug.h"
 
 QT_BEGIN_NAMESPACE
 
@@ -550,8 +551,6 @@ static bool checkStaticArray(int &val, const QByteArray &dateString, int at, con
     return false;
 }
 
-//#define PARSEDATESTRINGDEBUG
-
 #define ADAY   1
 #define AMONTH 2
 #define AYEAR  4
@@ -591,7 +590,7 @@ static QDateTime parseDateString(const QByteArray &dateString)
     int at = 0;
     while (at < dateString.length()) {
 #ifdef PARSEDATESTRINGDEBUG
-        qDebug() << dateString.mid(at);
+        qDebug_COOKIE << dateString.mid(at);
 #endif
         bool isNum = isNumber(dateString[at]);
 
@@ -600,7 +599,7 @@ static QDateTime parseDateString(const QByteArray &dateString)
             && checkStaticArray(month, dateString, at, months, sizeof(months)- 1)) {
             ++month;
 #ifdef PARSEDATESTRINGDEBUG
-            qDebug() << "Month:" << month;
+            qDebug_COOKIE << "Month:" << month;
 #endif
             at += 3;
             continue;
@@ -612,7 +611,7 @@ static QDateTime parseDateString(const QByteArray &dateString)
             int sign = (at >= 0 && dateString[at - 1] == '-') ? -1 : 1;
             zoneOffset = sign * zoneOffsets[zoneOffset] * 60 * 60;
 #ifdef PARSEDATESTRINGDEBUG
-            qDebug() << "Zone:" << month;
+            qDebug_COOKIE << "Zone:" << month;
 #endif
             at += 3;
             continue;
@@ -653,7 +652,7 @@ static QDateTime parseDateString(const QByteArray &dateString)
                 int sign = dateString[at] == '-' ? -1 : 1;
                 zoneOffset = sign * ((minutes * 60) + (hours * 60 * 60));
 #ifdef PARSEDATESTRINGDEBUG
-                qDebug() << "Zone offset:" << zoneOffset << hours << minutes;
+                qDebug_COOKIE << "Zone offset:" << zoneOffset << hours << minutes;
 #endif
                 at += end;
                 continue;
@@ -678,7 +677,7 @@ static QDateTime parseDateString(const QByteArray &dateString)
                         h += 12;
                 time = QTime(h, m, s, ms);
 #ifdef PARSEDATESTRINGDEBUG
-                qDebug() << "Time:" << list << timeRx.matchedLength();
+                qDebug_COOKIE << "Time:" << list << timeRx.matchedLength();
 #endif
                 at += timeRx.matchedLength();
                 continue;
@@ -695,7 +694,7 @@ static QDateTime parseDateString(const QByteArray &dateString)
                 year = atoi(dateString.mid(at, 4).constData());
                 at += 4;
 #ifdef PARSEDATESTRINGDEBUG
-                qDebug() << "Year:" << year;
+                qDebug_COOKIE << "Year:" << year;
 #endif
                 continue;
             }
@@ -718,7 +717,7 @@ static QDateTime parseDateString(const QByteArray &dateString)
             }
             at += length;
 #ifdef PARSEDATESTRINGDEBUG
-            qDebug() << "Saving" << x;
+            qDebug_COOKIE << "Saving" << x;
 #endif
             continue;
         }
@@ -830,12 +829,12 @@ static QDateTime parseDateString(const QByteArray &dateString)
         else if (couldBe[i] & AYEAR && year == -1) year = unknown[i];
     }
 #ifdef PARSEDATESTRINGDEBUG
-        qDebug() << "Final set" << year << month << day;
+        qDebug_COOKIE << "Final set" << year << month << day;
 #endif
 
     if (year == -1 || month == -1 || day == -1) {
 #ifdef PARSEDATESTRINGDEBUG
-        qDebug() << "Parser failure" << year << month << day;
+        qDebug_COOKIE << "Parser failure" << year << month << day;
 #endif
         return QDateTime();
     }
