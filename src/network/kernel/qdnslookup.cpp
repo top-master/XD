@@ -33,6 +33,7 @@
 
 #include "qdnslookup.h"
 #include "qdnslookup_p.h"
+#include "qdnsoverride.h"   // QDnsWireRecord (the neutral record QDnsLookupReply::add() maps from)
 
 #include <qcoreapplication.h>
 #include <qdatetime.h>
@@ -494,11 +495,22 @@ void QDnsLookup::lookup()
     Q_D(QDnsLookup);
     d->isFinished = false;
     d->reply = QDnsLookupReply();
-    d->runnable = new QDnsLookupRunnable(d->type, QUrl::toAce(d->name), d->nameserver);
+    d->runnable = newRunnable();
     connect(d->runnable, SIGNAL(finished(QDnsLookupReply)),
             this, SLOT(_q_lookupFinished(QDnsLookupReply)),
             Qt::BlockingQueuedConnection);
     theDnsLookupThreadPool()->start(d->runnable);
+}
+
+/*!
+    \internal
+    Creates the runnable that carries out the lookup. Subclasses (e.g. QDnsOverride) override
+    this to substitute a runnable that resolves differently.
+*/
+QDnsLookupRunnable *QDnsLookup::newRunnable()
+{
+    Q_D(QDnsLookup);
+    return new QDnsLookupRunnable(d->type, QUrl::toAce(d->name), d->nameserver);
 }
 
 /*!
@@ -1049,6 +1061,83 @@ void QDnsLookupThreadPool::_q_applicationDestroyed()
 {
     waitForDone();
     signalsConnected = false;
+}
+
+/*!
+    Absorbs neutral wire records (produced by QDnsOverride::query) into this reply's typed record
+    lists. Defined here, beside QDnsLookupRunnable, because QDnsLookupReply is a friend of the
+    QDns*Record classes and so may write their private d-pointers.
+*/
+void QDnsLookupReply::add(const QList<QDnsWireRecord> &records)
+{
+    for (int i = 0; i < records.size(); ++i) {
+        const QDnsWireRecord &rec = records.at(i);
+        switch (rec.type) {
+        case QDnsLookup::A:
+        case QDnsLookup::AAAA: {
+            QDnsHostAddressRecord record;
+            QDnsHostAddressRecordPrivate *d = QDnsHostAddressRecordPrivate::get(record);
+            d->name = rec.name;
+            d->timeToLive = rec.ttl;
+            d->value = rec.address;
+            hostAddressRecords.append(record);
+            break; }
+        case QDnsLookup::CNAME: {
+            QDnsDomainNameRecord record;
+            QDnsDomainNameRecordPrivate *d = QDnsDomainNameRecordPrivate::get(record);
+            d->name = rec.name;
+            d->timeToLive = rec.ttl;
+            d->value = rec.value;
+            canonicalNameRecords.append(record);
+            break; }
+        case QDnsLookup::NS: {
+            QDnsDomainNameRecord record;
+            QDnsDomainNameRecordPrivate *d = QDnsDomainNameRecordPrivate::get(record);
+            d->name = rec.name;
+            d->timeToLive = rec.ttl;
+            d->value = rec.value;
+            nameServerRecords.append(record);
+            break; }
+        case QDnsLookup::PTR: {
+            QDnsDomainNameRecord record;
+            QDnsDomainNameRecordPrivate *d = QDnsDomainNameRecordPrivate::get(record);
+            d->name = rec.name;
+            d->timeToLive = rec.ttl;
+            d->value = rec.value;
+            pointerRecords.append(record);
+            break; }
+        case QDnsLookup::MX: {
+            QDnsMailExchangeRecord record;
+            QDnsMailExchangeRecordPrivate *d = QDnsMailExchangeRecordPrivate::get(record);
+            d->name = rec.name;
+            d->timeToLive = rec.ttl;
+            d->exchange = rec.value;
+            d->preference = rec.preference;
+            mailExchangeRecords.append(record);
+            break; }
+        case QDnsLookup::SRV: {
+            QDnsServiceRecord record;
+            QDnsServiceRecordPrivate *d = QDnsServiceRecordPrivate::get(record);
+            d->name = rec.name;
+            d->timeToLive = rec.ttl;
+            d->target = rec.value;
+            d->port = rec.port;
+            d->priority = rec.priority;
+            d->weight = rec.weight;
+            serviceRecords.append(record);
+            break; }
+        case QDnsLookup::TXT: {
+            QDnsTextRecord record;
+            QDnsTextRecordPrivate *d = QDnsTextRecordPrivate::get(record);
+            d->name = rec.name;
+            d->timeToLive = rec.ttl;
+            d->values = rec.txt;
+            textRecords.append(record);
+            break; }
+        default:
+            break;
+        }
+    }
 }
 
 QT_END_NAMESPACE
