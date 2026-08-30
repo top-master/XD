@@ -37,7 +37,7 @@
 #include "private/qnoncontiguousbytedevice_p.h"
 
 #include <qpair.h>
-#include <qdebug.h>
+#include "qnetwork-debug.h"
 
 #ifndef QT_NO_HTTP
 
@@ -228,7 +228,19 @@ void QHttpNetworkConnectionChannel::abort()
 
 bool QHttpNetworkConnectionChannel::sendRequest()
 {
-    Q_ASSERT(!protocolHandler.isNull());
+    // TRACE/network http-channel null-handler: drop the call when protocolHandler is null #3,
+    // same rationale as _q_receiveReply/_q_readyRead below. An SSL channel has no protocol
+    // handler until its handshake negotiates one (HTTP/1.1, SPDY, or HTTP/2); a queued
+    // _q_startNextRequest -- posted while a request was pending -- can arrive after the
+    // handshake FAILED and left the handler null (e.g. tst_QNetworkReply::httpProxyCommands's
+    // https-via-proxy row, where the CONNECT proxy never completes a real TLS handshake).
+    // Dropping the stale send is correct; dereferencing the null handler reads through a null
+    // pointer (a deterministic Fil-C panic, a flaky crash on a native build). The Q_ASSERT_X
+    // stays so a genuinely-unexpected null still trips in a debug build.
+    if (protocolHandler.isNull()) {
+        Q_ASSERT_X(false, Q_NULLPTR, "protocolHandler should be yet non-null.");
+        return false;
+    }
     return protocolHandler->sendRequest();
 }
 
@@ -260,6 +272,7 @@ void QHttpNetworkConnectionChannel::_q_readyRead()
 void QHttpNetworkConnectionChannel::handleUnexpectedEOF()
 {
     Q_ASSERT(reply);
+    qDebug_HTTPNCC << "handleUnexpectedEOF() reconnectAttempts" << reconnectAttempts;
     if (reconnectAttempts <= 0) {
         // too many errors reading/receiving/parsing the status, close the socket and emit error
         requeueCurrentlyPipelinedRequests();
@@ -286,6 +299,8 @@ bool QHttpNetworkConnectionChannel::ensureConnection()
         init();
 
     QAbstractSocket::SocketState socketState = socket->state();
+    qDebug_HTTPNCC << "ensureConnection() socketState" << socketState << "channelState" << state
+                   << "reconnectAttempts" << reconnectAttempts;
 
     // resend this request after we receive the disconnected signal
     // If !socket->isOpen() then we have already called close() on the socket, but there was still a
@@ -705,6 +720,7 @@ void QHttpNetworkConnectionChannel::pipelineFlush()
 
 void QHttpNetworkConnectionChannel::closeAndResendCurrentRequest()
 {
+    qDebug_HTTPNCC << "closeAndResendCurrentRequest() reconnectAttempts" << reconnectAttempts;
     requeueCurrentlyPipelinedRequests();
     close();
     if (reply)
@@ -715,6 +731,7 @@ void QHttpNetworkConnectionChannel::closeAndResendCurrentRequest()
 
 void QHttpNetworkConnectionChannel::resendCurrentRequest()
 {
+    qDebug_HTTPNCC << "resendCurrentRequest() reconnectAttempts" << reconnectAttempts;
     requeueCurrentlyPipelinedRequests();
     if (reply)
         resendCurrent = true;
@@ -852,6 +869,8 @@ void QHttpNetworkConnectionChannel::_q_error(QAbstractSocket::SocketError socket
     if (!socket)
         return;
     QNetworkReply::NetworkError errorCode = QNetworkReply::UnknownNetworkError;
+    qDebug_HTTPNCC << "_q_error()" << socketError << "channelState" << state
+                   << "reconnectAttempts" << reconnectAttempts << "ssl" << ssl;
 
     switch (socketError) {
     case QAbstractSocket::HostNotFoundError:
@@ -873,7 +892,20 @@ void QHttpNetworkConnectionChannel::_q_error(QAbstractSocket::SocketError socket
             // Try to reconnect/resend before sending an error.
             // While "Reading" the _q_disconnected() will handle this.
             if (reconnectAttempts-- > 0) {
-                resendCurrentRequest();
+                // The proxy closed the CONNECT tunnel during setup -- e.g. right after "200 Connection
+                // Established", before the tunnelled TLS handshake could begin -- so the socket is dead
+                // while we are still ConnectingState. If we don't close and reconnect here:
+                //  - resendCurrentRequest() re-sends the request on that same dead socket;
+                //  - _q_disconnected() won't re-drive it either (it acts only in Idle/Reading state);
+                //  - so the request is never re-issued, and a synchronous reply blocks on its semaphore
+                //    until the test watchdog fires.
+                // closeAndResendCurrentRequest() hands it a fresh socket instead. A later phase can reuse
+                // the live socket, so the plain resend still applies there.
+                if (state == QHttpNetworkConnectionChannel::ConnectingState) {
+                    closeAndResendCurrentRequest();
+                } else {
+                    resendCurrentRequest();
+                }
                 return;
             } else {
                 errorCode = QNetworkReply::RemoteHostClosedError;

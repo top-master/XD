@@ -42,11 +42,10 @@
 
 #include <qabstracteventdispatcher.h>
 #include <qsocketnotifier.h>
-#include <qdebug.h>
 #include <qdatetime.h>
 #include <qnetworkinterface.h>
 
-//#define QNATIVESOCKETENGINE_DEBUG
+#include "qnetwork-debug.h"
 #if defined(QNATIVESOCKETENGINE_DEBUG)
 #   include <qstring.h>
 #   include <qbytearray.h>
@@ -68,52 +67,52 @@ QT_BEGIN_NAMESPACE
 void verboseWSErrorDebug(int r)
 {
     switch (r) {
-        case WSANOTINITIALISED : qDebug("WSA error : WSANOTINITIALISED"); break;
-        case WSAEINTR: qDebug("WSA error : WSAEINTR"); break;
-        case WSAEBADF: qDebug("WSA error : WSAEBADF"); break;
-        case WSAEACCES: qDebug("WSA error : WSAEACCES"); break;
-        case WSAEFAULT: qDebug("WSA error : WSAEFAULT"); break;
-        case WSAEINVAL: qDebug("WSA error : WSAEINVAL"); break;
-        case WSAEMFILE: qDebug("WSA error : WSAEMFILE"); break;
-        case WSAEWOULDBLOCK: qDebug("WSA error : WSAEWOULDBLOCK"); break;
-        case WSAEINPROGRESS: qDebug("WSA error : WSAEINPROGRESS"); break;
-        case WSAEALREADY: qDebug("WSA error : WSAEALREADY"); break;
-        case WSAENOTSOCK: qDebug("WSA error : WSAENOTSOCK"); break;
-        case WSAEDESTADDRREQ: qDebug("WSA error : WSAEDESTADDRREQ"); break;
-        case WSAEMSGSIZE: qDebug("WSA error : WSAEMSGSIZE"); break;
-        case WSAEPROTOTYPE: qDebug("WSA error : WSAEPROTOTYPE"); break;
-        case WSAENOPROTOOPT: qDebug("WSA error : WSAENOPROTOOPT"); break;
-        case WSAEPROTONOSUPPORT: qDebug("WSA error : WSAEPROTONOSUPPORT"); break;
-        case WSAESOCKTNOSUPPORT: qDebug("WSA error : WSAESOCKTNOSUPPORT"); break;
-        case WSAEOPNOTSUPP: qDebug("WSA error : WSAEOPNOTSUPP"); break;
-        case WSAEPFNOSUPPORT: qDebug("WSA error : WSAEPFNOSUPPORT"); break;
-        case WSAEAFNOSUPPORT: qDebug("WSA error : WSAEAFNOSUPPORT"); break;
-        case WSAEADDRINUSE: qDebug("WSA error : WSAEADDRINUSE"); break;
-        case WSAEADDRNOTAVAIL: qDebug("WSA error : WSAEADDRNOTAVAIL"); break;
-        case WSAENETDOWN: qDebug("WSA error : WSAENETDOWN"); break;
-        case WSAENETUNREACH: qDebug("WSA error : WSAENETUNREACH"); break;
-        case WSAENETRESET: qDebug("WSA error : WSAENETRESET"); break;
-        case WSAECONNABORTED: qDebug("WSA error : WSAECONNABORTED"); break;
-        case WSAECONNRESET: qDebug("WSA error : WSAECONNRESET"); break;
-        case WSAENOBUFS: qDebug("WSA error : WSAENOBUFS"); break;
-        case WSAEISCONN: qDebug("WSA error : WSAEISCONN"); break;
-        case WSAENOTCONN: qDebug("WSA error : WSAENOTCONN"); break;
-        case WSAESHUTDOWN: qDebug("WSA error : WSAESHUTDOWN"); break;
-        case WSAETOOMANYREFS: qDebug("WSA error : WSAETOOMANYREFS"); break;
-        case WSAETIMEDOUT: qDebug("WSA error : WSAETIMEDOUT"); break;
-        case WSAECONNREFUSED: qDebug("WSA error : WSAECONNREFUSED"); break;
-        case WSAELOOP: qDebug("WSA error : WSAELOOP"); break;
-        case WSAENAMETOOLONG: qDebug("WSA error : WSAENAMETOOLONG"); break;
-        case WSAEHOSTDOWN: qDebug("WSA error : WSAEHOSTDOWN"); break;
-        case WSAEHOSTUNREACH: qDebug("WSA error : WSAEHOSTUNREACH"); break;
-        case WSAENOTEMPTY: qDebug("WSA error : WSAENOTEMPTY"); break;
-        case WSAEPROCLIM: qDebug("WSA error : WSAEPROCLIM"); break;
-        case WSAEUSERS: qDebug("WSA error : WSAEUSERS"); break;
-        case WSAEDQUOT: qDebug("WSA error : WSAEDQUOT"); break;
-        case WSAESTALE: qDebug("WSA error : WSAESTALE"); break;
-        case WSAEREMOTE: qDebug("WSA error : WSAEREMOTE"); break;
-        case WSAEDISCON: qDebug("WSA error : WSAEDISCON"); break;
-        default: qDebug("WSA error : Unknown"); break;
+        case WSANOTINITIALISED : qDebug_NSE << "WSA error : WSANOTINITIALISED"; break;
+        case WSAEINTR: qDebug_NSE << "WSA error : WSAEINTR"; break;
+        case WSAEBADF: qDebug_NSE << "WSA error : WSAEBADF"; break;
+        case WSAEACCES: qDebug_NSE << "WSA error : WSAEACCES"; break;
+        case WSAEFAULT: qDebug_NSE << "WSA error : WSAEFAULT"; break;
+        case WSAEINVAL: qDebug_NSE << "WSA error : WSAEINVAL"; break;
+        case WSAEMFILE: qDebug_NSE << "WSA error : WSAEMFILE"; break;
+        case WSAEWOULDBLOCK: qDebug_NSE << "WSA error : WSAEWOULDBLOCK"; break;
+        case WSAEINPROGRESS: qDebug_NSE << "WSA error : WSAEINPROGRESS"; break;
+        case WSAEALREADY: qDebug_NSE << "WSA error : WSAEALREADY"; break;
+        case WSAENOTSOCK: qDebug_NSE << "WSA error : WSAENOTSOCK"; break;
+        case WSAEDESTADDRREQ: qDebug_NSE << "WSA error : WSAEDESTADDRREQ"; break;
+        case WSAEMSGSIZE: qDebug_NSE << "WSA error : WSAEMSGSIZE"; break;
+        case WSAEPROTOTYPE: qDebug_NSE << "WSA error : WSAEPROTOTYPE"; break;
+        case WSAENOPROTOOPT: qDebug_NSE << "WSA error : WSAENOPROTOOPT"; break;
+        case WSAEPROTONOSUPPORT: qDebug_NSE << "WSA error : WSAEPROTONOSUPPORT"; break;
+        case WSAESOCKTNOSUPPORT: qDebug_NSE << "WSA error : WSAESOCKTNOSUPPORT"; break;
+        case WSAEOPNOTSUPP: qDebug_NSE << "WSA error : WSAEOPNOTSUPP"; break;
+        case WSAEPFNOSUPPORT: qDebug_NSE << "WSA error : WSAEPFNOSUPPORT"; break;
+        case WSAEAFNOSUPPORT: qDebug_NSE << "WSA error : WSAEAFNOSUPPORT"; break;
+        case WSAEADDRINUSE: qDebug_NSE << "WSA error : WSAEADDRINUSE"; break;
+        case WSAEADDRNOTAVAIL: qDebug_NSE << "WSA error : WSAEADDRNOTAVAIL"; break;
+        case WSAENETDOWN: qDebug_NSE << "WSA error : WSAENETDOWN"; break;
+        case WSAENETUNREACH: qDebug_NSE << "WSA error : WSAENETUNREACH"; break;
+        case WSAENETRESET: qDebug_NSE << "WSA error : WSAENETRESET"; break;
+        case WSAECONNABORTED: qDebug_NSE << "WSA error : WSAECONNABORTED"; break;
+        case WSAECONNRESET: qDebug_NSE << "WSA error : WSAECONNRESET"; break;
+        case WSAENOBUFS: qDebug_NSE << "WSA error : WSAENOBUFS"; break;
+        case WSAEISCONN: qDebug_NSE << "WSA error : WSAEISCONN"; break;
+        case WSAENOTCONN: qDebug_NSE << "WSA error : WSAENOTCONN"; break;
+        case WSAESHUTDOWN: qDebug_NSE << "WSA error : WSAESHUTDOWN"; break;
+        case WSAETOOMANYREFS: qDebug_NSE << "WSA error : WSAETOOMANYREFS"; break;
+        case WSAETIMEDOUT: qDebug_NSE << "WSA error : WSAETIMEDOUT"; break;
+        case WSAECONNREFUSED: qDebug_NSE << "WSA error : WSAECONNREFUSED"; break;
+        case WSAELOOP: qDebug_NSE << "WSA error : WSAELOOP"; break;
+        case WSAENAMETOOLONG: qDebug_NSE << "WSA error : WSAENAMETOOLONG"; break;
+        case WSAEHOSTDOWN: qDebug_NSE << "WSA error : WSAEHOSTDOWN"; break;
+        case WSAEHOSTUNREACH: qDebug_NSE << "WSA error : WSAEHOSTUNREACH"; break;
+        case WSAENOTEMPTY: qDebug_NSE << "WSA error : WSAENOTEMPTY"; break;
+        case WSAEPROCLIM: qDebug_NSE << "WSA error : WSAEPROCLIM"; break;
+        case WSAEUSERS: qDebug_NSE << "WSA error : WSAEUSERS"; break;
+        case WSAEDQUOT: qDebug_NSE << "WSA error : WSAEDQUOT"; break;
+        case WSAESTALE: qDebug_NSE << "WSA error : WSAESTALE"; break;
+        case WSAEREMOTE: qDebug_NSE << "WSA error : WSAEREMOTE"; break;
+        case WSAEDISCON: qDebug_NSE << "WSA error : WSAEDISCON"; break;
+        default: qDebug_NSE << "WSA error : Unknown"; break;
     }
     qErrnoWarning(r, "more details");
 }
@@ -355,7 +354,7 @@ bool QNativeSocketEnginePrivate::createNewSocket(QAbstractSocket::SocketType soc
             // make non inheritable the old way
             BOOL handleFlags = SetHandleInformation((HANDLE)socket, HANDLE_FLAG_INHERIT, 0);
 #ifdef QNATIVESOCKETENGINE_DEBUG
-            qDebug() << "QNativeSocketEnginePrivate::createNewSocket - set inheritable" << handleFlags;
+            qDebug_NSE << "createNewSocket - set inheritable" << handleFlags;
 #else
             Q_UNUSED(handleFlags);
 #endif
@@ -604,7 +603,10 @@ bool QNativeSocketEnginePrivate::fetchConnectionParameters()
     if (socketType == QAbstractSocket::TcpSocket) socketTypeStr = "TcpSocket";
     else if (socketType == QAbstractSocket::UdpSocket) socketTypeStr = "UdpSocket";
 
-    qDebug("QNativeSocketEnginePrivate::fetchConnectionParameters() localAddress == %s, localPort = %i, peerAddress == %s, peerPort = %i, socketProtocol == %s, socketType == %s", localAddress.toString().toLatin1().constData(), localPort, peerAddress.toString().toLatin1().constData(), peerPort, socketProtocolStr.toLatin1().constData(), socketTypeStr.toLatin1().constData());
+    qDebug_NSE << "fetchConnectionParameters() localAddress ==" << localAddress.toString()
+               << ", localPort =" << localPort << ", peerAddress ==" << peerAddress.toString()
+               << ", peerPort =" << peerPort << ", socketProtocol ==" << socketProtocolStr
+               << ", socketType ==" << socketTypeStr;
 #endif
 
     return true;
@@ -614,9 +616,7 @@ bool QNativeSocketEnginePrivate::fetchConnectionParameters()
 bool QNativeSocketEnginePrivate::nativeConnect(const QHostAddress &address, quint16 port)
 {
 
-#if defined (QNATIVESOCKETENGINE_DEBUG)
-    qDebug("QNativeSocketEnginePrivate::nativeConnect() to %s :: %i", address.toString().toLatin1().constData(), port);
-#endif
+    qDebug_NSE << "nativeConnect() to" << address.toString() << "::" << port;
 
     qt_sockaddr aa;
     QT_SOCKLEN_T sockAddrSize = 0;
@@ -730,22 +730,16 @@ bool QNativeSocketEnginePrivate::nativeConnect(const QHostAddress &address, quin
                 break;
             }
             if (socketState != QAbstractSocket::ConnectedState) {
-#if defined (QNATIVESOCKETENGINE_DEBUG)
-                qDebug("QNativeSocketEnginePrivate::nativeConnect(%s, %i) == false (%s)",
-                        address.toString().toLatin1().constData(), port,
-                        socketState == QAbstractSocket::ConnectingState
-                        ? "Connection in progress" : socketErrorString.toLatin1().constData());
-#endif
+                qDebug_NSE << "nativeConnect(" << address.toString() << "," << port << ") == false ("
+                           << (socketState == QAbstractSocket::ConnectingState
+                               ? "Connection in progress" : socketErrorString.toLatin1().constData()) << ")";
                 return false;
             }
         }
         break;
     }
 
-#if defined (QNATIVESOCKETENGINE_DEBUG)
-    qDebug("QNativeSocketEnginePrivate::nativeConnect(%s, %i) == true",
-           address.toString().toLatin1().constData(), port);
-#endif
+    qDebug_NSE << "nativeConnect(" << address.toString() << "," << port << ") == true";
 
     socketState = QAbstractSocket::ConnectedState;
     return true;
@@ -806,18 +800,12 @@ bool QNativeSocketEnginePrivate::nativeBind(const QHostAddress &a, quint16 port)
             break;
         }
 
-#if defined (QNATIVESOCKETENGINE_DEBUG)
-        qDebug("QNativeSocketEnginePrivate::nativeBind(%s, %i) == false (%s)",
-               address.toString().toLatin1().constData(), port, socketErrorString.toLatin1().constData());
-#endif
+        qDebug_NSE << "nativeBind(" << address.toString() << "," << port << ") == false (" << socketErrorString << ")";
 
         return false;
     }
 
-#if defined (QNATIVESOCKETENGINE_DEBUG)
-    qDebug("QNativeSocketEnginePrivate::nativeBind(%s, %i) == true",
-           address.toString().toLatin1().constData(), port);
-#endif
+    qDebug_NSE << "nativeBind(" << address.toString() << "," << port << ") == true";
     socketState = QAbstractSocket::BoundState;
     return true;
 }
@@ -840,16 +828,11 @@ bool QNativeSocketEnginePrivate::nativeListen(int backlog)
             break;
         }
 
-#if defined (QNATIVESOCKETENGINE_DEBUG)
-        qDebug("QNativeSocketEnginePrivate::nativeListen(%i) == false (%s)",
-               backlog, socketErrorString.toLatin1().constData());
-#endif
+        qDebug_NSE << "nativeListen(" << backlog << ") == false (" << socketErrorString << ")";
         return false;
     }
 
-#if defined (QNATIVESOCKETENGINE_DEBUG)
-    qDebug("QNativeSocketEnginePrivate::nativeListen(%i) == true", backlog);
-#endif
+    qDebug_NSE << "nativeListen(" << backlog << ") == true";
 
     socketState = QAbstractSocket::ListeningState;
     return true;
@@ -900,9 +883,7 @@ int QNativeSocketEnginePrivate::nativeAccept()
         n.setEnabled(true);
         n.setEnabled(false);
     }
-#if defined (QNATIVESOCKETENGINE_DEBUG)
-    qDebug("QNativeSocketEnginePrivate::nativeAccept() == %i", acceptedDescriptor);
-#endif
+    qDebug_NSE << "nativeAccept() ==" << acceptedDescriptor;
     return acceptedDescriptor;
 }
 
@@ -1121,10 +1102,7 @@ bool QNativeSocketEnginePrivate::nativeHasPendingDatagrams() const
     result = available > 0;
 #endif
 
-#if defined (QNATIVESOCKETENGINE_DEBUG)
-    qDebug("QNativeSocketEnginePrivate::nativeHasPendingDatagrams() == %s",
-           result ? "true" : "false");
-#endif
+    qDebug_NSE << "nativeHasPendingDatagrams() ==" << (result ? "true" : "false");
     return result;
 }
 
@@ -1189,9 +1167,7 @@ qint64 QNativeSocketEnginePrivate::nativePendingDatagramSize() const
     }
 #endif
 
-#if defined (QNATIVESOCKETENGINE_DEBUG)
-    qDebug("QNativeSocketEnginePrivate::nativePendingDatagramSize() == %lli", ret);
-#endif
+    qDebug_NSE << "nativePendingDatagramSize() ==" << ret;
 
     return ret;
 }
@@ -1297,10 +1273,10 @@ qint64 QNativeSocketEnginePrivate::nativeReceiveDatagram(char *data, qint64 maxL
 
 #if defined (QNATIVESOCKETENGINE_DEBUG)
     bool printSender = (ret != -1 && (options & QNativeSocketEngine::WantDatagramSender) != 0);
-    qDebug("QNativeSocketEnginePrivate::nativeReceiveDatagram(%p \"%s\", %lli, %s, %i) == %lli",
-           data, qt_prettyDebug(data, qMin<qint64>(ret, 16), ret).data(), maxLength,
-           printSender ? header->senderAddress.toString().toLatin1().constData() : "(unknown)",
-           printSender ? header->senderPort : 0, ret);
+    qDebug_NSE << "nativeReceiveDatagram(" << qFormatPtr(data)
+               << qt_prettyDebug(data, qMin<qint64>(ret, 16), ret) << maxLength
+               << (printSender ? header->senderAddress.toString() : QString("(unknown)"))
+               << (printSender ? header->senderPort : 0) << ") ==" << ret;
 #endif
 
     return ret;
@@ -1412,10 +1388,10 @@ qint64 QNativeSocketEnginePrivate::nativeSendDatagram(const char *data, qint64 l
     }
 
 #if defined (QNATIVESOCKETENGINE_DEBUG)
-    qDebug("QNativeSocketEnginePrivate::nativeSendDatagram(%p \"%s\", %lli, \"%s\", %i) == %lli", data,
-           qt_prettyDebug(data, qMin<qint64>(len, 16), len).data(), len,
-           header.destinationAddress.toString().toLatin1().constData(),
-           header.destinationPort, ret);
+    qDebug_NSE << "nativeSendDatagram(" << qFormatPtr(data)
+               << qt_prettyDebug(data, qMin<qint64>(len, 16), len) << len
+               << header.destinationAddress.toString()
+               << header.destinationPort << ") ==" << ret;
 #endif
 
     return ret;
@@ -1473,8 +1449,9 @@ qint64 QNativeSocketEnginePrivate::nativeWrite(const char *data, qint64 len)
     }
 
 #if defined (QNATIVESOCKETENGINE_DEBUG)
-    qDebug("QNativeSocketEnginePrivate::nativeWrite(%p \"%s\", %li) == %li",
-           data, qt_prettyDebug(data, qMin((int)ret, 16), (int)ret).data(), (int)len, (int)ret);
+    qDebug_NSE << "nativeWrite(" << qFormatPtr(data)
+               << qt_prettyDebug(data, qMin((int)ret, 16), (int)ret) << (int)len
+               << ") ==" << (int)ret;
 #endif
 
     return ret;
@@ -1519,11 +1496,12 @@ qint64 QNativeSocketEnginePrivate::nativeRead(char *data, qint64 maxLength)
 
 #if defined (QNATIVESOCKETENGINE_DEBUG)
     if (ret != -2) {
-        qDebug("QNativeSocketEnginePrivate::nativeRead(%p \"%s\", %li) == %li",
-               data, qt_prettyDebug(data, qMin((int)bytesRead, 16), (int)bytesRead).data(), (int)maxLength, (int)ret);
+        qDebug_NSE << "nativeRead(" << qFormatPtr(data)
+                   << qt_prettyDebug(data, qMin((int)bytesRead, 16), (int)bytesRead) << (int)maxLength
+                   << ") ==" << (int)ret;
     } else {
-        qDebug("QNativeSocketEnginePrivate::nativeRead(%p, %li) == -2 (WOULD BLOCK)",
-               data, int(maxLength));
+        qDebug_NSE << "nativeRead(" << qFormatPtr(data) << "," << int(maxLength)
+                   << ") == -2 (WOULD BLOCK)";
     }
 #endif
 
@@ -1630,9 +1608,7 @@ int QNativeSocketEnginePrivate::nativeSelect(int timeout,
 
 void QNativeSocketEnginePrivate::nativeClose()
 {
-#if defined (QTCPSOCKETENGINE_DEBUG)
-    qDebug("QNativeSocketEnginePrivate::nativeClose()");
-#endif
+    qDebug_TCPSE << "nativeClose()";
     // We were doing a setsockopt here before with SO_DONTLINGER. (However with kind of wrong
     // usage of parameters, it wants a BOOL but we used a struct and pretended it to be bool).
     // We don't think setting this option should be done here, if a user wants it she/he can

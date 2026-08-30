@@ -41,6 +41,7 @@
 #endif
 
 #include "qdebug.h"
+#include <QtCore/qstringnoquote.h>
 #include "qmetaobject.h"
 #include <private/qtextstream_p.h>
 #include <private/qtools_p.h>

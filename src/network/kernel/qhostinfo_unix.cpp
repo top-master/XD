@@ -31,7 +31,7 @@
 **
 ****************************************************************************/
 
-//#define QHOSTINFO_DEBUG
+#include "qnetwork-debug.h"
 
 #include "qplatformdefs.h"
 
@@ -127,10 +127,7 @@ QHostInfo QHostInfoAgent::fromName(const QString &hostName)
 {
     QHostInfo results;
 
-#if defined(QHOSTINFO_DEBUG)
-    qDebug("QHostInfoAgent::fromName(%s) looking up...",
-           hostName.toLatin1().constData());
-#endif
+    qDebug_HINFO << "fromName(" << hostName << ") looking up...";
 
     // Load res_init on demand.
     resolveLibrary();
@@ -214,9 +211,7 @@ QHostInfo QHostInfoAgent::fromName(const QString &hostName)
         addrinfo *node = res;
         QList<QHostAddress> addresses;
         while (node) {
-#ifdef QHOSTINFO_DEBUG
-                qDebug() << "getaddrinfo node: flags:" << node->ai_flags << "family:" << node->ai_family << "ai_socktype:" << node->ai_socktype << "ai_protocol:" << node->ai_protocol << "ai_addrlen:" << node->ai_addrlen;
-#endif
+                qDebug_HINFO << "getaddrinfo node: flags:" << node->ai_flags << "family:" << node->ai_family << "ai_socktype:" << node->ai_socktype << "ai_protocol:" << node->ai_protocol << "ai_addrlen:" << node->ai_addrlen;
             if (node->ai_family == AF_INET) {
                 QHostAddress addr;
                 addr.setAddress(ntohl(((sockaddr_in *) node->ai_addr)->sin_addr.s_addr));
@@ -293,8 +288,7 @@ QHostInfo QHostInfoAgent::fromName(const QString &hostName)
 
 #if defined(QHOSTINFO_DEBUG)
     if (results.error() != QHostInfo::NoError) {
-        qDebug("QHostInfoAgent::fromName(): error #%d %s",
-               h_errno, results.errorString().toLatin1().constData());
+        qDebug_HINFO << "fromName(): error #" << h_errno << results.errorString();
     } else {
         QString tmp;
         QList<QHostAddress> addresses = results.addresses();
@@ -302,9 +296,8 @@ QHostInfo QHostInfoAgent::fromName(const QString &hostName)
             if (i != 0) tmp += ", ";
             tmp += addresses.at(i).toString();
         }
-        qDebug("QHostInfoAgent::fromName(): found %i entries for \"%s\": {%s}",
-               addresses.count(), hostName.toLatin1().constData(),
-               tmp.toLatin1().constData());
+        qDebug_HINFO << "fromName(): found" << addresses.count()
+                     << "entries for \"" << hostName << "\": {" << tmp << "}";
     }
 #endif
     return results;
