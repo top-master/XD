@@ -58,6 +58,7 @@ QT_BEGIN_NAMESPACE
 //#define QDNSLOOKUP_DEBUG
 
 class QDnsLookupRunnable;
+struct QDnsWireRecord;
 
 class QDnsLookupReply
 {
@@ -76,6 +77,8 @@ public:
     QList<QDnsDomainNameRecord> pointerRecords;
     QList<QDnsServiceRecord> serviceRecords;
     QList<QDnsTextRecord> textRecords;
+
+    void add(const QList<QDnsWireRecord> &records);
 };
 
 class QDnsLookupPrivate : public QObjectPrivate
@@ -116,8 +119,9 @@ public:
 signals:
     void finished(const QDnsLookupReply &reply);
 
-private:
-    static void query(const int requestType, const QByteArray &requestName, const QHostAddress &nameserver, QDnsLookupReply *reply);
+protected:
+    virtual void query(const int requestType, const QByteArray &requestName, const QHostAddress &nameserver, QDnsLookupReply *reply);
+
     QDnsLookup::Type requestType;
     QByteArray requestName;
     QHostAddress nameserver;
@@ -156,6 +160,9 @@ public:
     QDnsDomainNameRecordPrivate()
     { }
 
+    static const QDnsDomainNameRecordPrivate *get(const QDnsDomainNameRecord &record) { return record.d.data(); }
+    static QDnsDomainNameRecordPrivate *get(QDnsDomainNameRecord &record) { return record.d.data(); }
+
     QString value;
 };
 
@@ -164,6 +171,9 @@ class QDnsHostAddressRecordPrivate : public QDnsRecordPrivate
 public:
     QDnsHostAddressRecordPrivate()
     { }
+
+    static const QDnsHostAddressRecordPrivate *get(const QDnsHostAddressRecord &record) { return record.d.data(); }
+    static QDnsHostAddressRecordPrivate *get(QDnsHostAddressRecord &record) { return record.d.data(); }
 
     QHostAddress value;
 };
@@ -174,6 +184,9 @@ public:
     QDnsMailExchangeRecordPrivate()
         : preference(0)
     { }
+
+    static const QDnsMailExchangeRecordPrivate *get(const QDnsMailExchangeRecord &record) { return record.d.data(); }
+    static QDnsMailExchangeRecordPrivate *get(QDnsMailExchangeRecord &record) { return record.d.data(); }
 
     QString exchange;
     quint16 preference;
@@ -188,6 +201,9 @@ public:
           weight(0)
     { }
 
+    static const QDnsServiceRecordPrivate *get(const QDnsServiceRecord &record) { return record.d.data(); }
+    static QDnsServiceRecordPrivate *get(QDnsServiceRecord &record) { return record.d.data(); }
+
     QString target;
     quint16 port;
     quint16 priority;
@@ -199,6 +215,9 @@ class QDnsTextRecordPrivate : public QDnsRecordPrivate
 public:
     QDnsTextRecordPrivate()
     { }
+
+    static const QDnsTextRecordPrivate *get(const QDnsTextRecord &record) { return record.d.data(); }
+    static QDnsTextRecordPrivate *get(QDnsTextRecord &record) { return record.d.data(); }
 
     QList<QByteArray> values;
 };
