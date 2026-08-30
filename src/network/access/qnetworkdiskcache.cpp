@@ -31,7 +31,7 @@
 **
 ****************************************************************************/
 
-//#define QNETWORKDISKCACHE_DEBUG
+#include "qnetwork-debug.h"
 
 
 #include "qnetworkdiskcache.h"
@@ -45,7 +45,6 @@
 #include <qdiriterator.h>
 #include <qurl.h>
 #include <qcryptographichash.h>
-#include <qdebug.h>
 
 #define CACHE_POSTFIX QLatin1String(".d")
 #define PREPARED_SLASH QLatin1String("prepared/")
@@ -136,9 +135,7 @@ QString QNetworkDiskCache::cacheDirectory() const
 */
 void QNetworkDiskCache::setCacheDirectory(const QString &cacheDir)
 {
-#if defined(QNETWORKDISKCACHE_DEBUG)
-    qDebug() << "QNetworkDiskCache::setCacheDirectory()" << cacheDir;
-#endif
+    qDebug_DISKCACHE << "setCacheDirectory()" << cacheDir;
     Q_D(QNetworkDiskCache);
     if (cacheDir.isEmpty())
         return;
@@ -157,9 +154,7 @@ void QNetworkDiskCache::setCacheDirectory(const QString &cacheDir)
 */
 qint64 QNetworkDiskCache::cacheSize() const
 {
-#if defined(QNETWORKDISKCACHE_DEBUG)
-    qDebug() << "QNetworkDiskCache::cacheSize()";
-#endif
+    qDebug_DISKCACHE << "cacheSize()";
     Q_D(const QNetworkDiskCache);
     if (d->cacheDirectory.isEmpty())
         return 0;
@@ -175,9 +170,7 @@ qint64 QNetworkDiskCache::cacheSize() const
 */
 QIODevice *QNetworkDiskCache::prepare(const QNetworkCacheMetaData &metaData)
 {
-#if defined(QNETWORKDISKCACHE_DEBUG)
-    qDebug() << "QNetworkDiskCache::prepare()" << metaData.url();
-#endif
+    qDebug_DISKCACHE << "prepare()" << metaData.url();
     Q_D(QNetworkDiskCache);
     if (!metaData.isValid() || !metaData.url().isValid() || !metaData.saveToDisk())
         return 0;
@@ -226,9 +219,7 @@ QIODevice *QNetworkDiskCache::prepare(const QNetworkCacheMetaData &metaData)
 */
 void QNetworkDiskCache::insert(QIODevice *device)
 {
-#if defined(QNETWORKDISKCACHE_DEBUG)
-    qDebug() << "QNetworkDiskCache::insert()" << device;
-#endif
+    qDebug_DISKCACHE << "insert()" << device;
     Q_D(QNetworkDiskCache);
     QHash<QIODevice*, QCacheItem*>::iterator it = d->inserting.find(device);
     if (it == d->inserting.end()) {
@@ -307,9 +298,7 @@ void QNetworkDiskCachePrivate::storeItem(QCacheItem *cacheItem)
 */
 bool QNetworkDiskCache::remove(const QUrl &url)
 {
-#if defined(QNETWORKDISKCACHE_DEBUG)
-    qDebug() << "QNetworkDiskCache::remove()" << url;
-#endif
+    qDebug_DISKCACHE << "remove()" << url;
     Q_D(QNetworkDiskCache);
 
     // remove is also used to cancel insertions, not a common operation
@@ -334,9 +323,7 @@ bool QNetworkDiskCache::remove(const QUrl &url)
  */
 bool QNetworkDiskCachePrivate::removeFile(const QString &file)
 {
-#if defined(QNETWORKDISKCACHE_DEBUG)
-    qDebug() << "QNetworkDiskCache::removFile()" << file;
-#endif
+    qDebug_DISKCACHE << "removFile()" << file;
     if (file.isEmpty())
         return false;
     QFileInfo info(file);
@@ -356,9 +343,7 @@ bool QNetworkDiskCachePrivate::removeFile(const QString &file)
 */
 QNetworkCacheMetaData QNetworkDiskCache::metaData(const QUrl &url)
 {
-#if defined(QNETWORKDISKCACHE_DEBUG)
-    qDebug() << "QNetworkDiskCache::metaData()" << url;
-#endif
+    qDebug_DISKCACHE << "metaData()" << url;
     Q_D(QNetworkDiskCache);
     if (d->lastItem.metaData.url() == url)
         return d->lastItem.metaData;
@@ -372,9 +357,7 @@ QNetworkCacheMetaData QNetworkDiskCache::metaData(const QUrl &url)
  */
 QNetworkCacheMetaData QNetworkDiskCache::fileMetaData(const QString &fileName) const
 {
-#if defined(QNETWORKDISKCACHE_DEBUG)
-    qDebug() << "QNetworkDiskCache::fileMetaData()" << fileName;
-#endif
+    qDebug_DISKCACHE << "fileMetaData()" << fileName;
     Q_D(const QNetworkDiskCache);
     QFile file(fileName);
     if (!file.open(QFile::ReadOnly))
@@ -392,9 +375,7 @@ QNetworkCacheMetaData QNetworkDiskCache::fileMetaData(const QString &fileName) c
 */
 QIODevice *QNetworkDiskCache::data(const QUrl &url)
 {
-#if defined(QNETWORKDISKCACHE_DEBUG)
-    qDebug() << "QNetworkDiskCache::data()" << url;
-#endif
+    qDebug_DISKCACHE << "data()" << url;
     Q_D(QNetworkDiskCache);
     QScopedPointer<QBuffer> buffer;
     if (!url.isValid())
@@ -441,23 +422,17 @@ QIODevice *QNetworkDiskCache::data(const QUrl &url)
 */
 void QNetworkDiskCache::updateMetaData(const QNetworkCacheMetaData &metaData)
 {
-#if defined(QNETWORKDISKCACHE_DEBUG)
-    qDebug() << "QNetworkDiskCache::updateMetaData()" << metaData.url();
-#endif
+    qDebug_DISKCACHE << "updateMetaData()" << metaData.url();
     QUrl url = metaData.url();
     QIODevice *oldDevice = data(url);
     if (!oldDevice) {
-#if defined(QNETWORKDISKCACHE_DEBUG)
-        qDebug() << "QNetworkDiskCache::updateMetaData(), no device!";
-#endif
+        qDebug_DISKCACHE << "updateMetaData(), no device!";
         return;
     }
 
     QIODevice *newDevice = prepare(metaData);
     if (!newDevice) {
-#if defined(QNETWORKDISKCACHE_DEBUG)
-        qDebug() << "QNetworkDiskCache::updateMetaData(), no new device!" << url;
-#endif
+        qDebug_DISKCACHE << "updateMetaData(), no new device!" << url;
         return;
     }
     char data[1024];
@@ -571,13 +546,11 @@ qint64 QNetworkDiskCache::expire()
         ++removedFiles;
         ++i;
     }
-#if defined(QNETWORKDISKCACHE_DEBUG)
     if (removedFiles > 0) {
-        qDebug() << "QNetworkDiskCache::expire()"
+        qDebug_DISKCACHE << "expire()"
                 << "Removed:" << removedFiles
                 << "Kept:" << cacheItems.count() - removedFiles;
     }
-#endif
     return totalSize;
 }
 
@@ -586,9 +559,7 @@ qint64 QNetworkDiskCache::expire()
 */
 void QNetworkDiskCache::clear()
 {
-#if defined(QNETWORKDISKCACHE_DEBUG)
-    qDebug() << "QNetworkDiskCache::clear()";
-#endif
+    qDebug_DISKCACHE << "clear()";
     Q_D(QNetworkDiskCache);
     qint64 size = d->maximumCacheSize;
     d->maximumCacheSize = 0;
