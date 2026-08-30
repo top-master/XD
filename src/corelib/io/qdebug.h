@@ -36,6 +36,7 @@
 #define QDEBUG_H
 
 #include <QtCore/qalgorithms.h>
+#include <QtCore/qatomicflags.h>
 #include <QtCore/qhash.h>
 #include <QtCore/qlist.h>
 #include <QtCore/qmap.h>
@@ -48,48 +49,65 @@
 
 QT_BEGIN_NAMESPACE
 
+/*!
+    \internal
+
+    Holds QDebug's per-stream format state as one copyable value that QDebugStateSaver captures on
+    entry and restores on exit -- a single QAtomicFlags word: bit 0 suppresses string quoting, bit 1
+    is the auto-insert-space toggle, and bits 29..31 carry the 5.6 verbose level, so each toggle is
+    one atomic bit. The bit meanings stay with the stream that reads them (see
+    QDebug::Stream::FormatFlag and the verbosity helpers below). With the state here the stream no
+    longer carries its own \c space or \c flags members, and a save or a restore is a copy of this
+    one object. The default constructor lives out of line (below QDebug) so it can seed the proper
+    default -- spaces and quotes on, default verbosity -- from the stream's own flag constants.
+*/
+class QDebugState
+{
+public:
+    QAtomicFlags<int> flags;
+
+    QDebugState();
+    Q_ALWAYS_INLINE QDebugState(const QDebugState &other) : flags(other.flags.toInt()) {}
+    Q_ALWAYS_INLINE QDebugState &operator=(const QDebugState &other)
+    { flags.storeUnsafe(other.flags.toInt()); return *this; }
+};
+
+class QStringNoQuote;
 
 class Q_CORE_EXPORT QDebug
 {
 protected:
     friend class QMessageLogger;
     friend class QDebugStateSaverPrivate;
+    friend class QDebugState;
     struct Stream {
         enum { defaultVerbosity = 2, verbosityShift = 29, verbosityMask = 0x7 };
 
         Stream(QIODevice *device) : ts(device), ref(1), type(QtDebugMsg),
-            space(true), message_output(false), flags(defaultVerbosity << verbosityShift) {}
+            message_output(false) {}
         Stream(QString *string) : ts(string, QIODevice::WriteOnly), ref(1), type(QtDebugMsg),
-            space(true), message_output(false), flags(defaultVerbosity << verbosityShift) {}
+            message_output(false) {}
         Stream(QtMsgType t) : ts(&buffer, QIODevice::WriteOnly), ref(1), type(t),
-            space(true), message_output(true), flags(defaultVerbosity << verbosityShift) {}
+            message_output(true) {}
         QTextStream ts;
         QString buffer;
         int ref;
         QtMsgType type;
-        bool space;
+        QDebugState state;
         bool message_output;
         QMessageLogContext context;
 
         enum FormatFlag { // Note: Bits 29..31 are reserved for the verbose level introduced in 5.6.
-            NoQuotes = 0x1
+            NoQuotes = 0x1,
+            Spaces   = 0x2
         };
 
-        // ### Qt 6: unify with space, introduce own version member
-        bool testFlag(FormatFlag flag) const { return (context.version > 1) ? (flags & flag) : false; }
-        void setFlag(FormatFlag flag) { if (context.version > 1) { flags |= flag; } }
-        void unsetFlag(FormatFlag flag) { if (context.version > 1) { flags &= ~flag; } }
-        int verbosity() const
-        { return context.version > 1 ? (flags >> verbosityShift) & verbosityMask : int(Stream::defaultVerbosity); }
-        void setVerbosity(int v)
-        {
-            if (context.version > 1) {
-                flags &= ~(verbosityMask << verbosityShift);
-                flags |= (v & verbosityMask) << verbosityShift;
-            }
-        }
-        // added in 5.4
-        int flags;
+        Q_ALWAYS_INLINE bool testFlag(FormatFlag flag) const { return state.flags.includes(flag); }
+        Q_ALWAYS_INLINE void setFlag(FormatFlag flag) { state.flags.append(flag); }
+        Q_ALWAYS_INLINE void unsetFlag(FormatFlag flag) { state.flags.remove(flag); }
+        int verbosity() const { return (state.flags.toInt() >> verbosityShift) & verbosityMask; }
+        bool setVerbosity(int v)
+        { return state.flags.replace(verbosityMask << verbosityShift, (v & verbosityMask) << verbosityShift); }
     } *stream;
 
     enum Latin1Content { ContainsBinary = 0, ContainsLatin1 };
@@ -108,21 +126,22 @@ public:
 
     QDebug &resetFormat();
 
-    inline QDebug &space() { stream->space = true; stream->ts << ' '; return *this; }
-    inline QDebug &nospace() { stream->space = false; return *this; }
-    inline QDebug &maybeSpace() { if (stream->space) stream->ts << ' '; return *this; }
+    inline QDebug &space() { stream->setFlag(Stream::Spaces); stream->ts << ' '; return *this; }
+    inline QDebug &nospace() { stream->unsetFlag(Stream::Spaces); return *this; }
+    inline QDebug &maybeSpace() { if (stream->testFlag(Stream::Spaces)) { stream->ts << ' '; } return *this; }
     int verbosity() const { return stream->verbosity(); }
-    void setVerbosity(int verbosityLevel) { stream->setVerbosity(verbosityLevel); }
+    bool setVerbosity(int verbosityLevel) { return stream->setVerbosity(verbosityLevel); }
 
-    bool autoInsertSpaces() const { return stream->space; }
-    void setAutoInsertSpaces(bool b) { stream->space = b; }
+    Q_ALWAYS_INLINE bool autoInsertSpaces() const { return stream->testFlag(Stream::Spaces); }
+    Q_ALWAYS_INLINE void setAutoInsertSpaces(bool b) { if (b) { stream->setFlag(Stream::Spaces); } else { stream->unsetFlag(Stream::Spaces); } }
 
-    bool hasQuotes() const { return !stream->testFlag(Stream::NoQuotes); }
     inline QDebug &quotes() { stream->unsetFlag(Stream::NoQuotes); return *this; }
     inline QDebug &noQuotes() { stream->setFlag(Stream::NoQuotes); return *this; }
     inline QDebug &quote() { stream->unsetFlag(Stream::NoQuotes); return *this; }
     inline QDebug &noquote() { stream->setFlag(Stream::NoQuotes); return *this; }
-    inline QDebug &maybeQuote(char c = '"') { if (!(stream->testFlag(Stream::NoQuotes))) stream->ts << c; return *this; }
+    inline QDebug &maybeQuote(char c = '"') { if (!(stream->testFlag(Stream::NoQuotes))) { stream->ts << c; } return *this; }
+    Q_ALWAYS_INLINE bool autoInsertQuotes() const { return !stream->testFlag(Stream::NoQuotes); }
+    Q_ALWAYS_INLINE void setAutoInsertQuotes(bool b) { if (b) { stream->unsetFlag(Stream::NoQuotes); } else { stream->setFlag(Stream::NoQuotes); } }
 
     inline QDebug &operator<<(QChar t) { putUcs4(t.unicode()); return maybeSpace(); }
     inline QDebug &operator<<(bool t) { stream->ts << (t ? "true" : "false"); return maybeSpace(); }
@@ -142,6 +161,7 @@ public:
     inline QDebug &operator<<(float t) { stream->ts << t; return maybeSpace(); }
     inline QDebug &operator<<(double t) { stream->ts << t; return maybeSpace(); }
     inline QDebug &operator<<(const char* t) { stream->ts << QString::fromUtf8(t); return maybeSpace(); }
+    Q_ALWAYS_INLINE QDebug &operator<<(const QStringNoQuote & t); // body in qstringnoquote.h; ahead of the QString overload so it out-resolves it
     inline QDebug &operator<<(const QString & t) { putString(t.constData(), uint(t.length())); return maybeSpace(); }
     inline QDebug &operator<<(const QStringRef & t) { putString(t.constData(), uint(t.length())); return maybeSpace(); }
     inline QDebug &operator<<(QLatin1String t) { putByteArray(t.latin1(), t.size(), ContainsLatin1); return maybeSpace(); }
@@ -177,6 +197,11 @@ public:
 
     inline const QMessageLogContext &context() const { return stream->context; }
 };
+
+// Defined out of line so it can seed the default from QDebug::Stream's own flag constants
+// (spaces and quotes on, default verbosity), which are only visible once QDebug is complete.
+Q_ALWAYS_INLINE QDebugState::QDebugState()
+    : flags(QDebug::Stream::Spaces | (QDebug::Stream::defaultVerbosity << QDebug::Stream::verbosityShift)) {}
 
 Q_DECLARE_SHARED(QDebug)
 
