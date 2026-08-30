@@ -41,11 +41,9 @@
 #include "qnetworkinterface.h"
 
 #if !defined(QT_NO_NETWORKPROXY) && !defined(QT_NO_HTTP)
-#include <qdebug.h>
+#include "qnetwork-debug.h"
 
 QT_BEGIN_NAMESPACE
-
-#define DEBUG
 
 QHttpSocketEngine::QHttpSocketEngine(QObject *parent)
     : QAbstractSocketEngine(*new QHttpSocketEnginePrivate, parent)
@@ -495,22 +493,31 @@ void QHttpSocketEngine::slotSocketConnected()
         data += header + ": " + d->proxy.rawHeader(header) + "\r\n";
     }
     QAuthenticatorPrivate *priv = QAuthenticatorPrivate::getPrivate(d->authenticator);
-    //qDebug() << "slotSocketConnected: priv=" << priv << (priv ? (int)priv->method : -1);
+    qDebug_HTTPSE << "slotSocketConnected() priv=" << priv << (priv ? (int)priv->method : -1);
     if (priv && priv->method != QAuthenticatorPrivate::None) {
         d->credentialsSent = true;
         data += "Proxy-Authorization: " + priv->calculateResponse(method, path);
         data += "\r\n";
     }
     data += "\r\n";
-//     qDebug() << ">>>>>>>> sending request" << this;
-//     qDebug() << data;
-//     qDebug() << ">>>>>>>";
+    qDebug_HTTPSE << "slotSocketConnected() sending CONNECT request" << data;
     d->socket->write(data);
     d->state = ConnectSent;
 }
 
 void QHttpSocketEngine::slotSocketDisconnected()
 {
+    Q_D(QHttpSocketEngine);
+    qDebug_HTTPSE << "slotSocketDisconnected() state" << d->state
+                  << "readNotificationEnabled" << d->readNotificationEnabled;
+    // Once the CONNECT tunnel is up this engine is transparent, so a close of the underlying
+    // proxy connection means the tunnelled peer went away. Surface it upward as a read
+    // notification: the socket's next read() then returns 0 (EOF) -- after draining any final
+    // bytes such as a TLS close_notify -- so it can finish a graceful shutdown instead of
+    // hanging in ClosingState until waitForDisconnected() times out. Before the tunnel is up the
+    // header-parsing paths in slotSocketReadNotification() already handle a premature close.
+    if (d->state == Connected && d->readNotificationEnabled)
+        emitReadNotification();
 }
 
 void QHttpSocketEngine::slotSocketReadNotification()
@@ -567,6 +574,7 @@ void QHttpSocketEngine::slotSocketReadNotification()
     int statusCode = d->reply->statusCode();
     QAuthenticatorPrivate *priv = 0;
     if (statusCode == 200) {
+        qDebug_HTTPSE << "slotSocketReadNotification() CONNECT tunnel established (200)";
         d->state = Connected;
         setLocalAddress(d->socket->localAddress());
         setLocalPort(d->socket->localPort());
@@ -734,8 +742,9 @@ void QHttpSocketEngine::slotSocketError(QAbstractSocket::SocketError error)
 
     d->state = None;
     setError(error, d->socket->errorString());
-    if (error != QAbstractSocket::RemoteHostClosedError)
-        qDebug() << "QHttpSocketEngine::slotSocketError: got weird error =" << error;
+    if (error != QAbstractSocket::RemoteHostClosedError) {
+        qDebug_HTTPSE << "slotSocketError() got weird error =" << error;
+    }
     //read notification needs to always be emitted, otherwise the higher layer doesn't get the disconnected signal
     emitReadNotification();
 }
