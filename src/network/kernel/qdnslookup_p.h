@@ -84,6 +84,7 @@ public:
     QDnsLookupPrivate()
         : isFinished(false)
         , type(QDnsLookup::A)
+        , port(53)
         , runnable(0)
     { }
 
@@ -95,6 +96,7 @@ public:
     QString name;
     QDnsLookup::Type type;
     QHostAddress nameserver;
+    quint16 port;
     QDnsLookupReply reply;
     QDnsLookupRunnable *runnable;
 
@@ -106,10 +108,11 @@ class QDnsLookupRunnable : public QObject, public QRunnable
     Q_OBJECT
 
 public:
-    QDnsLookupRunnable(QDnsLookup::Type type, const QByteArray &name, const QHostAddress &nameserver)
+    QDnsLookupRunnable(QDnsLookup::Type type, const QByteArray &name, const QHostAddress &nameserver, quint16 port)
         : requestType(type)
         , requestName(name)
         , nameserver(nameserver)
+        , port(port)
     { }
     void run() Q_DECL_OVERRIDE;
 
@@ -117,10 +120,11 @@ signals:
     void finished(const QDnsLookupReply &reply);
 
 private:
-    static void query(const int requestType, const QByteArray &requestName, const QHostAddress &nameserver, QDnsLookupReply *reply);
+    static void query(const int requestType, const QByteArray &requestName, const QHostAddress &nameserver, quint16 port, QDnsLookupReply *reply);
     QDnsLookup::Type requestType;
     QByteArray requestName;
     QHostAddress nameserver;
+    quint16 port;
 };
 
 class QDnsLookupThreadPool : public QThreadPool

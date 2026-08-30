@@ -49,6 +49,7 @@
 #  include <gnu/lib-names.h>
 #endif
 
+
 QT_BEGIN_NAMESPACE
 
 #ifndef QT_NO_LIBRARY
@@ -114,8 +115,13 @@ static bool resolveLibraryInternal()
 }
 Q_GLOBAL_STATIC_WITH_ARGS(bool, resolveLibrary, (resolveLibraryInternal()))
 
-void QDnsLookupRunnable::query(const int requestType, const QByteArray &requestName, const QHostAddress &nameserver, QDnsLookupReply *reply)
+
+void QDnsLookupRunnable::query(const int requestType, const QByteArray &requestName, const QHostAddress &nameserver, quint16 port, QDnsLookupReply *reply)
 {
+    unsigned char response[PACKETSZ];
+    memset(response, 0, sizeof(response));
+    int responseLength;
+
     // Load dn_expand, res_ninit and res_nquery on demand.
     resolveLibrary();
 
@@ -139,6 +145,7 @@ void QDnsLookupRunnable::query(const int requestType, const QByteArray &requestN
     if (!nameserver.isNull()) {
         if (nameserver.protocol() == QAbstractSocket::IPv4Protocol) {
             state.nsaddr_list[0].sin_addr.s_addr = htonl(nameserver.toIPv4Address());
+            state.nsaddr_list[0].sin_port = htons(port);
             state.nscount = 1;
         } else if (nameserver.protocol() == QAbstractSocket::IPv6Protocol) {
 #if defined(Q_OS_LINUX)
@@ -159,7 +166,7 @@ void QDnsLookupRunnable::query(const int requestType, const QByteArray &requestN
 #endif
             state._u._ext.nscount6 = 1;
             ns->sin6_family = AF_INET6;
-            ns->sin6_port = htons(53);
+            ns->sin6_port = htons(port);
 
             Q_IPV6ADDR ipv6Address = nameserver.toIPv6Address();
             for (int i=0; i<16; i++) {
@@ -179,9 +186,7 @@ void QDnsLookupRunnable::query(const int requestType, const QByteArray &requestN
     QScopedPointer<struct __res_state, QDnsLookupStateDeleter> state_ptr(&state);
 
     // Perform DNS query.
-    unsigned char response[PACKETSZ];
-    memset(response, 0, sizeof(response));
-    const int responseLength = local_res_nquery(&state, requestName, C_IN, requestType, response, sizeof(response));
+    responseLength = local_res_nquery(&state, requestName, C_IN, requestType, response, sizeof(response));
 
     // Check the response header.
     HEADER *header = (HEADER*)response;
@@ -364,11 +369,12 @@ void QDnsLookupRunnable::query(const int requestType, const QByteArray &requestN
 }
 
 #else
-void QDnsLookupRunnable::query(const int requestType, const QByteArray &requestName, const QHostAddress &nameserver, QDnsLookupReply *reply)
+void QDnsLookupRunnable::query(const int requestType, const QByteArray &requestName, const QHostAddress &nameserver, quint16 port, QDnsLookupReply *reply)
 {
     Q_UNUSED(requestType)
     Q_UNUSED(requestName)
     Q_UNUSED(nameserver)
+    Q_UNUSED(port)
     reply->error = QDnsLookup::ResolverError;
     reply->errorString = tr("Resolver library can't be loaded: No runtime library loading support");
     return;

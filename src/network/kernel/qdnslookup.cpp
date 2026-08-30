@@ -394,6 +394,38 @@ void QDnsLookup::setNameserver(const QHostAddress &nameserver)
 }
 
 /*!
+    \overload
+    Sets both the nameserver address and the UDP \a port to query on it. The standard DNS
+    port is 53; a non-standard port lets a test point the lookup at a local stand-in server
+    bound to an unprivileged port.
+*/
+void QDnsLookup::setNameserver(const QHostAddress &nameserver, quint16 port)
+{
+    setNameserver(nameserver);
+    setNameserverPort(port);
+}
+
+/*!
+    \property QDnsLookup::nameserverPort
+    \brief the UDP port of the nameserver to use for DNS lookup, 53 by default.
+*/
+
+quint16 QDnsLookup::nameserverPort() const
+{
+    Q_D(const QDnsLookup);
+    return d->port;
+}
+
+void QDnsLookup::setNameserverPort(quint16 port)
+{
+    Q_D(QDnsLookup);
+    if (port != d->port) {
+        d->port = port;
+        emit nameserverPortChanged(port);
+    }
+}
+
+/*!
     Returns the list of canonical name records associated with this lookup.
 */
 
@@ -494,7 +526,7 @@ void QDnsLookup::lookup()
     Q_D(QDnsLookup);
     d->isFinished = false;
     d->reply = QDnsLookupReply();
-    d->runnable = new QDnsLookupRunnable(d->type, QUrl::toAce(d->name), d->nameserver);
+    d->runnable = new QDnsLookupRunnable(d->type, QUrl::toAce(d->name), d->nameserver, d->port);
     connect(d->runnable, SIGNAL(finished(QDnsLookupReply)),
             this, SLOT(_q_lookupFinished(QDnsLookupReply)),
             Qt::BlockingQueuedConnection);
@@ -1002,7 +1034,7 @@ void QDnsLookupRunnable::run()
     }
 
     // Perform request.
-    query(requestType, requestName, nameserver, &reply);
+    query(requestType, requestName, nameserver, port, &reply);
 
     // Sort results.
     if (!theDnsLookupSeedStorage()->hasLocalData()) {

@@ -44,8 +44,10 @@
 
 QT_BEGIN_NAMESPACE
 
-void QDnsLookupRunnable::query(const int requestType, const QByteArray &requestName, const QHostAddress &nameserver, QDnsLookupReply *reply)
+void QDnsLookupRunnable::query(const int requestType, const QByteArray &requestName, const QHostAddress &nameserver, quint16 port, QDnsLookupReply *reply)
 {
+    Q_UNUSED(port) // a custom nameserver port is honored only by the Unix backend
+
     // Perform DNS query.
     PDNS_RECORD dns_records = 0;
     const QString requestNameUtf16 = QString::fromUtf8(requestName.data(), requestName.size());

@@ -55,8 +55,10 @@ using namespace ABI::Windows::Networking::Sockets;
 
 QT_BEGIN_NAMESPACE
 
-void QDnsLookupRunnable::query(const int requestType, const QByteArray &requestName, const QHostAddress &nameserver, QDnsLookupReply *reply)
+void QDnsLookupRunnable::query(const int requestType, const QByteArray &requestName, const QHostAddress &nameserver, quint16 port, QDnsLookupReply *reply)
 {
+    Q_UNUSED(port) // a custom nameserver port is honored only by the Unix backend
+
     // TODO: Add nameserver support for winRT
     if (!nameserver.isNull())
         qWarning() << "Ignoring nameserver as its currently not supported on WinRT";

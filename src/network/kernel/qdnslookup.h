@@ -182,6 +182,7 @@ class Q_NETWORK_EXPORT QDnsLookup : public QObject
     Q_PROPERTY(QString name READ name WRITE setName NOTIFY nameChanged)
     Q_PROPERTY(Type type READ type WRITE setType NOTIFY typeChanged)
     Q_PROPERTY(QHostAddress nameserver READ nameserver WRITE setNameserver NOTIFY nameserverChanged)
+    Q_PROPERTY(quint16 nameserverPort READ nameserverPort WRITE setNameserverPort NOTIFY nameserverPortChanged)
 
 public:
     enum Error
@@ -228,6 +229,10 @@ public:
 
     QHostAddress nameserver() const;
     void setNameserver(const QHostAddress &nameserver);
+    void setNameserver(const QHostAddress &nameserver, quint16 port);
+
+    quint16 nameserverPort() const;
+    void setNameserverPort(quint16 port);
 
     QList<QDnsDomainNameRecord> canonicalNameRecords() const;
     QList<QDnsHostAddressRecord> hostAddressRecords() const;
@@ -247,6 +252,7 @@ Q_SIGNALS:
     void nameChanged(const QString &name);
     void typeChanged(Type type);
     void nameserverChanged(const QHostAddress &nameserver);
+    void nameserverPortChanged(quint16 port);
 
 private:
     Q_DECLARE_PRIVATE(QDnsLookup)
