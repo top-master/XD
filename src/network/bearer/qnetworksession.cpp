@@ -319,7 +319,7 @@ void QNetworkSession::open()
     \code
         session->open();
         if (session->waitForOpened(1000))
-            qDebug("Open!");
+            qWarning("Open!");
     \endcode
 
     If \a msecs is -1, this function will not time out.
