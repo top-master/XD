@@ -7,6 +7,8 @@ HEADERS += kernel/qauthenticator.h \
 	   kernel/qauthenticator_p.h \
            kernel/qdnslookup.h \
            kernel/qdnslookup_p.h \
+           kernel/qdnsoverride.h \
+           kernel/qhostinfooverride.h \
            kernel/qhostaddress.h \
            kernel/qhostaddress_p.h \
            kernel/qhostinfo.h \
@@ -19,6 +21,8 @@ HEADERS += kernel/qauthenticator.h \
 
 SOURCES += kernel/qauthenticator.cpp \
            kernel/qdnslookup.cpp \
+           kernel/qdnsoverride.cpp \
+           kernel/qhostinfooverride.cpp \
            kernel/qhostaddress.cpp \
            kernel/qhostinfo.cpp \
            kernel/qurlinfo.cpp \
