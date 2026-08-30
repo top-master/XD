@@ -44,6 +44,7 @@ QT_BEGIN_NAMESPACE
 
 class QHostAddress;
 class QDnsLookupPrivate;
+class QDnsLookupRunnable;
 class QDnsDomainNameRecordPrivate;
 class QDnsHostAddressRecordPrivate;
 class QDnsMailExchangeRecordPrivate;
@@ -70,6 +71,7 @@ public:
 private:
     QSharedDataPointer<QDnsDomainNameRecordPrivate> d;
     friend class QDnsLookupRunnable;
+    friend class QDnsDomainNameRecordPrivate;
 };
 
 Q_DECLARE_SHARED(QDnsDomainNameRecord)
@@ -94,6 +96,7 @@ public:
 private:
     QSharedDataPointer<QDnsHostAddressRecordPrivate> d;
     friend class QDnsLookupRunnable;
+    friend class QDnsHostAddressRecordPrivate;
 };
 
 Q_DECLARE_SHARED(QDnsHostAddressRecord)
@@ -119,6 +122,7 @@ public:
 private:
     QSharedDataPointer<QDnsMailExchangeRecordPrivate> d;
     friend class QDnsLookupRunnable;
+    friend class QDnsMailExchangeRecordPrivate;
 };
 
 Q_DECLARE_SHARED(QDnsMailExchangeRecord)
@@ -146,6 +150,7 @@ public:
 private:
     QSharedDataPointer<QDnsServiceRecordPrivate> d;
     friend class QDnsLookupRunnable;
+    friend class QDnsServiceRecordPrivate;
 };
 
 Q_DECLARE_SHARED(QDnsServiceRecord)
@@ -170,6 +175,7 @@ public:
 private:
     QSharedDataPointer<QDnsTextRecordPrivate> d;
     friend class QDnsLookupRunnable;
+    friend class QDnsTextRecordPrivate;
 };
 
 Q_DECLARE_SHARED(QDnsTextRecord)
@@ -247,6 +253,9 @@ Q_SIGNALS:
     void nameChanged(const QString &name);
     void typeChanged(Type type);
     void nameserverChanged(const QHostAddress &nameserver);
+
+protected:
+    virtual QDnsLookupRunnable *newRunnable();
 
 private:
     Q_DECLARE_PRIVATE(QDnsLookup)
