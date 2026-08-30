@@ -107,6 +107,24 @@ public:
         return this->remove(f);
     }
 
+    /// Atomically clears the @p before bits and sets the @p after bits in one
+    /// lock-free, race-safe update.
+    /// @returns @c true if this changed the value (won the race), @c false if it was
+    /// already at the target.
+    Q_ALWAYS_INLINE bool replace(IntType before, IntType after) Q_DECL_NOTHROW
+    {
+        IntType tmp = this->_q_value.load();
+        for (;;) {
+            const IntType desired = (tmp & ~before) | after;
+            if (tmp == desired) {
+                return false;
+            }
+            if (this->_q_value.testAndSetOrdered(tmp, desired, tmp)) {
+                return true;
+            }
+        }
+    }
+
 
     /// Same as includes(FlagType), however, uses relaxed memory-order.
     Q_ALWAYS_INLINE bool includesLax(FlagType f) const Q_DECL_NOTHROW
@@ -152,6 +170,23 @@ public:
             return this->appendLax(f);
         }
         return this->removeLax(f);
+    }
+
+    /// Same as replace(IntType, IntType), however, uses relaxed memory-order.
+    /// @returns @c true if this changed the value (won the race), @c false if it was
+    /// already at the target.
+    Q_ALWAYS_INLINE bool replaceLax(IntType before, IntType after) Q_DECL_NOTHROW
+    {
+        IntType tmp = this->_q_value.load();
+        for (;;) {
+            const IntType desired = (tmp & ~before) | after;
+            if (tmp == desired) {
+                return false;
+            }
+            if (this->_q_value.testAndSetRelaxed(tmp, desired, tmp)) {
+                return true;
+            }
+        }
     }
 
 
@@ -230,7 +265,7 @@ public:
 
     inline QAtomicFlags<FlagType, IntType > &operator=(const QAtomicFlags<FlagType, IntType > &other) Q_DECL_NOTHROW
     {
-        this->_q_value.storeRelease(other.loadAcquire());
+        this->_q_value.storeRelease(other._q_value.loadAcquire());
         return *this;
     }
 };
