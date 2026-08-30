@@ -66,6 +66,7 @@
 
 QT_BEGIN_NAMESPACE
 
+class QHostInfoOverride;
 
 class QHostInfoResult : public QObject
 {
@@ -163,11 +164,14 @@ public:
     ~QAbstractHostInfoLookupManager() {}
     virtual void clear() = 0;
 
+    // The per-application manager instance. Public so an override can be installed on it (see
+    // QHostInfoLookupManager::setOverride); reachable through this private header only.
+    static QAbstractHostInfoLookupManager* globalInstance();
+
     QHostInfoCache cache;
 
 protected:
      QAbstractHostInfoLookupManager() {}
-     static QAbstractHostInfoLookupManager* globalInstance();
 
 };
 
@@ -189,8 +193,15 @@ public:
     void lookupFinished(QHostInfoRunnable *r);
     bool wasAborted(int id);
 
+    // Per-application resolution override (see QHostInfoOverride). When set, name lookups are
+    // offered to it before the operating-system resolver. Both accessors are thread-safe.
+    void setOverride(const QSharedPointer<QHostInfoOverride> &override);
+    QSharedPointer<QHostInfoOverride> override();
+
     friend class QHostInfoRunnable;
 protected:
+    QSharedPointer<QHostInfoOverride> dnsOverride;
+
     QList<QHostInfoRunnable*> currentLookups; // in progress
     QList<QHostInfoRunnable*> postponedLookups; // postponed because in progress for same host
     QQueue<QHostInfoRunnable*> scheduledLookups; // not yet started

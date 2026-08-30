@@ -33,6 +33,7 @@
 
 #include "qhostinfo.h"
 #include "qhostinfo_p.h"
+#include "qhostinfooverride.h"
 
 #include "QtCore/qscopedpointer.h"
 #include <qabstracteventdispatcher.h>
@@ -221,13 +222,33 @@ void QHostInfo::abortHostLookup(int id)
 
     \sa lookupHost()
 */
+
+// If a resolution override is installed on the (per-application) lookup manager, offer the name to
+// it first. On a hit, fills *out and returns true; otherwise returns false so the caller falls
+// through to the operating-system resolver. Cross-platform: called from the shared code below.
+static bool qhi_tryOverride(const QString &name, QHostInfo *out)
+{
+    QHostInfoLookupManager *manager = theHostInfoLookupManager();
+    QSharedPointer<QHostInfoOverride> ov = manager ? manager->override() : QSharedPointer<QHostInfoOverride>();
+    if (!ov)
+        return false;
+    QList<QHostAddress> addresses;
+    if (!ov->lookupHost(name, &addresses))
+        return false;
+    out->setHostName(name);
+    out->setAddresses(addresses);
+    return true;
+}
+
 QHostInfo QHostInfo::fromName(const QString &name)
 {
 #if defined QHOSTINFO_DEBUG
     qDebug("QHostInfo::fromName(\"%s\")",name.toLatin1().constData());
 #endif
 
-    QHostInfo hostInfo = QHostInfoAgent::fromName(name);
+    QHostInfo hostInfo;
+    if (!qhi_tryOverride(name, &hostInfo))
+        hostInfo = QHostInfoAgent::fromName(name);
     QAbstractHostInfoLookupManager* manager = theHostInfoLookupManager();
     manager->cache.put(name, hostInfo);
     return hostInfo;
@@ -240,7 +261,9 @@ QHostInfo QHostInfoPrivate::fromName(const QString &name, QSharedPointer<QNetwor
     qDebug("QHostInfoPrivate::fromName(\"%s\") with session %p",name.toLatin1().constData(), session.data());
 #endif
 
-    QHostInfo hostInfo = QHostInfoAgent::fromName(name, session);
+    QHostInfo hostInfo;
+    if (!qhi_tryOverride(name, &hostInfo))
+        hostInfo = QHostInfoAgent::fromName(name, session);
     QAbstractHostInfoLookupManager* manager = theHostInfoLookupManager();
     manager->cache.put(name, hostInfo);
     return hostInfo;
@@ -469,12 +492,14 @@ void QHostInfoRunnable::run()
         hostInfo = manager->cache.get(toBeLookedUp, &valid);
         if (!valid) {
             // not in cache, we need to do the lookup and store the result in the cache
-            hostInfo = QHostInfoAgent::fromName(toBeLookedUp);
+            if (!qhi_tryOverride(toBeLookedUp, &hostInfo))
+                hostInfo = QHostInfoAgent::fromName(toBeLookedUp);
             manager->cache.put(toBeLookedUp, hostInfo);
         }
     } else {
         // cache is not enabled, just do the lookup and continue
-        hostInfo = QHostInfoAgent::fromName(toBeLookedUp);
+        if (!qhi_tryOverride(toBeLookedUp, &hostInfo))
+            hostInfo = QHostInfoAgent::fromName(toBeLookedUp);
     }
 
     // check aborted again
@@ -513,6 +538,18 @@ QHostInfoLookupManager::QHostInfoLookupManager() : mutex(QMutex::Recursive), was
     moveToThread(QCoreApplicationPrivate::mainThread());
     connect(QCoreApplication::instance(), SIGNAL(destroyed()), SLOT(waitForThreadPoolDone()), Qt::DirectConnection);
     threadPool.setMaxThreadCount(20); // do up to 20 DNS lookups in parallel
+}
+
+void QHostInfoLookupManager::setOverride(const QSharedPointer<QHostInfoOverride> &override)
+{
+    QMutexLocker locker(&mutex);
+    dnsOverride = override;
+}
+
+QSharedPointer<QHostInfoOverride> QHostInfoLookupManager::override()
+{
+    QMutexLocker locker(&mutex);
+    return dnsOverride;
 }
 
 QHostInfoLookupManager::~QHostInfoLookupManager()
