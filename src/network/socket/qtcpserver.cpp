@@ -31,7 +31,7 @@
 **
 ****************************************************************************/
 
-//#define QTCPSERVER_DEBUG
+#include "qnetwork-debug.h"
 
 /*! \class QTcpServer
 
@@ -182,9 +182,7 @@ void QTcpServerPrivate::readNotification()
     Q_Q(QTcpServer);
     for (;;) {
         if (pendingConnections.count() >= maxConnections) {
-#if defined (QTCPSERVER_DEBUG)
-            qDebug("QTcpServerPrivate::_q_processIncomingConnection() too many connections");
-#endif
+            qDebug_TCPSRV << "_q_processIncomingConnection() too many connections";
             if (socketEngine->isReadNotificationEnabled())
                 socketEngine->setReadNotificationEnabled(false);
             return;
@@ -200,9 +198,7 @@ void QTcpServerPrivate::readNotification()
             }
             break;
         }
-#if defined (QTCPSERVER_DEBUG)
-        qDebug("QTcpServerPrivate::_q_processIncomingConnection() accepted socket %i", descriptor);
-#endif
+        qDebug_TCPSRV << "_q_processIncomingConnection() accepted socket" << descriptor;
         q->incomingConnection(descriptor);
 
         QPointer<QTcpServer> that = q;
@@ -222,9 +218,7 @@ void QTcpServerPrivate::readNotification()
 QTcpServer::QTcpServer(QObject *parent)
     : QObject(*new QTcpServerPrivate, parent)
 {
-#if defined(QTCPSERVER_DEBUG)
-    qDebug("QTcpServer::QTcpServer(%p)", parent);
-#endif
+    qDebug_TCPSRV << "QTcpServer(" << qFormatPtr(parent) << ")";
 }
 
 /*!
@@ -238,9 +232,7 @@ QTcpServer::QTcpServer(QObject *parent)
 */
 QTcpServer::~QTcpServer()
 {
-#if defined(QTCPSERVER_DEBUG)
-    qDebug("QTcpServer::~QTcpServer()");
-#endif
+    qDebug_TCPSRV << "~QTcpServer()";
     close();
 }
 
@@ -249,9 +241,7 @@ QTcpServer::~QTcpServer()
 QTcpServer::QTcpServer(QTcpServerPrivate &dd, QObject *parent)
     : QObject(dd, parent)
 {
-#if defined(QTCPSERVER_DEBUG)
-    qDebug("QTcpServer::QTcpServer(QTcpServerPrivate == %p, parent == %p)", &dd, parent);
-#endif
+    qDebug_TCPSRV << "QTcpServer(QTcpServerPrivate == " << qFormatPtr(&dd) << ", parent == " << qFormatPtr(parent) << ")";
 }
 
 /*!
@@ -322,10 +312,8 @@ bool QTcpServer::listen(const QHostAddress &address, quint16 port)
     d->address = d->socketEngine->localAddress();
     d->port = d->socketEngine->localPort();
 
-#if defined (QTCPSERVER_DEBUG)
-    qDebug("QTcpServer::listen(%i, \"%s\") == true (listening on port %i)", port,
-           address.toString().toLatin1().constData(), d->socketEngine->localPort());
-#endif
+    qDebug_TCPSRV << "listen(" << port << ", \"" << address.toString()
+                  << "\") == true (listening on port" << d->socketEngine->localPort() << ")";
     return true;
 }
 
@@ -417,10 +405,8 @@ bool QTcpServer::setSocketDescriptor(qintptr socketDescriptor)
     if (!d->socketEngine->initialize(socketDescriptor, QAbstractSocket::ListeningState)) {
         d->serverSocketError = d->socketEngine->error();
         d->serverSocketErrorString = d->socketEngine->errorString();
-#if defined (QTCPSERVER_DEBUG)
-        qDebug("QTcpServer::setSocketDescriptor(%i) failed (%s)", socketDescriptor,
-               d->serverSocketErrorString.toLatin1().constData());
-#endif
+        qDebug_TCPSRV << "setSocketDescriptor(" << socketDescriptor << ") failed ("
+                      << d->serverSocketErrorString << ")";
         return false;
     }
 
@@ -431,9 +417,7 @@ bool QTcpServer::setSocketDescriptor(qintptr socketDescriptor)
     d->address = d->socketEngine->localAddress();
     d->port = d->socketEngine->localPort();
 
-#if defined (QTCPSERVER_DEBUG)
-    qDebug("QTcpServer::setSocketDescriptor(%i) succeeded.", socketDescriptor);
-#endif
+    qDebug_TCPSRV << "setSocketDescriptor(" << socketDescriptor << ") succeeded.";
     return true;
 }
 
@@ -572,9 +556,7 @@ QTcpSocket *QTcpServer::nextPendingConnection()
 */
 void QTcpServer::incomingConnection(qintptr socketDescriptor)
 {
-#if defined (QTCPSERVER_DEBUG)
-    qDebug("QTcpServer::incomingConnection(%i)", socketDescriptor);
-#endif
+    qDebug_TCPSRV << "incomingConnection(" << socketDescriptor << ")";
 
     QTcpSocket *socket = new QTcpSocket(this);
     socket->setSocketDescriptor(socketDescriptor);

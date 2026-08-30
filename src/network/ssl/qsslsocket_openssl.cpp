@@ -47,7 +47,7 @@
 **
 ****************************************************************************/
 
-//#define QSSLSOCKET_DEBUG
+#include "qnetwork-debug.h"
 //#define QT_DECRYPT_SSL_TRAFFIC
 
 #include "qssl_p.h"
