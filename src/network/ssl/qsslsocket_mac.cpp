@@ -57,6 +57,8 @@
 #include <CoreServices/CoreServices.h>
 #endif
 
+#include "qnetwork-debug.h"
+
 QT_BEGIN_NAMESPACE
 
 static SSLContextRef qt_createSecureTransportContext(QSslSocket::SslMode mode)
@@ -337,8 +339,6 @@ void QSecureTransportContext::reset(SSLContextRef newContext)
 }
 
 Q_GLOBAL_STATIC_WITH_ARGS(QMutex, qt_securetransport_mutex, (QMutex::Recursive))
-
-//#define QSSLSOCKET_DEBUG
 
 bool QSslSocketPrivate::s_libraryLoaded = false;
 bool QSslSocketPrivate::s_loadedCiphersAndCerts = false;

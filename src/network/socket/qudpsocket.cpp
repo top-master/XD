@@ -31,7 +31,7 @@
 **
 ****************************************************************************/
 
-//#define QUDPSOCKET_DEBUG
+#include "qnetwork-debug.h"
 
 /*! \class QUdpSocket
 
@@ -324,10 +324,8 @@ qint64 QUdpSocket::writeDatagram(const char *data, qint64 size, const QHostAddre
                                   quint16 port)
 {
     Q_D(QUdpSocket);
-#if defined QUDPSOCKET_DEBUG
-    qDebug("QUdpSocket::writeDatagram(%p, %llu, \"%s\", %i)", data, size,
-           address.toString().toLatin1().constData(), port);
-#endif
+    qDebug_UDPSOCK << "writeDatagram(" << qFormatPtr(data) << ", " << qFormatULongLong(size) << ", \""
+                   << address.toString() << "\", " << port << ")";
     if (!d->doEnsureInitialized(QHostAddress::Any, 0, address))
         return -1;
     if (state() == UnconnectedState)
@@ -373,9 +371,7 @@ qint64 QUdpSocket::readDatagram(char *data, qint64 maxSize, QHostAddress *addres
 {
     Q_D(QUdpSocket);
 
-#if defined QUDPSOCKET_DEBUG
-    qDebug("QUdpSocket::readDatagram(%p, %llu, %p, %p)", data, maxSize, address, port);
-#endif
+    qDebug_UDPSOCK << "readDatagram(" << qFormatPtr(data) << ", " << qFormatULongLong(maxSize) << ", " << qFormatPtr(address) << ", " << qFormatPtr(port) << ")";
     QT_CHECK_BOUND("QUdpSocket::readDatagram()", -1);
 
     qint64 readBytes;

@@ -48,9 +48,9 @@
 #  include <unistd.h>
 #endif
 
-QT_BEGIN_NAMESPACE
+#include "qnetwork-debug.h"
 
-//#define QHOSTINFO_DEBUG
+QT_BEGIN_NAMESPACE
 
 Q_GLOBAL_STATIC(QHostInfoLookupManager, theHostInfoLookupManager)
 
@@ -142,10 +142,8 @@ static QBasicAtomicInt theIdCounter = Q_BASIC_ATOMIC_INITIALIZER(1);
 int QHostInfo::lookupHost(const QString &name, QObject *receiver,
                           const char *member)
 {
-#if defined QHOSTINFO_DEBUG
-    qDebug("QHostInfo::lookupHost(\"%s\", %p, %s)",
-           name.toLatin1().constData(), receiver, member ? member + 1 : 0);
-#endif
+    qDebug_HINFO << "lookupHost(" << name << ", " << qFormatPtr(receiver)
+                 << ", " << (member ? member + 1 : 0) << ")";
 
     if (!QAbstractEventDispatcher::instance(QThread::currentThread())) {
         qWarning("QHostInfo::lookupHost() called with no event dispatcher");
@@ -242,9 +240,7 @@ static bool qhi_tryOverride(const QString &name, QHostInfo *out)
 
 QHostInfo QHostInfo::fromName(const QString &name)
 {
-#if defined QHOSTINFO_DEBUG
-    qDebug("QHostInfo::fromName(\"%s\")",name.toLatin1().constData());
-#endif
+    qDebug_HINFO << "fromName(" << name << ")";
 
     QHostInfo hostInfo;
     if (!qhi_tryOverride(name, &hostInfo))
@@ -257,9 +253,7 @@ QHostInfo QHostInfo::fromName(const QString &name)
 #ifndef QT_NO_BEARERMANAGEMENT
 QHostInfo QHostInfoPrivate::fromName(const QString &name, QSharedPointer<QNetworkSession> session)
 {
-#if defined QHOSTINFO_DEBUG
-    qDebug("QHostInfoPrivate::fromName(\"%s\") with session %p",name.toLatin1().constData(), session.data());
-#endif
+    qDebug_HINFO << "fromName(" << name << ") with session " << qFormatPtr(session.data());
 
     QHostInfo hostInfo;
     if (!qhi_tryOverride(name, &hostInfo))

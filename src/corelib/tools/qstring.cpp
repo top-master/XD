@@ -6229,7 +6229,7 @@ QString QString::vasprintf(const char *cformat, va_list ap)
                 void *arg = va_arg(ap, void*);
                 const quint64 i = reinterpret_cast<quintptr>(arg);
                 flags |= QLocaleData::Alternate;
-                subst = QLocaleData::c()->unsLongLongToString(i, precision, 16, width, flags);
+                subst = QLocaleData::classic()->formatULongLong(i, precision, 16, width, flags);
                 ++c;
                 break;
             }

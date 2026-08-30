@@ -39,10 +39,9 @@
 #include <qmutex.h>
 #include <qbasicatomic.h>
 #include <qurl.h>
+#include "qnetwork-debug.h"
 
 QT_BEGIN_NAMESPACE
-
-//#define QHOSTINFO_DEBUG
 
 // Older SDKs do not include the addrinfo struct declaration, so we
 // include a copy of it here.
@@ -122,11 +121,9 @@ QHostInfo QHostInfoAgent::fromName(const QString &hostName)
 
     QHostInfo results;
 
-#if defined(QHOSTINFO_DEBUG)
-    qDebug("QHostInfoAgent::fromName(): looking up \"%s\" (IPv6 support is %s)",
-           hostName.toLatin1().constData(),
-           (local_getaddrinfo && local_freeaddrinfo) ? "enabled" : "disabled");
-#endif
+    qDebug_HINFO << "fromName(): looking up \"" << hostName
+                 << "\" (IPv6 support is"
+                 << ((local_getaddrinfo && local_freeaddrinfo) ? "enabled" : "disabled") << ")";
 
     QHostAddress address;
     if (address.setAddress(hostName)) {
@@ -237,8 +234,7 @@ QHostInfo QHostInfoAgent::fromName(const QString &hostName)
 
 #if defined(QHOSTINFO_DEBUG)
     if (results.error() != QHostInfo::NoError) {
-        qDebug("QHostInfoAgent::run(): error (%s)",
-               results.errorString().toLatin1().constData());
+        qDebug_HINFO << "run(): error (" << results.errorString() << ")";
     } else {
         QString tmp;
         QList<QHostAddress> addresses = results.addresses();
@@ -246,8 +242,7 @@ QHostInfo QHostInfoAgent::fromName(const QString &hostName)
             if (i != 0) tmp += ", ";
             tmp += addresses.at(i).toString();
         }
-        qDebug("QHostInfoAgent::run(): found %i entries: {%s}",
-               addresses.count(), tmp.toLatin1().constData());
+        qDebug_HINFO << "run(): found" << addresses.count() << "entries: {" << tmp << "}";
     }
 #endif
     return results;

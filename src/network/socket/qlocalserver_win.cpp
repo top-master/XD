@@ -37,6 +37,7 @@
 #include <QtCore/private/qsystemerror_p.h>
 
 #include <qdebug.h>
+#include "qnetwork-debug.h"
 
 #include <aclapi.h>
 #include <accctrl.h>
@@ -110,10 +111,10 @@ bool QLocalServerPrivate::addListener()
         QScopedPointer<wchar_t, QScopedPointerArrayDeleter<wchar_t>> groupName(new wchar_t[groupNameSize]);
         QScopedPointer<wchar_t, QScopedPointerArrayDeleter<wchar_t>> domainName(new wchar_t[domainNameSize]);
         if (LookupAccountSid(0, pTokenGroup->PrimaryGroup, groupName.data(), &groupNameSize, domainName.data(), &domainNameSize, &groupNameUse)) {
-            qDebug() << "primary group" << QString::fromWCharArray(domainName.data()) << "\\" << QString::fromWCharArray(groupName.data()) << "type=" << groupNameUse;
+            qDebug_LOCSRV << "primary group" << QString::fromWCharArray(domainName.data()) << "\\" << QString::fromWCharArray(groupName.data()) << "type=" << groupNameUse;
         }
         if (ConvertSidToStringSid(pTokenGroup->PrimaryGroup, &groupNameSid)) {
-            qDebug() << "primary group SID" << QString::fromWCharArray(groupNameSid) << "valid" << IsValidSid(pTokenGroup->PrimaryGroup);
+            qDebug_LOCSRV << "primary group SID" << QString::fromWCharArray(groupNameSid) << "valid" << IsValidSid(pTokenGroup->PrimaryGroup);
             LocalFree(groupNameSid);
         }
 #endif

@@ -117,6 +117,7 @@ public:
     bool autoInsertSpaces() const { return stream->space; }
     void setAutoInsertSpaces(bool b) { stream->space = b; }
 
+    bool hasQuotes() const { return !stream->testFlag(Stream::NoQuotes); }
     inline QDebug &quotes() { stream->unsetFlag(Stream::NoQuotes); return *this; }
     inline QDebug &noQuotes() { stream->setFlag(Stream::NoQuotes); return *this; }
     inline QDebug &quote() { stream->unsetFlag(Stream::NoQuotes); return *this; }

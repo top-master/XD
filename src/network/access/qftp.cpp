@@ -31,8 +31,7 @@
 **
 ****************************************************************************/
 
-//#define QFTPPI_DEBUG
-//#define QFTPDTP_DEBUG
+#include "qnetwork-debug.h"
 
 #include "private/qftp_p.h"
 #include "qabstractsocket.h"
@@ -146,6 +145,7 @@ class QFtpPI : public QObject
 
 public:
     QFtpPI(QObject *parent = 0);
+    ~QFtpPI();
 
     void connectToHost(const QString &host, quint16 port);
 
@@ -390,9 +390,7 @@ void QFtpDTP::writeData()
         return;
 
     if (is_ba) {
-#if defined(QFTPDTP_DEBUG)
-        qDebug("QFtpDTP::writeData: write %d bytes", data.ba->size());
-#endif
+        qDebug_FDTP << "writeData: write" << data.ba->size() << "bytes";
         if (data.ba->size() == 0)
             emit dataTransferProgress(0, bytesTotal);
         else
@@ -406,9 +404,7 @@ void QFtpDTP::writeData()
         const qint64 blockSize = 16*1024;
         char buf[16*1024];
         qint64 read = data.dev->read(buf, blockSize);
-#if defined(QFTPDTP_DEBUG)
-        qDebug("QFtpDTP::writeData: write() of size %lli bytes", read);
-#endif
+        qDebug_FDTP << "writeData: write() of size" << read << "bytes";
         if (read > 0) {
             socket->write(buf, read);
         } else if (read == -1 || (!data.dev->isSequential() && data.dev->atEnd())) {
@@ -446,10 +442,7 @@ inline void QFtpDTP::clearError()
 
 void QFtpDTP::abortConnection()
 {
-#if defined(QFTPDTP_DEBUG)
-    qDebug("QFtpDTP::abortConnection, bytesAvailable == %lli",
-           socket ? socket->bytesAvailable() : (qint64) 0);
-#endif
+    qDebug_FDTP << "abortConnection, bytesAvailable ==" << (socket ? socket->bytesAvailable() : (qint64) 0);
     callWriteData = false;
     clearData();
 
@@ -636,9 +629,7 @@ bool QFtpDTP::parseDir(const QByteArray &buffer, const QString &userName, QUrlIn
 void QFtpDTP::socketConnected()
 {
     bytesDone = 0;
-#if defined(QFTPDTP_DEBUG)
-    qDebug("QFtpDTP::connectState(CsConnected)");
-#endif
+    qDebug_FDTP << "connectState(CsConnected)";
     emit connectState(QFtpDTP::CsConnected);
 }
 
@@ -649,9 +640,7 @@ void QFtpDTP::socketReadyRead()
 
     if (pi->currentCommand().isEmpty()) {
         socket->close();
-#if defined(QFTPDTP_DEBUG)
-        qDebug("QFtpDTP::connectState(CsClosed)");
-#endif
+        qDebug_FDTP << "connectState(CsClosed)";
         emit connectState(QFtpDTP::CsClosed);
         return;
     }
@@ -666,9 +655,7 @@ void QFtpDTP::socketReadyRead()
         while (socket->canReadLine()) {
             QUrlInfo i;
             QByteArray line = socket->readLine();
-#if defined(QFTPDTP_DEBUG)
-            qDebug("QFtpDTP read (list): '%s'", line.constData());
-#endif
+            qDebug_FDTP << "read (list): '" << line << "'";
             if (parseDir(line, QLatin1String(""), &i)) {
                 emit listInfo(i);
             } else {
@@ -692,9 +679,7 @@ void QFtpDTP::socketReadyRead()
                 }
                 ba.resize(bytesRead);
                 bytesDone += bytesRead;
-#if defined(QFTPDTP_DEBUG)
-                qDebug("QFtpDTP read: %lli bytes (total %lli bytes)", bytesRead, bytesDone);
-#endif
+                qDebug_FDTP << "read:" << bytesRead << "bytes (total" << bytesDone << "bytes)";
                 if (data.dev)       // make sure it wasn't deleted in the slot
                     data.dev->write(ba);
                 emit dataTransferProgress(bytesDone, bytesTotal);
@@ -704,10 +689,7 @@ void QFtpDTP::socketReadyRead()
                 // if events are processed, more data may have arrived.
             } while (socket->bytesAvailable());
         } else {
-#if defined(QFTPDTP_DEBUG)
-            qDebug("QFtpDTP readyRead: %lli bytes available (total %lli bytes read)",
-                   bytesAvailable(), bytesDone);
-#endif
+            qDebug_FDTP << "readyRead:" << bytesAvailable() << "bytes available (total" << bytesDone << "bytes read)";
             emit dataTransferProgress(bytesDone+socket->bytesAvailable(), bytesTotal);
             emit readyRead();
         }
@@ -717,14 +699,10 @@ void QFtpDTP::socketReadyRead()
 void QFtpDTP::socketError(QAbstractSocket::SocketError e)
 {
     if (e == QTcpSocket::HostNotFoundError) {
-#if defined(QFTPDTP_DEBUG)
-        qDebug("QFtpDTP::connectState(CsHostNotFound)");
-#endif
+        qDebug_FDTP << "connectState(CsHostNotFound)";
         emit connectState(QFtpDTP::CsHostNotFound);
     } else if (e == QTcpSocket::ConnectionRefusedError) {
-#if defined(QFTPDTP_DEBUG)
-        qDebug("QFtpDTP::connectState(CsConnectionRefused)");
-#endif
+        qDebug_FDTP << "connectState(CsConnectionRefused)";
         emit connectState(QFtpDTP::CsConnectionRefused);
     }
 }
@@ -739,18 +717,14 @@ void QFtpDTP::socketConnectionClosed()
         bytesFromSocket = socket->readAll();
     else
         bytesFromSocket.clear();
-#if defined(QFTPDTP_DEBUG)
-    qDebug("QFtpDTP::connectState(CsClosed)");
-#endif
+    qDebug_FDTP << "connectState(CsClosed)";
     emit connectState(QFtpDTP::CsClosed);
 }
 
 void QFtpDTP::socketBytesWritten(qint64 bytes)
 {
     bytesDone += bytes;
-#if defined(QFTPDTP_DEBUG)
-    qDebug("QFtpDTP::bytesWritten(%lli)", bytesDone);
-#endif
+    qDebug_FDTP << "bytesWritten(" << bytesDone << ")";
     emit dataTransferProgress(bytesDone, bytesTotal);
     if (callWriteData)
         writeData();
@@ -805,6 +779,21 @@ QFtpPI::QFtpPI(QObject *parent) :
 
     connect(&dtp, SIGNAL(connectState(int)),
              SLOT(dtpConnectState(int)));
+}
+
+QFtpPI::~QFtpPI()
+{
+    // Members are destroyed in reverse declaration order, so commandSocket (declared after dtp)
+    // is already gone by the time dtp is torn down. Without the disconnects below, tearing down
+    // dtp would reenter this half-destroyed object:
+    // * destroying dtp's active-mode listener closes its data socket;
+    // * the socket's disconnected() runs QFtpDTP::socketConnectionClosed();
+    // * that chains connectState(CsClosed) -> dtpConnectState() -> readyRead();
+    // * readyRead() then reads the already-freed commandSocket.
+    // Sever every callback from our sockets into this PI before any member is destroyed, so a
+    // member's own teardown can never reenter this half-destroyed object.
+    disconnect(&commandSocket, 0, this, 0);
+    disconnect(&dtp, 0, this, 0);
 }
 
 void QFtpPI::connectToHost(const QString &host, quint16 port)
@@ -864,9 +853,7 @@ void QFtpPI::abort()
 
     if (currentCmd.startsWith(QLatin1String("STOR "))) {
         abortState = AbortStarted;
-#if defined(QFTPPI_DEBUG)
-        qDebug("QFtpPI send: ABOR");
-#endif
+        qDebug_FPI << "send: ABOR";
         commandSocket.write("ABOR\r\n", 6);
 
         dtp.abortConnection();
@@ -888,9 +875,9 @@ void QFtpPI::hostFound()
 void QFtpPI::connected()
 {
     state = Begin;
-#if defined(QFTPPI_DEBUG)
-//    qDebug("QFtpPI state: %d [connected()]", state);
-#endif
+    // The control connection is up, so the interpreter restarts from the Begin state.
+    // maybe debug-log this like:
+    // qDebug_FPI << "state:" << state << "[connected()]";
     // try to improve performance by setting TCP_NODELAY
     commandSocket.setSocketOption(QAbstractSocket::LowDelayOption, 1);
 
@@ -987,11 +974,13 @@ void QFtpPI::readyRead()
 bool QFtpPI::processReply()
 {
 #if defined(QFTPPI_DEBUG)
-//    qDebug("QFtpPI state: %d [processReply() begin]", state);
+    // A server reply has arrived and is about to be parsed.
+    // maybe debug-log this like:
+    // qDebug_FPI << "state:" << state << "[processReply() begin]";
     if (replyText.length() < 400)
-        qDebug("QFtpPI recv: %d %s", 100*replyCode[0]+10*replyCode[1]+replyCode[2], replyText.toLatin1().constData());
+        qDebug_FPI << "recv:" << (100*replyCode[0]+10*replyCode[1]+replyCode[2]) << replyText;
     else
-        qDebug("QFtpPI recv: %d (text skipped)", 100*replyCode[0]+10*replyCode[1]+replyCode[2]);
+        qDebug_FPI << "recv:" << (100*replyCode[0]+10*replyCode[1]+replyCode[2]) << "(text skipped)";
 #endif
 
     int replyCodeInt = 100*replyCode[0] + 10*replyCode[1] + replyCode[2];
@@ -1045,9 +1034,9 @@ bool QFtpPI::processReply()
             // ignore unrequested message
             return true;
     }
-#if defined(QFTPPI_DEBUG)
-//    qDebug("QFtpPI state: %d [processReply() intermediate]", state);
-#endif
+    // The reply advanced the state machine; the per-reply side effects run next.
+    // maybe debug-log this like:
+    // qDebug_FPI << "state:" << state << "[processReply() intermediate]";
 
     // special actions on certain replies
     emit rawFtpReply(replyCodeInt, replyText);
@@ -1061,9 +1050,7 @@ bool QFtpPI::processReply()
         // info.
         QRegExp addrPortPattern(QLatin1String("(\\d+),(\\d+),(\\d+),(\\d+),(\\d+),(\\d+)"));
         if (addrPortPattern.indexIn(replyText) == -1) {
-#if defined(QFTPPI_DEBUG)
-            qDebug("QFtp: bad 227 response -- address and port information missing");
-#endif
+            qDebug_FPI << "QFtp: bad 227 response -- address and port information missing";
             // this error should be reported
         } else {
             QStringList lst = addrPortPattern.capturedTexts();
@@ -1076,9 +1063,7 @@ bool QFtpPI::processReply()
         // 229 Extended Passive mode OK (|||10982|)
         int portPos = replyText.indexOf(QLatin1Char('('));
         if (portPos == -1) {
-#if defined(QFTPPI_DEBUG)
-            qDebug("QFtp: bad 229 response -- port information missing");
-#endif
+            qDebug_FPI << "QFtp: bad 229 response -- port information missing";
             // this error should be reported
         } else {
             ++portPos;
@@ -1144,9 +1129,9 @@ bool QFtpPI::processReply()
             }
             break;
     }
-#if defined(QFTPPI_DEBUG)
-//    qDebug("QFtpPI state: %d [processReply() end]", state);
-#endif
+    // The reply is fully processed and the interpreter state has settled.
+    // maybe debug-log this like:
+    // qDebug_FPI << "state:" << state << "[processReply() end]";
     return true;
 }
 
@@ -1164,7 +1149,7 @@ bool QFtpPI::startNextCmd()
 
 #if defined(QFTPPI_DEBUG)
     if (state != Idle)
-        qDebug("QFtpPI startNextCmd: Internal error! QFtpPI called in non-Idle state %d", state);
+        qDebug_FPI << "startNextCmd: Internal error! QFtpPI called in non-Idle state" << state;
 #endif
     if (pendingCommands.isEmpty()) {
         currentCmd.clear();
@@ -1211,9 +1196,7 @@ bool QFtpPI::startNextCmd()
     }
 
     pendingCommands.pop_front();
-#if defined(QFTPPI_DEBUG)
-    qDebug("QFtpPI send: %s", currentCmd.left(currentCmd.length()-2).toLatin1().constData());
-#endif
+    qDebug_FPI << "send:" << currentCmd.left(currentCmd.length()-2);
     state = Waiting;
     commandSocket.write(currentCmd.toUtf8());
     return true;
