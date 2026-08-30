@@ -33,6 +33,8 @@ HEADERS +=  \
         tools/qlazinessresolver.h \
         tools/qline.h \
         tools/qlinkedlist.h \
+        tools/qformatter.h \
+        tools/qstringnoquote.h \
         tools/qlist.h \
         tools/qlocale.h \
         tools/qlocale_p.h \

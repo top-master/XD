@@ -31,7 +31,7 @@
 **
 ****************************************************************************/
 
-//#define QNETWORKACCESSCACHEBACKEND_DEBUG
+#include "qnetwork-debug.h"
 
 #include "qnetworkaccesscachebackend_p.h"
 #include "qabstractnetworkcache.h"
@@ -108,9 +108,7 @@ bool QNetworkAccessCacheBackend::sendCacheContents()
         writeDownstreamData(contents);
     }
 
-#if defined(QNETWORKACCESSCACHEBACKEND_DEBUG)
-    qDebug() << "Successfully sent cache:" << url();
-#endif
+    qDebug_CACHEBACKEND << "Successfully sent cache:" << url();
     return true;
 }
 

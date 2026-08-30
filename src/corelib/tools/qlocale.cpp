@@ -651,7 +651,7 @@ static const QLocaleData *defaultData()
     return default_data;
 }
 
-const QLocaleData *QLocaleData::c()
+const QLocaleData *QLocaleData::classic()
 {
     Q_ASSERT(locale_index[QLocale::C] == 0);
     return c_data;
@@ -2968,7 +2968,7 @@ QString QLocaleData::longLongToString(const QChar zero, const QChar group,
     return num_str;
 }
 
-QString QLocaleData::unsLongLongToString(qulonglong l, int precision,
+QString QLocaleData::formatULongLong(qulonglong l, int precision,
                                             int base, int width,
                                             unsigned flags) const
 {

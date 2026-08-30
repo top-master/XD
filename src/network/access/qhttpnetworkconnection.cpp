@@ -45,7 +45,7 @@
 
 #include <qbuffer.h>
 #include <qpair.h>
-#include <qdebug.h>
+#include "qnetwork-debug.h"
 
 #ifndef QT_NO_HTTP
 
@@ -975,6 +975,7 @@ void QHttpNetworkConnectionPrivate::removeReply(QHttpNetworkReply *reply)
 // although it is called _q_startNextRequest, it will actually start multiple requests when possible
 void QHttpNetworkConnectionPrivate::_q_startNextRequest()
 {
+    qDebug_HTTPNC << "_q_startNextRequest() networkLayerState" << networkLayerState << "state" << state;
     // If there is no network layer state decided we should not start any new requests.
     if (networkLayerState == Unknown || networkLayerState == HostLookupPending || networkLayerState == IPv4or6)
         return;

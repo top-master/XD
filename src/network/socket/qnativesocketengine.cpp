@@ -31,7 +31,7 @@
 **
 ****************************************************************************/
 
-//#define QNATIVESOCKETENGINE_DEBUG
+#include "qnetwork-debug.h"
 
 /*! \class QNativeSocketEngine
     \internal
@@ -124,7 +124,6 @@
 
 QT_BEGIN_NAMESPACE
 
-//#define QNATIVESOCKETENGINE_DEBUG
 
 #define Q_VOID
 
@@ -413,8 +412,7 @@ bool QNativeSocketEngine::initialize(QAbstractSocket::SocketType socketType, QAb
         QString protocolStr = QLatin1String("UnknownProtocol");
         if (protocol == QAbstractSocket::IPv4Protocol) protocolStr = QLatin1String("IPv4Protocol");
         else if (protocol == QAbstractSocket::IPv6Protocol) protocolStr = QLatin1String("IPv6Protocol");
-        qDebug("QNativeSocketEngine::initialize(type == %s, protocol == %s) failed: %s",
-               typeStr.toLatin1().constData(), protocolStr.toLatin1().constData(), d->socketErrorString.toLatin1().constData());
+        qDebug_NSE << "initialize(type == " << typeStr << ", protocol == " << protocolStr << ") failed: " << d->socketErrorString;
 #endif
         return false;
     }
@@ -478,10 +476,8 @@ bool QNativeSocketEngine::initialize(qintptr socketDescriptor, QAbstractSocket::
 
     // determine socket type and protocol
     if (!d->fetchConnectionParameters()) {
-#if defined (QNATIVESOCKETENGINE_DEBUG)
-        qDebug() << "QNativeSocketEngine::initialize(socketDescriptor) failed:"
-                 << socketDescriptor << d->socketErrorString;
-#endif
+        qDebug_NSE << "initialize(socketDescriptor) failed:"
+                   << socketDescriptor << d->socketErrorString;
         d->socketDescriptor = -1;
         return false;
     }
