@@ -31,7 +31,7 @@
 **
 ****************************************************************************/
 
-//#define QTCPSOCKET_DEBUG
+#include "qnetwork-debug.h"
 
 /*!
     \class QTcpSocket
@@ -75,9 +75,7 @@ QT_BEGIN_NAMESPACE
 QTcpSocket::QTcpSocket(QObject *parent)
     : QAbstractSocket(TcpSocket, *new QTcpSocketPrivate, parent)
 {
-#if defined(QTCPSOCKET_DEBUG)
-    qDebug("QTcpSocket::QTcpSocket()");
-#endif
+    qDebug_TCPSOCK << "QTcpSocket()";
     d_func()->isBuffered = true;
 }
 
@@ -89,9 +87,7 @@ QTcpSocket::QTcpSocket(QObject *parent)
 
 QTcpSocket::~QTcpSocket()
 {
-#if defined(QTCPSOCKET_DEBUG)
-    qDebug("QTcpSocket::~QTcpSocket()");
-#endif
+    qDebug_TCPSOCK << "~QTcpSocket()";
 }
 
 /*!
