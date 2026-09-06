@@ -155,8 +155,8 @@ void tst_QHttpSocketEngine::initTestCase()
              "server-dummy (http-proxy + imap) did not start");
     m_addr = TestEnv::serverAddress();
     m_hostName = m_httpServer->domainName();
-    m_proxyPort = quint16(m_httpServer->tryPort(3128));
-    m_imapPort = quint16(m_imapServer->tryPort(143));
+    m_proxyPort = m_httpServer->tryPort(3128);
+    m_imapPort = m_imapServer->tryPort(143);
 }
 
 void tst_QHttpSocketEngine::init()
@@ -636,7 +636,6 @@ void tst_QHttpSocketEngine::tcpSocketNonBlocking_closed()
 
 void tst_QHttpSocketEngine::downloadBigFile()
 {
-    QSKIP("Needs a 10 MB HTTP /qtest/mediumfile on port 80; not provided by server-dummy.");
     QHttpSocketEngineHandler http;
 
     if (tmpSocket)
@@ -646,7 +645,10 @@ void tst_QHttpSocketEngine::downloadBigFile()
     connect(tmpSocket, SIGNAL(connected()), SLOT(exitLoopSlot()));
     connect(tmpSocket, SIGNAL(readyRead()), SLOT(downloadBigFileSlot()));
 
-    tmpSocket->connectToHost(QtNetworkSettings::serverName(), 80);
+    // This test bypasses the proxy and connects directly to the HTTP responder; aim for
+    // the canonical port 80 but fall back to server-dummy's actual port when it cannot be
+    // bound (a non-root run), then serve /qtest/mediumfile from there.
+    tmpSocket->connectToHost(QtNetworkSettings::serverName(), m_httpServer->tryPort(80));
 
     QTestEventLoop::instance().enterLoop(30);
     if (QTestEventLoop::instance().timeout())
@@ -677,10 +679,14 @@ void tst_QHttpSocketEngine::downloadBigFile()
 
     QCOMPARE(tmpSocket->state(), QAbstractSocket::ConnectedState);
 
+#if !defined(__FILC__)
+    // The throughput print formats doubles, which reaches glibc feholdexcept (fnstenv
+    // inline asm) that Fil-C cannot instrument; the download itself already succeeded.
     qDebug("\t\t%.1fMB/%.1fs: %.1fMB/s",
            bytesAvailable / (1024.0 * 1024.0),
            stopWatch.elapsed() / 1024.0,
            (bytesAvailable / (stopWatch.elapsed() / 1000.0)) / (1024 * 1024));
+#endif
 
     delete tmpSocket;
     tmpSocket = 0;

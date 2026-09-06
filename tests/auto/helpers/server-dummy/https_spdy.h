@@ -772,15 +772,18 @@ public:
     {
         QTcpServer *server = new QTcpServer(this);
         listenTcp(server);
-        connect(server, &QTcpServer::newConnection, server, [this, server]() {
-            while (server->hasPendingConnections()) {
-                QTcpSocket *s = server->nextPendingConnection();
-                new Http1Connection(s, m_root, s);
-            }
-        });
+        connect(server, &QTcpServer::newConnection, this, &PlainHttpService::onNewConnection);
     }
 
 private:
+    void onNewConnection()
+    {
+        QTcpServer *server = qobject_cast<QTcpServer *>(sender());
+        while (server->hasPendingConnections()) {
+            QTcpSocket *s = server->nextPendingConnection();
+            new Http1Connection(s, m_root, s);
+        }
+    }
     QString m_root;
 };
 
@@ -797,14 +800,19 @@ public:
     {
         QTcpServer *server = new QTcpServer(this);
         listenTcp(server);
-        connect(server, &QTcpServer::newConnection, server, [server]() {
-            while (server->hasPendingConnections()) {
-                QTcpSocket *c = server->nextPendingConnection();
-                c->write(QDateTime::currentDateTime().toString(Qt::ISODate).toLatin1() + "\r\n");
-                connect(c, &QTcpSocket::disconnected, c, &QObject::deleteLater);
-                c->disconnectFromHost();
-            }
-        });
+        connect(server, &QTcpServer::newConnection, this, &DaytimeService::onNewConnection);
+    }
+
+private:
+    void onNewConnection()
+    {
+        QTcpServer *server = qobject_cast<QTcpServer *>(sender());
+        while (server->hasPendingConnections()) {
+            QTcpSocket *c = server->nextPendingConnection();
+            c->write(QDateTime::currentDateTime().toString(Qt::ISODate).toLatin1() + "\r\n");
+            connect(c, &QTcpSocket::disconnected, c, &QObject::deleteLater);
+            c->disconnectFromHost();
+        }
     }
 };
 
@@ -834,16 +842,21 @@ public:
     {
         QTcpServer *server = new QTcpServer(this);
         listenTcp(server);
-        connect(server, &QTcpServer::newConnection, server, [this, server]() {
-            while (server->hasPendingConnections()) {
-                QTcpSocket *c = server->nextPendingConnection();
-                connect(c, &QTcpSocket::readyRead, c, [this, c]() { onData(c); });
-                connect(c, &QTcpSocket::disconnected, c, &QObject::deleteLater);
-            }
-        });
+        connect(server, &QTcpServer::newConnection, this, &ConnectProxyService::onNewConnection);
     }
 
 private:
+    void onNewConnection()
+    {
+        QTcpServer *server = qobject_cast<QTcpServer *>(sender());
+        while (server->hasPendingConnections()) {
+            QTcpSocket *c = server->nextPendingConnection();
+            connect(c, &QTcpSocket::readyRead, this, &ConnectProxyService::onReadyRead);
+            connect(c, &QTcpSocket::disconnected, c, &QObject::deleteLater);
+        }
+    }
+    void onReadyRead() { onData(qobject_cast<QTcpSocket *>(sender())); }
+
     void onData(QTcpSocket *client)
     {
         if (client->property("tunnel").toBool() || client->property("forwarding").toBool())
@@ -886,23 +899,16 @@ private:
 
             QTcpSocket *upstream = new QTcpSocket(client);
             client->setProperty("tunnel", true);
-            connect(upstream, &QTcpSocket::connected, client, [client, upstream]() {
-                upstream->setProperty("up", true);
-                client->write("HTTP/1.1 200 Connection established\r\n\r\n");
-            });
+            linkPeers(client, upstream);
+            upstream->setProperty("connectReply", QByteArray("HTTP/1.1 200 Connection established\r\n\r\n"));
+            upstream->setProperty("errorReply", QByteArray("HTTP/1.1 503 Service Unavailable\r\n\r\n"));
+            upstream->setProperty("closeOnError", true);
+            connect(upstream, &QTcpSocket::connected, this, &ConnectProxyService::onTunnelConnected);
             connect(upstream, static_cast<void (QTcpSocket::*)(QAbstractSocket::SocketError)>(&QTcpSocket::error),
-                    client, [client, upstream]() {
-                if (!upstream->property("up").toBool()) {
-                    client->write("HTTP/1.1 503 Service Unavailable\r\n\r\n");
-                    client->disconnectFromHost();
-                }
-            });
-            connect(upstream, &QTcpSocket::readyRead, client, [client, upstream]() { client->write(upstream->readAll()); });
-            connect(client, &QTcpSocket::readyRead, upstream, [client, upstream]() { upstream->write(client->readAll()); });
-            connect(upstream, &QTcpSocket::disconnected, client, [client, upstream]() {
-                client->write(upstream->readAll());
-                client->disconnectFromHost();
-            });
+                    this, &ConnectProxyService::onTunnelError);
+            connect(upstream, &QTcpSocket::readyRead, this, &ConnectProxyService::relayReadyRead);
+            connect(client, &QTcpSocket::readyRead, this, &ConnectProxyService::relayReadyRead);
+            connect(upstream, &QTcpSocket::disconnected, this, &ConnectProxyService::relayDisconnected);
             upstream->connectToHost(host, port);
             return;
         }
@@ -961,18 +967,25 @@ private:
 
         client->setProperty("forwarding", true);
         QTcpSocket *upstream = new QTcpSocket(client);
-        connect(upstream, &QTcpSocket::connected, upstream, [upstream, fwd]() { upstream->write(fwd); });
-        connect(upstream, &QTcpSocket::readyRead, client, [client, upstream]() { client->write(upstream->readAll()); });
-        connect(upstream, &QTcpSocket::disconnected, client, [client, upstream]() {
-            client->write(upstream->readAll());
-            client->disconnectFromHost();
-        });
+        linkPeers(client, upstream);
+        upstream->setProperty("forward", fwd);
+        upstream->setProperty("errorReply", QByteArray("HTTP/1.1 503 Service Unavailable\r\nContent-Length: 0\r\n\r\n"));
+        upstream->setProperty("closeOnError", true);
+        connect(upstream, &QTcpSocket::connected, this, &ConnectProxyService::onForwardConnected);
+        connect(upstream, &QTcpSocket::readyRead, this, &ConnectProxyService::relayReadyRead);
+        connect(upstream, &QTcpSocket::disconnected, this, &ConnectProxyService::relayDisconnected);
         connect(upstream, static_cast<void (QTcpSocket::*)(QAbstractSocket::SocketError)>(&QTcpSocket::error),
-                client, [client]() {
-            client->write("HTTP/1.1 503 Service Unavailable\r\nContent-Length: 0\r\n\r\n");
-            client->disconnectFromHost();
-        });
+                this, &ConnectProxyService::onTunnelError);
         upstream->connectToHost(host, port);
+    }
+
+    // The forward proxy writes the rewritten request to the upstream once connected (and
+    // marks it "up" so a later close is not mistaken for a connect failure).
+    void onForwardConnected()
+    {
+        QTcpSocket *up = qobject_cast<QTcpSocket *>(sender());
+        up->setProperty("up", true);
+        up->write(up->property("forward").toByteArray());
     }
 
     bool m_requireAuth;
@@ -991,16 +1004,21 @@ public:
     {
         QTcpServer *server = new QTcpServer(this);
         listenTcp(server);
-        connect(server, &QTcpServer::newConnection, server, [this, server]() {
-            while (server->hasPendingConnections()) {
-                QTcpSocket *c = server->nextPendingConnection();
-                connect(c, &QTcpSocket::readyRead, c, [this, c]() { onSocks(c); });
-                connect(c, &QTcpSocket::disconnected, c, &QObject::deleteLater);
-            }
-        });
+        connect(server, &QTcpServer::newConnection, this, &SocksProxyService::onNewConnection);
     }
 
 private:
+    void onNewConnection()
+    {
+        QTcpServer *server = qobject_cast<QTcpServer *>(sender());
+        while (server->hasPendingConnections()) {
+            QTcpSocket *c = server->nextPendingConnection();
+            connect(c, &QTcpSocket::readyRead, this, &SocksProxyService::onReadyRead);
+            connect(c, &QTcpSocket::disconnected, c, &QObject::deleteLater);
+        }
+    }
+    void onReadyRead() { onSocks(qobject_cast<QTcpSocket *>(sender())); }
+
     void onSocks(QTcpSocket *client)
     {
         if (client->property("tunnel").toBool())
@@ -1051,24 +1069,18 @@ private:
             remapTarget(&hostStr, &dport);
             QTcpSocket *upstream = new QTcpSocket(client);
             client->setProperty("target", true);
-            connect(upstream, &QTcpSocket::connected, client, [client, upstream]() {
-                upstream->setProperty("up", true);
-                client->setProperty("tunnel", true);
-                client->write(QByteArray::fromRawData("\x05\x00\x00\x01\x00\x00\x00\x00\x00\x00", 10));
-            });
+            // Further client bytes are tunnel data, not SOCKS.
+            client->setProperty("tunnel", true);
+            linkPeers(client, upstream);
+            upstream->setProperty("connectReply", QByteArray("\x05\x00\x00\x01\x00\x00\x00\x00\x00\x00", 10));
+            upstream->setProperty("errorReply", QByteArray("\x05\x05\x00\x01\x00\x00\x00\x00\x00\x00", 10));
+            upstream->setProperty("closeOnError", true);
+            connect(upstream, &QTcpSocket::connected, this, &SocksProxyService::onTunnelConnected);
             connect(upstream, static_cast<void (QTcpSocket::*)(QAbstractSocket::SocketError)>(&QTcpSocket::error),
-                    client, [client, upstream]() {
-                if (!upstream->property("up").toBool()) {
-                    client->write(QByteArray::fromRawData("\x05\x05\x00\x01\x00\x00\x00\x00\x00\x00", 10));
-                    client->disconnectFromHost();
-                }
-            });
-            connect(upstream, &QTcpSocket::readyRead, client, [client, upstream]() { client->write(upstream->readAll()); });
-            connect(client, &QTcpSocket::readyRead, upstream, [client, upstream]() { upstream->write(client->readAll()); });
-            connect(upstream, &QTcpSocket::disconnected, client, [client, upstream]() {
-                client->write(upstream->readAll());
-                client->disconnectFromHost();
-            });
+                    this, &SocksProxyService::onTunnelError);
+            connect(upstream, &QTcpSocket::readyRead, this, &SocksProxyService::relayReadyRead);
+            connect(client, &QTcpSocket::readyRead, this, &SocksProxyService::relayReadyRead);
+            connect(upstream, &QTcpSocket::disconnected, this, &SocksProxyService::relayDisconnected);
             upstream->connectToHost(hostStr, dport);
         }
     }
@@ -1098,22 +1110,28 @@ protected:
             return;
         }
         s->setSslConfiguration(m_cfg);
-        connect(s, &QSslSocket::encrypted, s, [this, s]() {
-            const QByteArray proto = s->sslConfiguration().nextNegotiatedProtocol();
-            if (proto == "h2")
-                new Http2Connection(s, m_root, s);
-            else if (proto == "spdy/3")
-                new SpdyConnection(s, m_root, s);
-            else
-                new Http1Connection(s, m_root, s);
-        });
+        connect(s, &QSslSocket::encrypted, this, &SslServer::onEncrypted);
         connect(s, static_cast<void (QSslSocket::*)(const QList<QSslError> &)>(&QSslSocket::sslErrors),
-                s, [s](const QList<QSslError> &) { /* self-signed cert is expected */ });
+                this, &SslServer::onSslErrors);
         connect(s, &QSslSocket::disconnected, s, &QObject::deleteLater);
         s->startServerEncryption();
     }
 
 private:
+    void onEncrypted()
+    {
+        QSslSocket *s = qobject_cast<QSslSocket *>(sender());
+        const QByteArray proto = s->sslConfiguration().nextNegotiatedProtocol();
+        if (proto == "h2")
+            new Http2Connection(s, m_root, s);
+        else if (proto == "spdy/3")
+            new SpdyConnection(s, m_root, s);
+        else
+            new Http1Connection(s, m_root, s);
+    }
+    // A self-signed cert is expected; nothing to do.
+    void onSslErrors() {}
+
     QSslConfiguration m_cfg;
     QString m_root;
 };
@@ -1137,15 +1155,17 @@ protected:
             return;
         }
         s->setSslConfiguration(m_cfg);
-        const QByteArray greeting = m_greeting;
-        connect(s, &QSslSocket::encrypted, s, [s, greeting]() { s->write(greeting); });
+        connect(s, &QSslSocket::encrypted, this, &GreetingSslServer::onEncrypted);
         connect(s, static_cast<void (QSslSocket::*)(const QList<QSslError> &)>(&QSslSocket::sslErrors),
-                s, [s](const QList<QSslError> &) {});
+                this, &GreetingSslServer::onSslErrors);
         connect(s, &QSslSocket::disconnected, s, &QObject::deleteLater);
         s->startServerEncryption();
     }
 
 private:
+    void onEncrypted() { qobject_cast<QSslSocket *>(sender())->write(m_greeting); }
+    void onSslErrors() {}
+
     QSslConfiguration m_cfg;
     QByteArray m_greeting;
 };

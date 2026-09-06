@@ -143,8 +143,8 @@ public:
     // (TCP/UDP echo for FileTransfer, the SOCKS5 proxy for WebProxy). These reflect the
     // REAL bound ports after start()/tryPort(): if the child had to fall back (a
     // requested port was taken or privileged), these hold where it actually landed.
-    int port() const { return m_port; }
-    int echoPort() const { return m_echoPort; }
+    quint16 port() const { return m_port; }
+    quint16 echoPort() const { return m_echoPort; }
 
     // Expose a real filesystem directory through the FTP "way": server-dummy serves its
     // contents (LIST/RETR/STOR/...) instead of a tiny in-memory FS. Set before start()
@@ -159,10 +159,10 @@ public:
     // the child on the resulting port and returns it, so the caller connects to exactly
     // where the server ended up. The secondary/echo port follows as the chosen port + 1
     // (the child reports its real value, adopted via parseReady()).
-    int tryPort(int newPort)
+    quint16 tryPort(quint16 newPort)
     {
         const quint16 previous = m_port ? m_port : m_defaultPort;
-        const quint16 chosen = canBind(newPort) ? quint16(newPort) : previous;
+        const quint16 chosen = canBind(newPort) ? newPort : previous;
         if (!isRunning() || chosen != m_port) {
             m_port = chosen;
             m_echoPort = quint16(chosen + 1);
@@ -174,12 +174,12 @@ public:
     // True if this process can bind port on the loopback right now. A throwaway
     // QTcpServer::listen reports the OS's permission/availability verdict the same way on
     // every platform: false on EACCES for a privileged port, or when the port is taken.
-    static bool canBind(int port)
+    static bool canBind(quint16 port)
     {
-        if (port <= 0 || port > 65535)
+        if (port == 0)
             return false;
         QTcpServer probe;
-        const bool ok = probe.listen(QHostAddress(QHostAddress::LocalHost), quint16(port));
+        const bool ok = probe.listen(QHostAddress(QHostAddress::LocalHost), port);
         probe.close();
         return ok;
     }

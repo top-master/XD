@@ -82,16 +82,26 @@ public:
     {
         QTcpServer *server = new QTcpServer(this);
         listenTcp(server);
-        connect(server, &QTcpServer::newConnection, server, [this, server]() {
-            QTcpSocket *c = server->nextPendingConnection();
-            FtpState *st = new FtpState(c);
-            connect(c, &QTcpSocket::readyRead, c, [this, c, st]() { onFtp(c, st); });
-            connect(c, &QTcpSocket::disconnected, c, &QObject::deleteLater);
-            reply(c, 220, "server-dummy ready");
-        });
+        connect(server, &QTcpServer::newConnection, this, &FtpService::onNewConnection);
     }
 
 private:
+    void onNewConnection()
+    {
+        QTcpSocket *c = qobject_cast<QTcpServer *>(sender())->nextPendingConnection();
+        FtpState *st = new FtpState(c);
+        c->setProperty("ftpState", QVariant::fromValue<QObject *>(st));
+        connect(c, &QTcpSocket::readyRead, this, &FtpService::onControlReadyRead);
+        connect(c, &QTcpSocket::disconnected, c, &QObject::deleteLater);
+        reply(c, 220, "server-dummy ready");
+    }
+
+    void onControlReadyRead()
+    {
+        QTcpSocket *c = qobject_cast<QTcpSocket *>(sender());
+        onFtp(c, stateOf(c));
+    }
+
     // Per-control-connection state, kept alive as a child of the control socket.
     struct FtpState : QObject {
         explicit FtpState(QObject *p)
@@ -112,6 +122,17 @@ private:
         bool ascii;          // TYPE A (CRLF text mode)
         QString cwd;         // FTP-space current directory
     };
+
+    // FtpState is a plain QObject (no Q_OBJECT), so recover it with static_cast from the
+    // QObject* stashed on the control/data/pasv object; the stored object is always one.
+    static FtpState *stateOf(QObject *o)
+    {
+        return static_cast<FtpState *>(o->property("ftpState").value<QObject *>());
+    }
+    static QTcpSocket *ctrlOf(QObject *o)
+    {
+        return qobject_cast<QTcpSocket *>(o->property("ftpControl").value<QObject *>());
+    }
 
     QString m_root; // filesystem directory this FTP server exposes (from --folder)
     bool m_qtestAtRoot; // treat a leading "/qtest" as m_root (flat-folder fleet use)
@@ -264,15 +285,22 @@ private:
         resetData(st);
         st->pasv = new QTcpServer(st);
         st->pasv->listen(m_host, 0);
-        connect(st->pasv, &QTcpServer::newConnection, st->pasv, [this, c, st]() {
-            st->data = st->pasv->nextPendingConnection();
-            st->data->setParent(st);
-            onDataReady(c, st);
-        });
+        st->pasv->setProperty("ftpState", QVariant::fromValue<QObject *>(st));
+        st->pasv->setProperty("ftpControl", QVariant::fromValue<QObject *>(c));
+        connect(st->pasv, &QTcpServer::newConnection, this, &FtpService::onPasvConnection);
         const quint16 p = st->pasv->serverPort();
         reply(c, 227, QByteArray("Entering Passive Mode (127,0,0,1," +
                                  QByteArray::number(p >> 8) + ',' +
                                  QByteArray::number(p & 0xff) + ")").constData());
+    }
+
+    void onPasvConnection()
+    {
+        QTcpServer *pasv = qobject_cast<QTcpServer *>(sender());
+        FtpState *st = stateOf(pasv);
+        st->data = pasv->nextPendingConnection();
+        st->data->setParent(st);
+        onDataReady(ctrlOf(pasv), st);
     }
 
     // "PORT h1,h2,h3,h4,p1,p2": remember where to connect for the next transfer.
@@ -301,12 +329,20 @@ private:
         if (st->active) {
             QTcpSocket *d = new QTcpSocket(st);
             st->data = d;
-            connect(d, &QTcpSocket::connected, c, [this, c, st]() { onDataReady(c, st); });
+            d->setProperty("ftpState", QVariant::fromValue<QObject *>(st));
+            d->setProperty("ftpControl", QVariant::fromValue<QObject *>(c));
+            connect(d, &QTcpSocket::connected, this, &FtpService::onActiveDataConnected);
             d->connectToHost(st->portAddr, st->portPort);
         } else if (st->data) {
             onDataReady(c, st);
         }
         // else PASV, still waiting: openPasv's newConnection handler calls onDataReady.
+    }
+
+    void onActiveDataConnected()
+    {
+        QObject *d = sender();
+        onDataReady(ctrlOf(d), stateOf(d));
     }
 
     // --- listing: a real directory in the ls -l form QFtp's parser understands ---
@@ -374,23 +410,37 @@ private:
     void receiveUpload(QTcpSocket *c, FtpState *st)
     {
         reply(c, 150, "opening data connection");
-        const bool ascii = st->ascii;
         QTcpSocket *data = st->data;
         QFile *f = new QFile(st->storName, data);
         f->open(QIODevice::Append);
-        connect(data, &QTcpSocket::readyRead, data, [f, data, ascii]() {
-            QByteArray d = data->readAll();
-            if (ascii) d.replace("\r\n", "\n"); // ASCII store: CRLF -> LF
-            f->write(d);
-        });
-        connect(data, &QTcpSocket::disconnected, c, [this, c, st, f, data, ascii]() {
-            QByteArray d = data->readAll();
-            if (ascii) d.replace("\r\n", "\n");
-            f->write(d);
-            f->close();
-            reply(c, 226, "transfer complete");
-            resetData(st);
-        });
+        data->setProperty("uploadFile", QVariant::fromValue<QObject *>(f));
+        data->setProperty("uploadAscii", st->ascii);
+        data->setProperty("ftpState", QVariant::fromValue<QObject *>(st));
+        data->setProperty("ftpControl", QVariant::fromValue<QObject *>(c));
+        connect(data, &QTcpSocket::readyRead, this, &FtpService::onUploadReadyRead);
+        connect(data, &QTcpSocket::disconnected, this, &FtpService::onUploadDone);
+    }
+
+    void onUploadReadyRead()
+    {
+        QObject *data = sender();
+        QFile *f = qobject_cast<QFile *>(data->property("uploadFile").value<QObject *>());
+        QByteArray d = qobject_cast<QTcpSocket *>(data)->readAll();
+        // ASCII store: CRLF -> LF.
+        if (data->property("uploadAscii").toBool()) d.replace("\r\n", "\n");
+        f->write(d);
+    }
+
+    void onUploadDone()
+    {
+        QObject *data = sender();
+        QFile *f = qobject_cast<QFile *>(data->property("uploadFile").value<QObject *>());
+        QByteArray d = qobject_cast<QTcpSocket *>(data)->readAll();
+        if (data->property("uploadAscii").toBool()) d.replace("\r\n", "\n");
+        f->write(d);
+        f->close();
+        reply(ctrlOf(data), 226, "transfer complete");
+        resetData(stateOf(data));
     }
 };
 
@@ -408,21 +458,33 @@ public:
     {
         QTcpServer *tcp = new QTcpServer(this);
         listenTcp(tcp); // records m_port
-        connect(tcp, &QTcpServer::newConnection, tcp, [tcp]() {
-            QTcpSocket *s = tcp->nextPendingConnection();
-            connect(s, &QTcpSocket::readyRead, s, [s]() { s->write(s->readAll()); });
-            connect(s, &QTcpSocket::disconnected, s, &QObject::deleteLater);
-        });
+        connect(tcp, &QTcpServer::newConnection, this, &EchoService::onNewConnection);
         QUdpSocket *udp = new QUdpSocket(this);
         udp->bind(m_host, m_port); // match the TCP echo's port
-        connect(udp, &QUdpSocket::readyRead, udp, [udp]() {
-            while (udp->hasPendingDatagrams()) {
-                QByteArray data(int(udp->pendingDatagramSize()), Qt::Uninitialized);
-                QHostAddress from; quint16 fromPort;
-                udp->readDatagram(data.data(), data.size(), &from, &fromPort);
-                udp->writeDatagram(data, from, fromPort);
-            }
-        });
+        connect(udp, &QUdpSocket::readyRead, this, &EchoService::onUdpReadyRead);
+    }
+
+private:
+    void onNewConnection()
+    {
+        QTcpSocket *s = qobject_cast<QTcpServer *>(sender())->nextPendingConnection();
+        connect(s, &QTcpSocket::readyRead, this, &EchoService::onTcpReadyRead);
+        connect(s, &QTcpSocket::disconnected, s, &QObject::deleteLater);
+    }
+    void onTcpReadyRead()
+    {
+        QTcpSocket *s = qobject_cast<QTcpSocket *>(sender());
+        s->write(s->readAll());
+    }
+    void onUdpReadyRead()
+    {
+        QUdpSocket *udp = qobject_cast<QUdpSocket *>(sender());
+        while (udp->hasPendingDatagrams()) {
+            QByteArray data(int(udp->pendingDatagramSize()), Qt::Uninitialized);
+            QHostAddress from; quint16 fromPort;
+            udp->readDatagram(data.data(), data.size(), &from, &fromPort);
+            udp->writeDatagram(data, from, fromPort);
+        }
     }
 };
 
@@ -440,14 +502,18 @@ public:
     {
         QTcpServer *server = new QTcpServer(this);
         listenTcp(server);
-        connect(server, &QTcpServer::newConnection, server, [this, server]() {
-            QTcpSocket *s = server->nextPendingConnection();
-            connect(s, &QTcpSocket::readyRead, s, [this, s]() { onRequest(s); });
-            connect(s, &QTcpSocket::disconnected, s, &QObject::deleteLater);
-        });
+        connect(server, &QTcpServer::newConnection, this, &HttpService::onNewConnection);
     }
 
 private:
+    void onNewConnection()
+    {
+        QTcpSocket *s = qobject_cast<QTcpServer *>(sender())->nextPendingConnection();
+        connect(s, &QTcpSocket::readyRead, this, &HttpService::onReadyRead);
+        connect(s, &QTcpSocket::disconnected, s, &QObject::deleteLater);
+    }
+    void onReadyRead() { onRequest(qobject_cast<QTcpSocket *>(sender())); }
+
     // Keep-alive request pump: buffer bytes, and while a full request (head + any
     // Content-Length body) is present, dispatch it and keep the connection open. This is
     // what lets the pipelining/keep-alive tests reuse one socket for many requests.
@@ -536,6 +602,11 @@ private:
             send(s, 200, "OK", QByteArray(25962, 'x'));      // exact size 25962
         } else if (p == "/qtest/bigfile") {
             send(s, 200, "OK", QByteArray(512 * 1024, 'x')); // large enough to stream
+        } else if (p == "/qtest/mediumfile") {
+            // Exactly 10 MB of NUL bytes for downloadBigFile. The zero body matters: that
+            // test finds the body by the first NUL past the ASCII headers, then counts from
+            // there, so the payload must be all-NUL to total exactly 10000000.
+            send(s, 200, "OK", QByteArray(10000000, '\0'));
         } else if (p.startsWith("/qtest/rfcs-auth/")) {
             requireBasic(s, head, "httptest:httptest", "httptest login");
         } else if (p.startsWith("/qtest/auth-digest/")) {
@@ -592,25 +663,17 @@ private:
 
         QTcpSocket *upstream = new QTcpSocket(client);
         client->setProperty("tunnel", true);
-        connect(upstream, &QTcpSocket::connected, client, [client, upstream]() {
-            upstream->setProperty("up", true);
-            client->write("HTTP/1.1 200 Connection established\r\n\r\n");
-        });
+        linkPeers(client, upstream);
+        upstream->setProperty("connectReply", QByteArray("HTTP/1.1 200 Connection established\r\n\r\n"));
+        upstream->setProperty("errorReply", QByteArray("HTTP/1.1 503 Service Unavailable\r\n\r\n"));
+        // A failed CONNECT must also close the client.
+        upstream->setProperty("closeOnError", true);
+        connect(upstream, &QTcpSocket::connected, this, &HttpService::onTunnelConnected);
         connect(upstream, static_cast<void (QTcpSocket::*)(QAbstractSocket::SocketError)>(&QTcpSocket::error),
-                client, [client, upstream]() {
-            // Only a failure to establish the tunnel is a proxy error; a normal close once
-            // relaying has begun must not inject a 503 into the tunnelled stream.
-            if (!upstream->property("up").toBool()) {
-                client->write("HTTP/1.1 503 Service Unavailable\r\n\r\n");
-                client->disconnectFromHost();
-            }
-        });
-        connect(upstream, &QTcpSocket::readyRead, client, [client, upstream]() { client->write(upstream->readAll()); });
-        connect(client, &QTcpSocket::readyRead, upstream, [client, upstream]() { upstream->write(client->readAll()); });
-        connect(upstream, &QTcpSocket::disconnected, client, [client, upstream]() {
-            client->write(upstream->readAll()); // relay any final bytes, then close so the client sees EOF
-            client->disconnectFromHost();
-        });
+                this, &HttpService::onTunnelError);
+        connect(upstream, &QTcpSocket::readyRead, this, &HttpService::relayReadyRead);
+        connect(client, &QTcpSocket::readyRead, this, &HttpService::relayReadyRead);
+        connect(upstream, &QTcpSocket::disconnected, this, &HttpService::relayDisconnected);
         upstream->connectToHost(host, port);
     }
 };
@@ -629,14 +692,18 @@ public:
     {
         QTcpServer *server = new QTcpServer(this);
         listenTcp(server);
-        connect(server, &QTcpServer::newConnection, server, [this, server]() {
-            QTcpSocket *client = server->nextPendingConnection();
-            connect(client, &QTcpSocket::readyRead, client, [this, client]() { onSocks(client); });
-            connect(client, &QTcpSocket::disconnected, client, &QObject::deleteLater);
-        });
+        connect(server, &QTcpServer::newConnection, this, &SocksService::onNewConnection);
     }
 
 private:
+    void onNewConnection()
+    {
+        QTcpSocket *client = qobject_cast<QTcpServer *>(sender())->nextPendingConnection();
+        connect(client, &QTcpSocket::readyRead, this, &SocksService::onReadyRead);
+        connect(client, &QTcpSocket::disconnected, client, &QObject::deleteLater);
+    }
+    void onReadyRead() { onSocks(qobject_cast<QTcpSocket *>(sender())); }
+
     void onSocks(QTcpSocket *client)
     {
         // Stage 0: greeting "05 nmethods methods..." -> pick no-auth (00) if offered,
@@ -672,11 +739,13 @@ private:
             client->setProperty("authed", true);
             return;
         }
-        // Stage 1: request "05 CMD 00 ATYP addr port" -> connect upstream and relay.
+        // Stage 1: request "05 CMD 00 ATYP addr port" -> CONNECT (relay to upstream)
+        // or BIND (listen, then relay the first incoming connection to the client).
         if (client->property("target").isNull()) {
             if (client->bytesAvailable() < 4)
                 return;
             QByteArray hdr = client->read(4);
+            const quint8 cmd = quint8(hdr.at(1));
             const quint8 atyp = quint8(hdr.at(3));
             QString hostStr;
             if (atyp == 0x01) {
@@ -687,26 +756,190 @@ private:
                 hostStr = QString::fromLatin1(client->read(len));
             }
             const quint16 dport = qFromBigEndian<quint16>((const uchar *)client->read(2).constData());
-            QTcpSocket *upstream = new QTcpSocket(client);
             client->setProperty("target", true);
-            connect(upstream, &QTcpSocket::connected, client, [client, upstream]() {
-                upstream->setProperty("up", true);
-                client->write(QByteArray::fromRawData("\x05\x00\x00\x01\x00\x00\x00\x00\x00\x00", 10));
-            });
+            if (cmd == 0x02) { // BIND: the DST fields are advisory only, so they are ignored here.
+                startBind(client);
+                return;
+            }
+            if (cmd == 0x03) { // UDP ASSOCIATE: likewise the DST is the client's own bind, ignored.
+                startUdpAssociate(client);
+                return;
+            }
+            QTcpSocket *upstream = new QTcpSocket(client);
+            linkPeers(client, upstream);
+            upstream->setProperty("connectReply", QByteArray("\x05\x00\x00\x01\x00\x00\x00\x00\x00\x00", 10));
+            upstream->setProperty("errorReply", QByteArray("\x05\x05\x00\x01\x00\x00\x00\x00\x00\x00", 10));
+            connect(upstream, &QTcpSocket::connected, this, &SocksService::onTunnelConnected);
             connect(upstream, static_cast<void (QTcpSocket::*)(QAbstractSocket::SocketError)>(&QTcpSocket::error),
-                    client, [client, upstream]() {
-                // Only a failure to establish the tunnel is a SOCKS error; a normal close
-                // once relaying has begun must NOT inject an error reply into the stream.
-                if (!upstream->property("up").toBool())
-                    client->write(QByteArray::fromRawData("\x05\x05\x00\x01\x00\x00\x00\x00\x00\x00", 10));
-            });
-            connect(upstream, &QTcpSocket::readyRead, client, [client, upstream]() { client->write(upstream->readAll()); });
-            connect(client, &QTcpSocket::readyRead, upstream, [client, upstream]() { upstream->write(client->readAll()); });
-            connect(upstream, &QTcpSocket::disconnected, client, [client, upstream]() {
-                client->write(upstream->readAll()); // relay any final bytes, then close so the client sees EOF
-                client->disconnectFromHost();
-            });
+                    this, &SocksService::onTunnelError);
+            connect(upstream, &QTcpSocket::readyRead, this, &SocksService::relayReadyRead);
+            connect(client, &QTcpSocket::readyRead, this, &SocksService::relayReadyRead);
+            connect(upstream, &QTcpSocket::disconnected, this, &SocksService::relayDisconnected);
             upstream->connectToHost(hostStr, dport);
+        }
+    }
+
+    // Encode "ATYP(01) <IPv4> <port>" shared by the TCP reply and the UDP header.
+    static QByteArray encodeAddrPort(const QHostAddress &addr, quint16 port)
+    {
+        const quint32 v4 = addr.toIPv4Address();
+        QByteArray b;
+        b.append(char(0x01));
+        b.append(char((v4 >> 24) & 0xff)).append(char((v4 >> 16) & 0xff));
+        b.append(char((v4 >> 8) & 0xff)).append(char(v4 & 0xff));
+        b.append(char((port >> 8) & 0xff)).append(char(port & 0xff));
+        return b;
+    }
+
+    // Build a SOCKS5 reply "05 REP 00 01 <IPv4> <port>".
+    static QByteArray socksReply(quint8 rep, const QHostAddress &addr, quint16 port)
+    {
+        QByteArray b;
+        b.append(char(0x05)).append(char(rep)).append(char(0x00));
+        return b + encodeAddrPort(addr, port);
+    }
+
+    // Encode "ATYP(04) <v4-mapped IPv6> <port>". The client's UDP socket learns its own
+    // address through a dual-stack probe, so it sees v4-mapped IPv6; the sender field
+    // must match that form for the datagram-sender comparison to hold.
+    static QByteArray encodeAddrPortV6(const QHostAddress &addr, quint16 port)
+    {
+        const Q_IPV6ADDR a6 = addr.toIPv6Address();
+        QByteArray b;
+        b.append(char(0x04));
+        for (int i = 0; i < 16; ++i)
+            b.append(char(a6[i]));
+        b.append(char((port >> 8) & 0xff)).append(char(port & 0xff));
+        return b;
+    }
+
+    // SOCKS5 BIND: listen on an ephemeral port and tell the client which one via the
+    // first reply; on the first incoming connection send the second reply (its peer)
+    // and relay bytes over the same control socket. The peer reaches this port through
+    // the ordinary CONNECT path, so no special-casing of the listen port is needed.
+    void startBind(QTcpSocket *control)
+    {
+        QTcpServer *bindServer = new QTcpServer(control);
+        bindServer->listen(control->localAddress(), 0);
+        bindServer->setProperty("bindControl", QVariant::fromValue<QObject *>(control));
+        control->write(socksReply(0x00, bindServer->serverAddress(), bindServer->serverPort()));
+        connect(bindServer, &QTcpServer::newConnection, this, &SocksService::onBindConnection);
+    }
+
+    void onBindConnection()
+    {
+        QTcpServer *bindServer = qobject_cast<QTcpServer *>(sender());
+        QTcpSocket *control = qobject_cast<QTcpSocket *>(bindServer->property("bindControl").value<QObject *>());
+        QTcpSocket *incoming = bindServer->nextPendingConnection();
+        // BIND relays a single connection, so stop listening.
+        bindServer->close();
+        control->write(socksReply(0x00, incoming->peerAddress(), incoming->peerPort()));
+        linkPeers(control, incoming);
+        connect(incoming, &QTcpSocket::readyRead, this, &SocksService::relayReadyRead);
+        connect(control, &QTcpSocket::readyRead, this, &SocksService::relayReadyRead);
+        connect(incoming, &QTcpSocket::disconnected, this, &SocksService::relayDisconnected);
+        connect(control, &QTcpSocket::disconnected, this, &SocksService::relayDisconnected);
+    }
+
+    // A live SOCKS5 UDP association. Its relay socket doubles as the endpoint peers
+    // target: QSocks5SocketEngine reports the relay endpoint as the client's own
+    // localAddress (via the bootstrap probe), so peers address each other by it.
+    struct UdpAssoc
+    {
+        UdpAssoc() : control(0), relay(0), clientPort(0) {}
+        QTcpSocket *control;
+        QUdpSocket *relay;
+        QHostAddress clientAddr;
+        quint16 clientPort; // the client's real UDP source; nonzero once its first datagram lands.
+    };
+    QList<UdpAssoc *> m_udpAssocs;
+
+    // SOCKS5 UDP ASSOCIATE: hand the client a relay endpoint, then forward datagrams
+    // between associations, rewriting the SOCKS5 header's sender to the source relay
+    // endpoint (which is what the receiving peer knows the sender as).
+    void startUdpAssociate(QTcpSocket *control)
+    {
+        UdpAssoc *assoc = new UdpAssoc;
+        assoc->control = control;
+        assoc->relay = new QUdpSocket(control);
+        assoc->relay->bind(control->localAddress(), 0);
+        m_udpAssocs.append(assoc);
+        control->write(socksReply(0x00, assoc->relay->localAddress(), assoc->relay->localPort()));
+        connect(assoc->relay, &QUdpSocket::readyRead, this, &SocksService::onUdpRelayReady);
+        connect(control, &QTcpSocket::disconnected, this, &SocksService::onUdpControlGone);
+    }
+
+    void onUdpRelayReady()
+    {
+        QObject *relay = sender();
+        for (int i = 0; i < m_udpAssocs.size(); ++i)
+            if (m_udpAssocs.at(i)->relay == relay) { onUdpRelay(m_udpAssocs.at(i)); return; }
+    }
+
+    void onUdpControlGone()
+    {
+        QObject *control = sender();
+        for (int i = 0; i < m_udpAssocs.size(); ++i)
+            if (m_udpAssocs.at(i)->control == control) {
+                UdpAssoc *a = m_udpAssocs.takeAt(i);
+                delete a->relay;
+                delete a;
+                return;
+            }
+    }
+
+    void onUdpRelay(UdpAssoc *assoc)
+    {
+        while (assoc->relay->hasPendingDatagrams()) {
+            QByteArray dg(int(assoc->relay->pendingDatagramSize()), 0);
+            QHostAddress from;
+            quint16 fromPort = 0;
+            assoc->relay->readDatagram(dg.data(), dg.size(), &from, &fromPort);
+            assoc->clientAddr = from; // the client's real UDP source, for delivery back.
+            assoc->clientPort = fromPort;
+            if (dg.size() < 4 || dg.at(0) != 0 || dg.at(1) != 0 || dg.at(2) != 0)
+                continue; // RSV(2)+FRAG(1) must be zero; fragmentation is unsupported.
+            const quint8 atyp = quint8(dg.at(3));
+            int pos = 4;
+            QHostAddress dst;
+            if (atyp == 0x01) {
+                dst = QHostAddress(qFromBigEndian<quint32>((const uchar *)dg.constData() + pos));
+                pos += 4;
+            } else if (atyp == 0x04) {
+                Q_IPV6ADDR a6;
+                for (int i = 0; i < 16; ++i)
+                    a6[i] = quint8(dg.at(pos + i));
+                dst = QHostAddress(a6);
+                pos += 16;
+            } else if (atyp == 0x03) {
+                pos += 1 + quint8(dg.at(pos)); // domain: length byte then name.
+            } else {
+                continue;
+            }
+            if (dg.size() < pos + 2)
+                continue;
+            const quint16 dport = qFromBigEndian<quint16>((const uchar *)dg.constData() + pos);
+            pos += 2;
+            const QByteArray payload = dg.mid(pos);
+            if (payload.isEmpty()) {
+                // Bootstrap probe: replying to the DST lets the client read this relay's
+                // endpoint (this datagram's sender) as its own local address.
+                assoc->relay->writeDatagram(QByteArray(), dst, dport);
+                continue;
+            }
+            Q_UNUSED(dst); // routing is by relay port, which is unique per association.
+            for (int i = 0; i < m_udpAssocs.size(); ++i) {
+                UdpAssoc *target = m_udpAssocs.at(i);
+                if (target->relay->localPort() == dport && target->clientPort != 0) {
+                    // Sender = this association's relay endpoint, which is what the peer
+                    // knows the sender as; v4-mapped IPv6 to match its own dual-stack view.
+                    const QByteArray out = QByteArray(3, char(0))
+                        + encodeAddrPortV6(assoc->relay->localAddress(), assoc->relay->localPort())
+                        + payload;
+                    target->relay->writeDatagram(out, target->clientAddr, target->clientPort);
+                    break;
+                }
+            }
         }
     }
 };
@@ -730,16 +963,20 @@ public:
     {
         QUdpSocket *dns = new QUdpSocket(this);
         bindUdp(dns);
-        connect(dns, &QUdpSocket::readyRead, dns, [this, dns]() {
-            while (dns->hasPendingDatagrams()) {
-                QByteArray query(int(dns->pendingDatagramSize()), Qt::Uninitialized);
-                QHostAddress from; quint16 fromPort;
-                dns->readDatagram(query.data(), query.size(), &from, &fromPort);
-                const QByteArray reply = buildReply(query);
-                if (!reply.isEmpty())
-                    dns->writeDatagram(reply, from, fromPort);
-            }
-        });
+        connect(dns, &QUdpSocket::readyRead, this, &DnsService::onReadyRead);
+    }
+
+    void onReadyRead()
+    {
+        QUdpSocket *dns = qobject_cast<QUdpSocket *>(sender());
+        while (dns->hasPendingDatagrams()) {
+            QByteArray query(int(dns->pendingDatagramSize()), Qt::Uninitialized);
+            QHostAddress from; quint16 fromPort;
+            dns->readDatagram(query.data(), query.size(), &from, &fromPort);
+            const QByteArray reply = buildReply(query);
+            if (!reply.isEmpty())
+                dns->writeDatagram(reply, from, fromPort);
+        }
     }
 
 private:
@@ -814,43 +1051,53 @@ private:
             base = labels.at(0); zone = labels.mid(1);
         }
 
-        QByteArray answers;
-        int answerCount = 0;
-        const bool known = appendRecords(base, qtype, zone, answers, answerCount);
+        const bool known = appendRecords(base, qtype, zone);
 
         QByteArray reply = query.left(2);                 // copy the query id
         reply += u16(known ? 0x8580 : 0x8583);            // QR + AA + RD + RA; rcode 3 when unknown
         reply += u16(1);                                  // one question
-        reply += u16(quint16(answerCount));
+        reply += u16(quint16(m_rrCount));
         reply += u16(0); reply += u16(0);                 // no authority / additional
         reply += query.mid(12, questionEnd - 12);         // echo the question
-        reply += answers;
+        reply += m_rrOut;
         return reply;
     }
 
-    // Appends the resource records for base+qtype; returns false for an unknown base so the
-    // caller answers NXDOMAIN. zone is the trailing labels appended to relative targets.
-    bool appendRecords(const QByteArray &base, quint16 qtype, const QList<QByteArray> &zone,
-                       QByteArray &out, int &count)
+    // The add*/relName/absName emit helpers below append to these scratch fields; one
+    // appendRecords() call runs synchronously at a time, so plain members are enough (and
+    // keep the dispatch table free of a lambda per record, which the XD tree forbids).
+    QByteArray m_rrOut;
+    int m_rrCount;
+    // Trailing zone labels appended to relative targets.
+    QList<QByteArray> m_rrZone;
+
+    // A relative target ("multi") becomes "multi.<zone>"; an absolute one keeps its labels.
+    QByteArray relName(const char *n) const
+    {
+        QList<QByteArray> ls = QByteArray(n).split('.');
+        ls += m_rrZone;
+        return encodeName(ls);
+    }
+    static QByteArray absName(const char *n) { return encodeName(QByteArray(n).split('.')); }
+    void addA(const char *ip) { m_rrOut += rr(T_A, aRdata(ip)); ++m_rrCount; }
+    void addAAAA(const char *ip) { m_rrOut += rr(T_AAAA, aaaaRdata(ip)); ++m_rrCount; }
+    void addMX(quint16 pref, const char *tgt) { m_rrOut += rr(T_MX, u16(pref) + relName(tgt)); ++m_rrCount; }
+    void addNS(const char *tgt) { m_rrOut += rr(T_NS, absName(tgt)); ++m_rrCount; }
+    void addPTR(const char *tgt) { m_rrOut += rr(T_PTR, relName(tgt)); ++m_rrCount; }
+    void addSRV(quint16 p, quint16 w, quint16 port, const char *tgt)
+    {
+        m_rrOut += rr(T_SRV, u16(p) + u16(w) + u16(port) + relName(tgt)); ++m_rrCount;
+    }
+    void addTXT(const QByteArray &s) { m_rrOut += rr(T_TXT, txtChunk(s)); ++m_rrCount; }
+
+    // Appends the resource records for base+qtype into m_rrOut/m_rrCount; returns false for an
+    // unknown base so the caller answers NXDOMAIN. zone is appended to relative targets.
+    bool appendRecords(const QByteArray &base, quint16 qtype, const QList<QByteArray> &zone)
     {
         const bool any = (qtype == T_ANY);
-        // A relative target ("multi") becomes "multi.<zone>"; an absolute one keeps its labels.
-        const QList<QByteArray> zoneLabels = zone;
-        auto relName = [zoneLabels](const char *n) {
-            QList<QByteArray> ls = QByteArray(n).split('.');
-            ls += zoneLabels;
-            return encodeName(ls);
-        };
-        auto absName = [](const char *n) { return encodeName(QByteArray(n).split('.')); };
-        auto addA = [&](const char *ip) { out += rr(T_A, aRdata(ip)); ++count; };
-        auto addAAAA = [&](const char *ip) { out += rr(T_AAAA, aaaaRdata(ip)); ++count; };
-        auto addMX = [&](quint16 pref, const char *tgt) { out += rr(T_MX, u16(pref) + relName(tgt)); ++count; };
-        auto addNS = [&](const char *tgt) { out += rr(T_NS, absName(tgt)); ++count; };
-        auto addPTR = [&](const char *tgt) { out += rr(T_PTR, relName(tgt)); ++count; };
-        auto addSRV = [&](quint16 p, quint16 w, quint16 port, const char *tgt) {
-            out += rr(T_SRV, u16(p) + u16(w) + u16(port) + relName(tgt)); ++count;
-        };
-        auto addTXT = [&](const QByteArray &s) { out += rr(T_TXT, txtChunk(s)); ++count; };
+        m_rrOut.clear();
+        m_rrCount = 0;
+        m_rrZone = zone;
 
         if (base == "a-single") { if (any || qtype == T_A) addA("192.0.2.1"); }
         else if (base == "a-multi") { if (any || qtype == T_A) { addA("192.0.2.1"); addA("192.0.2.2"); addA("192.0.2.3"); } }
@@ -878,7 +1125,7 @@ private:
             }
         }
         else if (base == "txt-single") { if (any || qtype == T_TXT) addTXT("Hello"); }
-        else if (base == "txt-multi-onerr") { if (any || qtype == T_TXT) { out += rr(T_TXT, txtChunk("Hello") + txtChunk("World")); ++count; } }
+        else if (base == "txt-multi-onerr") { if (any || qtype == T_TXT) { m_rrOut += rr(T_TXT, txtChunk("Hello") + txtChunk("World")); ++m_rrCount; } }
         else if (base == "txt-multi-multirr") { if (any || qtype == T_TXT) { addTXT("Hello"); addTXT("World"); } }
         else { return false; } // unknown base -> NXDOMAIN
 
@@ -901,14 +1148,18 @@ public:
     {
         QTcpServer *server = new QTcpServer(this);
         listenTcp(server);
-        connect(server, &QTcpServer::newConnection, server, [server]() {
-            QTcpSocket *c = server->nextPendingConnection();
-            connect(c, &QTcpSocket::readyRead, c, [c]() { onImap(c); });
-            connect(c, &QTcpSocket::disconnected, c, &QObject::deleteLater);
-            // Greeting: must start with "* OK " and end with "server ready\r\n".
-            c->write("* OK [CAPABILITY IMAP4rev1] server-dummy IMAP server ready\r\n");
-        });
+        connect(server, &QTcpServer::newConnection, this, &ImapService::onNewConnection);
     }
+
+    void onNewConnection()
+    {
+        QTcpSocket *c = qobject_cast<QTcpServer *>(sender())->nextPendingConnection();
+        connect(c, &QTcpSocket::readyRead, this, &ImapService::onReadyRead);
+        connect(c, &QTcpSocket::disconnected, c, &QObject::deleteLater);
+        // Greeting: must start with "* OK " and end with "server ready\r\n".
+        c->write("* OK [CAPABILITY IMAP4rev1] server-dummy IMAP server ready\r\n");
+    }
+    void onReadyRead() { onImap(qobject_cast<QTcpSocket *>(sender())); }
 
 private:
     static void onImap(QTcpSocket *c)

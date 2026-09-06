@@ -246,12 +246,12 @@ void tst_QFtp::initTestCase()
     m_ftpServer = TestEnv::getServer(TestServer::FileTransfer);
     QVERIFY2(m_ftpServer && m_ftpServer->isRunning(), "server-dummy (ftp) did not start");
     m_ftpServer->setFolder(m_fixtureDir);
-    m_ftpPort = quint16(m_ftpServer->tryPort(21));
+    m_ftpPort = m_ftpServer->tryPort(21);
     m_host = m_ftpServer->domainName();
     m_socksServer = TestEnv::getServer(TestServer::WebProxy);
     QVERIFY2(m_socksServer && m_socksServer->isRunning(), "server-dummy (socks) did not start");
     m_socksHost = m_socksServer->domainName();
-    m_socksPort = quint16(m_socksServer->echoPort());
+    m_socksPort = m_socksServer->echoPort();
 }
 
 void tst_QFtp::cleanupTestCase()

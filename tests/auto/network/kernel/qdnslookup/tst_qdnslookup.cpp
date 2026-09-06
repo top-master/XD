@@ -251,7 +251,7 @@ void tst_QDnsLookup::lookupServerDummy()
     m_dnsServer = TestEnv::getServer(TestServer::NameLookup);
     QVERIFY2(m_dnsServer && m_dnsServer->isRunning(), "server-dummy (dns) did not start");
     QString detail;
-    const bool ok = runLookup(QHostAddress(QHostAddress::LocalHost), quint16(m_dnsServer->port()), &detail);
+    const bool ok = runLookup(QHostAddress(QHostAddress::LocalHost), m_dnsServer->port(), &detail);
     // server-dummy is our own code and must match exactly, so here a mismatch IS a hard failure.
     QVERIFY2(ok, qPrintable(QStringLiteral("server-dummy DNS mismatch: ") + detail));
     m_serverDummyPassed.insert(QTest::currentDataTag());

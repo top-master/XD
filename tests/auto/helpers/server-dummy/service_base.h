@@ -10,6 +10,7 @@
 #define SERVICE_BASE_H
 
 #include <QtCore/QObject>
+#include <QtCore/QVariant>
 #include <QtNetwork/QHostAddress>
 #include <QtNetwork/QTcpServer>
 #include <QtNetwork/QTcpSocket>
@@ -44,6 +45,62 @@ protected:
     static void reply(QTcpSocket *c, int code, const char *text)
     {
         c->write(QByteArray::number(code) + ' ' + text + "\r\n");
+    }
+
+    // --- Generic byte relay, so per-connection handlers can be plain member functions
+    // rather than lambdas (MSVC 2010 cannot compile a lambda nested inside another
+    // lambda). Two sockets are linked with linkPeers(); each recovers its partner from a
+    // "peer" property, and the emitting socket from sender(). Optional "connectReply" /
+    // "errorReply" / "closeOnError" properties on an upstream socket drive the tunnel
+    // handshake replies. All are wired via the pointer-to-member connect() overload,
+    // which needs neither moc nor a lambda.
+    static void linkPeers(QObject *a, QObject *b)
+    {
+        a->setProperty("peer", QVariant::fromValue<QObject *>(b));
+        b->setProperty("peer", QVariant::fromValue<QObject *>(a));
+    }
+    static QTcpSocket *peerOf(const QObject *s)
+    {
+        return s ? qobject_cast<QTcpSocket *>(s->property("peer").value<QObject *>()) : Q_NULLPTR;
+    }
+
+    void relayReadyRead()
+    {
+        QTcpSocket *s = qobject_cast<QTcpSocket *>(sender());
+        QTcpSocket *peer = peerOf(s);
+        if (s && peer)
+            peer->write(s->readAll());
+    }
+    void relayDisconnected()
+    {
+        QTcpSocket *s = qobject_cast<QTcpSocket *>(sender());
+        QTcpSocket *peer = peerOf(s);
+        if (s && peer) {
+            // Flush any final bytes, then close so the peer sees EOF.
+            peer->write(s->readAll());
+            peer->disconnectFromHost();
+        }
+    }
+    void onTunnelConnected()
+    {
+        QTcpSocket *up = qobject_cast<QTcpSocket *>(sender());
+        if (!up)
+            return;
+        up->setProperty("up", true);
+        if (QTcpSocket *client = peerOf(up))
+            client->write(up->property("connectReply").toByteArray());
+    }
+    void onTunnelError()
+    {
+        QTcpSocket *up = qobject_cast<QTcpSocket *>(sender());
+        // A close once relaying has begun is normal, not a handshake failure.
+        if (!up || up->property("up").toBool())
+            return;
+        if (QTcpSocket *client = peerOf(up)) {
+            client->write(up->property("errorReply").toByteArray());
+            if (up->property("closeOnError").toBool())
+                client->disconnectFromHost();
+        }
     }
 
     QHostAddress m_host;

@@ -46,6 +46,7 @@
 #include <QtTest/QtTest>
 
 #include "../../../helpers/assertion.h"
+#include "../../../helpers/testenv.h"
 
 #ifndef Q_OS_WIN
 #include <unistd.h>
@@ -122,6 +123,8 @@ private slots:
 private:
 #ifndef QT_NO_BEARERMANAGEMENT
     QNetworkSession *networkSession;
+    QRef<TestServer> m_proxyServer; // server-dummy providing the SOCKS5 proxy for the WithSocks5Proxy rows
+    quint16 m_socksPort;
 #endif
     QString crashingServerDir;
 };
@@ -172,6 +175,15 @@ void tst_QTcpServer::initTestCase()
     networkSession = new QNetworkSession(man.defaultConfiguration(), this);
     qExpect(networkSession)->to<OpenBefore>(30000);
 #endif
+    // The SOCKS5 rows drive an application proxy; provide it via server-dummy rather than
+    // a hard-coded port. tryPort aims for the canonical 1080 but falls back to a free port,
+    // and the SOCKS5 service listens on the secondary (echo) port.
+    m_socksPort = 1080;
+    m_proxyServer = TestEnv::getServer(TestServer::WebProxy);
+    if (m_proxyServer && m_proxyServer->isRunning()) {
+        m_proxyServer->tryPort(1080);
+        m_socksPort = m_proxyServer->echoPort();
+    }
 }
 
 void tst_QTcpServer::init()
@@ -181,7 +193,7 @@ void tst_QTcpServer::init()
 #ifndef QT_NO_NETWORKPROXY
         QFETCH_GLOBAL(int, proxyType);
         if (proxyType == QNetworkProxy::Socks5Proxy) {
-            QNetworkProxy::setApplicationProxy(QNetworkProxy(QNetworkProxy::Socks5Proxy, QtNetworkSettings::serverName(), 1080));
+            QNetworkProxy::setApplicationProxy(QNetworkProxy(QNetworkProxy::Socks5Proxy, m_proxyServer->domainName(), m_socksPort));
         }
 #else // !QT_NO_NETWORKPROXY
         QSKIP("No proxy support");

@@ -181,8 +181,8 @@ void tst_QSocks5SocketEngine::initTestCase()
     QVERIFY2(m_server && m_server->isRunning(), "server-dummy (imap+socks) did not start");
     m_addr = TestEnv::serverAddress();
     m_hostName = m_server->domainName();
-    m_imapPort = quint16(m_server->tryPort(143));
-    m_socksPort = quint16(m_server->echoPort());
+    m_imapPort = m_server->tryPort(143);
+    m_socksPort = m_server->echoPort();
 }
 
 void tst_QSocks5SocketEngine::init()
@@ -483,7 +483,6 @@ void tst_QSocks5SocketEngine::tcpLoopbackPerformance()
 //---------------------------------------------------------------------------
 void tst_QSocks5SocketEngine::serverTest()
 {
-    QSKIP("SOCKS5 BIND is not implemented by server-dummy (needs two-stage BIND relay).");
     QSocks5SocketEngine server;
 
     // Initialize a Tcp socket
@@ -560,7 +559,6 @@ void tst_QSocks5SocketEngine::serverTest()
 //---------------------------------------------------------------------------
 void tst_QSocks5SocketEngine::udpTest()
 {
-    QSKIP("SOCKS5 UDP ASSOCIATE is not implemented by server-dummy.");
     QSocks5SocketEngine udpSocket;
 
     // Initialize device #1
@@ -795,8 +793,12 @@ void tst_QSocks5SocketEngine::tcpSocketNonBlocking_closed()
 
 void tst_QSocks5SocketEngine::downloadBigFile()
 {
-    QSKIP("Needs a 10 MB HTTP /qtest/mediumfile on port 80; not provided by server-dummy.");
     QSocks5SocketEngineHandler socks5;
+
+    // This test bypasses the SOCKS5 proxy and connects directly to an HTTP responder, so
+    // it needs the WebProxy server-dummy (this suite otherwise runs the IMAP+SOCKS one).
+    QRef<TestServer> web = TestEnv::getServer(TestServer::WebProxy);
+    QVERIFY2(web && web->isRunning(), "server-dummy (web) did not start");
 
     if (tmpSocket)
         delete tmpSocket;
@@ -805,7 +807,9 @@ void tst_QSocks5SocketEngine::downloadBigFile()
     connect(tmpSocket, SIGNAL(connected()), SLOT(exitLoopSlot()));
     connect(tmpSocket, SIGNAL(readyRead()), SLOT(downloadBigFileSlot()));
 
-    tmpSocket->connectToHost(QtNetworkSettings::serverName(), 80);
+    // Aim for the canonical port 80 but fall back to the server's actual port when it
+    // cannot be bound (a non-root run), then serve /qtest/mediumfile from there.
+    tmpSocket->connectToHost(web->domainName(), web->tryPort(80));
 
     QTestEventLoop::instance().enterLoop(30);
     if (QTestEventLoop::instance().timeout())

@@ -124,7 +124,7 @@ void tst_PlatformSocketEngine::initTestCase()
     m_imapServer = TestEnv::getServer(TestServer::MailProxy);
     QVERIFY2(m_imapServer && m_imapServer->isRunning(), "server-dummy (imap) did not start");
     m_imapAddr = TestEnv::serverAddress();
-    m_imapPort = quint16(m_imapServer->tryPort(143));
+    m_imapPort = m_imapServer->tryPort(143);
 }
 
 void tst_PlatformSocketEngine::init()

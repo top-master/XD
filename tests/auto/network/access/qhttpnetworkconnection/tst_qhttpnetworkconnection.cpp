@@ -124,7 +124,7 @@ void tst_QHttpNetworkConnection::initTestCase()
     m_server = TestEnv::getServer(TestServer::WebProxy);
     QVERIFY2(m_server && m_server->isRunning(), "server-dummy (http) did not start");
     m_host = m_server->domainName();
-    m_port = quint16(m_server->tryPort(80));
+    m_port = m_server->tryPort(80);
 }
 
 void tst_QHttpNetworkConnection::cleanupTestCase()
