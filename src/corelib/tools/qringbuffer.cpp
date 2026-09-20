@@ -1,5 +1,6 @@
 /****************************************************************************
 **
+** Copyright (C) 2015 The XD Company Ltd.
 ** Copyright (C) 2015 The Qt Company Ltd.
 ** Copyright (C) 2015 Alex Trotsenko <alex1973tr@gmail.com>
 ** Contact: http://www.qt.io/licensing/
@@ -41,9 +42,8 @@ QT_BEGIN_NAMESPACE
 /*!
     \internal
 
-    Access the bytes at a specified position the out-variable length will
-    contain the amount of bytes readable from there, e.g. the amount still
-    the same QByteArray
+    Return a pointer to the bytes at \a pos; set \a length to how many readable
+    bytes follow it inside the same block.
 */
 const char *QRingBuffer::readPointerAtPosition(qint64 pos, qint64 &length) const
 {
@@ -193,20 +193,42 @@ void QRingBuffer::clear()
     bufferSize = 0;
 }
 
-qint64 QRingBuffer::indexOf(char c, qint64 maxLength) const
+qint64 QRingBuffer::indexOf(char c, qint64 maxLength, qint64 pos) const
 {
-    qint64 index = 0;
-    qint64 j = head;
-    for (int i = 0; index < maxLength && i < buffers.size(); ++i) {
-        const char *ptr = buffers[i].constData() + j;
-        j = qMin(index + (i == tailBuffer ? tail : buffers[i].size()) - j, maxLength);
+    if (maxLength <= 0 || pos < 0)
+        return -1;
 
-        while (index < j) {
-            if (*ptr++ == c)
-                return index;
-            ++index;
+    // stopPos is the absolute offset (exclusive) to stop scanning at; scanPos is the absolute readable
+    // offset from head; offsetInBlock is the byte offset inside the current block.
+    const qint64 stopPos = pos + maxLength;
+    qint64 scanPos = 0;
+    int offsetInBlock = head;
+    for (int bufferIndex = 0;
+         scanPos < stopPos && bufferIndex < buffers.size(); ++bufferIndex) {
+        const qint64 blockBytes =
+                (bufferIndex == tailBuffer ? tail : buffers[bufferIndex].size());
+        const qint64 blockEndPos = scanPos + (blockBytes - offsetInBlock);
+
+        // This whole block sits before the requested start, so skip past it.
+        if (blockEndPos <= pos) {
+            scanPos = blockEndPos;
+            offsetInBlock = 0;
+            continue;
         }
-        j = 0;
+        // The requested start falls inside this block, so jump into it.
+        if (scanPos < pos) {
+            offsetInBlock += int(pos - scanPos);
+            scanPos = pos;
+        }
+
+        const char *cursor = buffers[bufferIndex].constData() + offsetInBlock;
+        const qint64 scanLimit = qMin(blockEndPos, stopPos);
+        while (scanPos < scanLimit) {
+            if (*cursor++ == c)
+                return scanPos;
+            ++scanPos;
+        }
+        offsetInBlock = 0;
     }
     return -1;
 }
@@ -296,6 +318,21 @@ void QRingBuffer::append(const QByteArray &qba)
     }
     tail = qba.size();
     bufferSize += tail;
+}
+
+/*!
+    \internal
+
+    Add \a size raw bytes from \a data at the end.
+*/
+void QRingBuffer::append(const char *data, qint64 size)
+{
+    if (size <= 0)
+        return;
+
+    char *writePtr = reserve(size);
+    if (writePtr)
+        memcpy(writePtr, data, size);
 }
 
 qint64 QRingBuffer::readLine(char *data, qint64 maxLength)
