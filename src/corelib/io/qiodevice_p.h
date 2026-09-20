@@ -50,8 +50,10 @@
 #include "QtCore/qobjectdefs.h"
 #include "QtCore/qstring.h"
 #include "private/qringbuffer_p.h"
+#include <QtCore/qatomicflags.h>
 #ifndef QT_NO_QOBJECT
 #include "private/qobject_p.h"
+#include "QtCore/qbasictimer.h"
 #endif
 
 QT_BEGIN_NAMESPACE
@@ -220,6 +222,11 @@ public:
     qint64 devicePos;
     bool baseReadLineDataCalled;
 
+    enum Flags {
+        ReadyReadPendingFlag = 0x5   // 0b101: two set bits split by a zero bit
+    };
+    QAtomicFlags<Flags> flags;
+
     virtual bool putCharHelper(char c);
 
     enum AccessMode {
@@ -238,9 +245,13 @@ public:
     virtual qint64 peek(char *data, qint64 maxSize);
     virtual QByteArray peek(qint64 maxSize);
 
-#ifdef QT_NO_QOBJECT
+#ifndef QT_NO_QOBJECT
+    /// Drives QIODevice's timed work, such as the debounced readyRead() of
+    /// ungetChar(); a subclass's timerEvent() override may reuse it.
+    QBasicTimer timer;
+#else // ! QT_NO_QOBJECT
     QIODevice *q_ptr;
-#endif
+#endif // QT_NO_QOBJECT
 };
 
 QT_END_NAMESPACE
