@@ -37,6 +37,7 @@
 
 #include <QtTest/qtest_global.h>
 #include <QtTest/qtestcase.h>
+#include <QtTest/qtestrule.h>
 #include <QtTest/qtestdata.h>
 #include <QtTest/qbenchmark.h>
 

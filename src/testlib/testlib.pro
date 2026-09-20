@@ -23,6 +23,7 @@ HEADERS = qbenchmark.h \
     qtestaccessible.h \
     qtestassert.h \
     qtestcase.h \
+    qtestrule.h \
     qtestlog_p.h \
     qtestdata.h \
     qtestexpectation.h \
@@ -44,6 +45,7 @@ HEADERS = qbenchmark.h \
 
 SOURCES = \
     qtestcase.cpp \
+    qtestrule.cpp \
     qtestlog.cpp \
     qtesttable.cpp \
     qtestdata.cpp \
