@@ -34,6 +34,7 @@
 ****************************************************************************/
 
 #include <QtTest/qtestcase.h>
+#include <QtTest/qtestrule.h>
 #include <QtTest/qtestassert.h>
 
 #include <QtCore/qbytearray.h>
@@ -2385,6 +2386,8 @@ static bool qInvokeTestMethod(const char *slotName, const char *data, WatchDog *
     slot[strlen(slot) - 2] = '\0';
     QTestResult::setCurrentTestFunction(slot);
 
+    QTestRule::runBeforeEach();
+
     const QTestTable *gTable = QTestTable::globalTestTable();
     const int globalDataCount = gTable->dataCount();
     int curGlobalDataIndex = 0;
@@ -2456,6 +2459,7 @@ static bool qInvokeTestMethod(const char *slotName, const char *data, WatchDog *
     result = true;
 
 posEndFunc:
+    QTestRule::runAfterEach();
     // Restores global state to the defaults.
     QTestResult::finishedCurrentTestFunction();
     QTestResult::setSkipCurrentTest(false);
@@ -2769,6 +2773,8 @@ static bool qInvokeTestMethods(QObject *testObject)
     if (!QTestResult::skipCurrentTest() && !QTest::currentTestFailed()) {
         invokeMethod(testObject, "initTestCase()");
 
+        QTestRule::runBeforeClass();
+
         // finishedCurrentTestDataCleanup() resets QTestResult::currentTestFailed(), so use a local copy.
         const bool previousFailed = QTestResult::currentTestFailed();
         QTestResult::finishedCurrentTestData();
@@ -2812,6 +2818,9 @@ static bool qInvokeTestMethods(QObject *testObject)
         QTestResult::setBlacklistCurrentTest(false);
         QTestResult::setCurrentTestFunction("cleanupTestCase");
         invokeMethod(testObject, "cleanupTestCase()");
+
+        QTestRule::runAfterClassAndClear();
+
         QTestResult::finishedCurrentTestData();
         QTestResult::finishedCurrentTestDataCleanup();
     }
