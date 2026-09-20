@@ -1,5 +1,6 @@
 /****************************************************************************
 **
+** Copyright (C) 2015 The XD Company Ltd.
 ** Copyright (C) 2015 The Qt Company Ltd.
 ** Contact: http://www.qt.io/licensing/
 **
@@ -58,6 +59,9 @@ public:
         buffers.append(QByteArray());
     }
 
+    inline void setChunkSize(int size) { basicBlockSize = size; }
+    inline int chunkSize() const { return basicBlockSize; }
+
     inline qint64 nextDataBlockSize() const {
         return (tailBuffer == 0 ? tail : buffers.first().size()) - head;
     }
@@ -114,11 +118,19 @@ public:
 
     Q_CORE_EXPORT void clear();
     inline qint64 indexOf(char c) const { return indexOf(c, size()); }
-    Q_CORE_EXPORT qint64 indexOf(char c, qint64 maxLength) const;
+    Q_CORE_EXPORT qint64 indexOf(char c, qint64 maxLength, qint64 pos = 0) const;
     Q_CORE_EXPORT qint64 read(char *data, qint64 maxLength);
     Q_CORE_EXPORT QByteArray read();
+
+    inline QByteArray readAll() {
+        QByteArray result;
+        result.resize(int(size()));
+        result.resize(int(read(result.data(), result.size())));
+        return result;
+    }
     Q_CORE_EXPORT qint64 peek(char *data, qint64 maxLength, qint64 pos = 0) const;
     Q_CORE_EXPORT void append(const QByteArray &qba);
+    Q_CORE_EXPORT void append(const char *data, qint64 size);
 
     inline qint64 skip(qint64 length) {
         return read(0, length);
@@ -134,7 +146,7 @@ private:
     QList<QByteArray> buffers;
     int head, tail;
     int tailBuffer; // always buffers.size() - 1
-    const int basicBlockSize;
+    int basicBlockSize;
     qint64 bufferSize;
 };
 
