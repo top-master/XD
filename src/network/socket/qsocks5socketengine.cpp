@@ -1173,6 +1173,15 @@ void QSocks5SocketEnginePrivate::_q_controlSocketReadNotification()
             break;
         case RequestMethodSent:
             parseRequestMethodReply();
+            // TRACE/corelib ungetChar: announce pushed-back bytes via a debounced readyRead #2,
+            // hence the coalesced greeting parseRequestMethodReply() just ungetChar'd here (an FTP
+            // server's 220 arriving in the same read as the CONNECT reply) now reaches the reader on
+            // its own; else this engine-local drain would be needed here, kept commented as a fallback
+            // were #1 ever reverted:
+            // ```
+            // if (socks5State == Connected && data->controlSocket->bytesAvailable())
+            //     _q_controlSocketReadNotification();
+            // ```
             break;
         case Connected: {
             QByteArray buf;
