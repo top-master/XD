@@ -157,6 +157,10 @@ protected:
 
     void setErrorString(const QString &errorString);
 
+#ifndef QT_NO_QOBJECT
+    void timerEvent(QTimerEvent *event) Q_DECL_OVERRIDE;
+#endif
+
 #ifdef QT_NO_QOBJECT
     QScopedPointer<QIODevicePrivate> d_ptr;
 #endif
