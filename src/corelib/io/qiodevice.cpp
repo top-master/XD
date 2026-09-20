@@ -39,6 +39,9 @@
 #include "qbytearray.h"
 #include "qdebug.h"
 #include "qiodevice_p.h"
+#ifndef QT_NO_QOBJECT
+#include "qcoreevent.h"
+#endif
 #include "qfile.h"
 #include "qstringlist.h"
 #include "qdir.h"
@@ -1437,9 +1440,56 @@ void QIODevice::ungetChar(char c)
 #endif
 
     d->buffer.ungetChar(c);
-    if (!d->isSequential())
+    const bool wasSequential = d->isSequential();
+    if (!wasSequential)
         --d->pos;
+
+    // TRACE/corelib ungetChar: announce pushed-back bytes via a debounced readyRead #1,
+    // ungetChar() makes bytes available in the read buffer but by itself raises no readyRead, and a
+    // select()-based wait sees no NEW kernel data (the bytes live in Qt's userspace buffer). So any
+    // waiter that only wakes on readyRead -- an event-loop reader, or one blocked in
+    // waitForReadyRead() -- would sit there while the bytes it needs are already in hand. (Seen as a
+    // ~60s hang: QSocks5SocketEngine ungetChar's a server's greeting back onto its control socket
+    // after the CONNECT reply; nothing then delivered it.) Fixing it here, at the source, covers every
+    // sequential device. Random-access devices are read synchronously and have no readyRead-waiter to
+    // strand, so they are left alone. The announce is DEBOUNCED through readyReadTimer (fired in
+    // timerEvent()): the first pushed-back byte wins ReadyReadPendingFlag and arms one 100 ms timer, a
+    // burst then rides that timer, and the reader wakes ONCE rather than one queued readyRead per byte.
+#ifndef QT_NO_QOBJECT
+    if (wasSequential) {
+        // Arm the debounce only when we WIN the race to set the flag (it was clear); a later byte in
+        // the same burst loses the race and rides the live timer.
+        if (d->flags.append(QIODevicePrivate::ReadyReadPendingFlag)) {
+            d->readyReadTimer.start(100, this);
+        }
+    }
+#endif
 }
+
+#ifndef QT_NO_QOBJECT
+/*!
+    \internal
+    \reimp
+
+    Fires the debounced ungetChar() readyRead (see ungetChar's TRACE): claim the pending debounce
+    atomically -- if it was already cleared, a stale timer fire is ignored -- then stop the timer and
+    emit readyRead() once. Any other timer id is passed to the base class.
+*/
+void QIODevice::timerEvent(QTimerEvent *event)
+{
+    Q_D(QIODevice);
+    if (event->timerId() == d->readyReadTimer.timerId()) {
+        // remove() wins the race to clear the flag iff the debounce is still pending: then disarm and
+        // announce once. A stale fire whose flag was already cleared does nothing.
+        if (d->flags.remove(QIODevicePrivate::ReadyReadPendingFlag)) {
+            d->readyReadTimer.stop();
+            emit readyRead();
+        }
+    } else {
+        QObject::timerEvent(event);
+    }
+}
+#endif
 
 /*! \fn bool QIODevice::putChar(char c)
 
