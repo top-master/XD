@@ -73,7 +73,9 @@ public:
         Append = 0x0004,
         Truncate = 0x0008,
         Text = 0x0010,
-        Unbuffered = 0x0020
+        Unbuffered = 0x0020,
+        NewOnly = 0x0040,
+        ExistingOnly = 0x0080
     };
     Q_DECLARE_FLAGS(OpenMode, OpenModeFlag)
 
@@ -92,6 +94,13 @@ public:
     bool isReadable() const;
     bool isWritable() const;
     virtual bool isSequential() const;
+
+    int readChannelCount() const;
+    int writeChannelCount() const;
+    int currentReadChannel() const;
+    void setCurrentReadChannel(int channel);
+    int currentWriteChannel() const;
+    void setCurrentWriteChannel(int channel);
 
     virtual bool open(OpenMode mode);
     virtual void close();
@@ -118,6 +127,11 @@ public:
     void clearBuffer();
     qint64 bufferSize() const;
 
+    void startTransaction();
+    void commitTransaction();
+    void rollbackTransaction();
+    bool isTransactionStarted() const;
+
     qint64 write(const char *data, qint64 len);
     qint64 write(const char *data);
     inline qint64 write(const QByteArray &data)
@@ -125,6 +139,7 @@ public:
 
     qint64 peek(char *data, qint64 maxlen);
     QByteArray peek(qint64 maxlen);
+    qint64 skip(qint64 maxSize);
 
     virtual bool waitForReadyRead(int msecs);
     virtual bool waitForBytesWritten(int msecs);
@@ -138,7 +153,9 @@ public:
 #ifndef QT_NO_QOBJECT
 Q_SIGNALS:
     void readyRead();
+    void channelReadyRead(int channel);
     void bytesWritten(qint64 bytes);
+    void channelBytesWritten(int channel, qint64 bytes);
     void aboutToClose();
     void readChannelFinished();
 #endif
