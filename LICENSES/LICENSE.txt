@@ -1,0 +1,52 @@
+                       XD Framework -- Licensing Summary
+                       =================================
+
+This file summarizes how the XD framework is licensed. Where this summary and a
+full license text disagree, the full license text governs.
+
+
+1. Primary license -- LGPL-2.1
+   -----------------------------------------------------------------------------
+   This project is intended to be used mainly under the terms and conditions of
+   the GNU Lesser General Public License, version 2.1, as found in the file
+
+       LGPL-2.1-only.txt
+
+   in this same LICENSES directory.
+
+
+2. Alternative -- GNU GPL version 2
+   -----------------------------------------------------------------------------
+   The project may also be used under the terms and conditions of the GNU General
+   Public License, version 2, exactly as that option is stated within the
+   LGPL-2.1-only.txt file itself (LGPL 2.1 permits conveying the covered work
+   under the GPL). The full text of that license is in GPL-2.0-only.txt.
+
+
+3. XD's own additions and improvements -- Apache License 2.0
+   -----------------------------------------------------------------------------
+   All additions and improvements contributed from The XD Company's side are
+   intended to be licensed under the terms and conditions of the Apache License,
+   Version 2.0.
+
+   Because the Apache License 2.0 is compatible with the license named in
+   section 1, you may simply use EVERYTHING in this project under the terms and
+   conditions of LGPL-2.1-only.txt. You do not have to identify or track XD's
+   parts separately in order to comply.
+
+
+4. Anything not covered by the above
+   -----------------------------------------------------------------------------
+   Should any part of this project fall outside the licenses described above,
+   that part states its own license at the appropriate place -- inside the file
+   itself, or in a notice next to it. Where such a local license is present, it
+   governs that part.
+
+
+5. Modified files
+   -----------------------------------------------------------------------------
+   We modified each and every file in this project since 2015, and you are hereby
+   explicitly warned. A per-file copyright line naming The XD Company Ltd. is our
+   own record of XD's authorship of those changes; the absence of a loud per-file
+   notice does NOT mean a file is unmodified -- this project-wide statement
+   already covers them all.

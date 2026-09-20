@@ -363,6 +363,14 @@ QSslSocket::~QSslSocket()
 #ifdef QSSLSOCKET_DEBUG
     qCDebug(lcSsl) << "QSslSocket::~QSslSocket(), this =" << (void *)this;
 #endif
+    // Stop the connection and emit its final disconnected()/stateChanged() HERE, while this is still a
+    // fully-valid QSslSocket. Left to the base ~QAbstractSocket, the same abort() would run after
+    // ~QSslSocket has already reset the vtable and torn down plainSocket, so it would emit from a
+    // half-destroyed socket (a slot's qobject_cast<QSslSocket*> then returns null and per-socket
+    // lookups keyed on the emitter miss). Aborting now also leaves UnconnectedState, so the base
+    // destructor has nothing left to emit.
+    if (state() != UnconnectedState)
+        abort();
     deleteChild(d->plainSocket);
     d->plainSocket = 0;
 }
