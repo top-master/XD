@@ -2,6 +2,7 @@
 
 HEADERS += \
     access/qftp.h \
+    access/qftp_p.h \
     access/qhttpnetworkheader_p.h \
     access/qhttpnetworkrequest_p.h \
     access/qhttpnetworkreply_p.h \
