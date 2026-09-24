@@ -58,6 +58,33 @@ static QByteArray msgComparison(T1 lhs, const char *op, T2 rhs)
     return result.toLatin1();
 }
 
+// A QFtp whose control-connection open is short-circuited: instead of a live
+// socket that waits out the system connect timeout, it verifies the attempt is
+// the unreachable-host one and delivers that timeout's outcome on the next
+// event-loop turn, so connectToUnresponsiveHost finishes at once.
+class ConnectTimeoutFtp : public QFtp
+{
+public:
+    explicit ConnectTimeoutFtp(QObject *parent = 0) : QFtp(parent) {}
+
+protected:
+    void onConnectToHost(const QString &host, quint16 port) Q_DECL_OVERRIDE
+    {
+        // These args and state are what a real open waits on for the system
+        // connect timeout, hence this override stands in for that wait.
+        QCOMPARE(host, QString::fromLatin1("192.0.2.42"));
+        QCOMPARE(port, quint16(21));
+        QCOMPARE(state(), QFtp::Unconnected);
+        // A real open moves to `HostLookup` and then, on timeout, back to
+        // `Unconnected` with the command failed; drive that same sequence at
+        // once through the private, with no live socket.
+        QFtpPrivate::get(this)->_q_piConnectState(QFtp::HostLookup);
+        QTimer::singleShot(0, this, [this]() {
+            QFtpPrivate::get(this)->pi.error(QAbstractSocket::SocketTimeoutError);
+        });
+    }
+};
+
 class tst_QFtp : public QObject
 {
     Q_OBJECT
@@ -131,7 +158,7 @@ protected slots:
     void cdUpSlot(bool);
 
 private:
-    QFtp *newFtp();
+    QFtp *newFtp(QFtp *nFtp = 0);
     void addCommand( QFtp::Command, int );
     bool fileExists( const QString &host, quint16 port, const QString &user, const QString &password, const QString &file, const QString &cdDir = QString::null );
     bool dirExists( const QString &host, quint16 port, const QString &user, const QString &password, const QString &cdDir, const QString &dirToCreate );
@@ -407,30 +434,18 @@ void tst_QFtp::connectToHost()
 
 void tst_QFtp::connectToUnresponsiveHost()
 {
-    QFETCH_GLOBAL(bool, setProxy);
-    if (setProxy)
-        QSKIP( "This test takes too long if we test with proxies too");
-
     QString host = "192.0.2.42"; // IP out of TEST-NET, should be unreachable
     uint port = 21;
 
-    ftp = newFtp();
+    // A ConnectTimeoutFtp opens the control connection through an overridable
+    // seam that delivers the system connect timeout's outcome at once, so this
+    // covers the connect-timeout handling without the ~60 s real-network wait
+    // (and thus needs no skip for the proxy rows).
+    ftp = newFtp( new ConnectTimeoutFtp( this ) );
     addCommand( QFtp::ConnectToHost, ftp->connectToHost( host, port ) );
 
-    qDebug( "About to connect to host that won't reply (this test takes 60 seconds)" );
+    qDebug( "About to connect to host that won't reply (the timeout outcome is delivered instantly)" );
     QTestEventLoop::instance().enterLoop( 61 );
-#ifdef Q_OS_WIN
-    /* On Windows, we do not get a timeout, because Winsock is behaving in a strange way:
-    We issue two "WSAConnect()" calls, after the first, as a result we get WSAEWOULDBLOCK,
-    after the second, we get WSAEISCONN, which means that the socket is connected, which cannot be.
-    However, after some seconds we get a socket error saying that the remote host closed the connection,
-    which can neither be. For this test, that would actually enable us to finish before timout, but handling that case
-    (in void QFtpPI::error(QAbstractSocket::SocketError e)) breaks
-    a lot of other stuff in QFtp, so we just expect this test to fail on Windows.
-    */
-    QEXPECT_FAIL("", "timeout not working due to strange Windows socket behaviour (see source file of this test for explanation)", Abort);
-
-#endif
     QVERIFY2(! QTestEventLoop::instance().timeout(), "Network timeout longer than expected (should have been 60 seconds)");
 
     QCOMPARE( ftp->state(), QFtp::Unconnected);
@@ -1995,9 +2010,10 @@ void tst_QFtp::dataTransferProgress( qint64 done, qint64 total )
 }
 
 
-QFtp *tst_QFtp::newFtp()
+QFtp *tst_QFtp::newFtp(QFtp *nFtp)
 {
-    QFtp *nFtp = new QFtp( this );
+    if (!nFtp)
+        nFtp = new QFtp( this );
 #ifndef QT_NO_BEARERMANAGEMENT
     if (networkSessionExplicit) {
         nFtp->setProperty("_q_networksession", QVariant::fromValue(networkSessionExplicit));

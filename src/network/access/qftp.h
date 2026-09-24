@@ -151,6 +151,9 @@ Q_SIGNALS:
     void commandFinished(int, bool);
     void done(bool);
 
+protected:
+    virtual void onConnectToHost(const QString &host, quint16 port);
+
 private:
     Q_DISABLE_COPY(QFtp)
     Q_DECLARE_PRIVATE(QFtp)
