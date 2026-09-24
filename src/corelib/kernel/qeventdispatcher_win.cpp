@@ -886,7 +886,7 @@ bool QEventDispatcherWin32::processEvents(QEventLoop::ProcessEventsFlags flags)
                 // no message - check for signalled objects
                 for (int i=0; i<(int)nCount; i++)
                     pHandles[i] = d->winEventNotifierList.at(i)->handle();
-                waitRet = MsgWaitForMultipleObjectsEx(nCount, pHandles, 0, QS_ALLINPUT, MWMO_ALERTABLE);
+                waitRet = select(nCount, pHandles, 0, QS_ALLINPUT, MWMO_ALERTABLE);
                 if ((haveMessage = (waitRet == WAIT_OBJECT_0 + nCount))) {
                     // a new message has arrived, process it
                     continue;
@@ -952,7 +952,7 @@ bool QEventDispatcherWin32::processEvents(QEventLoop::ProcessEventsFlags flags)
                 pHandles[i] = d->winEventNotifierList.at(i)->handle();
 
             emit aboutToBlock();
-            waitRet = MsgWaitForMultipleObjectsEx(nCount, pHandles, INFINITE, QS_ALLINPUT, MWMO_ALERTABLE | MWMO_INPUTAVAILABLE);
+            waitRet = select(nCount, pHandles, INFINITE, QS_ALLINPUT, MWMO_ALERTABLE | MWMO_INPUTAVAILABLE);
             emit awake();
             if (waitRet - WAIT_OBJECT_0 < nCount) {
                 d->activateEventNotifier(d->winEventNotifierList.at(waitRet - WAIT_OBJECT_0));
@@ -1381,6 +1381,19 @@ void QEventDispatcherWin32::sendPostedEvents()
 {
     Q_D(QEventDispatcherWin32);
     QCoreApplicationPrivate::sendPostedEvents(0, 0, d->threadData);
+}
+
+/*!
+    Waits for a message or one of the \a nCount \a handles, as
+    MsgWaitForMultipleObjectsEx() does with the same arguments, which is all
+    this implementation does; processEvents() waits only through here, so a
+    subclass can observe or stand in for the wait, just like
+    QEventDispatcherUNIX::select().
+*/
+DWORD QEventDispatcherWin32::select(DWORD nCount, const HANDLE *handles, DWORD timeout,
+                                    DWORD wakeMask, DWORD flags)
+{
+    return MsgWaitForMultipleObjectsEx(nCount, handles, timeout, wakeMask, flags);
 }
 
 QT_END_NAMESPACE
