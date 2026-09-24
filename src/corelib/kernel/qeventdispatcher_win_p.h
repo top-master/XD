@@ -103,6 +103,8 @@ public:
 protected:
     QEventDispatcherWin32(QEventDispatcherWin32Private &dd, QObject *parent = 0);
     virtual void sendPostedEvents();
+    virtual DWORD select(DWORD nCount, const HANDLE *handles, DWORD timeout,
+                         DWORD wakeMask, DWORD flags);
     void doUnregisterSocketNotifier(QSocketNotifier *notifier);
 
 private:
