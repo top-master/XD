@@ -46,6 +46,14 @@
 #include <qnetworkconfigmanager.h>
 #include <QNetworkSession>
 #include <QtNetwork/private/qnetworksession_p.h>
+#if defined(Q_OS_WIN) && !defined(Q_OS_WINRT)
+#  include <QtCore/private/qeventdispatcher_win_p.h>
+#  define TST_QFTP_DISPATCHER QEventDispatcherWin32
+#elif defined(Q_OS_UNIX)
+#  include <QtCore/private/qeventdispatcher_unix_p.h>
+#  define TST_QFTP_DISPATCHER QEventDispatcherUNIX
+#endif
+#include <QtCore/qeventdispatcherdecor.h>
 
 #include "../../../network-settings.h"
 #include "../../../helpers/testenv.h"
@@ -57,6 +65,84 @@ static QByteArray msgComparison(T1 lhs, const char *op, T2 rhs)
     QTextStream(&result) << lhs << ' ' << op << ' ' << rhs;
     return result.toLatin1();
 }
+
+// The test's stand-in dispatcher: it overrides the point where the event loop
+// blocks waiting for fd activity, to intercept the command socket's connect-wait.
+// While armed with an ftp that is mid-connect, the first such wait on that ftp's
+// command socket finishing its connect to the unreachable host (the ~30 s system
+// wait) is short-circuited: it verifies the wait is real, delivers the connect
+// timeout on the next turn, then returns without blocking. Every other wait
+// delegates to the base, the platform's own dispatcher, whose blocking wait is
+// select() on Unix and on Windows alike.
+#ifdef TST_QFTP_DISPATCHER
+class ConnectTimeoutDispatcher : public TST_QFTP_DISPATCHER
+{
+public:
+    explicit ConnectTimeoutDispatcher(QObject *parent = 0)
+        : TST_QFTP_DISPATCHER(parent), ftp(0),
+          sawConnectingSelect(false), observedTimeoutSec(0),
+          observedState(QFtp::Unconnected) {}
+
+    QFtp *ftp;
+    // What the intercepted blocking select observed; QCOMPARE/QVERIFY do a bare
+    // `return;` on failure, which is illegal in this non-void override, so the
+    // test slot checks these afterwards (in void context) instead.
+    bool sawConnectingSelect;
+    QString observedPeerName;
+    // How long the select would have blocked; -1 means without a time limit.
+    long observedTimeoutSec;
+    QFtp::State observedState;
+
+protected:
+#if defined(Q_OS_WIN)
+    DWORD select(DWORD nCount, const HANDLE *handles, DWORD timeout,
+                 DWORD wakeMask, DWORD flags) Q_DECL_OVERRIDE
+    {
+        long timeoutSec = timeout == INFINITE ? -1 : long(timeout / 1000);
+#else
+    int select(int nfds, fd_set *readfds, fd_set *writefds, fd_set *exceptfds,
+               timespec *timeout) Q_DECL_OVERRIDE
+    {
+        long timeoutSec = timeout ? long(timeout->tv_sec) : -1;
+#endif
+        if (ftp && !sawConnectingSelect && timeout) {
+            QAbstractSocket *s = QFtpPrivate::get(ftp)->pi.socket();
+            if (s->state() == QAbstractSocket::ConnectingState) {
+                // The loop is about to block while the command socket is
+                // mid-connect to the unreachable host -- the ~system-timeout wait
+                // a real open hangs on. Record it (the test slot verifies), then
+                // stand in for it. (socketDescriptor() reads -1 while connecting
+                // on this build, so the socket state, not the fd, is the signal.)
+                sawConnectingSelect = true;
+                observedPeerName = s->peerName();
+                observedTimeoutSec = timeoutSec;
+                observedState = ftp->state();
+                QFtp *f = ftp;
+                QTimer::singleShot(0, f, [f]() {
+                    QFtpPrivate::get(f)->pi.socket()->abort();
+                    QFtpPrivate::get(f)->pi.error(QAbstractSocket::SocketTimeoutError);
+                });
+                // Do NOT perform the real, blocking select.
+#if defined(Q_OS_WIN)
+                return WAIT_TIMEOUT;
+#else
+                return 0;
+#endif
+            }
+        }
+#if defined(Q_OS_WIN)
+        return TST_QFTP_DISPATCHER::select(nCount, handles, timeout, wakeMask, flags);
+#else
+        return TST_QFTP_DISPATCHER::select(nfds, readfds, writefds, exceptfds, timeout);
+#endif
+    }
+};
+#endif // TST_QFTP_DISPATCHER
+
+// Installed as the test binary's event dispatcher in main() (wrapping the real
+// one); connectToUnresponsiveHost swaps a ConnectTimeoutDispatcher in for its
+// duration through replace(), then restore()s the original.
+static QEventDispatcherDecor *tst_qftp_dispatcher = 0;
 
 class tst_QFtp : public QObject
 {
@@ -131,7 +217,7 @@ protected slots:
     void cdUpSlot(bool);
 
 private:
-    QFtp *newFtp();
+    QFtp *newFtp(QFtp *nFtp = 0);
     void addCommand( QFtp::Command, int );
     bool fileExists( const QString &host, quint16 port, const QString &user, const QString &password, const QString &file, const QString &cdDir = QString::null );
     bool dirExists( const QString &host, quint16 port, const QString &user, const QString &password, const QString &cdDir, const QString &dirToCreate );
@@ -407,31 +493,38 @@ void tst_QFtp::connectToHost()
 
 void tst_QFtp::connectToUnresponsiveHost()
 {
-    QFETCH_GLOBAL(bool, setProxy);
-    if (setProxy)
-        QSKIP( "This test takes too long if we test with proxies too");
-
+#ifndef TST_QFTP_DISPATCHER
+    QSKIP("This platform's event dispatcher has no select() to stand in for.");
+#else
     QString host = "192.0.2.42"; // IP out of TEST-NET, should be unreachable
     uint port = 21;
 
+    // The event loop's select() is where a real open would block for the system
+    // connect timeout. Swap a ConnectTimeoutDispatcher into the installed
+    // decorator for this row's duration: it watches for exactly that blocking
+    // select and delivers the timeout at once, covering connect-timeout handling
+    // without the ~60 s wait (and thus needs no skip for the proxy rows).
+    // Restored right after the loop.
+    QVERIFY( tst_qftp_dispatcher );
     ftp = newFtp();
+    ConnectTimeoutDispatcher hook;
+    hook.ftp = ftp;
+    tst_qftp_dispatcher->replace( &hook );
+
     addCommand( QFtp::ConnectToHost, ftp->connectToHost( host, port ) );
 
-    qDebug( "About to connect to host that won't reply (this test takes 60 seconds)" );
+    qDebug( "About to connect to host that won't reply (the timeout outcome is delivered instantly)" );
     QTestEventLoop::instance().enterLoop( 61 );
-#ifdef Q_OS_WIN
-    /* On Windows, we do not get a timeout, because Winsock is behaving in a strange way:
-    We issue two "WSAConnect()" calls, after the first, as a result we get WSAEWOULDBLOCK,
-    after the second, we get WSAEISCONN, which means that the socket is connected, which cannot be.
-    However, after some seconds we get a socket error saying that the remote host closed the connection,
-    which can neither be. For this test, that would actually enable us to finish before timout, but handling that case
-    (in void QFtpPI::error(QAbstractSocket::SocketError e)) breaks
-    a lot of other stuff in QFtp, so we just expect this test to fail on Windows.
-    */
-    QEXPECT_FAIL("", "timeout not working due to strange Windows socket behaviour (see source file of this test for explanation)", Abort);
-
-#endif
+    tst_qftp_dispatcher->restore();
     QVERIFY2(! QTestEventLoop::instance().timeout(), "Network timeout longer than expected (should have been 60 seconds)");
+
+    // The intercepted select really was the command socket's connect-wait on the
+    // unreachable host, blocking for the system timeout -- i.e. calling the base
+    // select there would have waited it out.
+    QVERIFY( hook.sawConnectingSelect );
+    QCOMPARE( hook.observedPeerName, QString::fromLatin1("192.0.2.42") );
+    QVERIFY( hook.observedTimeoutSec == -1 || hook.observedTimeoutSec > 1 );
+    QVERIFY( hook.observedState != QFtp::Unconnected );
 
     QCOMPARE( ftp->state(), QFtp::Unconnected);
     ResMapIt it = resultMap.find( QFtp::ConnectToHost );
@@ -440,6 +533,7 @@ void tst_QFtp::connectToUnresponsiveHost()
 
     delete ftp;
     ftp = 0;
+#endif
 }
 
 void tst_QFtp::login_data()
@@ -1995,9 +2089,10 @@ void tst_QFtp::dataTransferProgress( qint64 done, qint64 total )
 }
 
 
-QFtp *tst_QFtp::newFtp()
+QFtp *tst_QFtp::newFtp(QFtp *nFtp)
 {
-    QFtp *nFtp = new QFtp( this );
+    if (!nFtp)
+        nFtp = new QFtp( this );
 #ifndef QT_NO_BEARERMANAGEMENT
     if (networkSessionExplicit) {
         nFtp->setProperty("_q_networksession", QVariant::fromValue(networkSessionExplicit));
@@ -2218,6 +2313,19 @@ void tst_QFtp::qtbug7359Crash()
         QCoreApplication::processEvents(QEventLoop::AllEvents, 2000 - elapsed);
 }
 
-QTEST_MAIN(tst_QFtp)
+int main(int argc, char *argv[])
+{
+    // Install a replaceable decorator as this binary's event dispatcher BEFORE
+    // the application creates its own, so connectToUnresponsiveHost can swap a
+    // select-overriding dispatcher in for its duration. Qt's own default is
+    // untouched (still QEventDispatcherLazy) outside this test binary.
+    tst_qftp_dispatcher = new QEventDispatcherDecor();
+    QCoreApplication::setEventDispatcher(tst_qftp_dispatcher);
+
+    QCoreApplication app(argc, argv);
+    tst_QFtp tc;
+    QTEST_SET_MAIN_SOURCE_PATH
+    return QTest::qExec(&tc, argc, argv);
+}
 
 #include "tst_qftp.moc"
