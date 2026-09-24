@@ -129,6 +129,9 @@ public:
     bool rawCommand;
     bool transferConnectionExtended;
 
+    // The QFtp that owns this PI, reached for its socket-creation seam.
+    QFtp *listener;
+
     QFtpDTP dtp; // the PI has a DTP which is not the design of RFC 959, but it
                  // makes the design simpler this way
 signals:
@@ -168,8 +171,9 @@ private:
 
     bool processReply();
     bool startNextCmd();
+    void initCommandSocket();
 
-    QTcpSocket commandSocket;
+    QAbstractSocket *commandSocket;
     QString replyText;
     char replyCode[3];
     State state;

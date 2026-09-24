@@ -592,6 +592,7 @@ QFtpPI::QFtpPI(QObject *parent) :
     QObject(parent),
     rawCommand(false),
     transferConnectionExtended(true),
+    listener(0),
     dtp(this),
     commandSocket(0),
     state(Begin), abortState(None),
@@ -599,46 +600,59 @@ QFtpPI::QFtpPI(QObject *parent) :
     waitForDtpToConnect(false),
     waitForDtpToClose(false)
 {
-    commandSocket.setObjectName(QLatin1String("QFtpPI_socket"));
-    connect(&commandSocket, SIGNAL(hostFound()),
-            SLOT(hostFound()));
-    connect(&commandSocket, SIGNAL(connected()),
-            SLOT(connected()));
-    connect(&commandSocket, SIGNAL(disconnected()),
-            SLOT(connectionClosed()));
-    connect(&commandSocket, SIGNAL(readyRead()),
-            SLOT(readyRead()));
-    connect(&commandSocket, SIGNAL(error(QAbstractSocket::SocketError)),
-            SLOT(error(QAbstractSocket::SocketError)));
-
     connect(&dtp, SIGNAL(connectState(int)),
              SLOT(dtpConnectState(int)));
 }
 
+/*
+  \internal
+  Creates the command socket for a control connection through the listener --
+  the seam a QFtp subclass overrides -- and wires it to this interpreter. Called
+  once, lazily, when the first connectToHost() opens the connection.
+*/
+void QFtpPI::initCommandSocket()
+{
+    commandSocket = listener->onSocketCreate();
+    commandSocket->setParent(this);
+    commandSocket->setObjectName(QLatin1String("QFtpPI_socket"));
+    connect(commandSocket, SIGNAL(hostFound()),
+            SLOT(hostFound()));
+    connect(commandSocket, SIGNAL(connected()),
+            SLOT(connected()));
+    connect(commandSocket, SIGNAL(disconnected()),
+            SLOT(connectionClosed()));
+    connect(commandSocket, SIGNAL(readyRead()),
+            SLOT(readyRead()));
+    connect(commandSocket, SIGNAL(error(QAbstractSocket::SocketError)),
+            SLOT(error(QAbstractSocket::SocketError)));
+}
+
 QFtpPI::~QFtpPI()
 {
-    // Members are destroyed in reverse declaration order, so commandSocket (declared after dtp)
-    // is already gone by the time dtp is torn down. Without the disconnects below, tearing down
-    // dtp would reenter this half-destroyed object:
+    // Both sockets outlive their signals here: without the disconnects below,
+    // tearing down dtp would reenter this half-destroyed object:
     // * destroying dtp's active-mode listener closes its data socket;
     // * the socket's disconnected() runs QFtpDTP::socketConnectionClosed();
     // * that chains connectState(CsClosed) -> dtpConnectState() -> readyRead();
     // * readyRead() then reads the already-freed commandSocket.
     // Sever every callback from our sockets into this PI before any member is destroyed, so a
     // member's own teardown can never reenter this half-destroyed object.
-    disconnect(&commandSocket, 0, this, 0);
+    if (commandSocket)
+        disconnect(commandSocket, 0, this, 0);
     disconnect(&dtp, 0, this, 0);
 }
 
 void QFtpPI::connectToHost(const QString &host, quint16 port)
 {
+    if (!commandSocket)
+        initCommandSocket();
     emit connectState(QFtp::HostLookup);
 #ifndef QT_NO_BEARERMANAGEMENT
     //copy network session down to the socket & DTP
-    commandSocket.setProperty("_q_networksession", property("_q_networksession"));
+    commandSocket->setProperty("_q_networksession", property("_q_networksession"));
     dtp.setProperty("_q_networksession", property("_q_networksession"));
 #endif
-    commandSocket.connectToHost(host, port);
+    commandSocket->connectToHost(host, port);
 }
 
 /*
@@ -656,7 +670,7 @@ bool QFtpPI::sendCommands(const QStringList &cmds)
     if (!pendingCommands.isEmpty())
         return false;
 
-    if (commandSocket.state() != QTcpSocket::ConnectedState || state!=Idle) {
+    if (!commandSocket || commandSocket->state() != QTcpSocket::ConnectedState || state!=Idle) {
         emit error(QFtp::NotConnected, QFtp::tr("Not connected"));
         return true; // there are no pending commands
     }
@@ -688,7 +702,7 @@ void QFtpPI::abort()
     if (currentCmd.startsWith(QLatin1String("STOR "))) {
         abortState = AbortStarted;
         qDebug_FPI << "send: ABOR";
-        commandSocket.write("ABOR\r\n", 6);
+        commandSocket->write("ABOR\r\n", 6);
 
         dtp.abortConnection();
     } else {
@@ -713,14 +727,14 @@ void QFtpPI::connected()
     // maybe debug-log this like:
     // qDebug_FPI << "state:" << state << "[connected()]";
     // try to improve performance by setting TCP_NODELAY
-    commandSocket.setSocketOption(QAbstractSocket::LowDelayOption, 1);
+    commandSocket->setSocketOption(QAbstractSocket::LowDelayOption, 1);
 
     emit connectState(QFtp::Connected);
 }
 
 void QFtpPI::connectionClosed()
 {
-    commandSocket.close();
+    commandSocket->close();
     emit connectState(QFtp::Unconnected);
 }
 
@@ -734,15 +748,15 @@ void QFtpPI::error(QAbstractSocket::SocketError e)
     if (e == QTcpSocket::HostNotFoundError) {
         emit connectState(QFtp::Unconnected);
         emit error(QFtp::HostNotFound,
-                    QFtp::tr("Host %1 not found").arg(commandSocket.peerName()));
+                    QFtp::tr("Host %1 not found").arg(commandSocket->peerName()));
     } else if (e == QTcpSocket::ConnectionRefusedError) {
         emit connectState(QFtp::Unconnected);
         emit error(QFtp::ConnectionRefused,
-                    QFtp::tr("Connection refused to host %1").arg(commandSocket.peerName()));
+                    QFtp::tr("Connection refused to host %1").arg(commandSocket->peerName()));
     } else if (e == QTcpSocket::SocketTimeoutError) {
         emit connectState(QFtp::Unconnected);
         emit error(QFtp::ConnectionRefused,
-                   QFtp::tr("Connection timed out to host %1").arg(commandSocket.peerName()));
+                   QFtp::tr("Connection timed out to host %1").arg(commandSocket->peerName()));
     }
 }
 
@@ -751,9 +765,9 @@ void QFtpPI::readyRead()
     if (waitForDtpToClose)
         return;
 
-    while (commandSocket.canReadLine()) {
+    while (commandSocket->canReadLine()) {
         // read line with respect to line continuation
-        QString line = QString::fromUtf8(commandSocket.readLine());
+        QString line = QString::fromUtf8(commandSocket->readLine());
         if (replyText.isEmpty()) {
             if (line.length() < 3) {
                 // protocol error
@@ -783,9 +797,9 @@ void QFtpPI::readyRead()
                 replyText += line.mid(4); // strip 'xyz-'
             else
                 replyText += line;
-            if (!commandSocket.canReadLine())
+            if (!commandSocket->canReadLine())
                 return;
-            line = QString::fromUtf8(commandSocket.readLine());
+            line = QString::fromUtf8(commandSocket->readLine());
             lineLeft4 = line.left(4);
         }
         replyText += line.mid(4); // strip reply code 'xyz '
@@ -850,7 +864,7 @@ bool QFtpPI::processReply()
                 return true;
             } else if (replyCode[0] == 2) {
                 state = Idle;
-                emit finished(QFtp::tr("Connected to host %1").arg(commandSocket.peerName()));
+                emit finished(QFtp::tr("Connected to host %1").arg(commandSocket->peerName()));
                 break;
             }
             // reply codes not starting with 1 or 2 are not handled.
@@ -905,7 +919,7 @@ bool QFtpPI::processReply()
             QStringList epsvParameters = replyText.mid(portPos).split(delimiter);
 
             waitForDtpToConnect = true;
-            dtp.connectToHost(commandSocket.peerAddress().toString(),
+            dtp.connectToHost(commandSocket->peerAddress().toString(),
                               epsvParameters.at(3).toInt());
         }
 
@@ -996,7 +1010,7 @@ bool QFtpPI::startNextCmd()
     // should try the extended transfer connection commands EPRT and
     // EPSV. The PORT command also triggers setting up a listener, and
     // the address/port arguments are edited in.
-    QHostAddress address = commandSocket.localAddress();
+    QHostAddress address = commandSocket->localAddress();
     if (currentCmd.startsWith(QLatin1String("PORT"))) {
         if ((address.protocol() == QTcpSocket::IPv6Protocol) && transferConnectionExtended) {
             int port = dtp.setupListener(address);
@@ -1032,7 +1046,7 @@ bool QFtpPI::startNextCmd()
     pendingCommands.pop_front();
     qDebug_FPI << "send:" << currentCmd.left(currentCmd.length()-2);
     state = Waiting;
-    commandSocket.write(currentCmd.toUtf8());
+    commandSocket->write(currentCmd.toUtf8());
     return true;
 }
 
@@ -1211,6 +1225,8 @@ QFtp::QFtp(QObject *parent)
 {
     Q_D(QFtp);
     d->errorString = tr("Unknown error");
+    // The PI reaches this QFtp's socket-creation seam through the listener.
+    d->pi.listener = this;
 
     connect(&d->pi, SIGNAL(connectState(int)),
             SLOT(_q_piConnectState(int)));
@@ -1465,13 +1481,14 @@ int QFtp::connectToHost(const QString &host, quint16 port)
 
 /*!
     \internal
-    Opens the control connection to \a host on \a port for a running
-    ConnectToHost command. This is the seam a subclass overrides to supply a
-    connect outcome without a live socket -- the base opens the real connection.
+    Creates the command socket a ConnectToHost opens its control connection
+    through. This is the seam a subclass overrides to hand back a decorated
+    socket -- e.g. one carrying a listener that intercepts the connect-wait --
+    by calling the base to create the socket and returning it.
 */
-void QFtp::onConnectToHost(const QString &host, quint16 port)
+QAbstractSocket *QFtp::onSocketCreate()
 {
-    d_func()->pi.connectToHost(host, port);
+    return new QTcpSocket;
 }
 
 /*!
@@ -2071,9 +2088,9 @@ void QFtpPrivate::_q_startNextCommand()
         if (!proxyHost.isEmpty()) {
             host = c->rawCmds[0];
             port = c->rawCmds[1].toUInt();
-            q->onConnectToHost(proxyHost, proxyPort);
+            pi.connectToHost(proxyHost, proxyPort);
         } else {
-            q->onConnectToHost(c->rawCmds[0], c->rawCmds[1].toUInt());
+            pi.connectToHost(c->rawCmds[0], c->rawCmds[1].toUInt());
         }
     } else {
         if (c->command == QFtp::Put) {

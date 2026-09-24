@@ -35,6 +35,7 @@
 #include <QtTest/QtTest>
 
 #include <qcoreapplication.h>
+#include <qsharedpointer.h>
 #include <qfile.h>
 #include <qbuffer.h>
 #include "private/qftp_p.h"
@@ -58,31 +59,65 @@ static QByteArray msgComparison(T1 lhs, const char *op, T2 rhs)
     return result.toLatin1();
 }
 
-// A QFtp whose control-connection open is short-circuited: instead of a live
-// socket that waits out the system connect timeout, it verifies the attempt is
-// the unreachable-host one and delivers that timeout's outcome on the next
-// event-loop turn, so connectToUnresponsiveHost finishes at once.
+// Watches the command socket of a control-connection open. It fires the instant
+// that socket enters its connect-wait -- the point a real open blocks at until
+// the system connect timeout -- verifies the wait is on the unreachable host,
+// then delivers that timeout's outcome on the next event-loop turn instead of
+// waiting it out. Held by `QSharedPointer` so it outlives the async open.
+class ConnectTimeoutListener : public QObject
+{
+public:
+    ConnectTimeoutListener(QFtp *ftp, QAbstractSocket *socket)
+        : m_ftp(ftp), m_socket(socket)
+    {
+        connect(socket, &QAbstractSocket::stateChanged,
+                this, &ConnectTimeoutListener::socketStateChanged);
+    }
+
+private:
+    void socketStateChanged(QAbstractSocket::SocketState socketState)
+    {
+        if (socketState != QAbstractSocket::ConnectingState || m_fired)
+            return;
+        m_fired = true;
+        // The socket now waits on exactly the unreachable host the command
+        // targets, mid-open; that is what makes a real open hang. (peerPort()
+        // stays 0 until the peer is reached, so it cannot be checked here.)
+        QCOMPARE(m_socket->peerName(), QString::fromLatin1("192.0.2.42"));
+        QVERIFY(m_ftp->state() != QFtp::Unconnected);
+        // Deliver the timeout on the next turn, clear of this notification, so
+        // the socket tears down cleanly rather than being re-entered mid-signal.
+        QFtp *ftp = m_ftp;
+        QAbstractSocket *socket = m_socket;
+        QTimer::singleShot(0, ftp, [ftp, socket]() {
+            socket->abort();
+            QFtpPrivate::get(ftp)->pi.error(QAbstractSocket::SocketTimeoutError);
+        });
+    }
+
+    QFtp *m_ftp;
+    QAbstractSocket *m_socket;
+    bool m_fired = false;
+};
+
+// A QFtp that keeps a ConnectTimeoutListener on the command socket of every
+// control-connection open, so connectToUnresponsiveHost delivers the connect
+// timeout at once rather than waiting out the ~60 s system one.
 class ConnectTimeoutFtp : public QFtp
 {
 public:
     explicit ConnectTimeoutFtp(QObject *parent = 0) : QFtp(parent) {}
 
 protected:
-    void onConnectToHost(const QString &host, quint16 port) Q_DECL_OVERRIDE
+    QAbstractSocket *onSocketCreate() Q_DECL_OVERRIDE
     {
-        // These args and state are what a real open waits on for the system
-        // connect timeout, hence this override stands in for that wait.
-        QCOMPARE(host, QString::fromLatin1("192.0.2.42"));
-        QCOMPARE(port, quint16(21));
-        QCOMPARE(state(), QFtp::Unconnected);
-        // A real open moves to `HostLookup` and then, on timeout, back to
-        // `Unconnected` with the command failed; drive that same sequence at
-        // once through the private, with no live socket.
-        QFtpPrivate::get(this)->_q_piConnectState(QFtp::HostLookup);
-        QTimer::singleShot(0, this, [this]() {
-            QFtpPrivate::get(this)->pi.error(QAbstractSocket::SocketTimeoutError);
-        });
+        QAbstractSocket *socket = QFtp::onSocketCreate();
+        m_listener = QSharedPointer<ConnectTimeoutListener>::create(this, socket);
+        return socket;
     }
+
+private:
+    QSharedPointer<ConnectTimeoutListener> m_listener;
 };
 
 class tst_QFtp : public QObject

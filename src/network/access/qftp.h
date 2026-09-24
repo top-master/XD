@@ -54,6 +54,7 @@ QT_BEGIN_NAMESPACE
 
 #ifndef QT_NO_FTP
 
+class QAbstractSocket;
 class QFtpPrivate;
 
 class Q_AUTOTEST_EXPORT QFtp : public QObject
@@ -152,11 +153,12 @@ Q_SIGNALS:
     void done(bool);
 
 protected:
-    virtual void onConnectToHost(const QString &host, quint16 port);
+    virtual QAbstractSocket *onSocketCreate();
 
 private:
     Q_DISABLE_COPY(QFtp)
     Q_DECLARE_PRIVATE(QFtp)
+    friend class QFtpPI; // reaches onSocketCreate() to open the control connection
 
     Q_PRIVATE_SLOT(d_func(), void _q_startNextCommand())
     Q_PRIVATE_SLOT(d_func(), void _q_piFinished(const QString&))
