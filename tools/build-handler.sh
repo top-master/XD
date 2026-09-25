@@ -2511,10 +2511,15 @@ bh_template_app() {
 #      every leaf as qmake generates it; because qmake -r walks SUBDIRS in
 #      dependency order, the marker lists the whole tree in build order.
 #   2. Walk the marker's unique .pro entries in that order and `make` each in its
-#      shadow build dir -- skipping any whose recorded target file(s) already
-#      exist. The object wipe (save_space.prf, at post-link) leaves the target in
-#      place, so its presence is a reliable "already built" signal, which is what
-#      lets a killed build resume without repeating finished projects.
+#      shadow build dir. save_space.prf's post-link step, after the object wipe,
+#      writes a ".save_space-<debug|release>" record; a project whose records
+#      all exist, whose recorded targets still exist, and whose inputs all
+#      predate those records is skipped (see
+#      `bh_save_space_up_to_date`), which is what lets a killed build resume
+#      without repeating finished projects. A project missing a record failed or
+#      was killed before its post-link ran, so it is built again; only that
+#      project, never the whole tree, and make decides which of its objects
+#      that takes. The target's own date plays no part.
 #
 # An optional user --filter regexp narrows the set (matched on the path relative
 # to BH_ROOT). No-op-safe: an empty marker means nothing to build.
@@ -2546,57 +2551,157 @@ bh_save_space_build() {
     fi
 
     # Collapse to one line per project, in first-seen (build) order, carrying all
-    # of that project's recorded target files: "<pro>\t<target>\t<target>...".
+    # of that project's recorded variants and target files:
+    # "<pro>\t<variant>\t<target>\t<variant>\t<target>...".
     # A failed or empty collapse of a non-empty marker must FAIL, not silently
     # "build 0 projects" as if everything were done.
     _ssb_order=$_ssb_marker.order
     awk -F'\t' '
         !seen[$1]++ { order[++n] = $1 }
-        { tgt[$1] = tgt[$1] "\t" $3 }
+        { tgt[$1] = tgt[$1] "\t" $2 "\t" $3 }
         END { for (i = 1; i <= n; i++) print order[i] tgt[order[i]] }
     ' "$_ssb_marker" > "$_ssb_order" \
         || bh_error "--save-space: failed to derive the build order from $_ssb_marker"
     [ -s "$_ssb_order" ] \
         || bh_error "--save-space: empty build order derived from non-empty $_ssb_marker"
 
+    # One walk counts the projects the filter keeps, for the "[N/count]"
+    # progress tail; the second, identical walk skips or builds them.
+    bh_save_space_walk "$_ssb_order" estimate
+    _ssb_count=$_ssb_total
+    bh_save_space_walk "$_ssb_order" build
+    # $_ssb_order is derived scratch, rewritten from the marker every run (so a
+    # resume never depends on the old copy); left in place, cleared by --clean.
+    echo "--save-space: built $_ssb_made, skipped $_ssb_skipped up-to-date, of $_ssb_total project(s)."
+    return 0
+}
+
+# bh_save_space_walk <order-file> <estimate|build>
+#
+# Walks bh_save_space_build's order file, one "<pro>\t<variant>\t<target>..."
+# line per project, keeping the projects the --filter regexp matches. `estimate`
+# only counts them into _ssb_total; `build` also skips each up-to-date project
+# and builds the rest, numbered against _ssb_count, tallying _ssb_made and
+# _ssb_skipped. Both modes share this one walk, so the count always matches the
+# projects the build visits.
+bh_save_space_walk() {
+    _ssb_mode=$2
     _ssb_tab=$(printf '\t')
-    # Project count for the "[N/count]" progress tail.
-    _ssb_count=$(wc -l < "$_ssb_order" | tr -d ' ')
     _ssb_total=0 _ssb_made=0 _ssb_skipped=0
-    # Read the order list on fd 3 so the inner target checks keep stdin free and
+    # Reads the order list on fd 3 so the inner target checks keep stdin free and
     # the loop runs in THIS shell (no pipe subshell) -- so a bh_error propagates
     # and the counters survive.
     while IFS= read -r _ssb_line <&3; do
         [ -n "$_ssb_line" ] || continue
         _ssb_p=${_ssb_line%%"$_ssb_tab"*}
-        _ssb_tgts=${_ssb_line#*"$_ssb_tab"}
-        [ "$_ssb_tgts" = "$_ssb_line" ] && _ssb_tgts=   # line had no target field
+        _ssb_pairs=${_ssb_line#*"$_ssb_tab"}
+        [ "$_ssb_pairs" = "$_ssb_line" ] && _ssb_pairs=   # line had no variant field
         _ssb_rel=${_ssb_p#"$BH_ROOT"/}
         if [ -n "${BH_FILTER:-}" ]; then
             printf '%s\n' "$_ssb_rel" | grep -Eq -- "$BH_FILTER" || continue
         fi
         _ssb_total=$((_ssb_total + 1))
-        # Already built when every recorded target for this .pro is present.
-        _ssb_missing=0
-        _ssb_oldifs=$IFS; IFS=$_ssb_tab
-        for _ssb_t in $_ssb_tgts; do
-            { [ -n "$_ssb_t" ] && [ -f "$_ssb_t" ]; } || _ssb_missing=1
-        done
-        IFS=$_ssb_oldifs
-        if [ -n "$_ssb_tgts" ] && [ "$_ssb_missing" -eq 0 ]; then
-            _ssb_skipped=$((_ssb_skipped + 1))
+        if [ "$_ssb_mode" = estimate ]; then
             continue
         fi
         _ssb_bd=$BUILD_DIR/$(dirname "$_ssb_rel")
+        # Maps each "<variant>\t<target>" pair to its post-link record; a missing
+        # record or target means this project never finished its last build.
+        _ssb_records= _ssb_missing=0 _ssb_is_variant=1
+        _ssb_oldifs=$IFS; IFS=$_ssb_tab
+        for _ssb_field in $_ssb_pairs; do
+            if [ "$_ssb_is_variant" -eq 1 ]; then
+                _ssb_record=$_ssb_bd/.save_space-${_ssb_field##*:}
+                [ -f "$_ssb_record" ] || _ssb_missing=1
+                _ssb_records=$_ssb_records$_ssb_record$_ssb_tab
+                _ssb_is_variant=0
+            else
+                [ -f "$_ssb_field" ] || _ssb_missing=1
+                _ssb_is_variant=1
+            fi
+        done
+        IFS=$_ssb_oldifs
+        if [ -z "$_ssb_records" ]; then
+            _ssb_missing=1
+        fi
+        if [ "$_ssb_missing" -eq 0 ]; then
+            if bh_save_space_up_to_date "$_ssb_bd" "$_ssb_records"; then
+                _ssb_skipped=$((_ssb_skipped + 1))
+                continue
+            fi
+            echo "--save-space: $_ssb_rel changed since its last build; rebuilding."
+        elif [ -d "$_ssb_bd" ]; then
+            echo "--save-space: $_ssb_rel has no finished build on record; building it again."
+        fi
+        # Drops the old records first, so a build that dies before post-link
+        # leaves none and the next run builds this project again.
+        _ssb_oldifs=$IFS; IFS=$_ssb_tab
+        for _ssb_record in $_ssb_records; do
+            rm -f "$_ssb_record"
+        done
+        IFS=$_ssb_oldifs
         echo "--save-space build [$_ssb_total/$_ssb_count]: $_ssb_rel"
         ( cd "$_ssb_bd" && bh_make "$JOBS" ) \
             || bh_error "--save-space: build failed for $_ssb_rel"
         _ssb_made=$((_ssb_made + 1))
-    done 3< "$_ssb_order"
-    # $_ssb_order is derived scratch, rewritten from the marker every run (so a
-    # resume never depends on the old copy); left in place, cleared by --clean.
-    echo "--save-space: built $_ssb_made, skipped $_ssb_skipped already-present, of $_ssb_total project(s)."
-    return 0
+    done 3< "$1"
+}
+
+# bh_save_space_up_to_date <build-dir> <records>
+#
+# Succeeds when every post-link record in the tab-separated <records> (written
+# by save_space.prf once a variant finished) is newer than each file the project's
+# Makefile names as an object prerequisite: its sources and every header they
+# include, other modules' headers too. The --save-space object wipe leaves make
+# itself unable to judge that, yet those dependency lists still name every
+# input, so a record older than any of them marks the project stale and the
+# caller rebuilds it. A build dir with no Makefile, or a listed file that no
+# longer exists, adds no newer input.
+bh_save_space_up_to_date() {
+    _ssu_dir=$1
+    _ssu_tab=$(printf '\t')
+    # Picks the oldest record; every input has to predate it.
+    _ssu_oldest=
+    _ssu_oldifs=$IFS
+    IFS=$_ssu_tab
+    for _ssu_record in $2; do
+        if [ -z "$_ssu_oldest" ] \
+                || [ -n "$(find "$_ssu_oldest" -newer "$_ssu_record" 2>/dev/null)" ]; then
+            _ssu_oldest=$_ssu_record
+        fi
+    done
+    IFS=$_ssu_oldifs
+    _ssu_makefiles=$(ls "$_ssu_dir"/Makefile* 2>/dev/null)
+    if [ -z "$_ssu_oldest" ] || [ -z "$_ssu_makefiles" ]; then
+        return 0
+    fi
+    # Lists every object prerequisite, then keeps the first one newer than the
+    # oldest record. Relative entries resolve from the build dir, as for make.
+    _ssu_newer=$(cd "$_ssu_dir" && awk '
+        /^[^ \t#][^:=]*\.(o|obj):/ {
+            inrule = 1
+            sub(/^[^:]*:/, "")
+        }
+        inrule {
+            cont = /\\$/
+            sub(/\\$/, "")
+            n = split($0, dep, /[ \t]+/)
+            for (i = 1; i <= n; i++) {
+                if (dep[i] != "") {
+                    print dep[i]
+                }
+            }
+            if (!cont) {
+                inrule = 0
+            }
+        }
+    ' Makefile* | sort -u \
+        | xargs sh -c '
+            [ "$#" -gt 0 ] || exit 0
+            find "$@" -prune -newer "$0" -print
+        ' "$_ssu_oldest" 2>/dev/null \
+        | head -n 1)
+    [ -z "$_ssu_newer" ]
 }
 
 # bh_collect_filter_pros

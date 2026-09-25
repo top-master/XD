@@ -18,9 +18,8 @@
 #      correct BUILD ORDER. XD's build.sh (tools/build-handler.sh) then builds
 #      (and skips) per project in that order, instead of the filesystem order a
 #      `find | sort` would give -- which could build a consumer before its
-#      dependency. The recorded <resolved-target> lets build.sh decide "already
-#      built" by testing whether that file exists (it survives the object wipe
-#      below), so no separate completion record is needed.
+#      dependency. The recorded <resolved-target> lets build.sh notice a
+#      target that went missing since the last build.
 #
 #   2. RECLAIM SPACE. At post-link, drop the object files plus the moc/rcc/uic
 #      output. It does NOT run the Makefile `clean` target: on win32 a shared
@@ -28,12 +27,21 @@
 #      import library, which a dependent (e.g. ssleay32 against libeay32) still
 #      needs to link. Dropping just the objects and compiler-generated files
 #      reclaims the same space while keeping $(TARGET) and the import library.
+#      Last, write ".save_space-<debug|release>" in the build dir. Post-link
+#      only runs once every object is built and linked, so that file is
+#      build.sh's only "built" signal: a project without it failed (or was
+#      killed) before its post-link ran, and one with an input newer than it
+#      changed since; build.sh rebuilds either, and make decides which objects
+#      that takes. The target's own date plays no part.
 #
 # The marker is created by build.sh before the recursive qmake; when it is
 # absent (caching off) the upward search below finds nothing and this is a
 # silent no-op, so including the file unconditionally is harmless.
 
 have_target {
+    CONFIG(debug, debug|release): ss_variant = debug
+    else:                         ss_variant = release
+
     # --- 1. instant order log -------------------------------------------------
     # A debug_and_release project is evaluated once per variant (build_pass) plus
     # once for the meta pass that only dispatches to the two sub-Makefiles. The
@@ -89,5 +97,7 @@ have_target {
     # --- 2. reclaim space at post-link ---------------------------------------
     !isEmpty(QMAKE_POST_LINK):QMAKE_POST_LINK = $$QMAKE_POST_LINK$$escape_expand(\\n\\t)
     QMAKE_POST_LINK = $$QMAKE_POST_LINK$$quote($(MAKE) -f $(MAKEFILE) compiler_clean)$$escape_expand(\\n\\t)
-    QMAKE_POST_LINK = $$QMAKE_POST_LINK$$quote(-$(DEL_FILE) $(OBJECTS))
+    QMAKE_POST_LINK = $$QMAKE_POST_LINK$$quote(-$(DEL_FILE) $(OBJECTS))$$escape_expand(\\n\\t)
+    # Relative to the build dir, where make runs every variant's Makefile.
+    QMAKE_POST_LINK = $$QMAKE_POST_LINK$$quote(echo $$ss_variant> .save_space-$$ss_variant)
 }

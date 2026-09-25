@@ -499,6 +499,20 @@ DEFINEFUNC(void, PKCS12_free, PKCS12 *pkcs12, pkcs12, return, DUMMYARG)
         && !(_q_##func = _q_PTR_##func(libs.second->resolve(#func)))) \
         qsslSocketCannotResolveSymbolWarning(#func);
 
+// TRACE/network ssl: resolve OpenSSL 3 names of symbols it renamed #1,
+// only as a fallback for when the system's libssl gets loaded instead of XD's own
+// (the preferred one, built from the bundled 1.1 sources): 3.0 renamed (keeping
+// them as macros only) for example SSL_get_peer_certificate to
+// SSL_get1_peer_certificate and EVP_PKEY_base_id to EVP_PKEY_get_base_id; each
+// pair behaves the same, so the 3.0 name fills the same q_* pointer, and only
+// when both names are missing is it an error.
+#define RESOLVEFUNC_OR_RENAMED(func, renamed) \
+    if (!(_q_##func = _q_PTR_##func(libs.first->resolve(#func)))         \
+        && !(_q_##func = _q_PTR_##func(libs.second->resolve(#func)))     \
+        && !(_q_##func = _q_PTR_##func(libs.first->resolve(renamed)))    \
+        && !(_q_##func = _q_PTR_##func(libs.second->resolve(renamed))))  \
+        qsslSocketCannotResolveSymbolWarning(#func);
+
 #if OPENSSL_VERSION_NUMBER >= 0x10100000L
 // 1.1 renamed the STACK_OF (sk_*) functions to OPENSSL_sk_*; resolve the new
 // symbol names into the existing q_sk_* pointers so callers stay unchanged.
@@ -982,7 +996,7 @@ bool q_resolveOpenSslSymbols()
     RESOLVEFUNC(SSL_version)
     RESOLVEFUNC(SSL_get_error)
     RESOLVEFUNC(SSL_get_peer_cert_chain)
-    RESOLVEFUNC(SSL_get_peer_certificate)
+    RESOLVEFUNC_OR_RENAMED(SSL_get_peer_certificate, "SSL_get1_peer_certificate")
     RESOLVEFUNC(SSL_get_verify_result)
 #if OPENSSL_VERSION_NUMBER >= 0x10100000L
     RESOLVEFUNC_NAMED(SSL_library_init, "OPENSSL_init_ssl") // 1.1: single init call
@@ -1059,7 +1073,7 @@ bool q_resolveOpenSslSymbols()
     RESOLVEFUNC(X509_get_version)
     RESOLVEFUNC(X509_get_serialNumber)
     RESOLVEFUNC(X509_get_X509_PUBKEY)
-    RESOLVEFUNC(EVP_PKEY_base_id)
+    RESOLVEFUNC_OR_RENAMED(EVP_PKEY_base_id, "EVP_PKEY_get_base_id")
 #endif // OPENSSL_VERSION_NUMBER >= 0x10100000L
     RESOLVEFUNC(X509_STORE_free)
     RESOLVEFUNC(X509_STORE_new)

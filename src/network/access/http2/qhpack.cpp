@@ -57,7 +57,11 @@ static const HuffCode huffTable[257] = {
     A binary decode tree for the Huffman code, built once from huffTable.
 */
 struct HuffNode {
-    Q_DECL_CONSTEXPR inline HuffNode()
+    // TRACE/network hpack: non-constexpr `HuffNode` constructor #1,
+    // because its body fills `child`, which a constexpr constructor may not do
+    // before C++20 (GCC rejects it); `huffTree()` builds the tree at run time,
+    // hence no `HuffNode` is ever needed at compile time.
+    inline HuffNode()
         : sym(-1)
     {
         child[0] = -1;
