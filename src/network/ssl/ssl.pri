@@ -66,15 +66,24 @@ contains(QT_CONFIG, openssl) | contains(QT_CONFIG, openssl-linked) {
 
 android:!android-no-sdk: SOURCES += ssl/qsslsocket_openssl_android.cpp
 
-    # Fil-C: the memory-safe QtNetwork dlopens libssl.*/libcrypto.* at runtime
-    # and searches the Qt lib dir (a loaded-library path via dl_iterate_phdr).
-    # The bundled OpenSSL builds under lib/openssl with the Windows-era
-    # eay32/ssleay32 names, so it is invisible there -- and a native system
-    # OpenSSL cannot be called from Fil-C. Drop discoverable libssl/libcrypto
-    # symlinks beside the Qt libs (this module's $(DESTDIR)) so the tests load
-    # THIS Fil-C-built OpenSSL with no manual LD_LIBRARY_PATH. libeay32.so.1 is
-    # the SONAME the ssl lib records; the ssleay32 name is deliberately not
-    # symlinked so it cannot shadow libssl.* in Qt's "libssl.*" glob.
+    # Fil-C (the memory-safe build): after linking, make shortcut files
+    # (symlinks) beside the Qt libs, in this module's $(DESTDIR), that all
+    # point at XD's own OpenSSL in lib/openssl/release:
+    #   - libcrypto.so.1.1, libcrypto.so.1, libcrypto.so and libeay32.so.1
+    #     point at libeay32.so, the crypto half;
+    #   - libssl.so.1.1, libssl.so.1 and libssl.so point at libssleay32.so,
+    #     the SSL half.
+    # XD builds its own OpenSSL under the old Windows names libeay32 and
+    # libssleay32, and a Fil-C program can only use a Fil-C OpenSSL, never the
+    # system's normal one. QtNetwork used to look for OpenSSL by the usual
+    # names (libssl.*, libcrypto.*) among the loaded libraries' folders, and
+    # these links let it find XD's copy that way. Since it loads only XD's
+    # own OpenSSL (see qsslsocket_openssl_symbols.cpp), it asks for
+    # libeay32.so and libssleay32.so by those names in lib/openssl/<debug or
+    # release> instead, so QtNetwork no longer uses the libssl/libcrypto
+    # links. libeay32.so.1 is still the name the SSL half asks for when it
+    # loads. The libssleay32 name itself gets no link here: under the old
+    # search it could have hidden the libssl.* links.
     memory_safe:unix:!darwin {
         QMAKE_POST_LINK += cd $(DESTDIR) && \
             ln -sf openssl/release/libeay32.so libcrypto.so.1.1 && ln -sf libcrypto.so.1.1 libcrypto.so.1 && ln -sf libcrypto.so.1.1 libcrypto.so && ln -sf libcrypto.so.1.1 libeay32.so.1 && \

@@ -98,6 +98,7 @@ public:
     static QStringList platformPluginArguments(const QString &platformName);
 
     static QString pathFromLibrary(const QString &name);
+    static QString binaryPath(const QString &libName = QString());
 
 private:
     QLibraryInfo();

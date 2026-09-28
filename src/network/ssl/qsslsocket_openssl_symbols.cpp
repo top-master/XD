@@ -52,14 +52,17 @@
 
 #ifdef Q_OS_WIN
 # include <private/qsystemlibrary_p.h>
-#else
-# include <QtCore/qlibrary.h>
 #endif
+#include <QtCore/qlibrary.h>
 #include <QtCore/qmutex.h>
 #include <private/qmutexpool_p.h>
 #include <QtCore/qdatetime.h>
+#include <QtCore/qcoreapplication.h>
+#include <QtCore/qfile.h>
+#include <QtCore/qlibraryinfo.h>
 #if defined(Q_OS_UNIX)
 #include <QtCore/qdir.h>
+#include <QtCore/qfileinfo.h>
 #endif
 #if defined(Q_OS_LINUX) && !defined(Q_OS_ANDROID)
 #include <link.h>
@@ -499,6 +502,21 @@ DEFINEFUNC(void, PKCS12_free, PKCS12 *pkcs12, pkcs12, return, DUMMYARG)
         && !(_q_##func = _q_PTR_##func(libs.second->resolve(#func)))) \
         qsslSocketCannotResolveSymbolWarning(#func);
 
+// TRACE/network ssl: resolve OpenSSL 3 names of symbols it renamed #1,
+// just in case the system's libssl gets loaded, which only a build with
+// QT_OPENSSL_LOAD_SYSTEM does (XD's own OpenSSL, built from the bundled 1.1
+// sources, is the preferred one and needs none of this): 3.0 renamed (keeping
+// them as macros only) for example SSL_get_peer_certificate to
+// SSL_get1_peer_certificate and EVP_PKEY_base_id to EVP_PKEY_get_base_id; each
+// pair behaves the same, so the 3.0 name fills the same q_* pointer, and only
+// when both names are missing is it an error.
+#define RESOLVEFUNC_OR_RENAMED(func, renamed) \
+    if (!(_q_##func = _q_PTR_##func(libs.first->resolve(#func)))         \
+        && !(_q_##func = _q_PTR_##func(libs.second->resolve(#func)))     \
+        && !(_q_##func = _q_PTR_##func(libs.first->resolve(renamed)))    \
+        && !(_q_##func = _q_PTR_##func(libs.second->resolve(renamed))))  \
+        qsslSocketCannotResolveSymbolWarning(#func);
+
 #if OPENSSL_VERSION_NUMBER >= 0x10100000L
 // 1.1 renamed the STACK_OF (sk_*) functions to OPENSSL_sk_*; resolve the new
 // symbol names into the existing q_sk_* pointers so callers stay unchanged.
@@ -641,6 +659,88 @@ static QStringList findAllLibCrypto()
 }
 # endif
 
+// TRACE/network ssl: load only XD's own OpenSSL build #1,
+// unless XD itself is compiled with QT_OPENSSL_LOAD_SYSTEM (add `openssl_system`
+// to QT_CONFIG, see mkspecs/features/qt.prf). Whatever OpenSSL the system has
+// may be any version and is outside XD's control, while XD's own build (from
+// src/3rdparty/openssl-*, named libeay32 and libssleay32 so nothing else
+// shadows it) is the one QtNetwork is written against. So it is only looked
+// for by full path: beside the executable, where copyOpenSSL() of
+// xd_functions.prf copies it, then in XD's own lib/openssl/<debug|release>.
+static QStringList ownOpenSslDirs()
+{
+    QStringList dirs;
+    if (QCoreApplication::instance()) {
+        dirs << QCoreApplication::applicationDirPath();
+    }
+#  ifdef QT_DEBUG
+    const QLatin1String modeDir("/openssl/debug");
+#  else
+    const QLatin1String modeDir("/openssl/release");
+#  endif
+    // TRACE/network ssl: load only XD's own OpenSSL build #7,
+    // hence XD's own lib dir is also taken from where QtCore was loaded from
+    // (QtNetwork lives beside it), since QLibraryInfo resolves a relative
+    // prefix against the application's dir, which names XD's lib dir only for
+    // an application inside XD's bin dir.
+    const QString coreDir = QLibraryInfo::binaryPath();
+    if ( ! coreDir.isEmpty()) {
+        dirs << coreDir + modeDir;
+    }
+    const QString libDir = QLibraryInfo::location(QLibraryInfo::LibrariesPath);
+    dirs << libDir + modeDir;
+#  ifdef Q_OS_ANDROID
+    // An Android app's bundled libs are found by bare name, and the system
+    // itself ships no libeay32 or libssleay32, so a bare name is still ours.
+    dirs << QString();
+#  endif
+    return dirs;
+}
+
+// Loads libeay32 (crypto) first, so the `libeay32.so.1` that libssleay32 needs
+// resolves to that already-loaded copy instead of being searched for.
+static QPair<QLibrary*, QLibrary*> loadOwnOpenSsl()
+{
+    QPair<QLibrary*,QLibrary*> pair;
+    QLibrary *&libssl = pair.first;
+    QLibrary *&libcrypto = pair.second;
+    libssl = new QLibrary;
+    libcrypto = new QLibrary;
+#  if defined(Q_OS_WIN)
+    // TRACE/network ssl: load only XD's own OpenSSL build #3,
+    // hence on Windows too it is loaded by full path through QLibrary, since
+    // QSystemLibrary takes only a bare name and also searches the system dir,
+    // which may hold another program's libeay32.dll.
+    const QString suffix = QLatin1String(".dll");
+    const QLatin1String sslName("ssleay32");
+#  elif defined(Q_OS_DARWIN)
+    const QString suffix = QLatin1String(".dylib");
+    const QLatin1String sslName("libssleay32");
+#  else
+    const QString suffix = QLatin1String(".so");
+    const QLatin1String sslName("libssleay32");
+#  endif
+    foreach (const QString &dir, ownOpenSslDirs()) {
+        const QString prefix = dir.isEmpty() ? QString() : dir + QLatin1Char('/');
+        libcrypto->setFileName(prefix + QLatin1String("libeay32") + suffix);
+        if (!libcrypto->load()) {
+            continue;
+        }
+        libssl->setFileName(prefix + sslName + suffix);
+        if (libssl->load()) {
+            return pair;
+        }
+        libcrypto->unload();
+    }
+    delete libssl;
+    delete libcrypto;
+    libssl = libcrypto = 0;
+    return pair;
+}
+
+// TRACE/network ssl: load only XD's own OpenSSL build #2,
+// hence the system's OpenSSL loaders below stay compiled, but run only when
+// the build asks for them (see q_resolveOpenSslSymbols()).
 #ifdef Q_OS_WIN
 static bool tryToLoadOpenSslWin32Library(QLatin1String ssleay32LibName, QLatin1String libeay32LibName, QPair<QSystemLibrary*, QSystemLibrary*> &pair)
 {
@@ -665,6 +765,7 @@ static bool tryToLoadOpenSslWin32Library(QLatin1String ssleay32LibName, QLatin1S
     return TRUE;
 }
 
+Q_DECL_UNUSED
 static QPair<QSystemLibrary*, QSystemLibrary*> loadOpenSslWin32()
 {
     QPair<QSystemLibrary*,QSystemLibrary*> pair;
@@ -684,8 +785,9 @@ static QPair<QSystemLibrary*, QSystemLibrary*> loadOpenSslWin32()
 
     return pair;
 }
-#else
+#endif
 
+Q_DECL_UNUSED
 static QPair<QLibrary*, QLibrary*> loadOpenSsl()
 {
     QPair<QLibrary*,QLibrary*> pair;
@@ -811,7 +913,6 @@ static QPair<QLibrary*, QLibrary*> loadOpenSsl()
     return pair;
 # endif
 }
-#endif
 
 bool q_resolveOpenSslSymbols()
 {
@@ -826,7 +927,11 @@ bool q_resolveOpenSslSymbols()
         return false;
     triedToResolveSymbols = true;
 
-#ifdef Q_OS_WIN
+    // TRACE/network ssl: load only XD's own OpenSSL build #4,
+    // hence the system's OpenSSL is loaded only when the build asks for it.
+#if !defined(QT_OPENSSL_LOAD_SYSTEM)
+    QPair<QLibrary *, QLibrary *> libs = loadOwnOpenSsl();
+#elif defined(Q_OS_WIN)
     QPair<QSystemLibrary *, QSystemLibrary *> libs = loadOpenSslWin32();
 #else
     QPair<QLibrary *, QLibrary *> libs = loadOpenSsl();
@@ -982,7 +1087,7 @@ bool q_resolveOpenSslSymbols()
     RESOLVEFUNC(SSL_version)
     RESOLVEFUNC(SSL_get_error)
     RESOLVEFUNC(SSL_get_peer_cert_chain)
-    RESOLVEFUNC(SSL_get_peer_certificate)
+    RESOLVEFUNC_OR_RENAMED(SSL_get_peer_certificate, "SSL_get1_peer_certificate")
     RESOLVEFUNC(SSL_get_verify_result)
 #if OPENSSL_VERSION_NUMBER >= 0x10100000L
     RESOLVEFUNC_NAMED(SSL_library_init, "OPENSSL_init_ssl") // 1.1: single init call
@@ -1059,7 +1164,7 @@ bool q_resolveOpenSslSymbols()
     RESOLVEFUNC(X509_get_version)
     RESOLVEFUNC(X509_get_serialNumber)
     RESOLVEFUNC(X509_get_X509_PUBKEY)
-    RESOLVEFUNC(EVP_PKEY_base_id)
+    RESOLVEFUNC_OR_RENAMED(EVP_PKEY_base_id, "EVP_PKEY_get_base_id")
 #endif // OPENSSL_VERSION_NUMBER >= 0x10100000L
     RESOLVEFUNC(X509_STORE_free)
     RESOLVEFUNC(X509_STORE_new)

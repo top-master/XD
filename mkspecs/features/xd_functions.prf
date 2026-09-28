@@ -277,17 +277,24 @@ defineTest(copyOpenSSL) {
     # is linked against its symbol set) rather than whatever OpenSSL the
     # host happens to expose.
     #
+    # TRACE/network ssl: load only XD's own OpenSSL build #6,
+    # hence each platform's real file names get copied, as the loader wants
+    # them beside the executable: ssleay32.pro's TARGET gets no `lib` prefix on
+    # Windows (`ssleay32.dll`), unlike libeay32.pro's.
     win32 {
         ext = .dll
+        ssl_name = ssleay32
     } else:macx {
         ext = *.dylib
+        ssl_name = libssleay32
     } else {
         ext = .so*
+        ssl_name = libssleay32
     }
     for(f, $$list($$files($$path/libeay32$$ext)))  {
         copy_file($$f, $$1/)
     }
-    for(f, $$list($$files($$path/libssleay32$$ext))) {
+    for(f, $$list($$files($$path/$$ssl_name$$ext))) {
         copy_file($$f, $$1/)
     }
 }
@@ -300,6 +307,8 @@ defineReplace(xd_destdir) {
     # Below's loaded after .pro file, but is required now.
     QMAKE_DIR_FIX = DESTDIR
     load(exclusive_builds_post)
+    # An empty DESTDIR is the build dir itself.
+    isEmpty(DESTDIR): return($$OUT_PWD)
     # Make absolute-path.
     return( $$shadowed( $$DESTDIR ) )
 }

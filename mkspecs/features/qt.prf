@@ -24,6 +24,12 @@ plugin { #Qt plugins
 contains(QT_CONFIG, openssl) {
     DEFINES += QT_OPENSSL
 }
+# TRACE/network ssl: load only XD's own OpenSSL build #5,
+# hence `QT_CONFIG += openssl_system` (for example in mkspecs/qconfig.pri) is
+# what lets QtNetwork fall back to the system's OpenSSL.
+contains(QT_CONFIG, openssl_system) {
+    DEFINES += QT_OPENSSL_LOAD_SYSTEM
+}
 contains(QT_CONFIG, sql) {
     DEFINES += QT_SQL
 }
