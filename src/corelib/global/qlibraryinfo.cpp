@@ -34,6 +34,7 @@
 ****************************************************************************/
 
 #include "qdir.h"
+#include "qfileinfo.h"
 #include "qstringlist.h"
 #include "qfile.h"
 #include "qsettings.h"
@@ -57,6 +58,17 @@ QT_END_NAMESPACE
 
 #ifdef Q_OS_WIN
 #  include <qt_windows.h>
+#endif
+
+// The qmake build compiles this file too, but links no libdl.
+#if defined(Q_OS_UNIX) && !defined(QT_BUILD_QMAKE) && !defined(QT_NO_DYNAMIC_LIBRARY)
+#  define QT_LIBRARYINFO_DL
+#  include <dlfcn.h>
+#  if defined(Q_OS_LINUX) && !defined(Q_OS_ANDROID)
+#    include <link.h>
+#  elif defined(Q_OS_DARWIN)
+#    include <mach-o/dyld.h>
+#  endif
 #endif
 
 QT_BEGIN_NAMESPACE
@@ -202,15 +214,12 @@ QSettings *QLibraryInfoPrivate::findConfiguration()
 
     // Try finding by QtCore lib's binary folder.
 #if defined(Q_OS_WIN) && !defined(Q_OS_WINRT) && !defined(Q_OS_WINCE)
-    const QString selfName = QLatin1String("Qt" QT_STRINGIFY(QT_VERSION_MAJOR) "Core" QT_DEBUG_SCOPE("d"));
-    QString path = QLibraryInfo::pathFromLibrary(selfName);
-    // Keeps only folder-path.
-    int i = path.lastIndexOf(QLatin1Char('/'));
-    if (i >= 0)
-        path.truncate(i + 1);
-    // Check.
-    if (QSettings *result = findConfigurationAt(path)) {
-        return result;
+    // An unknown path is skipped, since an empty QDir is the current dir.
+    const QString path = QLibraryInfo::binaryPath();
+    if ( ! path.isEmpty()) {
+        if (QSettings *result = findConfigurationAt(path)) {
+            return result;
+        }
     }
 #endif // Q_OS_WIN
 
@@ -711,6 +720,125 @@ QString QLibraryInfo::pathFromLibrary(const QString &nameArg) {
 #endif // Q_OS_WIN
 
     return QString();
+}
+
+#if defined(QT_LIBRARYINFO_DL) && !defined(Q_OS_ANDROID) \
+    && (defined(Q_OS_LINUX) || defined(Q_OS_DARWIN))
+// Tells whether the loaded module file at path @p filePath is the library
+// named @p libName: a full path matches the same file, through symlinks too
+// (a loader records `libQt5Core.so.5` for a `libQt5Core.so` link), and a
+// bare name matches a file named after it with or without the `lib` prefix,
+// followed by any suffix (`.so`, `.so.5.6`, `.dylib`, `.5.dylib`).
+static bool libraryFileMatches(const QString &filePath, const QString &libName)
+{
+    if (libName.contains(QLatin1Char('/'))) {
+        const QString canonical = QFileInfo(libName).canonicalFilePath();
+        return ! canonical.isEmpty()
+                && QFileInfo(filePath).canonicalFilePath() == canonical;
+    }
+    const QString fileName = QFileInfo(filePath).fileName();
+    return fileName == libName
+            || fileName.startsWith(libName + QLatin1Char('.'))
+            || fileName.startsWith(QLatin1String("lib") + libName + QLatin1Char('.'));
+}
+#endif
+
+#if defined(QT_LIBRARYINFO_DL) && defined(Q_OS_LINUX) && !defined(Q_OS_ANDROID)
+struct QLibraryFileSearch
+{
+    const QString *libName;
+    QString filePath;
+};
+
+static int libraryFileSearchCallback(struct dl_phdr_info *info, size_t size, void *data)
+{
+    if (size < sizeof(info->dlpi_addr) + sizeof(info->dlpi_name)) {
+        return 1;
+    }
+    QLibraryFileSearch *search = static_cast<QLibraryFileSearch *>(data);
+    const QString path = QFile::decodeName(info->dlpi_name);
+    if (path.isEmpty() || ! libraryFileMatches(path, *search->libName)) {
+        return 0;
+    }
+    search->filePath = path;
+    return 1;
+}
+#endif
+
+/*!
+  Returns the absolute path of the folder holding the binary of the already
+  loaded library named \a libName, or of the QtCore library itself when
+  \a libName is empty. Returns a null string when that is unknown: the library
+  is not loaded, or the platform cannot tell.
+
+  A bare \a libName matches the library's file name with or without its
+  platform prefix and suffix (\c Qt5Network, \c libQt5Network.so.5 and
+  \c Qt5Network.dll all name one library), while a \a libName holding a
+  folder matches only that exact file.
+
+  Finding QtCore's own folder works on Windows (desktop) and on Unix with
+  dynamic loading; finding another library's works on Windows (desktop),
+  Linux and Darwin.
+
+  \sa pathFromLibrary()
+
+  \internal
+
+  \since 5.6
+ */
+QString QLibraryInfo::binaryPath(const QString &libName)
+{
+    QString filePath;
+#if defined(Q_OS_WIN) && !defined(Q_OS_WINRT) && !defined(Q_OS_WINCE)
+    if (libName.isEmpty()) {
+        // The module holding an address inside QtCore is QtCore's own, a
+        // decades-old technique, effectively equivalent to GetModuleHandleEx.
+        MEMORY_BASIC_INFORMATION mbi = { 0, 0, 0, 0, 0, 0, 0 };
+        const LPCVOID address = reinterpret_cast<LPCVOID>(&QLibraryInfo::binaryPath);
+        if (::VirtualQuery(address, &mbi, sizeof(mbi)) == 0) {
+            return QString();
+        }
+        HMODULE self = reinterpret_cast<HMODULE>(mbi.AllocationBase);
+        wchar_t buf[MAX_PATH + 1];
+        const DWORD length = ::GetModuleFileNameW(self, buf, MAX_PATH + 1);
+        if (length == 0 || length > MAX_PATH) {
+            return QString();
+        }
+        filePath = QDir::cleanPath(QString::fromWCharArray(buf, length));
+    } else {
+        filePath = pathFromLibrary(libName);
+    }
+#elif defined(QT_LIBRARYINFO_DL)
+    if (libName.isEmpty()) {
+        Dl_info self;
+        const void *address = reinterpret_cast<const void *>(&QLibraryInfo::binaryPath);
+        if (dladdr(const_cast<void *>(address), &self) && self.dli_fname) {
+            filePath = QFile::decodeName(self.dli_fname);
+        }
+    } else {
+#  if defined(Q_OS_LINUX) && !defined(Q_OS_ANDROID)
+        QLibraryFileSearch search = { &libName, QString() };
+        dl_iterate_phdr(libraryFileSearchCallback, &search);
+        filePath = search.filePath;
+#  elif defined(Q_OS_DARWIN)
+        const uint32_t count = _dyld_image_count();
+        for (uint32_t i = 0; i < count; ++i) {
+            const QString path = QFile::decodeName(_dyld_get_image_name(i));
+            if (libraryFileMatches(path, libName)) {
+                filePath = path;
+                break;
+            }
+        }
+#  endif
+    }
+#else
+    Q_UNUSED(libName)
+#endif
+
+    if (filePath.isEmpty()) {
+        return QString();
+    }
+    return QFileInfo(filePath).absolutePath();
 }
 
 /*!

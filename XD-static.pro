@@ -23,6 +23,10 @@ SUBDIRS += \
 
 win32: SUBDIRS += $$PWD/src/winmain
 
+# XD's own OpenSSL, which QtNetwork loads at run time and apps copy beside
+# their executable with copyOpenSSL().
+contains(QT_CONFIG, openssl): SUBDIRS += $$PWD/src/3rdparty/openssl-1.1.1w/openssl.pro
+
 SUBDIRS += \
     $$PWD/src/dbus \
     $$PWD/src/network \
