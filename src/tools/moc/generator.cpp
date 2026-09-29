@@ -594,7 +594,9 @@ void Generator::generateCode()
                     cdef->classname.constData(), QByteArray(j+1, ')').constData());
         }
     }
-    if (cdef->inheritsFrom("QObjectDecor")) {
+    if (cdef->inheritsFrom("QObjectDecor")
+        || cdef->inheritsFrom("QObjectLazy"))
+    {
         fprintf(out, "    return this->toDecoratee()->qt_metacast(_clname);\n");
         goto posEndSmartCast;
     }

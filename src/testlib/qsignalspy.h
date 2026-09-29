@@ -128,7 +128,15 @@ public:
             return;
         }
         sig = signalMetaMethod.methodSignature();
-        initArgs(mo->method(sigIndex), obj);
+        // Records the given signal's own parameter count and types, since
+        // through a decorator (see QObjectDecor) the real class of @p obj can
+        // hold another signal at the same index, whose parameters the emitter
+        // never passes, else would do:
+        // ```
+        // initArgs(mo->method(sigIndex), obj);
+        // ```
+        // instead of:
+        initArgs(signalMetaMethod, obj);
     }
 #endif // Q_QDOC
 
