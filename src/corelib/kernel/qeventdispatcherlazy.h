@@ -26,7 +26,7 @@
 #define QEVENTDISPATCHER_LAZY_H
 
 #include <QtCore/qabstracteventdispatcher.h>
-#include <QtCore/qobjectdecor.h>
+#include <QtCore/qobjectlazy.h>
 #include <QtCore/qfunction.h>
 
 
@@ -40,7 +40,7 @@ class QThreadData;
  * This should work fine as long as @ref qobject_cast is used instead of the
  * raw @c reinterpret_cast.
  */
-class Q_CORE_EXPORT QEventDispatcherLazy : public QAbstractEventDispatcher, public QObjectDecor
+class Q_CORE_EXPORT QEventDispatcherLazy : public QAbstractEventDispatcher, public QObjectLazy
 {
     Q_OBJECT
     typedef QAbstractEventDispatcher super;
@@ -103,7 +103,7 @@ protected:
         bool isUsedByApp;
         bool isUsedByThread;
     };
-    void decorListener(PreDecorContext *);
+    virtual void decorListener(PreDecorContext *);
 
 private:
     Q_DISABLE_COPY(QEventDispatcherLazy);
