@@ -39,6 +39,7 @@ QT_BEGIN_NAMESPACE
 
 class QThread;
 class QObjectDecorLocker;
+class QObjectDecorPrivate;
 
 typedef QFunction<void (QObject *) > QObjectDecorListener;
 
@@ -179,6 +180,13 @@ public:
         return *Q_PTR_CAST(QScopedPointerLazyImmutable<QObjectData> *, &const_cast<QObject * >(obj)->d_ptr);
     }
 
+    /// Returns the raw private pointer held in @p obj's @ref d_ptr_from slot.
+    ///
+    /// @warning Meant for internal use only.
+    static Q_ALWAYS_INLINE QObjectPrivate *&d_ptr_valueRef(const QObject *obj) {
+        return QObjectPrivateScoped::raw(&const_cast<QObject * >(obj)->d_ptr);
+    }
+
 protected:
     void decorAttach(QObject *owner) Q_THROWS( QAtomicMismatchException );
     /// @warning After calling this, you should set `decorLoaded` to `Q_NULLPTR`
@@ -197,8 +205,15 @@ protected:
     virtual void preDecorLoad();
     /// @warning Caller should lock @ref decorMutex while calling.
     ///
-    /// @note Not virtual since we have @ref decorListen helper.
-    void postDecorLoad(QObject *loaded) Q_THROWS( QRequirementErrorType::Usage );
+    /// @warning Use @ref decorListen instead of overridding this.
+    virtual void postDecorLoad(QObject *loaded) Q_THROWS( QRequirementErrorType::Usage );
+
+    /// Re-points the decoratee to @p newValue (leaving the owner attached),
+    /// returning the previous decoratee. Undoes the old decoratee's laziness
+    /// bookkeeping and wires @p newValue's -- WITHOUT any private swap -- so a
+    /// plain (non-dissolving) decorator can swap its decoratee at run time.
+    /// @warning Caller should lock @ref decorMutex while calling.
+    virtual QObject *decorSwapLoaded(QObject *newValue) Q_THROWS( QRequirementErrorType::Usage );
 
     /// Triggers listeners (if any).
     /// @warning Caller should lock @ref decorMutex while calling.
@@ -210,6 +225,7 @@ private:
     Q_DISABLE_COPY(QObjectDecor);
 
     friend class QObjectDecorLocker;
+    friend class QObjectDecorPrivate;
 
     mutable QMutex decorMutex;
     mutable QObjectDecorLocker *decorLocker;

@@ -23,6 +23,7 @@
 ****************************************************************************/
 
 #include "qobjectdecor.h"
+#include "qobjectdecor_p.h"
 
 #include <QtCore/qexception.h>
 #include <QtCore/qthread.h>
@@ -89,7 +90,10 @@ void QObjectDecor::preDecorLoad() {
 }
 
 void QObjectDecor::postDecorLoad(QObject *loaded) {
-    Q_ASSERT_X(decorMutex.tryLock() == false, "Decor", "Caller should lock the mutex.");
+    // Plain decorator: record the decoratee and forward through it, keeping this
+    // owner's own private. QObjectLazy overrides this to also dissolve the owner
+    // into the decoratee's private.
+    QObjectDecorPrivate::assertLocked(this);
 
     if (loaded == decorOwner) {
         qThrow(QRequirementErrorType::Usage,  "Recursion detected,"
@@ -102,11 +106,29 @@ void QObjectDecor::postDecorLoad(QObject *loaded) {
 
     QObjectPrivate *loadedPrivate = QObjectPrivate::get(loaded);
     loadedPrivate->isDecoratee = true;
-    QObjectPrivateScoped::raw(&decorOwner->d_ptr) = loadedPrivate;
     this->decorLoaded = QPointer<QObject>(loaded);
     decorOwnerPrivate->isLazy = false;
 
     decorListenTrigger();
+}
+
+QObject *QObjectDecor::decorSwapLoaded(QObject *newValue) {
+    QObject *old = decorLoaded.data();
+    if (old == newValue) {
+        return old;
+    }
+    if (old) {
+        QObjectPrivate::get(old)->isDecoratee = false;
+        QLazinessResolver::set(old->d_ptr, this, defaultResolver());
+    }
+    if (newValue) {
+        if ( ! QLazinessResolver::set(newValue->d_ptr, defaultResolver(), this)) {
+            qThrow(QRequirementErrorType::Usage,  "Replacement decoratee should have default resolver.");
+        }
+        QObjectPrivate::get(newValue)->isDecoratee = true;
+    }
+    decorLoaded = QPointer<QObject >(newValue);
+    return old;
 }
 
 void QObjectDecor::decorListen(const QObjectDecorListener &listener) {

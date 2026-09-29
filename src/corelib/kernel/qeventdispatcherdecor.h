@@ -22,38 +22,45 @@
 **
 ****************************************************************************/
 
-#ifndef QEVENTDISPATCHER_LAZY_H
-#define QEVENTDISPATCHER_LAZY_H
+#ifndef QEVENTDISPATCHER_DECOR_H
+#define QEVENTDISPATCHER_DECOR_H
 
 #include <QtCore/qabstracteventdispatcher.h>
-#include <QtCore/qobjectlazy.h>
-#include <QtCore/qfunction.h>
+#include <QtCore/qobjectdecor.h>
 
 
 QT_BEGIN_NAMESPACE
 
 class QThreadData;
 
-/**
- * Decorates QAbstractEventDispatcher with lazy-loading.
- *
- * This should work fine as long as @ref qobject_cast is used instead of the
- * raw @c reinterpret_cast.
- */
-class Q_CORE_EXPORT QEventDispatcherLazy : public QAbstractEventDispatcher, public QObjectLazy
+/*!
+A run-time replaceable decorator around an event dispatcher.
+
+Unlike @ref QEventDispatcherLazy (a lazy loader that dissolves into its
+decoratee's private), this keeps its own identity on the plain @ref QObjectDecor
+base and forwards every call to a delegate it holds. @ref replace swaps that
+delegate at run time and returns the previous one, so a test can install this
+once as the thread's dispatcher, swap in an overriding dispatcher for the
+duration of a case, then swap the original back -- without touching Qt's own
+setEventDispatcher workflow (whose default stays @ref QEventDispatcherLazy).
+*/
+class Q_CORE_EXPORT QEventDispatcherDecor : public QAbstractEventDispatcher, public QObjectDecor
 {
     Q_OBJECT
     typedef QAbstractEventDispatcher super;
-    typedef QEventDispatcherLazy Self;
+    typedef QEventDispatcherDecor Self;
 public:
-    explicit QEventDispatcherLazy(QObject *parent = Q_NULLPTR) Q_THROWS(?);
-    ~QEventDispatcherLazy();
+    explicit QEventDispatcherDecor(QAbstractEventDispatcher *delegate, QObject *parent = Q_NULLPTR);
+    ~QEventDispatcherDecor();
 
     // MARK: helpers.
 
     inline QAbstractEventDispatcher *toDecoratee() const {
-        return reinterpret_cast<QAbstractEventDispatcher *>(QObjectDecor::toDecoratee().data());
+        return reinterpret_cast<QAbstractEventDispatcher * >(QObjectDecor::toDecoratee().data());
     }
+
+    /// Swaps the held delegate for @p newValue and returns the previous one.
+    QAbstractEventDispatcher *replace(QAbstractEventDispatcher *newValue);
 
     // MARK: interface copy.
 
@@ -66,7 +73,7 @@ public:
     void registerTimer(int timerId, int interval, Qt::TimerType timerType, QObject *object) Q_DECL_OVERRIDE;
     bool unregisterTimer(int timerId) Q_DECL_OVERRIDE;
     bool unregisterTimers(QObject *object) Q_DECL_OVERRIDE;
-    QList<TimerInfo> registeredTimers(QObject *object) const Q_DECL_OVERRIDE;
+    QList<TimerInfo > registeredTimers(QObject *object) const Q_DECL_OVERRIDE;
 
     int remainingTime(int timerId) Q_DECL_OVERRIDE;
 
@@ -82,56 +89,15 @@ public:
     void startingUp() Q_DECL_OVERRIDE;
     void closingDown() Q_DECL_OVERRIDE;
 
-    // MARK: internals.
-
 protected:
-    inline QEventDispatcherLazy(QAbstractEventDispatcherPrivate &d, QObject *parent)
-        : super(d, parent)
-    {}
-
-    void preDecorLoad() Q_DECL_OVERRIDE;
     void decorLoad() Q_DECL_OVERRIDE;
 
-    struct PreDecorContext {
-        Q_DECL_CONSTEXPR inline PreDecorContext()
-            : thread(Q_NULLPTR)
-            , isUsedByApp(false)
-            , isUsedByThread(false)
-        {}
-
-        QThreadData *thread;
-        bool isUsedByApp;
-        bool isUsedByThread;
-    };
-    void decorListener(PreDecorContext *);
-
 private:
-    Q_DISABLE_COPY(QEventDispatcherLazy);
+    Q_DISABLE_COPY(QEventDispatcherDecor);
 
-public:
-    QErrorFunc lastError;
-};
-
-class Q_CORE_EXPORT QEventDispatcherLazyFunc : public QEventDispatcherLazy {
-    typedef QEventDispatcherLazy super;
-    typedef QEventDispatcherLazyFunc Self;
-public:
-    inline QEventDispatcherLazyFunc(QObject *parent = Q_NULLPTR)
-        : super(parent)
-    {}
-
-    void decorLoad() Q_DECL_OVERRIDE;
-
-    QFunction<QAbstractEventDispatcher *(QEventDispatcherLazy *)> load;
-    QFunction<bool(QEventDispatcherLazy *)> destroy;
-
-protected:
-    bool lazyEvent(QLazyEvent *event) Q_DECL_OVERRIDE;
-
-private:
-    Q_DISABLE_COPY(QEventDispatcherLazyFunc)
+    QAbstractEventDispatcher *initialDelegate;
 };
 
 QT_END_NAMESPACE
 
-#endif // QEVENTDISPATCHER_LAZY_H
+#endif // QEVENTDISPATCHER_DECOR_H
