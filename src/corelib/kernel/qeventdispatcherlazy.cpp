@@ -22,26 +22,26 @@
 **
 ****************************************************************************/
 
-#include "qeventdispatcherdecor.h"
+#include "qeventdispatcherlazy.h"
 
 #include <private/qcoreapplication_p.h>
 #include <private/qthread_p.h>
 #include <QtCore/qexception.h>
 
 
-QEventDispatcherDecor::QEventDispatcherDecor(QObject *parent) Q_DECL_NOEXCEPT_EXPR(false)
+QEventDispatcherLazy::QEventDispatcherLazy(QObject *parent) Q_DECL_NOEXCEPT_EXPR(false)
     : super(parent)
     , lastError(Q_NULLPTR)
 {
     decorAttach(this);
 }
 
-QEventDispatcherDecor::~QEventDispatcherDecor()
+QEventDispatcherLazy::~QEventDispatcherLazy()
 {
     // Nothing to do (but required).
 }
 
-void QEventDispatcherDecor::preDecorLoad()
+void QEventDispatcherLazy::preDecorLoad()
 {
     // Prevents recursion.
     PreDecorContext *ctx = new PreDecorContext();
@@ -65,7 +65,7 @@ void QEventDispatcherDecor::preDecorLoad()
     });
 }
 
-void QEventDispatcherDecor::decorLoad()
+void QEventDispatcherLazy::decorLoad()
 {
     QObjectDecorLocker _(this);
     if ( ! this->decorLoaded) {
@@ -84,7 +84,7 @@ void QEventDispatcherDecor::decorLoad()
     }
 }
 
-void QEventDispatcherDecor::decorListener(PreDecorContext *ctx) {
+void QEventDispatcherLazy::decorListener(PreDecorContext *ctx) {
     QAbstractEventDispatcher *dispatcher = reinterpret_cast<QAbstractEventDispatcher *>(decorLoaded.data());
     if (ctx->isUsedByThread) {
         Q_IF(ctx->thread) {
@@ -100,64 +100,64 @@ void QEventDispatcherDecor::decorListener(PreDecorContext *ctx) {
     delete ctx;
 }
 
-bool QEventDispatcherDecor::processEvents(QEventLoop::ProcessEventsFlags flags)
+bool QEventDispatcherLazy::processEvents(QEventLoop::ProcessEventsFlags flags)
 {
     return toDecoratee()->processEvents(flags);
 }
 
-bool QEventDispatcherDecor::hasPendingEvents()
+bool QEventDispatcherLazy::hasPendingEvents()
 {
     return toDecoratee()->hasPendingEvents();
 }
 
-void QEventDispatcherDecor::registerSocketNotifier(QSocketNotifier *notifier)
+void QEventDispatcherLazy::registerSocketNotifier(QSocketNotifier *notifier)
 {
     return toDecoratee()->registerSocketNotifier(notifier);
 }
 
-void QEventDispatcherDecor::unregisterSocketNotifier(QSocketNotifier *notifier)
+void QEventDispatcherLazy::unregisterSocketNotifier(QSocketNotifier *notifier)
 {
     return toDecoratee()->unregisterSocketNotifier(notifier);
 }
 
-void QEventDispatcherDecor::registerTimer(int timerId, int interval, Qt::TimerType timerType, QObject *object)
+void QEventDispatcherLazy::registerTimer(int timerId, int interval, Qt::TimerType timerType, QObject *object)
 {
     return toDecoratee()->registerTimer(timerId, interval, timerType, object);
 }
 
-bool QEventDispatcherDecor::unregisterTimer(int timerId)
+bool QEventDispatcherLazy::unregisterTimer(int timerId)
 {
     return toDecoratee()->unregisterTimer(timerId);
 }
 
-bool QEventDispatcherDecor::unregisterTimers(QObject *object)
+bool QEventDispatcherLazy::unregisterTimers(QObject *object)
 {
     return toDecoratee()->unregisterTimers(object);
 }
 
-QList<QAbstractEventDispatcher::TimerInfo> QEventDispatcherDecor::registeredTimers(QObject *object) const
+QList<QAbstractEventDispatcher::TimerInfo> QEventDispatcherLazy::registeredTimers(QObject *object) const
 {
     return toDecoratee()->registeredTimers(object);
 }
 
-int QEventDispatcherDecor::remainingTime(int timerId)
+int QEventDispatcherLazy::remainingTime(int timerId)
 {
     return toDecoratee()->remainingTime(timerId);
 }
 
 #ifdef Q_OS_WIN
-bool QEventDispatcherDecor::registerEventNotifier(QWinEventNotifier *notifier)
+bool QEventDispatcherLazy::registerEventNotifier(QWinEventNotifier *notifier)
 {
     return toDecoratee()->registerEventNotifier(notifier);
 }
 
-void QEventDispatcherDecor::unregisterEventNotifier(QWinEventNotifier *notifier)
+void QEventDispatcherLazy::unregisterEventNotifier(QWinEventNotifier *notifier)
 {
     return toDecoratee()->unregisterEventNotifier(notifier);
 }
 #endif // Q_OS_WIN
 
-void QEventDispatcherDecor::wakeUp()
+void QEventDispatcherLazy::wakeUp()
 {
     // TRACE/QEventDispatcher/decor BugFix: skip until decoratee loads #1,
     // since `load` may still be constructing the platform integration --
@@ -174,7 +174,7 @@ void QEventDispatcherDecor::wakeUp()
     return toDecoratee()->wakeUp();
 }
 
-void QEventDispatcherDecor::interrupt()
+void QEventDispatcherLazy::interrupt()
 {
     // TRACE/QEventDispatcher/decor BugFix: skip until decoratee loads #2.
     if ( ! isDecorLoaded())
@@ -182,7 +182,7 @@ void QEventDispatcherDecor::interrupt()
     return toDecoratee()->interrupt();
 }
 
-void QEventDispatcherDecor::flush()
+void QEventDispatcherLazy::flush()
 {
     // TRACE/QEventDispatcher/decor BugFix: skip until decoratee loads #3.
     if ( ! isDecorLoaded())
@@ -190,17 +190,17 @@ void QEventDispatcherDecor::flush()
     return toDecoratee()->flush();
 }
 
-void QEventDispatcherDecor::startingUp()
+void QEventDispatcherLazy::startingUp()
 {
     return toDecoratee()->startingUp();
 }
 
-void QEventDispatcherDecor::closingDown()
+void QEventDispatcherLazy::closingDown()
 {
     return toDecoratee()->closingDown();
 }
 
-void QEventDispatcherDecorFunc::decorLoad()
+void QEventDispatcherLazyFunc::decorLoad()
 {
     QObjectDecorLocker _(this);
     if ( ! this->decorLoaded) {
@@ -212,7 +212,7 @@ void QEventDispatcherDecorFunc::decorLoad()
     }
 }
 
-bool QEventDispatcherDecorFunc::lazyEvent(QLazyEvent *event)
+bool QEventDispatcherLazyFunc::lazyEvent(QLazyEvent *event)
 {
     switch (event->type()) {
     case QLazyEvent::Destroy:
