@@ -336,33 +336,30 @@ QObject *QMetaObject::cast(QObject *obj) const
     if (obj) {
         const QMetaObject *m;
         // First searches without laziness-resolvement (if lazy-loadable).
-        const QObjectDecor *decor = QObjectDecor::fromDecorable(obj);
+        // This also covers casting back from decoratee to decor.
+        QObjectDecor *decor = QObjectDecor::fromDecorable(obj);
         if (decor) {
             m = decor->toMetaObject();
         } else {
-posResolve:
-            // Resolves laziness (if any) and
-            // picks decoratee's QMetaObject for search.
-            QObjectPrivate *d = QObjectPrivate::get(obj);
-            if (d->isDecoratee) {
-                obj = d->q_ptr;
-                if ( ! obj) {
-                    return 0; // Could use Q_UNREACHABLE here.
-                }
-            }
+            Q_ASSERT_X(obj == QObjectPrivate::get(obj)->q_ptr,
+                       "Decor", "Laziness resolver should *not* be set directly (failed to find QObjectDecor).");
             m = obj->metaObject();
         }
 
         do {
-            if (m == this)
+            if (m == this) {
+                if (decor) {
+                    // Cast-match found in the decor.
+                    return decor->toDecor();
+                }
                 return obj;
+            }
         } while ((m = m->d.superdata));
 
         // Even if nothing found yet, resolves laziness **only if**
-        // this itself is **not** a decor.
+        // the cast's target-type itself is **not** a decor.
         if (decor && this->indexOfClassInfo("Decor") < 0) {
-            decor = Q_NULLPTR;
-            goto posResolve;
+            return decor->decorCast(obj, this);
         }
     }
     return 0;

@@ -250,6 +250,41 @@ public:
         return false;
     }
 
+
+
+    /// Unlike QAtomicPointer, gives @c nullptr instead of a previous value
+    /// that is already deleted, just like @ref load does.
+    inline Type fetchAndStoreRelaxed(Type newValue) Q_DECL_NOTHROW {
+        const Self previous(*this);
+        (void) this->wp.value.fetchAndStoreRelaxed(newValue);
+        *this = Self(newValue);
+        return previous.load();
+    }
+
+    /// @copydoc fetchAndStoreRelaxed
+    inline Type fetchAndStoreAcquire(Type newValue) Q_DECL_NOTHROW {
+        const Self previous(*this);
+        (void) this->wp.value.fetchAndStoreAcquire(newValue);
+        *this = Self(newValue);
+        return previous.load();
+    }
+
+    /// @copydoc fetchAndStoreRelaxed
+    inline Type fetchAndStoreRelease(Type newValue) Q_DECL_NOTHROW {
+        const Self previous(*this);
+        (void) this->wp.value.fetchAndStoreRelease(newValue);
+        *this = Self(newValue);
+        return previous.load();
+    }
+
+    /// @copydoc fetchAndStoreRelaxed
+    inline Type fetchAndStoreOrdered(Type newValue) Q_DECL_NOTHROW {
+        const Self previous(*this);
+        (void) this->wp.value.fetchAndStoreOrdered(newValue);
+        *this = Self(newValue);
+        return previous.load();
+    }
+
 };
 
 QT_END_NAMESPACE

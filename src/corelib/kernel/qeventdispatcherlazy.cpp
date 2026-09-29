@@ -71,14 +71,24 @@ void QEventDispatcherLazy::decorLoad()
     if ( ! this->decorLoaded) {
         preDecorLoad();
 
+        QAbstractEventDispatcher *actual = Q_NULLPTR;
         QCoreApplication *app = qApp;
-        Q_ASSERT(app);
-        QCoreApplicationPrivate *d = QCoreApplicationPrivate::get(app);
-        if ( ! QCoreApplicationPrivate::eventDispatcher) {
-            (*d).QCoreApplicationPrivate::createEventDispatcher();
+        if (app) {
+            QCoreApplicationPrivate *d = QCoreApplicationPrivate::get(app);
+            if ( ! QCoreApplicationPrivate::eventDispatcher) {
+                (*d).QCoreApplicationPrivate::createEventDispatcher();
+            }
+            actual = QCoreApplicationPrivate::eventDispatcher;
+        } else {
+            // No application yet, as for a dispatcher installed before it
+            // through QCoreApplication::setEventDispatcher(): creates the
+            // default the way QThread creates its own, in the thread slot,
+            // then takes it back out of there.
+            QThreadData *thread = QThreadData::current();
+            QAbstractEventDispatcher *held = thread->eventDispatcher.fetchAndStoreOrdered(Q_NULLPTR);
+            QThreadPrivate::createEventDispatcher(thread);
+            actual = thread->eventDispatcher.fetchAndStoreOrdered(held);
         }
-
-        QAbstractEventDispatcher *actual = QCoreApplicationPrivate::eventDispatcher;
 
         postDecorLoad(actual);
     }

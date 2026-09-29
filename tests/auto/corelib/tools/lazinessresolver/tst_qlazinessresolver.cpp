@@ -135,6 +135,44 @@ public:
     bool isDecorateeDeletable;
 };
 
+/// A plain (non-dissolving) decorator: unlike DecorDummy, it keeps its own
+/// private, and lets tests swap or detach its decoratee.
+class PlainDecorDummy : public QObject, public QObjectDecor {
+    Q_OBJECT
+public:
+    inline PlainDecorDummy()
+        : decoratee(new QObjectDummy())
+    {
+        decorAttach(this);
+    }
+
+    inline ~PlainDecorDummy()
+    {
+        decorDetach();
+        delete decoratee;
+    }
+
+    inline QObject *swapLoaded(QObject *newValue)
+    {
+        QObjectDecorLocker _(this);
+        return decorSwapLoaded(newValue);
+    }
+
+    inline void detach()
+    {
+        decorDetach();
+    }
+
+protected:
+    void decorLoad() Q_DECL_OVERRIDE
+    {
+        postDecorLoad(decoratee);
+    }
+
+public:
+    QObjectDummy *decoratee;
+};
+
 class DecorateeSpy {
 public:
     inline DecorateeSpy(QObjectDummy &obj)
@@ -617,11 +655,20 @@ private slots:
         DecorDummy decor;
         QAbstractEventDispatcher *decoratee = decor.QEventDispatcherLazy::toDecoratee();
         qExpect(decoratee)->Not->toBeNull();
-        QSignalSpy spyReal(decoratee, &QAbstractEventDispatcher::aboutToBlock);
+        QSignalSpy spyReal(decoratee, SIGNAL(dummySignal(QString)));
         qExpect(spyReal.isValid())->toBeTruthy();
         DispatcherSpy spyDecor(decor);
-        // With trigger.
-        decor.aboutToBlock();
+        // With trigger by index, carrying the argument the decoratee's signal
+        // reads (see below), since a plain trigger passes no argument at all,
+        // hence reading one would be undefined-behavior, else would do:
+        // ```
+        // decor.aboutToBlock();
+        // ```
+        // instead of:
+        QString payload(QLL("my-frst-arg"));
+        void *argv[] = { Q_NULLPTR, &payload };
+        QMetaMethod signal = QMetaMethod::fromSignal(&QAbstractEventDispatcher::aboutToBlock);
+        QMetaObject::activate(&decor, signal.methodIndex(), argv);
         spyDecor.assertAboutToBlock(0);
 
         // Actual test.
@@ -634,12 +681,118 @@ private slots:
         qExpect(arg)->Not->toBeNull();
         int refTypeId = qMetaTypeId<QString>();
         qExpect(arg.type())->toEqual(refTypeId);
+        // With the slot passed through as is.
+        QString result = arg.value<QString >();
+        qExpect(result)->toEqual(QLL("my-frst-arg"));
+    }
 
-        // Note that taking the argument would be undefined-behavior, else could do:
-        // ```
-        // QString result = arg.value<QString >();
-        // qExpect(result)->Not->toBeNull();
-        // ```
+    inline void qsignalspy_shouldShapeArgsByGivenSignalNotByDecorateeMethodAtItsIndex() {
+        // Dummy.
+        DecorDummy decor;
+        // With the decoratee typed as the decor's base, whose method at the
+        // spied index is `aboutToBlock()`, while the decoratee's own one there
+        // is `dummySignal(QString)`.
+        QAbstractEventDispatcher *decoratee = decor.QEventDispatcherLazy::toDecoratee();
+        qExpect(decoratee)->Not->toBeNull();
+        QSignalSpy spy(decoratee, &QAbstractEventDispatcher::aboutToBlock);
+        qExpect(spy.isValid())->toBeTruthy();
+        // With trigger by index, as in the test above.
+        QString payload(QLL("my-frst-arg"));
+        void *argv[] = { Q_NULLPTR, &payload };
+        QMetaMethod signal = QMetaMethod::fromSignal(&QAbstractEventDispatcher::aboutToBlock);
+        QMetaObject::activate(&decor, signal.methodIndex(), argv);
+
+        // Actual test.
+        qExpect(spy.count())->toEqual(1);
+        qExpect(spy[0].count())->toEqual(0)
+                ->withContext("Should record the given signal's parameters, which are none.");
+    }
+
+    inline void fromDecorable_shouldBeNullForPlainQObject() {
+        // Dummy.
+        QObjectDummy obj;
+
+        // Actual test.
+        qExpect(QObjectDecor::fromDecorable(&obj))->toBeNull();
+        // With cast, which asserts that resolving laziness is a no-op.
+        qExpect(qobject_cast<QObjectDummy *>(&obj))->toBe(&obj);
+        qExpect(qobject_cast<DecorDummy *>(&obj))->toBeNull();
+    }
+
+    inline void fromDecorable_shouldReturnDecorOfLoadedDecoratee() {
+        // Dummy.
+        DecorDummy decor;
+        PlainDecorDummy plain;
+        // Without loading yet.
+        qExpect(QObjectDecor::fromDecorable(plain.decoratee))->toBeNull();
+
+        // Actual test.
+        QObjectDecor *expected = QObjectDecor::fromDecorable(&decor);
+        qExpect(expected)->Not->toBeNull();
+        qExpect(QObjectDecor::fromDecorable(decor.toDecoratee()))->toBe(expected);
+        // With repeat for plain decorator.
+        expected = QObjectDecor::fromDecorable(&plain);
+        qExpect(expected)->toBe(static_cast<QObjectDecor *>(&plain));
+        qExpect(plain.toDecoratee().data())->toBe(plain.decoratee);
+        qExpect(QObjectDecor::fromDecorable(plain.decoratee))->toBe(expected);
+    }
+
+    inline void plainDecor_shouldCastToDecorateeButKeepOwnPrivate() {
+        // Dummy.
+        PlainDecorDummy decor;
+        QObjectDummy *casted = qobject_cast<QObjectDummy *>(&decor);
+
+        // Actual test.
+        qExpect(casted)->toBe(decor.decoratee);
+        qExpect(QObjectPrivate::get(&decor))->Not->toBe(QObjectPrivate::get(casted));
+        qExpect(QObjectPrivate::get(&decor)->q_ptr)->toBe(static_cast<QObject *>(&decor));
+        // With casting to the decor itself, since its meta-object is
+        // recorded after construction (unlike DecorDummy's).
+        qExpect(qobject_cast<PlainDecorDummy *>(&decor))->toBe(&decor);
+    }
+
+    inline void plainDecor_shouldForgetDecorateeAfterSwapAndDetach() {
+        // Dummy.
+        QObjectDummy other;
+        PlainDecorDummy decor;
+        QObjectDummy *initial = qobject_cast<QObjectDummy *>(&decor);
+        qExpect(initial)->toBe(decor.decoratee);
+        // With swap.
+        qExpect(decor.swapLoaded(&other))->toBe(static_cast<QObject *>(initial));
+
+        // Actual test.
+        qExpect(QObjectDecor::fromDecorable(initial))->toBeNull();
+        qExpect(bool(QObjectPrivate::get(initial)->isDecoratee))->toBeFalsy();
+        qExpect(qobject_cast<QObjectDummy *>(initial))->toBe(initial);
+        qExpect(QObjectDecor::fromDecorable(&other))->toBe(static_cast<QObjectDecor *>(&decor));
+        qExpect(qobject_cast<QObjectDummy *>(&decor))->toBe(&other);
+        // With detach.
+        decor.detach();
+        qExpect(QObjectDecor::fromDecorable(&decor))->toBeNull();
+        qExpect(QObjectDecor::fromDecorable(&other))->toBeNull();
+        qExpect(bool(QObjectPrivate::get(&other)->isDecoratee))->toBeFalsy();
+        qExpect(qobject_cast<QObjectDummy *>(&other))->toBe(&other);
+        qExpect(qobject_cast<QObjectDummy *>(&decor))->toBeNull();
+        qExpect(qobject_cast<PlainDecorDummy *>(&decor))->toBe(&decor);
+    }
+
+    inline void decoratee_shouldCastBackToDecor() {
+        // Dummy.
+        DecorDummy decor;
+        QObjectDummy *decoratee = decor.toDecoratee();
+        PlainDecorDummy plain;
+        (void) plain.toDecoratee();
+
+        // Actual test.
+        qExpect(qobject_cast<QEventDispatcherLazy *>(decoratee))
+                ->toBe(static_cast<QEventDispatcherLazy *>(&decor));
+        qExpect(qobject_cast<PlainDecorDummy *>(plain.decoratee))->toBe(&plain);
+        // Without losing the decoratee's own type.
+        qExpect(qobject_cast<QObjectDummy *>(decoratee))->toBe(decoratee);
+        qExpect(qobject_cast<QObjectDummy *>(plain.decoratee))->toBe(plain.decoratee);
+        // With classes both share being the decor's.
+        qExpect(qobject_cast<QObject *>(decoratee))->toBe(static_cast<QObject *>(&decor));
+        qExpect(qobject_cast<QObject *>(plain.decoratee))->toBe(static_cast<QObject *>(&plain));
     }
 
     /// Should be last test-case.
