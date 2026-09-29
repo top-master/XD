@@ -167,7 +167,9 @@ bool Moc::parseClassHead(ClassDef *def)
             } else {
                 const Superclass &superclass = Superclass(type, access);
                 def->superclassList += superclass;
-                if (superclass.hasName("QObjectDecor")) {
+                if (superclass.hasName("QObjectDecor")
+                    || superclass.hasName("QObjectLazy"))
+                {
                     ClassInfoDef info;
                     info.name = "Decor";
                     info.value = info.name;
