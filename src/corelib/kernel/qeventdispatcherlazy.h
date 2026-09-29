@@ -22,8 +22,8 @@
 **
 ****************************************************************************/
 
-#ifndef QEVENTDISPATCHER_DECOR_H
-#define QEVENTDISPATCHER_DECOR_H
+#ifndef QEVENTDISPATCHER_LAZY_H
+#define QEVENTDISPATCHER_LAZY_H
 
 #include <QtCore/qabstracteventdispatcher.h>
 #include <QtCore/qobjectdecor.h>
@@ -40,14 +40,14 @@ class QThreadData;
  * This should work fine as long as @ref qobject_cast is used instead of the
  * raw @c reinterpret_cast.
  */
-class Q_CORE_EXPORT QEventDispatcherDecor : public QAbstractEventDispatcher, public QObjectDecor
+class Q_CORE_EXPORT QEventDispatcherLazy : public QAbstractEventDispatcher, public QObjectDecor
 {
     Q_OBJECT
     typedef QAbstractEventDispatcher super;
-    typedef QEventDispatcherDecor Self;
+    typedef QEventDispatcherLazy Self;
 public:
-    explicit QEventDispatcherDecor(QObject *parent = Q_NULLPTR) Q_THROWS(?);
-    ~QEventDispatcherDecor();
+    explicit QEventDispatcherLazy(QObject *parent = Q_NULLPTR) Q_THROWS(?);
+    ~QEventDispatcherLazy();
 
     // MARK: helpers.
 
@@ -85,7 +85,7 @@ public:
     // MARK: internals.
 
 protected:
-    inline QEventDispatcherDecor(QAbstractEventDispatcherPrivate &d, QObject *parent)
+    inline QEventDispatcherLazy(QAbstractEventDispatcherPrivate &d, QObject *parent)
         : super(d, parent)
     {}
 
@@ -106,32 +106,32 @@ protected:
     void decorListener(PreDecorContext *);
 
 private:
-    Q_DISABLE_COPY(QEventDispatcherDecor);
+    Q_DISABLE_COPY(QEventDispatcherLazy);
 
 public:
     QErrorFunc lastError;
 };
 
-class Q_CORE_EXPORT QEventDispatcherDecorFunc : public QEventDispatcherDecor {
-    typedef QEventDispatcherDecor super;
-    typedef QEventDispatcherDecorFunc Self;
+class Q_CORE_EXPORT QEventDispatcherLazyFunc : public QEventDispatcherLazy {
+    typedef QEventDispatcherLazy super;
+    typedef QEventDispatcherLazyFunc Self;
 public:
-    inline QEventDispatcherDecorFunc(QObject *parent = Q_NULLPTR)
+    inline QEventDispatcherLazyFunc(QObject *parent = Q_NULLPTR)
         : super(parent)
     {}
 
     void decorLoad() Q_DECL_OVERRIDE;
 
-    QFunction<QAbstractEventDispatcher *(QEventDispatcherDecor *)> load;
-    QFunction<bool(QEventDispatcherDecor *)> destroy;
+    QFunction<QAbstractEventDispatcher *(QEventDispatcherLazy *)> load;
+    QFunction<bool(QEventDispatcherLazy *)> destroy;
 
 protected:
     bool lazyEvent(QLazyEvent *event) Q_DECL_OVERRIDE;
 
 private:
-    Q_DISABLE_COPY(QEventDispatcherDecorFunc)
+    Q_DISABLE_COPY(QEventDispatcherLazyFunc)
 };
 
 QT_END_NAMESPACE
 
-#endif // QEVENTDISPATCHER_DECOR_H
+#endif // QEVENTDISPATCHER_LAZY_H

@@ -38,7 +38,7 @@
 
 #ifndef QT_NO_QOBJECT
 #include "qabstracteventdispatcher.h"
-#include "qeventdispatcherdecor.h"
+#include "qeventdispatcherlazy.h"
 #include "qcoreevent.h"
 #include "qeventloop.h"
 #endif
@@ -826,7 +826,7 @@ void QCoreApplicationPrivate::init()
         createEventDispatcher();
     Q_ASSERT(eventDispatcher);
 
-    QEventDispatcherDecor *lazyDispatcher = qobject_cast<QEventDispatcherDecor *>(eventDispatcher);
+    QEventDispatcherLazy *lazyDispatcher = qobject_cast<QEventDispatcherLazy *>(eventDispatcher);
     QObjectDecorListener postLoad = [&] (QObject *dispatcher) {
         QCoreApplication *app = qApp;
         if ( ! dispatcher->parent()) {

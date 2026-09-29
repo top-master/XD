@@ -2,7 +2,7 @@
 
 HEADERS += \
         kernel/qabstracteventdispatcher.h \
-        kernel/qeventdispatcherdecor.h \
+        kernel/qeventdispatcherlazy.h \
         kernel/qabstractnativeeventfilter.h \
         kernel/qbasictimer.h \
         kernel/qeventloop.h\
@@ -46,7 +46,7 @@ HEADERS += \
 
 SOURCES += \
         kernel/qabstracteventdispatcher.cpp \
-        kernel/qeventdispatcherdecor.cpp \
+        kernel/qeventdispatcherlazy.cpp \
         kernel/qabstractnativeeventfilter.cpp \
         kernel/qbasictimer.cpp \
         kernel/qeventloop.cpp \
