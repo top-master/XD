@@ -25,7 +25,7 @@
 #include <QtCore/private/qobject_p.h>
 
 #include <QtCore/QCoreApplication>
-#include <QtCore/qeventdispatcherdecor.h>
+#include <QtCore/qeventdispatcherlazy.h>
 #include <QtTest/QtTest>
 #include <QtTest/qtestexpectation.h>
 #include <QtTest/QSignalSpy>
@@ -97,18 +97,18 @@ inline QObjectDummy::QObjectDummy(QObject *parent)
     , isPrivateDeleted(false)
 {}
 
-class DecorDummy : public QEventDispatcherDecorFunc {
+class DecorDummy : public QEventDispatcherLazyFunc {
     Q_OBJECT
-    typedef QEventDispatcherDecorFunc super;
+    typedef QEventDispatcherLazyFunc super;
 public:
     inline DecorDummy()
         : isDecorateeDeletable(true)
     {
         decoratee = new QObjectDummy();
-        this->load = [&] (QEventDispatcherDecor *) {
+        this->load = [&] (QEventDispatcherLazy *) {
             return reinterpret_cast<QAbstractEventDispatcher *>(decoratee);
         };
-        this->destroy = [&] (QEventDispatcherDecor *) {
+        this->destroy = [&] (QEventDispatcherLazy *) {
             return false;
         };
     }
@@ -390,8 +390,8 @@ private slots:
         QObjectDummy *myObj = new QObjectDummy();
         QPointer<QObject> ptrInitial;
         {
-            QEventDispatcherDecorFunc obj;
-            obj.load = [&] (QEventDispatcherDecor *) {
+            QEventDispatcherLazyFunc obj;
+            obj.load = [&] (QEventDispatcherLazy *) {
                 return reinterpret_cast<QAbstractEventDispatcher *>(myObj);
             };
             ptrInitial = QPointer<QObject>(obj.toDecoratee());
@@ -574,7 +574,7 @@ private slots:
 
     inline void decor_shouldRedirectSignalToDecorateeSignal() {
         // Dummy.
-        QEventDispatcherDecor decor;
+        QEventDispatcherLazy decor;
         QAbstractEventDispatcher *decoratee = decor.toDecoratee();
         qExpect(decoratee)->Not->toBeNull();
         DispatcherSpy spyReal(*decoratee);
@@ -615,7 +615,7 @@ private slots:
     inline void decor_ifDecorExtendsWrongClassThenRedirectsToWrongDecorateeSignal() {
         // Dummy.
         DecorDummy decor;
-        QAbstractEventDispatcher *decoratee = decor.QEventDispatcherDecor::toDecoratee();
+        QAbstractEventDispatcher *decoratee = decor.QEventDispatcherLazy::toDecoratee();
         qExpect(decoratee)->Not->toBeNull();
         QSignalSpy spyReal(decoratee, &QAbstractEventDispatcher::aboutToBlock);
         qExpect(spyReal.isValid())->toBeTruthy();
@@ -656,7 +656,7 @@ private slots:
     }
 
 public:
-    inline QPointer<QObjectDummy> assertDecorLoaded(QEventDispatcherDecor *decorator) {
+    inline QPointer<QObjectDummy> assertDecorLoaded(QEventDispatcherLazy *decorator) {
         QScopedPointerLazy<QObjectData> &d_ptr = DecorDummy::d_ptr_from(decorator);
         QObjectPrivate *ptrInitialPrivate = static_cast<QObjectPrivate *>(d_ptr.data());
         qExpect(ptrInitialPrivate)->Not->toBeNull();

@@ -44,7 +44,7 @@
 #include <qpa/qplatformintegration.h>
 #include <qpa/qplatformdrag.h>
 
-#include <QtCore/qeventdispatcherdecor.h>
+#include <QtCore/qeventdispatcherlazy.h>
 #include <QtCore/QVariant>
 #include <QtCore/private/qcoreapplication_p.h>
 #include <QtCore/private/qabstracteventdispatcher_p.h>
@@ -1286,7 +1286,7 @@ void QGuiApplicationPrivate::createPlatformIntegration()
 
 void QGuiApplicationPrivate::onGuiPreRoutine()
 {
-    QEventDispatcherDecor *decor = qobject_cast<QEventDispatcherDecor *>(eventDispatcher);
+    QEventDispatcherLazy *decor = qobject_cast<QEventDispatcherLazy *>(eventDispatcher);
     if (decor) {
         (void) decor->toDecoratee();
     }
@@ -1302,7 +1302,7 @@ void QGuiApplicationPrivate::createEventDispatcher()
 {
    Q_ASSERT(!eventDispatcher);
 
-#ifndef QEVENTDISPATCHER_DECOR_H
+#ifndef QEVENTDISPATCHER_LAZY_H
     if (platform_integration == 0)
         createPlatformIntegration();
 
@@ -1311,8 +1311,8 @@ void QGuiApplicationPrivate::createEventDispatcher()
 
     eventDispatcher = platform_integration->createEventDispatcher();
 #else
-    QEventDispatcherDecorFunc *decor = new QEventDispatcherDecorFunc();
-    decor->load = [&] (QEventDispatcherDecor *current) -> QAbstractEventDispatcher* {
+    QEventDispatcherLazyFunc *decor = new QEventDispatcherLazyFunc();
+    decor->load = [&] (QEventDispatcherLazy *current) -> QAbstractEventDispatcher* {
         Q_UNUSED(current) // Not always used.
         QGuiApplication *app = qApp;
         QGuiApplicationPrivate *d = QGuiApplicationPrivate::get(app);
@@ -1336,7 +1336,7 @@ void QGuiApplicationPrivate::createEventDispatcher()
 void QGuiApplicationPrivate::eventDispatcherReady()
 {
     // Maybe redirect to this later.
-    QEventDispatcherDecor *lazy = qobject_cast<QEventDispatcherDecor *>(eventDispatcher);
+    QEventDispatcherLazy *lazy = qobject_cast<QEventDispatcherLazy *>(eventDispatcher);
     if (lazy && ! lazy->isDecorLoaded()) {
         lazy->decorListen([&] (QObject *) {
             QGuiApplication *app = qApp;

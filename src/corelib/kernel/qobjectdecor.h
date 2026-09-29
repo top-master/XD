@@ -51,15 +51,15 @@ else decor's signal/slot connections are **not** redirected to decoratee.
 @warning Calls to @ref qobject_cast global helper load and return decoratee, if
 said helper is called with @ref decorOwner as first argument, but as a
 down-side, said helper can never cast to the real-class of @ref decorOwner, and
-as an example, the @ref QEventDispatcherDecor class can be cast into the
+as an example, the @ref QEventDispatcherLazy class can be cast into the
 `QEventDispatcherWin32`, although it never extends `QEventDispatcherWin32` class.
 
 @warning Extending QObjectDecor forces MOC to change the implementation of
 @ref QObject::qt_metacast helper into something slimilar to below:
 ```
-void *QEventDispatcherDecor::qt_metacast(const char *className) Q_DECL_OVERRIDE
+void *QEventDispatcherLazy::qt_metacast(const char *className) Q_DECL_OVERRIDE
 {
-    if (qstrcmp(className, "QEventDispatcherDecor") == 0) {
+    if (qstrcmp(className, "QEventDispatcherLazy") == 0) {
         return static_cast<void *>(this);
     }
 
@@ -69,7 +69,7 @@ void *QEventDispatcherDecor::qt_metacast(const char *className) Q_DECL_OVERRIDE
 
 @note The word "decor" or similar is injected to member names, to
 prevent conflicting with sub-class's possible members, see the
-@ref QEventDispatcherDecor
+@ref QEventDispatcherLazy
 */
 class Q_CORE_EXPORT QObjectDecor : protected QPointerLazinessResolver {
     typedef QPointerLazinessResolver super;
