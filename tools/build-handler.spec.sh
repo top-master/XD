@@ -1031,8 +1031,8 @@ test_section 'bh_wipe -- shows a spinner during rm -rf'
 _bh_spec_wipe_body=$(awk '/^bh_wipe\(\) \{/,/^\}$/' \
     "$_spec_dir/build-handler.sh")
 
-expect_int_gt 'bh_wipe backgrounds `rm -rf "$BUILD_DIR"`' \
-    "$(printf '%s\n' "$_bh_spec_wipe_body" | grep -cE 'rm -rf "\$BUILD_DIR" &')" 0
+expect_int_gt 'bh_wipe runs `rm -rf "$BUILD_DIR"` held, in the background' \
+    "$(printf '%s\n' "$_bh_spec_wipe_body" | grep -cE 'bh_held_start rm -rf "\$BUILD_DIR"')" 0
 expect_int_gt 'bh_wipe polls through bh_spin_until' \
     "$(printf '%s\n' "$_bh_spec_wipe_body" | grep -c 'bh_spin_until')" 0
 expect_int_gt 'bh_wipe renders the first spinner frame itself' \
@@ -1052,8 +1052,8 @@ expect 'bh_wipe does NOT bump `_step`' '' \
 test_section 'bh_run_silent_fg -- counted spinner around foreground prep work'
 
 # Regression guard for bh_run_silent_fg's counted spinner: bump `_step`,
-# run cmd in foreground, ticker in background, `|| true`-guarded kill+wait,
-# non-TTY fallback.
+# run cmd in foreground, ticker in background (`bh_ticker_start`), whose
+# kill+wait in `bh_ticker_stop` are `|| true`-guarded, non-TTY fallback.
 
 _bh_spec_silent_body=$(awk '/^bh_run_silent_fg\(\) \{/,/^\}$/' \
     "$_spec_dir/build-handler.sh")
@@ -1063,9 +1063,13 @@ expect_int_gt 'bh_run_silent_fg bumps `_step`' \
 expect_int_gt 'bh_run_silent_fg runs the command in foreground (no `&`)' \
     "$(printf '%s\n' "$_bh_spec_silent_body" | grep -cE '^[[:space:]]+"\$@"$')" 0
 expect_int_gt 'bh_run_silent_fg spawns a background ticker' \
-    "$(printf '%s\n' "$_bh_spec_silent_body" | grep -cE 'bh_progress_tick')" 0
-expect_int_gt 'bh_run_silent_fg `kill` ticker is `|| true`-guarded' \
-    "$(printf '%s\n' "$_bh_spec_silent_body" | grep -cE 'kill .*_bhsf_pid.*\|\| true')" 0
+    "$(printf '%s\n' "$_bh_spec_silent_body" | grep -c 'bh_ticker_start')" 0
+expect_int_gt 'bh_run_silent_fg stops the ticker' \
+    "$(printf '%s\n' "$_bh_spec_silent_body" | grep -c 'bh_ticker_stop')" 0
+_bh_spec_ticker_stop_body=$(awk '/^bh_ticker_stop\(\) \{/,/^\}$/' \
+    "$_spec_dir/build-handler.sh")
+expect_int_gt 'bh_ticker_stop `kill` is `|| true`-guarded' \
+    "$(printf '%s\n' "$_bh_spec_ticker_stop_body" | grep -cE 'kill .*_bh_spinner_pid.*\|\| true')" 0
 expect_int_gt 'bh_run_silent_fg keeps a fallback for no progress display' \
     "$(printf '%s\n' "$_bh_spec_silent_body" | grep -c 'if ! bh_progress_active')" 0
 
@@ -1099,8 +1103,8 @@ _bh_spec_body=$(awk '/^bh_make_step\(\) \{/,/^\}$/' \
 
 expect_int_gt 'body contains `bh_make_run -n` (the precount itself)' \
     "$(printf '%s\n' "$_bh_spec_body" | grep -cE '\bbh_make_run -n\b')" 0
-expect_int_gt 'body backgrounds `bh_make_run -n` (`( bh_make_run -n ... ) &`)' \
-    "$(printf '%s\n' "$_bh_spec_body" | grep -cE '\( *bh_make_run -n.*\) *&')" 0
+expect_int_gt 'body runs `bh_make_run -n` held, in the background (`bh_held_start`)' \
+    "$(printf '%s\n' "$_bh_spec_body" | grep -cE 'bh_held_start bh_make_run -n')" 0
 expect_int_gt 'body polls through bh_spin_until' \
     "$(printf '%s\n' "$_bh_spec_body" | grep -c 'bh_spin_until')" 0
 _bh_spec_spin_body=$(awk '/^bh_spin_until\(\) \{/,/^\}$/' \
@@ -1186,6 +1190,107 @@ _bh_spec_total=$(
 )
 expect 'bh_make leaves BH_STEPS_TOTAL alone on single-make path' 3 "$_bh_spec_total"
 
+rm -rf "$_bh_spec_sandbox"
+
+
+test_section 'bh_tee_status -- returns once its command exits, though a child lives on'
+
+# The command starts a child that keeps the command's output open for 30 s,
+# prints, and fails with 3, as a make whose compiler left a server behind; the
+# step must return the 3 within seconds, with the output shown and logged.
+_bh_spec_sandbox=$(mktemp -d)
+_bh_spec_lingering() {
+    sleep 30 &
+    echo "$!" > "$_bh_spec_sandbox/child"
+    echo out
+    return 3
+}
+if bh_tail_follows_pid; then
+    _bh_spec_t0=$(date +%s)
+    _bh_spec_out=$(bh_tee_status "$_bh_spec_sandbox/log" _bh_spec_lingering; echo "rc=$?")
+    _bh_spec_t1=$(date +%s)
+    kill "$(cat "$_bh_spec_sandbox/child")" 2>/dev/null || true
+    expect 'it returns the command'"'"'s exit code, after its output' \
+        "out rc=3" "$(printf '%s' "$_bh_spec_out" | tr '\n' ' ')"
+    expect 'and the log holds the output' out "$(cat "$_bh_spec_sandbox/log")"
+    expect 'without waiting for the child' yes \
+        "$([ $((_bh_spec_t1 - _bh_spec_t0)) -lt 10 ] && echo yes)"
+else
+    test_skip 'bh_tee_status returns once its command exits' 'tail cannot follow a pid here'
+fi
+
+# The command takes Ctrl+C: a shell that traps SIGINT and sends it to itself
+# runs its trap, where one that started with the signal ignored (a command in
+# the background) cannot set the trap and goes on. The trap exits normally,
+# since bash takes a command substitution whose command dies of SIGINT as a
+# Ctrl+C of its own. A spec run that itself started with SIGINT ignored
+# passes that on to every command; hence the case runs only where a plain
+# command takes the trap.
+_bh_spec_self_interrupt() {
+    sh -c 'trap "echo trapped; exit 3" INT; kill -INT $$; echo went on'
+}
+if [ "$(_bh_spec_self_interrupt)" = trapped ]; then
+    _bh_spec_out=$(bh_tee_status "$_bh_spec_sandbox/log" _bh_spec_self_interrupt
+        echo "rc=$?")
+    expect 'Ctrl+C reaches the command' 'trapped rc=3' \
+        "$(printf '%s' "$_bh_spec_out" | tr '\n' ' ')"
+else
+    test_skip 'Ctrl+C reaches the command' 'this run ignores SIGINT'
+fi
+expect 'the command reads the standard input of bh_tee_status' 'got hi' \
+    "$(echo hi | bh_tee_status "$_bh_spec_sandbox/log" sh -c 'read x; echo "got $x"')"
+rm -rf "$_bh_spec_sandbox"
+
+
+test_section 'Ctrl+C -- a step stops at once, or ends whole first'
+
+# Says `trapped` when Ctrl+C reaches it, `went on` when it ignores Ctrl+C,
+# and succeeds either way, hence a step that runs it never fails.
+_bh_spec_sandbox=$(mktemp -d)
+_bh_spec_interrupt_probe() {
+    sh -c 'trap "echo trapped; exit 0" INT; kill -INT $$; echo went on'
+}
+if [ "$(_bh_spec_self_interrupt)" = trapped ]; then
+    expect 'bh_run gives Ctrl+C to its command' trapped \
+        "$(LOGS=$_bh_spec_sandbox; _step=0; BH_LOG_LEVEL=1; BH_NO_PROGRESS=1
+           bh_run probe _bh_spec_interrupt_probe
+           cat "$_bh_spec_sandbox/01-probe.log")"
+    expect 'bh_run --whole runs its command with Ctrl+C ignored' 'went on' \
+        "$(LOGS=$_bh_spec_sandbox; _step=0; BH_LOG_LEVEL=1; BH_NO_PROGRESS=1
+           bh_run --whole probe _bh_spec_interrupt_probe
+           cat "$_bh_spec_sandbox/01-probe.log")"
+    expect 'bh_run_held runs its command with Ctrl+C ignored' 'went on' \
+        "$(bh_run_held _bh_spec_interrupt_probe)"
+
+    # A shell under bh_strict_mode gets Ctrl+C while a held step runs: the
+    # step still ends, then the shell stops with 130 before its next command.
+    expect_returns 'Ctrl+C during a held step stops the build after it, with 130' \
+        130 sh -c '. "'"$_spec_dir"'/build-handler.sh"
+            bh_strict_mode
+            bh_run_held sh -c "kill -INT \$1; sleep 0.3; : > \$2" \
+                sh $$ "'"$_bh_spec_sandbox"'/step-ended" \
+                2> "'"$_bh_spec_sandbox"'/notice"
+            : > "'"$_bh_spec_sandbox"'/went-on"'
+    expect 'and the held step ended' yes \
+        "$([ -f "$_bh_spec_sandbox/step-ended" ] && echo yes)"
+    expect 'and nothing after it ran' no \
+        "$([ -f "$_bh_spec_sandbox/went-on" ] && echo yes || echo no)"
+    expect 'and a notice said the build stops after the step' \
+        'Ctrl+C: the build stops once this step ends, since stopping it now may leave its files half-written.' \
+        "$(sed '/^$/d' "$_bh_spec_sandbox/notice")"
+else
+    test_skip 'Ctrl+C reaches or skips a step' 'this run ignores SIGINT'
+fi
+
+# The spinner ticker ends by itself once the shell that started it is gone,
+# as after a Ctrl+C that ended the script.
+sh -c '. "'"$_spec_dir"'/build-handler.sh"
+       BH_SPIN_INTERVAL=0.05
+       bh_ticker_start
+       echo "$_bh_spinner_pid" > "'"$_bh_spec_sandbox"'/ticker"'
+sleep 0.5
+expect 'the ticker ends once its shell is gone' gone \
+    "$(kill -0 "$(cat "$_bh_spec_sandbox/ticker")" 2>/dev/null && echo alive || echo gone)"
 rm -rf "$_bh_spec_sandbox"
 
 

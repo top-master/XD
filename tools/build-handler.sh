@@ -258,18 +258,118 @@ bh_install_filc() {
 bh_strict_mode() {
     set -e
     (set -o pipefail) 2>/dev/null && set -o pipefail || true
-    # Ctrl+C: the wrapped child in the current step has already taken the
-    # signal (same process group). Settle its row on `[C]` so the user
-    # sees an explicit "manual abort" glyph, then re-raise so the script
-    # exits 130 instead of marching on to the next step.
+    # Ctrl+C: the command of the current step takes the signal too (same
+    # process group), unless the step holds it (see `bh_held_start`).
+    # Settle its row on `[C]`, an explicit "manual abort" glyph for the
+    # user, then re-raise; hence the script exits 130 instead of marching
+    # on to the next step.
     trap '_bh_on_sigint' INT
 }
 
+# _bh_on_sigint
+#
+# Stops the build on Ctrl+C: stops the spinner ticker, settles the row on
+# `[C]`, and exits 130. While a step holds Ctrl+C (see `bh_held_start`), it
+# only marks the stop as pending, with a notice, and `bh_held_finish` stops
+# the build once that step has ended.
 _bh_on_sigint() {
+    if [ "${_bh_sigint_holds:-0}" -gt 0 ]; then
+        if [ "${_bh_sigint_pending:-0}" -eq 0 ]; then
+            _bh_sigint_pending=1
+            printf '\nCtrl+C: the build stops once this step ends, since stopping it now may leave its files half-written.\n' 1>&2
+        fi
+        return 0
+    fi
+    bh_ticker_stop
     bh_progress_hide C
     trap - INT
     kill -INT $$
     exit 130
+}
+
+# Usage: bh_held_start <command...>
+#
+# Starts <command> for a step that has to end whole, such as qmake writing
+# Makefiles or `rm -rf` wiping the build folder: the next run trusts what
+# such a step leaves behind, and has no way to tell a half-written
+# Makefile from a whole one. Its process id goes in `_bh_held_pid`; a
+# caller may spin on it (`bh_spin_until`), then calls `bh_held_finish`.
+#
+# <command> runs in the background with Ctrl+C ignored, and until
+# `bh_held_finish`, Ctrl+C only marks the stop as pending (see
+# `_bh_on_sigint`). The trap goes in again here, since a subshell starts
+# without the traps of its parent shell.
+bh_held_start() {
+    _bh_sigint_holds=$((${_bh_sigint_holds:-0} + 1))
+    trap '_bh_on_sigint' INT
+    ( trap '' INT; "$@" ) &
+    _bh_held_pid=$!
+}
+
+# Usage: bh_held_finish
+#
+# Waits for the command of `bh_held_start` and returns its exit code; when
+# Ctrl+C came meanwhile, it stops the build right after
+# (see `_bh_on_sigint`).
+bh_held_finish() {
+    _bhhf_status=0
+    bh_wait_pid "$_bh_held_pid" || _bhhf_status=$?
+    _bh_sigint_holds=$((_bh_sigint_holds - 1))
+    if [ "$_bh_sigint_holds" -le 0 ] && [ "${_bh_sigint_pending:-0}" -eq 1 ]; then
+        _bh_sigint_pending=0
+        _bh_on_sigint
+    fi
+    return "$_bhhf_status"
+}
+
+# Usage: bh_run_held <command...>
+#
+# Runs <command> to its end, even on Ctrl+C, and returns its exit code
+# (see `bh_held_start`).
+bh_run_held() {
+    bh_held_start "$@"
+    bh_held_finish
+}
+
+# Usage: bh_wait_pid <pid>
+#
+# Waits for the background process <pid> and returns its exit code. A trap
+# that runs (such as Ctrl+C's) ends `wait` early with the process still
+# alive, hence it waits again until the process is gone.
+bh_wait_pid() {
+    while :; do
+        _bwp_status=0
+        wait "$1" || _bwp_status=$?
+        if ! kill -0 "$1" 2>/dev/null; then
+            return "$_bwp_status"
+        fi
+    done
+}
+
+# Usage: bh_ticker_start
+#
+# Turns the spinner once per `BH_SPIN_INTERVAL` in the background, while the
+# command of a step runs in the foreground, where Ctrl+C reaches it.
+# `bh_ticker_stop` (or `_bh_on_sigint`) ends it; it also ends by itself
+# once the script is gone, since a command in the background ignores Ctrl+C.
+bh_ticker_start() {
+    ( while kill -0 $$ 2>/dev/null && sleep "$BH_SPIN_INTERVAL"; do
+          BH_PROGRESS_VALUE=$((BH_PROGRESS_VALUE + 1))
+          bh_progress_tick
+      done ) &
+    _bh_spinner_pid=$!
+}
+
+# Usage: bh_ticker_stop
+#
+# Ends the spinner of `bh_ticker_start`, when one runs.
+bh_ticker_stop() {
+    if [ -z "${_bh_spinner_pid:-}" ]; then
+        return 0
+    fi
+    kill "$_bh_spinner_pid" 2>/dev/null || true
+    wait "$_bh_spinner_pid" 2>/dev/null || true
+    _bh_spinner_pid=
 }
 
 
@@ -1416,26 +1516,7 @@ bh_dump_fail() {
 }
 
 
-# ---- bh_run -----------------------------------------------------------
-
-# bh_run <name> <cmd...>
-#
-# Run a named step. Stream goes to `$LOGS/<NN>-<name>.log`. Three
-# display modes:
-#
-#   - Verbose mode (BH_LOG_LEVEL >= 2): tee output to the terminal so
-#     the user sees everything; no spinner (would clash with the
-#     stream).
-#   - Quiet + interactive (TTY stderr, BH_NO_PROGRESS=0): run the
-#     command in the background and spin the indeterminate progress
-#     bar on the foreground while we poll. Wakes once per second so
-#     a long step (qmake on a big subdirs tree) shows it's alive.
-#   - Quiet + non-interactive (CI, redirected log, --no-progress):
-#     plain silent run; dump the log to stderr only on failure.
-#
-# All three paths exit with the wrapped command's status, dumping
-# the captured log on failure so a non-verbose step never hides
-# its error message.
+# MARK: bh_run.
 
 # bh_run_silent_fg <description> <cmd...>
 #
@@ -1450,7 +1531,8 @@ bh_dump_fail() {
 # (`bh_parse_target` -> `BH_TARGET_NAME`; `bh_searchpath_plugins`
 # -> `QT_PLUGINS_STAGE`). Backgrounding them would lose those
 # assignments to a subshell. Instead the spinner runs in a small
-# background ticker subshell, killed when the command returns.
+# background ticker subshell (`bh_ticker_start`), which is killed
+# when the command returns.
 #
 # set -e is toggled off around the wrapped command so a non-zero
 # return surfaces as our own `return $status` instead of an
@@ -1468,17 +1550,12 @@ bh_run_silent_fg() {
     bh_progress_setMax 0
     bh_progress_setDescription "$_bhsf_desc"
     bh_progress_render
-    ( while sleep "$BH_SPIN_INTERVAL"; do
-          BH_PROGRESS_VALUE=$((BH_PROGRESS_VALUE + 1))
-          bh_progress_tick
-      done ) &
-    _bhsf_pid=$!
+    bh_ticker_start
     set +e
     "$@"
     _bhsf_status=$?
     set -e
-    kill "$_bhsf_pid" 2>/dev/null || true
-    wait "$_bhsf_pid" 2>/dev/null || true
+    bh_ticker_stop
     # Ctrl+C is handled by the global INT trap (renders `[C]` and exits);
     # here we only distinguish clean success (√) from runner-reported
     # failure (X) so a scrollback of completed steps reads at a glance.
@@ -1492,23 +1569,103 @@ bh_run_silent_fg() {
 
 # bh_tee_status <log> <command...>
 #
-# Runs <command>, showing its output and copying it into <log> (through tee),
-# and returns <command>'s own exit code. A shell reports the exit code of the
-# LAST command of a pipe, so a plain `<command> | tee <log>` returns tee's,
-# which nearly always succeeds; only `pipefail` (best-effort in bh_strict_mode,
-# missing from e.g. Debian 12's dash) changes that. So <command>'s exit code also
-# goes to a file beside <log>, which decides.
+# Runs <command>, showing its output and copying it into <log>, and returns
+# <command>'s own exit code; it returns once <command> exits, even when a
+# program <command> started keeps running.
+#
+# Such a program (MSVC's mspdbsrv.exe, a build daemon) inherits <command>'s
+# output, and a pipe stays open while any holder lives; hence, where `tail`
+# can follow a file until a process exits (see `bh_tail_follows_pid`),
+# <command> writes into <log>, and `bh_follow_until_eof` shows <log> until
+# <command> exits. <command> runs as the first command of a pipe, never in
+# the background, where a shell without job control makes it ignore Ctrl+C
+# and may give it no input. Elsewhere (macOS) <command> runs through `tee`.
+# Either way <command>'s exit code goes to a file beside <log>, which
+# decides: a shell reports the exit code of a pipe's LAST command unless
+# `pipefail` is on, which is best-effort in `bh_strict_mode` and missing
+# from e.g. Debian 12's dash.
 bh_tee_status() {
     _bts_log=$1; shift
     _bts_file=$_bts_log.status
     rm -f "$_bts_file"
-    { "$@" 2>&1; echo "$?" > "$_bts_file"; } | tee "$_bts_log"
+    if bh_tail_follows_pid; then
+        : > "$_bts_log"
+        { "$@" >> "$_bts_log" 2>&1; echo "$?" > "$_bts_file"; } \
+            | bh_follow_until_eof "$_bts_log"
+    else
+        { "$@" 2>&1; echo "$?" > "$_bts_file"; } | tee "$_bts_log"
+    fi
     _bts_status=$(cat "$_bts_file" 2>/dev/null || echo 1)
     rm -f "$_bts_file"
     return "$_bts_status"
 }
 
+# bh_follow_until_eof <file>
+#
+# Shows <file> from its first line as it grows, until standard input reaches
+# its end, and then shows what is left of <file>.
+#
+# A reader in the background waits for that end; `tail` follows <file> until
+# the reader exits, checking five times a second, then reads <file> once
+# more and exits too. The reader gets standard input through fd 3, since a
+# shell without job control may give a command in the background no input.
+bh_follow_until_eof() (
+    exec 3<&0
+    cat <&3 > /dev/null &
+    _bfue_reader=$!
+    exec 3<&-
+    tail -n +1 -f -s 0.2 --pid="$_bfue_reader" "$1"
+    # The `wait` keeps this shell the parent of the reader, to reap it once
+    # it ends: as the last command, `tail` may take the shell's place, and
+    # a reader nobody reaps still looks alive to `tail`.
+    wait "$_bfue_reader"
+)
+
+# bh_tail_follows_pid
+#
+# Tells whether this host's `tail` can follow a file until a process exits
+# (`--pid`, as GNU tail on Linux, MSYS and Cygwin has; macOS's lacks it),
+# checking at the interval of `bh_follow_until_eof`. Probed once per run.
+bh_tail_follows_pid() {
+    if [ -z "${_bh_tail_pid:-}" ]; then
+        if tail -s 0.2 --pid=$$ -n 0 /dev/null > /dev/null 2>&1; then
+            _bh_tail_pid=1
+        else
+            _bh_tail_pid=0
+        fi
+    fi
+    [ "$_bh_tail_pid" = 1 ]
+}
+
+# bh_run [--whole] <name> <cmd...>
+#
+# Run a named step. Stream goes to `$LOGS/<NN>-<name>.log`, in one of
+# three display modes:
+#
+#   - Verbose mode (`BH_LOG_LEVEL` >= 2): tee output to the terminal,
+#     hence the user sees everything; no spinner, which would clash
+#     with the stream.
+#   - Quiet + interactive (TTY stderr, `BH_NO_PROGRESS`=0): run the
+#     command in the foreground while a ticker in the background
+#     (`bh_ticker_start`) spins the indeterminate progress row, hence a
+#     long step (qmake on a big subdirs tree) shows it's alive.
+#   - Quiet + non-interactive (CI, redirected log, --no-progress):
+#     plain silent run; dump the log to stderr only on failure.
+#
+# All three paths exit with the wrapped command's status, dumping
+# the captured log on failure; hence a non-verbose step never hides
+# its error message.
+#
+# Ctrl+C stops <cmd> at once, unless `--whole` is given: then the step
+# runs to its end and the build stops right after (see
+# `bh_held_start`), for a step whose output the next run trusts as
+# whole (Makefiles, a record of finished projects, a merged binary).
 bh_run() {
+    _bhr_whole=0
+    if [ "$1" = --whole ]; then
+        _bhr_whole=1
+        shift
+    fi
     _name=$1; shift
     _step=$((_step + 1))
     _log=$LOGS/$(printf '%02d-%s.log' "$_step" "$_name")
@@ -1519,6 +1676,10 @@ bh_run() {
         # bh_tee_status). A bare `return 0` here would hide a failed step
         # from any caller that checks (e.g. the per-test sweep) whenever
         # -e is off, such as inside a subshell used as a condition.
+        if [ "$_bhr_whole" -eq 1 ]; then
+            bh_run_held bh_tee_status "$_log" "$@"
+            return $?
+        fi
         bh_tee_status "$_log" "$@"
         return $?
     fi
@@ -1527,15 +1688,23 @@ bh_run() {
         bh_progress_setType spinner
         bh_progress_setMax 0
         bh_progress_setDescription "$_name is running."
-        "$@" >"$_log" 2>&1 &
-        _pid=$!
-        # Initial frame so something appears immediately; bh_spin_until
-        # then animates while the background command runs.
-        # See also docs of: bh_spin_until, for the kill -0 liveness poll.
+        # The initial frame shows the row at once; the spinner then
+        # turns while the command runs.
         bh_progress_render
-        bh_spin_until "$_pid"
         _status=0
-        wait "$_pid" || _status=$?
+        if [ "$_bhr_whole" -eq 1 ]; then
+            bh_held_start "$@" >"$_log" 2>&1
+            bh_spin_until "$_bh_held_pid"
+            bh_held_finish || _status=$?
+        else
+            bh_ticker_start
+            if "$@" >"$_log" 2>&1; then
+                :
+            else
+                _status=$?
+            fi
+            bh_ticker_stop
+        fi
         if [ "$_status" -eq 0 ]; then
             bh_progress_hide
         else
@@ -1543,10 +1712,16 @@ bh_run() {
             bh_dump_fail "$_log" "$_status"
         fi
     else
-        if "$@" >"$_log" 2>&1; then
+        _status=0
+        if [ "$_bhr_whole" -eq 1 ]; then
+            bh_held_start "$@" >"$_log" 2>&1
+            bh_held_finish || _status=$?
+        elif "$@" >"$_log" 2>&1; then
             :
         else
             _status=$?
+        fi
+        if [ "$_status" -ne 0 ]; then
             bh_dump_fail "$_log" "$_status"
         fi
     fi
@@ -1647,24 +1822,25 @@ bh_run_qmake() {
     # qmake's recursive run prints a "Reading <pro> [<dir>]" line per
     # subdir -- a firehose on a big tree -- so it's gated behind -vv
     # (very-verbose, level 3); plain -v keeps it in the log.
+    # qmake runs to its end even on Ctrl+C (see `bh_held_start`), since a
+    # Makefile it leaves half-written looks up-to-date to the next run.
     if [ "${BH_LOG_LEVEL:-1}" -ge 3 ]; then
         # shellcheck disable=SC2086  # $_bhq_r is intentionally word-split.
-        bh_tee_status "$_log" "$QMAKE" $_bhq_r -spec "$XD_DIR/mkspecs/$QMAKESPEC" \
+        bh_run_held bh_tee_status "$_log" "$QMAKE" $_bhq_r -spec "$XD_DIR/mkspecs/$QMAKESPEC" \
             -xspec "$XD_DIR/mkspecs/${BH_CROSS_SPEC:-$QMAKESPEC}" "$_pro" "$@"
         return $?
     fi
 
+    _status=0
     if bh_progress_active; then
         bh_progress_setType spinner
         bh_progress_setMax 0
         bh_progress_setDescription "QMake is generating Makefile(s) for $_label."
-        "$QMAKE" $_bhq_r -spec "$XD_DIR/mkspecs/$QMAKESPEC" -xspec "$XD_DIR/mkspecs/${BH_CROSS_SPEC:-$QMAKESPEC}" "$_pro" "$@" \
-            >"$_log" 2>&1 &
-        _pid=$!
+        bh_held_start "$QMAKE" $_bhq_r -spec "$XD_DIR/mkspecs/$QMAKESPEC" -xspec "$XD_DIR/mkspecs/${BH_CROSS_SPEC:-$QMAKESPEC}" "$_pro" "$@" \
+            >"$_log" 2>&1
         bh_progress_render                    # initial frame
-        bh_spin_until "$_pid"
-        _status=0
-        wait "$_pid" || _status=$?
+        bh_spin_until "$_bh_held_pid"
+        bh_held_finish || _status=$?
         if [ "$_status" -eq 0 ]; then
             bh_progress_hide
         else
@@ -1672,11 +1848,10 @@ bh_run_qmake() {
             bh_dump_fail "$_log" "$_status"
         fi
     else
-        if "$QMAKE" $_bhq_r -spec "$XD_DIR/mkspecs/$QMAKESPEC" -xspec "$XD_DIR/mkspecs/${BH_CROSS_SPEC:-$QMAKESPEC}" "$_pro" "$@" \
-            >"$_log" 2>&1; then
-            :
-        else
-            _status=$?
+        bh_held_start "$QMAKE" $_bhq_r -spec "$XD_DIR/mkspecs/$QMAKESPEC" -xspec "$XD_DIR/mkspecs/${BH_CROSS_SPEC:-$QMAKESPEC}" "$_pro" "$@" \
+            >"$_log" 2>&1
+        bh_held_finish || _status=$?
+        if [ "$_status" -ne 0 ]; then
             bh_dump_fail "$_log" "$_status"
         fi
     fi
@@ -1709,21 +1884,22 @@ bh_wipe() {
     fi
     # `rm -rf` on a large build tree can take several seconds with no
     # visible activity, so animate a spinner while it runs (no (N/M) --
-    # see the uncounted-phase note above).
+    # see the uncounted-phase note above). It runs to its end even on
+    # Ctrl+C (see `bh_held_start`), since the next run builds into a
+    # half-deleted folder as if it were whole.
     # See also docs of: bh_spin_until, for the background-poll spinner.
     if bh_progress_active; then
         bh_progress_setType spinner
         bh_progress_setMax 0
         bh_progress_setDescription "Deleting $BUILD_DIR"
-        rm -rf "$BUILD_DIR" &
-        _bh_wipe_pid=$!
+        bh_held_start rm -rf "$BUILD_DIR"
         bh_progress_render
-        bh_spin_until "$_bh_wipe_pid"
-        wait "$_bh_wipe_pid" 2>/dev/null || true
+        bh_spin_until "$_bh_held_pid"
+        bh_held_finish || true
         bh_progress_hide
     else
         echo "Deleting $BUILD_DIR"
-        rm -rf "$BUILD_DIR"
+        bh_run_held rm -rf "$BUILD_DIR"
     fi
 }
 
@@ -2220,31 +2396,23 @@ bh_make_step() {
     bh_progress_setDescription "Makefile runner ($_bh_name) is computing build plan."
     bh_progress_render                       # initial frame so the row appears
 
-    if bh_progress_active; then
-        _bh_precount=$LOGS/$(printf '%02d-%s.precount.tmp' "$_step" "$_bh_name")
-        if [ -n "$_bh_tgt" ]; then
-            ( bh_make_run -n "$@" "$_bh_tgt" 2>/dev/null > "$_bh_precount" ) &
-        else
-            ( bh_make_run -n "$@" 2>/dev/null > "$_bh_precount" ) &
-        fi
-        _bh_pid=$!
-        bh_spin_until "$_bh_pid"
-        wait "$_bh_pid" 2>/dev/null || true
-        _bh_total=$(grep -cE "$BH_BUILD_STEP_RE" \
-            "$_bh_precount" 2>/dev/null || true)
-        rm -f "$_bh_precount"
+    # `make -n` still remakes an out-of-date Makefile (running qmake), hence
+    # it runs to its end even on Ctrl+C (see `bh_held_start`). A spinner
+    # turns meanwhile when the row shows; `grep -c` exits 1 on zero matches,
+    # and `|| true` keeps pipefail+errexit quiet (grep still prints "0").
+    _bh_precount=$LOGS/$(printf '%02d-%s.precount.tmp' "$_step" "$_bh_name")
+    if [ -n "$_bh_tgt" ]; then
+        bh_held_start bh_make_run -n "$@" "$_bh_tgt" 2>/dev/null > "$_bh_precount"
     else
-        # Headless / non-TTY: synchronous precount, no spinner.
-        # `grep -c` exits 1 on zero matches; `|| true` keeps
-        # pipefail+errexit quiet (grep still prints "0").
-        if [ -n "$_bh_tgt" ]; then
-            _bh_total=$(bh_make_run -n "$@" "$_bh_tgt" 2>/dev/null \
-                | grep -cE "$BH_BUILD_STEP_RE" || true)
-        else
-            _bh_total=$(bh_make_run -n "$@" 2>/dev/null \
-                | grep -cE "$BH_BUILD_STEP_RE" || true)
-        fi
+        bh_held_start bh_make_run -n "$@" 2>/dev/null > "$_bh_precount"
     fi
+    if bh_progress_active; then
+        bh_spin_until "$_bh_held_pid"
+    fi
+    bh_held_finish || true
+    _bh_total=$(grep -cE "$BH_BUILD_STEP_RE" \
+        "$_bh_precount" 2>/dev/null || true)
+    rm -f "$_bh_precount"
     bh_progress_hide                         # row settles on [√] (N/M)
 
     # Phase 2 of two: "compiling source-codes". A separate step --
@@ -3123,9 +3291,9 @@ bh_qmake_in_build_order() {
     BH_FORCE_QMAKE=$_bqo_saved_fq
     BH_QMAKE_PLAIN=0
     if [ "${BH_QMAKE_KEEP_GOING:-0}" -ne 0 ]; then
-        bh_run qmake-all bh_make_run -k qmake_all
+        bh_run --whole qmake-all bh_make_run -k qmake_all
     else
-        bh_run qmake-all bh_make_run qmake_all
+        bh_run --whole qmake-all bh_make_run qmake_all
     fi
 }
 
@@ -3485,7 +3653,7 @@ bh_save_space_mark_finished() {
     fi
     if ! bh_save_space_is_finished "$1"; then
         ( cd "$(dirname "$2")" \
-            && bh_run save-space-finished bh_make_run -f "$(basename "$2")" save_space_finished ) \
+            && bh_run --whole save-space-finished bh_make_run -f "$(basename "$2")" save_space_finished ) \
             || bh_error "--save-space: cannot mark ${1#"$BH_ROOT"/} finished"
     fi
     bh_save_space_drop_unfinished "$1"
@@ -3919,6 +4087,6 @@ bh_template_makefile() {
             _bhmkf_parts="$_bhmkf_parts $_bhmkf_part"
         done
         # shellcheck disable=SC2086  # intentional word-split of part paths.
-        bh_run lipo lipo -create $_bhmkf_parts -output "$_bhmkf_binary"
+        bh_run --whole lipo lipo -create $_bhmkf_parts -output "$_bhmkf_binary"
     fi
 }
