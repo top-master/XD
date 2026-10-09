@@ -4,6 +4,9 @@ SOURCE_PATH = ..
 !if "$(BUILD_PATH)" == ""
 BUILD_PATH = ..
 !endif
+!if "$(QT_HEADER_VERSION)" == ""
+QT_HEADER_VERSION = $(QT_VERSION)
+!endif
 
 QMKSRC = $(SOURCE_PATH)\qmake
 
@@ -30,9 +33,9 @@ CFLAGS_EXTRA      = /MP /D_CRT_SECURE_NO_WARNINGS /D_SCL_SECURE_NO_WARNINGS /Zc:
 
 CFLAGS_BARE = -c -Fo./ -Fdqmake.pdb \
               -W3 -nologo -O1 \
-              $(CFLAGS_EXTRA) \
+              $(CFLAGS_EXTRA) $(EXTRA_CXXFLAGS) \
               -I$(QMKSRC) -I$(QMKSRC)\library -I$(QMKSRC)\generators -I$(QMKSRC)\generators\unix -I$(QMKSRC)\generators\win32 -I$(QMKSRC)\generators\mac -I$(QMKSRC)\generators\integrity \
-              -I$(INC_PATH) -I$(INC_PATH)\QtCore -I$(INC_PATH)\QtCore\$(QT_VERSION) -I$(INC_PATH)\QtCore\$(QT_VERSION)\QtCore \
+              -I$(INC_PATH) -I$(INC_PATH)\QtCore -I$(INC_PATH)\QtCore\$(QT_HEADER_VERSION) -I$(INC_PATH)\QtCore\$(QT_HEADER_VERSION)\QtCore \
               -I$(BUILD_PATH)\src\corelib\global -DHAVE_QCONFIG_CPP \
               -I$(SOURCE_PATH)\mkspecs\$(QMAKESPEC)  \
               -I$(SOURCE_PATH)\tools\shared \
@@ -59,7 +62,7 @@ OBJS        = project.obj main.obj ioutils.obj proitems.obj qmakevfs.obj \
               makefiledeps.obj metamakefile.obj xmloutput.obj \
               msvc_nmake.obj msvc_vcproj.obj msvc_vcxproj.obj \
               msvc_objectmodel.obj msbuild_objectmodel.obj registry.obj \
-              cesdkhandler.obj
+              cesdkhandler.obj udebug.obj manualskip.obj
 
 #qt code
 QTOBJS= \
@@ -124,13 +127,20 @@ QTOBJS= \
 	qjsonparser.obj \
 	qjsonarray.obj \
 	qjsonobject.obj \
-	qjsonvalue.obj
+	qjsonvalue.obj \
+	qmemorysafety.obj \
+	qexception.obj
 
-first all: qmake.exe
+first all: qmake.exe bin_qmake
 
 qmake.exe: $(OBJS) $(QTOBJS)
 	$(LINKQMAKE) qmake_pch.obj
-	-copy qmake.exe $(BUILD_PATH)\bin\qmake.exe
+
+# Copies qmake.exe into bin\ on every run, hence an up-to-date build still
+# replaces an older bin\qmake.exe. Outside a batch file, cmd's copy asks
+# before it overwrites a file; /y skips that question.
+bin_qmake: qmake.exe
+	copy /y qmake.exe $(BUILD_PATH)\bin\qmake.exe
 
 clean::
 	-del $(QTOBJS)
@@ -210,6 +220,9 @@ qmake_pch.obj:
 	$(CXX) $(CXXFLAGS) $<
 
 {$(SOURCE_PATH)\src\corelib\xml}.cpp{}.obj::
+	$(CXX) $(CXXFLAGS) $<
+
+{$(SOURCE_PATH)\src\corelib\thread}.cpp{}.obj::
 	$(CXX) $(CXXFLAGS) $<
 
 {$(SOURCE_PATH)\src\corelib\json}.cpp{}.obj::

@@ -52,6 +52,16 @@ $QT_DIR/src/corelib/tools/qstring_mac.mm"
         : "${QMAKESPEC:=linux-g++}"
         BIN_SUFFIX=-linux
         ;;
+    MINGW*|MSYS*|CYGWIN*)
+        # Windows builds qmake.exe with MSVC from qmake/Makefile.win32 (see
+        # drive_qmake_build_msvc), the way upstream's configure.exe does.
+        : "${QMAKESPEC:=$(bh_msvc_spec)}"
+        case "$QMAKESPEC" in
+            win32-msvc*) ;;
+            *) bh_error "qmake builds on Windows with MSVC only, not with spec $QMAKESPEC: run from a Visual Studio developer prompt (vcvarsall.bat)." ;;
+        esac
+        BIN_SUFFIX=.exe
+        ;;
     *)
         bh_error "unsupported host OS: $HOST_OS"
         ;;
@@ -82,6 +92,10 @@ $QT_DIR/src/corelib/io/qfsfileengine_unix.cpp \
 $QT_DIR/src/corelib/tools/qlocale_unix.cpp $MAC_SRCS"
 
 drive_qmake_build() {
+    if [ "$BIN_SUFFIX" = .exe ]; then
+        drive_qmake_build_msvc
+        return
+    fi
     # CXX: an explicit CXX wins; else the memory-safe compiler (BH_MEMSAFE_CXX,
     # Fil-C, from --memory-safe); else the libc's preferred compiler (BH_LIBC_CC,
     # e.g. musl's, from --libc/--musl); else g++ (Darwin already pinned clang++).
@@ -125,4 +139,37 @@ drive_qmake_build() {
         QTSRCS="$QTSRCS"
 }
 
+# Builds qmake.exe with MSVC: jom or nmake runs qmake/Makefile.win32, which
+# compiles in the current folder and copies qmake.exe into bin/ itself.
+drive_qmake_build_msvc() {
+    command -v cl >/dev/null 2>&1 \
+        || bh_error "cl.exe not found in PATH: run from a Visual Studio developer prompt (vcvarsall.bat)."
+    case "$BH_MODE" in
+        release) MODE_CXXFLAGS= ;;
+        debug)   MODE_CXXFLAGS="-Od -Zi" ;;
+    esac
+    # --release-debug (BH_DEBUG_INFO) keeps -Zi on an otherwise optimized build.
+    [ "${BH_DEBUG_INFO:-0}" = 1 ] && MODE_CXXFLAGS="$MODE_CXXFLAGS -Zi"
+    # cmd.exe takes a leading `/` of a path for a switch, hence backslashes
+    # for the paths nmake hands to commands; the C string literal of
+    # PROJECT_FOLDER takes forward slashes, where a backslash starts an escape.
+    _win_dir=$(cygpath -w "$QT_DIR" 2>/dev/null || (cd "$QT_DIR" && pwd -W) | tr / '\\')
+    _win_root=$(cygpath -m "$ROOT" 2>/dev/null || (cd "$ROOT" && pwd -W))
+    bh_make_find_msvc
+    bh_make_step make "" "$JOBS" -f "$_win_dir\\qmake\\Makefile.win32" \
+        SOURCE_PATH="$_win_dir" \
+        BUILD_PATH="$_win_dir" \
+        INC_PATH="$_win_dir\\include" \
+        QMAKESPEC="$QMAKESPEC" \
+        QT_VERSION="$QT_VERSION" \
+        QT_MAJOR_VERSION="$QT_MAJOR_VERSION" \
+        QT_MINOR_VERSION="$QT_MINOR_VERSION" \
+        QT_PATCH_VERSION="$QT_PATCH_VERSION" \
+        QT_HEADER_VERSION="$QT_HEADER_VERSION" \
+        EXTRA_CXXFLAGS="$MODE_CXXFLAGS -DPROJECT_FOLDER=\\\"$_win_root/\\\" -DQT_NO_EXCEPTIONS"
+}
+
 bh_template_makefile drive_qmake_build "$QT_DIR/bin/qmake$BIN_SUFFIX" "$@"
+if [ "${BH_NO_BUILD:-0}" -eq 0 ]; then
+    echo "Built $QT_DIR/bin/qmake$BIN_SUFFIX."
+fi
