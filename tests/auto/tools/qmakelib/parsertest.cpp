@@ -1387,6 +1387,32 @@ void tst_qmakelib::addParseBraces()
             << "WARNING: in:1: Excess colon in front of opening brace."
             << true;
 
+    QTest::newRow("test-newline-{test}")
+            << "true\n{\ntrue\n}"
+            << TS(
+    /*     0 */ << H(TokLine) << H(1)
+    /*     2 */ << H(TokHashLiteral) << HS(L"true")
+    /*    10 */ << H(TokCondition)
+    /*    11 */ << H(TokLine) << H(3)
+    /*    13 */ << H(TokHashLiteral) << HS(L"true")
+    /*    21 */ << H(TokCondition))
+            << "WARNING: in:2: Opening brace on a new line is not bound to the condition before it."
+            << true;
+
+    QTest::newRow("assignment-newline-{test}")
+            << "VAR = 1\n{\ntrue\n}"
+            << TS(
+    /*     0 */ << H(TokLine) << H(1)
+    /*     2 */ << H(TokHashLiteral) << HS(L"VAR")
+    /*     9 */ << H(TokAssign) << H(0)
+    /*    11 */ << H(TokLiteral | TokNewStr) << S(L"1")
+    /*    14 */ << H(TokValueTerminator)
+    /*    15 */ << H(TokLine) << H(3)
+    /*    17 */ << H(TokHashLiteral) << HS(L"true")
+    /*    25 */ << H(TokCondition))
+            << ""
+            << true;
+
     QTest::newRow("test-{assignment}")
             << "true { VAR = {foo} }"
             << TS(
