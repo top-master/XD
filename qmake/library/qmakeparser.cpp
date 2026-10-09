@@ -791,6 +791,15 @@ void QMakeParser::read(ProFile *pro, const QString &in, int line, SubGrammar gra
                     } else if (c == '{') {
                         FLUSH_LHS_LITERAL();
                         finalizeCond(tokPtr, buf, ptr, wordCount);
+                        // TRACE/qmake/parser braces: warn of a brace that starts a line #1,
+                        // since such a brace opens a scope of its own, just
+                        // like a bare `{...}` block in C and C++, while the
+                        // condition on the line above keeps no body; hence the
+                        // block runs whatever that condition says, and its
+                        // variables stay set after the closing brace.
+                        if (m_state == StNew && m_canElse) {
+                            logicWarning(fL1S("Opening brace on a new line is not bound to the condition before it."));
+                        }
                         if (m_operator == AndOperator) {
                             languageWarning(fL1S("Excess colon in front of opening brace."));
                             m_operator = NoOperator;
