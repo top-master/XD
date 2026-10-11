@@ -1961,6 +1961,9 @@ int QObject::startTimer(int interval, Qt::TimerType timerType)
         return 0;
     }
     int timerId = d->threadData->eventDispatcher.load()->registerTimer(interval, timerType, this);
+    if (timerId == 0) {
+        return 0;
+    }
     d->extras()->runningTimers.append(timerId);
     return timerId;
 }
