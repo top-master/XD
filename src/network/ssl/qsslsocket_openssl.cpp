@@ -70,6 +70,7 @@
 #include <QtCore/qfileinfo.h>
 #include <QtCore/qmutex.h>
 #include <QtCore/qthread.h>
+#include <QtCore/qthreadstorage.h>
 #include <QtCore/qurl.h>
 #include <QtCore/qvarlengtharray.h>
 #include <QLibrary> // for loading the security lib for the CA store
@@ -284,20 +285,31 @@ QSslCipher QSslSocketBackendPrivate::QSslCipher_from_SSL_CIPHER(SSL_CIPHER *ciph
     return ciph;
 }
 
-// ### This list is shared between all threads, and protected by a
-// mutex. Investigate using thread local storage instead.
-struct QSslErrorList
+typedef QList<QPair<int, int> > QSslErrorList;
+Q_GLOBAL_STATIC(QThreadStorage<QSslErrorList *>, _q_sslErrorLists)
+
+/*!
+    Collects the verification errors `q_X509Callback` reports while this
+    thread runs a handshake or a `verify()`: OpenSSL calls back on the thread
+    that called it, hence each thread keeps its own list and takes no lock.
+    A handshake that blocks inside a callback (such as a pre-shared key
+    request that waits for another thread) then keeps no other thread's
+    handshake waiting.
+*/
+static QSslErrorList &_q_sslErrorList()
 {
-    QMutex mutex;
-    QList<QPair<int, int> > errors;
-};
-Q_GLOBAL_STATIC(QSslErrorList, _q_sslErrorList)
+    QThreadStorage<QSslErrorList *> *storage = _q_sslErrorLists();
+    if (!storage->hasLocalData()) {
+        storage->setLocalData(new QSslErrorList);
+    }
+    return *storage->localData();
+}
 
 int q_X509Callback(int ok, X509_STORE_CTX *ctx)
 {
     if (!ok) {
         // Store the error and at which depth the error was detected.
-        _q_sslErrorList()->errors << qMakePair<int, int>(q_X509_STORE_CTX_get_error(ctx), q_X509_STORE_CTX_get_error_depth(ctx));
+        _q_sslErrorList() << qMakePair<int, int>(q_X509_STORE_CTX_get_error(ctx), q_X509_STORE_CTX_get_error_depth(ctx));
 #ifdef QSSLSOCKET_DEBUG
         qCDebug(lcSsl) << "verification error: dumping bad certificate";
         qCDebug(lcSsl) << QSslCertificatePrivate::QSslCertificate_from_X509(q_X509_STORE_CTX_get_current_cert(ctx)).toPem();
@@ -1159,11 +1171,12 @@ bool QSslSocketBackendPrivate::startHandshake()
 
     // Check if the connection has been established. Get all errors from the
     // verification stage.
-    _q_sslErrorList()->mutex.lock();
-    _q_sslErrorList()->errors.clear();
+    _q_sslErrorList().clear();
     int result = (mode == QSslSocket::SslClientMode) ? q_SSL_connect(ssl) : q_SSL_accept(ssl);
 
-    const QList<QPair<int, int> > &lastErrors = _q_sslErrorList()->errors;
+    // A copy, as a slot of `peerVerifyError()` below may start another
+    // handshake on this thread, which clears the list.
+    const QSslErrorList lastErrors = _q_sslErrorList();
     if (!lastErrors.isEmpty())
         storePeerCertificates();
     for (int i = 0; i < lastErrors.size(); ++i) {
@@ -1175,7 +1188,6 @@ bool QSslSocketBackendPrivate::startHandshake()
     }
 
     errorList << lastErrors;
-    _q_sslErrorList()->mutex.unlock();
 
     // Connection aborted during handshake phase.
     if (q->state() != QAbstractSocket::ConnectedState)
@@ -1820,7 +1832,7 @@ QList<QSslError> QSslSocketBackendPrivate::verify(const QList<QSslCertificate> &
         }
     }
 
-    QMutexLocker sslErrorListMutexLocker(&_q_sslErrorList()->mutex);
+    _q_sslErrorList().clear();
 
     // Register a custom callback to get all verification errors.
 #if OPENSSL_VERSION_NUMBER >= 0x10100000L
@@ -1882,10 +1894,8 @@ QList<QSslError> QSslSocketBackendPrivate::verify(const QList<QSslCertificate> &
 #endif
 
     // Now process the errors
-    const QList<QPair<int, int> > errorList = _q_sslErrorList()->errors;
-    _q_sslErrorList()->errors.clear();
-
-    sslErrorListMutexLocker.unlock();
+    const QSslErrorList errorList = _q_sslErrorList();
+    _q_sslErrorList().clear();
 
     // Translate the errors
     if (QSslCertificatePrivate::isBlacklisted(certificateChain[0])) {
