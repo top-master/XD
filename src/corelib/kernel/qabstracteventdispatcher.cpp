@@ -84,7 +84,11 @@ Q_GLOBAL_STATIC(QtTimerIdFreeList, timerIdFreeList)
 
 int QAbstractEventDispatcherPrivate::allocateTimerId()
 {
-    return timerIdFreeList()->next();
+    // A thread that still runs while the process exits (or a global
+    // destructor) may start a timer after timerIdFreeList() has been
+    // destructed; it then gets no id, 0 being none.
+    QRef<QtTimerIdFreeList > fl = timerIdFreeList();
+    return fl ? fl->next() : 0;
 }
 
 void QAbstractEventDispatcherPrivate::releaseTimerId(int timerId)
@@ -250,6 +254,9 @@ QAbstractEventDispatcher *QAbstractEventDispatcher::instance(QThread *thread)
 int QAbstractEventDispatcher::registerTimer(int interval, Qt::TimerType timerType, QObject *object)
 {
     int id = QAbstractEventDispatcherPrivate::allocateTimerId();
+    if (id == 0) {
+        return 0;
+    }
     registerTimer(id, interval, timerType, object);
     return id;
 }
