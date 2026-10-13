@@ -160,7 +160,7 @@ QStyle *QStyleFactory::create(const QString& key)
     { } // Keep these here - they make the #ifdefery above work
 #ifndef QT_NO_LIBRARY
     if (!ret)
-        ret = qLoadPlugin<QStyle, QStylePlugin>(loader(), style);
+        ret = qLoadPlugin<QStyle, QStylePlugin>(loader().data(), style);
 #endif
     if(ret)
         ret->setObjectName(style);

@@ -1034,7 +1034,7 @@ static QPlatformTextureList *widgetTexturesFor(QWidget *tlw, QWidget *widget)
 #endif
                 )
         {
-            return qt_dummy_platformTextureList();
+            return qt_dummy_platformTextureList().data();
         }
     }
 

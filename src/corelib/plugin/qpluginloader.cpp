@@ -434,7 +434,7 @@ void Q_CORE_EXPORT qRegisterStaticPluginFunction(QStaticPlugin plugin)
 QObjectList QPluginLoader::staticInstances()
 {
     QObjectList instances;
-    const StaticPluginList *plugins = staticPluginList();
+    QRef<const StaticPluginList > plugins = staticPluginList();
     if (plugins) {
         const int numPlugins = plugins->size();
         instances.reserve(numPlugins);
@@ -453,7 +453,7 @@ QObjectList QPluginLoader::staticInstances()
 */
 QVector<QStaticPlugin> QPluginLoader::staticPlugins()
 {
-    StaticPluginList *plugins = staticPluginList();
+    QRef<StaticPluginList > plugins = staticPluginList();
     if (plugins)
         return *plugins;
     return QVector<QStaticPlugin>();

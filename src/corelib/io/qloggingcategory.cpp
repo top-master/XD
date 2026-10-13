@@ -378,7 +378,7 @@ void QLoggingCategory::setEnabled(QtMsgType type, bool enable)
  */
 QLoggingCategory *QLoggingCategory::defaultCategory()
 {
-    return qtDefaultCategory();
+    return qtDefaultCategory().data();
 }
 
 /*!

@@ -101,7 +101,7 @@ public:
 #ifdef QT_BUILD_QMAKE
     static bool haveGroup(QLibraryInfo::PathGroup group)
     {
-        QLibrarySettings *ls = qt_library_settings();
+        QRef<QLibrarySettings > ls = qt_library_settings();
         return ls ? (group == QLibraryInfo::EffectiveSourcePaths
                      ? ls->haveEffectiveSourcePaths
                      : group == QLibraryInfo::EffectivePaths
@@ -113,7 +113,7 @@ public:
 #endif
     static QSettings *configuration()
     {
-        QLibrarySettings *ls = qt_library_settings();
+        QRef<QLibrarySettings > ls = qt_library_settings();
         if (ls) {
 #ifndef QT_BUILD_QMAKE
             if (ls->reloadOnQAppAvailable && QCoreApplication::instance() != 0)

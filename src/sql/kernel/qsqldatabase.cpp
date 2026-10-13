@@ -186,7 +186,7 @@ QSqlDatabasePrivate::~QSqlDatabasePrivate()
 
 void QSqlDatabasePrivate::cleanConnections()
 {
-    QConnectionDict *dict = dbDict();
+    QRef<QConnectionDict > dict = dbDict();
     Q_ASSERT(dict);
     QWriteLocker locker(&dict->lock);
 
@@ -236,7 +236,7 @@ void QSqlDatabasePrivate::invalidateDb(const QSqlDatabase &db, const QString &na
 
 void QSqlDatabasePrivate::removeDatabase(const QString &name)
 {
-    QConnectionDict *dict = dbDict();
+    QRef<QConnectionDict > dict = dbDict();
     Q_ASSERT(dict);
     QWriteLocker locker(&dict->lock);
 
@@ -248,7 +248,7 @@ void QSqlDatabasePrivate::removeDatabase(const QString &name)
 
 void QSqlDatabasePrivate::addDatabase(const QSqlDatabase &db, const QString &name)
 {
-    QConnectionDict *dict = dbDict();
+    QRef<QConnectionDict > dict = dbDict();
     Q_ASSERT(dict);
     QWriteLocker locker(&dict->lock);
 
@@ -265,7 +265,7 @@ void QSqlDatabasePrivate::addDatabase(const QSqlDatabase &db, const QString &nam
 */
 QSqlDatabase QSqlDatabasePrivate::database(const QString& name, bool open)
 {
-    const QConnectionDict *dict = dbDict();
+    QRef<const QConnectionDict > dict = dbDict();
     Q_ASSERT(dict);
 
     dict->lock.lockForRead();
@@ -572,7 +572,7 @@ QStringList QSqlDatabase::drivers()
 #endif
 
 #ifndef QT_NO_LIBRARY
-    if (QFactoryLoader *fl = loader()) {
+    if (QRef<QFactoryLoader > fl = loader()) {
         typedef QMultiMap<int, QString> PluginKeyMap;
         typedef PluginKeyMap::const_iterator PluginKeyMapConstIterator;
 
@@ -774,7 +774,7 @@ void QSqlDatabasePrivate::init(const QString &type)
 
 #ifndef QT_NO_LIBRARY
     if (!driver && loader())
-        driver = qLoadPlugin<QSqlDriver, QSqlDriverPlugin>(loader(), type);
+        driver = qLoadPlugin<QSqlDriver, QSqlDriverPlugin>(loader().data(), type);
 #endif // QT_NO_LIBRARY
 
     if (!driver) {

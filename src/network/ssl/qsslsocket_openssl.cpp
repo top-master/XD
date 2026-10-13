@@ -298,7 +298,7 @@ Q_GLOBAL_STATIC(QThreadStorage<QSslErrorList *>, _q_sslErrorLists)
 */
 static QSslErrorList &_q_sslErrorList()
 {
-    QThreadStorage<QSslErrorList *> *storage = _q_sslErrorLists();
+    QRef<QThreadStorage<QSslErrorList *> > storage = _q_sslErrorLists();
     if (!storage->hasLocalData()) {
         storage->setLocalData(new QSslErrorList);
     }
@@ -1525,7 +1525,7 @@ Q_GLOBAL_STATIC(QWindowsCaRootFetcherThread, windowsCaRootFetcherThread);
 QWindowsCaRootFetcher::QWindowsCaRootFetcher(const QSslCertificate &certificate, QSslSocket::SslMode sslMode)
     : cert(certificate), mode(sslMode)
 {
-    moveToThread(windowsCaRootFetcherThread());
+    moveToThread(windowsCaRootFetcherThread().data());
 }
 
 QWindowsCaRootFetcher::~QWindowsCaRootFetcher()
