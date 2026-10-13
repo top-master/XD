@@ -89,10 +89,10 @@ QXcbGlIntegration *QXcbGlIntegrationFactory::create(const QString &platform, con
     // Try loading the plugin from platformPluginPath first:
     if (!pluginPath.isEmpty()) {
         QCoreApplication::addLibraryPath(pluginPath);
-        if (QXcbGlIntegration *ret = loadIntegration(directLoader(), platform))
+        if (QXcbGlIntegration *ret = loadIntegration(directLoader().data(), platform))
             return ret;
     }
-    if (QXcbGlIntegration *ret = loadIntegration(loader(), platform))
+    if (QXcbGlIntegration *ret = loadIntegration(loader().data(), platform))
         return ret;
 #else
     Q_UNUSED(platform);

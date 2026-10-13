@@ -1284,7 +1284,7 @@ QString qFormatLogMessage(QtMsgType type, const QMessageLogContext &context, con
 
     QMutexLocker lock(&QMessagePattern::mutex);
 
-    QMessagePattern *pattern = qMessagePattern();
+    QRef<QMessagePattern > pattern = qMessagePattern();
     if (!pattern) {
         // after destruction of static QMessagePattern instance
         message.append(str);

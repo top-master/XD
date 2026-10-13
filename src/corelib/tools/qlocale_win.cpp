@@ -794,7 +794,7 @@ QLocale QSystemLocale::fallbackUiLocale() const
 
 QVariant QSystemLocale::query(QueryType type, QVariant in = QVariant()) const
 {
-    QSystemLocalePrivate *d = systemLocalePrivate();
+    QRef<QSystemLocalePrivate > d = systemLocalePrivate();
     switch(type) {
     case DecimalPoint:
         return d->decimalPoint();

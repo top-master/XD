@@ -74,7 +74,7 @@ zexact_ptrtable *QPtrSafetyTable::forPtr(const void *ptr)
 {
     // Pick a table by hashing the object pointer into the pool, the same way
     // QObjectPrivate::sharedMutex picks a mutex from its pool.
-    QPtrSafetyPool *pool = qPtrSafetyPool();
+    QRef<QPtrSafetyPool > pool = qPtrSafetyPool();
     return pool->tables[
         quint32(quintptr(ptr)) % sizeof(pool->tables) / sizeof(pool->tables[0])];
 }

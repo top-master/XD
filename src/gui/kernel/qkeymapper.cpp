@@ -104,7 +104,7 @@ Q_GLOBAL_STATIC(QKeyMapper, keymapper)
 */
 QKeyMapper *QKeyMapper::instance()
 {
-    return keymapper();
+    return keymapper().data();
 }
 
 QKeyMapperPrivate *qt_keymapper_private()

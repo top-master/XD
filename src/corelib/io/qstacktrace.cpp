@@ -68,7 +68,7 @@ QStackTrace::QStackTrace()
 
 bool QStackTrace::prepare()
 {
-    QStackTraceGlobals *globals = qstackTraceGlobals();
+    QRef<QStackTraceGlobals > globals = qstackTraceGlobals();
     if ( ! globals) {
         return false;
     }
@@ -105,7 +105,7 @@ QStackTrace QStackTrace::capture(quint32 skipLatest)
     if ( ! d) {
         qThrowOutOfMemory();
     }
-    QStackTraceGlobals *globals = qstackTraceGlobals();
+    QRef<QStackTraceGlobals > globals = qstackTraceGlobals();
     d->pathTranslator = globals->pathTranslator;
 
     if ( ! globals->isPrepared && ! QStackTrace::prepare()) {
@@ -348,7 +348,7 @@ void QStackTrace::setPathTranslator(const QStackTrace::PathTranslator &f)
 
 QStackTrace::PathTranslator QStackTrace::setPathTranslatorDefault(const QStackTrace::PathTranslator &f)
 {
-    QStackTraceGlobals *globals = qstackTraceGlobals();
+    QRef<QStackTraceGlobals > globals = qstackTraceGlobals();
 
     PathTranslator old = globals->pathTranslator;
     globals->pathTranslator = f;

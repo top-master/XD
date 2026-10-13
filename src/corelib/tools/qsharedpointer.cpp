@@ -1833,7 +1833,7 @@ namespace QtSharedPointer {
 */
 void QtSharedPointer::internalSafetyCheckAdd(const void *d_ptr, const volatile void *ptr)
 {
-    KnownPointers *const kp = knownPointers();
+    const QRef<KnownPointers > kp = knownPointers();
     if (!kp)
         return;                 // end-game: the application is being destroyed already
 
@@ -1884,7 +1884,7 @@ void QtSharedPointer::internalSafetyCheckAdd(const void *d_ptr, const volatile v
 */
 void QtSharedPointer::internalSafetyCheckRemove(const void *d_ptr, bool silentMode)
 {
-    KnownPointers *const kp = knownPointers();
+    const QRef<KnownPointers > kp = knownPointers();
     if (!kp)
         return;                 // end-game: the application is being destroyed already
 
@@ -1919,7 +1919,7 @@ void QtSharedPointer::internalSafetyCheckRemove(const void *d_ptr, bool silentMo
 void QtSharedPointer::internalSafetyCheckCleanCheck()
 {
 #  ifdef QT_BUILD_INTERNAL
-    KnownPointers *const kp = knownPointers();
+    const QRef<KnownPointers > kp = knownPointers();
     Q_ASSERT_X(kp, "internalSafetyCheckSelfCheck()", "Called after global statics deletion!");
 
     if (kp->dPointers.size() != kp->dataPointers.size())
