@@ -70,6 +70,50 @@ static QString makespec()
     return QString::fromLatin1(p + 1);
 }
 
+/// Finds the qmake that built this test, else the one of the Qt build, else
+/// the one on `PATH`.
+static QString externalBuildQmake()
+{
+#ifdef EXTERNAL_TESTS_QMAKE
+    const QString recorded = QString::fromLocal8Bit(EXTERNAL_TESTS_QMAKE);
+    if (!recorded.isEmpty() && QFile::exists(recorded)) {
+        return recorded;
+    }
+#endif
+    QString cmd = QLibraryInfo::location(QLibraryInfo::BinariesPath) + QLL("/qmake");
+#ifdef Q_OS_WIN
+    cmd.append(QLL(".exe"));
+#endif
+    if (QFile::exists(cmd)) {
+        return cmd;
+    }
+    qWarning("qmake from build not found, fallback to PATH's qmake");
+    return QLL("qmake");
+}
+
+/// Gives the external build the compilers that built this test: their folder
+/// goes first on `PATH`, just like it did during that build.
+static QStringList externalBuildEnvironment()
+{
+    QStringList environment = QProcess::systemEnvironment();
+#ifdef EXTERNAL_TESTS_TOOLCHAIN
+    const QString toolchain = QString::fromLocal8Bit(EXTERNAL_TESTS_TOOLCHAIN);
+#  ifdef Q_OS_WIN
+    const QLatin1Char separator(';');
+#  else
+    const QLatin1Char separator(':');
+#  endif
+    for (int i = 0; i < environment.size(); ++i) {
+        if (environment.at(i).startsWith(QLL("PATH="))) {
+            environment[i] = QLL("PATH=") + toolchain + separator + environment.at(i).mid(5);
+            return environment;
+        }
+    }
+    environment += QLL("PATH=") + toolchain;
+#endif
+    return environment;
+}
+
 QT_BEGIN_NAMESPACE
 namespace QTest {
 #ifndef QT_NO_PROCESS
@@ -562,18 +606,15 @@ namespace QTest {
         QStringList args;
         args << QLatin1String("-makefile")
              << QLatin1String("-spec")
-             << makespec()
-             << QLatin1String("project.pro");
-        qmake.setWorkingDirectory(temporaryDirPath);
-
-        QString cmd = QLibraryInfo::location(QLibraryInfo::BinariesPath) + "/qmake";
-#ifdef Q_OS_WIN
-        cmd.append(".exe");
+             << makespec();
+#ifdef EXTERNAL_TESTS_MEMORY_SAFE
+        args << QLL("CONFIG+=memory_safe");
 #endif
-        if (!QFile::exists(cmd)) {
-            cmd = "qmake";
-            qWarning("qmake from build not found, fallback to PATH's qmake");
-        }
+        args << QLatin1String("project.pro");
+        qmake.setWorkingDirectory(temporaryDirPath);
+        qmake.setEnvironment(externalBuildEnvironment());
+
+        const QString cmd = externalBuildQmake();
 
         qmake.start(cmd, args);
 
@@ -609,7 +650,7 @@ namespace QTest {
         QExternalProcess make;
         make.setWorkingDirectory(temporaryDirPath);
 
-        QStringList environment = QProcess::systemEnvironment();
+        QStringList environment = externalBuildEnvironment();
         environment += QLatin1String("LC_ALL=C");
         make.setEnvironment(environment);
 
@@ -660,11 +701,13 @@ namespace QTest {
         std_out += make.readAllStandardOutput();
         std_err += make.readAllStandardError();
 
+#ifdef Q_OS_WIN
         static bool didWarn = false;
         if ( ! didWarn && make.program() != QLL("my_make_x86.bat")) {
             didWarn = true;
             qWarning("QExternalTest: Failed to find custom-build environment.");
         }
+#endif
 
         return ok;
 #endif // !QT_NO_PROCESS
