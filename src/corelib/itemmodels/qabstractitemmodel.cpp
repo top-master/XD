@@ -487,7 +487,7 @@ QAbstractItemModelPrivate::~QAbstractItemModelPrivate()
 
 QAbstractItemModel *QAbstractItemModelPrivate::staticEmptyModel()
 {
-    return qEmptyModel();
+    return qEmptyModel().data();
 }
 
 namespace {

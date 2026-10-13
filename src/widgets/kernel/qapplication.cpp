@@ -453,13 +453,13 @@ bool Q_WIDGETS_EXPORT qt_tab_all_widgets()
 Q_GLOBAL_STATIC(PaletteHash, app_palettes)
 PaletteHash *qt_app_palettes_hash()
 {
-    return app_palettes();
+    return app_palettes().data();
 }
 
 Q_GLOBAL_STATIC(FontHash, app_fonts)
 FontHash *qt_app_fonts_hash()
 {
-    return app_fonts();
+    return app_fonts().data();
 }
 
 QWidgetList *QApplicationPrivate::popupWidgets = 0;        // has keyboard input focus
@@ -1433,7 +1433,7 @@ QPalette QApplication::palette(const QWidget* w)
 {
     typedef PaletteHash::const_iterator PaletteHashConstIt;
 
-    PaletteHash *hash = app_palettes();
+    QRef<PaletteHash > hash = app_palettes();
     if (w && hash && hash->size()) {
         PaletteHashConstIt it = hash->constFind(w->metaObject()->className());
         const PaletteHashConstIt cend = hash->constEnd();
@@ -1458,7 +1458,7 @@ QPalette QApplication::palette(const char *className)
 {
     if (!QApplicationPrivate::app_pal)
         palette();
-    PaletteHash *hash = app_palettes();
+    QRef<PaletteHash > hash = app_palettes();
     if (className && hash && hash->size()) {
         QHash<QByteArray, QPalette>::ConstIterator it = hash->constFind(className);
         if (it != hash->constEnd())
@@ -1475,7 +1475,7 @@ void QApplicationPrivate::setPalette_helper(const QPalette &palette, const char*
         QApplicationPrivate::app_style->polish(pal); // NB: non-const reference
 
     bool all = false;
-    PaletteHash *hash = app_palettes();
+    QRef<PaletteHash > hash = app_palettes();
     if (!className) {
         if (QApplicationPrivate::app_pal && pal.isCopyOf(*QApplicationPrivate::app_pal))
             return;
@@ -1603,7 +1603,7 @@ QFont QApplication::font(const QWidget *widget)
 {
     typedef FontHash::const_iterator FontHashConstIt;
 
-    FontHash *hash = app_fonts();
+    QRef<FontHash > hash = app_fonts();
 
     if (widget && hash  && hash->size()) {
 #ifdef Q_OS_MAC
@@ -1635,7 +1635,7 @@ QFont QApplication::font(const QWidget *widget)
 */
 QFont QApplication::font(const char *className)
 {
-    FontHash *hash = app_fonts();
+    QRef<FontHash > hash = app_fonts();
     if (className && hash && hash->size()) {
         QHash<QByteArray, QFont>::ConstIterator it = hash->constFind(className);
         if (it != hash->constEnd())
@@ -1667,7 +1667,7 @@ QFont QApplication::font(const char *className)
 void QApplication::setFont(const QFont &font, const char *className)
 {
     bool all = false;
-    FontHash *hash = app_fonts();
+    QRef<FontHash > hash = app_fonts();
     if (!className) {
         QGuiApplication::setFont(font);
         if (hash && hash->size()) {

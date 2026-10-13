@@ -394,7 +394,7 @@ QLoggingRegistry::installFilter(QLoggingCategory::CategoryFilter filter)
 
 QLoggingRegistry *QLoggingRegistry::instance()
 {
-    return qtLoggingRegistry();
+    return qtLoggingRegistry().data();
 }
 
 /*!

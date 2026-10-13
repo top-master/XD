@@ -161,7 +161,8 @@ void Renderer::render()
         m_inited = true;
         initializeOpenGLFunctions();
 
-        QMutexLocker initLock(initMutex());
+        QRef<QMutex > mutex = initMutex();
+        QMutexLocker initLock(mutex.data());
         QOpenGLShader *vshader = new QOpenGLShader(QOpenGLShader::Vertex, this);
         const char *vsrc =
             "attribute highp vec4 vertex;\n"

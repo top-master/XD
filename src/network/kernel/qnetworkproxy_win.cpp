@@ -567,7 +567,7 @@ void QWindowsSystemProxy::init()
 
 QList<QNetworkProxy> QNetworkProxyFactory::systemProxyForQuery(const QNetworkProxyQuery &query)
 {
-    QWindowsSystemProxy *sp = systemProxy();
+    QRef<QWindowsSystemProxy > sp = systemProxy();
     if (!sp)
         return QList<QNetworkProxy>() << QNetworkProxy();
 

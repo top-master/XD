@@ -185,7 +185,7 @@ QString QIconvCodec::convertToUnicode(const char* chars, int len, ConverterState
             QTextCodecUnalignedPointer::encode(convState->state_data, qIconvCodecStateFree);
         }
     } else {
-        QThreadStorage<QIconvCodec::IconvState *> *ts = toUnicodeState();
+        QRef<QThreadStorage<QIconvCodec::IconvState *> > ts = toUnicodeState();
         if (!ts) {
             // we're running after the Q_GLOBAL_STATIC has been deleted
             // or before the QCoreApplication initialization
@@ -343,7 +343,7 @@ QByteArray QIconvCodec::convertFromUnicode(const QChar *uc, int len, ConverterSt
 #endif
 
     IconvState *temporaryState = 0;
-    QThreadStorage<QIconvCodec::IconvState *> *ts = fromUnicodeState();
+    QRef<QThreadStorage<QIconvCodec::IconvState *> > ts = fromUnicodeState();
     IconvState *&state = ts ? ts->localData() : temporaryState;
     if (!state) {
         iconv_t cd = createIconv_t(0, UTF16);

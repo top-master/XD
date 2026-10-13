@@ -207,7 +207,7 @@ static void gtkStyleSetCallback(GtkWidget*)
     // We have to let this function return and complete the event
     // loop to ensure that all gtk widgets have been styled before
     // updating
-    QMetaObject::invokeMethod(styleScheduler(), "updateTheme", Qt::QueuedConnection);
+    QMetaObject::invokeMethod(styleScheduler().data(), "updateTheme", Qt::QueuedConnection);
 }
 
 static void update_toolbar_style(GtkWidget *gtkToolBar, GParamSpec *, gpointer)
