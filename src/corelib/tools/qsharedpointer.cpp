@@ -537,6 +537,27 @@
 */
 
 /*!
+    \fn QSharedPointer<T> &QSharedPointer::internalUnchecked(T *ptr, Deleter deleter)
+    \internal
+
+    Makes this QSharedPointer own \a ptr with \a deleter, just like the
+    QSharedPointer(T *ptr, Deleter deleter) constructor would, but keeps it out
+    of the pointer tracking that \c QT_SHAREDPOINTER_TRACK_POINTERS turns on,
+    and returns itself. Pass QtSharedPointer::NormalDeleter for a plain delete.
+
+    \warning Call it only on a null QSharedPointer: it replaces the counter
+    without dropping it, hence whatever this QSharedPointer owned before would
+    leak. Debug builds assert it.
+
+    Use it only for a pointer that its owner creates itself and never hands to
+    a second QSharedPointer, such as the contents of a \c Q_GLOBAL_STATIC:
+    tracking cannot catch anything there, and an owner that keeps its
+    QSharedPointer for good would leave an entry behind. The global static
+    holding the tracking table needs it too, since tracking its own creation
+    would ask for that table while it is still being created.
+*/
+
+/*!
     \fn T *QSharedPointer::data() const
 
     Returns the value of the pointer referenced by this object.
@@ -1301,6 +1322,7 @@ QT_BEGIN_NAMESPACE
 
 const char * const QtSharedPointer::TAG = "QSharedPointer";
 const char * const QtSharedPointer::MSG_DESTRUCT_REPEAT = "Already destructed but was invoked.";
+const char * const QtSharedPointer::MSG_UNCHECKED_NOT_NULL = "internalUnchecked() needs a null QSharedPointer.";
 
 void QtSharedPointer::ExternalRefCountData::destruct(bool debug) {
     if (debug) {
@@ -1417,6 +1439,18 @@ QT_END_NAMESPACE
 #include "private/qobject_p.h"
 
 QT_BEGIN_NAMESPACE
+
+/*!
+    \internal
+
+    Deletes the \a ptr that a `CustomDeleter` for `ObjectDeleter` holds, out
+    of line where QObject is fully defined; hence that inline deleter needs
+    only a declaration of QObject.
+*/
+void QT_FASTCALL QtSharedPointer::deleteQObject(QObject *ptr)
+{
+    delete ptr;
+}
 
 /*!
     \internal

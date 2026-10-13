@@ -1021,6 +1021,47 @@ bool QtPrivate::debugDeleteEvents = false;
 */
 
 /*!
+    \macro QT_VERSION_TARGET
+    \relates <QtGlobal>
+
+    Names the Qt version the program is written for, in the form
+    #QT_VERSION_CHECK returns; it picks between an old, source-compatible API
+    and the safer one that replaced it. A project defines it to move that line.
+
+    Qt's own modules default to the current version, hence use the safer APIs
+    only, while any other code defaults to 4.8.0.
+
+    \sa QT_TARGETS(), QT_TARGETS_BEFORE()
+*/
+
+/*!
+    \macro QT_TARGETS(major, minor, patch)
+    \relates <QtGlobal>
+
+    Tells whether the program is written for Qt \a major.\a minor.\a patch
+    or a later version (see #QT_VERSION_TARGET), used like
+    `#if QT_TARGETS(5, 6, 6)`.
+
+    It takes the same arguments as #QT_VERSION_CHECK, but its `#define`
+    leaves them out, to keep Qt Creator's coloring right. Hence write
+    `#if QT_TARGETS_BEFORE(5, 6, 6)`, never `#if !QT_TARGETS(5, 6, 6)`: once
+    the macro expands, the `!` applies to #QT_VERSION_TARGET alone, which turns
+    the test into one that is always false.
+
+    \sa QT_TARGETS_BEFORE()
+*/
+
+/*!
+    \macro QT_TARGETS_BEFORE(major, minor, patch)
+    \relates <QtGlobal>
+
+    Tells the opposite of #QT_TARGETS: whether the program is written for a
+    Qt version before \a major.\a minor.\a patch.
+
+    \sa QT_TARGETS()
+*/
+
+/*!
     \relates <QtGlobal>
 
     Returns the version number of Qt at run-time as a string (for

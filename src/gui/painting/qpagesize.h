@@ -34,6 +34,8 @@
 #ifndef QPAGESIZE_H
 #define QPAGESIZE_H
 
+#include <QtCore/qmetatype.h>
+#include <QtCore/qrect.h>
 #include <QtCore/qsharedpointer.h>
 
 QT_BEGIN_NAMESPACE
