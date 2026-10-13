@@ -529,7 +529,7 @@ Q_GLOBAL_STATIC_WITH_ARGS(QFactoryLoader, loader,
 
 QFactoryLoader *qt_iconEngineFactoryLoader()
 {
-    return loader();
+    return loader().data();
 }
 #endif
 

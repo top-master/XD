@@ -111,10 +111,10 @@ QEGLDeviceIntegration *QEGLDeviceIntegrationFactory::create(const QString &key, 
 #ifndef QT_NO_LIBRARY
     if (!pluginPath.isEmpty()) {
         QCoreApplication::addLibraryPath(pluginPath);
-        integration = loadIntegration(directLoader(), key);
+        integration = loadIntegration(directLoader().data(), key);
     }
     if (!integration)
-        integration = loadIntegration(loader(), key);
+        integration = loadIntegration(loader().data(), key);
     if (integration)
         qCDebug(qLcEglDevDebug) << "Using EGL device integration" << key;
     else

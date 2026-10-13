@@ -47,7 +47,7 @@ Q_GLOBAL_STATIC(RateController, rateController)
 
 RateController *RateController::instance()
 {
-    return rateController();
+    return rateController().data();
 }
 
 void RateController::addSocket(PeerWireClient *socket)

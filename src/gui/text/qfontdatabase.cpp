@@ -719,7 +719,7 @@ Q_GLOBAL_STATIC_WITH_ARGS(QMutex, fontDatabaseMutex, (QMutex::Recursive))
 // used in qguiapplication.cpp
 void qt_cleanupFontDatabase()
 {
-    QFontDatabasePrivate *db = privateDb();
+    QRef<QFontDatabasePrivate > db = privateDb();
     if (db) {
         db->fallbacksCache.clear();
         db->free();
@@ -729,7 +729,7 @@ void qt_cleanupFontDatabase()
 // used in qfontengine_x11.cpp
 QMutex *qt_fontdatabase_mutex()
 {
-    return fontDatabaseMutex();
+    return fontDatabaseMutex().data();
 }
 
 
@@ -739,7 +739,7 @@ void qt_registerFont(const QString &familyName, const QString &stylename,
                      bool scalable, int pixelSize, bool fixedPitch,
                      const QSupportedWritingSystems &writingSystems, void *handle)
 {
-    QFontDatabasePrivate *d = privateDb();
+    QRef<QFontDatabasePrivate > d = privateDb();
 //    qDebug() << "Adding font" << familyName << weight << style << pixelSize << antialiased;
     QtFontStyle::Key styleKey;
     styleKey.style = style;
@@ -778,7 +778,7 @@ void qt_registerAliasToFontFamily(const QString &familyName, const QString &alia
     if (alias.isEmpty())
         return;
 
-    QFontDatabasePrivate *d = privateDb();
+    QRef<QFontDatabasePrivate > d = privateDb();
     QtFontFamily *f = d->family(familyName, QFontDatabasePrivate::RequestFamily);
     if (!f)
         return;
@@ -792,7 +792,7 @@ void qt_registerAliasToFontFamily(const QString &familyName, const QString &alia
 QString qt_resolveFontFamilyAlias(const QString &alias)
 {
     if (!alias.isEmpty()) {
-        const QFontDatabasePrivate *d = privateDb();
+        QRef<const QFontDatabasePrivate > d = privateDb();
         for (int i = 0; i < d->count; ++i)
             if (d->families[i]->matchesFamilyName(alias))
                 return d->families[i]->name;
@@ -814,7 +814,7 @@ QStringList QPlatformFontDatabase::fallbacksForFamily(const QString &family, QFo
     if (writingSystem >= QFontDatabase::WritingSystemsCount)
         writingSystem = QFontDatabase::Any;
 
-    QFontDatabasePrivate *db = privateDb();
+    QRef<QFontDatabasePrivate > db = privateDb();
     for (int i = 0; i < db->count; ++i) {
         QtFontFamily *f = db->families[i];
 
@@ -845,7 +845,7 @@ static void initializeDb();
 
 static QStringList fallbacksForFamily(const QString &family, QFont::Style style, QFont::StyleHint styleHint, QChar::Script script)
 {
-    QFontDatabasePrivate *db = privateDb();
+    QRef<QFontDatabasePrivate > db = privateDb();
     if (!db->count)
         initializeDb();
 
@@ -879,7 +879,8 @@ static QStringList fallbacksForFamily(const QString &family, QFont::Style style,
 
 QStringList qt_fallbacksForFamily(const QString &family, QFont::Style style, QFont::StyleHint styleHint, QChar::Script script)
 {
-    QMutexLocker locker(fontDatabaseMutex());
+    QRef<QMutex > mutex = fontDatabaseMutex();
+    QMutexLocker locker(mutex.data());
     return fallbacksForFamily(family, style, styleHint, script);
 }
 
@@ -887,7 +888,7 @@ static void registerFont(QFontDatabasePrivate::ApplicationFont *fnt);
 
 static void initializeDb()
 {
-    QFontDatabasePrivate *db = privateDb();
+    QRef<QFontDatabasePrivate > db = privateDb();
 
     // init by asking for the platformfontdb for the first time or after invalidation
     if (!db->count)
@@ -1020,7 +1021,7 @@ QFontEngine *loadEngine(int script, const QFontDef &request,
 
 static void registerFont(QFontDatabasePrivate::ApplicationFont *fnt)
 {
-    QFontDatabasePrivate *db = privateDb();
+    QRef<QFontDatabasePrivate > db = privateDb();
 
     fnt->families = QGuiApplicationPrivate::platformIntegration()->fontDatabase()->addApplicationFont(fnt->data,fnt->fileName);
 
@@ -1252,7 +1253,7 @@ static int match(int script, const QFontDef &request,
     if (writingSystem >= QFontDatabase::WritingSystemsCount)
         writingSystem = QFontDatabase::Any;
 
-    QFontDatabasePrivate *db = privateDb();
+    QRef<QFontDatabasePrivate > db = privateDb();
     for (int x = 0; x < db->count; ++x) {
         if (blacklistedFamilies.contains(x))
             continue;
@@ -1410,9 +1411,10 @@ QFontDatabase::QFontDatabase()
     if (!qApp || !QGuiApplicationPrivate::platformIntegration())
         qFatal("QFontDatabase: Must construct a QGuiApplication before accessing QFontDatabase");
 
-    QMutexLocker locker(fontDatabaseMutex());
+    QRef<QMutex > mutex = fontDatabaseMutex();
+    QMutexLocker locker(mutex.data());
     createDatabase();
-    d = privateDb();
+    d = privateDb().data();
 }
 
 /*!
@@ -1477,7 +1479,8 @@ QFontDatabase::QFontDatabase()
 */
 QList<QFontDatabase::WritingSystem> QFontDatabase::writingSystems() const
 {
-    QMutexLocker locker(fontDatabaseMutex());
+    QRef<QMutex > mutex = fontDatabaseMutex();
+    QMutexLocker locker(mutex.data());
 
     QT_PREPEND_NAMESPACE(load)();
 
@@ -1520,7 +1523,8 @@ QList<QFontDatabase::WritingSystem> QFontDatabase::writingSystems(const QString 
     QString familyName, foundryName;
     parseFontName(family, foundryName, familyName);
 
-    QMutexLocker locker(fontDatabaseMutex());
+    QRef<QMutex > mutex = fontDatabaseMutex();
+    QMutexLocker locker(mutex.data());
 
     QT_PREPEND_NAMESPACE(load)();
 
@@ -1550,7 +1554,8 @@ QList<QFontDatabase::WritingSystem> QFontDatabase::writingSystems(const QString 
 */
 QStringList QFontDatabase::families(WritingSystem writingSystem) const
 {
-    QMutexLocker locker(fontDatabaseMutex());
+    QRef<QMutex > mutex = fontDatabaseMutex();
+    QMutexLocker locker(mutex.data());
 
     QT_PREPEND_NAMESPACE(load)();
 
@@ -1594,7 +1599,8 @@ QStringList QFontDatabase::styles(const QString &family) const
     QString familyName, foundryName;
     parseFontName(family, foundryName, familyName);
 
-    QMutexLocker locker(fontDatabaseMutex());
+    QRef<QMutex > mutex = fontDatabaseMutex();
+    QMutexLocker locker(mutex.data());
 
     QT_PREPEND_NAMESPACE(load)(familyName);
 
@@ -1638,7 +1644,8 @@ bool QFontDatabase::isFixedPitch(const QString &family,
     QString familyName, foundryName;
     parseFontName(family, foundryName, familyName);
 
-    QMutexLocker locker(fontDatabaseMutex());
+    QRef<QMutex > mutex = fontDatabaseMutex();
+    QMutexLocker locker(mutex.data());
 
     QT_PREPEND_NAMESPACE(load)(familyName);
 
@@ -1663,7 +1670,8 @@ bool QFontDatabase::isBitmapScalable(const QString &family,
     QString familyName, foundryName;
     parseFontName(family, foundryName, familyName);
 
-    QMutexLocker locker(fontDatabaseMutex());
+    QRef<QMutex > mutex = fontDatabaseMutex();
+    QMutexLocker locker(mutex.data());
 
     QT_PREPEND_NAMESPACE(load)(familyName);
 
@@ -1703,7 +1711,8 @@ bool QFontDatabase::isSmoothlyScalable(const QString &family, const QString &sty
     QString familyName, foundryName;
     parseFontName(family, foundryName, familyName);
 
-    QMutexLocker locker(fontDatabaseMutex());
+    QRef<QMutex > mutex = fontDatabaseMutex();
+    QMutexLocker locker(mutex.data());
 
     QT_PREPEND_NAMESPACE(load)(familyName);
 
@@ -1745,7 +1754,8 @@ bool QFontDatabase::isSmoothlyScalable(const QString &family, const QString &sty
 bool  QFontDatabase::isScalable(const QString &family,
                                  const QString &style) const
 {
-    QMutexLocker locker(fontDatabaseMutex());
+    QRef<QMutex > mutex = fontDatabaseMutex();
+    QMutexLocker locker(mutex.data());
     if (isSmoothlyScalable(family, style))
         return true;
     return isBitmapScalable(family, style);
@@ -1768,7 +1778,8 @@ QList<int> QFontDatabase::pointSizes(const QString &family,
     QString familyName, foundryName;
     parseFontName(family, foundryName, familyName);
 
-    QMutexLocker locker(fontDatabaseMutex());
+    QRef<QMutex > mutex = fontDatabaseMutex();
+    QMutexLocker locker(mutex.data());
 
     QT_PREPEND_NAMESPACE(load)(familyName);
 
@@ -1822,7 +1833,8 @@ QFont QFontDatabase::font(const QString &family, const QString &style,
     QString familyName, foundryName;
     parseFontName(family, foundryName, familyName);
 
-    QMutexLocker locker(fontDatabaseMutex());
+    QRef<QMutex > mutex = fontDatabaseMutex();
+    QMutexLocker locker(mutex.data());
 
     QT_PREPEND_NAMESPACE(load)(familyName);
 
@@ -1870,7 +1882,8 @@ QList<int> QFontDatabase::smoothSizes(const QString &family,
     QString familyName, foundryName;
     parseFontName(family, foundryName, familyName);
 
-    QMutexLocker locker(fontDatabaseMutex());
+    QRef<QMutex > mutex = fontDatabaseMutex();
+    QMutexLocker locker(mutex.data());
 
     QT_PREPEND_NAMESPACE(load)(familyName);
 
@@ -1935,7 +1948,8 @@ bool QFontDatabase::italic(const QString &family, const QString &style) const
     QString familyName, foundryName;
     parseFontName(family, foundryName, familyName);
 
-    QMutexLocker locker(fontDatabaseMutex());
+    QRef<QMutex > mutex = fontDatabaseMutex();
+    QMutexLocker locker(mutex.data());
 
     QT_PREPEND_NAMESPACE(load)(familyName);
 
@@ -1969,7 +1983,8 @@ bool QFontDatabase::bold(const QString &family,
     QString familyName, foundryName;
     parseFontName(family, foundryName, familyName);
 
-    QMutexLocker locker(fontDatabaseMutex());
+    QRef<QMutex > mutex = fontDatabaseMutex();
+    QMutexLocker locker(mutex.data());
 
     QT_PREPEND_NAMESPACE(load)(familyName);
 
@@ -2005,7 +2020,8 @@ int QFontDatabase::weight(const QString &family,
     QString familyName, foundryName;
     parseFontName(family, foundryName, familyName);
 
-    QMutexLocker locker(fontDatabaseMutex());
+    QRef<QMutex > mutex = fontDatabaseMutex();
+    QMutexLocker locker(mutex.data());
 
     QT_PREPEND_NAMESPACE(load)(familyName);
 
@@ -2405,7 +2421,8 @@ void QFontDatabase::createDatabase()
 // used from qfontengine_ft.cpp
 Q_GUI_EXPORT QByteArray qt_fontdata_from_index(int index)
 {
-    QMutexLocker locker(fontDatabaseMutex());
+    QRef<QMutex > mutex = fontDatabaseMutex();
+    QMutexLocker locker(mutex.data());
     return privateDb()->applicationFonts.value(index).data;
 }
 
@@ -2472,7 +2489,8 @@ int QFontDatabase::addApplicationFont(const QString &fileName)
             return -1;
         data = f.readAll();
     }
-    QMutexLocker locker(fontDatabaseMutex());
+    QRef<QMutex > mutex = fontDatabaseMutex();
+    QMutexLocker locker(mutex.data());
     return privateDb()->addAppFont(data, fileName);
 }
 
@@ -2495,7 +2513,8 @@ int QFontDatabase::addApplicationFont(const QString &fileName)
 */
 int QFontDatabase::addApplicationFontFromData(const QByteArray &fontData)
 {
-    QMutexLocker locker(fontDatabaseMutex());
+    QRef<QMutex > mutex = fontDatabaseMutex();
+    QMutexLocker locker(mutex.data());
     return privateDb()->addAppFont(fontData, QString() /* fileName */);
 }
 
@@ -2509,7 +2528,8 @@ int QFontDatabase::addApplicationFontFromData(const QByteArray &fontData)
 */
 QStringList QFontDatabase::applicationFontFamilies(int id)
 {
-    QMutexLocker locker(fontDatabaseMutex());
+    QRef<QMutex > mutex = fontDatabaseMutex();
+    QMutexLocker locker(mutex.data());
     return privateDb()->applicationFonts.value(id).families;
 }
 
@@ -2563,9 +2583,10 @@ QFont QFontDatabase::systemFont(QFontDatabase::SystemFont type)
 */
 bool QFontDatabase::removeApplicationFont(int handle)
 {
-    QMutexLocker locker(fontDatabaseMutex());
+    QRef<QMutex > mutex = fontDatabaseMutex();
+    QMutexLocker locker(mutex.data());
 
-    QFontDatabasePrivate *db = privateDb();
+    QRef<QFontDatabasePrivate > db = privateDb();
     if (handle < 0 || handle >= db->applicationFonts.count())
         return false;
 
@@ -2590,9 +2611,10 @@ bool QFontDatabase::removeApplicationFont(int handle)
 */
 bool QFontDatabase::removeAllApplicationFonts()
 {
-    QMutexLocker locker(fontDatabaseMutex());
+    QRef<QMutex > mutex = fontDatabaseMutex();
+    QMutexLocker locker(mutex.data());
 
-    QFontDatabasePrivate *db = privateDb();
+    QRef<QFontDatabasePrivate > db = privateDb();
     if (db->applicationFonts.isEmpty())
         return false;
 
@@ -2627,7 +2649,8 @@ bool QFontDatabase::supportsThreadedFontRendering()
 */
 QFontEngine *QFontDatabase::findFont(const QFontDef &request, int script)
 {
-    QMutexLocker locker(fontDatabaseMutex());
+    QRef<QMutex > mutex = fontDatabaseMutex();
+    QMutexLocker locker(mutex.data());
 
     if (!privateDb()->count)
         initializeDb();

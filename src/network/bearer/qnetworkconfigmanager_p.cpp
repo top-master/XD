@@ -382,7 +382,7 @@ void QNetworkConfigurationManagerPrivate::updateConfigurations()
         bool envOK  = false;
         const int skipGeneric = qgetenv("QT_EXCLUDE_GENERIC_BEARER").toInt(&envOK);
         QBearerEngine *generic = 0;
-        QFactoryLoader *l = loader();
+        QRef<QFactoryLoader > l = loader();
         const PluginKeyMap keyMap = l->keyMap();
         const PluginKeyMapConstIterator cend = keyMap.constEnd();
         QStringList addedEngines;
@@ -392,7 +392,7 @@ void QNetworkConfigurationManagerPrivate::updateConfigurations()
                 continue;
 
             addedEngines.append(key);
-            if (QBearerEngine *engine = qLoadPlugin<QBearerEngine, QBearerEnginePlugin>(l, key)) {
+            if (QBearerEngine *engine = qLoadPlugin<QBearerEngine, QBearerEnginePlugin>(l.data(), key)) {
                 if (key == QLatin1String("generic"))
                     generic = engine;
                 else

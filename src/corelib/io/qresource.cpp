@@ -251,8 +251,9 @@ bool
 QResourcePrivate::load(const QString &file)
 {
     related.clear();
-    QMutexLocker lock(resourceMutex());
-    const ResourceList *list = resourceList();
+    QRef<QMutex > mutex = resourceMutex();
+    QMutexLocker lock(mutex.data());
+    QRef<const ResourceList > list = resourceList();
     QString cleaned = cleanPath(file);
     for(int i = 0; i < list->size(); ++i) {
         QResourceRoot *res = list->at(i);
@@ -304,7 +305,8 @@ QResourcePrivate::ensureInitialized() const
     if(path.startsWith(QLatin1Char('/'))) {
         that->load(path);
     } else {
-        QMutexLocker lock(resourceMutex());
+        QRef<QMutex > mutex = resourceMutex();
+        QMutexLocker lock(mutex.data());
         QStringList searchPaths = *resourceSearchPaths();
         searchPaths << QLatin1String("");
         for(int i = 0; i < searchPaths.size(); ++i) {
@@ -555,7 +557,8 @@ QResource::addSearchPath(const QString &path)
                  path.toLocal8Bit().data());
         return;
     }
-    QMutexLocker lock(resourceMutex());
+    QRef<QMutex > mutex = resourceMutex();
+    QMutexLocker lock(mutex.data());
     resourceSearchPaths()->prepend(path);
 }
 
@@ -573,7 +576,8 @@ QResource::addSearchPath(const QString &path)
 QStringList
 QResource::searchPaths()
 {
-    QMutexLocker lock(resourceMutex());
+    QRef<QMutex > mutex = resourceMutex();
+    QMutexLocker lock(mutex.data());
     return *resourceSearchPaths();
 }
 
@@ -822,7 +826,8 @@ bool QResourceRoot::mappingRootSubdir(const QString &path, QString *match) const
 Q_CORE_EXPORT bool qRegisterResourceData(int version, const unsigned char *tree,
                                          const unsigned char *name, const unsigned char *data)
 {
-    QMutexLocker lock(resourceMutex());
+    QRef<QMutex > mutex = resourceMutex();
+    QMutexLocker lock(mutex.data());
     if(version == 0x01 && resourceList()) {
         bool found = false;
         QResourceRoot res(tree, name, data);
@@ -845,7 +850,8 @@ Q_CORE_EXPORT bool qRegisterResourceData(int version, const unsigned char *tree,
 Q_CORE_EXPORT bool qUnregisterResourceData(int version, const unsigned char *tree,
                                            const unsigned char *name, const unsigned char *data)
 {
-    QMutexLocker lock(resourceMutex());
+    QRef<QMutex > mutex = resourceMutex();
+    QMutexLocker lock(mutex.data());
     if(version == 0x01 && resourceList()) {
         QResourceRoot res(tree, name, data);
         for(int i = 0; i < resourceList()->size(); ) {
@@ -1065,7 +1071,8 @@ QResource::registerResource(const QString &rccFilename, const QString &resourceR
     QDynamicFileResourceRoot *root = new QDynamicFileResourceRoot(r);
     if(root->registerSelf(rccFilename)) {
         root->ref.ref();
-        QMutexLocker lock(resourceMutex());
+        QRef<QMutex > mutex = resourceMutex();
+        QMutexLocker lock(mutex.data());
         resourceList()->append(root);
         return true;
     }
@@ -1089,8 +1096,9 @@ QResource::unregisterResource(const QString &rccFilename, const QString &resourc
 {
     QString r = qt_resource_fixResourceRoot(resourceRoot);
 
-    QMutexLocker lock(resourceMutex());
-    ResourceList *list = resourceList();
+    QRef<QMutex > mutex = resourceMutex();
+    QMutexLocker lock(mutex.data());
+    QRef<ResourceList > list = resourceList();
     for(int i = 0; i < list->size(); ++i) {
         QResourceRoot *res = list->at(i);
         if(res->type() == QResourceRoot::Resource_File) {
@@ -1136,7 +1144,8 @@ QResource::registerResource(const uchar *rccData, const QString &resourceRoot)
     QDynamicBufferResourceRoot *root = new QDynamicBufferResourceRoot(r);
     if (root->registerSelf(rccData, -1)) {
         root->ref.ref();
-        QMutexLocker lock(resourceMutex());
+        QRef<QMutex > mutex = resourceMutex();
+        QMutexLocker lock(mutex.data());
         resourceList()->append(root);
         return true;
     }
@@ -1160,8 +1169,9 @@ QResource::unregisterResource(const uchar *rccData, const QString &resourceRoot)
 {
     QString r = qt_resource_fixResourceRoot(resourceRoot);
 
-    QMutexLocker lock(resourceMutex());
-    ResourceList *list = resourceList();
+    QRef<QMutex > mutex = resourceMutex();
+    QMutexLocker lock(mutex.data());
+    QRef<ResourceList > list = resourceList();
     for(int i = 0; i < list->size(); ++i) {
         QResourceRoot *res = list->at(i);
         if(res->type() == QResourceRoot::Resource_Buffer) {

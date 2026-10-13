@@ -108,7 +108,8 @@ class QAbstractFileEngineHandlerList : public QList<QAbstractFileEngineHandler *
 public:
     ~QAbstractFileEngineHandlerList()
     {
-        QWriteLocker locker(fileEngineHandlerMutex());
+        QRef<QReadWriteLock > readWriteLock = fileEngineHandlerMutex();
+        QWriteLocker locker(readWriteLock.data());
         qt_abstractfileenginehandlerlist_shutDown = true;
     }
 };
@@ -125,7 +126,8 @@ Q_GLOBAL_STATIC(QAbstractFileEngineHandlerList, fileEngineHandlers)
  */
 QAbstractFileEngineHandler::QAbstractFileEngineHandler()
 {
-    QWriteLocker locker(fileEngineHandlerMutex());
+    QRef<QReadWriteLock > readWriteLock = fileEngineHandlerMutex();
+    QWriteLocker locker(readWriteLock.data());
     qt_file_engine_handlers_in_use = true;
     fileEngineHandlers()->prepend(this);
 }
@@ -136,10 +138,11 @@ QAbstractFileEngineHandler::QAbstractFileEngineHandler()
  */
 QAbstractFileEngineHandler::~QAbstractFileEngineHandler()
 {
-    QWriteLocker locker(fileEngineHandlerMutex());
+    QRef<QReadWriteLock > readWriteLock = fileEngineHandlerMutex();
+    QWriteLocker locker(readWriteLock.data());
     // Remove this handler from the handler list only if the list is valid.
     if (!qt_abstractfileenginehandlerlist_shutDown) {
-        QAbstractFileEngineHandlerList *handlers = fileEngineHandlers();
+        QRef<QAbstractFileEngineHandlerList > handlers = fileEngineHandlers();
         handlers->removeOne(this);
         if (handlers->isEmpty())
             qt_file_engine_handlers_in_use = false;
@@ -156,10 +159,11 @@ QAbstractFileEngine *qt_custom_file_engine_handler_create(const QString &path)
     QAbstractFileEngine *engine = 0;
 
     if (qt_file_engine_handlers_in_use) {
-        QReadLocker locker(fileEngineHandlerMutex());
+        QRef<QReadWriteLock > readWriteLock = fileEngineHandlerMutex();
+        QReadLocker locker(readWriteLock.data());
 
         // check for registered handlers that can load the file
-        QAbstractFileEngineHandlerList *handlers = fileEngineHandlers();
+        QRef<QAbstractFileEngineHandlerList > handlers = fileEngineHandlers();
         for (int i = 0; i < handlers->size(); i++) {
             if ((engine = handlers->at(i)->create(path)))
                 break;

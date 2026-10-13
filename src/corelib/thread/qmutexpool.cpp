@@ -108,7 +108,7 @@ QMutexPool::~QMutexPool()
 */
 QMutexPool *QMutexPool::instance()
 {
-    return globalMutexPool();
+    return globalMutexPool().data();
 }
 
 /*!
@@ -135,7 +135,7 @@ QMutex *QMutexPool::createMutex(int index)
 */
 QMutex *QMutexPool::globalInstanceGet(const void *address)
 {
-    QMutexPool * const globalInstance = globalMutexPool();
+    const QRef<QMutexPool > globalInstance = globalMutexPool();
     if (globalInstance == 0)
         return 0;
     return globalInstance->get(address);

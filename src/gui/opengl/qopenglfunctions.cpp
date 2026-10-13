@@ -7611,7 +7611,7 @@ QOpenGLExtensionsPrivate::QOpenGLExtensionsPrivate(QOpenGLContext *ctx)
 
 QOpenGLES3Helper *QOpenGLExtensions::gles3Helper()
 {
-    return qgles3Helper();
+    return qgles3Helper().data();
 }
 
 void QOpenGLExtensions::flushShared()

@@ -420,7 +420,7 @@ LRESULT QT_WIN_CALLBACK qt_internal_proc(HWND hwnd, UINT message, WPARAM wp, LPA
     QEventDispatcherWin32 *q = Q_PTR_CAST(QEventDispatcherWin32 *, GetWindowLong(hwnd, QT_WINDOWEXTRA_OFFSET));
 #  endif
 #else
-    MapWindowDispatcher *map = mapWindowDispatcher();
+    QRef<MapWindowDispatcher > map = mapWindowDispatcher();
     QEventDispatcherWin32 *q = map ? map->value(hwnd, 0) : 0;
 #endif // QT_NO_WINDOWLONG
     QEventDispatcherWin32Private *d = 0;
@@ -629,7 +629,7 @@ Q_GLOBAL_STATIC(QWindowsMessageWindowClassContext, qWindowsMessageWindowClassCon
 
 static HWND qt_create_internal_window(const QEventDispatcherWin32 *eventDispatcher)
 {
-    QWindowsMessageWindowClassContext *ctx = qWindowsMessageWindowClassContext();
+    QRef<QWindowsMessageWindowClassContext > ctx = qWindowsMessageWindowClassContext();
     if (!ctx->atom)
         return 0;
 #ifdef Q_OS_WINCE
@@ -662,7 +662,7 @@ static HWND qt_create_internal_window(const QEventDispatcherWin32 *eventDispatch
     });
     qSetWindowPtr(wnd, eventDispatcher);
 #else
-    MapWindowDispatcher *map = mapWindowDispatcher();
+    QRef<MapWindowDispatcher > map = mapWindowDispatcher();
     Q_CHECK_PTR(map);
     QObject::connect(eventDispatcher, &QObject::destroyed, [wnd]() -> void {
         mapWindowDispatcher()->remove(wnd);

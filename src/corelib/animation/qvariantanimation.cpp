@@ -427,7 +427,7 @@ static QBasicMutex registeredInterpolatorsMutex;
 void QVariantAnimation::registerInterpolator(QVariantAnimation::Interpolator func, int interpolationType)
 {
     // will override any existing interpolators
-    QInterpolatorVector *interpolators = registeredInterpolators();
+    QRef<QInterpolatorVector > interpolators = registeredInterpolators();
     // When built on solaris with GCC, the destructors can be called
     // in such an order that we get here with interpolators == NULL,
     // to continue causes the app to crash on exit with a SEGV
@@ -448,7 +448,7 @@ template<typename T> static inline QVariantAnimation::Interpolator castToInterpo
 QVariantAnimation::Interpolator QVariantAnimationPrivate::getInterpolator(int interpolationType)
 {
     {
-        QInterpolatorVector *interpolators = registeredInterpolators();
+        QRef<QInterpolatorVector > interpolators = registeredInterpolators();
         QMutexLocker locker(&registeredInterpolatorsMutex);
         QVariantAnimation::Interpolator ret = 0;
         if (interpolationType < interpolators->count()) {

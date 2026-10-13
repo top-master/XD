@@ -52,7 +52,7 @@ QCoreGlobalData::~QCoreGlobalData()
 
 QCoreGlobalData *QCoreGlobalData::instance()
 {
-    return globalInstance();
+    return globalInstance().data();
 }
 
 QT_END_NAMESPACE

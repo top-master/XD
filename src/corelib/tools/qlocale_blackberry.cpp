@@ -258,7 +258,7 @@ QLocale QSystemLocale::fallbackUiLocale() const
 
 QVariant QSystemLocale::query(QueryType type, QVariant in) const
 {
-    QBBSystemLocaleData *d = bbSysLocaleData();
+    QRef<QBBSystemLocaleData > d = bbSysLocaleData();
 
     QReadLocker locker(&d->lock);
 

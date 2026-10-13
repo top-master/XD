@@ -804,7 +804,7 @@ void QMacInternalPasteboardMime::initializeMimeTypes()
 */
 void QMacInternalPasteboardMime::destroyMimeTypes()
 {
-    MimeList *mimes = globalMimeList();
+    QRef<MimeList > mimes = globalMimeList();
     while (!mimes->isEmpty())
         delete mimes->takeFirst();
 }
@@ -817,7 +817,7 @@ void QMacInternalPasteboardMime::destroyMimeTypes()
 QMacInternalPasteboardMime*
 QMacInternalPasteboardMime::convertor(uchar t, const QString &mime, QString flav)
 {
-    MimeList *mimes = globalMimeList();
+    QRef<MimeList > mimes = globalMimeList();
     for (MimeList::const_iterator it = mimes->constBegin(); it != mimes->constEnd(); ++it) {
 #ifdef DEBUG_MIME_MAPS
         qDebug("QMacPasteboardMime::convertor: seeing if %s (%d) can convert %s to %d[%c%c%c%c] [%d]",
@@ -842,7 +842,7 @@ QMacInternalPasteboardMime::convertor(uchar t, const QString &mime, QString flav
 */
 QString QMacInternalPasteboardMime::flavorToMime(uchar t, QString flav)
 {
-    MimeList *mimes = globalMimeList();
+    QRef<MimeList > mimes = globalMimeList();
     for (MimeList::const_iterator it = mimes->constBegin(); it != mimes->constEnd(); ++it) {
 #ifdef DEBUG_MIME_MAPS
         qDebug("QMacMIme::flavorToMime: attempting %s (%d) for flavor %d[%c%c%c%c] [%s]",
@@ -866,7 +866,7 @@ QString QMacInternalPasteboardMime::flavorToMime(uchar t, QString flav)
 QList<QMacInternalPasteboardMime*> QMacInternalPasteboardMime::all(uchar t)
 {
     MimeList ret;
-    MimeList *mimes = globalMimeList();
+    QRef<MimeList > mimes = globalMimeList();
     for (MimeList::const_iterator it = mimes->constBegin(); it != mimes->constEnd(); ++it) {
         if ((*it)->type & t)
             ret.append((*it));

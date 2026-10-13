@@ -61,13 +61,13 @@ public:
 
 Q_GLOBAL_STATIC_WITH_ARGS(QSqlQueryPrivate, nullQueryPrivate, (0))
 Q_GLOBAL_STATIC(QSqlNullDriver, nullDriver)
-Q_GLOBAL_STATIC_WITH_ARGS(QSqlNullResult, nullResult, (nullDriver()))
+Q_GLOBAL_STATIC_WITH_ARGS(QSqlNullResult, nullResult, (nullDriver().data()))
 
 QSqlQueryPrivate* QSqlQueryPrivate::shared_null()
 {
-    QSqlQueryPrivate *null = nullQueryPrivate();
+    QRef<QSqlQueryPrivate > null = nullQueryPrivate();
     null->ref.ref();
-    return null;
+    return null.data();
 }
 
 /*!
@@ -77,12 +77,12 @@ QSqlQueryPrivate::QSqlQueryPrivate(QSqlResult* result)
     : ref(1), sqlResult(result)
 {
     if (!sqlResult)
-        sqlResult = nullResult();
+        sqlResult = nullResult().data();
 }
 
 QSqlQueryPrivate::~QSqlQueryPrivate()
 {
-    QSqlResult *nr = nullResult();
+    QRef<QSqlResult > nr = nullResult();
     if (!nr || sqlResult == nr)
         return;
     delete sqlResult;

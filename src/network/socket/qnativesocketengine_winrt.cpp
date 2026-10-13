@@ -443,7 +443,7 @@ int QNativeSocketEngine::accept()
     if (d->socketType == QAbstractSocket::TcpSocket) {
         IStreamSocket *socket = d->pendingConnections.takeFirst();
 
-        SocketHandler *handler = gSocketHandler();
+        QRef<SocketHandler > handler = gSocketHandler();
         handler->pendingTcpSockets.insert(++handler->socketCount, socket);
         return handler->socketCount;
     }

@@ -113,7 +113,7 @@ void QIconLoader::ensureInitialized()
 QIconLoader *QIconLoader::instance()
 {
    iconLoaderInstance()->ensureInitialized();
-   return iconLoaderInstance();
+   return iconLoaderInstance().data();
 }
 
 // Queries the system theme and invalidates existing

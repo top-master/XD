@@ -70,7 +70,7 @@ QPlatformInputContext *QPlatformInputContextFactory::create(const QString& key)
         const QString platform = paramList.takeFirst().toLower();
 
         QPlatformInputContext *ic = qLoadPlugin1<QPlatformInputContext, QPlatformInputContextPlugin>
-                                                 (loader(), platform, paramList);
+                                                 (loader().data(), platform, paramList);
         if (ic && ic->isValid())
             return ic;
 
