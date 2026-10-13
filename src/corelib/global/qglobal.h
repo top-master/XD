@@ -73,6 +73,17 @@
  */
 #define QT_HAS_XD QT_VERSION >= QT_VERSION_CHECK
 
+#ifndef QT_VERSION_TARGET
+#  ifdef QT_BUILDING_QT
+#    define QT_VERSION_TARGET QT_VERSION
+#  else
+#    define QT_VERSION_TARGET QT_VERSION_CHECK(4, 8, 0)
+#  endif
+#endif
+
+#define QT_TARGETS QT_VERSION_TARGET >= QT_VERSION_CHECK
+#define QT_TARGETS_BEFORE QT_VERSION_TARGET < QT_VERSION_CHECK
+
 
 /* The QT_SUPPORTS macro is deprecated. Don't use it in new code.
  * Instead, use #ifdef/ndef QT_NO_feature.
@@ -1587,9 +1598,14 @@ QT_END_NAMESPACE
 #include <QtCore/qflags.h>
 
 #include <QtCore/qatomic.h>
-#include <QtCore/qglobalstatic.h>
 #include <QtCore/qnumeric.h>
 #include <QtCore/qversiontagging.h>
+
+// Gives `Q_GLOBAL_STATIC` the shared-pointer core alone; the headers the rest
+// of `qsharedpointer.h` needs include this one, hence come later.
+#define QT_SHAREDPOINTER_CORE_ONLY
+#include <QtCore/qglobalstatic.h>
+#undef QT_SHAREDPOINTER_CORE_ONLY
 
 #endif /* __cplusplus */
 
