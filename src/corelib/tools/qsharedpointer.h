@@ -31,12 +31,12 @@
 **
 ****************************************************************************/
 
+#include <QtCore/qglobal.h>
+
 #ifndef QSHAREDPOINTER_H
 #define QSHAREDPOINTER_H
 
-#include <QtCore/qglobal.h>
 #include <QtCore/qatomic.h>
-#include <QtCore/qshareddata.h>
 
 #ifndef Q_QDOC
 # include "qsharedpointer_impl.h"
@@ -158,3 +158,37 @@ QT_END_NAMESPACE
 #endif // Q_QDOC
 
 #endif // QSHAREDPOINTER_H
+
+// The part `qglobal.h` leaves out while it defines `Q_GLOBAL_STATIC`, since the
+// headers below include `qglobal.h` themselves; any later include of this
+// header adds it.
+#if !defined(QSHAREDPOINTER_FULL_H) && !defined(QT_SHAREDPOINTER_CORE_ONLY)
+#define QSHAREDPOINTER_FULL_H
+
+#include <QtCore/qshareddata.h>
+#include <QtCore/qhashfunctions.h>
+#if QT_DEPRECATED_SINCE(5, 6)
+#include <QtCore/qhash.h>
+#endif
+
+#ifndef Q_QDOC
+QT_BEGIN_NAMESPACE
+
+//
+// qHash
+//
+
+// Uses helper defined in `qhashfunctions.h` file:
+// ```
+// template <class T> inline uint qHash(const T *key, uint seed = 0) Q_DECL_NOTHROW;
+// ```
+template <class T>
+Q_INLINE_TEMPLATE uint qHash(const QSharedPointer<T> &ptr, uint seed = 0)
+{
+    return QT_PREPEND_NAMESPACE(qHash)<T>(ptr.data(), seed);
+}
+
+QT_END_NAMESPACE
+#endif // Q_QDOC
+
+#endif // QSHAREDPOINTER_FULL_H
