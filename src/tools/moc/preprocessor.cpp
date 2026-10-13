@@ -1308,6 +1308,15 @@ Symbols Preprocessor::preprocessed(const QByteArray &filename, QFile *file)
                tokenTypeName(symbols[j].token));
 #endif
 
+    // Counts the input file as read, hence an include of it from one of its own
+    // includes is skipped like that of any file read before; its classes then
+    // stay at the input file's own depth, which is how the parser tells them
+    // apart from those of the files it includes.
+    const QString inputPath = QFileInfo(QString::fromLocal8Bit(filename.constData())).canonicalFilePath();
+    if (!inputPath.isEmpty()) {
+        preprocessedIncludes.insert(inputPath.toLocal8Bit());
+    }
+
     // phase 3: preprocess conditions and substitute macros
     Symbols result;
     preprocess(filename, result);
