@@ -175,7 +175,7 @@ void QOpenUrlHandlerRegistry::handlerDestroyed(QObject *handler)
 */
 bool QDesktopServices::openUrl(const QUrl &url)
 {
-    QOpenUrlHandlerRegistry *registry = handlerRegistry();
+    QRef<QOpenUrlHandlerRegistry > registry = handlerRegistry();
     QMutexLocker locker(&registry->mutex);
     static bool insideOpenUrlHandler = false;
 
@@ -228,7 +228,7 @@ bool QDesktopServices::openUrl(const QUrl &url)
 */
 void QDesktopServices::setUrlHandler(const QString &scheme, QObject *receiver, const char *method)
 {
-    QOpenUrlHandlerRegistry *registry = handlerRegistry();
+    QRef<QOpenUrlHandlerRegistry > registry = handlerRegistry();
     QMutexLocker locker(&registry->mutex);
     if (!receiver) {
         registry->handlers.remove(scheme.toLower());
@@ -239,7 +239,7 @@ void QDesktopServices::setUrlHandler(const QString &scheme, QObject *receiver, c
     h.name = method;
     registry->handlers.insert(scheme.toLower(), h);
     QObject::connect(receiver, SIGNAL(destroyed(QObject*)),
-                     registry, SLOT(handlerDestroyed(QObject*)));
+                     registry.data(), SLOT(handlerDestroyed(QObject*)));
 }
 
 /*!

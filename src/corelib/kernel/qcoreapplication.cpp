@@ -240,7 +240,7 @@ static QBasicMutex globalPreRoutinesMutex;
 */
 void qAddPreRoutine(QtStartUpFunction p)
 {
-    QStartUpFuncList *list = preRList();
+    QRef<QStartUpFuncList > list = preRList();
     if (!list)
         return;
     // Due to C++11 parallel dynamic initialization, this can be called
@@ -255,7 +255,7 @@ void qAddPreRoutine(QtStartUpFunction p)
 
 void qAddPostRoutine(QtCleanUpFunction p)
 {
-    QVFuncList *list = postRList();
+    QRef<QVFuncList > list = postRList();
     if (!list)
         return;
     list->prepend(p);
@@ -263,7 +263,7 @@ void qAddPostRoutine(QtCleanUpFunction p)
 
 void qRemovePostRoutine(QtCleanUpFunction p)
 {
-    QVFuncList *list = postRList();
+    QRef<QVFuncList > list = postRList();
     if (!list)
         return;
     list->removeAll(p);
@@ -271,7 +271,7 @@ void qRemovePostRoutine(QtCleanUpFunction p)
 
 static void qt_call_pre_routines()
 {
-    QStartUpFuncList *list = preRList();
+    QRef<QStartUpFuncList > list = preRList();
     if (!list)
         return;
 #ifndef QT_NO_THREAD
@@ -286,7 +286,7 @@ static void qt_call_pre_routines()
 
 void Q_CORE_EXPORT qt_call_post_routines()
 {
-    QVFuncList *list = 0;
+    QRef<QVFuncList > list;
     QT_TRY {
         list = postRList();
     } QT_CATCH(const std::bad_alloc &) {
@@ -2550,7 +2550,8 @@ Q_GLOBAL_STATIC_WITH_ARGS(QMutex, libraryPathMutex, (QMutex::Recursive))
 */
 QStringList QCoreApplication::libraryPaths()
 {
-    QMutexLocker locker(libraryPathMutex());
+    QRef<QMutex > mutex = libraryPathMutex();
+    QMutexLocker locker(mutex.data());
 
     if (coreappdata()->manual_libpaths)
         return *(coreappdata()->manual_libpaths);
@@ -2601,7 +2602,8 @@ QStringList QCoreApplication::libraryPaths()
  */
 void QCoreApplication::setLibraryPaths(const QStringList &paths)
 {
-    QMutexLocker locker(libraryPathMutex());
+    QRef<QMutex > mutex = libraryPathMutex();
+    QMutexLocker locker(mutex.data());
 
     // setLibraryPaths() is considered a "remove everything and then add some new ones" operation.
     // When the application is constructed it should still amend the paths. So we keep the originals
@@ -2642,7 +2644,8 @@ void QCoreApplication::addLibraryPath(const QString &path)
     if (canonicalPath.isEmpty())
         return;
 
-    QMutexLocker locker(libraryPathMutex());
+    QRef<QMutex > mutex = libraryPathMutex();
+    QMutexLocker locker(mutex.data());
 
     QStringList *libpaths = coreappdata()->manual_libpaths.data();
     if (libpaths) {
@@ -2681,7 +2684,8 @@ void QCoreApplication::removeLibraryPath(const QString &path)
     if (canonicalPath.isEmpty())
         return;
 
-    QMutexLocker locker(libraryPathMutex());
+    QRef<QMutex > mutex = libraryPathMutex();
+    QMutexLocker locker(mutex.data());
 
     QStringList *libpaths = coreappdata()->manual_libpaths.data();
     if (libpaths) {

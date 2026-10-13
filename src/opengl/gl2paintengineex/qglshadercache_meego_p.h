@@ -267,13 +267,13 @@ static int qt_cache_index_unlocked(const QByteArray &md5Sum, CachedShaders *cach
 /* Returns the index of the shader identified by md5Sum */
 static int qt_cache_index(const QByteArray &md5Sum)
 {
-    ShaderCacheSharedMemory *shm = shaderCacheSharedMemory();
+    QRef<ShaderCacheSharedMemory > shm = shaderCacheSharedMemory();
     if (!shm || !shm->isAttached())
         return false;
 
     Q_ASSERT(md5Sum.length() == 16);
 
-    ShaderCacheLocker locker(shm);
+    ShaderCacheLocker locker(shm.data());
     if (!locker.isLocked())
         return false;
 
@@ -293,7 +293,7 @@ static bool qt_cached_shader(QGLShaderProgram *program, const QGLContext *ctx, i
     Q_ASSERT(shaderIndex >= 0 && shaderIndex <= ShaderCacheMaxEntries);
     Q_ASSERT(program);
 
-    ShaderCacheSharedMemory *shm = shaderCacheSharedMemory();
+    QRef<ShaderCacheSharedMemory > shm = shaderCacheSharedMemory();
     if (!shm || !shm->isAttached())
         return false;
 
@@ -320,7 +320,7 @@ static bool qt_cached_shader(QGLShaderProgram *program, const QGLContext *ctx, i
    if the cache is too small to hold the shader. */
 static bool qt_cache_shader(const QGLShaderProgram *shader, const QGLContext *ctx, const QByteArray &md5Sum)
 {
-    ShaderCacheSharedMemory *shm = shaderCacheSharedMemory();
+    QRef<ShaderCacheSharedMemory > shm = shaderCacheSharedMemory();
     if (!shm || !shm->isAttached())
         return false;
 
@@ -329,7 +329,7 @@ static bool qt_cache_shader(const QGLShaderProgram *shader, const QGLContext *ct
 
     CachedShaders *cache = reinterpret_cast<CachedShaders *>(data);
 
-    ShaderCacheLocker locker(shm);
+    ShaderCacheLocker locker(shm.data());
     if (!locker.isLocked())
         return false;
 

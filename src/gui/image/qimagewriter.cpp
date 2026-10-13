@@ -136,7 +136,7 @@ static QImageIOHandler *createWriteHandlerHelper(QIODevice *device,
     typedef QMultiMap<int, QString> PluginKeyMap;
 
     // check if any plugins can write the image
-    QFactoryLoader *l = loader();
+    QRef<QFactoryLoader > l = loader();
     const PluginKeyMap keyMap = l->keyMap();
     int suffixPluginIndex = -1;
 #endif
@@ -909,7 +909,7 @@ QList<QByteArray> QImageWriter::supportedImageFormats()
 #endif
 
 #ifndef QT_NO_IMAGEFORMATPLUGIN
-    supportedImageHandlerFormats(loader(), QImageIOPlugin::CanWrite, &formats);
+    supportedImageHandlerFormats(loader().data(), QImageIOPlugin::CanWrite, &formats);
 #endif // QT_NO_IMAGEFORMATPLUGIN
 
     std::sort(formats.begin(), formats.end());
@@ -950,7 +950,7 @@ QList<QByteArray> QImageWriter::supportedMimeTypes()
 #endif
 
 #ifndef QT_NO_IMAGEFORMATPLUGIN
-    supportedImageHandlerMimeTypes(loader(), QImageIOPlugin::CanWrite, &mimeTypes);
+    supportedImageHandlerMimeTypes(loader().data(), QImageIOPlugin::CanWrite, &mimeTypes);
 #endif // QT_NO_IMAGEFORMATPLUGIN
 
     std::sort(mimeTypes.begin(), mimeTypes.end());

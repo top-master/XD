@@ -71,14 +71,14 @@ Q_GLOBAL_STATIC(QRemoteUserCounter, globalInstanceManager )
 
 QRemoteUserCounter *QRemoteUserPrivate::instanceManager()
 {
-    return globalInstanceManager();
+    return globalInstanceManager().data();
 }
 
 Q_GLOBAL_STATIC(QThreadStorage<QRemoteUserPrivate::PerThreadStorageGlobal>, globalThreadStore)
 
 QThreadStorage<QRemoteUserPrivate::PerThreadStorageGlobal> *QRemoteUserPrivate::threadStoreGlobal()
 {
-    return globalThreadStore();
+    return globalThreadStore().data();
 }
 
 

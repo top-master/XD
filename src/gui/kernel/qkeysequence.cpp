@@ -1058,7 +1058,7 @@ int QKeySequencePrivate::decodeString(const QString &str, QKeySequence::Sequence
     QString accel = str.toLower();
     bool nativeText = (format == QKeySequence::NativeText);
 
-    QVector<QModifKeyName> *gmodifs;
+    QRef<QVector<QModifKeyName> > gmodifs;
     if (nativeText) {
         gmodifs = globalModifs();
         if (gmodifs->isEmpty()) {

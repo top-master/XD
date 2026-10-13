@@ -247,7 +247,7 @@ static QImageIOHandler *createReadHandlerHelper(QIODevice *device,
     typedef QMultiMap<int, QString> PluginKeyMap;
 
     // check if we have plugins that support the image format
-    QFactoryLoader *l = loader();
+    QRef<QFactoryLoader > l = loader();
     const PluginKeyMap keyMap = l->keyMap();
 
 #ifdef QIMAGEREADER_DEBUG
@@ -1628,7 +1628,7 @@ QList<QByteArray> QImageReader::supportedImageFormats()
         formats << _qt_BuiltInFormats[i].extension;
 
 #ifndef QT_NO_IMAGEFORMATPLUGIN
-    supportedImageHandlerFormats(loader(), QImageIOPlugin::CanRead, &formats);
+    supportedImageHandlerFormats(loader().data(), QImageIOPlugin::CanRead, &formats);
 #endif // QT_NO_IMAGEFORMATPLUGIN
 
     std::sort(formats.begin(), formats.end());
@@ -1653,7 +1653,7 @@ QList<QByteArray> QImageReader::supportedMimeTypes()
         mimeTypes << _qt_BuiltInFormats[i].mimeType;
 
 #ifndef QT_NO_IMAGEFORMATPLUGIN
-    supportedImageHandlerMimeTypes(loader(), QImageIOPlugin::CanRead, &mimeTypes);
+    supportedImageHandlerMimeTypes(loader().data(), QImageIOPlugin::CanRead, &mimeTypes);
 #endif // QT_NO_IMAGEFORMATPLUGIN
 
     std::sort(mimeTypes.begin(), mimeTypes.end());

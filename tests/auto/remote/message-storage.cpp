@@ -8,7 +8,7 @@ Q_GLOBAL_STATIC(QThreadStorage<MessageStorage>, globalThreadStorage)
 
 
 MessageStorage &MessageStorage::get() {
-    QThreadStorage<MessageStorage> *storage = globalThreadStorage();
+    QRef<QThreadStorage<MessageStorage> > storage = globalThreadStorage();
     Q_ASSERT(storage);
     MessageStorage &store = storage->localData();
     return store;

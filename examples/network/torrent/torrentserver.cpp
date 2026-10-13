@@ -48,7 +48,7 @@ Q_GLOBAL_STATIC(TorrentServer, torrentServer)
 
 TorrentServer *TorrentServer::instance()
 {
-    return torrentServer();
+    return torrentServer().data();
 }
 
 void TorrentServer::addClient(TorrentClient *client)

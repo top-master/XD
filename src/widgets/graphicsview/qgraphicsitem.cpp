@@ -1488,7 +1488,7 @@ QGraphicsItem::~QGraphicsItem()
     }
     delete d_ptr->transformData;
 
-    if (QGraphicsItemCustomDataStore *dataStore = qt_dataStore())
+    if (QRef<QGraphicsItemCustomDataStore > dataStore = qt_dataStore())
         dataStore->data.remove(this);
 }
 
@@ -6545,7 +6545,7 @@ bool QGraphicsItem::isUnderMouse() const
 */
 QVariant QGraphicsItem::data(int key) const
 {
-    QGraphicsItemCustomDataStore *store = qt_dataStore();
+    QRef<QGraphicsItemCustomDataStore > store = qt_dataStore();
     if (!store->data.contains(this))
         return QVariant();
     return store->data.value(this).value(key);

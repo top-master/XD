@@ -85,12 +85,12 @@ QPlatformIntegration *QPlatformIntegrationFactory::create(const QString &platfor
     // First tries to load the plugin from the path set by CLI option or env-var.
     if (!platformPluginPath.isEmpty()) {
         QCoreApplication::addLibraryPath(platformPluginPath);
-        found = loadIntegration(directLoader(), platform, paramList, argc, argv);
+        found = loadIntegration(directLoader().data(), platform, paramList, argc, argv);
         if (found)
             return found;
     }
     // Then loads normally.
-    found = loadIntegration(loader(), platform, paramList, argc, argv);
+    found = loadIntegration(loader().data(), platform, paramList, argc, argv);
 #else
     Q_UNUSED(platform);
     Q_UNUSED(paramList);

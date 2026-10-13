@@ -91,7 +91,7 @@ typedef QList<QTextCodec*>::ConstIterator TextCodecListConstIt;
 typedef QList<QByteArray>::ConstIterator ByteArrayListConstIt;
 
 Q_GLOBAL_STATIC_WITH_ARGS(QMutex, textCodecsMutex, (QMutex::Recursive));
-QMutex *qTextCodecsMutex() { return textCodecsMutex(); }
+QMutex *qTextCodecsMutex() { return textCodecsMutex().data(); }
 
 #if !defined(QT_USE_ICU)
 static char qtolower(char c)
@@ -152,7 +152,8 @@ static QTextCodec *setupLocaleMapper()
     QTextCodec *locale = 0;
 
     {
-        QMutexLocker locker(textCodecsMutex());
+        QRef<QMutex > mutex = textCodecsMutex();
+        QMutexLocker locker(mutex.data());
         if (globalData->allCodecs.isEmpty())
             setup();
     }
@@ -467,7 +468,8 @@ QTextCodec::ConverterState::~ConverterState()
 */
 QTextCodec::QTextCodec()
 {
-    QMutexLocker locker(textCodecsMutex());
+    QRef<QMutex > mutex = textCodecsMutex();
+    QMutexLocker locker(mutex.data());
 
     QCoreGlobalData *globalInstance = QCoreGlobalData::instance();
     if (globalInstance->allCodecs.isEmpty())
@@ -506,7 +508,8 @@ QTextCodec *QTextCodec::codecForName(const QByteArray &name)
     if (name.isEmpty())
         return 0;
 
-    QMutexLocker locker(textCodecsMutex());
+    QRef<QMutex > mutex = textCodecsMutex();
+    QMutexLocker locker(mutex.data());
 
     QCoreGlobalData *globalData = QCoreGlobalData::instance();
     if (!globalData)
@@ -553,7 +556,8 @@ QTextCodec *QTextCodec::codecForName(const QByteArray &name)
 */
 QTextCodec* QTextCodec::codecForMib(int mib)
 {
-    QMutexLocker locker(textCodecsMutex());
+    QRef<QMutex > mutex = textCodecsMutex();
+    QMutexLocker locker(mutex.data());
 
     QCoreGlobalData *globalData = QCoreGlobalData::instance();
     if (!globalData)
@@ -599,7 +603,8 @@ QTextCodec* QTextCodec::codecForMib(int mib)
 */
 QList<QByteArray> QTextCodec::availableCodecs()
 {
-    QMutexLocker locker(textCodecsMutex());
+    QRef<QMutex > mutex = textCodecsMutex();
+    QMutexLocker locker(mutex.data());
 
     QCoreGlobalData *globalData = QCoreGlobalData::instance();
     if (globalData->allCodecs.isEmpty())
@@ -631,7 +636,8 @@ QList<int> QTextCodec::availableMibs()
 #ifdef QT_USE_ICU
     return QIcuCodec::availableMibs();
 #else
-    QMutexLocker locker(textCodecsMutex());
+    QRef<QMutex > mutex = textCodecsMutex();
+    QMutexLocker locker(mutex.data());
 
     QCoreGlobalData *globalData = QCoreGlobalData::instance();
     if (globalData->allCodecs.isEmpty())
