@@ -129,6 +129,7 @@ QTOBJS= \
 	qjsonobject.obj \
 	qjsonvalue.obj \
 	qmemorysafety.obj \
+	qsharedpointer.obj \
 	qexception.obj
 
 first all: qmake.exe bin_qmake

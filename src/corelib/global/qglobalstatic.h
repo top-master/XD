@@ -37,6 +37,8 @@
 #define QGLOBALSTATIC_H
 
 #include <QtCore/qatomic.h>
+#include <QtCore/qsharedpointer.h>
+#include <QtCore/qptr.h>
 
 QT_BEGIN_NAMESPACE
 
@@ -70,7 +72,8 @@ enum GuardValues {
 #endif
 
 #define Q_GLOBAL_STATIC_INTERNAL(ARGS)                          \
-    Q_GLOBAL_STATIC_INTERNAL_DECORATION Type *innerFunction()   \
+    Q_GLOBAL_STATIC_INTERNAL_DECORATION                         \
+    QSharedPointer<Type > *innerFunction()                      \
     {                                                           \
         struct HolderBase {                                     \
             ~HolderBase() Q_DECL_NOTHROW                        \
@@ -78,11 +81,17 @@ enum GuardValues {
                   guard.store(QtGlobalStatic::Destroyed); }     \
         };                                                      \
         static struct Holder : public HolderBase {              \
-            Type value;                                         \
+            QSharedPointer<Type > value;                        \
             Holder()                                            \
-                Q_DECL_NOEXCEPT_EXPR(noexcept(Type ARGS))       \
-                : value ARGS                                    \
-            { guard.store(QtGlobalStatic::Initialized); }       \
+            {                                                   \
+                value.internalUnchecked(new Type ARGS,          \
+                    QtSharedPointer::NormalDeleter());          \
+                QtSharedPointer::ExternalRefCountData *counter = \
+                    const_cast<QtSharedPointer::ExternalRefCountData * >( \
+                        value.internalData());                  \
+                counter->weakref.ref();                         \
+                guard.store(QtGlobalStatic::Initialized);       \
+            }                                                   \
         } holder;                                               \
         return &holder.value;                                   \
     }
@@ -95,18 +104,29 @@ QT_END_NAMESPACE
 QT_BEGIN_NAMESPACE
 
 #define Q_GLOBAL_STATIC_INTERNAL(ARGS)                                  \
-    Q_DECL_HIDDEN inline Type *innerFunction()                          \
+    Q_DECL_HIDDEN inline QSharedPointer<Type > *innerFunction()         \
     {                                                                   \
-        static Type *d;                                                 \
+        static union {                                                  \
+            char bytes[sizeof(QSharedPointer<Type >)];                  \
+            void *alignment;                                            \
+        } storage;                                                      \
+        static QSharedPointer<Type > *d;                                \
         static QBasicMutex mutex;                                       \
         int x = guard.loadAcquire();                                    \
         if (Q_UNLIKELY(x >= QtGlobalStatic::Uninitialized)) {           \
             QMutexLocker locker(&mutex);                                \
             if (guard.load() == QtGlobalStatic::Uninitialized) {        \
-                d = new Type ARGS;                                      \
+                d = new (&storage) QSharedPointer<Type >();             \
+                d->internalUnchecked(new Type ARGS,                     \
+                    QtSharedPointer::NormalDeleter());                  \
+                QtSharedPointer::ExternalRefCountData *counter =        \
+                    const_cast<QtSharedPointer::ExternalRefCountData * >( \
+                        d->internalData());                             \
+                counter->weakref.ref();                                 \
                 static struct Cleanup {                                 \
                     ~Cleanup() {                                        \
-                        delete d;                                       \
+                        typedef QSharedPointer<Type > Pointer;          \
+                        d->~Pointer();                                  \
                         guard.store(QtGlobalStatic::Destroyed);         \
                     }                                                   \
                 } cleanup;                                              \
@@ -118,24 +138,50 @@ QT_BEGIN_NAMESPACE
 #endif
 
 // this class must be POD, unless the compiler supports thread-safe statics
-template <typename T, T *(&innerFunction)(), QBasicAtomicInt &guard>
+template <typename T, QSharedPointer<T > *(&innerFunction)(), QBasicAtomicInt & guard>
 struct QGlobalStatic
 {
     typedef T Type;
+#if QT_TARGETS(5, 6, 6)
+    typedef QRef<T > Ref;
+#else
+    typedef QPtr<T > Ref;
+#endif
 
     bool isDestroyed() const { return guard.load() <= QtGlobalStatic::Destroyed; }
     bool exists() const { return guard.load() == QtGlobalStatic::Initialized; }
-    operator Type *() { if (isDestroyed()) return 0; return innerFunction(); }
-    Type *operator()() { if (isDestroyed()) return 0; return innerFunction(); }
-    Type *operator->()
+    operator Type *()
+    {
+        if (isDestroyed()) {
+            return 0;
+        }
+        // TRACE/corelib Q_GLOBAL_STATIC: take references by copy-assign #2,
+        QSharedPointer<T > contents;
+        contents = *innerFunction();
+        return contents.data();
+    }
+    Ref operator()()
+    {
+        if (isDestroyed()) {
+            return Ref();
+        }
+        // TRACE/corelib Q_GLOBAL_STATIC: take references by copy-assign #3,
+        QSharedPointer<T > contents;
+        contents = *innerFunction();
+        return contents;
+    }
+    Ref operator->()
     {
       Q_ASSERT_X(!isDestroyed(), "Q_GLOBAL_STATIC", "The global static was used after being destroyed");
-      return innerFunction();
+      // TRACE/corelib Q_GLOBAL_STATIC: take references by copy-assign #4,
+      QSharedPointer<T > contents;
+      contents = *innerFunction();
+      return contents;
     }
     Type &operator*()
     {
       Q_ASSERT_X(!isDestroyed(), "Q_GLOBAL_STATIC", "The global static was used after being destroyed");
-      return *innerFunction();
+      return *innerFunction()->data();
     }
 };
 

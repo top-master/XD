@@ -189,16 +189,20 @@
     C \c atexit function. On most systems, in fact, the destructor will also be
     called if the library or plugin is unloaded from memory before exit.
 
+    The object lives in a QSharedPointer, and every use through
+    `operator()()` or `operator->()` holds a QRef to it. At exit-time, the
+    global static only drops its own reference; hence a thread that still holds
+    a QRef keeps the object alive, and the last QRef to end destroys it.
+
     Since the destruction is meant to happen at program exit, no thread-safety
     is provided. This includes the case of plugin or library unload. In
     addition, since destructors are not supposed to throw exceptions, no
     exception safety is provided either.
 
-    However, reentrancy is permitted: during destruction, it is possible to
-    access the global static object and the pointer returned will be the same
-    as it was before destruction began. After the destruction has completed,
-    accessing the global static object is not permitted, except as noted in the
-    \l QGlobalStatic API.
+    During destruction, accessing the global static object gives null, just
+    like after it, since its reference count is already zero. After the
+    destruction has completed, accessing the global static object is not
+    permitted, except as noted in the \l QGlobalStatic API.
 
     \omit
     \section1 Compatibility with Qt 4 and Qt 5.0
@@ -275,23 +279,30 @@
     define QT_NO_THREAD.
 
     The implementation requiring thread-safe initialization from the compiler
-    is the simplest: it creates the \a Type object as a function-local static
-    and returns its address. The actual object is actually inside a holder
-    structure so holder's destructor can set the guard variable to the value -2
-    (destroyed) when the type has finished destruction. Since we need to set
-    the guard \b after the destruction has finished, this code needs to be in a
-    base struct's destructor. And it only sets to -2 (destroyed) if it finds
-    the guard at -1 (initialized): this is done to ensure that the guard isn't
-    set to -2 in the event the type's constructor threw an exception. A holder
-    structure is used to avoid creating two statics, which the ABI might
-    require duplicating the thread-safe control structures for.
+    is the simplest: it keeps the QSharedPointer that owns the \a Type object
+    (using QSharedPointer::internalUnchecked() to disable safety-checks)
+    as a function-local static, and returns its address. It also holds a weak
+    reference of its own on that pointer's counter, which it never drops;
+    hence each use may take a reference from that QSharedPointer at any time
+    by copy assignment, and the reference is null once the object is gone.
+    The QSharedPointer is inside a holder structure; hence the holder's
+    destructor drops that reference, and its base struct's destructor sets the
+    guard variable to the value -2 (destroyed) once that is done. Since we need
+    to set the guard \b after that, this code needs to be in a base struct's
+    destructor. And it only sets to -2 (destroyed) if it finds the guard at -1
+    (initialized): this is done to ensure that the guard isn't set to -2 in the
+    event the type's constructor threw an exception. A holder structure is used
+    to avoid creating two statics, which the ABI might require duplicating the
+    thread-safe control structures for.
 
     The other implementation is similar to Qt 4's Q_GLOBAL_STATIC, but unlike
-    that one, it uses a \l QBasicMutex to provide locking. It is also more
-    efficient memory-wise. It use a simple double-checked locking of the mutex
-    and then creates the contents on the heap. After that, it creates a
-    function-local structure called "Cleanup", whose destructor will be run at
-    program exit and will actually destroy the contents.
+    that one, it uses a \l QBasicMutex to provide locking. It uses a simple
+    double-checked locking of the mutex and then creates the contents on the
+    heap, and the QSharedPointer in a function-local static buffer (a buffer
+    has no constructor, hence no race on its initialization). After that, it
+    creates a function-local structure called "Cleanup", whose destructor runs
+    at program exit and destroys the QSharedPointer; the buffer outlives it,
+    just like the holder's storage does in the other implementation.
 
     \endomit
 
@@ -364,12 +375,23 @@
 */
 
 /*!
+    \typedef QGlobalStatic::Ref
+
+    The reference that `operator()()` and `operator->()` return: a QRef to
+    `Type` when the program is written for XD 5.6.6 or later (see
+    #QT_VERSION_TARGET), otherwise a QPtr, which also converts to a raw
+    pointer by itself.
+*/
+
+/*!
     \fn bool QGlobalStatic::isDestroyed() const
 
     This function returns \c true if the global static object has already
-    completed destruction (that is, if the destructor for the type has already
-    returned). In specific, note that this function returns \c false if
-    the destruction is still in progress.
+    completed destruction (that is, if the global static has already dropped
+    its own reference to the contents; unless a `Ref` still keeps them alive,
+    the destructor for the type has then already returned). In specific, note
+    that this function returns \c false if the destruction is still in
+    progress.
 
     Once this function has returned true once, it will never return
     false again until either the program is restarted or the plugin or library
@@ -476,31 +498,29 @@
 */
 
 /*!
-    \fn Type *QGlobalStatic::operator()()
-    \deprecated
+    \fn QGlobalStatic::Ref QGlobalStatic::operator()()
 
-    This function returns the address of the contents of this global static. If
-    the contents have not yet been created, they will be created thread-safely
-    by this function. If the contents have already been destroyed, this
-    function will return a null pointer.
+    This function returns a `Ref` to the contents of this global static, which
+    keeps them alive for as long as it exists. If the contents have not yet been
+    created, they will be created thread-safely by this function. If the global
+    static has already been destroyed, this function returns a null `Ref`.
 
-    This function is equivalent to \l {operator Type *()}. It is provided for
-    compatibility with the private Q_GLOBAL_STATIC implementation that existed
-    in Qt 4.x and 5.0. New code should avoid using it and should instead treat
-    the object as a smart pointer.
+    Keep the result in a QRef variable for as long as the contents are used;
+    a raw pointer taken out of it with @ref QRef::data "data()" is valid only
+    while some QRef exists.
 */
 
 /*!
-    \fn Type *QGlobalStatic::operator->()
+    \fn QGlobalStatic::Ref QGlobalStatic::operator->()
 
-    This function returns the address of the contents of this global static. If
-    the contents have not yet been created, they will be created thread-safely
-    by this function.
+    This function returns a `Ref` to the contents of this global static, which
+    keeps them alive until the end of the expression that uses it. If the
+    contents have not yet been created, they will be created thread-safely by
+    this function.
 
-    This function does not check if the contents have already been destroyed and
-    will never return null. If this function is called after the object has
-    been destroyed, it will return a dangling pointer that should not be
-    dereferenced.
+    Using this function after the global static has been destroyed fails an
+    assertion in debug builds; otherwise the `Ref` is null, and dereferencing
+    it is undefined behavior.
 */
 
 /*!
@@ -514,3 +534,12 @@
     If this function is called after the object has been destroyed, it will
     return an invalid reference that must not be used.
 */
+
+// TRACE/corelib Q_GLOBAL_STATIC: take references by copy-assign #1,
+// since an assignment never raises a strong count from zero, while a copy
+// constructor would: the global's destruction may run in another thread,
+// which may already have dropped the count to zero. No thread ever frees
+// what the assignment reads: the global holds a weak reference of its own
+// on the counter, and its `QSharedPointer` sits in static storage, which
+// outlives the destructor that nulls it; hence the reference is null once
+// the contents are gone.

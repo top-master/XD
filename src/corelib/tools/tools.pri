@@ -48,6 +48,7 @@ HEADERS +=  \
         tools/qpodlist_p.h \
         tools/qpair.h \
         tools/qpoint.h \
+        tools/qptr.h \
         tools/qqueue.h \
         tools/qrect.h \
         tools/qregexp.h \

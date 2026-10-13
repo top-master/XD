@@ -56,11 +56,7 @@ QT_END_NAMESPACE
 #include <new>
 #include <QtCore/qatomic.h>
 #include <QtCore/qatomicflags.h>
-#include <QtCore/qobject.h>    // for qobject_cast
-#if QT_DEPRECATED_SINCE(5, 6)
-#include <QtCore/qhash.h>
-#endif
-#include <QtCore/qhashfunctions.h>
+#include <QtCore/qnamespace.h>
 
 #if defined(Q_COMPILER_RVALUE_REFS) && defined(Q_COMPILER_VARIADIC_TEMPLATES)
 #  include <utility>           // for std::forward
@@ -101,7 +97,18 @@ QSharedPointer<X> qSharedPointerConstCast(const QSharedPointer<T> &ptr);
 template <class X, class T>
 QSharedPointer<X> qSharedPointerObjectCast(const QSharedPointer<T> &ptr);
 
+class QObject;
 class QObjectPrivate;
+
+template <class T>
+inline T qobject_cast(QObject *object);
+template <class T>
+inline T qobject_cast(const QObject *object);
+
+namespace QtPrivate {
+    template <typename T>
+    struct IsPointerToTypeDerivedFromQObject;
+}
 #endif
 
 namespace QtSharedPointer {
@@ -116,6 +123,7 @@ namespace QtSharedPointer {
 
     Q_CORE_EXPORT extern const char * const TAG;
     Q_CORE_EXPORT extern const char * const MSG_DESTRUCT_REPEAT;
+    Q_CORE_EXPORT extern const char * const MSG_UNCHECKED_NOT_NULL;
 
     // Used in debug mode to verify the reuse of pointers
     // (e.g. `DEFINES += QT_SHAREDPOINTER_TRACK_POINTERS`).
@@ -243,7 +251,7 @@ namespace QtSharedPointer {
 #endif // QT_NO_QOBJECT
 
         // To support any class even if not sub-class of QObject:
-        static Q_ALWAYS_INLINE void attachToObject(const void *ptr, ExternalRefCountData **d)
+        static Q_ALWAYS_INLINE void attachToObject(const volatile void *ptr, ExternalRefCountData **d)
         {
             if ((*d)->isSafetyChecked()) {
                 internalSafetyCheckAdd(*d, ptr);
@@ -338,6 +346,19 @@ namespace QtSharedPointer {
     // sizeof(CustomDeleter specialization) = sizeof(void*)
 
 #ifndef QT_NO_QOBJECT
+    Q_CORE_EXPORT void QT_FASTCALL deleteQObject(QObject *ptr);
+
+    /// Forwards to @ref deleteQObject, since QObject's header may
+    /// not be included yet.
+    template <>
+    struct CustomDeleter<QObject, NormalDeleter>
+    {
+        QObject *ptr;
+
+        CustomDeleter(QObject *p, NormalDeleter) : ptr(p) {}
+        Q_ALWAYS_INLINE void execute() { deleteQObject(ptr); }
+    };
+
     // This specialization of CustomDeleter for a deleter of type ObjectDeleter
     // is to support forward-declarations: instead of storing a pointer to T
     // we simply store a QObject pointer.
@@ -347,7 +368,7 @@ namespace QtSharedPointer {
         QObject *ptr;
 
         CustomDeleter(QObject *p, ObjectDeleter) : ptr(p) {}
-        void execute() { delete ptr; }
+        Q_ALWAYS_INLINE void execute() { deleteQObject(ptr); }
     };
 #endif // QT_NO_QOBJECT
 
@@ -711,6 +732,15 @@ public:
 
     Q_ALWAYS_INLINE const Data *internalData() const { return this->d; }
 
+    template <typename Deleter>
+    Q_INLINE_TEMPLATE QSharedPointer<T> &internalUnchecked(T *ptr, Deleter deleter)
+    {
+        Q_ASSERT_X(!d, QtSharedPointer::TAG, QtSharedPointer::MSG_UNCHECKED_NOT_NULL);
+        const int flags = Data::inlineFlags(ptr) & ~int(QtSharedPointer::FlagIsSafetyChecked);
+        internalConstruct(ptr, deleter, flags);
+        return *this;
+    }
+
 protected:
     inline void deref() Q_DECL_NOTHROW
     { Data::derefStrong(d); }
@@ -731,11 +761,13 @@ protected:
     inline void enableSharedFromThis(...) {}
 
     template <typename Deleter>
-    inline void internalConstruct(T *ptr, Deleter deleter)
+    inline void internalConstruct(T *ptr, Deleter deleter, int flags = -1)
     {
         if (ptr) {
             typedef QtSharedPointer::ExternalRefCountWithCustomDeleter<T, Deleter> DeleteWrapper;
-            const int flags = Data::inlineFlags(ptr);
+            if (flags == -1) {
+                flags = Data::inlineFlags(ptr);
+            }
             typename Data::DestroyerFn actualDeleter = &DeleteWrapper::deleter;
             d = DeleteWrapper::create(ptr, deleter, actualDeleter, flags);
         } else
@@ -1211,21 +1243,6 @@ Q_INLINE_TEMPLATE bool operator<(T *ptr1, const QSharedPointer<X> &ptr2)
 {
     return ptr1 < ptr2.data();
 }
-
-//
-// qHash
-//
-
-// Uses helper defined in `qhashfunctions.h` file:
-// ```
-// template <class T> inline uint qHash(const T *key, uint seed = 0) Q_DECL_NOTHROW;
-// ```
-template <class T>
-Q_INLINE_TEMPLATE uint qHash(const QSharedPointer<T> &ptr, uint seed = 0)
-{
-    return QT_PREPEND_NAMESPACE(qHash)<T>(ptr.data(), seed);
-}
-
 
 template <class T>
 Q_INLINE_TEMPLATE QWeakPointer<T> QSharedPointer<T>::toWeakRef() const

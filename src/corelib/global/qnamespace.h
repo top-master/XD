@@ -31,10 +31,10 @@
 **
 ****************************************************************************/
 
+#include <QtCore/qglobal.h>
+
 #ifndef QNAMESPACE_H
 #define QNAMESPACE_H
-
-#include <QtCore/qglobal.h>
 
 #if defined(__OBJC__) && !defined(__cplusplus)
 #  warning "File built in Objective-C mode (.m), but using Qt requires Objective-C++ (.mm)"
