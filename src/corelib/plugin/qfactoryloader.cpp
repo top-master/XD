@@ -102,7 +102,8 @@ QFactoryLoader::QFactoryLoader(const char *iid,
     d->suffix = suffix;
 
 
-    QMutexLocker locker(qt_factoryloader_mutex());
+    QRef<QMutex > mutex = qt_factoryloader_mutex();
+    QMutexLocker locker(mutex.data());
     update();
     qt_factory_loaders()->append(this);
 }
@@ -249,7 +250,8 @@ void QFactoryLoader::update()
 
 QFactoryLoader::~QFactoryLoader()
 {
-    QMutexLocker locker(qt_factoryloader_mutex());
+    QRef<QMutex > mutex = qt_factoryloader_mutex();
+    QMutexLocker locker(mutex.data());
     qt_factory_loaders()->removeAll(this);
 }
 
@@ -316,8 +318,9 @@ QLibraryPrivate *QFactoryLoader::library(const QString &key) const
 
 void QFactoryLoader::refreshAll()
 {
-    QMutexLocker locker(qt_factoryloader_mutex());
-    QList<QFactoryLoader *> *loaders = qt_factory_loaders();
+    QRef<QMutex > mutex = qt_factoryloader_mutex();
+    QMutexLocker locker(mutex.data());
+    QRef<QList<QFactoryLoader *> > loaders = qt_factory_loaders();
     for (QList<QFactoryLoader *>::const_iterator it = loaders->constBegin();
          it != loaders->constEnd(); ++it) {
         (*it)->update();

@@ -7265,7 +7265,7 @@ FontHash::FontHash()
 Q_GLOBAL_STATIC(FontHash, app_fonts)
 FontHash *qt_app_fonts_hash()
 {
-    return app_fonts();
+    return app_fonts().data();
 }
 */
 QT_END_NAMESPACE

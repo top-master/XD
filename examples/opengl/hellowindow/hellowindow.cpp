@@ -192,7 +192,8 @@ Q_GLOBAL_STATIC(QMutex, initMutex)
 void Renderer::initialize()
 {
     // Threaded shader compilation can confuse some drivers. Avoid it.
-    QMutexLocker lock(initMutex());
+    QRef<QMutex > mutex = initMutex();
+    QMutexLocker lock(mutex.data());
 
     QOpenGLShader *vshader = new QOpenGLShader(QOpenGLShader::Vertex, this);
     vshader->compileSourceCode(

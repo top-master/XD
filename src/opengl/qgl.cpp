@@ -162,12 +162,12 @@ Q_GLOBAL_STATIC(QGLDefaultOverlayFormat, defaultOverlayFormatInstance)
 Q_GLOBAL_STATIC(QGLSignalProxy, theSignalProxy)
 QGLSignalProxy *QGLSignalProxy::instance()
 {
-    QGLSignalProxy *proxy = theSignalProxy();
+    QRef<QGLSignalProxy > proxy = theSignalProxy();
     if (proxy && qApp && proxy->thread() != qApp->thread()) {
         if (proxy->thread() == QThread::currentThread())
             proxy->moveToThread(qApp->thread());
     }
-    return proxy;
+    return proxy.data();
 }
 
 
@@ -1587,7 +1587,7 @@ QGLFormat QGLFormat::defaultOverlayFormat()
 
 void QGLFormat::setDefaultOverlayFormat(const QGLFormat &f)
 {
-    QGLFormat *defaultFormat = defaultOverlayFormatInstance();
+    QRef<QGLFormat > defaultFormat = defaultOverlayFormatInstance();
     *defaultFormat = f;
     // Make sure the user doesn't request that the overlays themselves
     // have overlays, since it is unlikely that the system supports
@@ -1987,7 +1987,7 @@ void QGLTextureCache::cleanupBeforePixmapDestruction(QPlatformPixmap* pmd)
 
 QGLTextureCache *QGLTextureCache::instance()
 {
-    return qt_gl_texture_cache();
+    return qt_gl_texture_cache().data();
 }
 
 // DDS format structure

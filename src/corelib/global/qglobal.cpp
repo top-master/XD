@@ -3580,7 +3580,7 @@ Q_GLOBAL_STATIC(AndroidRandomStorage, randomTLS)
 void qsrand(uint seed)
 {
 #if defined(Q_OS_UNIX) && !defined(QT_NO_THREAD) && defined(_POSIX_THREAD_SAFE_FUNCTIONS) && (_POSIX_THREAD_SAFE_FUNCTIONS - 0 > 0)
-    SeedStorage *seedStorage = randTLS();
+    QRef<SeedStorage > seedStorage = randTLS();
     if (seedStorage) {
         SeedStorageType *pseed = seedStorage->localData();
         if (!pseed)
@@ -3634,7 +3634,7 @@ void qsrand(uint seed)
 int qrand()
 {
 #if defined(Q_OS_UNIX) && !defined(QT_NO_THREAD) && defined(_POSIX_THREAD_SAFE_FUNCTIONS) && (_POSIX_THREAD_SAFE_FUNCTIONS - 0 > 0)
-    SeedStorage *seedStorage = randTLS();
+    QRef<SeedStorage > seedStorage = randTLS();
     if (seedStorage) {
         SeedStorageType *pseed = seedStorage->localData();
         if (!pseed) {
@@ -3650,7 +3650,7 @@ int qrand()
         return rand();
     }
 #elif defined(Q_OS_ANDROID) && !defined(Q_OS_ANDROID_NO_SDK)
-    AndroidRandomStorage *randomStorage = randomTLS();
+    QRef<AndroidRandomStorage > randomStorage = randomTLS();
     if (!randomStorage)
         return rand();
 
@@ -4074,7 +4074,7 @@ Q_GLOBAL_STATIC(QInternal_CallBackTable, global_callback_table)
 bool QInternal::registerCallback(Callback cb, qInternalCallback callback)
 {
     if (cb >= 0 && cb < QInternal::LastCallback) {
-        QInternal_CallBackTable *cbt = global_callback_table();
+        QRef<QInternal_CallBackTable > cbt = global_callback_table();
         cbt->callbacks.resize(cb + 1);
         cbt->callbacks[cb].append(callback);
         return true;
@@ -4085,7 +4085,7 @@ bool QInternal::registerCallback(Callback cb, qInternalCallback callback)
 bool QInternal::unregisterCallback(Callback cb, qInternalCallback callback)
 {
     if (cb >= 0 && cb < QInternal::LastCallback) {
-        QInternal_CallBackTable *cbt = global_callback_table();
+        QRef<QInternal_CallBackTable > cbt = global_callback_table();
         return (bool) cbt->callbacks[cb].removeAll(callback);
     }
     return false;
@@ -4095,7 +4095,7 @@ bool QInternal::activateCallbacks(Callback cb, void **parameters)
 {
     Q_ASSERT_X(cb >= 0, "QInternal::activateCallback()", "Callback id must be a valid id");
 
-    QInternal_CallBackTable *cbt = global_callback_table();
+    QRef<QInternal_CallBackTable > cbt = global_callback_table();
     if (cbt && cb < cbt->callbacks.size()) {
         QList<qInternalCallback> callbacks = cbt->callbacks[cb];
         bool ret = false;

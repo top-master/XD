@@ -54,7 +54,7 @@ Q_GLOBAL_STATIC(QSocketEngineHandlerList, socketHandlers)
 
 QSocketEngineHandler::QSocketEngineHandler()
 {
-    QSocketEngineHandlerList *list = socketHandlers();
+    QRef<QSocketEngineHandlerList > list = socketHandlers();
     if ( ! list)
         return;
     QMutexLocker locker(&list->mutex);

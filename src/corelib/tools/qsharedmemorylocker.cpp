@@ -66,7 +66,7 @@ bool QSharedMemoryLockerBase::connect(QSharedMemoryLockerBase::Constructor const
     bool locked = false;
     QSharedMemory *mem = this->memory();
     if (mem) {
-        QSharedMemoryLockerList *list = staticList();
+        QRef<QSharedMemoryLockerList > list = staticList();
         QMutexLocker _(o ? &list->mutex : Q_NULLPTR);
         if ( ! o || ! list->contains(qMakePair(o, reinterpret_cast<quintptr>(memory())))) {
             QLatin1String error;
@@ -130,7 +130,7 @@ bool QSharedMemoryLockerBase::connect(QSharedMemoryLockerBase::Constructor const
 bool QSharedMemoryLockerBase::unlock()
 {
     if (isLocked()) {
-        QSharedMemoryLockerList *list = staticList();
+        QRef<QSharedMemoryLockerList > list = staticList();
         QMutexLocker _(&list->mutex);
         if (isLocked()) {
 #if QT_PTR_TAGGING

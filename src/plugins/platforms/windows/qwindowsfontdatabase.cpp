@@ -1077,7 +1077,7 @@ Q_GLOBAL_STATIC(FontEngineThreadLocalData, fontEngineThreadLocalData)
 
 QSharedPointer<QWindowsFontEngineData> sharedFontData()
 {
-    FontEngineThreadLocalData *data = fontEngineThreadLocalData();
+    QRef<FontEngineThreadLocalData > data = fontEngineThreadLocalData();
     if (!data->hasLocalData())
         data->setLocalData(QSharedPointer<QWindowsFontEngineData>(new QWindowsFontEngineData));
     return data->localData();
@@ -1087,7 +1087,7 @@ Q_GLOBAL_STATIC(QWindowsFontEngineDataPtr, fontEngineData)
 
 QWindowsFontEngineDataPtr sharedFontData()
 {
-    QWindowsFontEngineDataPtr *data = fontEngineData();
+    QRef<QWindowsFontEngineDataPtr > data = fontEngineData();
     if (data->isNull())
         *data = QWindowsFontEngineDataPtr(new QWindowsFontEngineData);
     return *data;

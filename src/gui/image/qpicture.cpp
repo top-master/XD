@@ -1429,7 +1429,7 @@ void qt_init_picture_plugins()
 static void cleanup()
 {
     // make sure that picture handlers are delete before plugin manager
-    if (QPHList *list = pictureHandlers()) {
+    if (QRef<QPHList > list = pictureHandlers()) {
         qDeleteAll(*list);
         list->clear();
     }
@@ -1447,7 +1447,7 @@ static QPictureHandler *get_picture_handler(const char *format)
 {                                                // get pointer to handler
     qt_init_picture_handlers();
     qt_init_picture_plugins();
-    if (QPHList *list = pictureHandlers()) {
+    if (QRef<QPHList > list = pictureHandlers()) {
         for (int i = 0; i < list->size(); ++i) {
             if (list->at(i)->format == format)
                 return list->at(i);
@@ -1503,7 +1503,7 @@ void QPictureIO::defineIOHandler(const char *format,
                                  picture_io_handler writePicture)
 {
     qt_init_picture_handlers();
-    if (QPHList *list = pictureHandlers()) {
+    if (QRef<QPHList > list = pictureHandlers()) {
         QPictureHandler *p;
         p = new QPictureHandler(format, header, QByteArray(flags), readPicture, writePicture);
         list->prepend(p);
@@ -1774,7 +1774,7 @@ QByteArray QPictureIO::pictureFormat(QIODevice *d)
     if (rdlen > 0) {
         buf[rdlen - 1] = '\0';
         QString bufStr = QString::fromLatin1(buf);
-        if (QPHList *list = pictureHandlers()) {
+        if (QRef<QPHList > list = pictureHandlers()) {
             for (int i = 0; i < list->size(); ++i) {
                 if (list->at(i)->header.indexIn(bufStr) != -1) { // try match with headers
                     format = list->at(i)->format;
@@ -1798,7 +1798,7 @@ QList<QByteArray> QPictureIO::inputFormats()
     qt_init_picture_handlers();
     qt_init_picture_plugins();
 
-    if (QPHList *list = pictureHandlers()) {
+    if (QRef<QPHList > list = pictureHandlers()) {
         for (int i = 0; i < list->size(); ++i) {
             QPictureHandler *p = list->at(i);
             if (p->read_picture && !p->obsolete  && !result.contains(p->format))
@@ -1820,7 +1820,7 @@ QList<QByteArray> QPictureIO::outputFormats()
     qt_init_picture_plugins();
 
     QList<QByteArray> result;
-    if (QPHList *list = pictureHandlers()) {
+    if (QRef<QPHList > list = pictureHandlers()) {
         for (int i = 0; i < list->size(); ++i) {
             QPictureHandler *p = list->at(i);
             if (p->write_picture && !p->obsolete && !result.contains(p->format))

@@ -203,11 +203,12 @@ void QDBusMetaType::registerMarshallOperators(int id, MarshallFunction mf,
                                               DemarshallFunction df)
 {
     QByteArray var;
-    QVector<QDBusCustomTypeInfo> *ct = customTypes();
+    QRef<QVector<QDBusCustomTypeInfo> > ct = customTypes();
     if (id < 0 || !mf || !df || !ct)
         return;                 // error!
 
-    QWriteLocker locker(customTypesLock());
+    QRef<QReadWriteLock > readWriteLock = customTypesLock();
+    QWriteLocker locker(readWriteLock.data());
     if (id >= ct->size())
         ct->resize(id + 1);
     QDBusCustomTypeInfo &info = (*ct)[id];
@@ -227,8 +228,9 @@ bool QDBusMetaType::marshall(QDBusArgument &arg, int id, const void *data)
 
     MarshallFunction mf;
     {
-        QReadLocker locker(customTypesLock());
-        QVector<QDBusCustomTypeInfo> *ct = customTypes();
+        QRef<QReadWriteLock > readWriteLock = customTypesLock();
+        QReadLocker locker(readWriteLock.data());
+        QRef<QVector<QDBusCustomTypeInfo> > ct = customTypes();
         if (id >= ct->size())
             return false;       // non-existent
 
@@ -256,8 +258,9 @@ bool QDBusMetaType::demarshall(const QDBusArgument &arg, int id, void *data)
 
     DemarshallFunction df;
     {
-        QReadLocker locker(customTypesLock());
-        QVector<QDBusCustomTypeInfo> *ct = customTypes();
+        QRef<QReadWriteLock > readWriteLock = customTypesLock();
+        QReadLocker locker(readWriteLock.data());
+        QRef<QVector<QDBusCustomTypeInfo> > ct = customTypes();
         if (id >= ct->size())
             return false;       // non-existent
 
@@ -431,9 +434,10 @@ const char *QDBusMetaType::typeToSignature(int type)
         return DBUS_TYPE_UNIX_FD_AS_STRING;
 
     // try the database
-    QVector<QDBusCustomTypeInfo> *ct = customTypes();
+    QRef<QVector<QDBusCustomTypeInfo> > ct = customTypes();
     {
-        QReadLocker locker(customTypesLock());
+        QRef<QReadWriteLock > readWriteLock = customTypesLock();
+        QReadLocker locker(readWriteLock.data());
         if (type >= ct->size())
             return 0;           // type not registered with us
 
@@ -454,7 +458,8 @@ const char *QDBusMetaType::typeToSignature(int type)
         QByteArray signature = QDBusArgumentPrivate::createSignature(type);
 
         // re-acquire lock
-        QWriteLocker locker(customTypesLock());
+        QRef<QReadWriteLock > readWriteLock = customTypesLock();
+        QWriteLocker locker(readWriteLock.data());
         info = &(*ct)[type];
         info->signature = signature;
     }

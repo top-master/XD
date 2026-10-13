@@ -74,7 +74,7 @@ Q_GLOBAL_STATIC(DestructorMap, destructors)
 QThreadStorageData::QThreadStorageData(void (*func)(void *))
 {
     QMutexLocker locker(&destructorsMutex);
-    DestructorMap *destr = destructors();
+    QRef<DestructorMap > destr = destructors();
     if ( ! destr) {
         /*
          the destructors vector has already been destroyed, yet a new
@@ -115,7 +115,7 @@ QThreadStorageData::~QThreadStorageData()
     DEBUG_MSG("QThreadStorageData: Released id %d", id);
     this->set(Q_NULLPTR);
     QMutexLocker locker(&destructorsMutex);
-    DestructorMap *destr = destructors();
+    QRef<DestructorMap > destr = destructors();
     if (destr) {
         (*destr)[id] = Q_NULLPTR;
     }
@@ -162,7 +162,7 @@ void **QThreadStorageData::internalSet(const int id, void *p)
                 data->thread.load());
 
         QMutexLocker locker(&destructorsMutex);
-        DestructorMap *destr = destructors();
+        QRef<DestructorMap > destr = destructors();
         void (*destructor)(void *) = destr ? destr->value(id) : Q_NULLPTR;
         locker.unlock();
 

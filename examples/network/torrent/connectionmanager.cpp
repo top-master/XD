@@ -49,7 +49,7 @@ Q_GLOBAL_STATIC(ConnectionManager, connectionManager)
 
 ConnectionManager *ConnectionManager::instance()
 {
-    return connectionManager();
+    return connectionManager().data();
 }
 
 bool ConnectionManager::canAddConnection() const
