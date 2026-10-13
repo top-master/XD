@@ -428,7 +428,7 @@ QThreadPool::~QThreadPool()
 */
 QThreadPool *QThreadPool::globalInstance()
 {
-    return theInstance();
+    return theInstance().data();
 }
 
 /*!

@@ -152,7 +152,7 @@ QDBusConnectionManager::~QDBusConnectionManager()
 
 QDBusConnectionManager* QDBusConnectionManager::instance()
 {
-    return _q_manager();
+    return _q_manager().data();
 }
 
 Q_DBUS_EXPORT void qDBusBindToApplication();

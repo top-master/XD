@@ -1770,7 +1770,7 @@ Q_GLOBAL_STATIC(QFontSubst, globalFontSubst)
 */
 QString QFont::substitute(const QString &familyName)
 {
-    QFontSubst *fontSubst = globalFontSubst();
+    QRef<QFontSubst > fontSubst = globalFontSubst();
     Q_ASSERT(fontSubst != 0);
     QFontSubst::ConstIterator it = fontSubst->constFind(familyName.toLower());
     if (it != fontSubst->constEnd() && !(*it).isEmpty())
@@ -1791,7 +1791,7 @@ QString QFont::substitute(const QString &familyName)
  */
 QStringList QFont::substitutes(const QString &familyName)
 {
-    QFontSubst *fontSubst = globalFontSubst();
+    QRef<QFontSubst > fontSubst = globalFontSubst();
     Q_ASSERT(fontSubst != 0);
     return fontSubst->value(familyName.toLower(), QStringList());
 }
@@ -1806,7 +1806,7 @@ QStringList QFont::substitutes(const QString &familyName)
 void QFont::insertSubstitution(const QString &familyName,
                                const QString &substituteName)
 {
-    QFontSubst *fontSubst = globalFontSubst();
+    QRef<QFontSubst > fontSubst = globalFontSubst();
     Q_ASSERT(fontSubst != 0);
     QStringList &list = (*fontSubst)[familyName.toLower()];
     QString s = substituteName.toLower();
@@ -1824,7 +1824,7 @@ void QFont::insertSubstitution(const QString &familyName,
 void QFont::insertSubstitutions(const QString &familyName,
                                 const QStringList &substituteNames)
 {
-    QFontSubst *fontSubst = globalFontSubst();
+    QRef<QFontSubst > fontSubst = globalFontSubst();
     Q_ASSERT(fontSubst != 0);
     QStringList &list = (*fontSubst)[familyName.toLower()];
     foreach (const QString &substituteName, substituteNames) {
@@ -1842,7 +1842,7 @@ void QFont::insertSubstitutions(const QString &familyName,
 */
 void QFont::removeSubstitutions(const QString &familyName)
 {
-    QFontSubst *fontSubst = globalFontSubst();
+    QRef<QFontSubst > fontSubst = globalFontSubst();
     Q_ASSERT(fontSubst != 0);
     fontSubst->remove(familyName.toLower());
 }
@@ -1862,7 +1862,7 @@ void QFont::removeSubstitutions(const QString &familyName)
 */
 QStringList QFont::substitutions()
 {
-    QFontSubst *fontSubst = globalFontSubst();
+    QRef<QFontSubst > fontSubst = globalFontSubst();
     Q_ASSERT(fontSubst != 0);
     QStringList ret = fontSubst->keys();
 
@@ -2671,7 +2671,7 @@ Q_GLOBAL_STATIC(QFontCache, theFontCache)
 
 QFontCache *QFontCache::instance()
 {
-    return theFontCache();
+    return theFontCache().data();
 }
 
 void QFontCache::cleanup()
@@ -2690,7 +2690,7 @@ QFontCache *QFontCache::instance()
 
 void QFontCache::cleanup()
 {
-    QThreadStorage<QFontCache *> *cache = 0;
+    QRef<QThreadStorage<QFontCache *> > cache;
     QT_TRY {
         cache = theFontCache();
     } QT_CATCH (const std::bad_alloc &) {

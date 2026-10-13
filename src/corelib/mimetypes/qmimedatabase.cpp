@@ -59,7 +59,7 @@ Q_GLOBAL_STATIC(QMimeDatabasePrivate, staticQMimeDatabase)
 
 QMimeDatabasePrivate *QMimeDatabasePrivate::instance()
 {
-    return staticQMimeDatabase();
+    return staticQMimeDatabase().data();
 }
 
 QMimeDatabasePrivate::QMimeDatabasePrivate()
@@ -291,7 +291,7 @@ bool QMimeDatabasePrivate::inherits(const QString &mime, const QString &parent)
     or when the very first instance is constructed (when parsing XML files directly).
  */
 QMimeDatabase::QMimeDatabase() :
-        d(staticQMimeDatabase())
+        d(staticQMimeDatabase().data())
 {
 }
 

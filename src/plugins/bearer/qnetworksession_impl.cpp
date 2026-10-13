@@ -78,7 +78,7 @@ Q_GLOBAL_STATIC(QNetworkSessionManagerPrivate, sessionManager);
 
 void QNetworkSessionPrivateImpl::syncStateWithInterface()
 {
-    connect(sessionManager(), SIGNAL(forcedSessionClose(QNetworkConfiguration)),
+    connect(sessionManager().data(), SIGNAL(forcedSessionClose(QNetworkConfiguration)),
             this, SLOT(forcedSessionClose(QNetworkConfiguration)));
 
     opened = false;

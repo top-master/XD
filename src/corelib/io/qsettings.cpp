@@ -196,8 +196,8 @@ QConfFile *QConfFile::fromName(const QString &fileName, bool _userPerms)
 {
     QString absPath = QFileInfo(fileName).absoluteFilePath();
 
-    ConfFileHash *usedHash = usedHashFunc();
-    ConfFileCache *unusedCache = unusedCacheFunc();
+    QRef<ConfFileHash > usedHash = usedHashFunc();
+    QRef<ConfFileCache > unusedCache = unusedCacheFunc();
 
     QConfFile *confFile = 0;
     QMutexLocker locker(&settingsGlobalMutex);
@@ -948,7 +948,7 @@ void QConfFileSettingsPrivate::initFormat()
 
     if (format > QSettings::IniFormat) {
         QMutexLocker locker(&settingsGlobalMutex);
-        const CustomFormatVector *customFormatVector = customFormatVectorFunc();
+        QRef<const CustomFormatVector > customFormatVector = customFormatVectorFunc();
 
         int i = (int)format - (int)QSettings::CustomFormat1;
         if (i >= 0 && i < customFormatVector->size()) {
@@ -1048,7 +1048,7 @@ static inline int pathHashKey(QSettings::Format format, QSettings::Scope scope)
 
 static void initDefaultPaths(QMutexLocker *locker)
 {
-    PathHash *pathHash = pathHashFunc();
+    QRef<PathHash > pathHash = pathHashFunc();
     QString systemPath;
 
     locker->unlock();
@@ -1116,7 +1116,7 @@ static QString getPath(QSettings::Format format, QSettings::Scope scope)
     Q_ASSERT((int)QSettings::IniFormat == 1);
 
     QMutexLocker locker(&settingsGlobalMutex);
-    PathHash *pathHash = pathHashFunc();
+    QRef<PathHash > pathHash = pathHashFunc();
     if (pathHash->isEmpty())
         initDefaultPaths(&locker);
 
@@ -1192,8 +1192,8 @@ QConfFileSettingsPrivate::QConfFileSettingsPrivate(const QString &fileName,
 QConfFileSettingsPrivate::~QConfFileSettingsPrivate()
 {
     QMutexLocker locker(&settingsGlobalMutex);
-    ConfFileHash *usedHash = usedHashFunc();
-    ConfFileCache *unusedCache = unusedCacheFunc();
+    QRef<ConfFileHash > usedHash = usedHashFunc();
+    QRef<ConfFileCache > unusedCache = unusedCacheFunc();
 
     for (int i = 0; i < NumConfFiles; ++i) {
         if (confFiles[i] && !confFiles[i]->ref.deref()) {
@@ -3420,7 +3420,7 @@ void QSettings::setUserIniPath(const QString &dir)
 void QSettings::setPath(Format format, Scope scope, const QString &path)
 {
     QMutexLocker locker(&settingsGlobalMutex);
-    PathHash *pathHash = pathHashFunc();
+    QRef<PathHash > pathHash = pathHashFunc();
     if (pathHash->isEmpty())
         initDefaultPaths(&locker);
     pathHash->insert(pathHashKey(format, scope), path + QDir::separator());
@@ -3503,7 +3503,7 @@ QSettings::Format QSettings::registerFormat(const QString &extension, ReadFunc r
 #endif
 
     QMutexLocker locker(&settingsGlobalMutex);
-    CustomFormatVector *customFormatVector = customFormatVectorFunc();
+    QRef<CustomFormatVector > customFormatVector = customFormatVectorFunc();
     int index = customFormatVector->size();
     if (index == 16) // the QSettings::Format enum has room for 16 custom formats
         return QSettings::InvalidFormat;

@@ -42,7 +42,7 @@ Q_GLOBAL_STATIC(QImagePixmapCleanupHooks, qt_image_and_pixmap_cleanup_hooks)
 
 QImagePixmapCleanupHooks *QImagePixmapCleanupHooks::instance()
 {
-    return qt_image_and_pixmap_cleanup_hooks();
+    return qt_image_and_pixmap_cleanup_hooks().data();
 }
 
 void QImagePixmapCleanupHooks::addPlatformPixmapModificationHook(_qt_pixmap_cleanup_hook_pmd hook)
@@ -78,7 +78,7 @@ void QImagePixmapCleanupHooks::removeImageHook(_qt_image_cleanup_hook_64 hook)
 
 void QImagePixmapCleanupHooks::executePlatformPixmapModificationHooks(QPlatformPixmap* pmd)
 {
-    QImagePixmapCleanupHooks *h = qt_image_and_pixmap_cleanup_hooks();
+    QRef<QImagePixmapCleanupHooks > h = qt_image_and_pixmap_cleanup_hooks();
     // the global destructor for the pixmap and image hooks might have
     // been called already if the app is "leaking" global
     // pixmaps/images
@@ -90,7 +90,7 @@ void QImagePixmapCleanupHooks::executePlatformPixmapModificationHooks(QPlatformP
 
 void QImagePixmapCleanupHooks::executePlatformPixmapDestructionHooks(QPlatformPixmap* pmd)
 {
-    QImagePixmapCleanupHooks *h = qt_image_and_pixmap_cleanup_hooks();
+    QRef<QImagePixmapCleanupHooks > h = qt_image_and_pixmap_cleanup_hooks();
     // the global destructor for the pixmap and image hooks might have
     // been called already if the app is "leaking" global
     // pixmaps/images
@@ -102,7 +102,7 @@ void QImagePixmapCleanupHooks::executePlatformPixmapDestructionHooks(QPlatformPi
 
 void QImagePixmapCleanupHooks::executeImageHooks(qint64 key)
 {
-    QImagePixmapCleanupHooks *h = qt_image_and_pixmap_cleanup_hooks();
+    QRef<QImagePixmapCleanupHooks > h = qt_image_and_pixmap_cleanup_hooks();
     // the global destructor for the pixmap and image hooks might have
     // been called already if the app is "leaking" global
     // pixmaps/images

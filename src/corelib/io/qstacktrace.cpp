@@ -24,7 +24,8 @@
 
 #include "qstacktrace_p.h"
 
-#include <QtCore/qmutex.h>
+#include <QtCore/qatomicflags.h>
+#include <QtCore/qthread.h>
 #include <QtCore/qdir.h>
 #include <QtCore/qexception.h>
 #ifndef QT_NO_REGULAREXPRESSION
@@ -43,13 +44,23 @@ static QString defaultPathTranslator(const QString &path)
 
 class QStackTraceGlobals {
 public:
+    /// Names the bits of state.
+    enum StateFlag {
+        /// Marks that one thread runs, or ran, the work of prepare(); set
+        /// before the work and kept forever after it.
+        PreparingFlag = 0x1,
+        /// Marks that the work of prepare() is done.
+        PreparedFlag = 0x2
+    };
+
     inline QStackTraceGlobals()
-        : isPrepared(false)
-        , pathTranslator(defaultPathTranslator)
+        : pathTranslator(defaultPathTranslator)
     {}
 
-    QBasicMutex lock;
-    volatile bool isPrepared;
+    /// Lets the first caller of prepare() do its work, and every caller see
+    /// once it is done; its constructor zeroes it, even on the heap where
+    /// Q_GLOBAL_STATIC creates this object.
+    QAtomicFlags<StateFlag > state;
     QStackTrace::PathTranslator pathTranslator;
 
 #ifdef Q_OS_WIN
@@ -68,12 +79,18 @@ QStackTrace::QStackTrace()
 
 bool QStackTrace::prepare()
 {
-    QStackTraceGlobals *globals = qstackTraceGlobals();
+    QRef<QStackTraceGlobals > globals = qstackTraceGlobals();
     if ( ! globals) {
         return false;
     }
-    QMutexLocker _(&globals->lock);
-    if (globals->isPrepared) {
+    if (globals->state.includes(QStackTraceGlobals::PreparedFlag)) {
+        return true;
+    }
+    if ( ! globals->state.append(QStackTraceGlobals::PreparingFlag)) {
+        // Another thread does the work; waits until it is done.
+        while (globals->state.excludes(QStackTraceGlobals::PreparedFlag)) {
+            QThread::yieldCurrentThread();
+        }
         return true;
     }
 
@@ -94,7 +111,7 @@ bool QStackTrace::prepare()
     ::SymInitializeW( process, path, TRUE );
 #endif // Q_OS_WIN
 
-    globals->isPrepared = true;
+    globals->state.append(QStackTraceGlobals::PreparedFlag);
     return true;
 }
 
@@ -105,10 +122,12 @@ QStackTrace QStackTrace::capture(quint32 skipLatest)
     if ( ! d) {
         qThrowOutOfMemory();
     }
-    QStackTraceGlobals *globals = qstackTraceGlobals();
+    QRef<QStackTraceGlobals > globals = qstackTraceGlobals();
     d->pathTranslator = globals->pathTranslator;
 
-    if ( ! globals->isPrepared && ! QStackTrace::prepare()) {
+    if (globals->state.excludes(QStackTraceGlobals::PreparedFlag)
+        && ! QStackTrace::prepare()
+    ) {
         return result;
     }
 
@@ -348,7 +367,7 @@ void QStackTrace::setPathTranslator(const QStackTrace::PathTranslator &f)
 
 QStackTrace::PathTranslator QStackTrace::setPathTranslatorDefault(const QStackTrace::PathTranslator &f)
 {
-    QStackTraceGlobals *globals = qstackTraceGlobals();
+    QRef<QStackTraceGlobals > globals = qstackTraceGlobals();
 
     PathTranslator old = globals->pathTranslator;
     globals->pathTranslator = f;
