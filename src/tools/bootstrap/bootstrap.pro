@@ -79,6 +79,7 @@ SOURCES += \
            ../../corelib/tools/qringbuffer.cpp \
            ../../corelib/tools/qpoint.cpp \
            ../../corelib/tools/qrect.cpp \
+           ../../corelib/tools/qsharedpointer.cpp \
            ../../corelib/tools/qsize.cpp \
            ../../corelib/tools/qline.cpp \
            ../../corelib/tools/qstring.cpp \

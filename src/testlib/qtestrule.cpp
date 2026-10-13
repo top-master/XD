@@ -18,7 +18,8 @@ Q_GLOBAL_STATIC(QVector<QSharedPointer<QTestRule> >, qtestRules)
 static void qtestRuleNoDelete(QTestRule *) {}
 
 QTestRule QTestRule::m_null;
-QSharedPointer<QTestRule> QTestRule::m_nullRef(&QTestRule::m_null, qtestRuleNoDelete);
+QSharedPointer<QTestRule> QTestRule::m_nullRef = qMove(
+        QSharedPointer<QTestRule>().internalUnchecked(&QTestRule::m_null, qtestRuleNoDelete));
 
 void QTestRule::add(const QSharedPointer<QTestRule> &rule)
 {

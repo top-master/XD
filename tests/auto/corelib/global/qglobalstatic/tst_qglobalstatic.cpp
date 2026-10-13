@@ -60,6 +60,8 @@ private Q_SLOTS:
     void catchExceptionAndRetry();
     void threadStressTest();
     void afterDestruction();
+    void call_shouldReturnNullDuringDestruction();
+    void call_shouldKeepContentsAliveAfterDestruction();
 };
 
 void tst_QGlobalStatic::initTestCase()
@@ -250,6 +252,68 @@ void tst_QGlobalStatic::afterDestruction()
     (void) runAtExit;
 
     *checkedAfterDestruction = 42;
+}
+
+struct ReentrantType
+{
+    int i;
+    ~ReentrantType();
+};
+
+Q_GLOBAL_STATIC(ReentrantType, checkedDuringDestruction)
+
+ReentrantType::~ReentrantType()
+{
+    QRef<ReentrantType > self = checkedDuringDestruction();
+    if (self.data() != Q_NULLPTR) {
+        qFatal("Global static gave its contents out during their destruction");
+    }
+}
+
+/// The check runs at exit, in the destructor of the contents, which aborts the
+/// program when the global static still gives them out there.
+void tst_QGlobalStatic::call_shouldReturnNullDuringDestruction()
+{
+    checkedDuringDestruction()->i = 42;
+    qExpect(checkedDuringDestruction.exists())->toBeTruthy();
+}
+
+struct KeptAliveType
+{
+    static QBasicAtomicInt destructedCount;
+    int i;
+    ~KeptAliveType() { destructedCount.ref(); }
+};
+
+QBasicAtomicInt KeptAliveType::destructedCount = Q_BASIC_ATOMIC_INITIALIZER(0);
+
+Q_GLOBAL_STATIC(KeptAliveType, keptAfterDestruction)
+
+/// The checks run at exit, once the global static is destroyed, and abort the
+/// program when the contents die before their last reference does, or after.
+void tst_QGlobalStatic::call_shouldKeepContentsAliveAfterDestruction()
+{
+    // Static destruction is LIFO; hence the keeper, constructed before the
+    // global static is used for the first time, is destroyed after it.
+    static struct Keeper {
+        QRef<KeptAliveType > contents;
+        ~Keeper() {
+            if (!keptAfterDestruction.isDestroyed()) {
+                qFatal("Global static is not destroyed as was expected");
+            }
+            if (KeptAliveType::destructedCount.load() != 0 || contents->i != 42) {
+                qFatal("Global static freed contents that a reference still keeps");
+            }
+            contents.clear();
+            if (KeptAliveType::destructedCount.load() != 1) {
+                qFatal("Global static contents outlived their last reference");
+            }
+        }
+    } keeper;
+    keeper.contents = keptAfterDestruction();
+    keeper.contents->i = 42;
+    KeptAliveType *raw = keptAfterDestruction;
+    qExpect(keeper.contents.data())->toEqual(raw);
 }
 
 QTEST_APPLESS_MAIN(tst_QGlobalStatic);
