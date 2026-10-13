@@ -2766,7 +2766,8 @@ static bool qInvokeTestMethods(QObject *testObject)
         && QBenchmarkGlobalData::current->mode() != QBenchmarkGlobalData::CallgrindChildProcess
 #endif
        ) {
-        timeoutCounter.reset(new WatchDog);
+        timeoutCounter.clear();
+        timeoutCounter.internalUnchecked(new WatchDog, QtSharedPointer::NormalDeleter());
         watchDog = timeoutCounter;
     }
 

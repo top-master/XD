@@ -22,6 +22,8 @@
 **
 ****************************************************************************/
 
+#include <QtCore/qglobal.h>
+
 #ifndef QATOMICFLAGS_H
 #define QATOMICFLAGS_H
 
