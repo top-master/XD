@@ -80,7 +80,7 @@ protected:
     ValueType val;
 };
 
-#ifndef QT_MOC_RUN
+#ifndef Q_MOC_RUN
 template <typename T>
 inline qreal operator*(qreal i, const QNumber<T> &v) { return i * v.value(); }
 template <typename T>
@@ -254,11 +254,15 @@ inline QTextStream &operator>>(QTextStream &s, QNumber<T> &n) {
 #else
 #  define QNUMBER_OPERATORS(CLASS)
 #  define QNUMBER_OPERATOR_T(LEFT_CLASS, RIGHT_CLASS, LEFT_CAST)
+#  define QNUMBER_OPS_ACCESSOR(CLASS)
+#  define QNUMBER_OPS_ACCESSOR_T(CLASS, TYPE, TYPE_CAST)
+#  define QNUMBER_OPS_ASSIGN(CLASS)
+#  define QNUMBER_OPS_ASSIGN_T(LEFT_CLASS, RIGHT_CLASS, LEFT_CAST)
 #  define QNUMBER_OPS_COMPARE(CLASS)
 #  define QNUMBER_OPS_COMPARE_T(LEFT_CLASS, RIGHT_CLASS, LEFT_CAST)
 #  define QNUMBER_OPS_COMPARE_GLOBAL(LEFT_CLASS, RIGHT_CLASS)
 #  define Q_GLOBAL_OPS_COMPARE(LEFT_CLASS, RIGHT_CLASS, LEFT_CAST)
-#endif //QT_MOC_RUN
+#endif //Q_MOC_RUN
 
 QT_END_NAMESPACE
 
