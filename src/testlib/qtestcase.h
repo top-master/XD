@@ -353,6 +353,7 @@ namespace QTest
 
     Q_TESTLIB_EXPORT const char *currentTestFunction();
     Q_TESTLIB_EXPORT const char *currentDataTag();
+    Q_TESTLIB_EXPORT const char *currentGlobalDataTag();
     Q_TESTLIB_EXPORT bool currentTestFailed();
 
     /// Compares @ref currentDataTag with given @p dataTag.
