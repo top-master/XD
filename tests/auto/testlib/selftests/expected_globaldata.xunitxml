@@ -1,5 +1,5 @@
 <?xml version="1.0" encoding="UTF-8" ?>
-<testsuite errors="37" failures="0" tests="6" name="tst_globaldata">
+<testsuite errors="43" failures="0" tests="6" name="tst_globaldata">
   <properties>
     <property value="@INSERT_QT_VERSION_HERE@" name="QTestVersion"/>
     <property value="@INSERT_QT_VERSION_HERE@" name="QtVersion"/>
@@ -36,6 +36,12 @@
     <!-- tag="1:local 2" message="init skipLocal local 2" type="qdebug" -->
     <!-- tag="1:local 2" message="skipping" type="skip" -->
     <!-- tag="1:local 2" message="cleanup skipLocal local 2" type="qdebug" -->
+    <!-- tag="2:local 1" message="init skipLocal local 1" type="qdebug" -->
+    <!-- tag="2:local 1" message="skipping" type="skip" -->
+    <!-- tag="2:local 1" message="cleanup skipLocal local 1" type="qdebug" -->
+    <!-- tag="2:local 2" message="init skipLocal local 2" type="qdebug" -->
+    <!-- tag="2:local 2" message="skipping" type="skip" -->
+    <!-- tag="2:local 2" message="cleanup skipLocal local 2" type="qdebug" -->
   </testcase>
   <testcase result="pass" name="skipSingle">
     <!-- tag="1:local 1" message="init skipSingle local 1" type="qdebug" -->
@@ -73,6 +79,12 @@
 <![CDATA[local: true]]>
 <![CDATA[cleanup testGlobal local 2]]>
 <![CDATA[skipping]]>
+<![CDATA[init skipLocal local 1]]>
+<![CDATA[skipping]]>
+<![CDATA[cleanup skipLocal local 1]]>
+<![CDATA[init skipLocal local 2]]>
+<![CDATA[skipping]]>
+<![CDATA[cleanup skipLocal local 2]]>
 <![CDATA[init skipLocal local 1]]>
 <![CDATA[skipping]]>
 <![CDATA[cleanup skipLocal local 1]]>
