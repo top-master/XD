@@ -189,9 +189,7 @@ int QHostInfo::lookupHost(const QString &name, QObject *receiver,
         }
 
         // cache is not enabled or it was not in the cache, do normal lookup
-        QHostInfoRunnable* runnable = new QHostInfoRunnable(name, id);
-        if (receiver)
-            QObject::connect(&runnable->resultEmitter, SIGNAL(resultsReady(QHostInfo)), receiver, member, Qt::QueuedConnection);
+        QHostInfoRunnable* runnable = new QHostInfoRunnable(name, id, receiver, member);
         manager->scheduleLookup(runnable);
     }
     return id;
@@ -471,10 +469,189 @@ QString QHostInfo::localHostName()
     \sa hostName()
 */
 
-QHostInfoRunnable::QHostInfoRunnable(const QString &hn, int i) : toBeLookedUp(hn), id(i)
+QHostInfoRunnable::QHostInfoRunnable(
+        const QString &hn, int i,
+        const QObject *receiver, const char *member)
+    : toBeLookedUp(hn)
+    , id(i)
+    , resultEmitter(new QHostInfoResult(receiver != Q_NULLPTR))
 {
     setAutoDelete(true);
+    // TRACE/network host-lookup emitter-teardown: emit and die in the receiver's thread #1,
+    // a runnable is deleted on a lookup-pool thread, and an emitter that died with it
+    // tore its connection down there while the receiver could be tearing the same
+    // connection down in its own thread (`~QObject()` walking its senders), which reads
+    // a freed connection. Hence the emitter lives in the receiver's thread, gets the
+    // result posted (`postResultsReady()`), and `QHostInfoResult::dispose()` deletes it
+    // there, after that result.
+    if (receiver) {
+        resultEmitter->moveToThread(receiver->thread());
+        QObject::connect(resultEmitter, SIGNAL(resultsReady(QHostInfo)),
+                         receiver, member,
+                         Qt::QueuedConnection);
+        // A destroyed receiver needs no result; hence its `destroyed()` signal disposes of
+        // the emitter too, which matters when its thread never runs events again.
+        QObject::connect(receiver, &QObject::destroyed,
+                         resultEmitter, &QHostInfoResult::disposeOnReceiverEnd,
+                         Qt::DirectConnection);
+    }
+    // A finished or destroyed thread runs no more queued calls; hence its `finished()` and
+    // `destroyed()` signals dispose of the emitter too, whichever comes first.
+    QThread *emitterThread = resultEmitter->thread();
+    QObject::connect(emitterThread, &QThread::finished,
+                     resultEmitter, &QHostInfoResult::disposeOnThreadEnd,
+                     Qt::DirectConnection);
+    QObject::connect(emitterThread, &QObject::destroyed,
+                     resultEmitter, &QHostInfoResult::disposeOnThreadDestroyed,
+                     Qt::DirectConnection);
 }
+
+/*!
+    \internal
+
+    Hands the emitter off to dispose() when this runnable never posted a result, such
+    as for an aborted lookup.
+*/
+QHostInfoRunnable::~QHostInfoRunnable()
+{
+    if (resultEmitter) {
+        resultEmitter->dispose(QHostInfoResult::DisposeByOwner);
+    }
+}
+
+/*!
+    \internal
+
+    Hands \a info to the result emitter in its own thread, which emits it there, then
+    hands the emitter off to dispose(), which deletes it after that emission. This
+    runnable keeps no emitter afterwards, hence a lookup posts its one result once.
+*/
+void QHostInfoRunnable::postResultsReady(const QHostInfo &info)
+{
+    Q_IF_X(resultEmitter != Q_NULLPTR, "QHostInfoRunnable::postResultsReady",
+           "a lookup posts its one result once")
+    {
+        QMetaObject::invokeMethod(resultEmitter, "emitResultsReady", Qt::QueuedConnection,
+                                  Q_ARG(QHostInfo, info));
+        resultEmitter->dispose(QHostInfoResult::DisposeByOwner);
+        resultEmitter = Q_NULLPTR;
+    }
+}
+
+/*!
+    \internal
+
+    Deletes this emitter where and when that is safe, for each of its callers, given by
+    \a reason:
+
+    \list
+    \li DisposeByOwner: the runnable handed the emitter off, in
+        QHostInfoRunnable::postResultsReady() or its destructor, from any thread.
+    \li DisposeByThreadEnd: the emitter's thread emitted finished() (in that thread).
+    \li DisposeByThreadDestroyed: the emitter's QThread was destroyed, in the thread
+        that deleted it.
+    \li DisposeByReceiverEnd: the receiver was destroyed, in the thread that deleted it.
+    \li DisposeQueued: the deletion queued by the owner's call, in the emitter's thread.
+    \endlist
+
+    Every call holds the emitter's own lock while it decides; hence the owner's call
+    and the ends never race. No call dereferences the QThread, which its controller
+    may delete once the thread has finished. Of the owner's call and the ends, the
+    last one that can still come deletes:
+
+    \list
+    \li The owner's call deletes right away once the emitter's QThread was destroyed
+        and the receiver is gone, since no thread can reach the emitter any more.
+        Before the thread ended, it queues the deletion in the emitter's thread (a
+        queued call runs at any event-loop level, a posted deleteLater() only at
+        its own); in between, it leaves the deletion to the ends.
+    \li The thread's end deletes when the owner already let go and the receiver is
+        gone, which covers a queued deletion the finishing thread never runs; else
+        it leaves it to the later call.
+    \li The receiver's end does the same. Destroyed in the emitter's own thread, it
+        leaves that thread running, hence the owner's later call still queues the
+        deletion there. Destroyed in another thread, it ends the emitter's thread
+        too, since an object may be deleted from another thread only once its own
+        thread runs no more events; it then also waits for the QThread's destruction.
+    \endlist
+
+    A queued deletion runs only while the thread's event loop does, hence never after
+    finished(); and when an end deletes first, the queued call goes with the emitter.
+*/
+void QHostInfoResult::dispose(DisposeReason reason)
+{
+    QMutexLocker locker(&m_disposeLock);
+
+    switch (reason) {
+    case DisposeByOwner:
+        m_released = true;
+        if (!m_threadEnded) {
+            QMetaObject::invokeMethod(this, "disposeQueued", Qt::QueuedConnection);
+            return;
+        }
+        if (!m_threadGone || !m_receiverGone) {
+            return;
+        }
+        break;
+    case DisposeByThreadEnd:
+        m_threadEnded = true;
+        if (!m_released || !m_receiverGone) {
+            return;
+        }
+        break;
+    case DisposeByThreadDestroyed:
+        m_threadEnded = true;
+        m_threadGone = true;
+        if (!m_released || !m_receiverGone) {
+            return;
+        }
+        break;
+    case DisposeByReceiverEnd:
+        m_receiverGone = true;
+        if (QThread::currentThread() != thread()) {
+            m_threadEnded = true;
+            if (!m_threadGone) {
+                return;
+            }
+        }
+        if (!m_released) {
+            return;
+        }
+        break;
+    case DisposeQueued:
+        break;
+    }
+    locker.unlock();
+    delete this;
+}
+
+/*!
+    \fn void QHostInfoResult::disposeOnThreadEnd()
+    \internal
+
+    Disposes of this emitter once its thread emitted finished().
+*/
+
+/*!
+    \fn void QHostInfoResult::disposeOnThreadDestroyed()
+    \internal
+
+    Disposes of this emitter once its QThread was destroyed.
+*/
+
+/*!
+    \fn void QHostInfoResult::disposeOnReceiverEnd()
+    \internal
+
+    Disposes of this emitter once its receiver was destroyed.
+*/
+
+/*!
+    \fn void QHostInfoResult::disposeQueued()
+    \internal
+
+    Disposes of this emitter in its own thread, as queued by the owner's dispose() call.
+*/
 
 // the QHostInfoLookupManager will at some point call this via a QThreadPool
 void QHostInfoRunnable::run()
@@ -515,7 +692,7 @@ void QHostInfoRunnable::run()
 
     // signal emission
     hostInfo.setLookupId(id);
-    resultEmitter.emitResultsReady(hostInfo);
+    postResultsReady(hostInfo);
 
     // now also iterate through the postponed ones
     {
@@ -527,7 +704,7 @@ void QHostInfoRunnable::run()
                 // we can now emit
                 iterator.remove();
                 hostInfo.setLookupId(postponed->id);
-                postponed->resultEmitter.emitResultsReady(hostInfo);
+                postponed->postResultsReady(hostInfo);
                 delete postponed;
             }
         }

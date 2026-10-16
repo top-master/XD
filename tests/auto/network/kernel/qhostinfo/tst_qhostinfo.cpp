@@ -126,6 +126,8 @@ private slots:
     void cache();
 
     void abortHostLookup();
+    void receiverInStoppedThread_data();
+    void receiverInStoppedThread();
 protected slots:
     void resultsReady(const QHostInfo &);
 
@@ -605,6 +607,55 @@ void tst_QHostInfo::abortHostLookup()
     QHostInfo::abortHostLookup(id);
     QTestEventLoop::instance().enterLoop(5);
     QCOMPARE(lookupsDoneCounter, 0);
+}
+
+void tst_QHostInfo::receiverInStoppedThread_data()
+{
+    QTest::addColumn<bool>("startThread");
+    QTest::addColumn<bool>("deleteThreadFirst");
+
+    QTest::newRow("never-started") << false << false;
+    QTest::newRow("finished") << true << false;
+    QTest::newRow("thread-deleted-first") << false << true;
+}
+
+/// Looks a name up for a receiver whose thread runs no event loop, hence the result
+/// never arrives; deleting the receiver and its thread then disposes of the result
+/// emitter, which a memory-safe build would report as a panic if done wrong.
+///
+/// A second lookup of the same name, for this test object, waits for the first one:
+/// the lookup manager runs a name once and posts the postponed lookups' results
+/// inside that run, hence its result arrives after the first lookup posted its own.
+void tst_QHostInfo::receiverInStoppedThread()
+{
+    QFETCH(bool, startThread);
+    QFETCH(bool, deleteThreadFirst);
+    qt_qhostinfo_clear_cache();
+
+    // Prepares a thread that runs no event loop.
+    QScopedPointer<QThread> thread(new QThread);
+    if (startThread) {
+        thread->start();
+        thread->quit();
+        QVERIFY(thread->wait(5000));
+    }
+    QScopedPointer<QObject> receiver(new QObject);
+    receiver->moveToThread(thread.data());
+
+    // Looks the name up for that receiver, then waits for it.
+    lookupsDoneCounter = 0;
+    QHostInfo::lookupHost("a-single" TEST_DOMAIN, receiver.data(), SLOT(deleteLater()));
+    QHostInfo::lookupHost("a-single" TEST_DOMAIN, this, SLOT(resultsReady(QHostInfo)));
+    QTRY_COMPARE_WITH_TIMEOUT(lookupsDoneCounter, 1, 10000);
+
+    // Ends the receiver and its thread, in the row's order.
+    if (deleteThreadFirst) {
+        thread.reset();
+        receiver.reset();
+    } else {
+        receiver.reset();
+        thread.reset();
+    }
 }
 
 class LookupAborter : public QObject
