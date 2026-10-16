@@ -3713,6 +3713,18 @@ const char *QTest::currentDataTag()
 }
 
 /*!
+    Returns the name of the current global test data, the row of
+    \c initTestCase_data() the test function runs for now. If the test
+    has no global test data, the function returns 0.
+
+    \sa currentDataTag()
+*/
+const char *QTest::currentGlobalDataTag()
+{
+    return QTestResult::currentGlobalDataTag();
+}
+
+/*!
     Returns \c true if the current test function failed, otherwise false.
 */
 bool QTest::currentTestFailed()
