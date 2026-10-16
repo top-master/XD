@@ -71,14 +71,34 @@ class QHostInfoOverride;
 class QHostInfoResult : public QObject
 {
     Q_OBJECT
+public:
+    /// Tells dispose() which of its callers it serves.
+    enum DisposeReason { DisposeByOwner, DisposeByThreadEnd, DisposeByReceiverEnd, DisposeQueued };
+
+    QHostInfoResult() : m_released(false), m_threadEnded(false) {}
+
+    void dispose(DisposeReason reason);
+
 public Q_SLOTS:
     inline void emitResultsReady(const QHostInfo &info)
     {
         emit resultsReady(info);
     }
+    inline void disposeOnThreadEnd() { dispose(DisposeByThreadEnd); }
+    inline void disposeOnReceiverEnd() { dispose(DisposeByReceiverEnd); }
+    inline void disposeQueued() { dispose(DisposeQueued); }
 
 Q_SIGNALS:
     void resultsReady(const QHostInfo &info);
+
+private:
+    /// Serializes dispose() across every thread that calls it.
+    QMutex m_disposeLock;
+    /// Set once the runnable handed the emitter off; hence an end may delete.
+    bool m_released;
+    /// Set once the emitter's thread can run no more events for it; hence the owner
+    /// may delete at once.
+    bool m_threadEnded;
 };
 
 // needs to be QObject because fromName calls tr()
@@ -147,12 +167,15 @@ private:
 class QHostInfoRunnable : public QRunnable
 {
 public:
-    QHostInfoRunnable(const QString &hn, int i);
+    QHostInfoRunnable(const QString &hn, int i, const QObject *receiver);
+    ~QHostInfoRunnable();
     void run() Q_DECL_OVERRIDE;
+    void postResultsReady(const QHostInfo &info);
 
     QString toBeLookedUp;
     int id;
-    QHostInfoResult resultEmitter;
+    /// Lives in the receiver's thread; null once postResultsReady() handed it off.
+    QHostInfoResult *resultEmitter;
 };
 
 
