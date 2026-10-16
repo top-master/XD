@@ -2391,19 +2391,23 @@ static bool qInvokeTestMethod(const char *slotName, const char *data, WatchDog *
     const QTestTable *gTable = QTestTable::globalTestTable();
     const int globalDataCount = gTable->dataCount();
     int curGlobalDataIndex = 0;
+    bool dataFunctionSkipped = false;
 
     /* For each test function that has a *_data() table/function, do: */
     do {
         if (!gTable->isEmpty())
             QTestResult::setCurrentGlobalTestData(gTable->testData(curGlobalDataIndex));
 
+        // Only a `QSKIP()` in the `*_data()` function skips every global pass;
+        // a `QSKIP()` in the last row of one pass must not drop the next pass.
         if (curGlobalDataIndex == 0) {
             qsnprintf(member, 512, "%s_data()", slot);
             invokeMethod(QTest::currentTestObject, member);
+            dataFunctionSkipped = QTestResult::skipCurrentTest();
         }
 
         bool foundFunction = false;
-        if (!QTestResult::skipCurrentTest()) {
+        if (!dataFunctionSkipped) {
             int curDataIndex = 0;
             const int dataCount = table.dataCount();
 
