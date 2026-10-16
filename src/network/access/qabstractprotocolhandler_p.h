@@ -48,6 +48,7 @@
 #ifndef QT_NO_HTTP
 
 #include <QtCore/qglobal.h>
+#include <QtCore/qpointer.h>
 
 QT_BEGIN_NAMESPACE
 
@@ -67,10 +68,10 @@ public:
     void setReply(QHttpNetworkReply *reply);
 
 protected:
-    QHttpNetworkConnectionChannel *m_channel;
-    QHttpNetworkReply *m_reply;
-    QAbstractSocket *m_socket;
-    QHttpNetworkConnection *m_connection;
+    QPointer<QHttpNetworkConnectionChannel> m_channel;
+    QPointer<QHttpNetworkReply> m_reply;
+    QPointer<QAbstractSocket> m_socket;
+    QPointer<QHttpNetworkConnection> m_connection;
 };
 
 QT_END_NAMESPACE
