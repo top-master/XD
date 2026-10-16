@@ -24,6 +24,7 @@ HEADERS = qbenchmark.h \
     qtestassert.h \
     qtestcase.h \
     qtestrule.h \
+    qtestcoverage.h \
     qtestlog_p.h \
     qtestdata.h \
     qtestexpectation.h \
