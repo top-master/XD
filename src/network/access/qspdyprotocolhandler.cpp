@@ -1143,10 +1143,17 @@ void QSpdyProtocolHandler::handleGOAWAY(char /*flags*/, quint32 /*length*/,
 
     // emit errors for all replies after the last good stream ID
     Q_ASSERT(m_connection);
-    for (qint32 currentStreamID = lastGoodStreamID + 2; currentStreamID <= m_nextStreamID;
-         ++currentStreamID) {
+    // Client stream ids are odd (a last good id of 0 means no stream was
+    // processed), and a stream that already finished has left
+    // `m_inFlightStreams`; hence only the open ones get an error.
+    const qint32 firstRefusedStreamID = (lastGoodStreamID & 1) ? lastGoodStreamID + 2
+                                                               : lastGoodStreamID + 1;
+    for (qint32 currentStreamID = firstRefusedStreamID; currentStreamID <= m_nextStreamID;
+         currentStreamID += 2) {
         QHttpNetworkReply *reply = m_inFlightStreams.value(currentStreamID).second;
-        Q_ASSERT(reply);
+        if (!reply) {
+            continue;
+        }
         m_connection->d_func()->emitReplyError(m_socket, reply, errorCode);
     }
     // ### we could make sure a new session is initiated anyhow
