@@ -51,6 +51,7 @@
 #include <QtCore/qatomicflags.h>
 #include <QtCore/qset.h>
 #include <QtCore/qobject.h>
+#include <QtCore/qpointer.h>
 
 
 QT_BEGIN_NAMESPACE
@@ -111,10 +112,10 @@ protected:
     template <typename Streams>
     Q_ALWAYS_INLINE void untieStreams(const Streams &streams);
 
-    QHttpNetworkConnectionChannel *m_channel;
-    QHttpNetworkReply *m_reply;
-    QAbstractSocket *m_socket;
-    QHttpNetworkConnection *m_connection;
+    QPointer<QHttpNetworkConnectionChannel> m_channel;
+    QPointer<QHttpNetworkReply> m_reply;
+    QPointer<QAbstractSocket> m_socket;
+    QPointer<QHttpNetworkConnection> m_connection;
     /// Files each request attachReply() tied here, under TrackRepliesFlag, and
     /// drops it once its reply dies; untieReplies() unties those still in flight.
     QProtocolRequestTracker m_inFlightRequests;

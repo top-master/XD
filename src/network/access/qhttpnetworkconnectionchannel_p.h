@@ -99,7 +99,9 @@ public:
     bool isInitialized;
     ChannelState state;
     QHttpNetworkRequest request; // current request, only used for HTTP
-    QHttpNetworkReply *reply; // current reply for this request, only used for HTTP
+    /// Names the reply the current HTTP request reads into; it turns null once that
+    /// reply is destroyed, even when no one removed it from this channel.
+    QPointer<QHttpNetworkReply> reply;
     qint64 written;
     qint64 bytesTotal;
     bool resendCurrent;
