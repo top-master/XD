@@ -30,18 +30,21 @@
 
 QT_BEGIN_NAMESPACE
 
-class QHttp2ProtocolHandler : public QObject, public QAbstractProtocolHandler
+class QHttp2ProtocolHandler : public QAbstractProtocolHandler
 {
     Q_OBJECT
+    typedef QAbstractProtocolHandler super;
 public:
     explicit QHttp2ProtocolHandler(QHttpNetworkConnectionChannel *channel);
+    ~QHttp2ProtocolHandler();
 
     void _q_receiveReply() Q_DECL_OVERRIDE;
     void _q_readyRead() Q_DECL_OVERRIDE;
     bool sendRequest() Q_DECL_OVERRIDE;
+    void untieReplies() Q_DECL_OVERRIDE;
 
-private Q_SLOTS:
-    void _q_replyDestroyed(QObject *reply);
+protected Q_SLOTS:
+    void _q_replyDestroyed(QObject *reply) Q_DECL_OVERRIDE;
 
 private:
     Q_DISABLE_COPY(QHttp2ProtocolHandler)

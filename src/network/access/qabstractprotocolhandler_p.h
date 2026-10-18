@@ -48,6 +48,10 @@
 #ifndef QT_NO_HTTP
 
 #include <QtCore/qglobal.h>
+#include <QtCore/qatomicflags.h>
+#include <QtCore/qset.h>
+#include <QtCore/qobject.h>
+
 
 QT_BEGIN_NAMESPACE
 
@@ -55,9 +59,39 @@ class QHttpNetworkConnectionChannel;
 class QHttpNetworkReply;
 class QAbstractSocket;
 class QHttpNetworkConnection;
+class QAbstractProtocolHandler;
 
-class QAbstractProtocolHandler {
+class QProtocolRequestTracker : private QSet<QHttpNetworkReply *>
+{
+    typedef QSet<QHttpNetworkReply *> super;
 public:
+    typedef super Requests;
+
+    Q_ALWAYS_INLINE const Requests &toSet() const { return *this; }
+    Q_ALWAYS_INLINE Requests &toSet() { return *this; }
+
+    Q_ALWAYS_INLINE void add(QHttpNetworkReply *reply);
+    Q_ALWAYS_INLINE void remove(QHttpNetworkReply *reply);
+    void removeDestroyed(QObject *reply);
+    Q_ALWAYS_INLINE void clear();
+};
+
+class QAbstractProtocolHandler : public QObject
+{
+    Q_OBJECT
+    typedef QObject super;
+public:
+    /// Names the bits of m_flags; a subclass adds its own from UserFlag on.
+    enum HandlerFlag {
+        /// Marks that untieReplies() ran since the last attachReply().
+        RepliesUntiedFlag = 0x1,
+        /// Asks attachReply() to file each request in m_inFlightRequests; off
+        /// unless a subclass that needs the base to track them turns it on.
+        TrackRepliesFlag = 0x2,
+        /// Starts the bits a subclass may use for flags of its own.
+        UserFlag = 0x10000
+    };
+
     QAbstractProtocolHandler(QHttpNetworkConnectionChannel *channel);
     virtual ~QAbstractProtocolHandler();
 
@@ -65,13 +99,58 @@ public:
     virtual void _q_readyRead() = 0;
     virtual bool sendRequest() = 0;
     void setReply(QHttpNetworkReply *reply);
+    virtual void untieReplies();
+
+protected Q_SLOTS:
+    virtual void _q_replyDestroyed(QObject *reply);
 
 protected:
+    virtual void attachReply(QHttpNetworkReply *reply);
+    virtual void detachReply(QHttpNetworkReply *reply);
+    void untieReply(QHttpNetworkReply *reply);
+    template <typename Streams>
+    Q_ALWAYS_INLINE void untieStreams(const Streams &streams);
+
     QHttpNetworkConnectionChannel *m_channel;
     QHttpNetworkReply *m_reply;
     QAbstractSocket *m_socket;
     QHttpNetworkConnection *m_connection;
+    /// Files each request attachReply() tied here, under TrackRepliesFlag, and
+    /// drops it once its reply dies; untieReplies() unties those still in flight.
+    QProtocolRequestTracker m_inFlightRequests;
+    /// Marks the handler's states by HandlerFlag bits, and by a subclass's own.
+    QAtomicFlags<int > m_flags;
 };
+
+#ifndef Q_MOC_RUN
+// MARK: Inlined at each call site.
+
+Q_ALWAYS_INLINE void QProtocolRequestTracker::add(QHttpNetworkReply *reply)
+{
+    this->insert(reply);
+}
+
+Q_ALWAYS_INLINE void QProtocolRequestTracker::remove(QHttpNetworkReply *reply)
+{
+    super::remove(reply);
+}
+
+Q_ALWAYS_INLINE void QProtocolRequestTracker::clear()
+{
+    super::clear();
+}
+
+template <typename Streams>
+Q_ALWAYS_INLINE void QAbstractProtocolHandler::untieStreams(const Streams &streams)
+{
+    typename Streams::const_iterator it = streams.constBegin();
+    for (; it != streams.constEnd(); ++it) {
+        if (it.value().second) {
+            this->untieReply(it.value().second);
+        }
+    }
+}
+#endif // Q_MOC_RUN
 
 QT_END_NAMESPACE
 

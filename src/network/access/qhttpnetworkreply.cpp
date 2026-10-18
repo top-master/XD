@@ -58,6 +58,10 @@ QHttpNetworkReply::QHttpNetworkReply(const QUrl &url, QObject *parent)
 QHttpNetworkReply::~QHttpNetworkReply()
 {
     Q_D(QHttpNetworkReply);
+    // TRACE/QObject improve: sub-class's destructor can emit `destroyed(this)` #2,
+    // hence a handler that keeps this reply's stream finds it by `streamId`
+    // while the reply is still whole, before it leaves its connection below.
+    d->emitDestroyed();
     if (d->connection) {
         d->connection->d_func()->removeReply(this);
     }
@@ -325,6 +329,7 @@ QHttpNetworkReplyPrivate::QHttpNetworkReplyPrivate(const QUrl &newUrl)
       connection(0),
       autoDecompress(false), responseData(), requestIsPrepared(false)
       ,pipeliningUsed(false), spdyUsed(false), downstreamLimited(false)
+      ,streamId(0)
       ,userProvidedDownloadBuffer(0)
 #ifndef QT_NO_COMPRESS
       ,inflateStrm(0)
