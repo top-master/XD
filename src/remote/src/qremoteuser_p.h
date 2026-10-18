@@ -33,6 +33,7 @@
 #include "qremoteobject_p.h"
 
 #include <private/qobject_p.h>
+#include <QtCore/QAtomicFlagsLax>
 #include <QtCore/QBasicTimer>
 #include <QtCore/QPointer>
 #include <QtCore/QSharedPointer>
@@ -90,7 +91,7 @@ public:
         FlagIsDeleted = 10,
         FlagIsInstanceOwner = 160
     };
-    QAtomicFlags<Flag > flags;
+    QAtomicFlagsLax<Flag > flags;
 
     inline QRemoteUserCounter()
         : instanceMutex(QReadWriteLock::Recursive)
@@ -99,7 +100,8 @@ public:
 
     inline ~QRemoteUserCounter()
     {
-        QReadLocker locker(&instanceMutex);
+        // Writes `m_instance`; hence the write lock, like every other writer.
+        QWriteLocker locker(&instanceMutex);
         flags.append(FlagIsDeleted);
         if (flags.includes(FlagIsInstanceOwner)) {
             QRemoteUser *user = m_instance;

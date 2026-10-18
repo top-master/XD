@@ -1108,10 +1108,12 @@ void QObjectPrivate::detachSharedRefCount() {
             // Ensures Qt's smart-pointers know the QObject has already been deleted.
             //
             // First, handles current and down-stream.
-            sharedRefcount->flags.append(QtSharedPointer::FlagIsMalformed);
+            // TRACE/corelib shared-pointer malformed: the strongref syncs memory-order #2,
+            // hence the release zeroing of `strongref` below publishes this flag.
+            sharedRefcount->flags.appendLax(QtSharedPointer::FlagIsMalformed);
             QtSharedPointer::ExternalRefCountData *it = sharedRefcount;
             do {
-                int tmp = it->strongref.fetchAndStoreRelaxed(0);
+                int tmp = it->strongref.fetchAndStoreRelease(0);
                 if (tmp > 0) {
                     it->destroy(false);
                 }
@@ -1121,7 +1123,7 @@ void QObjectPrivate::detachSharedRefCount() {
             // (but using `while`-loop we try to handle malformed programs).
             it = sharedRefcount;
             while (( it = it->previous )) {
-                int tmp = it->strongref.fetchAndStoreRelaxed(0);
+                int tmp = it->strongref.fetchAndStoreRelease(0);
                 if (tmp > 0) {
                     it->destroy(false);
                 }
