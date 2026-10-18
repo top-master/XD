@@ -346,6 +346,9 @@ void QHttpThreadDelegate::startRequest()
     // Send the request to the connection
     httpReply = httpConnection->sendRequest(httpRequest);
     httpReply->setParent(this);
+    // TRACE/network HTTP-reply throttle: hand over the read buffer limit at start #2,
+    // hence applies it through the same slot that applies every later change.
+    readBufferSizeChanged(readBufferMaxSize);
 
     // Connect the reply signals that we need to handle and then forward
     if (synchronous) {
