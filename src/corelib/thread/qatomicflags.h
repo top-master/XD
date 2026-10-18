@@ -42,12 +42,11 @@
  * myFlags.storeUnsafe(0);
  * ```
  *
- * WARNING: only @ref append and @ref remove can be used without locking a mutex, and
- * otherwise, either your logic needs to work even with relaxed memory-order, or,
- * you should lock a mutex before calling ANY of this class's methods, because
- * although this class uses "Acquire" memory-order to force loading the
- * changes made by other threads, that can NOT force the other threads to run faster,
- * which may result to behaving same as relaxed memory-order and missing said changes.
+ * WARNING: only use methods without @c Lax suffix of this class, or
+ * otherwise, your logic would need to work even with relaxed memory-order,
+ * since all @c Lax suffixed methods use "Relaxed" memory-order.
+ * Also, even non-Lax read operations can NOT be used as a guard for other reads,
+ * unless the write was non-Lax as well.
  *
  * @warning The @tparam FlagType enum is not allowed to contain zero, and
  * zero means there is no single flag set yet.
@@ -59,13 +58,13 @@ public:
     QBasicAtomicInteger<IntType> _q_value;
 
 
-    /// Checks with relaxed memory-order whether given @p f flag is set.
+    /// Checks whether given @p f flag is set.
     ///
     /// WARNING: does not support @p f being zero, to increase speed.
     Q_ALWAYS_INLINE bool includes(FlagType f) const Q_DECL_NOTHROW
     { return (this->_q_value.loadAcquire() & IntType(f)) == IntType(f); }
 
-    /// Checks with relaxed memory-order whether given @p f flag is unset.
+    /// Checks whether given @p f flag is unset.
     ///
     /// WARNING: does not support @p f being zero, to increase speed.
     Q_ALWAYS_INLINE bool excludes(FlagType f) const Q_DECL_NOTHROW
@@ -79,7 +78,7 @@ public:
     {
         IntType tmp = this->_q_value.load();
         while ((tmp & IntType(f)) != IntType(f)) {
-            if (this->_q_value.testAndSetRelaxed(tmp, (tmp | IntType(f)), tmp)) {
+            if (this->_q_value.testAndSetOrdered(tmp, (tmp | IntType(f)), tmp)) {
                 return true;
             }
         }
@@ -92,7 +91,7 @@ public:
     {
         IntType tmp = this->_q_value.load();
         while ((tmp & IntType(f)) == IntType(f)) {
-            if (this->_q_value.testAndSetRelaxed(tmp, (tmp & ~IntType(f)), tmp)) {
+            if (this->_q_value.testAndSetOrdered(tmp, (tmp & ~IntType(f)), tmp)) {
                 return true;
             }
         }
@@ -110,15 +109,50 @@ public:
 
 
     /// Same as includes(FlagType), however, uses relaxed memory-order.
-    Q_ALWAYS_INLINE bool cacheIncludes(FlagType f) const Q_DECL_NOTHROW
+    Q_ALWAYS_INLINE bool includesLax(FlagType f) const Q_DECL_NOTHROW
     { return (this->_q_value.load() & IntType(f)) == IntType(f); }
 
     /// Same as excludes(FlagType), however, uses relaxed memory-order.
-    Q_ALWAYS_INLINE bool cacheExcludes(FlagType f) const Q_DECL_NOTHROW
+    Q_ALWAYS_INLINE bool excludesLax(FlagType f) const Q_DECL_NOTHROW
     { return (this->_q_value.load() & IntType(f)) != IntType(f); }
 
     /// Same as toInt(), however, uses relaxed memory-order.
-    Q_ALWAYS_INLINE IntType cacheToInt() const Q_DECL_NOTHROW { return this->_q_value.load(); }
+    Q_ALWAYS_INLINE IntType toIntLax() const Q_DECL_NOTHROW { return this->_q_value.load(); }
+
+    /// Same as append(FlagType), however, uses relaxed memory-order.
+    /// @returns @c true if won said race.
+    Q_ALWAYS_INLINE bool appendLax(FlagType f) Q_DECL_NOTHROW
+    {
+        IntType tmp = this->_q_value.load();
+        while ((tmp & IntType(f)) != IntType(f)) {
+            if (this->_q_value.testAndSetRelaxed(tmp, (tmp | IntType(f)), tmp)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    /// Same as remove(FlagType), however, uses relaxed memory-order.
+    /// @returns @c true if won said race.
+    Q_ALWAYS_INLINE bool removeLax(FlagType f) Q_DECL_NOTHROW
+    {
+        IntType tmp = this->_q_value.load();
+        while ((tmp & IntType(f)) == IntType(f)) {
+            if (this->_q_value.testAndSetRelaxed(tmp, (tmp & ~IntType(f)), tmp)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    /// Same as setIf(bool, FlagType), however, uses relaxed memory-order.
+    Q_ALWAYS_INLINE bool setIfLax(bool conditionMet, FlagType f) Q_DECL_NOTHROW
+    {
+        if (conditionMet) {
+            return this->appendLax(f);
+        }
+        return this->removeLax(f);
+    }
 
 
     /// WARNING: sets raw-value without checking other threads, hence

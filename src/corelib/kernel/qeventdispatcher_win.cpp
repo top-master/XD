@@ -529,7 +529,7 @@ LRESULT QT_WIN_CALLBACK qt_GetMessageHook(int code, WPARAM wp, LPARAM lp)
     QEventDispatcherWin32 *q = qobject_cast<QEventDispatcherWin32 *>(QAbstractEventDispatcher::instance());
     // TRACE/gui BugFix: should not show the assert-dialog if already visible, since
     // this hook is called repeatedly even before closing the assert-dialog.
-    if (q == Q_NULLPTR && warnSkip.append(WarnInstance)) {
+    if (q == Q_NULLPTR && warnSkip.appendLax(WarnInstance)) {
         qAssertWarning("Message-listener hook", "No QEventDispatcherWin32 instance was available.");
     }
 
