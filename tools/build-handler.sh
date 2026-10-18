@@ -409,6 +409,11 @@ export BH_BUILD_STEP_RE
 # linker `LNK2019`), and make/nmake/jom (`*** [target] Error 1`).
 BH_BUILD_ERROR_RE='([Ee]rror:|fatal error|: error|[Ee]rror [A-Z]?[0-9]|LNK[0-9]|undefined (reference|symbol)|ld:|\*\*\* )'
 
+# Lines of the step log that `bh_filter_errors` shows before each error line:
+# the failing tool's own message (`flex: unknown flag`, `bison: cannot open
+# file`), which a make, nmake, or jom error line only names by its target.
+BH_BUILD_ERROR_CONTEXT=4
+
 # Seconds between spinner/ticker frames. One knob for every animated
 # poll loop so the rotating |/-\ cadence stays uniform.
 BH_SPIN_INTERVAL=0.15
@@ -1646,14 +1651,54 @@ bh_spin_until() {
 
 # bh_filter_errors <logfile>
 #
-# Print just the error-ish lines (BH_BUILD_ERROR_RE) of a step log to
-# stderr. Falls back to the log's tail when nothing matches, so a
-# failure never shows an empty filter.
+# Print the error-ish lines (`BH_BUILD_ERROR_RE`) of a step log to stderr,
+# each after the `BH_BUILD_ERROR_CONTEXT` lines that precede it, in grep's
+# `-n -B` layout (`<n>:` for an error line, `<n>-` for a line before it, and
+# `--` between groups). A line longer than 300 characters (a compiler
+# command) is cut there. Falls back to the log's tail when nothing matches;
+# hence a failure never shows an empty filter.
 bh_filter_errors() {
-    if ! grep -nE "$BH_BUILD_ERROR_RE" "$1" 1>&2; then
+    if ! grep -qE "$BH_BUILD_ERROR_RE" "$1"; then
         printf '  (no recognizable error lines; showing last 40 of %s)\n' "$1" 1>&2
         tail -n 40 "$1" 1>&2
+        return 0
     fi
+    BH_BUILD_ERROR_RE=$BH_BUILD_ERROR_RE \
+        BH_FILTER_CONTEXT=$BH_BUILD_ERROR_CONTEXT awk '
+        function cut(text) {
+            if (length(text) > 300) {
+                return substr(text, 1, 300) " ..."
+            }
+            return text
+        }
+        BEGIN {
+            re = ENVIRON["BH_BUILD_ERROR_RE"]
+            context = ENVIRON["BH_FILTER_CONTEXT"] + 0
+            shown = 0
+            pending = 0
+        }
+        $0 ~ re {
+            # Separates this group from the previous one, unless it goes on
+            # right after it.
+            first = NR - pending
+            if (shown > 0 && first > shown + 1) {
+                print "--"
+            }
+            for (i = first; i < NR; i++) {
+                print i "-" cut(before[i % (context + 1)])
+            }
+            print NR ":" cut($0)
+            shown = NR
+            pending = 0
+            next
+        }
+        {
+            before[NR % (context + 1)] = $0
+            if (pending < context) {
+                pending++
+            }
+        }
+    ' "$1" 1>&2
 }
 
 # bh_dump_fail <logfile> <status>

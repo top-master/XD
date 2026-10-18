@@ -1812,6 +1812,40 @@ expect 'the ticker ends once its shell is gone' gone \
 rm -rf "$_bh_spec_sandbox"
 
 
+test_section 'bh_filter_errors -- shows the lines before each error line'
+
+# A jom log where flex fails: the jom line names only the target, and the
+# lines before it carry flex's own message. A line that goes on right after
+# an error line joins its group; a gap starts a new group after `--`.
+_bh_spec_sandbox=$(mktemp -d)
+printf '%s\n' \
+    'cl -c a.cpp' \
+    'flex --noline Tokenizer.l' \
+    "flex: unknown flag '-'." \
+    'a.cpp' \
+    'jom: Makefile.Release [release\Tokenizer.cpp] Error 1' \
+    'jom: Makefile [release-all] Error 2' \
+    'one' 'two' 'three' 'four' 'five' \
+    'jom: Makefile [sub-angle-make_first] Error 2' \
+    > "$_bh_spec_sandbox/log"
+expect 'the error lines come with the lines before them, grouped' \
+    "1-cl -c a.cpp|2-flex --noline Tokenizer.l|3-flex: unknown flag '-'.|4-a.cpp|5:jom: Makefile.Release [release\\Tokenizer.cpp] Error 1|6:jom: Makefile [release-all] Error 2|--|8-two|9-three|10-four|11-five|12:jom: Makefile [sub-angle-make_first] Error 2" \
+    "$(bh_filter_errors "$_bh_spec_sandbox/log" 2>&1 | tr '\n' '|' | sed 's/|$//')"
+
+# A line past 300 characters (a long compiler command) is cut there.
+_bh_spec_long=$(printf '%0400d' 0)
+printf '%s\n' "$_bh_spec_long" 'x.cpp(1): error C2065: y' > "$_bh_spec_sandbox/log"
+expect 'a long line before an error line is cut at 300 characters' \
+    "1-$(printf '%0300d' 0) ..." \
+    "$(bh_filter_errors "$_bh_spec_sandbox/log" 2>&1 | head -n 1)"
+
+# Without an error line, the log's tail shows instead.
+printf '%s\n' 'all' 'fine' > "$_bh_spec_sandbox/log"
+expect 'a log without an error line shows its tail' 'fine' \
+    "$(bh_filter_errors "$_bh_spec_sandbox/log" 2>&1 | tail -n 1)"
+rm -rf "$_bh_spec_sandbox"
+
+
 test_section 'bh_strict_mode'
 
 # bh_strict_mode should enable `set -e`. Verify in a subshell.
