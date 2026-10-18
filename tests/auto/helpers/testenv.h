@@ -31,6 +31,7 @@
 #include <QElapsedTimer>
 #include <QFile>
 #include <QFileInfo>
+#include <QLibraryInfo>
 #include <QProcess>
 #include <QSettings>
 #include <QSharedPointer>
@@ -152,6 +153,35 @@ public:
     static QString bearerPluginPath()
     {
         return settings().value(QLL("bearer/pluginpath")).toString();
+    }
+
+    /// Lets this process, and the processes it starts, load the bearer plugins
+    /// (and every other plugin) of XD's own plugins dir; call it before the
+    /// first QNetworkConfigurationManager loads the bearer engines.
+    ///
+    /// A headless test's default plugin search does not reach that dir: this
+    /// Qt's configured prefix is relative to the app dir, not the plugins dir.
+    /// QT_PLUGIN_PATH is read only at QCoreApplication construction (too late
+    /// from here), hence the dir is added as a runtime library path, which does
+    /// refresh the bearer QFactoryLoader, and published in QT_PLUGIN_PATH for
+    /// the child processes (such as qnetworksession's lackey), which construct
+    /// their own QCoreApplication. Prefers the [bearer] pluginpath the .pri
+    /// recorded at qmake time, else QLibraryInfo.
+    static void addBearerPluginPath()
+    {
+        QString pluginDir = bearerPluginPath();
+        if (pluginDir.isEmpty()) {
+            pluginDir = QLibraryInfo::location(QLibraryInfo::PluginsPath);
+        }
+        if (pluginDir.isEmpty() || !QDir(pluginDir).exists()) {
+            return;
+        }
+        QCoreApplication::addLibraryPath(pluginDir);
+        const QByteArray dir = QFile::encodeName(QDir::toNativeSeparators(pluginDir));
+        const QByteArray existing = qgetenv("QT_PLUGIN_PATH");
+        if (!existing.split(':').contains(dir)) {
+            qputenv("QT_PLUGIN_PATH", existing.isEmpty() ? dir : dir + ':' + existing);
+        }
     }
 
     /// Launch the bundled server-dummy for one of the network "ways" and hand back an

@@ -49,6 +49,8 @@
 #include <QSysInfo>
 #include <QThread>
 
+#include "../../../helpers/testenv.h"
+
 class tst_QNetworkProxyFactory : public QObject {
     Q_OBJECT
 
@@ -70,6 +72,7 @@ public:
     };
 
 private slots:
+    void initTestCase();
     void systemProxyForQueryCalledFromThread();
     void systemProxyForQuery_data();
     void systemProxyForQuery() const;
@@ -338,6 +341,13 @@ void tst_QNetworkProxyFactory::inNetworkAccessManager()
     QFETCH(QNetworkConfiguration, config);
     QFETCH(QList<QNetworkProxy>, proxies);
 
+    // Installs the counting factory again, since `systemProxyForQuery_local()`
+    // replaced it through `setApplicationProxy()`, which deletes the factory.
+    if (!factory) {
+        factory = new QDebugProxyFactory;
+        QNetworkProxyFactory::setApplicationProxyFactory(factory);
+    }
+
     int count = QDebugProxyFactory::requestCounter;
 
     QNetworkAccessManager manager;
@@ -428,6 +438,14 @@ public:
     QNetworkProxyQuery query;
     QList<QNetworkProxy> proxies;
 };
+
+void tst_QNetworkProxyFactory::initTestCase()
+{
+    // Gives `QNetworkConfigurationManager` the bearer plugins (generic and the
+    // others) of XD's own plugins dir; hence the configuration rows find this
+    // host's network interfaces.
+    TestEnv::addBearerPluginPath();
+}
 
 //regression test for QTBUG-18799
 void tst_QNetworkProxyFactory::systemProxyForQueryCalledFromThread()

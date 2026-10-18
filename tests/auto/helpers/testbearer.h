@@ -18,7 +18,6 @@
 #include <QtCore/QDir>
 #include <QtCore/QElapsedTimer>
 #include <QtCore/QFile>
-#include <QtCore/QLibraryInfo>
 #include <QtCore/QObject>
 #include <QtCore/QProcess>
 #include <QtCore/QStringList>
@@ -40,28 +39,8 @@ public:
     {
         if (m_program.isEmpty())
             return false;
-        // The qbearerdummy engine plugin is installed with the other Qt plugins (<prefix>/plugins/
-        // bearer/), but a headless test's default plugin search does not reach it: this Qt's
-        // configured prefix is relative to the app dir, not the plugins dir. QT_PLUGIN_PATH is read
-        // only at QCoreApplication construction (too late from here), so add the plugins dir as a
-        // runtime library path -- which does refresh the bearer QFactoryLoader -- before the first
-        // QNetworkConfigurationManager loads the bearer engines. Prefer the [bearer] pluginpath the
-        // .pri recorded at qmake time; fall back to QLibraryInfo.
-        QString pluginDir = TestEnv::bearerPluginPath();
-        if (pluginDir.isEmpty())
-            pluginDir = QLibraryInfo::location(QLibraryInfo::PluginsPath);
-        if (!pluginDir.isEmpty() && QDir(pluginDir).exists()) {
-            // This process: addLibraryPath is effective immediately (QT_PLUGIN_PATH is read only at
-            // QCoreApplication construction, too late from here).
-            QCoreApplication::addLibraryPath(pluginDir);
-            // Child processes (e.g. qnetworksession's lackey): they construct their own
-            // QCoreApplication, so they DO honour QT_PLUGIN_PATH -- publish it so they can load the
-            // qbearerdummy engine and reach the same daemon.
-            const QByteArray dir = QFile::encodeName(QDir::toNativeSeparators(pluginDir));
-            const QByteArray existing = qgetenv("QT_PLUGIN_PATH");
-            if (!existing.split(':').contains(dir))
-                qputenv("QT_PLUGIN_PATH", existing.isEmpty() ? dir : dir + ':' + existing);
-        }
+        // The engine plugin is one of the bearer plugins of XD's own plugins dir.
+        TestEnv::addBearerPluginPath();
         if (!m_proc) {
             m_proc = new ParentDeathProcess(this);
             m_proc->setProcessChannelMode(QProcess::MergedChannels);
