@@ -61,8 +61,9 @@ class QHttpNetworkRequest;
 typedef QPair<QHttpNetworkRequest, QHttpNetworkReply*> HttpMessagePair;
 #endif
 
-class QSpdyProtocolHandler : public QObject, public QAbstractProtocolHandler {
+class QSpdyProtocolHandler : public QAbstractProtocolHandler {
     Q_OBJECT
+    typedef QAbstractProtocolHandler super;
 public:
     QSpdyProtocolHandler(QHttpNetworkConnectionChannel *channel);
     ~QSpdyProtocolHandler();
@@ -97,10 +98,13 @@ public:
     virtual void _q_receiveReply() Q_DECL_OVERRIDE;
     virtual void _q_readyRead() Q_DECL_OVERRIDE;
     virtual bool sendRequest() Q_DECL_OVERRIDE;
+    void untieReplies() Q_DECL_OVERRIDE;
+
+protected Q_SLOTS:
+    void _q_replyDestroyed(QObject *reply) Q_DECL_OVERRIDE;
 
 private slots:
     void _q_uploadDataReadyRead();
-    void _q_replyDestroyed(QObject*);
 
 private:
 

@@ -1304,6 +1304,11 @@ QHttpNetworkConnection::QHttpNetworkConnection(quint16 connectionCount, const QS
 
 QHttpNetworkConnection::~QHttpNetworkConnection()
 {
+    // TRACE/network http-reply dangling-connection: untie the replies a handler holds #3,
+    // a reply may outlive this connection yet still hold a `QPointer` to it and, from its own
+    // destructor, call `connection->removeReply()`. Hence every guard to this connection goes
+    // null now, at the very start of teardown: such a reply then reads a null connection and
+    // skips `removeReply()` rather than dereferencing the private that is about to be freed.
     detachSharedRefCount();
 }
 

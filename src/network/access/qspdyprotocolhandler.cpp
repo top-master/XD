@@ -248,7 +248,7 @@ static const char spdyDictionary[] = {
 //}
 
 QSpdyProtocolHandler::QSpdyProtocolHandler(QHttpNetworkConnectionChannel *channel)
-    : QObject(0), QAbstractProtocolHandler(channel),
+    : QAbstractProtocolHandler(channel),
       m_nextStreamID(-1),
       m_maxConcurrentStreams(100), // 100 is recommended in the SPDY RFC
       m_initialWindowSize(0),
@@ -273,16 +273,28 @@ QSpdyProtocolHandler::QSpdyProtocolHandler(QHttpNetworkConnectionChannel *channe
 
 QSpdyProtocolHandler::~QSpdyProtocolHandler()
 {
-    const QList<HttpMessagePair> inflight = m_inFlightStreams.values();
-    for (int i = 0; i < inflight.count(); ++i) {
-        QHttpNetworkReply *reply = inflight.at(i).second;
-        if (reply) {
-            reply->d_func()->connection = 0;
-            reply->d_func()->connectionChannel = 0;
-        }
-    }
+    // TRACE/network http-reply dangling-connection: untie the replies a handler holds #4,
+    // hence untie them here first, while this handler is still whole; the
+    // base destructor then finds them untied and skips it.
+    untieReplies();
     deflateEnd(&m_deflateStream);
     deflateEnd(&m_inflateStream);
+}
+
+/*!
+    \internal
+
+    Unties the reply of each stream still open, then runs the base version.
+*/
+void QSpdyProtocolHandler::untieReplies()
+{
+    // TRACE/network http-reply dangling-connection: untie the replies a handler holds #5,
+    // hence the streams this handler keeps are untied here, as the base files
+    // none for it.
+    if (m_flags.excludesLax(RepliesUntiedFlag)) {
+        untieStreams(m_inFlightStreams);
+    }
+    super::untieReplies();
 }
 
 bool QSpdyProtocolHandler::sendRequest()
@@ -307,13 +319,11 @@ bool QSpdyProtocolHandler::sendRequest()
 
         currentReply->setSpdyWasUsed(true);
         qint32 streamID = generateNextStreamID();
-        currentReply->setProperty("SPDYStreamID", streamID);
+        currentReply->d_func()->streamId = quint32(streamID);
 
         currentReply->setRequest(currentRequest);
-        currentReply->d_func()->connection = m_connection;
-        currentReply->d_func()->connectionChannel = m_channel;
+        attachReply(currentReply);
         m_inFlightStreams.insert(streamID, currentPair);
-        connect(currentReply, SIGNAL(destroyed(QObject*)), this, SLOT(_q_replyDestroyed(QObject*)));
 
         sendSYN_STREAM(currentPair, streamID, /* associatedToStreamID = */ 0);
         // TRACE/network spdy-sendqueue-iterator: erase must consume the iterator it returns #1.
@@ -326,11 +336,21 @@ bool QSpdyProtocolHandler::sendRequest()
     return true;
 }
 
-void QSpdyProtocolHandler::_q_replyDestroyed(QObject* reply)
+/*!
+    \internal
+
+    Drops the stream of a reply its owner destroyed while the stream was still
+    open, and cancels that stream at the server.
+
+    QHttpNetworkReply emits destroyed() while still whole; hence the reply
+    still names its stream.
+*/
+void QSpdyProtocolHandler::_q_replyDestroyed(QObject *reply)
 {
-    qint32 streamID = reply->property("SPDYStreamID").toInt();
+    qint32 streamID = qint32(static_cast<QHttpNetworkReply * >(reply)->d_func()->streamId);
     if (m_inFlightStreams.remove(streamID))
         sendRST_STREAM(streamID, RST_STREAM_CANCEL);
+    super::_q_replyDestroyed(reply);
 }
 
 void QSpdyProtocolHandler::_q_receiveReply()
@@ -1283,7 +1303,7 @@ void QSpdyProtocolHandler::replyFinished(QHttpNetworkReply *httpReply, qint32 st
     int streamsRemoved = m_inFlightStreams.remove(streamID);
     Q_ASSERT(streamsRemoved == 1);
     Q_UNUSED(streamsRemoved); // silence -Wunused-variable
-    httpReply->d_func()->connection = 0;
+    detachReply(httpReply);
     emit httpReply->finished();
 }
 
@@ -1298,7 +1318,7 @@ void QSpdyProtocolHandler::replyFinishedWithError(QHttpNetworkReply *httpReply, 
     int streamsRemoved = m_inFlightStreams.remove(streamID);
     Q_ASSERT(streamsRemoved == 1);
     Q_UNUSED(streamsRemoved); // silence -Wunused-variable
-    httpReply->d_func()->connection = 0;
+    detachReply(httpReply);
     emit httpReply->finishedWithError(errorCode, QSpdyProtocolHandler::tr(errorMessage));
 }
 
