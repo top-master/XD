@@ -49,6 +49,33 @@ QHttp2ProtocolHandler::QHttp2ProtocolHandler(QHttpNetworkConnectionChannel *chan
 {
 }
 
+/*!
+    \internal
+
+    Unties the streams still open while this handler is still whole; the base
+    destructor then finds them untied and skips it.
+*/
+QHttp2ProtocolHandler::~QHttp2ProtocolHandler()
+{
+    untieReplies();
+}
+
+/*!
+    \internal
+
+    Unties the reply of each stream still open, then runs the base version.
+*/
+void QHttp2ProtocolHandler::untieReplies()
+{
+    // TRACE/network http-reply dangling-connection: untie the replies a handler holds #6,
+    // hence the streams this handler keeps are untied here, as the base files
+    // none for it.
+    if (m_flags.excludesLax(RepliesUntiedFlag)) {
+        untieStreams(m_inFlightStreams);
+    }
+    super::untieReplies();
+}
+
 void QHttp2ProtocolHandler::_q_receiveReply()
 {
     processFrames();
@@ -102,13 +129,12 @@ void QHttp2ProtocolHandler::openStream(const HttpMessagePair &pair)
     const quint32 streamID = m_nextStreamID;
     m_nextStreamID += 2;
 
-    reply->d_func()->connection = m_connection;
-    reply->d_func()->connectionChannel = m_channel;
+    attachReply(reply);
     // A multiplexed handler ran; the reply-impl maps this onto Http2WasUsed for
     // requests that opted into HTTP/2 (and SpdyWasUsed otherwise).
     reply->setSpdyWasUsed(true);
     m_inFlightStreams.insert(streamID, pair);
-    connect(reply, SIGNAL(destroyed(QObject*)), this, SLOT(_q_replyDestroyed(QObject*)));
+    reply->d_func()->streamId = streamID;
 
     HttpHeaders headers;
     headers.append(HeaderField(":method", request.methodName()));
@@ -299,7 +325,7 @@ void QHttp2ProtocolHandler::handleRST_STREAM(const QHttp2::Frame &frame)
     m_inFlightStreams.remove(streamID);
     m_headerBlocks.remove(streamID);
     m_endStreamAfterHeaders.remove(streamID);
-    reply->d_func()->connection = 0;
+    detachReply(reply);
     emit reply->finishedWithError(QNetworkReply::ProtocolFailure, tr("HTTP/2 stream reset by peer"));
 }
 
@@ -327,7 +353,7 @@ void QHttp2ProtocolHandler::finishStream(quint32 streamID)
     m_inFlightStreams.remove(streamID);
     m_headerBlocks.remove(streamID);
     m_endStreamAfterHeaders.remove(streamID);
-    reply->d_func()->connection = 0;
+    detachReply(reply);
     emit reply->finished();
 }
 
@@ -338,22 +364,21 @@ void QHttp2ProtocolHandler::finishStream(quint32 streamID)
     and cancels that stream at the server, hence no later frame of the stream reaches
     the freed reply.
 
-    The reply is compared by address only, since it is already being destroyed.
+    QHttpNetworkReply emits destroyed() while still whole; hence the reply
+    still names its stream, which is found by that id at once.
 */
 void QHttp2ProtocolHandler::_q_replyDestroyed(QObject *reply)
 {
-    QHash<quint32, HttpMessagePair>::iterator it = m_inFlightStreams.begin();
-    while (it != m_inFlightStreams.end()) {
-        if (static_cast<QObject *>(it.value().second) != reply) {
-            ++it;
-            continue;
-        }
-        const quint32 streamID = it.key();
-        it = m_inFlightStreams.erase(it);
+    QHttpNetworkReply *httpReply = static_cast<QHttpNetworkReply * >(reply);
+    const quint32 streamID = httpReply->d_func()->streamId;
+    QHash<quint32, HttpMessagePair>::iterator it = m_inFlightStreams.find(streamID);
+    if (it != m_inFlightStreams.end() && it.value().second == httpReply) {
+        m_inFlightStreams.erase(it);
         m_headerBlocks.remove(streamID);
         m_endStreamAfterHeaders.remove(streamID);
         sendRstStream(streamID, QHttp2::Cancel);
     }
+    super::_q_replyDestroyed(reply);
 }
 
 void QHttp2ProtocolHandler::connectionError(quint32 errorCode, const char *message)
