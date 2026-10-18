@@ -40,6 +40,7 @@ public:
     inline explicit QTestFailure(const QString &msg) Q_DECL_NOTHROW
         : QExceptionWithMessage(msg)
         , m_line(0)
+        , m_isIgnored(false)
     {
     }
     ~QTestFailure() Q_DECL_NOTHROW;
@@ -70,6 +71,20 @@ protected:
 
 private:
     bool m_isIgnored;
+};
+
+class Q_TESTLIB_EXPORT QTestSkip : public QTestFailure
+{
+    typedef QTestFailure super;
+public:
+    inline explicit QTestSkip(const QString &msg) Q_DECL_NOTHROW
+        : QTestFailure(msg)
+    {
+    }
+    ~QTestSkip() Q_DECL_NOTHROW;
+    void raise() const Q_DECL_OVERRIDE;
+    QTestSkip *clone() const Q_DECL_OVERRIDE;
+    void log() Q_DECL_OVERRIDE;
 };
 
 

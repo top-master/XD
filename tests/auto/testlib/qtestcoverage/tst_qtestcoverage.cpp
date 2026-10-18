@@ -30,7 +30,20 @@ private slots:
     void testCoverRow_shouldMarkOnlyItsRow();
     void testIsCoveredRow_shouldMatchCoveredRows_data();
     void testIsCoveredRow_shouldMatchCoveredRows();
+
+    /// QTestSkip, the skip a helper throws.
+    void testClone_shouldRaiseAQTestSkip();
+    /// Its result row is a SKIP; a FAIL there means QtTest logged the skip as a
+    /// failure.
+    void testRaiseFromHelper_shouldEndTheSlotAsSkip();
 };
+
+/// Skips the calling test function from one level down, where a plain QSKIP()
+/// could only return from this helper.
+static void skipFromHelper()
+{
+    QTestSkip(QLL("Thrown from a helper, as intended.")).raise();
+}
 
 void tst_QTestCoverage::initTestCase_data()
 {
@@ -92,6 +105,25 @@ void tst_QTestCoverage::testIsCoveredRow_shouldMatchCoveredRows()
     const bool expected = covered && (coverAll || QTest::hasTag("a"));
     qExpect(m_rows.isCovered())->toEqual(expected);
     qExpect(m_rows.canSkip())->toEqual(expected);
+}
+
+void tst_QTestCoverage::testClone_shouldRaiseAQTestSkip()
+{
+    QScopedPointer<QTestFailure> copy(QTestSkip(QLL("cloned")).clone());
+    bool caughtSkip = false;
+    try {
+        copy->raise();
+    } catch (const QTestSkip &) {
+        caughtSkip = true;
+    } catch (...) {
+    }
+    qExpect(caughtSkip)->toBeTruthy();
+}
+
+void tst_QTestCoverage::testRaiseFromHelper_shouldEndTheSlotAsSkip()
+{
+    skipFromHelper();
+    QFAIL("QTestSkip did not end the test function.");
 }
 
 QTEST_APPLESS_MAIN(tst_QTestCoverage)
