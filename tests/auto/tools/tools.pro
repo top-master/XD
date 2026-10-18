@@ -4,6 +4,7 @@ SUBDIRS=\
    qmake \
    uic \
    moc \
+   format \
    rcc \
 
 qtHaveModule(dbus): SUBDIRS += qdbuscpp2xml qdbusxml2cpp

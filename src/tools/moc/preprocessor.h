@@ -68,6 +68,7 @@ class Preprocessor : public Parser
 public:
     Preprocessor(){}
     static bool preprocessOnly;
+    static bool keepComments;
     QList<QByteArray> frameworks;
     QSet<QByteArray> preprocessedIncludes;
     Macros macros;
