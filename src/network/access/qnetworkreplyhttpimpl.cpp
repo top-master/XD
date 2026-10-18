@@ -803,6 +803,13 @@ void QNetworkReplyHttpImplPrivate::postRequest(const QNetworkRequest &newHttpReq
         }
 
 
+        // TRACE/network HTTP-reply throttle: hand over the read buffer limit at start #1,
+        // the reply sends a limit change through readBufferSizeChanged(), which reaches
+        // nobody while the request still waits for its network session (no delegate
+        // yet); hence the delegate takes the limit set until now, else the download
+        // would run unthrottled, no matter how small the caller made the read buffer.
+        delegate->readBufferMaxSize = q->readBufferSize();
+
         // These atomic integers are used for signal compression
         delegate->pendingDownloadData = pendingDownloadDataEmissions;
         delegate->pendingDownloadProgress = pendingDownloadProgressEmissions;
