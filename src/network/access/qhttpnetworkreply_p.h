@@ -170,6 +170,7 @@ private:
     friend class QHttpNetworkConnection;
     friend class QHttpNetworkConnectionPrivate;
     friend class QHttpNetworkConnectionChannel;
+    friend class QAbstractProtocolHandler;
     friend class QHttpProtocolHandler;
     friend class QSpdyProtocolHandler;
     friend class QHttp2ProtocolHandler;
@@ -257,6 +258,9 @@ public:
     bool pipeliningUsed;
     bool spdyUsed;
     bool downstreamLimited;
+    /// Lets a multiplexing handler (SPDY, HTTP/2) find the stream of this reply,
+    /// even from its destroyed() signal; 0 while the reply has no stream.
+    quint32 streamId;
 
     char* userProvidedDownloadBuffer;
     QUrl redirectUrl;

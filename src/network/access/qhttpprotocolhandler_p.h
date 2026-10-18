@@ -53,6 +53,8 @@
 QT_BEGIN_NAMESPACE
 
 class QHttpProtocolHandler : public QAbstractProtocolHandler {
+    Q_OBJECT
+    typedef QAbstractProtocolHandler super;
 public:
     QHttpProtocolHandler(QHttpNetworkConnectionChannel *channel);
 
