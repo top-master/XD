@@ -11,6 +11,8 @@ shortcut {
     $$PWD/win32/windows.prf
 }
 
+defineTest(qtStaticInternalResolve) {
+
 force_bootstrap {
     CONFIG -= qt_static
 }
@@ -40,6 +42,8 @@ export(MODULE_SUFFIX)
 export(MODULE_DIR)
 export(CONFIG)
 
+} # qtStaticInternalResolve
+
 # Recursion-handler passed to the resolve_depends built-in (its 5th arg) by qt.prf.
 #
 # $$1 is the module qmake found in a dependency cycle,
@@ -61,3 +65,5 @@ defineTest(onQtModuleRecursion) {
     }
     return(false)
 }
+
+!equals(qtStaticInternalResolveSkip, true): qtStaticInternalResolve()

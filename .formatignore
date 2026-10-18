@@ -1,0 +1,10 @@
+#
+# Overrides applied on top of `.gitignore`, to further adjust what we format.
+# (see src/tools/format/README.md). Paths passed to CLI are still formatted.
+#
+# For example, we leave out of the format tool's folder scans 3rd-party libraries,
+# to keep their upstream layout.
+#
+
+# Vendored libraries.
+/src/3rdparty/
