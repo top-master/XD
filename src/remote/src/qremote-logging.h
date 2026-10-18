@@ -40,7 +40,7 @@ enum LogTypes {
 QT_REMOTE_EXPORT extern QBasicAtomicFlags<LogTypes> logSkip;
 
 Q_ALWAYS_INLINE void warnGlobalInstance(const char *where) {
-    if (QRemote::logSkip.append(QRemote::WarnGlobalInstance)) {
+    if (QRemote::logSkip.appendLax(QRemote::WarnGlobalInstance)) {
         qAssertWarning(where, "Failed to find QRemoteUser's global instance"
                        " (ensure to construct the default instance first,"
                        " and destruct it only after it's no longer relied on).");

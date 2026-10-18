@@ -1364,7 +1364,14 @@ bool QtSharedPointer::ExternalRefCountData::derefStrong(
     //     myStrongRef.clear();
     // };
     // ```
-    Q_ASSERT_X(count > 0 || counter->flags.includes(FlagIsMalformed), QtSharedPointer::TAG,
+    // TRACE/corelib shared-pointer malformed: the strongref syncs memory-order #1,
+    // `~QObject` sets `FlagIsMalformed` and then zeroes `strongref` with
+    // release; hence once `count` looked spent, `strongref` is read again with
+    // acquire before the flag, which the flag's own memory-order cannot replace,
+    // and leaves the flag relaxed. Only this rare path pays for it.
+    Q_ASSERT_X(count > 0
+               || counter->strongref.loadAcquire() > 0
+               || counter->flags.includesLax(FlagIsMalformed), QtSharedPointer::TAG,
                "Was dereferenced more than there were smart-pointer instances.");
 
     if ( ! counter->weakref.deref()) {
@@ -1389,7 +1396,7 @@ void QtSharedPointer::ExternalRefCountData::copyStrong(
         otherValue = Q_NULLPTR;
     } else if ( ! other->tryIncrementStrong()) {
 #ifndef QT_NO_QOBJECT
-        if (other->flags.includes(FlagIsQObject)
+        if (other->flags.includesLax(FlagIsQObject)
             && (flags & int(Qt::LogWarning)) == int(Qt::LogWarning)
         ) {
             other->checkQObjectShared(Q_PTR_CAST(const QObject *, otherValue));
