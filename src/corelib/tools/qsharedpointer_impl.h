@@ -267,7 +267,7 @@ namespace QtSharedPointer {
         ///
         /// @warning Usable with QSharedPointer's private-data (but not QWeakPointer's).
         Q_ALWAYS_INLINE bool isFake() const {
-            return this->flags.includes(FlagIsFake) && ! this->next.load();
+            return this->flags.includesLax(FlagIsFake) && ! this->next.load();
         }
 
         /// Increase the strongref, but never up from zero or less.
