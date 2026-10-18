@@ -4055,6 +4055,14 @@ bh_pro_is_subdirs() {
     grep -Eq '^[[:space:]]*TEMPLATE[[:space:]]*=[[:space:]]*subdirs[[:space:]]*$' "$1" 2>/dev/null
 }
 
+# bh_pro_is_aux <pro>
+#
+# Tells whether <pro> sets `TEMPLATE = aux`: its qmake run does its work
+# (such as writing a descriptor), and it links nothing to mark finished.
+bh_pro_is_aux() {
+    grep -Eq '^[[:space:]]*TEMPLATE[[:space:]]*=[[:space:]]*aux[[:space:]]*$' "$1" 2>/dev/null
+}
+
 # bh_build_alone <pro> <path>
 #
 # Builds one project alone, <path> being <pro> relative to BH_ROOT: makes it
@@ -4375,13 +4383,20 @@ bh_save_space_unfinish() {
 
 # bh_save_space_mark_finished <pro> <makefile>
 #
-# Makes sure <pro>, just built from <makefile>, counts as finished: when its
+# Makes sure <pro>, just built from <makefile>, counts as finished (an aux
+# project excepted, which never does): when its
 # post-link wrote no finished line (the build linked nothing, its target being
 # up to date already), it asks <makefile> for them through the
 # `save_space_finished` target of save_space.prf. Then it drops the emptied
 # finished lines of <pro> (see bh_save_space_drop_unfinished). Fails when a
 # target recorded for <pro> is missing, as the build then failed.
 bh_save_space_mark_finished() {
+    # Leaves an aux project unmarked: it has no target, and each build runs its
+    # qmake again, which redoes its work.
+    if bh_pro_is_aux "$1"; then
+        return 0
+    fi
+
     # A make that failed without saying so leaves a target missing; that is a
     # failed build, never a finished one.
     _smf_missing=$(bh_save_space_order_targets "$1" | cut -f2 \

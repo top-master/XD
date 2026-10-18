@@ -1,0 +1,84 @@
+# Copyright (C) 2015 The XD Company Ltd.
+# SPDX-License-Identifier: Apache-2.0
+
+# This feature is optional: every project has `static_plugins` in its
+# `CONFIG`, and a project can opt out with `CONFIG -= static_plugins`.
+#
+# Links the static plugins that `STATIC_PLUGINS` names (such as
+# `STATIC_PLUGINS += ignore-parser`) into the project, and lets a static
+# plugin's own project describe it for them. `QTPLUGIN_STATIC` is an alias
+# for a project that uses Qt (see the end of this file).
+#
+# A static plugin lives in `src/plugins-static/<name>`: its `<name>.pri` lists
+# its files and needs, and its `<name>.pro` writes them, at qmake time, into
+# the descriptor `mkspecs/plugins-static/<name>.pri`, as
+# `STATIC_PLUGINS.<id>.*` values (`<id>` is the name with `_` for `-`). A
+# project that names the plugin compiles its sources in.
+
+# staticPluginDescriptor(name)
+#
+# Builds the path of the descriptor of the static plugin `name`.
+defineReplace(staticPluginDescriptor) {
+    return($$[QT_HOST_DATA]/mkspecs/plugins-static/$${1}.pri)
+}
+
+# staticPluginDescribe(name)
+#
+# Writes the descriptor of the static plugin `name` from the plugin's own
+# list, the `PLUGIN_HEADERS`, `PLUGIN_SOURCES`, `PLUGIN_QT` and
+# `PLUGIN_DEPENDS` values its `<name>.pri` sets, its files relative to the
+# plugin's folder.
+defineTest(staticPluginDescribe) {
+    id = $$replace(1, -, _)
+    dir = $$_PRO_FILE_PWD_
+    headers =
+    for(header, PLUGIN_HEADERS): headers += $$dir/$$header
+    sources =
+    for(source, PLUGIN_SOURCES): sources += $$dir/$$source
+    lines = \
+        "STATIC_PLUGINS.$${id}.includes = $$val_escape(dir)" \
+        "STATIC_PLUGINS.$${id}.headers = $$val_escape(headers)" \
+        "STATIC_PLUGINS.$${id}.sources = $$val_escape(sources)" \
+        "STATIC_PLUGINS.$${id}.qt = $$val_escape(PLUGIN_QT)" \
+        "STATIC_PLUGINS.$${id}.depends = $$val_escape(PLUGIN_DEPENDS)"
+    descriptor = $$staticPluginDescriptor($$1)
+    write_file($$descriptor, lines)|error("Cannot write $$descriptor")
+    return(true)
+}
+
+# staticPluginAdd(name)
+#
+# Adds the static plugin `name` to the project, after the static plugins it
+# depends on, each once.
+defineTest(staticPluginAdd) {
+    id = $$replace(1, -, _)
+    contains(STATIC_PLUGINS_ADDED, $$id): return(true)
+    descriptor = $$staticPluginDescriptor($$1)
+    !exists($$descriptor): \
+        error("Static plugin $$1 is not built yet; build src/plugins-static/$$1 first.")
+    include($$descriptor)
+    STATIC_PLUGINS_ADDED += $$id
+    export(STATIC_PLUGINS_ADDED)
+    for(dependency, STATIC_PLUGINS.$${id}.depends): staticPluginAdd($$dependency)
+    !isEmpty(STATIC_PLUGINS.$${id}.qt):!qt: \
+        error("Static plugin $$1 needs Qt; add qt to CONFIG.")
+
+    INCLUDEPATH += $$eval(STATIC_PLUGINS.$${id}.includes)
+    HEADERS += $$eval(STATIC_PLUGINS.$${id}.headers)
+    SOURCES += $$eval(STATIC_PLUGINS.$${id}.sources)
+    QT += $$eval(STATIC_PLUGINS.$${id}.qt)
+    # Keeps the plugin's own files named apart from the project's, for a
+    # tool that reads the project's variables.
+    export(STATIC_PLUGINS.$${id}.headers)
+    export(STATIC_PLUGINS.$${id}.sources)
+    export(INCLUDEPATH)
+    export(HEADERS)
+    export(SOURCES)
+    export(QT)
+    return(true)
+}
+
+# `QTPLUGIN_STATIC` is just an alias for `STATIC_PLUGINS`, which counts only
+# in a project that uses Qt.
+qt: STATIC_PLUGINS += $$QTPLUGIN_STATIC
+for(name, STATIC_PLUGINS): staticPluginAdd($$name)
