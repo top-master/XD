@@ -1,0 +1,6 @@
+# Settings of the format tool (see src/tools/format/README.md); a .formatrc in
+# a deeper folder overrides the keys it sets again.
+
+[Types]
+refSuffix = keep-as-is
+moveSuffix = keep-as-is

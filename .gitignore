@@ -95,6 +95,7 @@ bin/linguist*
 bin/lrelease*
 bin/lupdate*
 bin/lconvert*
+bin/format*
 bin/moc*
 bin/makeqpf*
 bin/pixeltool*
@@ -359,3 +360,7 @@ tests/auto/widgets/kernel/qapplication/modal/modal
 
 # Generated static plugin import sources
 *_plugin_import.cpp
+
+# Static plugin descriptors, written when src/plugins-static builds.
+/mkspecs/plugins-static/*
+!/mkspecs/plugins-static/README.md

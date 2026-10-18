@@ -115,6 +115,17 @@ static QByteArray cleaned(const QByteArray &input)
 
 bool Preprocessor::preprocessOnly = false;
 
+/*!
+    Makes tokenize() emit each comment as a CPP_COMMENT or C_COMMENT symbol
+    (the preprocessor's PP_CPP_COMMENT and PP_C_COMMENT share those values),
+    with its offset and length into the input, for tools that work on the
+    source text itself, such as a formatter.
+
+    Off by default; hence moc's parser and preprocessor never see a comment
+    symbol, since a comment is dropped or turned into whitespace there.
+*/
+bool Preprocessor::keepComments = false;
+
 void Preprocessor::skipUntilEndif()
 {
     while(index < symbols.size() - 1 && symbols.at(index).token != PP_ENDIF){
@@ -336,6 +347,9 @@ Symbols Preprocessor::tokenize(const QByteArray& input, int lineNum, Preprocesso
                             ++lineNum;
                         ++data;
                     }
+                    if (Preprocessor::keepComments) {
+                        break;
+                    }
                     token = WHITESPACE; // one comment, one whitespace
                     // fall through;
                 case WHITESPACE:
@@ -349,6 +363,9 @@ Symbols Preprocessor::tokenize(const QByteArray& input, int lineNum, Preprocesso
                 case CPP_COMMENT:
                     while (*data && *data != '\n')
                         ++data;
+                    if (Preprocessor::keepComments) {
+                        break;
+                    }
                     continue; // ignore safely, the newline is a separator
                 default:
                     continue; //ignore
@@ -517,6 +534,9 @@ Symbols Preprocessor::tokenize(const QByteArray& input, int lineNum, Preprocesso
                         ++lineNum;
                     ++data;
                 }
+                if (Preprocessor::keepComments) {
+                    break;
+                }
                 token = PP_WHITESPACE; // one comment, one whitespace
                 // fall through;
             case PP_WHITESPACE:
@@ -526,6 +546,9 @@ Symbols Preprocessor::tokenize(const QByteArray& input, int lineNum, Preprocesso
             case PP_CPP_COMMENT:
                 while (*data && *data != '\n')
                     ++data;
+                if (Preprocessor::keepComments) {
+                    break;
+                }
                 continue; // ignore safely, the newline is a separator
             case PP_NEWLINE:
                 ++lineNum;

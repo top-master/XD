@@ -1,5 +1,9 @@
 CONFIG *= moc thread
 
+# Runs features that depend on `qt.prf` being ran only after them
+# (unless said features already ran).
+static_plugins: load(static_plugins)
+
 #handle defines
 load(qt_static_resolver)
 win32 {

@@ -125,6 +125,49 @@ defineReplace(qtModuleLib) {
     return($$qt5LibraryTarget($$name))
 }
 
+# qtStaticExists(keys)
+#
+# Tells whether every module of `keys` (`QT` keywords) has a static library
+# built for this build's kind: debug or release, and memory-safe or not. Call
+# it only while `qt_static` is set.
+defineTest(qtStaticExists) {
+    for(key, 1) {
+        id = $$qtModuleIdFromKey($$key)
+        name = $$eval(QT.$${id}.name)
+        isEmpty(name): return(false)
+        lib = $$[QT_INSTALL_LIBS]/$${QMAKE_PREFIX_STATICLIB}$$qt5LibraryTarget($$name)
+        !exists($${lib}.$${QMAKE_EXTENSION_STATICLIB})|!exists($${lib}.prl): return(false)
+        built = $$fromfile($${lib}.prl, QMAKE_PRL_CONFIG)
+        contains(built, memory_safe): !memory_safe: return(false)
+        !contains(built, memory_safe): memory_safe: return(false)
+    }
+    return(true)
+}
+
+# qtStaticMode(keys)
+#
+# Turns on `qt_static` when every module of `keys` has a fitting static
+# library (see qtStaticExists), and leaves `CONFIG` and `DEFINES` as they were
+# otherwise.
+defineTest(qtStaticMode) {
+    qt_static: return(true)
+    config = $$CONFIG
+    defines = $$DEFINES
+    CONFIG += qt_static
+    qtStaticInternalResolveSkip = true
+    load(qt_static_resolver)
+    qtStaticInternalResolve()
+    qtStaticExists($$1): return(true)
+
+    !build_pass: message("Links the shared Qt libraries: no fitting static library of $${1}.")
+    CONFIG = $$config
+    DEFINES = $$defines
+    export(CONFIG)
+    export(DEFINES)
+    qtStaticInternalResolve()
+    return(false)
+}
+
 # Converts "`QT` variable compatible" keywords to the header folders of those
 # modules, e.g. `dbus` -> the `QtDBus` folders; a `-private` keyword also gives
 # the folders of its public module.
