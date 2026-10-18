@@ -501,9 +501,6 @@ void tst_QNetworkSession::sessionOpenCloseStop()
 {
     QFETCH(QNetworkConfiguration, configuration);
     QFETCH(bool, forceSessionStop);
-#if defined(Q_OS_LINUX) && !defined(Q_OS_ANDROID)
-    QSKIP("Deadlocks on Linux due to QTBUG-45655");
-#endif
 
     QNetworkSession session(configuration);
 
