@@ -36,6 +36,13 @@ src_tools_uic.CONFIG = host_build
 force_bootstrap: src_tools_uic.depends = src_tools_bootstrap
 else: src_tools_uic.depends = src_corelib
 
+src_plugins_static.subdir = plugins-static
+src_plugins_static.target = sub-plugins-static
+
+src_tools_format.subdir = tools/format
+src_tools_format.target = sub-format
+src_tools_format.depends = src_corelib src_plugins_static
+
 src_tools_bootstrap_dbus.subdir = tools/bootstrap-dbus
 src_tools_bootstrap_dbus.target = sub-bootstrap_dbus
 src_tools_bootstrap_dbus.depends = src_tools_bootstrap
@@ -155,7 +162,7 @@ SUBDIRS += src_tools_bootstrap src_tools_moc src_tools_rcc
     SUBDIRS += src_3rdparty_pcre
     src_corelib.depends += src_3rdparty_pcre
 }
-SUBDIRS += src_corelib src_tools_qlalr
+SUBDIRS += src_corelib src_tools_qlalr src_plugins_static src_tools_format
 TOOLS = src_tools_moc src_tools_rcc src_tools_qlalr
 # `idc` (the ActiveQt IDC tool) is Windows-only -- main.cpp includes
 # `<windows.h>`, so building it on Mac/Linux fails to find the header.

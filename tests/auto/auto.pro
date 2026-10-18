@@ -13,6 +13,7 @@ contains(QT_CONFIG, sql): SUBDIRS += sql
 SUBDIRS += \
     testlib \
     tools \
+    plugins-static \
     xml \
     concurrent \
     other \
