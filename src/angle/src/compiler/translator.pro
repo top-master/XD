@@ -1,15 +1,13 @@
 CONFIG += static
 contains(QT_CONFIG, dynamicgl): CONFIG += not_installed
 include(../config.pri)
+include(../generator.pri)
 
 INCLUDEPATH += \
     $$ANGLE_DIR/src \
     $$ANGLE_DIR/include
 
 DEFINES += _SECURE_SCL=0 _LIB ANGLE_TRANSLATOR_IMPLEMENTATION ANGLE_TRANSLATOR_STATIC ANGLE_ENABLE_HLSL
-
-FLEX_SOURCES = $$ANGLE_DIR/src/compiler/translator/glslang.l
-BISON_SOURCES = $$ANGLE_DIR/src/compiler/translator/glslang.y
 
 HEADERS += \
     $$ANGLE_DIR/include/GLSLANG/ResourceLimits.h \
@@ -42,6 +40,7 @@ HEADERS += \
     $$ANGLE_DIR/src/compiler/translator/EmulatePrecision.h \
     $$ANGLE_DIR/src/compiler/translator/FlagStd140Structs.h \
     $$ANGLE_DIR/src/compiler/translator/ForLoopUnroll.h \
+    $$ANGLE_DIR/src/compiler/translator/glslang_tab.h \
     $$ANGLE_DIR/src/compiler/translator/HashNames.h \
     $$ANGLE_DIR/src/compiler/translator/InfoSink.h \
     $$ANGLE_DIR/src/compiler/translator/InitializeDll.h \
@@ -114,6 +113,8 @@ SOURCES += \
     $$ANGLE_DIR/src/compiler/translator/EmulatePrecision.cpp \
     $$ANGLE_DIR/src/compiler/translator/FlagStd140Structs.cpp \
     $$ANGLE_DIR/src/compiler/translator/ForLoopUnroll.cpp \
+    $$ANGLE_DIR/src/compiler/translator/glslang_lex.cpp \
+    $$ANGLE_DIR/src/compiler/translator/glslang_tab.cpp \
     $$ANGLE_DIR/src/compiler/translator/InfoSink.cpp \
     $$ANGLE_DIR/src/compiler/translator/Initialize.cpp \
     $$ANGLE_DIR/src/compiler/translator/InitializeDll.cpp \
@@ -163,32 +164,12 @@ SOURCES += \
     $$ANGLE_DIR/src/third_party/compiler/ArrayBoundsClamper.cpp
 
 
-# NOTE: 'flex' and 'bison' can be found in qt5/gnuwin32/bin
-flex.commands = $$addGnuPath(flex) --noline --nounistd --outfile=${QMAKE_FILE_OUT} ${QMAKE_FILE_NAME}
-flex.output = $${BUILDSUBDIR}${QMAKE_FILE_BASE}_lex.cpp
-flex.input = FLEX_SOURCES
-flex.dependency_type = TYPE_C
-flex.variable_out = GENERATED_SOURCES
-QMAKE_EXTRA_COMPILERS += flex
-
-defineReplace(myDirName) { return($$dirname(1)) }
-bison.commands = $$addGnuPath(bison) --no-lines --skeleton=yacc.c --defines=${QMAKE_FILE_OUT} \
-                --output=${QMAKE_FUNC_FILE_OUT_myDirName}$$QMAKE_DIR_SEP${QMAKE_FILE_OUT_BASE}.cpp \
-                ${QMAKE_FILE_NAME}
-bison.output = $${BUILDSUBDIR}${QMAKE_FILE_BASE}_tab.h
-bison.input = BISON_SOURCES
-bison.dependency_type = TYPE_C
-bison.variable_out = GENERATED_SOURCES
-QMAKE_EXTRA_COMPILERS += bison
-
-# This is a dummy compiler to work around the fact that an extra compiler can only
-# have one output file even if the command generates two.
-MAKEFILE_NOOP_COMMAND = @echo -n
-msvc: MAKEFILE_NOOP_COMMAND = @echo >NUL
-bison_impl.output = $${BUILDSUBDIR}${QMAKE_FILE_BASE}_tab.cpp
-bison_impl.input = BISON_SOURCES
-bison_impl.commands = $$MAKEFILE_NOOP_COMMAND
-bison_impl.depends = $${BUILDSUBDIR}${QMAKE_FILE_BASE}_tab.h
-bison_impl.output = $${BUILDSUBDIR}${QMAKE_FILE_BASE}_tab.cpp
-bison_impl.variable_out = GENERATED_SOURCES
-QMAKE_EXTRA_COMPILERS += bison_impl
+# Regenerates the scanner and the parser above, when flex and bison run here.
+OTHER_FILES += \
+    $$ANGLE_DIR/src/compiler/translator/glslang.l \
+    $$ANGLE_DIR/src/compiler/translator/glslang.y
+angleGenerate(flex, $$ANGLE_DIR/src/compiler/translator/glslang.l, \
+    $$ANGLE_DIR/src/compiler/translator/glslang_lex.cpp)
+angleGenerate(bison, $$ANGLE_DIR/src/compiler/translator/glslang.y, \
+    $$ANGLE_DIR/src/compiler/translator/glslang_tab.cpp \
+    $$ANGLE_DIR/src/compiler/translator/glslang_tab.h)
