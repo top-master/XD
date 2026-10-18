@@ -131,7 +131,11 @@ void QNetworkAccessDebugPipeBackend::pushFromSocketToDownstream()
 {
     QByteArray buffer;
 
-    if (socket.state() == QAbstractSocket::ConnectingState) {
+    // Until the socket connects (host lookup included), `read()` returns -1,
+    // which below ends the download; hence wait for the connection first.
+    if (socket.state() == QAbstractSocket::HostLookupState
+        || socket.state() == QAbstractSocket::ConnectingState)
+    {
         return;
     }
 
@@ -139,8 +143,15 @@ void QNetworkAccessDebugPipeBackend::pushFromSocketToDownstream()
         if (hasDownloadFinished)
             return;
 
-        buffer.resize(ReadBufferSize);
-        qint64 haveRead = socket.read(buffer.data(), ReadBufferSize);
+        // Takes no more than the reply has room for; hence a reader that drains
+        // the reply slowly slows the sender too, until a next read makes room.
+        const qint64 room = nextDownstreamBlockSize();
+        if (room <= 0) {
+            break;
+        }
+        const qint64 blockSize = qMin<qint64 >(room, ReadBufferSize);
+        buffer.resize(blockSize);
+        qint64 haveRead = socket.read(buffer.data(), blockSize);
 
         if (haveRead == -1) {
             hasDownloadFinished = true;
@@ -275,6 +286,10 @@ void QNetworkAccessDebugPipeBackend::socketDisconnected()
 
 void QNetworkAccessDebugPipeBackend::socketConnected()
 {
+    // The pipe's reader paces its sender through the read buffer; a kernel
+    // receive buffer left to grow to megabytes would take the sender's data in
+    // instead, hence it stays as small as the read buffer.
+    socket.setSocketOption(QAbstractSocket::ReceiveBufferSizeSocketOption, ReadBufferSize);
 }
 
 
