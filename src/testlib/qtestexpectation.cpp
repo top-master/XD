@@ -54,6 +54,43 @@ void QTestFailure::log()
 }
 
 
+/*!
+    \class QTestSkip
+    \inmodule QtTest
+
+    Ends the current test function with a skip instead of a failure. Unlike
+    QSKIP(), which only returns from the function it is written in, it may be
+    thrown from a helper at any depth, such as TestEnv::assertInternet(); QtTest
+    catches it like any QTestFailure, and log() records the skip.
+*/
+
+QTestSkip::~QTestSkip() Q_DECL_NOTHROW
+{
+}
+
+void QTestSkip::raise() const
+{
+    QTestSkip e = *this;
+    throw e;
+}
+
+QTestSkip *QTestSkip::clone() const
+{
+    return new QTestSkip(*this);
+}
+
+/*!
+    Records the skip, with its message and the place it was thrown from.
+*/
+void QTestSkip::log()
+{
+    const bool hasPath = qNot(m_file.isEmpty());
+    QTest::qSkip(what(),
+                 hasPath ? qPrintable(m_file) : (const char *)__FILE__,
+                 hasPath ? m_line : ((int)__LINE__) - 2);
+}
+
+
 namespace QTest {
 
 ExpectationBase::~ExpectationBase() Q_DECL_NOEXCEPT_EXPR(false)
