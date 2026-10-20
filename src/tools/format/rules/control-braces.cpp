@@ -17,6 +17,11 @@
     Wraps the body of each `if`, `else`, `for`, `while`, `do`, and `foreach`
     in braces, also when it is one statement; a body that is itself a control
     statement, or that a preprocessor directive splits, is reported instead.
+
+    In a header (see FormatDocument::isHeader()), a body on its keyword's
+    line stays there, braced: `if (x) { return; }`. Elsewhere it moves to a
+    line of its own, one step (4 spaces) past the keyword's line, with its
+    `}` on the line after; a body that had its braces already moves too.
 */
 
 /*!
@@ -29,6 +34,13 @@ void FormatControlBracesRule::run(FormatDocument *document) const
             continue;
         }
         const int body = this->bodyStart(document, i);
+        if (body >= 0
+            && document->token(body) == LBRACE
+            && ! document->isHeader()
+        ) {
+            this->unfold(document, i, body);
+            continue;
+        }
         if (body < 0
             || document->token(body) == LBRACE
             || document->token(body) == SEMIC
@@ -160,8 +172,19 @@ void FormatControlBracesRule::brace(
         if (followedOnLine && after != ELSE && after != WHILE) {
             return;
         }
-        document->replace(document->symbolEnd(head), 0, " {");
-        document->replace(document->symbolEnd(end), 0, " }");
+        if (document->isHeader()) {
+            document->replace(document->symbolEnd(head), 0, " {");
+            document->replace(document->symbolEnd(end), 0, " }");
+            return;
+        }
+
+        // Moves the body to a line of its own, and closes it on the next.
+        const QByteArray indent = document->indentOf(document->symbolLine(keyword));
+        const int from = document->symbolEnd(head);
+        document->replace(from, document->symbols().at(body).from - from, " {\n"
+            + continuationPad(indent.size())
+        );
+        document->replace(document->symbolEnd(end), 0, "\n" + indent + "}");
         return;
     }
 

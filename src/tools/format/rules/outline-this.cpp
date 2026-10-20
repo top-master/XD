@@ -6,80 +6,82 @@
 #include "../format-document.h"
 #include "../format-rules.h"
 #include "../parser/class-helpers.h"
+#include "../parser/code-helpers.h"
+#include "../parser/scope-conditions.h"
 
 #include <QtCore/QByteArray>
-#include <QtCore/QDir>
-#include <QtCore/QFile>
-#include <QtCore/QFileInfo>
-#include <QtCore/QHash>
 #include <QtCore/QList>
 #include <QtCore/QSet>
 #include <QtCore/QString>
+#include <QtCore/QStringList>
 
 /*!
     @class FormatOutlineThisRule
     @internal
 
-    Reaches a class's own members through `this->` in its outline member
-    definitions (a body written outside the class body, such as
-    `void Widget::run() { ... }`), where a bare name could read as a free
-    function or a global; a member that a parameter or a local shadows is left
-    as it is, and so is a static one, and every member of a static function.
+    Reaches the members of a member function's own class, and of its base
+    classes, through `this->` where `[Relations] thisMode` asks for it (see
+    FormatSettings), and drops a `this->` where it does not: by default for a
+    base class's member, for an outline member definition in a header (a body
+    written outside the class body, such as `void Widget::run() { ... }`,
+    where a bare name could read as a free function or a global), and
+    wherever the code already says `this->`. The condition's names are those
+    of FormatScopeConditions, checked at each member name.
+
+    A member that a parameter or a local shadows is left as it is, and so is
+    a static one, every member of a static function, every member in the body
+    of a lambda that does not capture `this`, and a name the rule finds no
+    class member for. A class's members come from its body in the file, else
+    from a header named after the file, else from a header the file quotes in
+    an `#include` (see FormatScopeConditions); a base class declared only in
+    a header that the file includes with `<...>` adds no members.
 */
 
 /*!
-    Adds `this->` in front of each bare member name in each outline member
-    definition of @a document.
+    Tells whether the lambda capture list that the `[` at \a bracket of
+    \a document opens captures `this`: it names `this` or `*this`, or it
+    starts with the default capture `=` or `&`.
+*/
+static bool capturesThis(const FormatDocument *document, int bracket)
+{
+    const int close = document->match(bracket);
+    const Token first = document->token(bracket + 1);
+    if (first == EQ
+        || (first == AND
+            && (bracket + 2 == close || document->token(bracket + 2) == COMMA))
+    ) {
+        return true;
+    }
+    for (int k = bracket + 1; k < close; ++k) {
+        if (document->token(k) != THIS) {
+            continue;
+        }
+        const int start = document->token(k - 1) == STAR ? k - 1 : k;
+        const Token before = document->token(start - 1);
+        if (before == LBRACK || before == COMMA) {
+            return true;
+        }
+    }
+    return false;
+}
+
+/*!
+    Adds or drops `this->` in front of each member name in each member
+    function body of \a document, as `[Relations] thisMode` asks.
 */
 void FormatOutlineThisRule::run(FormatDocument *document) const
 {
-    QHash<QByteArray, FormatClassMembers > cache;
+    FormatScopeConditions conditions(document);
     for (int brace = 0; brace < document->symbols().size(); ++brace) {
         if (document->token(brace) != LBRACE
             || document->braceScope(brace) != FormatDocument::FunctionScope
         ) {
             continue;
         }
-        const FormatDocument::Scope scope = document->scopeOf(brace);
-        if (scope != FormatDocument::FileScope
-            && scope != FormatDocument::NamespaceScope
-        ) {
-            continue;
-        }
-
-        // Finds `<Class>::<member>(` in the head.
-        int params = -1;
-        int classToken = -1;
-        int memberToken = -1;
-        for (int k = document->headStart(brace); k + 2 < brace; ++k) {
-            if (document->token(k) != IDENTIFIER
-                || document->token(k + 1) != SCOPE
-            ) {
-                continue;
-            }
-            int member = k + 2;
-            if (document->token(member) == TILDE) {
-                ++member;
-            }
-            if (document->token(member) == IDENTIFIER && document->token(member + 1) == LPAREN
-                && document->token(member + 2) != STAR
-            ) {
-                classToken = k;
-                memberToken = member;
-                params = member + 1;
-            }
-        }
-        if (params < 0 || document->match(params) < 0) {
-            continue;
-        }
-        const QByteArray className = document->lexem(classToken);
-        const FormatClassMembers members = this->membersOf(
-            document,
-            className,
-            &cache
-        );
-        if (members.names.isEmpty()
-            || members.statics.contains(document->lexem(memberToken))
+        const FormatMemberScope scope = conditions.functionScope(brace);
+        if (scope.className.isEmpty() || scope.isStatic
+            || scope.members.statics.contains(document->lexem(scope.memberToken))
+            || (scope.members.names.isEmpty() && scope.baseMembers.isEmpty())
         ) {
             continue;
         }
@@ -88,37 +90,62 @@ void FormatOutlineThisRule::run(FormatDocument *document) const
         const int close = document->match(brace);
         QSet<QByteArray > shadowed = this->localNames(
             document,
-            params + 1,
-            document->match(params)
+            scope.params + 1,
+            document->match(scope.params)
         );
         shadowed.unite(this->localNames(document, brace + 1, close));
 
         QList<FormatGrowth > growths;
         for (int i = brace + 1; i < close; ++i) {
+            // Leaves the body of a lambda that does not capture `this` as it
+            // is, since `this->` does not compile there.
+            const int lambda = lambdaBody(document, i);
+            if (lambda >= 0 && ! capturesThis(document, i)) {
+                i = document->match(lambda);
+                continue;
+            }
             if (document->token(i) != IDENTIFIER
                 || document->isDirectiveLine(document->symbolLine(i))
             ) {
                 continue;
             }
             const QByteArray name = document->lexem(i);
-            if ( ! members.names.contains(name)
-                || shadowed.contains(name)
+            if (( ! scope.members.names.contains(name) && ! scope.baseMembers.contains(name))
+                || scope.members.statics.contains(name) || shadowed.contains(name)
             ) {
                 continue;
             }
             const Token before = document->token(i - 1);
             const Token after = document->token(i + 1);
-            if (before == DOT || before == ARROW || before == SCOPE || before == TILDE
-                || before == GOTO || after == SCOPE || (after == COLON && before == SEMIC)
+            const bool hasThis = before == ARROW
+                && document->token(i - 2) == THIS;
+            if (( ! hasThis
+                && (before == DOT || before == ARROW || before == SCOPE || before == TILDE
+                    || before == GOTO))
+                || after == SCOPE || (after == COLON && before == SEMIC)
                 || isMacroArgument(document, i)
             ) {
                 continue;
             }
-            const int from = document->symbols().at(i).from;
-            if (document->replace(from, 0, "this->")) {
-                const int column = from
-                    - document->lineStart(document->symbolLine(i));
+
+            // Adds or drops the `this->` the condition asks for.
+            const bool wanted = conditions.holds(
+                document->settings().thisMode,
+                i
+            );
+            const int from = document->symbols().at(hasThis ? i - 2 : i).from;
+            const int lineStart = document->lineStart(document->symbolLine(i));
+            const int column = from - lineStart;
+            if (wanted
+                && ! hasThis
+                && document->replace(from, 0, "this->")
+            ) {
                 growths << FormatGrowth(i, column, 6);
+            } else if ( ! wanted && hasThis) {
+                const int length = document->symbols().at(i).from - from;
+                if (document->replace(from, length, QByteArray())) {
+                    growths << FormatGrowth(i, column, -length);
+                }
             }
         }
         formatShiftContinuations(document, growths);
@@ -126,46 +153,7 @@ void FormatOutlineThisRule::run(FormatDocument *document) const
 }
 
 /*!
-    Builds the members of the class named @a className: from its body in
-    @a document, else in the header next to the document's file (its name
-    with a `.h`, `_p.h`, or `.hpp` suffix); @a cache keeps each class's
-    result for the run.
-*/
-FormatClassMembers FormatOutlineThisRule::membersOf(
-        const FormatDocument *document,
-        const QByteArray & className,
-        QHash<QByteArray, FormatClassMembers > *cache) const
-{
-    if (cache->contains(className)) {
-        return cache->value(className);
-    }
-    FormatClassMembers members;
-    const int brace = findClassBody(document, className);
-    if (brace >= 0) {
-        members = collectMembers(document, brace, className);
-    } else if ( ! document->path().isEmpty()) {
-        const QFileInfo info(document->path());
-        const char *const suffixes[] = { ".h", "_p.h", ".hpp" };
-        for (size_t s = 0; s < sizeof(suffixes) / sizeof(suffixes[0]); ++s) {
-            QFile header(info.dir().filePath(info.completeBaseName()
-                                             + QString::fromLatin1(suffixes[s])));
-            if ( ! header.open(QIODevice::ReadOnly)) {
-                continue;
-            }
-            const FormatDocument other(header.readAll(), header.fileName());
-            const int found = findClassBody(&other, className);
-            if (found >= 0) {
-                members = collectMembers(&other, found, className);
-                break;
-            }
-        }
-    }
-    cache->insert(className, members);
-    return members;
-}
-
-/*!
-    Builds the names that the tokens from @a from up to @a to of @a document
+    Builds the names that the tokens from \a from up to \a to of \a document
     declare: a name right after a type, followed by what may end a
     declaration (`;`, `=`, `,`, `)`, `(`, `[`, or a range-for's `:`), and
     the names that declaration lists after commas.

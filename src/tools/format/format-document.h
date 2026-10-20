@@ -15,6 +15,7 @@
 #include <QtCore/QPair>
 #include <QtCore/QSet>
 #include <QtCore/QString>
+#include <QtCore/QStringList>
 #include <QtCore/QVector>
 
 class FormatDocument
@@ -43,6 +44,11 @@ public:
     inline void setSettings(const FormatSettings & settings) { m_settings = settings; }
     inline int pass() const { return m_pass; }
     inline bool agentMode() const { return m_agentMode; }
+    inline const QStringList &includePaths() const { return m_includePaths; }
+    inline void setIncludePaths(const QStringList & paths) { m_includePaths = paths; }
+    QString findInclude(const QString & name) const;
+    bool isHeader() const;
+    QStringList quotedIncludes() const;
     inline void setAgentMode(bool agentMode) { m_agentMode = agentMode; }
     void setPass(int pass);
     FormatSpacing onSetting(const FormatSpacing & setting, int index);
@@ -115,6 +121,7 @@ private:
     FormatSettings m_settings;
     int m_pass;
     bool m_agentMode;
+    QStringList m_includePaths;
     QList<FormatIssue > m_requests;
     QSet<int > m_replacedLines;
     Symbols m_symbols;

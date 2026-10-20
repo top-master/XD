@@ -5,4 +5,5 @@ TEMPLATE = subdirs
 SUBDIRS = \
     config-parser \
     console \
-    ignore-parser
+    ignore-parser \
+    project-parser

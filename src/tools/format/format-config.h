@@ -20,7 +20,10 @@
     * `adds` (`--config-add`): settings files read over the `.formatrc`
       files, each overriding only the keys it sets;
     * `assignments` (`-c` and `--config`): `<section>.<key>=<value>`
-      settings, read last.
+      settings, read last;
+    * `includePaths` (`-I` and `-i`): the folders, besides a file's own,
+      that hold the headers its quoted `#include`s name, the way a
+      compiler searches them (see FormatDocument::findInclude()).
 */
 class FormatConfig
 {
@@ -31,6 +34,7 @@ public:
     QStringList adds;
     QStringList assignments;
     QList<QByteArray > inlineLayers;
+    QStringList includePaths;
 };
 
 #endif // FORMAT_CONFIG_H
