@@ -197,6 +197,7 @@ them.
 | `--cross-compile[=<spec>]` / `--cross-build` | Build for another platform (`win32-g++` without a value), while the build tools stay on this one. |
 | `--filter=<regexp>` / `--only=<regexp>` | Build only the projects whose path matches the regexp (`grep -E`), one at a time; `a\|b` names several. It filters what qmake lists: a project that its `subdirs` project does not list on this platform (a Windows-only helper on Linux, say) is left out, with a note. A part of the tree that the root project does not list (XD's tests, say) still builds, through the `subdirs` project at its top. |
 | `--rebuild[=<regexp>]` | Build the matching projects again (every project without a value): without `--save-space` each is cleaned first, with it each builds even when it finished once. With `--filter`, only among the projects `--filter` keeps. |
+| `--format` | Format the project's sources and headers (with `--filter`, those of each project it picks) with XD's `bin/format` before anything builds; a run that builds nothing only formats. |
 | `--build-tests` | Make the `--test` step build each test again. |
 | `--no-build-tests` | Make the `--test` step only run the tests built before (by default it follows `--build` / `--no-build`). |
 | `--static[=<regexp>]` \

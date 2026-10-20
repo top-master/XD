@@ -1,11 +1,15 @@
 // Copyright (C) 2015 The XD Company Ltd.
 // SPDX-License-Identifier: Apache-2.0
 
+#include "./format-agent-guides.h"
 #include "./format-process-runner.h"
+#include "./format-project-files.h"
+#include "./format-project-reader.h"
 #include "./format-runner.h"
 #include "./format-settings.h"
 #include "./formatter.h"
 
+#include "config-scanner.h"
 #include "console.h"
 #include "ignore-parser.h"
 #include "logger.h"
@@ -58,6 +62,81 @@ static QStringList sourceFilters()
 }
 
 /*!
+    Builds the path of the qmake that runs a project: the one beside the tool
+    when it is there, else the first `qmake` on the `PATH`.
+*/
+static QString defaultQmake()
+{
+#if defined(Q_OS_WIN)
+    const QString beside = QCoreApplication::applicationDirPath() + QLL("/qmake.exe");
+#else
+    const QString beside = QCoreApplication::applicationDirPath() + QLL("/qmake");
+#endif
+    return QFileInfo(beside).isFile() ? beside : QString(QLL("qmake"));
+}
+
+/*!
+    Builds the name of the qmake spec that `--specs` reads a project for when
+    it names none: the spec of the platform and compiler the tool was built
+    for, such as `linux-clang`.
+*/
+static QString runtimeSpec()
+{
+#if defined(Q_OS_WIN) && defined(Q_CC_MSVC)
+#  if _MSC_VER >= 1910
+    return QString(QLL("win32-msvc2017"));
+#  elif _MSC_VER >= 1900
+    return QString(QLL("win32-msvc2015"));
+#  elif _MSC_VER >= 1800
+    return QString(QLL("win32-msvc2013"));
+#  elif _MSC_VER >= 1700
+    return QString(QLL("win32-msvc2012"));
+#  elif _MSC_VER >= 1600
+    return QString(QLL("win32-msvc2010"));
+#  elif _MSC_VER >= 1500
+    return QString(QLL("win32-msvc2008"));
+#  else
+    return QString(QLL("win32-msvc2005"));
+#  endif
+#elif defined(Q_OS_WIN) && defined(Q_CC_CLANG)
+    return QString(QLL("win32-clang"));
+#elif defined(Q_OS_WIN)
+    return QString(QLL("win32-g++"));
+#elif defined(Q_OS_MAC) && defined(Q_CC_CLANG)
+    return QString(QLL("macx-clang"));
+#elif defined(Q_OS_MAC)
+    return QString(QLL("macx-g++"));
+#elif defined(Q_OS_FREEBSD) && defined(Q_CC_CLANG)
+    return QString(QLL("freebsd-clang"));
+#elif defined(Q_OS_FREEBSD)
+    return QString(QLL("freebsd-g++"));
+#elif defined(Q_CC_CLANG)
+    return QString(QLL("linux-clang"));
+#else
+    return QString(QLL("linux-g++"));
+#endif
+}
+
+/*!
+    Builds the list of @a taken files that the ignore files of @a ignores
+    keep and that @a known does not hold yet.
+*/
+static QStringList keptProjectFiles(
+        const QStringList & taken, IgnoreParser *ignores,
+        const QStringList & known)
+{
+    QStringList kept;
+    for (int i = 0; i < taken.size(); ++i) {
+        if ( ! known.contains(taken.at(i))
+            && ! ignores->isIgnored(taken.at(i), false)
+        ) {
+            kept << taken.at(i);
+        }
+    }
+    return kept;
+}
+
+/*!
     Tells whether the file descriptor @a fd is a terminal; Qt has no
     interface for it, hence the platform's own call.
 */
@@ -73,10 +152,12 @@ static bool isTerminal(int fd)
 /*!
     Builds the requests of @a results for the agent, one `#: <path>:<line>:
     <rule>: <message>` line each (`<line>-<last line>` for several lines),
-    and lists each file they concern in @a asked, once.
+    and lists each file they concern in @a asked, once. A request whose rule
+    has a prompt template gets, in place of its message, the prompt file that
+    @a guides writes for it: `Run prompt at: "<path>"`.
 */
 static QString agentRequests(const QList<FormatFileResult > & results,
-                             QStringList *asked)
+                             FormatAgentGuides *guides, QStringList *asked)
 {
     QString text;
     for (int i = 0; i < results.size(); ++i) {
@@ -86,11 +167,14 @@ static QString agentRequests(const QList<FormatFileResult > & results,
             const QString lines = request.endLine > request.line
                 ? QString(QLL("%1-%2")).arg(request.line).arg(request.endLine)
                 : QString::number(request.line);
+            const QString prompt = guides->write(result.path, request);
+            const QString message = prompt.isEmpty()
+                ? request.message : QString(QLL("Run prompt at: \"%1\"")).arg(prompt);
             text += QString(QLL("#: %1:%2: %3: %4\n")).arg(
                 QDir::toNativeSeparators(result.path),
                 lines,
                 QString::fromLatin1(request.rule),
-                request.message
+                message
             );
             if ( ! asked->contains(result.path)) {
                 *asked << result.path;
@@ -247,6 +331,35 @@ int main(int argc, char *argv[])
         QString(QLL("kind"))
     );
     parser.addOption(runnerOption);
+    QCommandLineOption includeOption(
+        QStringList() << QString(QLL("I")) << QString(QLL("i")),
+        QString(QLL("Looks for the headers that quoted includes name in <dir> too, after " "the file's own folder; may be given more than once.")),
+        QString(QLL("dir"))
+    );
+    parser.addOption(includeOption);
+    QCommandLineOption projectOption(
+        QStringList() << QString(QLL("p")) << QString(QLL("project")),
+        QString(QLL("Formats the sources and headers that the qmake project <file> " "lists, and those of the projects it holds, with its include folders, " "and skips the ones the ignore files leave out; may be given more " "than once.")),
+        QString(QLL("file"))
+    );
+    parser.addOption(projectOption);
+    QCommandLineOption specsOption(
+        QStringList() << QString(QLL("specs")),
+        QString(QLL("Reads each --project for each qmake spec of the comma-separated " "<names>, which pick the platform scopes, and formats a file that " "several of them list once; may be given more than once. The spec " "of the platform the tool runs on by default.")),
+        QString(QLL("names"))
+    );
+    parser.addOption(specsOption);
+    QCommandLineOption qmakeOption(
+        QStringList() << QString(QLL("qmake")),
+        QString(QLL("Reads each --project with the qmake at <path>; the one beside the " "tool by default, else the one on the PATH.")),
+        QString(QLL("path"))
+    );
+    parser.addOption(qmakeOption);
+    QCommandLineOption skipIgnoredOption(
+        QStringList() << QString(QLL("skip-ignored")),
+        QString(QLL("Skips each named path that the ignore files leave out, without a " "word, instead of formatting it."))
+    );
+    parser.addOption(skipIgnoredOption);
     QCommandLineOption agentOption(
         QStringList() << QString(QLL("ai")),
         QString(QLL("Asks the agent that runs the tool for the changes only it can " "make, as #: lines on the standard error, waits for q on the " "standard input, then formats each file it changed again."))
@@ -268,6 +381,17 @@ int main(int argc, char *argv[])
         QString(QLL("[paths...]"))
     );
     parser.process(app);
+
+    // Hands the agent the usage instructions of agent mode before any other
+    // line, since they say how to handle each line.
+    FormatAgentGuides guides;
+    if (parser.isSet(agentOption) && ! parser.isSet(workerOption)) {
+        const QString usage = guides.writeUsage();
+        if ( ! usage.isEmpty()) {
+            logger.logDiagnostic(
+                QString(QLL("Read this tool's usage instructions at: \"%1\"")).arg(usage));
+        }
+    }
 
     // Selects the rules.
     Formatter formatter;
@@ -297,6 +421,50 @@ int main(int argc, char *argv[])
     FormatConfig config;
     config.file = parser.value(configFileOption);
     config.adds = parser.values(configAddOption);
+    const QStringList includes = parser.values(includeOption);
+    for (int i = 0; i < includes.size(); ++i) {
+        config.includePaths
+            << QDir::cleanPath(QFileInfo(includes.at(i)).absoluteFilePath());
+    }
+
+    // Learns the files and the include folders of each project from qmake,
+    // for the first spec now; a thread reads the other specs once the
+    // formatting starts.
+    const QStringList projects = parser.values(projectOption);
+    const QString qmake = parser.isSet(qmakeOption)
+        ? parser.value(qmakeOption) : defaultQmake();
+    QStringList specs;
+    const QStringList specLists = parser.values(specsOption);
+    for (int i = 0; i < specLists.size(); ++i) {
+        const QStringList names = specLists.at(i).split(
+            QLatin1Char(','),
+            QString::SkipEmptyParts
+        );
+        for (int k = 0; k < names.size(); ++k) {
+            const QString name = names.at(k).trimmed();
+            if ( ! name.isEmpty() && ! specs.contains(name)) {
+                specs << name;
+            }
+        }
+    }
+    if (specs.isEmpty()) {
+        specs << runtimeSpec();
+    }
+    FormatProjectFiles projectFiles;
+    FormatProjectReader reader(&projectFiles, projects, qmake, specs);
+    if ( ! projects.isEmpty() && ! reader.readSpec(0, &error)) {
+        logger.logError(error);
+        return ExitError;
+    }
+    if (projects.isEmpty() || specs.size() == 1) {
+        projectFiles.finish();
+    }
+    const QStringList projectFolders = projectFiles.includePaths();
+    for (int i = 0; i < projectFolders.size(); ++i) {
+        if ( ! config.includePaths.contains(projectFolders.at(i))) {
+            config.includePaths << projectFolders.at(i);
+        }
+    }
     const QStringList assignments = parser.values(configOption);
     for (int i = 0; i < assignments.size(); ++i) {
         QString assignment = assignments.at(i);
@@ -361,9 +529,33 @@ int main(int argc, char *argv[])
         ignores.addExplicitPath(folders.at(i));
     }
 
+    // Skips each named path that the ignore files leave out, when asked to.
+    if (parser.isSet(skipIgnoredOption)) {
+        QStringList keptFiles;
+        for (int i = 0; i < files.size(); ++i) {
+            if (ignores.excludingRule(files.at(i), false).isEmpty()) {
+                keptFiles << files.at(i);
+            }
+        }
+        QStringList keptFolders;
+        for (int i = 0; i < folders.size(); ++i) {
+            if (ignores.excludingRule(folders.at(i), true).isEmpty()) {
+                keptFolders << folders.at(i);
+            }
+        }
+        const bool named = ! files.isEmpty() || ! folders.isEmpty();
+        files = keptFiles;
+        folders = keptFolders;
+        if (named && files.isEmpty() && folders.isEmpty()) {
+            return ExitClean;
+        }
+    }
+
     // Warns about each named path that the ignore files leave out, and asks
     // whether to format it anyway.
-    if ( ! parser.isSet(headlessOption) && ! parser.isSet(workerOption)) {
+    if ( ! parser.isSet(headlessOption) && ! parser.isSet(workerOption)
+        && ! parser.isSet(skipIgnoredOption)
+    ) {
         QStringList named = files;
         named << folders;
         int excluded = 0;
@@ -381,10 +573,13 @@ int main(int argc, char *argv[])
                 ++excluded;
             }
         }
-        if (excluded > 0
-            && ! console.confirm(QString(QLL("Format the named paths that the ignore files "
-                                            "leave out anyway?")))
-        ) {
+        // Asks with a `#:` line in agent mode, where only those lines ask.
+        QString question = QString(QLL("Format the named paths that the ignore files leave "
+                                       "out anyway?"));
+        if (parser.isSet(agentOption)) {
+            question.prepend(QLL("#: "));
+        }
+        if (excluded > 0 && ! console.confirm(question)) {
             logger.logError(QString(QLL("stopped: a named path is left out by the ignore "
                                         "files")));
             return ExitError;
@@ -400,7 +595,18 @@ int main(int argc, char *argv[])
             files.append(root + found.at(f).mid(absolute.size()));
         }
     }
-    if (files.isEmpty() && folders.isEmpty()) {
+
+    // Adds the projects' files that the ignore files keep.
+    files
+        << keptProjectFiles(projectFiles.takeUnparsed(false), &ignores, files);
+    if (files.isEmpty()
+        && folders.isEmpty()
+        && ! projects.isEmpty()
+        && projectFiles.isFinished()
+    ) {
+        return ExitClean;
+    }
+    if (files.isEmpty() && folders.isEmpty() && projects.isEmpty()) {
         logger.logError(QString(QLL("no files given; see --help")));
         return ExitError;
     }
@@ -436,7 +642,17 @@ int main(int argc, char *argv[])
         return ExitError;
     }
 
-    // Formats the files.
+    // Formats the files while the thread reads the projects for the others
+    // of the specs, if any.
+#ifndef QT_NO_THREAD
+    if ( ! projectFiles.isFinished()) {
+        reader.start();
+    }
+#else
+    if ( ! projectFiles.isFinished()) {
+        reader.readFrom(1);
+    }
+#endif
     QList<FormatFileResult > results = qMove(runner->run(files));
     if (parser.isSet(workerOption)) {
 #ifndef QT_NO_PROCESS
@@ -448,11 +664,54 @@ int main(int argc, char *argv[])
     }
     int code = logResults(&logger, results, options.check);
 
+    // Formats the files that the other specs add, batch by batch, each with
+    // the include folders found so far.
+    QStringList formatted = files;
+    for (;;) {
+        const QStringList taken = projectFiles.takeUnparsed(true);
+        if (taken.isEmpty()) {
+            break;
+        }
+        const QStringList batch = keptProjectFiles(
+            taken,
+            &ignores,
+            formatted
+        );
+        if (batch.isEmpty()) {
+            continue;
+        }
+        const QStringList found = projectFiles.includePaths();
+        for (int i = 0; i < found.size(); ++i) {
+            if ( ! options.config.includePaths.contains(found.at(i))) {
+                options.config.includePaths << found.at(i);
+            }
+        }
+        runner.reset(FormatRunner::create(
+            parser.value(runnerOption),
+            &formatter,
+            options
+        ));
+        const QList<FormatFileResult > batchResults = qMove(runner->run(batch));
+        results << batchResults;
+        formatted << batch;
+        code = qMax(code, logResults(&logger, batchResults, options.check));
+    }
+#ifndef QT_NO_THREAD
+    reader.wait();
+#endif
+    if ( ! reader.error().isEmpty()) {
+        logger.logError(reader.error());
+        code = ExitError;
+    }
+
     // Asks the agent for what only it can change, and formats each file it
-    // changed again, until no file it was asked about changes.
+    // changed again, until no file it was asked about changes; each round
+    // replaces the prompt files of the one before.
+    bool answered = false;
     while (options.agent) {
+        guides.removePrompts();
         QStringList asked;
-        const QString requests = agentRequests(results, &asked);
+        const QString requests = agentRequests(results, &guides, &asked);
         if (asked.isEmpty()) {
             break;
         }
@@ -464,6 +723,7 @@ int main(int argc, char *argv[])
         console.page(requests
             + QLL("#: Handle every request above, then type q.\n")
         );
+        answered = true;
         QStringList changed;
         for (int i = 0; i < asked.size(); ++i) {
             if (readFile(asked.at(i)) != before.at(i)) {
@@ -475,6 +735,12 @@ int main(int argc, char *argv[])
         }
         results = qMove(runner->run(changed));
         code = qMax(code, logResults(&logger, results, options.check));
+    }
+
+    // Removes the agent's files once it quit the tool; a run that asked it
+    // nothing keeps them for it to read (see `FormatAgentGuides`).
+    if (answered) {
+        guides.remove();
     }
     return code;
 }

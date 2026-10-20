@@ -14,6 +14,10 @@
     concerns (`line` to `endLine`, the same line for most), the rule, and the
     message. The lines move with the edits that later rules make above them,
     and `endLine` with the ones they make inside the range.
+
+    A request may also name the column its lines must keep within
+    (`columnLimit`, 0 for none), which the agent's prompt file states (see
+    FormatAgentGuides).
 */
 class FormatIssue
 {

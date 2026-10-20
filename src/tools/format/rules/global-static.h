@@ -12,11 +12,15 @@ class FormatGlobalStaticRule : public FormatNamedRule
 public:
     inline FormatGlobalStaticRule()
         : super("global-static",
-                "Reports static Qt objects that Q_GLOBAL_STATIC should hold.")
+                "Reports static Qt objects that Q_GLOBAL_STATIC should hold, and other "
+                "statics a function declares.")
     {
     }
 
     void run(FormatDocument *document) const Q_DECL_OVERRIDE;
+
+private:
+    bool isVariable(const FormatDocument *document, int index) const;
 };
 
 #endif // RULES_GLOBAL_STATIC_H
