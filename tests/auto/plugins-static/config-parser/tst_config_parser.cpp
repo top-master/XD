@@ -67,6 +67,8 @@ private slots:
     void testReadFile_shouldKeepCommasOfValue();
     void testAssign_shouldRejectMissingEquals();
     void testExtend_shouldFollowBaseUntilOverridden();
+    void testExtendPrefixed_shouldTakeEveryKeyWithPrefix();
+    void testAddFollower_shouldFollowItsSectionsKey();
 
     /// Conditions.
     void testCondition_shouldBindAndCloserThanOr_data();
@@ -625,6 +627,64 @@ void tst_ConfigParser::testExtend_shouldFollowBaseUntilOverridden()
     qExpect(parser.value(QString(QLL("layout.width"))))->toEqual(QString(QLL("100")));
     qExpect(parser.assign(QString(QLL("print.width=90")), &error))->toBeFalsy();
     qExpect(error)->toContain(QString(QLL("print.width = 90: use")));
+}
+
+/// Extends the keys of a `[Page]` section that start with `wrap` (in any
+/// case) into a `[Print]` section: `wrapBegin` and `WrapMax` follow the
+/// base, and `height` stays out of `[Print]`.
+void tst_ConfigParser::testExtendPrefixed_shouldTakeEveryKeyWithPrefix()
+{
+    const QStringList widths = QStringList() << QString(QLL("80"))
+        << QString(QLL("100"));
+    Config::Section page(QString(QLL("Page")));
+    page.addKey(QString(QLL("wrapBegin")), widths, QString(QLL("80")));
+    page.addKey(QString(QLL("WrapMax")), widths, QString(QLL("100")));
+    page.addKey(QString(QLL("height")), widths, QString(QLL("80")));
+    Config::Section print(QString(QLL("Print")));
+    print.extendPrefixed(page, QString(QLL("WRAP")));
+    Config::Schema schema;
+    schema.addSection(page);
+    schema.addSection(print);
+    qExpect(print.keys().size())->toEqual(2);
+    qExpect(schema.key(QString(QLL("print.wrapbegin"))).extends)
+        ->toEqual(QString(QLL("page.wrapbegin")));
+    qExpect(schema.key(QString(QLL("print.wrapmax"))).extends)
+        ->toEqual(QString(QLL("page.wrapmax")));
+
+    QString error;
+    Config::Parser parser(schema);
+    qExpect(parser.value(QString(QLL("print.wrapMax"))))->toEqual(QString(QLL("100")));
+    qExpect(parser.assign(QString(QLL("page.wrapBegin=100")), &error))->toBeTruthy();
+    qExpect(parser.value(QString(QLL("print.wrapBegin"))))->toEqual(QString(QLL("100")));
+    qExpect(parser.assign(QString(QLL("print.height=80")), &error))->toBeFalsy();
+    qExpect(error)->toContain(QString(QLL("unknown setting print.height")));
+}
+
+/// Adds a `margin` that follows the `width` of its own `[Page]` section: it
+/// gives the width's value until it is set itself, and takes the same values.
+void tst_ConfigParser::testAddFollower_shouldFollowItsSectionsKey()
+{
+    const QStringList widths = QStringList()
+        << QString(QLL("80"))
+        << QString(QLL("100"));
+    Config::Section page(QString(QLL("Page")));
+    page.addKey(QString(QLL("width")), widths, QString(QLL("80")));
+    page.addFollower(QString(QLL("margin")), QString(QLL("Width")));
+    page.addFollower(QString(QLL("gap")), QString(QLL("missing")));
+    Config::Schema schema;
+    schema.addSection(page);
+    qExpect(page.keys().size())->toEqual(2);
+    qExpect(schema.key(QString(QLL("page.margin"))).extends)
+        ->toEqual(QString(QLL("page.width")));
+
+    QString error;
+    Config::Parser parser(schema);
+    qExpect(parser.value(QString(QLL("page.margin"))))->toEqual(QString(QLL("80")));
+    qExpect(parser.assign(QString(QLL("page.width=100")), &error))->toBeTruthy();
+    qExpect(parser.value(QString(QLL("page.margin"))))->toEqual(QString(QLL("100")));
+    qExpect(parser.assign(QString(QLL("page.margin=80")), &error))->toBeTruthy();
+    qExpect(parser.value(QString(QLL("page.margin"))))->toEqual(QString(QLL("80")));
+    qExpect(parser.assign(QString(QLL("page.margin=90")), &error))->toBeFalsy();
 }
 
 /// Builds the names the condition tests take: `a`, `b`, and `c`.

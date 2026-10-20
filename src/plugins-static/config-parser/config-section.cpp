@@ -71,6 +71,51 @@ void Config::Section::extend(const Config::Section & base,
 }
 
 /*!
+    Adds the setting @p name that follows this section's key @p baseName (in
+    any case): it takes the same values, with the same aliases, and gives the
+    base key's value until a file or an assignment sets it (see
+    Config::Key::extends). Hence one key can be the default of another
+    one of the same section. Nothing is added for a @p baseName that this
+    section has not added yet.
+*/
+void Config::Section::addFollower(
+        const QString & name, const QString & baseName)
+{
+    const QString base = (this->m_name + QLatin1Char('.') + baseName).toLower();
+    for (int k = 0; k < this->m_keys.size(); ++k) {
+        if (this->m_keys.at(k).name != base) {
+            continue;
+        }
+        Config::Key key = this->m_keys.at(k);
+        key.name = (this->m_name + QLatin1Char('.') + name).toLower();
+        key.extends = base;
+        this->m_keys.append(key);
+        return;
+    }
+}
+
+/*!
+    Extends each key of the section @p base whose name starts with
+    @p prefix (in any case) into this section, the way extend() does; hence
+    a key that @p base gains later with that prefix needs no change here,
+    as long as @p base has it before this call.
+*/
+void Config::Section::extendPrefixed(
+        const Config::Section & base,
+        const QString & prefix)
+{
+    const QString start = (base.name() + QLatin1Char('.') + prefix).toLower();
+    QStringList names;
+    for (int k = 0; k < base.keys().size(); ++k) {
+        const QString & name = base.keys().at(k).name;
+        if (name.startsWith(start)) {
+            names << name.mid(base.name().size() + 1);
+        }
+    }
+    this->extend(base, names);
+}
+
+/*!
     Adds the setting @a name that takes one of the fixed @a words (in any
     case) as its values; see the overload that takes matchers.
 */

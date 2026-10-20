@@ -196,6 +196,7 @@ them.
 | `--cross-compile[=<spec>]` / `--cross-build` | Build for another platform (`win32-g++` without a value), while the build tools stay on this one. |
 | `--filter=<regexp>` / `--only=<regexp>` | Build only the projects whose path matches the regexp (`grep -E`), one at a time; `a\|b` names several. |
 | `--rebuild[=<regexp>]` | Build the matching projects again (every project without a value): without `--save-space` each is cleaned first, with it each builds even when it finished once. With `--filter`, only among the projects `--filter` keeps. |
+| `--format` | Format the project's sources and headers (with `--filter`, those of each project it picks) with XD's `bin/format` before anything builds; a run that builds nothing only formats. |
 | `--build-tests` | Make the `--test` step build each test again. |
 | `--no-build-tests` | Make the `--test` step only run the tests built before (by default it follows `--build` / `--no-build`). |
 | `--static[=<regexp>]` \
@@ -353,8 +354,8 @@ bh_hook build-deps <<'}'
 
 That other build gets this run's build settings (such as `--release`,
 `--cross-compile` and the qmake arguments), but no flag that names this
-project's own paths or steps (`--filter`, the `--static` regexp, `--test`,
-`--run`, `-d`), nor one that would redo or drop what the framework
+project's own paths or steps (`--filter`, the `--static` regexp, `--format`,
+`--test`, `--run`, `-d`), nor one that would redo or drop what the framework
 built (`--clean`, `--rebuild`, `--wipe`, `--qmake`, `--refresh`,
 `--force-qmake`): a framework such as XD is no small part of the build, hence
 `--xd-filter=<regexp>`, `--xd-clean`, `--xd-rebuild=<regexp>` and the like ask
