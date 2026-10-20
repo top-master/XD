@@ -2,7 +2,7 @@
 
 // Copyright (C) 2015 The XD Company Ltd.
 // Copyright (C) 2015 The Qt Company Ltd.
-// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR LGPL-2.1-only OR LGPL-3.0-only
+// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR LGPL-2.1-only WITH Qt-LGPL-exception-1.1 OR LGPL-3.0-only
 
 #ifndef EXTERNAL_TESTS_APP
 #error "Building directly is not supported, use QExternalTest class."
