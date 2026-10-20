@@ -1,6 +1,6 @@
 
 // Copyright (C) 2011 Thiago Macieira <thiago@kde.org>
-// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR LGPL-2.1 OR LGPL-3.0-only
+// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR LGPL-2.1-only WITH Qt-LGPL-exception-1.1 OR LGPL-3.0-only
 
 // Shared config for new atomics.
 
