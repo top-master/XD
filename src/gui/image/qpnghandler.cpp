@@ -37,6 +37,7 @@
 
 #ifndef QT_NO_IMAGEFORMAT_PNG
 #include <qcoreapplication.h>
+#include <qfile.h>
 #include <qiodevice.h>
 #include <qimage.h>
 #include <qlist.h>

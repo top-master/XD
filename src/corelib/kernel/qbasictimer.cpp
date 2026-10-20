@@ -34,6 +34,7 @@
 #include "qbasictimer.h"
 #include "qabstracteventdispatcher.h"
 #include "qabstracteventdispatcher_p.h"
+#include "./qcoreapplication.h"
 
 QT_BEGIN_NAMESPACE
 

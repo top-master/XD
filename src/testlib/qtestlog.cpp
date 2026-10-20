@@ -48,6 +48,7 @@
 #include <QtCore/qatomic.h>
 #include <QtCore/qbytearray.h>
 #include <QtCore/QElapsedTimer>
+#include <QtCore/qmutex.h>
 #include <QtCore/QVariant>
 #include <QtCore/QRegularExpression>
 

@@ -38,6 +38,7 @@
 #include "qtwindows_additional.h"
 
 #include <QtCore/QPointer>
+#include <QtCore/QPointF>
 #include <QtCore/QHash>
 
 QT_BEGIN_NAMESPACE

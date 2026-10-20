@@ -25,6 +25,7 @@
 #include "./qthreadslotable.h"
 
 #include <QtCore/private/qobject_p.h>
+#include <QtCore/qcoreapplication.h>
 #include <QtCore/qfunction.h>
 
 QT_BEGIN_NAMESPACE
