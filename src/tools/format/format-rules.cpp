@@ -3,6 +3,7 @@
 
 #include "./format-rules.h"
 
+#include "./rules/args-wrap.h"
 #include "./rules/as-with.h"
 #include "./rules/code-backticks.h"
 #include "./rules/code-shape.h"
@@ -65,7 +66,7 @@ static QList<FormatRule * > formatCreateCodeRules()
         << new FormatConditionWrapRule << new FormatTernaryWrapRule
         << new FormatConditionCloseRule
         << new FormatOperatorFirstRule << new FormatContinuationIndentRule
-        << new FormatInitListRule << new FormatParamWrapRule
+        << new FormatInitListRule << new FormatParamWrapRule << new FormatArgsWrapRule
         << new FormatTemplateCloseRule << new FormatReferenceSpaceRule
         << new FormatOneStatementRule;
     rules << new FormatSuperTypedefRule;
@@ -154,8 +155,11 @@ static QList<FormatRule * > formatCreateCommentRules()
         "state the technical condition, not the machine"
     );
     rules << new FormatTextReportRule(
-            "agents-md", "Reports mentions of the agent rule file.", "AGENTS\\.md",
-            "restate the rule itself instead of naming the agent rule file");
+        "agents-md",
+        "Reports mentions of the agent rule file.",
+        "AGENTS\\.md",
+        "restate the rule itself instead of naming the agent rule file"
+    );
     return rules;
 }
 

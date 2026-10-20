@@ -5,11 +5,12 @@
 # parser, for the `format` tool and for the tests that link the formatter's
 # rules directly.
 include($$PWD/../moc/moc.pri)
-STATIC_PLUGINS += config-parser ignore-parser console
+STATIC_PLUGINS += config-parser ignore-parser project-parser console
 
 INCLUDEPATH += $$PWD
 
 HEADERS += \
+    $$PWD/format-agent-guides.h \
     $$PWD/format-comment.h \
     $$PWD/format-config.h \
     $$PWD/format-document.h \
@@ -20,6 +21,8 @@ HEADERS += \
     $$PWD/format-named-rule.h \
     $$PWD/format-options.h \
     $$PWD/format-process-runner.h \
+    $$PWD/format-project-files.h \
+    $$PWD/format-project-reader.h \
     $$PWD/format-result.h \
     $$PWD/format-rule.h \
     $$PWD/format-rules.h \
@@ -30,10 +33,13 @@ HEADERS += \
     $$PWD/formatter.h \
     $$PWD/lang/class-members.h \
     $$PWD/lang/comment-line.h \
+    $$PWD/lang/member-scope.h \
     $$PWD/parser/class-helpers.h \
     $$PWD/parser/code-helpers.h \
     $$PWD/parser/comment-helpers.h \
     $$PWD/parser/layout-helpers.h \
+    $$PWD/parser/scope-conditions.h \
+    $$PWD/rules/args-wrap.h \
     $$PWD/rules/as-with.h \
     $$PWD/rules/code-backticks.h \
     $$PWD/rules/code-shape.h \
@@ -78,10 +84,13 @@ HEADERS += \
     $$PWD/rules/us-spelling.h
 
 SOURCES += \
+    $$PWD/format-agent-guides.cpp \
     $$PWD/format-document.cpp \
     $$PWD/format-line-spec.cpp \
     $$PWD/format-named-rule.cpp \
     $$PWD/format-process-runner.cpp \
+    $$PWD/format-project-files.cpp \
+    $$PWD/format-project-reader.cpp \
     $$PWD/format-rule.cpp \
     $$PWD/format-rules.cpp \
     $$PWD/format-runner.cpp \
@@ -92,6 +101,8 @@ SOURCES += \
     $$PWD/parser/code-helpers.cpp \
     $$PWD/parser/comment-helpers.cpp \
     $$PWD/parser/layout-helpers.cpp \
+    $$PWD/parser/scope-conditions.cpp \
+    $$PWD/rules/args-wrap.cpp \
     $$PWD/rules/as-with.cpp \
     $$PWD/rules/code-backticks.cpp \
     $$PWD/rules/code-shape.cpp \
@@ -134,3 +145,6 @@ SOURCES += \
     $$PWD/rules/text-report.cpp \
     $$PWD/rules/trailing-comment.cpp \
     $$PWD/rules/us-spelling.cpp
+
+# Carries the prompt templates of agent mode (see FormatAgentGuides).
+RESOURCES += $$PWD/assets/assets.qrc

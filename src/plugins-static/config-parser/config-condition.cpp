@@ -69,7 +69,10 @@ bool Config::Condition::match(const QString & value, QString *matched) const
             text += c.toLower();
         }
     }
-    *matched = text.simplified().replace(QLL("( "), QLL("(")).replace(QLL(" )"), QLL(")"));
+    *matched = text.simplified().replace(QLL("( "), QLL("(")).replace(
+        QLL(" )"),
+        QLL(")")
+    );
     return true;
 }
 

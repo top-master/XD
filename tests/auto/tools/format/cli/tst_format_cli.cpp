@@ -49,7 +49,15 @@ private slots:
     void testConfigAdd_shouldOverrideOnlyItsKeys();
     void testAgent_shouldAskAndFormatChangedFilesAgain();
     void testAgent_shouldStopWhenNothingChanged();
+    void testAgent_shouldHandPromptFileAndRemoveIt();
     void testAgent_shouldRejectCheck();
+    void testAgent_shouldKeepFilesWhenAskingNothing();
+    void testAgent_shouldAskAboutIgnoredPathOnHashLine();
+    void testInclude_shouldFindClassHeader();
+    void testSkipIgnored_shouldDropIgnoredNamedFile();
+    void testProject_shouldFormatItsFiles();
+    void testThisMode_shouldLeaveOwnMembersOfSourceBare();
+    void testSpecs_shouldFormatFilesOfEverySpec();
     void testAnyComment_shouldRewrapShortComments();
     void testDirOption_shouldRejectFile();
 
@@ -73,6 +81,7 @@ private:
     QString writeFile(const QString & relative, const QByteArray & text) const;
     QByteArray readFile(const QString & path) const;
     bool waitForError(QProcess *process, QByteArray *err, const QByteArray & text, int count) const;
+    QString agentUsage(const QByteArray & err) const;
     QStringList workerFiles(const QByteArray & out) const;
     bool hasRunner(const QString & kind) const;
 
@@ -153,6 +162,21 @@ QString tst_FormatCli::writeFile(const QString & relative,
     return path;
 }
 
+/// Builds the path of the usage instructions that the line `Read this
+/// tool's usage instructions at: "<path>"` of `err` names, or an empty path
+/// without that line.
+QString tst_FormatCli::agentUsage(const QByteArray & err) const
+{
+    const QByteArray marker = "Read this tool's usage instructions at: \"";
+    const int at = err.indexOf(marker);
+    if (at < 0) {
+        return QString();
+    }
+    QByteArray path = err.mid(at + marker.size());
+    path = path.left(path.indexOf('"'));
+    return QString::fromLocal8Bit(path);
+}
+
 /// Lists the files that a `--worker` run printed results for, in order.
 QStringList tst_FormatCli::workerFiles(const QByteArray & out) const
 {
@@ -205,7 +229,9 @@ void tst_FormatCli::testHelp_shouldListEveryOption()
     const char *options[] = { "-L, --range <range>", "--dir <path>", "--check", "--rules <names>",
                               "--list-rules", "--jobs <count>", "--runner <kind>", "--headless", "--worker",
                               "--config <setting>", "--config-file <file>",
-                              "--config-add <file>", "--ai", "--any-comment" };
+                              "--config-add <file>", "--ai", "-I, -i <dir>",
+                              "--skip-ignored", "-p, --project <file>", "--specs <names>",
+                              "--qmake <path>", "--any-comment" };
     for (size_t i = 0; i < sizeof(options) / sizeof(options[0]); ++i) {
         qExpect(out)->toContain(QByteArray(options[i]));
     }
@@ -358,6 +384,7 @@ void tst_FormatCli::testPlainPath_shouldStopWhenTheAnswerIsNo()
     const QString file = this->m_dir.path() + QLL("/tree/.hidden/c.cpp");
     qExpect(this->runWithInput(QStringList() << file, "n\n", &out, &err))->toEqual(2);
     qExpect(err)->toContain(QByteArray("format: stopped: a named path is left out"));
+    qExpect(err)->Not->toContain(QByteArray("#: "));
     qExpect(out)->toBeEmpty();
 }
 
@@ -476,7 +503,7 @@ void tst_FormatCli::testAgent_shouldAskAndFormatChangedFilesAgain()
                   << QString(QLL("--headless")) << file);
     QByteArray err;
     qExpect(this->waitForError(&process, &err, "(type q to continue)", 1))->toBeTruthy();
-    qExpect(err)->toContain(QByteArray("a.cpp:3-4: operator-wrap: the tool broke"));
+    qExpect(err)->toContain(QByteArray("a.cpp:3-4: operator-wrap: Run prompt at: \""));
     this->writeFile(QString(QLL("agent/a.cpp")), "void f()\n{\n    out << \"other\" << firstValue << secondValue << thirdValue << fourthValue << fifthValue << sixthValue;\n}\n");
     process.write("q\n");
     qExpect(this->waitForError(&process, &err, "(type q to continue)", 2))->toBeTruthy();
@@ -503,6 +530,51 @@ void tst_FormatCli::testAgent_shouldStopWhenNothingChanged()
     qExpect(out.count(": formatted"))->toEqual(1);
 }
 
+/// Runs `--ai` on a call the tool breaks after its `(`: the tool first names
+/// its usage instructions, then a request names a prompt file in the same
+/// temporary folder, filled with the call's lines and the column limit; the
+/// tool removes both files once the agent quits it.
+void tst_FormatCli::testAgent_shouldHandPromptFileAndRemoveIt()
+{
+    this->writeFile(QString(QLL("agent-prompt/.git/HEAD")), "ref: refs/heads/main\n");
+    const QString file = this->writeFile(
+        QString(QLL("agent-prompt/a.cpp")),
+        "void f()\n{\n    run(firstArgumentName, secondArgumentName, thirdArgumentName, fourthArgumentName);\n}\n"
+    );
+    QProcess process;
+    process.setProcessChannelMode(QProcess::MergedChannels);
+    process.start(this->m_format, QStringList() << QString(QLL("--ai"))
+                  << QString(QLL("--headless")) << QString(QLL("--rules=args-wrap")) << file);
+    QByteArray err;
+    qExpect(this->waitForError(&process, &err, "(type q to continue)", 1))->toBeTruthy();
+    const QByteArray marker = "a.cpp:3-8: args-wrap: Run prompt at: \"";
+    const int at = err.indexOf(marker);
+    qExpect(at)->toBeGreaterOrEqual(0);
+    QByteArray prompt = err.mid(at + marker.size());
+    prompt = prompt.left(prompt.indexOf('"'));
+    const QString path = QString::fromLocal8Bit(prompt);
+    const QByteArray usageMarker = "Read this tool's usage instructions at: \"";
+    const int usageAt = err.indexOf(usageMarker);
+    qExpect(usageAt)->toBeGreaterOrEqual(0);
+    qExpect(usageAt)->toBeLessThan(at);
+    QByteArray usage = err.mid(usageAt + usageMarker.size());
+    usage = usage.left(usage.indexOf('"'));
+    const QString usagePath = QString::fromLocal8Bit(usage);
+    qExpect(QFile::exists(usagePath))->toBeTruthy();
+    QFile guide(path);
+    qExpect(guide.open(QIODevice::ReadOnly))->toBeTruthy();
+    const QByteArray text = guide.readAll();
+    guide.close();
+    qExpect(text)->toContain(QByteArray("3-8"));
+    qExpect(text)->toContain(QByteArray("within 80 columns"));
+    process.write("q\n");
+    process.closeWriteChannel();
+    qExpect(process.waitForFinished(120000))->toBeTruthy();
+    qExpect(process.exitCode())->toEqual(1);
+    qExpect(QFile::exists(path))->toBeFalsy();
+    qExpect(QFile::exists(usagePath))->toBeFalsy();
+}
+
 void tst_FormatCli::testAgent_shouldRejectCheck()
 {
     QByteArray out;
@@ -512,6 +584,198 @@ void tst_FormatCli::testAgent_shouldRejectCheck()
         << file;
     qExpect(this->run(arguments, &out, &err))->toEqual(2);
     qExpect(err)->toContain(QByteArray("--ai cannot run with --check"));
+    QDir(QFileInfo(this->agentUsage(err)).absolutePath()).removeRecursively();
+}
+
+/// Runs `--ai` on a file that needs nothing: the tool asks nothing, and
+/// keeps its usage instructions for the agent to read after it ended; the
+/// next run with `--ai` removes that folder.
+void tst_FormatCli::testAgent_shouldKeepFilesWhenAskingNothing()
+{
+    this->writeFile(QString(QLL("agent-keep/.git/HEAD")), "ref: refs/heads/main\n");
+    const QString file = this->writeFile(
+        QString(QLL("agent-keep/a.cpp")),
+        "int a;\n"
+    );
+    const QStringList arguments = QStringList() << QString(QLL("--ai"))
+        << QString(QLL("--headless")) << file;
+    QByteArray out;
+    QByteArray err;
+    qExpect(this->run(arguments, &out, &err))->toEqual(0);
+    const QString usage = this->agentUsage(err);
+    qExpect(usage)->Not->toBeEmpty();
+    qExpect(QFile::exists(usage))->toBeTruthy();
+    const QString first = QFileInfo(usage).absolutePath();
+    qExpect(QFile::exists(first + QLL("/.lock")))->toBeFalsy();
+    qExpect(this->run(arguments, &out, &err))->toEqual(0);
+    const QString second = QFileInfo(this->agentUsage(err)).absolutePath();
+    qExpect(QDir(first).exists())->toBeFalsy();
+    qExpect(QDir(second).exists())->toBeTruthy();
+    QDir(second).removeRecursively();
+}
+
+/// Names a file that the ignore files leave out, with `--ai`: the tool
+/// warns, then asks on a `#:` line, after the line that names its usage
+/// instructions; the answer `n` stops it.
+void tst_FormatCli::testAgent_shouldAskAboutIgnoredPathOnHashLine()
+{
+    QByteArray out;
+    QByteArray err;
+    const QString file = this->m_dir.path() + QLL("/tree/.hidden/c.cpp");
+    const QStringList arguments = QStringList() << QString(QLL("--ai")) << file;
+    qExpect(this->runWithInput(arguments, "n\n", &out, &err))->toEqual(2);
+    const int usage = err.indexOf("Read this tool's usage instructions at: \"");
+    const int question = err.indexOf("#: Format the named paths that the ignore files leave out "
+                                     "anyway? [Y/n] ");
+    qExpect(usage)->toEqual(0);
+    qExpect(question)->toBeGreaterThan(usage);
+    qExpect(err)->toContain(QByteArray("\nWARNING: "));
+    QDir(QFileInfo(this->agentUsage(err)).absolutePath()).removeRecursively();
+}
+
+/// Formats an outline member definition whose class sits in a header of an
+/// include folder: only with `-I` does the tool find the class, and reach the
+/// member through `this->`.
+void tst_FormatCli::testInclude_shouldFindClassHeader()
+{
+    this->writeFile(QString(QLL("inc-run/.git/HEAD")), "ref: refs/heads/main\n");
+    this->writeFile(QString(QLL("inc-run/inc/widget.h")),
+                    "class Widget\n{\npublic:\n    void run();\n    int count;\n};\n");
+    const QByteArray source = "#include \"widget.h\"\n\nvoid Widget::run()\n{\n    count = 1;\n}\n";
+    const QString file = this->writeFile(QString(QLL("inc-run/src/widget.cpp")), source);
+    QByteArray out;
+    QByteArray err;
+    const QStringList plain = QStringList() << QString(QLL("--headless"))
+        << QString(QLL("--rules=outline-this")) << QString(QLL("-c=relations.thisMode=always"))
+        << file;
+    qExpect(this->run(plain, &out, &err))->toEqual(0);
+    qExpect(this->readFile(file))->toEqual(source);
+    const QStringList included = QStringList() << QString(QLL("--headless"))
+        << QString(QLL("--rules=outline-this")) << QString(QLL("-c=relations.thisMode=always"))
+        << QString(QLL("-I"))
+        << this->m_dir.path() + QLL("/inc-run/inc") << file;
+    qExpect(this->run(included, &out, &err))->toEqual(1);
+    qExpect(this->readFile(file))->toContain(QByteArray("    this->count = 1;"));
+}
+
+/// Names a file that `.formatignore` leaves out, with `--skip-ignored`: the
+/// tool skips it, asks nothing, and exits clean.
+void tst_FormatCli::testSkipIgnored_shouldDropIgnoredNamedFile()
+{
+    this->writeFile(QString(QLL("skip-run/.git/HEAD")), "ref: refs/heads/main\n");
+    this->writeFile(QString(QLL("skip-run/.formatignore")), "vendor/\n");
+    const QByteArray source = "int  a ;\n// lower case.\n";
+    const QString file = this->writeFile(QString(QLL("skip-run/vendor/a.cpp")), source);
+    QByteArray out;
+    QByteArray err;
+    const QStringList arguments = QStringList() << QString(QLL("--skip-ignored")) << file;
+    qExpect(this->run(arguments, &out, &err))->toEqual(0);
+    qExpect(err)->toBeEmpty();
+    qExpect(this->readFile(file))->toEqual(source);
+}
+
+/// Formats a qmake project through the subdirs project that holds it: the
+/// source it lists, with the class header found through its `INCLUDEPATH`; a
+/// file that `.formatignore` leaves out stays as it is.
+/// Formats a copy of a real source and header pair (QHostInfo's): the
+/// default `thisMode` adds no `this->` to a member of the source's own class,
+/// such as `resultEmitter`, and keeps every `this->` the source already has;
+/// `thisMode = always` then adds it.
+void tst_FormatCli::testThisMode_shouldLeaveOwnMembersOfSourceBare()
+{
+    const QString kernel = QString::fromLocal8Bit(FORMAT_SOURCE_TREE)
+        + QLL("/src/network/kernel/");
+    QByteArray source;
+    QByteArray header;
+    {
+        QFile sourceFile(kernel + QLL("qhostinfo.cpp"));
+        QFile headerFile(kernel + QLL("qhostinfo_p.h"));
+        QVERIFY(sourceFile.open(QIODevice::ReadOnly));
+        QVERIFY(headerFile.open(QIODevice::ReadOnly));
+        source = sourceFile.readAll();
+        header = headerFile.readAll();
+    }
+    this->writeFile(QString(QLL("real/.git/HEAD")), "ref: refs/heads/main\n");
+    this->writeFile(QString(QLL("real/qhostinfo_p.h")), header);
+    const QString file = this->writeFile(
+        QString(QLL("real/qhostinfo.cpp")),
+        source
+    );
+    QByteArray out;
+    QByteArray err;
+    const QStringList arguments = QStringList() << QString(QLL("--headless"))
+        << QString(QLL("--rules=outline-this")) << file;
+    qExpect(this->run(arguments, &out, &err))->Not->toEqual(2);
+    qExpect(err)->toBeEmpty();
+    const QByteArray formatted = this->readFile(file);
+    qExpect(formatted)->Not->toContain(QByteArray("this->resultEmitter"));
+    const QList<QByteArray > lines = source.split('\n');
+    for (int i = 0; i < lines.size(); ++i) {
+        if (lines.at(i).contains("this->")) {
+            qExpect(formatted)->toContain(lines.at(i));
+        }
+    }
+    this->writeFile(QString(QLL("real/qhostinfo.cpp")), source);
+    qExpect(this->run(QStringList(arguments) << QString(QLL("-c=relations.thisMode=always")),
+                      &out, &err))->toEqual(1);
+    qExpect(this->readFile(file))->toContain(QByteArray("this->resultEmitter"));
+}
+
+void tst_FormatCli::testProject_shouldFormatItsFiles()
+{
+    this->writeFile(QString(QLL("project-run/.git/HEAD")), "ref: refs/heads/main\n");
+    this->writeFile(QString(QLL("project-run/.formatignore")), "vendor/\n");
+    this->writeFile(QString(QLL("project-run/inc/widget.h")),
+                    "class Widget\n{\npublic:\n    void run();\n    int count;\n};\n");
+    const QString source = this->writeFile(QString(QLL("project-run/src/widget.cpp")),
+        "#include \"widget.h\"\n\nvoid Widget::run()\n{\n    count = 1;\n}\n");
+    const QByteArray vendored = "void f()\n{\n    if (a) b();\n}\n";
+    const QString vendor = this->writeFile(QString(QLL("project-run/vendor/v.cpp")), vendored);
+    this->writeFile(QString(QLL("project-run/app/app.pro")),
+        "SOURCES = ../src/widget.cpp ../vendor/v.cpp\nHEADERS = ../inc/widget.h\n"
+        "INCLUDEPATH = ../inc\n");
+    const QString project = this->writeFile(QString(QLL("project-run/top.pro")),
+                                            "TEMPLATE = subdirs\nSUBDIRS = app\n");
+    QByteArray out;
+    QByteArray err;
+    const QStringList arguments = QStringList() << QString(QLL("--rules=outline-this,control-braces"))
+        << QString(QLL("-c=relations.thisMode=always")) << QString(QLL("--project=") + project);
+    qExpect(this->run(arguments, &out, &err))->toEqual(1);
+    qExpect(this->readFile(source))->toContain(QByteArray("    this->count = 1;"));
+    qExpect(this->readFile(vendor))->toEqual(vendored);
+    qExpect(err)->toBeEmpty();
+}
+
+/// Reads a project whose platform scopes list one file each: the default spec
+/// (the platform the tool runs on) formats the Unix file alone, and `--specs`
+/// with a Unix and a Windows spec formats both files, the shared one once.
+void tst_FormatCli::testSpecs_shouldFormatFilesOfEverySpec()
+{
+    this->writeFile(QString(QLL("specs-run/.git/HEAD")), "ref: refs/heads/main\n");
+    const QByteArray unbraced = "void f()\n{\n    if (a) b();\n}\n";
+    const QString shared = this->writeFile(QString(QLL("specs-run/shared.cpp")), unbraced);
+    const QString unixFile = this->writeFile(QString(QLL("specs-run/unix.cpp")), unbraced);
+    const QString windowsFile = this->writeFile(QString(QLL("specs-run/windows.cpp")), unbraced);
+    const QString project = this->writeFile(QString(QLL("specs-run/specs.pro")),
+        "SOURCES = shared.cpp\nunix: SOURCES += unix.cpp\nwin32: SOURCES += windows.cpp\n");
+    QByteArray out;
+    QByteArray err;
+    const QStringList arguments = QStringList() << QString(QLL("--rules=control-braces"))
+        << QString(QLL("-p")) << project;
+#if !defined(Q_OS_WIN)
+    qExpect(this->run(arguments, &out, &err))->toEqual(1);
+    qExpect(this->readFile(unixFile))->Not->toEqual(unbraced);
+    qExpect(this->readFile(windowsFile))->toEqual(unbraced);
+    this->writeFile(QString(QLL("specs-run/shared.cpp")), unbraced);
+    this->writeFile(QString(QLL("specs-run/unix.cpp")), unbraced);
+#endif
+    qExpect(this->run(QStringList(arguments) << QString(QLL("--specs=linux-g++,win32-g++")),
+                      &out, &err))->toEqual(1);
+    qExpect(this->readFile(shared))->Not->toEqual(unbraced);
+    qExpect(this->readFile(unixFile))->Not->toEqual(unbraced);
+    qExpect(this->readFile(windowsFile))->Not->toEqual(unbraced);
+    qExpect(out.count(": formatted"))->toEqual(3);
+    qExpect(err)->toBeEmpty();
 }
 
 /// Leaves a comment whose lines all fit as it is, and joins its lines once

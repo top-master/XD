@@ -608,7 +608,12 @@ void tst_ConfigParser::testCondition_shouldBindAndCloserThanOr()
     QFETCH(bool, expected);
     QStringList program;
     QString error;
-    qExpect(Config::Condition::compile(text, conditionNames(), &program, &error))->toBeTruthy();
+    qExpect(Config::Condition::compile(
+        text,
+        conditionNames(),
+        &program,
+        &error
+    ))->toBeTruthy();
     qExpect(error)->toBeEmpty();
     qExpect(Config::Condition::evaluate(program, holding.toSet()))->toEqual(expected);
 }
@@ -645,7 +650,12 @@ void tst_ConfigParser::testCondition_shouldRejectBadText()
     QFETCH(QString, error);
     QStringList program;
     QString message;
-    qExpect(Config::Condition::compile(text, conditionNames(), &program, &message))->toBeFalsy();
+    qExpect(Config::Condition::compile(
+        text,
+        conditionNames(),
+        &program,
+        &message
+    ))->toBeFalsy();
     qExpect(message)->toEqual(error);
     QString matched;
     qExpect(Config::Condition(conditionNames()).match(text, &matched))->toBeFalsy();

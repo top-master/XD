@@ -3,6 +3,8 @@
 
 #include "./format-settings.h"
 
+#include "./parser/scope-conditions.h"
+
 #include "config-any-space.h"
 #include "config-condition.h"
 #include "config-numbers.h"
@@ -39,7 +41,19 @@
     * `target` (`[Comments]`): `long` (the default) rewraps only a comment
       paragraph that has a line past the limit, and `any` also one whose
       lines leave room unused (see FormatCommentWidthRule); the command line's
-      `--any-comment` sets `any`.
+      `--any-comment` sets `any`;
+    * `thisMode` (`[Relations]`): where a member function reaches a member of
+      its own class, or of a base class, through `this->`: a condition (see
+      Config::Condition) of the names FormatScopeConditions::names() lists,
+      compiled for FormatScopeConditions::holds();
+      `is-base-member | already-existing | (is-outline & is-header)` without
+      a `.formatrc` (see FormatOutlineThisRule);
+    * `wrapArgsAt` (`[Structure]`): where a call whose arguments do not fit
+      one line breaks after its `(`, one argument per line (see
+      FormatArgsWrapRule): a condition of the same names and of percents,
+      such as `(40% & is-non-header) | (30% & is-header)`, where a percent
+      holds when the column of the `(` is past that share of `wrapMax`;
+      `40%` without a `.formatrc`.
 
     Each spacing key takes any run of spaces and/or tabs to write there
     (`" "` for one space, `"\t"` for a tab, `""` or `none` for no space),
@@ -51,6 +65,16 @@
     The `.formatrc` files apply level by level (see
     Config::Scanner::levelFiles()), then the FormatConfig of the command line.
 */
+
+/*!
+    Spells the default `[Relations] thisMode` (see FormatSettings).
+*/
+static const char defaultThisModeText[] = "is-base-member | already-existing | (is-outline & is-header)";
+
+/*!
+    Spells the default `[Structure] wrapArgsAt` (see FormatSettings).
+*/
+static const char defaultWrapArgsAtText[] = "40%";
 
 /*!
     Builds the name of the settings files the tool reads in each folder.
@@ -115,8 +139,55 @@ Config::Schema FormatSettings::schema()
                     QStringList() << QString(QLL("long")) << QString(QLL("any")),
                     QString(QLL("long")));
     schema.addSection(comments);
+    Config::Section relations(QString(QLL("Relations")));
+    relations.addKey(QString(QLL("thisMode")),
+                     Config::Matchers() << Config::Condition::create(FormatScopeConditions::names()),
+                     QString::fromLatin1(defaultThisModeText));
+    schema.addSection(relations);
+    structure.addKey(QString(QLL("wrapArgsAt")),
+                     Config::Matchers()
+                         << Config::Condition::create(
+                             FormatScopeConditions::names(),
+                             true
+                         ),
+                     QString::fromLatin1(defaultWrapArgsAtText));
     schema.addSection(structure);
     return schema;
+}
+
+/*!
+    Builds the program of the default `[Relations] thisMode`, for settings
+    that no `.formatrc` set.
+*/
+QStringList FormatSettings::defaultThisMode()
+{
+    QStringList program;
+    QString error;
+    Config::Condition::compile(
+        QString::fromLatin1(defaultThisModeText),
+        FormatScopeConditions::names(),
+        &program,
+        &error
+    );
+    return program;
+}
+
+/*!
+    Builds the program of the default `[Structure] wrapArgsAt`, for settings
+    that no `.formatrc` set, and for a use site that sets no percent.
+*/
+QStringList FormatSettings::defaultWrapArgsAt()
+{
+    QStringList program;
+    QString error;
+    Config::Condition::compile(
+        QString::fromLatin1(defaultWrapArgsAtText),
+        FormatScopeConditions::names(),
+        &program,
+        &error,
+        true
+    );
+    return program;
 }
 
 /*!
@@ -189,6 +260,19 @@ bool FormatSettings::load(const QString & path, const FormatConfig & config,
         ? WrapCommaHard : WrapCommaSoft;
     settings->commentTarget = parser.value(QString(QLL("comments.target"))) == QLL("any")
         ? CommentTargetAny : CommentTargetLong;
+    Config::Condition::compile(
+        parser.value(QString(QLL("relations.thisMode"))),
+        FormatScopeConditions::names(),
+        &settings->thisMode,
+        error
+    );
+    Config::Condition::compile(
+        parser.value(QString(QLL("structure.wrapArgsAt"))),
+        FormatScopeConditions::names(),
+        &settings->wrapArgsAt,
+        error,
+        true
+    );
     return true;
 }
 

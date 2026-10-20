@@ -200,7 +200,10 @@ bool Config::Parser::readFile(const QString & file, QString *error)
     const QString copyName = QDir::tempPath()
         + QString(QLL("/config-parser-%1-XXXXXX.ini")).arg(copiesMade()->fetchAndAddRelaxed(1));
     QTemporaryFile copy(copyName);
-    QScopedPointer<QSettings > settings(new QSettings(file, QSettings::IniFormat));
+    QScopedPointer<QSettings > settings(new QSettings(
+        file,
+        QSettings::IniFormat
+    ));
 
     // Reads a copy of the file whose commas `QSettings` takes as plain
     // characters, once the file has a value it would split into a list.

@@ -104,6 +104,7 @@ FormatResult Formatter::format(const QByteArray & text, const QString & path,
     FormatResult result;
     FormatDocument document(text, path);
     document.setAgentMode(agentMode);
+    document.setIncludePaths(config.includePaths);
 
     // Reads the project's choices for the file.
     FormatSettings settings;

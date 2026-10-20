@@ -125,6 +125,9 @@ QStringList FormatProcessRunner::workerArguments() const
     for (int i = 0; i < config.assignments.size(); ++i) {
         arguments << QString(QLL("--config")) << config.assignments.at(i);
     }
+    for (int i = 0; i < config.includePaths.size(); ++i) {
+        arguments << QString(QLL("-I")) << config.includePaths.at(i);
+    }
     arguments << QString(QLL("--"));
     return arguments;
 }

@@ -24,11 +24,17 @@ public:
         , wrapComma(WrapCommaSoft), commentTarget(CommentTargetLong)
     {
         wrapBegin << 75;
+        commentWrapBegin << 75;
+        thisMode = FormatSettings::defaultThisMode();
+        wrapArgsAt = FormatSettings::defaultWrapArgsAt();
     }
 
     static QString fileName();
     static Config::Schema schema();
-    static bool readConfig(Config::Parser *parser, const FormatConfig & config, QString *error);
+    static QStringList defaultThisMode();
+    static QStringList defaultWrapArgsAt();
+    static bool readConfig(Config::Parser *parser, const FormatConfig & config,
+                           QString *error);
     static bool load(const QString & path, const FormatConfig & config,
                      FormatSettings *settings, QString *error);
 
@@ -42,6 +48,8 @@ public:
     int wrapEmptyLimit;
     WrapComma wrapComma;
     CommentTarget commentTarget;
+    QStringList thisMode;
+    QStringList wrapArgsAt;
 
 private:
     static FormatSpacing toSpacing(const QString & value,

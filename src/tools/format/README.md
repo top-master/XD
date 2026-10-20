@@ -44,8 +44,39 @@ format --list-rules
 - `--any-comment`: wraps again every comment paragraph that leaves room
   unused, not only the ones past `wrapMax`; the same as
   `-c comments.target=any` (see "Wrapping comments" below).
-- `--ai`: asks the agent that runs the tool for what only it can change (see
-  "Agent mode" below); it cannot run with `--check`.
+- `-I <dir>`, `-i <dir>`: looks for the headers that quoted `#include`s name
+  in `<dir>` too, after the file's own folder, the way a compiler does; give
+  it more than once for more folders. A rule that reads a class from its
+  header (`outline-this`) then finds a header kept in an include folder.
+- `-p <file>`, `--project <file>`: formats the files that the qmake project
+  `<file>` lists, as qmake reads it: the tool runs `qmake -E <file>` in a
+  scratch folder (it writes no Makefile there), and reads `SOURCES`,
+  `HEADERS`, `OBJECTIVE_SOURCES`, and the include folders of `INCLUDEPATH`. A
+  `subdirs` project formats the projects of its `SUBDIRS` instead (through
+  `<name>.file` or `<name>.subdir` when it sets them). A project formats only
+  its own files: the ones its `STATIC_PLUGINS` bring in belong to the
+  plugin's own project, which lists them in `PLUGIN_SOURCES` and
+  `PLUGIN_HEADERS`. It skips, without a word, the files that the ignore files
+  leave out (such as `src/3rdparty`). Give it more than once for more
+  projects. A file that only a scope of another platform lists
+  (`win32: SOURCES += ...`) counts only under that platform's spec (see
+  `--specs`). `build.sh --format` runs the tool this way before it builds: on
+  the build's own project, or with `--filter` on each project the filter
+  picks; when it cross-compiles, for the host spec and the target spec.
+- `--specs <names>`: reads each `--project` for each qmake spec of the
+  comma-separated `<names>` (such as `linux-g++,win32-g++`), which pick the
+  platform scopes; give it more than once for more specs. The first spec is
+  read before any file is formatted, and a thread reads the others while the
+  files found so far are formatted; a file that several specs list is
+  formatted once. Without it, the spec of the platform and compiler the tool
+  was built for (such as `linux-clang`).
+- `--qmake <path>`: reads each `--project` with the qmake at `<path>`; by
+  default the one beside the tool, else the first `qmake` on the `PATH`.
+- `--skip-ignored`: skips each named path that the ignore files leave out,
+  without a word (instead of the warning and the question, or of formatting
+  it with `--headless`); with nothing left, the tool exits clean.
+- `--ai`: to learn more about this option, read
+  [`assets/ai-start.md`](./assets/ai-start.md).
 - `--headless`: asks nothing. Without it, the tool warns about each named
   path that the ignore files leave out (naming the rule), and asks whether to
   go on; an answer of `n` or `no` stops the run, any other answer (or an input
@@ -133,6 +164,48 @@ moveSuffix = " "
 - `target` (in `[Comments]`): `long` (the default) wraps again only a comment
   paragraph with a line past `wrapMax`; `any` also wraps one whose lines leave
   room unused (see "Wrapping comments" below). `--any-comment` sets `any`.
+- `thisMode` (in `[Relations]`): where a member function reaches a member
+  of its class, or of a base class, through `this->` (the rule
+  `outline-this` adds the `this->` there, and drops it elsewhere): a
+  condition of names joined by `|` (or) and `&` (and, which binds closer),
+  with parentheses for grouping. The names hold for a member name:
+  - `always` everywhere, and `never` nowhere;
+  - `already-existing` where the code already says `this->`;
+  - `is-base-member` for a base class's member;
+  - `is-template` in a template, or a member of a class template;
+  - `is-outline` in a body written outside the class body
+    (`void Widget::run() { ... }`);
+  - `is-header` in a header (`.h`, `.hh`, `.hpp`, `.hxx`, `.h++`, or a file
+    without a suffix), and `is-non-header` in any other file.
+
+  The default, `is-base-member | already-existing | (is-outline & is-header)`,
+  keeps each `this->` there is, and adds one for a base class's member, and
+  for every member in an outline body of a header. Other choices, each one a
+  `thisMode` line of its own:
+
+  ```
+  [Relations]
+  ; Every member, everywhere.
+  thisMode = always
+  ; No new `this->`, and none dropped.
+  thisMode = never | already-existing
+  ; Only the base members of templates (found through `this->` alone).
+  thisMode = (is-base-member & is-template) | already-existing
+  ```
+- `wrapArgsAt` (in `[Structure]`): where a call whose arguments do not fit
+  one line breaks after its `(` (see `args-wrap` under "Laying out code"
+  below): a condition of the same names, and of percents from `0%` to
+  `100%`. A percent holds when the column right after the `(` is past that
+  share of `wrapMax`; with `wrapMax = 80`, `40%` holds from column 33 on.
+  The default is `40%`; a name alone needs no percent:
+
+  ```
+  [Structure]
+  ; Breaks sooner in a header.
+  wrapArgsAt = (40% & is-non-header) | (30% & is-header)
+  ; Breaks every wrapped call of a source file.
+  wrapArgsAt = is-non-header
+  ```
 
 The command line then overrides the `.formatrc` files, in this order:
 
@@ -216,40 +289,56 @@ joins the next one without a space (`session-` and `ticket` give
 `session-ticket`). A comment at the end of a line of code is not wrapped, and
 a line that no break brings within `wrapMax` is reported.
 
-## Agent mode
+## Laying out code
 
-With `--ai`, the tool formats as always, then asks the agent that runs it
-(an AI agent) for the changes only it can make, and waits:
+The code rules lay out a few constructs on their own:
 
-1. It writes each request to the standard error as a `#:` line:
-   `#: <path>:<line>: <rule>: <message>`, or `<line>-<last line>` for a
-   range of lines.
-2. It ends them with `#: Handle every request above, then type q.`, and
-   waits the way `git diff`'s pager does, at a bottom line of
-   `: (type q to continue)`; the `q` means that the agent has read the
-   requests and has handled them. On a terminal the `:` shows white and the
-   hint gray; the hint gives way to what is typed and comes back once the
-   line is empty again, and a `q` on an empty line continues at once. On any
-   other input, a line `q` continues, any other line asks again, and an
-   input that ends counts as `q`. Hence an agent that runs the
-   tool gives it an input it writes to later, such as a FIFO
-   (`mkfifo answer; format --ai ... < answer &`, then `echo q > answer`).
-3. It formats each file it asked about again, when the agent changed it, and
-   asks again about what that run leaves; it stops once no such file
-   changed.
+- `not-space` puts a space on each side of a logical not (`if (!ready)`
+  becomes `if ( ! ready)`); a run of signs stays together (`!! x`). It leaves
+  `!=`, `operator!`, preprocessor lines, and a side that has its space
+  already.
+- `control-braces` wraps each body of `if`, `else`, `for`, `while`, `do`, and
+  `foreach` in braces. In a header, a body on its keyword's line stays there
+  (`if (x) { return; }`); in any other file it moves to a line of its own,
+  one step (4 spaces) past the keyword's line, with its `}` on the next line,
+  also when it had its braces already.
+- `condition-wrap` breaks an `if` or `while` condition that passes the wrap
+  column before each `&&` and `||`, at each level of parentheses; each
+  operand line starts with its operator, one step past the line that opened
+  its group. A group that holds a parenthesized operand closes its `)` on a
+  line of its own, and so does the condition, at the keyword's indent, with
+  the body's `{` after it.
+- `args-wrap` breaks a call of 2 arguments or more after its `(` when the
+  call, written on one line, would pass the wrap column, and it takes more
+  than 3 arguments or `[Structure] wrapArgsAt` holds at its `(`: each
+  argument on a line of its own, one step past the line of the `(`, and the
+  `)` back at that line's indent. A call that fits one line keeps its
+  layout, and so does a call already broken after its `(` whose lines fit
+  `wrapMax` (such as one whose related arguments share a line):
 
-The rules that ask:
+  ```
+  const QByteArray input = makeFile(
+      "first",
+      "second"
+  );
+  ```
+- `ternary-wrap` breaks a statement with a conditional expression that passes
+  the wrap column before its `?`, one step past the statement's line, then
+  before its `:` too when that line still does not fit. `condition-wrap`
+  breaks an operand the same way, one step past the operand's line:
 
-- `operator-wrap`: a line of code past `wrapMax` that the tool broke before
-  its outer operators (`<<`, `+`, `-`, `|`, `^`, `&&`, `||`). The tool breaks
-  by width alone, while related operands belong on one line; hence it asks
-  the agent to regroup exactly the lines it made. A line the tool could not
-  break (no outer operator, or a first operand longer than the limit) is not
-  asked about.
-- `code-backticks`: an access chain in a doc-comment (`watcher()->load()`),
-  which Doxygen cannot link. Outside agent mode the tool wraps it in
-  backticks; in agent mode it asks for the member to be named by its class
-  (`IniWatcher::load()`) instead, unless the chain shows an example.
+  ```
+  if ( ! myFirstCondition
+      && (mySecond
+          || (myThird
+              && (ov = manager
+                  ? manager->override()
+                  : QSharedPointer<QHostInfoOverride >()
+              )
+          )
+      )
+  ) {
+  ```
 
 ## Comments the rules leave alone
 

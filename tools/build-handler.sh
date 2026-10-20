@@ -755,6 +755,10 @@ bh_macos_developer_dir() {
 #                      regexp, --test, --run, and -d), unless XD has a whole
 #                      static build
 #   --no-static        clear BH_STATIC: every project builds shared again
+#   --format           format the sources and headers of the build's own
+#                      project, or with --filter of each project it picks,
+#                      with XD's `bin/format`, before anything builds; a run
+#                      that builds nothing (--no-build, say) only formats
 #   --no-xd-build      leave XD as it is, even when it has no build yet (or,
 #                      under --static, no static build); without it, an app
 #                      that builds on XD gets XD built first when XD lacks
@@ -982,6 +986,7 @@ bh_parse_args() {
     : "${BH_SAVE_SPACE:=0}"
     : "${BH_PREFER_PATH:=0}"
     : "${BH_NO_XD_BUILD:=0}"
+    : "${BH_FORMAT:=0}"
 
     # --test-review is a review shortcut that pre-sets headless + verbose
     # + no-build. We apply those defaults *before* the parse loop so that
@@ -1156,6 +1161,9 @@ bh_parse_args() {
             # itself, neither normally (see bh_xd_build) nor in static mode (see
             # bh_xd_build_static).
             --no-xd-build|--no-qt-build) BH_NO_XD_BUILD=1; shift;;
+            # --format: format the projects' files before the build (see
+            # bh_format).
+            --format)         BH_FORMAT=1; shift;;
             # --get=<what>: print a single resolved path and exit without
             # building, so a caller can capture and forward it (e.g. bind-mount
             # XD's already-built dirs into a cross-build container instead of
@@ -1296,13 +1304,15 @@ bh_parse_args() {
 # bh_dependency_build_static hands on to a framework's static build. It leaves
 # out the flags that name this project's own paths or steps, which that build
 # would fail on or turn against this project: --filter (and --only), the
-# --static regexp (the framework gets a plain --static), --test, --tests, and
+# --static regexp (the framework gets a plain --static), --format, --test,
+# --tests, and
 # --test-review with their test project, --run with its subdir, and -d
 # (--directory). --test-review's own defaults go along, in front of every
 # flag, just as bh_parse_args sets them before it reads the flags.
 bh_forward_note() {
     case "$2" in
         --filter | --filter=* | --only | --only=* | --static | --static=* \
+                | --format \
                 | --test | --tests | --run | -d | --directory)
             return 0
             ;;
@@ -1331,6 +1341,49 @@ bh_forward_add() {
 }$1"
 }
 
+
+# bh_format [<pro>]
+#
+# Formats, under --format, the sources and headers of the build's own project
+# <pro>, or with --filter of each `.pro` the filter picks, with XD's
+# `bin/format`, which reads each project with XD's qmake. A cross-compiling
+# build reads them for the host spec and the target spec (`--specs`); any
+# other build leaves the spec to the tool, which takes its own platform's. A
+# format that changed files goes on to the build; one that failed stops the
+# run.
+bh_format() {
+    [ "${BH_FORMAT:-0}" -gt 0 ] || return 0
+    _bf_tool=$XD_DIR/bin/format
+    [ -f "$_bf_tool" ] || [ -f "$_bf_tool.exe" ] \
+        || bh_error "--format: $_bf_tool is not built yet -- build it with --filter 'src/tools/format/'"
+    _bf_own=${1:-}
+    set --
+    if [ -n "${BH_FILTER:-}" ]; then
+        while IFS= read -r _bf_pro; do
+            if bh_regexp_matches "${_bf_pro#"$BH_ROOT"/}" "$BH_FILTER"; then
+                set -- "$@" --project="$_bf_pro"
+            fi
+        done <<EOF
+$(bh_pro_files)
+EOF
+        [ $# -gt 0 ] || bh_error "--format: no .pro under '$BH_ROOT' matches $(bh_regexp_text "$BH_FILTER")"
+    else
+        [ -n "$_bf_own" ] || bh_error "--format: no project to format -- pass --filter=<regexp>"
+        set -- --project="$_bf_own"
+    fi
+    _bf_count=$#
+    if [ -n "${BH_CROSS_SPEC:-}" ]; then
+        set -- "$@" --specs="$QMAKESPEC,$BH_CROSS_SPEC"
+    fi
+    if [ "${BH_HEADLESS:-0}" -gt 0 ]; then
+        set -- --headless "$@"
+    fi
+    echo "Formatting the files of $_bf_count project(s)"
+    _bf_code=0
+    "$_bf_tool" --qmake="$XD_DIR/bin/qmake" "$@" || _bf_code=$?
+    [ "$_bf_code" -le 1 ] || bh_error "--format: formatting failed"
+    echo
+}
 
 # bh_pro_files
 #
@@ -3525,6 +3578,7 @@ bh_template_app() {
     echo "  $BUILD_DIR"
     echo
     bh_license_gate
+    bh_format "$_pro"
 
     # --wipe first, then bail early on `--wipe --no-build` so we
     # don't immediately recreate the empty dir via the mkdir below.
@@ -4541,6 +4595,7 @@ bh_template_subdirs() {
     echo "  $BUILD_DIR"
     echo
     bh_license_gate
+    bh_format "$_pro"
 
     if [ "${BH_WIPE:-0}" -gt 0 ]; then
         bh_wipe
@@ -4822,6 +4877,7 @@ bh_template_makefile() {
     echo "  $BUILD_DIR"
     echo
     bh_license_gate
+    bh_format
 
     if [ "${BH_WIPE:-0}" -gt 0 ]; then
         bh_wipe

@@ -5,10 +5,8 @@
 #define RULES_OUTLINE_THIS_H
 
 #include "../format-named-rule.h"
-#include "../lang/class-members.h"
 
 #include <QtCore/QByteArray>
-#include <QtCore/QHash>
 #include <QtCore/QSet>
 
 class FormatOutlineThisRule : public FormatNamedRule
@@ -17,15 +15,13 @@ class FormatOutlineThisRule : public FormatNamedRule
 public:
     inline FormatOutlineThisRule()
         : super("outline-this",
-                "Reaches own members with this-> in outline definitions.")
+                "Reaches members with this-> where [Relations] thisMode asks.")
     {
     }
 
     void run(FormatDocument *document) const Q_DECL_OVERRIDE;
 
 private:
-    FormatClassMembers membersOf(const FormatDocument *document, const QByteArray & className,
-                                 QHash<QByteArray, FormatClassMembers > *cache) const;
     QSet<QByteArray > localNames(const FormatDocument *document, int from,
                                  int to) const;
 };

@@ -132,8 +132,12 @@ FormatFileResult FormatRunner::formatFile(const QString & path) const
 
     // Formats it.
     const FormatResult formatted = this->m_formatter->format(
-            text, path, this->m_options.lineSpecs, this->m_options.config,
-            this->m_options.agent);
+        text,
+        path,
+        this->m_options.lineSpecs,
+        this->m_options.config,
+        this->m_options.agent
+    );
     result.changed = formatted.changed;
     result.issues = formatted.issues;
     result.requests = formatted.requests;
