@@ -30,6 +30,8 @@ public:
                 const QString & defaultValue,
                 const QHash<QString, QString > & aliases = QHash<QString, QString >());
     void extend(const Section & base, const QStringList & names);
+    void extendPrefixed(const Section & base, const QString & prefix);
+    void addFollower(const QString & name, const QString & baseName);
 
 private:
     QString m_name;

@@ -3,6 +3,7 @@
 
 #include "./format-rules.h"
 
+#include "./rules/args-wrap.h"
 #include "./rules/as-with.h"
 #include "./rules/code-backticks.h"
 #include "./rules/code-shape.h"
@@ -63,9 +64,9 @@ static QList<FormatRule * > formatCreateCodeRules()
         << new FormatNotSpaceRule
         << new FormatControlBracesRule << new FormatOperatorWrapRule
         << new FormatConditionWrapRule << new FormatTernaryWrapRule
-        << new FormatConditionCloseRule
         << new FormatOperatorFirstRule << new FormatContinuationIndentRule
-        << new FormatInitListRule << new FormatParamWrapRule
+        << new FormatInitListRule << new FormatParamWrapRule << new FormatArgsWrapRule
+        << new FormatConditionCloseRule
         << new FormatTemplateCloseRule << new FormatReferenceSpaceRule
         << new FormatOneStatementRule;
     rules << new FormatSuperTypedefRule;

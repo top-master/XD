@@ -1,0 +1,9 @@
+<!DOCTYPE RCC><RCC version="1.0">
+<qresource prefix="/assets">
+    <file>ai-start.md</file>
+</qresource>
+
+<qresource prefix="/assets">
+    <file>wrap.md</file>
+</qresource>
+</RCC>

@@ -5,6 +5,10 @@
 
 #include "preprocessor.h"
 
+#include <QtCore/QDir>
+#include <QtCore/QFileInfo>
+#include <QtCore/QRegularExpression>
+
 /*!
     @class FormatDocument
     @internal
@@ -828,4 +832,55 @@ void FormatDocument::shiftIssues(
             issue.endLine = qMax(issue.line, issue.endLine + delta);
         }
     }
+}
+
+/*!
+    Tells whether the document is a header: its file name ends in `.h`,
+    `.hh`, `.hpp`, `.hxx` or `.h++`, or has no suffix at all, like the
+    forwarding headers (`QString`); a document without a path counts as one.
+*/
+bool FormatDocument::isHeader() const
+{
+    const QString suffix = QFileInfo(this->m_path).suffix().toLower();
+    return suffix.isEmpty() || suffix == QLL("h") || suffix == QLL("hh") || suffix == QLL("hpp")
+        || suffix == QLL("hxx") || suffix == QLL("h++");
+}
+
+/*!
+    Finds the header that the quoted include @a name names, the way a
+    compiler does: next to the document's file first, then in each folder of
+    includePaths(), in order; an empty string when none holds it.
+*/
+QString FormatDocument::findInclude(const QString & name) const
+{
+    QStringList folders;
+    if ( ! this->m_path.isEmpty()) {
+        folders << QFileInfo(this->m_path).absolutePath();
+    }
+    folders << this->m_includePaths;
+    for (int i = 0; i < folders.size(); ++i) {
+        const QString candidate = QDir(folders.at(i)).filePath(name);
+        if (QFileInfo(candidate).isFile()) {
+            return QDir::cleanPath(candidate);
+        }
+    }
+    return QString();
+}
+
+/*!
+    Lists the names that the quoted `#include` lines of the document name,
+    in order (`"./widget.h"` gives `./widget.h`).
+*/
+QStringList FormatDocument::quotedIncludes() const
+{
+    QStringList names;
+    const QRegularExpression include(
+        QString(QLL("^\\s*#\\s*include\\s*\"([^\"]+)\"")),
+        QRegularExpression::MultilineOption
+    );
+    QRegularExpressionMatchIterator found = include.globalMatch(QString::fromUtf8(this->m_text));
+    while (found.hasNext()) {
+        names << found.next().captured(1);
+    }
+    return names;
 }

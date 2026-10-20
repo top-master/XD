@@ -1,12 +1,16 @@
 // Copyright (C) 2015 The XD Company Ltd.
 // SPDX-License-Identifier: Apache-2.0
 
+#include "config-condition.h"
+#include "format-agent-guides.h"
 #include "format-document.h"
 #include "format-line-spec.h"
 #include "format-process-runner.h"
 #include "format-runner.h"
+#include "format-project-files.h"
 #include "format-settings.h"
 #include "formatter.h"
+#include "parser/scope-conditions.h"
 #include "preprocessor.h"
 
 #include <QtCore/QLockFile>
@@ -59,10 +63,15 @@ private slots:
     void testAllRules_shouldKeepCleanCode();
     void testSettings_shouldReadFromRootDown();
     void testSettings_shouldReadWrapColumns();
+    void testProjectFiles_shouldHandEachFileOnce();
     void testCommentWidth_shouldWrap_data();
     void testAgentMode_shouldAskForOperatorGroups();
     void testAgentMode_shouldAskForDocAccessChains();
     void testAgentMode_shouldAskNothingWhenOff();
+    void testAgentMode_shouldAskForArgumentGroups();
+    void testAgentGuides_shouldFillTemplate();
+    void testAgentGuides_shouldWriteUsage();
+    void testAgentGuides_shouldRemoveLeftoversOfEndedRuns();
     void testSettings_shouldInheritStructureInComments();
     void testCommentWidth_shouldWrap();
     void testSettings_shouldRejectUnknownValue();
@@ -71,6 +80,15 @@ private slots:
     void testAllRules_shouldSurviveEmptyComments();
     void testRules_shouldRewriteFile_data();
     void testRules_shouldRewriteFile();
+    void testThisMode_shouldFollowSettings_data();
+    void testThisMode_shouldFollowSettings();
+    void testThisMode_shouldDefaultToBaseExistingAndHeaderOutline();
+    void testThisMode_shouldRejectUnknownName();
+    void testThisMode_shouldReachMembersInBlocks();
+    void testScopeConditions_shouldNameScopeOfToken();
+    void testScopeConditions_shouldFallBackWithoutPercent();
+    void testArgsWrap_shouldFollowSettings_data();
+    void testArgsWrap_shouldFollowSettings();
 
 private:
     Symbols tokenize(const QByteArray & text, bool keepComments) const;
@@ -512,6 +530,351 @@ void tst_FormatRules::testFix_shouldRewrite_data()
         << QString(QLL("param-wrap"))
         << QByteArray("class A\n{\n    static QByteArray absName(const char *name) { return encodeName(QByteArray(name).split('.')); }\n};\n")
         << QByteArray("class A\n{\n    static QByteArray absName(const char *name) { return encodeName(QByteArray(name).split('.')); }\n};\n");
+    QTest::newRow("args-wrap call in a control head")
+        << QString(QLL("args-wrap,condition-close"))
+        << QByteArray("void f()\n"
+                      "{\n"
+                      "    if ( ! this->matchesLast(rootFolder, currentFolder, isLast ? isDirectory : true, &decider)) {\n"
+                      "        g();\n"
+                      "    }\n"
+                      "}\n")
+        << QByteArray("void f()\n"
+                      "{\n"
+                      "    if ( ! this->matchesLast(\n"
+                      "            rootFolder,\n"
+                      "            currentFolder,\n"
+                      "            isLast ? isDirectory : true,\n"
+                      "            &decider\n"
+                      "        )\n"
+                      "    ) {\n"
+                      "        g();\n"
+                      "    }\n"
+                      "}\n");
+    QTest::newRow("operator-wrap chain before arguments")
+        << QString(QLL("operator-wrap,args-wrap"))
+        << QByteArray("void f()\n"
+                      "{\n"
+                      "    document.setLineRanges(LineRanges() << qMakePair(firstLine, firstLine) << qMakePair(lastLine, lastLine));\n"
+                      "}\n")
+        << QByteArray("void f()\n"
+                      "{\n"
+                      "    document.setLineRanges(LineRanges()\n"
+                      "        << qMakePair(firstLine, firstLine)\n"
+                      "        << qMakePair(lastLine, lastLine)\n"
+                      "    );\n"
+                      "}\n");
+    QTest::newRow("operator-wrap chain then arguments")
+        << QString(QLL("operator-wrap,args-wrap"))
+        << QByteArray("void f()\n"
+                      "{\n"
+                      "    document.setLineRanges(LineRanges() << qMakePair(1, 1) << qMakePairWhichIsForSomeReasonVeryVeryLong(firstArgumentName, secondArgumentName));\n"
+                      "}\n")
+        << QByteArray("void f()\n"
+                      "{\n"
+                      "    document.setLineRanges(LineRanges()\n"
+                      "        << qMakePair(1, 1)\n"
+                      "        << qMakePairWhichIsForSomeReasonVeryVeryLong(\n"
+                      "            firstArgumentName,\n"
+                      "            secondArgumentName\n"
+                      "        )\n"
+                      "    );\n"
+                      "}\n");
+    QTest::newRow("operator-wrap inner level only")
+        << QString(QLL("operator-wrap,args-wrap"))
+        << QByteArray("void f()\n"
+                      "{\n"
+                      "    QTest::newRow(\"process runner\") << (QStringList() << QString(QLL(\"--runner=process\")) << QString(QLL(\"--config\")) << QString(QLL(\"types.refsuffix=none\")));\n"
+                      "}\n")
+        << QByteArray("void f()\n"
+                      "{\n"
+                      "    QTest::newRow(\"process runner\") << (QStringList()\n"
+                      "        << QString(QLL(\"--runner=process\"))\n"
+                      "        << QString(QLL(\"--config\"))\n"
+                      "        << QString(QLL(\"types.refsuffix=none\"))\n"
+                      "    );\n"
+                      "}\n");
+    QTest::newRow("operator-wrap outer level too")
+        << QString(QLL("operator-wrap,args-wrap"))
+        << QByteArray("void f()\n"
+                      "{\n"
+                      "    QTest::newRow(\"process runner\") << (SomeOperatorContentThatIsVeryVeryLongAndHenceGetsANewLine() << QString(QLL(\"--runner=process\")) << QString(QLL(\"--config\")));\n"
+                      "}\n")
+        << QByteArray("void f()\n"
+                      "{\n"
+                      "    QTest::newRow(\"process runner\")\n"
+                      "        << (SomeOperatorContentThatIsVeryVeryLongAndHenceGetsANewLine()\n"
+                      "            << QString(QLL(\"--runner=process\"))\n"
+                      "            << QString(QLL(\"--config\"))\n"
+                      "        );\n"
+                      "}\n");
+    QTest::newRow("operator-wrap two outer groups")
+        << QString(QLL("operator-wrap,args-wrap"))
+        << QByteArray("void f()\n"
+                      "{\n"
+                      "    QTest::newRow(\"process runner\") << (QStringList() << QString(QLL(\"--runner=process\")) << QString(QLL(\"--config\"))) << (QStringList() << QString(QLL(\"--runner=thread\")) << QString(QLL(\"--config\")));\n"
+                      "}\n")
+        << QByteArray("void f()\n"
+                      "{\n"
+                      "    QTest::newRow(\"process runner\")\n"
+                      "        << (QStringList()\n"
+                      "            << QString(QLL(\"--runner=process\"))\n"
+                      "            << QString(QLL(\"--config\"))\n"
+                      "        ) << (QStringList()\n"
+                      "            << QString(QLL(\"--runner=thread\"))\n"
+                      "            << QString(QLL(\"--config\"))\n"
+                      "        );\n"
+                      "}\n");
+    QTest::newRow("operator-wrap flat chain")
+        << QString(QLL("operator-wrap,args-wrap"))
+        << QByteArray("void f()\n"
+                      "{\n"
+                      "    QTest::newRow(\"process runner\") << SomeOperatorContentThatIsVeryVeryLongAndHenceGetsANewLine() << QString(QLL(\"--runner=process\")) << QString(QLL(\"--config\"));\n"
+                      "}\n")
+        << QByteArray("void f()\n"
+                      "{\n"
+                      "    QTest::newRow(\"process runner\")\n"
+                      "        << SomeOperatorContentThatIsVeryVeryLongAndHenceGetsANewLine()\n"
+                      "        << QString(QLL(\"--runner=process\"))\n"
+                      "        << QString(QLL(\"--config\"));\n"
+                      "}\n");
+    QTest::newRow("args-wrap chain keeps its line groups")
+        << QString(QLL("operator-wrap,args-wrap,continuation-indent"))
+        << QByteArray("void f()\n"
+                      "{\n"
+                      "    process.start(QString(QLL(\"git\")), QStringList()\n"
+                      "                  << QString(QLL(\"-c\")) << QString(QLL(\"user.name=format-test\"))\n"
+                      "                  << QString(QLL(\"-c\")) << QString(QLL(\"commit.gpgsign=false\"))\n"
+                      "                  << arguments);\n"
+                      "}\n")
+        << QByteArray("void f()\n"
+                      "{\n"
+                      "    process.start(QString(QLL(\"git\")), QStringList()\n"
+                      "        << QString(QLL(\"-c\")) << QString(QLL(\"user.name=format-test\"))\n"
+                      "        << QString(QLL(\"-c\")) << QString(QLL(\"commit.gpgsign=false\"))\n"
+                      "        << arguments\n"
+                      "    );\n"
+                      "}\n");
+    QTest::newRow("args-wrap brace list keeps its line groups")
+        << QString(QLL("args-wrap"))
+        << QByteArray("void f()\n"
+                      "{\n"
+                      "    const char *options[] = { \"-L, --range <range>\", \"--dir <path>\", \"--check\",\n"
+                      "                              \"--config <setting>\", \"--config-file <file>\",\n"
+                      "                              \"--qmake <path>\", \"--any-comment\" };\n"
+                      "}\n")
+        << QByteArray("void f()\n"
+                      "{\n"
+                      "    const char *options[] = {\n"
+                      "        \"-L, --range <range>\", \"--dir <path>\", \"--check\",\n"
+                      "        \"--config <setting>\", \"--config-file <file>\",\n"
+                      "        \"--qmake <path>\", \"--any-comment\"\n"
+                      "    };\n"
+                      "}\n");
+    QTest::newRow("args-wrap keeps the breaks between string literals")
+        << QString(QLL("args-wrap"))
+        << QByteArray("void f()\n"
+                      "{\n"
+                      "    QCommandLineOption option(\n"
+                      "        QStringList() << QString(QLL(\"git\")),\n"
+                      "        QString(QLL(\"Formats only the lines that the git range changed, in each \"\n"
+                      "            \"source file it changed.\")),\n"
+                      "        QString(QLL(\"range\"))\n"
+                      "    );\n"
+                      "}\n")
+        << QByteArray("void f()\n"
+                      "{\n"
+                      "    QCommandLineOption option(\n"
+                      "        QStringList() << QString(QLL(\"git\")),\n"
+                      "        QString(QLL(\"Formats only the lines that the git range changed, in each \"\n"
+                      "            \"source file it changed.\")),\n"
+                      "        QString(QLL(\"range\"))\n"
+                      "    );\n"
+                      "}\n");
+    QTest::newRow("args-wrap one-line call of four")
+        << QString(QLL("args-wrap"))
+        << QByteArray("void f()\n"
+                      "{\n"
+                      "    run(firstArgumentName, secondArgumentName, thirdArgumentName, fourthArgumentNameLong);\n"
+                      "}\n")
+        << QByteArray("void f()\n"
+                      "{\n"
+                      "    run(\n"
+                      "        firstArgumentName,\n"
+                      "        secondArgumentName,\n"
+                      "        thirdArgumentName,\n"
+                      "        fourthArgumentNameLong\n"
+                      "    );\n"
+                      "}\n");
+    QTest::newRow("args-wrap splits a line group that does not fit")
+        << QString(QLL("args-wrap"))
+        << QByteArray("void f()\n"
+                      "{\n"
+                      "    total = combine(firstArgumentName, secondArgumentName, thirdArgumentName, fourthArgumentName,\n"
+                      "                    fifth, sixth);\n"
+                      "}\n")
+        << QByteArray("void f()\n"
+                      "{\n"
+                      "    total = combine(\n"
+                      "        firstArgumentName,\n"
+                      "        secondArgumentName,\n"
+                      "        thirdArgumentName,\n"
+                      "        fourthArgumentName,\n"
+                      "        fifth, sixth\n"
+                      "    );\n"
+                      "}\n");
+    QTest::newRow("param-wrap keeps line groups past wrapArgsAt")
+        << QString(QLL("param-wrap"))
+        << QByteArray("void Widget::reloadEverythingNow(const QString & name, int id,\n"
+                      "                                 const QObject *receiver, const char *member);\n")
+        << QByteArray("void Widget::reloadEverythingNow(\n"
+                      "        const QString & name, int id,\n"
+                      "        const QObject *receiver, const char *member);\n");
+    QTest::newRow("param-wrap breaks a misplaced line group list at its (")
+        << QString(QLL("param-wrap"))
+        << QByteArray("void Widget::reload(const QString & name, int id,\n"
+                      "        const QObject *receiver, const char *member);\n")
+        << QByteArray("void Widget::reload(\n        const QString & name, int id,\n"
+                      "        const QObject *receiver, const char *member);\n");
+    QTest::newRow("param-wrap keeps aligned line groups that fit")
+        << QString(QLL("param-wrap"))
+        << QByteArray("void Widget::reload(const QString & name, int id,\n"
+                      "                    const QObject *receiver, const char *member);\n")
+        << QByteArray("void Widget::reload(const QString & name, int id,\n"
+                      "                    const QObject *receiver, const char *member);\n");
+    QTest::newRow("continuation-indent nested operand")
+        << QString(QLL("continuation-indent"))
+        << QByteArray("void f()\n"
+                      "{\n"
+                      "    if (shellFolder.isEmpty() || ! QFileInfo(shellFolder).isAbsolute()\n"
+                      "        || shellFolder == workingFolder\n"
+                      "        || QFileInfo(shellFolder).canonicalFilePath()\n"
+                      "        != QFileInfo(workingFolder).canonicalFilePath()\n"
+                      "    ) {\n"
+                      "        g();\n"
+                      "    }\n"
+                      "}\n")
+        << QByteArray("void f()\n"
+                      "{\n"
+                      "    if (shellFolder.isEmpty() || ! QFileInfo(shellFolder).isAbsolute()\n"
+                      "        || shellFolder == workingFolder\n"
+                      "        || QFileInfo(shellFolder).canonicalFilePath()\n"
+                      "            != QFileInfo(workingFolder).canonicalFilePath()\n"
+                      "    ) {\n"
+                      "        g();\n"
+                      "    }\n"
+                      "}\n");
+    QTest::newRow("operator-wrap plus chain in a call")
+        << QString(QLL("operator-wrap,args-wrap"))
+        << QByteArray("void f()\n"
+                      "{\n"
+                      "    log(QString(QLL(\"first part of the message\")) + someVariableName + QString(QLL(\" and more text\")));\n"
+                      "}\n")
+        << QByteArray("void f()\n"
+                      "{\n"
+                      "    log(QString(QLL(\"first part of the message\"))\n"
+                      "        + someVariableName\n"
+                      "        + QString(QLL(\" and more text\"))\n"
+                      "    );\n"
+                      "}\n");
+    QTest::newRow("operator-wrap carries a chain through a nested call")
+        << QString(QLL("operator-wrap,args-wrap"))
+        << QByteArray("void f()\n"
+                      "{\n"
+                      "    QVERIFY(this->runGit(root, QStringList() << QString(QLL(\"add\")) << QString(QLL(\".\"))));\n"
+                      "}\n")
+        << QByteArray("void f()\n"
+                      "{\n"
+                      "    QVERIFY(this->runGit(root, QStringList()\n"
+                      "        << QString(QLL(\"add\"))\n"
+                      "        << QString(QLL(\".\"))\n"
+                      "    ));\n"
+                      "}\n");
+    QTest::newRow("args-wrap keeps the line groups of a chain argument")
+        << QString(QLL("args-wrap,continuation-indent"))
+        << QByteArray("void f()\n"
+                      "{\n"
+                      "    const QFileInfoList entries = dir.entryInfoList(\n"
+                      "        QDir::AllEntries | QDir::Hidden\n"
+                      "            | QDir::System | QDir::NoDotAndDotDot,\n"
+                      "        QDir::Name\n"
+                      "    );\n"
+                      "}\n")
+        << QByteArray("void f()\n"
+                      "{\n"
+                      "    const QFileInfoList entries = dir.entryInfoList(\n"
+                      "        QDir::AllEntries | QDir::Hidden\n"
+                      "            | QDir::System | QDir::NoDotAndDotDot,\n"
+                      "        QDir::Name\n"
+                      "    );\n"
+                      "}\n");
+    QTest::newRow("args-wrap far column")
+        << QString(QLL("args-wrap"))
+        << QByteArray("void f()\n{\n    const QByteArray input = makeFile(\"firstArgumentText\",\n"
+                      "                                      \"secondArgumentText\" \"more\");\n}\n")
+        << QByteArray("void f()\n{\n    const QByteArray input = makeFile(\n"
+                      "        \"firstArgumentText\",\n        \"secondArgumentText\" \"more\"\n"
+                      "    );\n}\n");
+    QTest::newRow("args-wrap four arguments")
+        << QString(QLL("args-wrap"))
+        << QByteArray("void f()\n{\n    run(firstArgumentName, secondArgumentName,\n"
+                      "        thirdArgumentName, fourthArgumentName);\n}\n")
+        << QByteArray("void f()\n{\n    run(\n        firstArgumentName, secondArgumentName,\n"
+                      "        thirdArgumentName, fourthArgumentName\n    );\n}\n");
+    QTest::newRow("args-wrap argument lines")
+        << QString(QLL("args-wrap"))
+        << QByteArray("void f()\n{\n    const QByteArray input = makeFile(\"firstArgumentText\"\n"
+                      "                                      \"more\", i < n, count);\n}\n")
+        << QByteArray("void f()\n{\n    const QByteArray input = makeFile(\n"
+                      "        \"firstArgumentText\"\n            \"more\",\n        i < n,\n"
+                      "        count\n    );\n}\n");
+    QTest::newRow("args-wrap fits one line")
+        << QString(QLL("args-wrap"))
+        << QByteArray("void f()\n{\n    const QByteArray input = makeFile(\"first\",\n"
+                      "                                      \"second\", third, fourth);\n}\n")
+        << QByteArray("void f()\n{\n    const QByteArray input = makeFile(\n        \"first\",\n"
+                      "        \"second\", third, fourth\n    );\n}\n");
+    QTest::newRow("args-wrap regrouped")
+        << QString(QLL("args-wrap"))
+        << QByteArray("void f()\n{\n    run(\n        firstArgumentName, secondArgumentName,\n"
+                      "        thirdArgumentName, fourthArgumentName\n    );\n}\n")
+        << QByteArray("void f()\n{\n    run(\n        firstArgumentName, secondArgumentName,\n"
+                      "        thirdArgumentName, fourthArgumentName\n    );\n}\n");
+    QTest::newRow("args-wrap near column")
+        << QString(QLL("args-wrap"))
+        << QByteArray("void f()\n{\n    run(first,\n        second);\n}\n")
+        << QByteArray("void f()\n{\n    run(first,\n        second);\n}\n");
+    QTest::newRow("args-wrap one line")
+        << QString(QLL("args-wrap"))
+        << QByteArray("void f()\n{\n    run(first, second, third, fourth);\n}\n")
+        << QByteArray("void f()\n{\n    run(first, second, third, fourth);\n}\n");
+    QTest::newRow("args-wrap one argument")
+        << QString(QLL("args-wrap"))
+        << QByteArray("void f()\n{\n    const QString text = QString(QLL(\"one\"\n"
+                      "                                     \"two\"));\n}\n")
+        << QByteArray("void f()\n{\n    const QString text = QString(QLL(\"one\"\n"
+                      "                                     \"two\"));\n}\n");
+    QTest::newRow("args-wrap long line, short call")
+        << QString(QLL("args-wrap"))
+        << QByteArray("void f()\n{\n    const int total = sum(first, second) + aVeryLongNameThatRunsOn"
+                      " + another;\n}\n")
+        << QByteArray("void f()\n{\n    const int total = sum(first, second) + aVeryLongNameThatRunsOn"
+                      " + another;\n}\n");
+    QTest::newRow("args-wrap long one-line call")
+        << QString(QLL("args-wrap"))
+        << QByteArray("void f()\n{\n    const QByteArray input = makeFile(firstArgumentName,"
+                      " secondArgumentName);\n}\n")
+        << QByteArray("void f()\n{\n    const QByteArray input = makeFile(\n"
+                      "        firstArgumentName,\n        secondArgumentName\n    );\n}\n");
+    QTest::newRow("args-wrap control head")
+        << QString(QLL("args-wrap,condition-close"))
+        << QByteArray("void f()\n{\n    if (check(first, second,\n              third, fourth)) {\n"
+                      "    }\n}\n")
+        << QByteArray("void f()\n{\n    if (check(\n            first, second,\n"
+                      "            third, fourth\n        )\n    ) {\n    }\n}\n");
+    QTest::newRow("args-wrap declaration")
+        << QString(QLL("args-wrap"))
+        << QByteArray("void run(int first, int second,\n         int third, int fourth);\n")
+        << QByteArray("void run(int first, int second,\n         int third, int fourth);\n");
     QTest::newRow("comment-period bare rule")
         << QString(QLL("comment-period"))
         << QByteArray("// ---------------------------------------------------------------------------\nint a;\n")
@@ -1269,6 +1632,11 @@ void tst_FormatRules::testCommentWidth_shouldWrap_data()
     QTest::newRow("short lines joined, target any") << QString(QLL("[Comments]\ntarget = any\n"))
         << QByteArray("// The tool waits for the server to answer\n// each request in turn.\n")
         << QByteArray("// The tool waits for the server to answer each request in turn.\n");
+    QTest::newRow("SPDX header kept whole") << QString()
+        << QByteArray("// Copyright (C) 2015 The XD Company Ltd.\n// SPDX-License-Identifier: "
+                      "LicenseRef-Qt-Commercial OR LGPL-2.1-only WITH Qt-LGPL-exception-1.1 OR LGPL-3.0-only\n")
+        << QByteArray("// Copyright (C) 2015 The XD Company Ltd.\n// SPDX-License-Identifier: "
+                      "LicenseRef-Qt-Commercial OR LGPL-2.1-only WITH Qt-LGPL-exception-1.1 OR LGPL-3.0-only\n");
     QTest::newRow("trailing comment kept") << QString(QLL(""))
         << QByteArray("int a; // The tool waits for the server to answer each request in turn before it sends the next one.\n")
         << QByteArray("int a; // The tool waits for the server to answer each request in turn before it sends the next one.\n");
@@ -1301,6 +1669,33 @@ void tst_FormatRules::testCommentWidth_shouldWrap()
         path
     ));
     QCOMPARE(again.text, output);
+}
+
+/// Hands each file to one batch alone, in the order the readings added it,
+/// keeps each include folder once, and stops waiting once the reading ended.
+void tst_FormatRules::testProjectFiles_shouldHandEachFileOnce()
+{
+    FormatProjectFiles files;
+    files.add(
+        QStringList() << QString(QLL("/a.cpp")) << QString(QLL("/b.cpp")),
+        QStringList() << QString(QLL("/inc"))
+    );
+    qExpect(files.takeUnparsed(false))
+        ->toEqual(QStringList() << QString(QLL("/a.cpp")) << QString(QLL("/b.cpp")));
+    files.add(
+        QStringList() << QString(QLL("/b.cpp")) << QString(QLL("/c.cpp")),
+        QStringList() << QString(QLL("/inc")) << QString(QLL("/other"))
+    );
+    qExpect(files.takeUnparsed(false))->toEqual(QStringList()
+        << QString(QLL("/c.cpp"))
+    );
+    qExpect(files.takeUnparsed(false))->toBeEmpty();
+    qExpect(files.includePaths())
+        ->toEqual(QStringList() << QString(QLL("/inc")) << QString(QLL("/other")));
+    qExpect(files.isFinished())->toBeFalsy();
+    files.finish();
+    qExpect(files.isFinished())->toBeTruthy();
+    qExpect(files.takeUnparsed(true))->toBeEmpty();
 }
 
 void tst_FormatRules::testSettings_shouldReadWrapColumns()
@@ -1421,6 +1816,651 @@ void tst_FormatRules::testAgentMode_shouldAskNothingWhenOff()
     ));
     qExpect(result.changed)->toBeTruthy();
     qExpect(result.requests.size())->toEqual(0);
+}
+
+/// Breaks a long call after its `(` in agent mode, and asks the agent to put
+/// the arguments that belong together on one line, within `wrapMax`.
+void tst_FormatRules::testAgentMode_shouldAskForArgumentGroups()
+{
+    Formatter formatter;
+    QString error;
+    qExpect(formatter.selectRules(
+        QStringList() << QString(QLL("args-wrap")),
+        &error
+    ))
+        ->toBeTruthy();
+    const QByteArray input = "void f()\n{\n    run(firstArgumentName, secondArgumentName,"
+                             " thirdArgumentName, fourthArgumentName);\n}\n";
+    const FormatResult result = qMove(formatter.format(
+        input,
+        QString(),
+        QStringList(),
+        FormatConfig(),
+        true
+    ));
+    qExpect(result.changed)->toBeTruthy();
+    qExpect(result.requests.size())->toEqual(1);
+    qExpect(result.requests.at(0).rule)->toEqual(QByteArray("args-wrap"));
+    qExpect(result.requests.at(0).line)->toEqual(3);
+    qExpect(result.requests.at(0).endLine)->toEqual(8);
+    qExpect(result.requests.at(0).columnLimit)->toEqual(80);
+}
+
+/// Writes the prompt file of an `args-wrap` request from its template, with
+/// the file, the lines, and the column limit in place of the placeholders,
+/// into the folder named after the process id, which remove() deletes; the
+/// `operator-wrap` request fills the same template with its own blocks, and
+/// a rule without a template gets no file.
+void tst_FormatRules::testAgentGuides_shouldFillTemplate()
+{
+    FormatAgentGuides guides;
+    const QString pid = QString::number(QCoreApplication::applicationPid());
+    qExpect(guides.folder())->toEndWith(QLatin1Char('/')
+        + FormatAgentGuides::folderPrefix()
+        + pid
+    );
+    const FormatIssue request(
+        3,
+        "args-wrap",
+        QString(QLL("regroup")),
+        8,
+        80
+    );
+    const QString prompt = guides.write(
+        QString(QLL("/src/a.cpp")),
+        request
+    );
+    qExpect(prompt)->Not->toBeEmpty();
+    QFile file(prompt);
+    qExpect(file.open(QIODevice::ReadOnly))->toBeTruthy();
+    const QString text = QString::fromUtf8(file.readAll());
+    file.close();
+    qExpect(text)->toContain(QDir::toNativeSeparators(QString(QLL("`/src/a.cpp`"))));
+    qExpect(text)->toContain(QString(QLL("lines\n3-8")));
+    qExpect(text)->toContain(QString(QLL("within 80 columns")));
+    qExpect(text)->Not->toContain(QString(QLL("{{")));
+    qExpect(FormatAgentGuides::templateName("args-wrap"))->toEqual(QString(QLL("wrap.md")));
+    qExpect(FormatAgentGuides::templateName("operator-wrap"))->toEqual(QString(QLL("wrap.md")));
+    qExpect(text)->Not->toContain(QString(QLL("operator chain")));
+    qExpect(FormatAgentGuides::templateName("code-backticks"))
+        ->toEqual(QString(QLL("code-backticks.md")));
+    const FormatIssue chain(
+        5,
+        "operator-wrap",
+        QString(QLL("regroup")),
+        6,
+        72
+    );
+    QFile operators(guides.write(QString(QLL("/src/a.cpp")), chain));
+    qExpect(operators.open(QIODevice::ReadOnly))->toBeTruthy();
+    const QString chainText = QString::fromUtf8(operators.readAll());
+    operators.close();
+    qExpect(chainText)->toContain(QString(QLL("lines 5-6")));
+    qExpect(chainText)->toContain(QString(QLL("within 72 columns")));
+    qExpect(chainText)->Not->toContain(QString(QLL("{{")));
+    qExpect(chainText)->toContain(QString(QLL("operator chain")));
+    qExpect(chainText)->Not->toContain(QString(QLL("break after the `(`")));
+    const FormatIssue other(1, "code-backticks", QString(QLL("name the member")));
+    qExpect(guides.write(QString(QLL("/src/a.cpp")), other))->toBeEmpty();
+    guides.remove();
+    qExpect(QFile::exists(prompt))->toBeFalsy();
+    qExpect(QDir(guides.folder()).exists())->toBeFalsy();
+}
+
+/// Writes the usage instructions into the guides' folder, with the folder in
+/// place of its placeholder; removing the prompt files keeps them, and
+/// remove() deletes them.
+void tst_FormatRules::testAgentGuides_shouldWriteUsage()
+{
+    FormatAgentGuides guides;
+    const QString usage = guides.writeUsage();
+    qExpect(usage)->toStartWith(QDir::toNativeSeparators(guides.folder()));
+    QFile file(usage);
+    qExpect(file.open(QIODevice::ReadOnly))->toBeTruthy();
+    const QString text = QString::fromUtf8(file.readAll());
+    file.close();
+    qExpect(text)->toStartWith(QString(QLL("# Using the format tool in agent mode")));
+    qExpect(text)->Not->toContain(QString(QLL("{{")));
+    qExpect(text)->toContain(QDir::toNativeSeparators(guides.folder()));
+    qExpect(text)->toContain(QString(QLL("Run prompt at:")));
+    const FormatIssue request(
+        3,
+        "args-wrap",
+        QString(QLL("regroup")),
+        8,
+        80
+    );
+    const QString prompt = guides.write(
+        QString(QLL("/src/a.cpp")),
+        request
+    );
+    guides.removePrompts();
+    qExpect(QFile::exists(prompt))->toBeFalsy();
+    qExpect(QFile::exists(usage))->toBeTruthy();
+    guides.remove();
+    qExpect(QFile::exists(usage))->toBeFalsy();
+}
+
+/// Builds a folder in the system's temporary folder for the leftover test,
+/// named after the guides' prefix and `name`, holding the usage
+/// instructions when `withUsage` is set.
+static QString leftoverFolder(const QString & name, bool withUsage)
+{
+    const QString path = QDir::tempPath() + QLatin1Char('/') + FormatAgentGuides::folderPrefix()
+        + name;
+    QDir().mkpath(path);
+    if (withUsage) {
+        QFile usage(path + QLatin1Char('/') + FormatAgentGuides::usageName());
+        usage.open(QIODevice::WriteOnly);
+    }
+    return path;
+}
+
+/// Leaves folders as other runs would, then writes a file: the guides
+/// remove the folder of an ended run (usage instructions and a prompt file,
+/// no lock), and keep the one whose lock a running process holds, one with
+/// another name, one without usage instructions, and one that also holds a
+/// file the guides never write.
+void tst_FormatRules::testAgentGuides_shouldRemoveLeftoversOfEndedRuns()
+{
+    const QString ended = leftoverFolder(QString(QLL("999999901")), true);
+    QFile prompt(ended + QLL("/args-wrap-1.md"));
+    qExpect(prompt.open(QIODevice::WriteOnly))->toBeTruthy();
+    prompt.close();
+    const QString running = leftoverFolder(QString(QLL("999999902")), true);
+    const QString other = leftoverFolder(QString(QLL("other")), true);
+    const QString bare = leftoverFolder(QString(QLL("999999903")), false);
+    const QString foreign = leftoverFolder(QString(QLL("999999904")), true);
+    QFile notes(foreign + QLL("/notes.txt"));
+    qExpect(notes.open(QIODevice::WriteOnly))->toBeTruthy();
+    notes.close();
+    QLockFile lock(running + QLL("/.lock"));
+    qExpect(lock.tryLock(0))->toBeTruthy();
+
+    FormatAgentGuides guides;
+    qExpect(guides.writeUsage())->Not->toBeEmpty();
+    qExpect(QFile::exists(guides.folder() + QLL("/.lock")))->toBeTruthy();
+    qExpect(QDir(ended).exists())->toBeFalsy();
+    qExpect(QDir(running).exists())->toBeTruthy();
+    qExpect(QDir(other).exists())->toBeTruthy();
+    qExpect(QDir(bare).exists())->toBeTruthy();
+    qExpect(QDir(foreign).exists())->toBeTruthy();
+
+    // Removes what the test made.
+    guides.remove();
+    lock.unlock();
+    QDir(running).removeRecursively();
+    QDir(other).removeRecursively();
+    QDir(bare).removeRecursively();
+    QDir(foreign).removeRecursively();
+}
+
+/// Sets only `[Structure]`: `[Comments]` follows it, until a `.formatrc`
+/// overrides a key in `[Comments]`, which then keeps its own value.
+void tst_FormatRules::testSettings_shouldInheritStructureInComments()
+{
+    QTemporaryDir dir;
+    writeProject(dir, QStringList() << QString(QLL(".formatrc"))
+        << QString(QLL("[Structure]\nwrapBegin = 70\nwrapMax = 100\n"))
+    );
+    FormatSettings settings;
+    QString error;
+    const QString path = dir.path() + QLL("/sub/a.cpp");
+    qExpect(FormatSettings::load(path, FormatConfig(), &settings, &error))->toBeTruthy();
+    QCOMPARE(settings.wrapBegin, QList<int >() << 70);
+    qExpect(settings.wrapMax)->toEqual(100);
+    QCOMPARE(settings.commentWrapBegin, QList<int >() << 70);
+    qExpect(settings.commentWrapMax)->toEqual(100);
+    writeProject(dir, QStringList() << QString(QLL("sub/.formatrc"))
+        << QString(QLL("[Comments]\nwrapMax = 90\n"))
+    );
+    qExpect(FormatSettings::load(path, FormatConfig(), &settings, &error))->toBeTruthy();
+    qExpect(settings.wrapMax)->toEqual(100);
+    qExpect(settings.commentWrapMax)->toEqual(90);
+    QCOMPARE(settings.commentWrapBegin, QList<int >() << 70);
+}
+
+/// Builds the condition sample of the wrap tests around the conditional
+/// expression `ternary`: `if (` and the other operands, then a body.
+static QByteArray conditionSample(const QByteArray & ternary)
+{
+    return "if (!myFirstCondition && (mySecond || (myThird && (" + ternary + ")))){\n"
+           "    x();\n"
+           "}\n";
+}
+
+void tst_FormatRules::testRules_shouldRewriteFile_data()
+{
+    QTest::addColumn<QString >("rules");
+    QTest::addColumn<QString >("file");
+    QTest::addColumn<QByteArray >("input");
+    QTest::addColumn<QByteArray >("output");
+
+    // Control statements of a source file.
+    QTest::newRow("control-braces moves a body below in a source")
+        << QString(QLL("control-braces")) << QString(QLL("a.cpp"))
+        << QByteArray("void f()\n{\n    if (x) return;\n}\n")
+        << QByteArray("void f()\n{\n    if (x) {\n        return;\n    }\n}\n");
+    QTest::newRow("control-braces moves a braced body below in a source")
+        << QString(QLL("not-space,control-braces")) << QString(QLL("a.cpp"))
+        << QByteArray("void f()\n{\n    if (!myVariable) { myMethod(); }\n}\n")
+        << QByteArray("void f()\n{\n    if ( ! myVariable) {\n        myMethod();\n    }\n}\n");
+    QTest::newRow("control-braces moves both bodies of an else line")
+        << QString(QLL("control-braces")) << QString(QLL("a.cpp"))
+        << QByteArray("void f()\n{\n    if (x) { a(); } else { b(); }\n}\n")
+        << QByteArray("void f()\n{\n    if (x) {\n        a();\n    } else {\n        b();\n    }\n}\n");
+    QTest::newRow("control-braces leaves an empty body")
+        << QString(QLL("control-braces")) << QString(QLL("a.cpp"))
+        << QByteArray("void f()\n{\n    while (next()) {}\n}\n")
+        << QByteArray("void f()\n{\n    while (next()) {}\n}\n");
+    QTest::newRow("control-braces keeps a body on its line in a header")
+        << QString(QLL("control-braces")) << QString(QLL("a.h"))
+        << QByteArray("inline void f()\n{\n    if (x) { a(); }\n    if (y) return;\n}\n")
+        << QByteArray("inline void f()\n{\n    if (x) { a(); }\n    if (y) { return; }\n}\n");
+
+    // Long conditions.
+    QTest::newRow("condition-wrap breaks a long conditional expression")
+        << QString(QLL("not-space,condition-wrap")) << QString(QLL("a.cpp"))
+        << conditionSample("ov = manager ? manager->override() : QSharedPointer<QHostInfoOverride >()")
+        << QByteArray("if ( ! myFirstCondition\n"
+                      "    && (mySecond\n"
+                      "        || (myThird\n"
+                      "            && (ov = manager\n"
+                      "                ? manager->override()\n"
+                      "                : QSharedPointer<QHostInfoOverride >()\n"
+                      "            )\n"
+                      "        )\n"
+                      "    )\n"
+                      ") {\n"
+                      "    x();\n"
+                      "}\n");
+    QTest::newRow("condition-wrap keeps a short conditional expression")
+        << QString(QLL("not-space,condition-wrap")) << QString(QLL("a.cpp"))
+        << conditionSample("ov = m ? m->override() : MyTypeDef()")
+        << QByteArray("if ( ! myFirstCondition\n"
+                      "    && (mySecond\n"
+                      "        || (myThird\n"
+                      "            && (ov = m ? m->override() : MyTypeDef())\n"
+                      "        )\n"
+                      "    )\n"
+                      ") {\n"
+                      "    x();\n"
+                      "}\n");
+    QTest::newRow("condition-wrap leaves a condition that fits")
+        << QString(QLL("condition-wrap")) << QString(QLL("a.cpp"))
+        << QByteArray("void f()\n{\n    if (a && (b || c)) {\n        x();\n    }\n}\n")
+        << QByteArray("void f()\n{\n    if (a && (b || c)) {\n        x();\n    }\n}\n");
+
+    // Long conditional expressions.
+    QTest::newRow("ternary-wrap breaks before the question mark")
+        << QString(QLL("ternary-wrap")) << QString(QLL("a.cpp"))
+        << QByteArray("void f()\n{\n    QSharedPointer<QHostInfoOverride > ov = manager ? "
+                      "manager->override() : QSharedPointer<QHostInfoOverride >();\n}\n")
+        << QByteArray("void f()\n{\n    QSharedPointer<QHostInfoOverride > ov = manager\n"
+                      "        ? manager->override() : QSharedPointer<QHostInfoOverride >();\n}\n");
+    QTest::newRow("ternary-wrap breaks before the colon too")
+        << QString(QLL("ternary-wrap")) << QString(QLL("a.cpp"))
+        << QByteArray("void f()\n{\n    QSharedPointer<QHostInfoOverride > ov = theManager ? "
+                      "theManager->currentOverride() : QSharedPointer<QHostInfoOverride >();\n}\n")
+        << QByteArray("void f()\n{\n    QSharedPointer<QHostInfoOverride > ov = theManager\n"
+                      "        ? theManager->currentOverride()\n"
+                      "        : QSharedPointer<QHostInfoOverride >();\n}\n");
+    QTest::newRow("ternary-wrap leaves a statement that fits")
+        << QString(QLL("ternary-wrap")) << QString(QLL("a.cpp"))
+        << QByteArray("void f()\n{\n    int a = b ? c : d;\n}\n")
+        << QByteArray("void f()\n{\n    int a = b ? c : d;\n}\n");
+}
+
+/// Formats each row's input as the file named in the row, of a project with
+/// the default settings, with the row's rules, joined by commas.
+void tst_FormatRules::testRules_shouldRewriteFile()
+{
+    QFETCH(QString, rules);
+    QFETCH(QString, file);
+    QFETCH(QByteArray, input);
+    QFETCH(QByteArray, output);
+    QTemporaryDir dir;
+    writeProject(dir, QStringList());
+    const QString path = dir.path() + QLatin1Char('/') + file;
+    const FormatResult result = qMove(this->formatWith(rules, input, path));
+    qExpect(result.error)->toBeEmpty();
+    QCOMPARE(result.text, output);
+
+    // Formats the result again, which changes nothing.
+    const FormatResult again = qMove(this->formatWith(
+        rules,
+        result.text,
+        path
+    ));
+    QCOMPARE(again.text, output);
+}
+
+/// Builds the file of the `thisMode` tests: a base class `B`, then a class
+/// `W` with the inline method body `get` and the outline method body `run`,
+/// then a class template `V` with the outline method body `templateRun`.
+static QByteArray thisModeFile(const QByteArray & get, const QByteArray & run,
+                               const QByteArray & templateRun)
+{
+    return "class B\n{\npublic:\n    void base();\n    int m_b;\n};\n"
+           "class W : public B\n{\npublic:\n    void run();\n"
+           "    inline int get() const { " + get + " }\n    int m_x;\n};\n"
+           "template <typename T>\nclass V : public B\n{\npublic:\n    void run();\n    T m_v;\n};\n"
+           "void W::run()\n{\n" + run + "}\n"
+           "template <typename T>\nvoid V<T>::run()\n{\n" + templateRun + "}\n";
+}
+
+void tst_FormatRules::testThisMode_shouldFollowSettings_data()
+{
+    QTest::addColumn<QString >("thisMode");
+    QTest::addColumn<QString >("file");
+    QTest::addColumn<QByteArray >("output");
+    QTest::newRow("default in a source") << QString() << QString(QLL("a.cpp"))
+        << thisModeFile("return m_x + this->m_b;",
+                        "    m_x = 1;\n    this->m_b = 2;\n    this->base();\n",
+                        "    m_v = T();\n    this->base();\n");
+    QTest::newRow("default in a header") << QString() << QString(QLL("a.h"))
+        << thisModeFile("return m_x + this->m_b;",
+                        "    this->m_x = 1;\n    this->m_b = 2;\n    this->base();\n",
+                        "    this->m_v = T();\n    this->base();\n");
+    QTest::newRow("always") << QString(QLL("always")) << QString(QLL("a.cpp"))
+        << thisModeFile("return this->m_x + this->m_b;",
+                        "    this->m_x = 1;\n    this->m_b = 2;\n    this->base();\n",
+                        "    this->m_v = T();\n    this->base();\n");
+    QTest::newRow("never, keeping what exists")
+        << QString(QLL("never | already-existing")) << QString(QLL("a.cpp"))
+        << thisModeFile("return m_x + m_b;",
+                        "    m_x = 1;\n    m_b = 2;\n    this->base();\n",
+                        "    m_v = T();\n    base();\n");
+    QTest::newRow("never, dropping what exists") << QString(QLL("never")) << QString(QLL("a.cpp"))
+        << thisModeFile("return m_x + m_b;",
+                        "    m_x = 1;\n    m_b = 2;\n    base();\n",
+                        "    m_v = T();\n    base();\n");
+    QTest::newRow("base members of templates, keeping what exists")
+        << QString(QLL("(is-base-member & is-template) | already-existing"))
+        << QString(QLL("a.cpp"))
+        << thisModeFile("return m_x + m_b;",
+                        "    m_x = 1;\n    m_b = 2;\n    this->base();\n",
+                        "    m_v = T();\n    this->base();\n");
+    QTest::newRow("outline bodies of a source") << QString(QLL("is-outline & is-non-header"))
+        << QString(QLL("a.cpp"))
+        << thisModeFile("return m_x + m_b;",
+                        "    this->m_x = 1;\n    this->m_b = 2;\n    this->base();\n",
+                        "    this->m_v = T();\n    this->base();\n");
+    QTest::newRow("outline bodies of a source, in a header")
+        << QString(QLL("is-outline & is-non-header")) << QString(QLL("a.h"))
+        << thisModeFile("return m_x + m_b;",
+                        "    m_x = 1;\n    m_b = 2;\n    base();\n",
+                        "    m_v = T();\n    base();\n");
+}
+
+/// Formats one file with the `outline-this` rule under each row's
+/// `[Relations] thisMode` (the default for an empty one); the input says
+/// `this->` only in front of `base()` in `W::run()`.
+void tst_FormatRules::testThisMode_shouldFollowSettings()
+{
+    QFETCH(QString, thisMode);
+    QFETCH(QString, file);
+    QFETCH(QByteArray, output);
+    QTemporaryDir dir;
+    QStringList files;
+    if ( ! thisMode.isEmpty()) {
+        files << QString(QLL(".formatrc"))
+            << QString(QLL("[Relations]\nthisMode = %1\n")).arg(thisMode);
+    }
+    writeProject(dir, files);
+    const QString path = dir.path() + QLatin1Char('/') + file;
+    const QByteArray input = thisModeFile(
+        "return m_x + m_b;",
+        "    m_x = 1;\n    m_b = 2;\n    this->base();\n",
+        "    m_v = T();\n    base();\n"
+    );
+    const FormatResult result = qMove(this->formatWith(
+        QString(QLL("outline-this")),
+        input,
+        path
+    ));
+    qExpect(result.error)->toBeEmpty();
+    QCOMPARE(result.text, output);
+    const FormatResult again = qMove(this->formatWith(
+        QString(QLL("outline-this")),
+        result.text,
+        path
+    ));
+    QCOMPARE(again.text, output);
+}
+
+void tst_FormatRules::testThisMode_shouldDefaultToBaseExistingAndHeaderOutline()
+{
+    const QStringList program = FormatSettings().thisMode;
+    qExpect(program)->toEqual(FormatSettings::defaultThisMode());
+    const QString outline = QString(QLL("is-outline"));
+    QSet<QString > holding;
+    holding << QString(QLL("is-base-member"));
+    qExpect(Config::Condition::evaluate(program, holding))->toBeTruthy();
+    holding.clear();
+    holding << outline << QString(QLL("is-non-header"));
+    qExpect(Config::Condition::evaluate(program, holding))->toBeFalsy();
+    holding.clear();
+    holding << outline << QString(QLL("is-header"));
+    qExpect(Config::Condition::evaluate(program, holding))->toBeTruthy();
+    holding.clear();
+    holding << QString(QLL("already-existing"));
+    qExpect(Config::Condition::evaluate(program, holding))->toBeTruthy();
+}
+
+void tst_FormatRules::testThisMode_shouldRejectUnknownName()
+{
+    QTemporaryDir dir;
+    writeProject(dir, QStringList() << QString(QLL(".formatrc"))
+        << QString(QLL("[Relations]\nthisMode = is-base | always\n"))
+    );
+    const FormatResult result = qMove(this->formatWith(
+        QString(QLL("outline-this")),
+        "int a;\n",
+        dir.path() + QLL("/a.cpp")
+    ));
+    qExpect(result.error)
+        ->toContain(QString(QLL(".formatrc: [Relations] thisMode = is-base | always: use")));
+}
+
+/// Formats blocks inside outline bodies under the default
+/// `[Relations] thisMode`: the `this->` in a block stays, a base member
+/// gets one, and the own member of a class template stays bare.
+void tst_FormatRules::testThisMode_shouldReachMembersInBlocks()
+{
+    const QByteArray input = thisModeFile(
+        "return m_x;",
+        "    if (m_x) {\n        this->m_x = m_b;\n    }\n",
+        "    for (;;) {\n        m_v = T();\n    }\n"
+    );
+    const QByteArray output = thisModeFile(
+        "return m_x;",
+        "    if (m_x) {\n        this->m_x = this->m_b;\n    }\n",
+        "    for (;;) {\n        m_v = T();\n    }\n"
+    );
+    QTemporaryDir dir;
+    writeProject(dir, QStringList());
+    const FormatResult result = qMove(this->formatWith(
+        QString(QLL("outline-this")),
+        input,
+        dir.path() + QLL("/a.cpp")
+    ));
+    qExpect(result.error)->toBeEmpty();
+    QCOMPARE(result.text, output);
+}
+
+/// Builds the index of the `occurrence`-th symbol (counting from 0) of
+/// `document` spelled `lexem`, or -1 when there is none.
+static int symbolIndex(
+        const FormatDocument & document, const QByteArray & lexem,
+        int occurrence = 0)
+{
+    for (int i = 0; i < document.symbols().size(); ++i) {
+        if (document.lexem(i) == lexem && occurrence-- == 0) {
+            return i;
+        }
+    }
+    return -1;
+}
+
+/// Asks the conditions for tokens of every kind of scope, the way any rule
+/// may: file scope, a template's class body, an inline body, and the
+/// outline bodies of a class and of a class template.
+void tst_FormatRules::testScopeConditions_shouldNameScopeOfToken()
+{
+    const QByteArray text = thisModeFile(
+        "return m_x + this->m_b;",
+        "    m_x = 1;\n    this->m_b = 2;\n"
+            "    if (m_x) {\n        this->m_x = m_b;\n    }\n",
+        "    m_v = T();\n"
+    );
+    const FormatDocument document(text, QString(QLL("a.h")));
+    FormatScopeConditions conditions(&document);
+    const QString always = QString(QLL("always"));
+    const QString header = QString(QLL("is-header"));
+    const QString outline = QString(QLL("is-outline"));
+    const QString templated = QString(QLL("is-template"));
+    const QString base = QString(QLL("is-base-member"));
+    const QString existing = QString(QLL("already-existing"));
+
+    // A file-scope token is in no class.
+    qExpect(conditions.holding(symbolIndex(document, "class")))
+        ->toEqual(QSet<QString >() << always << header);
+    // The class template's own field, in its class body.
+    qExpect(conditions.holding(symbolIndex(document, "m_v")))
+        ->toEqual(QSet<QString >() << always << header << templated);
+    // The inline body of `W::get()`: an own member, then a base member.
+    qExpect(conditions.holding(symbolIndex(document, "m_x", 0)))
+        ->toEqual(QSet<QString >() << always << header);
+    qExpect(conditions.holding(symbolIndex(document, "m_b", 1)))
+        ->toEqual(QSet<QString >() << always << header << base << existing);
+    // The outline body of `W::run()`.
+    qExpect(conditions.holding(symbolIndex(document, "m_x", 2)))
+        ->toEqual(QSet<QString >() << always << header << outline);
+    qExpect(conditions.holding(symbolIndex(document, "m_b", 2)))
+        ->toEqual(QSet<QString >() << always << header << outline << base << existing);
+    // A block inside the outline body of `W::run()`.
+    qExpect(conditions.holding(symbolIndex(document, "m_x", 4)))
+        ->toEqual(QSet<QString >() << always << header << outline << existing);
+    qExpect(conditions.holding(symbolIndex(document, "m_b", 3)))
+        ->toEqual(QSet<QString >() << always << header << outline << base);
+    // The outline body of `V<T>::run()`.
+    qExpect(conditions.holding(symbolIndex(document, "m_v", 1)))
+        ->toEqual(QSet<QString >() << always << header << outline << templated);
+
+    // The same code in a source file.
+    const FormatDocument source(text, QString(QLL("a.cpp")));
+    FormatScopeConditions sourceConditions(&source);
+    qExpect(sourceConditions.holding(symbolIndex(source, "m_x", 2)))
+        ->toEqual(QSet<QString >() << always << QString(QLL("is-non-header")) << outline);
+}
+
+/// Asks for a condition with a percent term without setting its value: the
+/// condition logs that, and the default condition decides instead.
+void tst_FormatRules::testScopeConditions_shouldFallBackWithoutPercent()
+{
+    const FormatDocument document(
+        "void f()\n{\n    run(first);\n}\n",
+        QString(QLL("a.h"))
+    );
+    FormatScopeConditions conditions(&document);
+    const QStringList names = FormatScopeConditions::names();
+    QStringList program;
+    QStringList fallback;
+    QString error;
+    qExpect(Config::Condition::compile(
+        QString(QLL("40% | never")),
+        names,
+        &program,
+        &error,
+        true
+    ))->toBeTruthy();
+    qExpect(Config::Condition::compile(
+        QString(QLL("is-header")),
+        names,
+        &fallback,
+        &error,
+        true
+    ))->toBeTruthy();
+    const int token = symbolIndex(document, "run");
+    QTest::ignoreMessage(QtWarningMsg, "Config::Condition: no value is set for the term 40%");
+    qExpect(conditions.holds(program, token, -1, fallback))->toBeTruthy();
+    qExpect(conditions.holds(program, token, 50, fallback))->toBeTruthy();
+    qExpect(conditions.holds(program, token, 30, fallback))->toBeFalsy();
+}
+
+/// Builds a function body that calls `run` with two arguments over two
+/// lines, the `(` at the column after `prefix`; on one line, the call would
+/// pass the wrap column.
+static QByteArray argsWrapFile(const QByteArray & prefix)
+{
+    return "void f()\n{\n    " + prefix + "(theFirstArgumentWithAVeryLongName,\n"
+        + QByteArray(prefix.size() + 5, ' ') + "theSecondArgumentWithAVeryLongName);\n}\n";
+}
+
+/// Builds the same body with the call broken after its `(`.
+static QByteArray argsWrapBroken(const QByteArray & prefix)
+{
+    return "void f()\n{\n    " + prefix + "(\n        theFirstArgumentWithAVeryLongName,\n"
+        "        theSecondArgumentWithAVeryLongName\n    );\n}\n";
+}
+
+void tst_FormatRules::testArgsWrap_shouldFollowSettings_data()
+{
+    // The `(` of `total` sits at column 26 of 80 (32.5%), that of `near` at
+    // column 9 (11.25%).
+    const QByteArray total = "const int total = sum";
+    const QByteArray near = "near";
+    QTest::addColumn<QString >("wrapArgsAt");
+    QTest::addColumn<QString >("file");
+    QTest::addColumn<QByteArray >("input");
+    QTest::addColumn<QByteArray >("output");
+    QTest::newRow("default, below it") << QString() << QString(QLL("a.cpp"))
+        << argsWrapFile(total) << argsWrapFile(total);
+    QTest::newRow("a name alone, in a source")
+        << QString(QLL("is-non-header")) << QString(QLL("a.cpp"))
+        << argsWrapFile(near) << argsWrapBroken(near);
+    QTest::newRow("a name alone, in a header")
+        << QString(QLL("is-non-header")) << QString(QLL("a.h"))
+        << argsWrapFile(near) << argsWrapFile(near);
+    QTest::newRow("percents by file, in a header")
+        << QString(QLL("(40% & is-non-header) | (30% & is-header)")) << QString(QLL("a.h"))
+        << argsWrapFile(total) << argsWrapBroken(total);
+    QTest::newRow("percents by file, in a source")
+        << QString(QLL("(40% & is-non-header) | (30% & is-header)")) << QString(QLL("a.cpp"))
+        << argsWrapFile(total) << argsWrapFile(total);
+    QTest::newRow("a percent no column passes") << QString(QLL("100%")) << QString(QLL("a.h"))
+        << argsWrapFile(total) << argsWrapFile(total);
+    QTest::newRow("every column") << QString(QLL("0%")) << QString(QLL("a.h"))
+        << argsWrapFile(near) << argsWrapBroken(near);
+}
+
+/// Formats one call with the `args-wrap` rule under each row's
+/// `[Structure] wrapArgsAt` (the default for an empty one).
+void tst_FormatRules::testArgsWrap_shouldFollowSettings()
+{
+    QFETCH(QString, wrapArgsAt);
+    QFETCH(QString, file);
+    QFETCH(QByteArray, input);
+    QFETCH(QByteArray, output);
+    QTemporaryDir dir;
+    QStringList files;
+    if ( ! wrapArgsAt.isEmpty()) {
+        files << QString(QLL(".formatrc"))
+            << QString(QLL("[Structure]\nwrapArgsAt = %1\n")).arg(wrapArgsAt);
+    }
+    writeProject(dir, files);
+    const QString path = dir.path() + QLatin1Char('/') + file;
+    const QString rule = QString(QLL("args-wrap"));
+    const FormatResult result = qMove(this->formatWith(rule, input, path));
+    qExpect(result.error)->toBeEmpty();
+    QCOMPARE(result.text, output);
+    const FormatResult again = qMove(this->formatWith(
+        rule,
+        result.text,
+        path
+    ));
+    QCOMPARE(again.text, output);
 }
 
 QTEST_APPLESS_MAIN(tst_FormatRules)
