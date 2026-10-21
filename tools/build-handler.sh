@@ -264,6 +264,21 @@ bh_strict_mode() {
     # user, then re-raise; hence the script exits 130 instead of marching
     # on to the next step.
     trap '_bh_on_sigint' INT
+    trap '_bh_on_exit' EXIT
+}
+
+# _bh_on_exit
+#
+# Runs the hooks that `bh_hook` added for the exit stages, when the script
+# exits: `pre-exit`, then `on-exit`, then `post-exit`. `BH_EXIT_STATUS` holds
+# the status the script exits with; a hook that fails changes it in no way.
+_bh_on_exit() {
+    BH_EXIT_STATUS=$?
+    set +e
+    bh_hook_run pre-exit
+    bh_hook_run on-exit
+    bh_hook_run post-exit
+    exit "$BH_EXIT_STATUS"
 }
 
 # _bh_on_sigint
@@ -374,34 +389,6 @@ bh_ticker_stop() {
 
 
 # ---- defaults ----------------------------------------------------------
-
-# Extended-regex that matches one real build step (compile / moc / uic /
-# rcc / resource / archive / link) in build-tool output, used to size and
-# advance the progress bar. The `(^|/|\\)` anchor means the tool name must
-# start the line or follow a path separator -- so recursive driver lines
-# (`cd X/ && make ...`, `... && jom ...`) are excluded, and the drivers
-# themselves (make / nmake / jom) aren't in the tool list either.
-#
-# Covers every toolchain we drive through GitBash on Windows, plus Linux
-# and macOS:
-#   - Unix: clang/clang++, gcc, g++, c++, ar, ranlib, libtool, moc/uic/rcc.
-#   - MinGW: adds windres (resources) + dlltool (DLL import libs).
-#   - MSVC (via nmake or jom.exe): adds cl, link, lib, rc, mt, midl.
-#   - `\\` in the anchor matches MSVC's backslash paths (C:\...\cl.exe);
-#     MinGW/MSYS uses forward slashes, already covered by `/`.
-#   - The trailing `([.]exe)?` matches the Windows `.exe` suffix.
-#
-# Two escaping rules keep ONE pattern usable by both `grep -E` and awk:
-#   - Literal `+`/`.` are bracket classes `[+]`/`[.]`, not `\+`/`\.`:
-#     awk's regex strips a lone backslash (turning `\+` into an illegal
-#     `++` quantifier). `clang([+][+])?` matches `clang` and `clang++`
-#     alike -- the missing `clang++` case is what made the qmake build's
-#     compile step fall back to a spinner instead of a determinate bar.
-#   - The literal `\\` (backslash) survives grep, but awk's `-v` collapses
-#     it, so the awk consumer reads this via ENVIRON[] (no -v mangling) --
-#     which is why the variable is exported.
-BH_BUILD_STEP_RE='(^|/|\\)(clang([+][+])?|gcc|g[+][+]|c[+][+]|cl|link|lib|rc|mt|midl|moc|uic|rcc|windres|dlltool|libtool|ar|ranlib)([.]exe)?[[:space:]]'
-export BH_BUILD_STEP_RE
 
 # Extended-regex (grep -E) matching the lines worth showing when a build
 # step fails -- the "Filter" view in bh_dump_fail. Covers gcc/clang
@@ -804,7 +791,7 @@ bh_take_test_pro() {
     set -f
     IFS='
 '
-    for _bhtp_pro in $(find "$BH_ROOT" -name '*.pro' \
+    for _bhtp_pro in $(find -H "$BH_ROOT" -name '*.pro' \
             ! -path '*/build/*' ! -path '*/.git/*' 2>/dev/null | sort); do
         _bhtp_rel=${_bhtp_pro#"$BH_ROOT"/}
         case "$_bhtp_rel" in
@@ -1019,6 +1006,12 @@ bh_parse_args() {
             --release-debug)  BH_MODE=release; BH_DEBUG_INFO=1; BH_MODE_GIVEN=1; shift;;
             --headless)       BH_HEADLESS=1; shift;;
             --no-progress)    BH_NO_PROGRESS=1; shift;;
+            # --estimate-actions=<count>: the `estimate` progress mode, whose
+            # bar starts at <count> build actions (see bh_progress_mode_resolve).
+            --estimate-actions=*)
+                BH_PROGRESS_MODE=estimate
+                BH_ESTIMATED_ACTIONS="${1#*=}"
+                shift;;
             # --libc=<static|musl|...>: how the C runtime is linked (resolved
             # below into BH_LIBC_CC / BH_LIBC_LDFLAGS that build scripts apply).
             # --musl is an alias for --libc=musl.
@@ -1249,13 +1242,16 @@ bh_parse_args() {
 # bh_dependency_build_static hands on to a framework's static build. It leaves
 # out the flags that name this project's own paths or steps, which that build
 # would fail on or turn against this project: --filter (and --only), the
-# --static regexp (the framework gets a plain --static), --test, --tests, and
+# --static regexp (the framework gets a plain --static),
+# --estimate-actions (the count of this project's build), --test,
+# --tests, and
 # --test-review with their test project, --run with its subdir, and -d
 # (--directory). --test-review's own defaults go along, in front of every
 # flag, just as bh_parse_args sets them before it reads the flags.
 bh_forward_note() {
     case "$2" in
         --filter | --filter=* | --only | --only=* | --static | --static=* \
+                | --estimate-actions=* \
                 | --test | --tests | --run | -d | --directory)
             return 0
             ;;
@@ -1290,7 +1286,7 @@ bh_forward_add() {
 # Prints each `.pro` under the source root, sorted, leaving out the build
 # folders, `.git`, and the scratch folder `todo/`.
 bh_pro_files() {
-    { find "$BH_ROOT" -name '*.pro' ! -path '*/build/*' ! -path '*/.git/*' \
+    { find -H "$BH_ROOT" -name '*.pro' ! -path '*/build/*' ! -path '*/.git/*' \
         ! -path "$BH_ROOT/todo/*" 2>/dev/null || true; } | sort
 }
 
@@ -1514,22 +1510,18 @@ bh_progress_render() {
             # row. Cursor sequence:
             #   \r          col 0 of bar row
             #   \033[K      clear bar row
-            #   \033[1A     up to header row
-            #   \033[K      clear header row
+            #   \033[<H>A   up to the header's first row, of
+            #               its BH_PROGRESS_HEADER_LINES rows
+            #   \033[J      clear the header rows
             #   \r          col 0
             if [ "${BH_PROGRESS_HEADER_PRINTED:-0}" -eq 1 ]; then
-                printf '\r\033[K\033[1A\033[K\r' 1>&2
+                printf '\r\033[K\033[%dA\033[J\r' "${BH_PROGRESS_HEADER_LINES:-1}" 1>&2
                 BH_PROGRESS_HEADER_PRINTED=0
             else
                 printf '\r\033[K' 1>&2
             fi
-            printf '[%s]' "$_bhp_bracket" 1>&2
-            if [ -n "${BH_STEPS_TOTAL:-}" ] && [ -n "${_step:-}" ]; then
-                printf ' (%d/%d)' "$_step" "$BH_STEPS_TOTAL" 1>&2
-            fi
-            if [ -n "${BH_PROGRESS_DESC:-}" ]; then
-                printf ': %s' "$BH_PROGRESS_DESC" 1>&2
-            fi
+            bh_progress_row "${_step:-}" "${BH_PROGRESS_DESC:-}"
+            printf '[%s]%s' "$_bhp_bracket" "$BH_PROGRESS_ROW" 1>&2
         else
             # Active bar: description sits on its own header row,
             # the bar row updates in place on the next row. The
@@ -1539,7 +1531,10 @@ bh_progress_render() {
             # blows past terminal width and visually thrashes.
             if [ "${BH_PROGRESS_HEADER_PRINTED:-0}" -eq 0 ] \
                 && [ -n "${BH_PROGRESS_DESC:-}" ]; then
-                printf '\r\033[K%s\n' "$BH_PROGRESS_DESC" 1>&2
+                bh_progress_row_clear
+                bh_progress_row "${_step:-}" "$BH_PROGRESS_DESC"
+                printf '\r\033[K[R]%s\n' "$BH_PROGRESS_ROW" 1>&2
+                BH_PROGRESS_HEADER_LINES=$BH_PROGRESS_ROW_LINES
                 BH_PROGRESS_HEADER_PRINTED=1
             fi
             # Bar mode is only used when progress is *known* and
@@ -1553,8 +1548,9 @@ bh_progress_render() {
             _bhp_frac=$((_bhp_c % 100))
             printf '\r\033[K  [%s] %3d.%02d %%' \
                 "$_bhp_bracket" "$_bhp_int" "$_bhp_frac" 1>&2
-            if [ -n "${BH_STEPS_TOTAL:-}" ] && [ -n "${_step:-}" ]; then
-                printf ' (%d/%d)' "$_step" "$BH_STEPS_TOTAL" 1>&2
+            printf ' (%d/%d)' "$BH_PROGRESS_VALUE" "$BH_PROGRESS_MAX" 1>&2
+            if [ -n "${BH_PROGRESS_CLOCK:-}" ]; then
+                printf ' %s' "$BH_PROGRESS_CLOCK" 1>&2
             fi
         fi
     else
@@ -1562,13 +1558,10 @@ bh_progress_render() {
         # (flush-left -- bar mode keeps the 2-space indent so the
         # bar row sits visually nested under its description header,
         # but spinner-mode rows are top-level and don't want that).
-        printf '\r\033[K[%s]' "$_bhp_bracket" 1>&2
-        if [ -n "${BH_STEPS_TOTAL:-}" ] && [ -n "${_step:-}" ]; then
-            printf ' (%d/%d)' "$_step" "$BH_STEPS_TOTAL" 1>&2
-        fi
-        if [ -n "${BH_PROGRESS_DESC:-}" ]; then
-            printf ': %s' "$BH_PROGRESS_DESC" 1>&2
-        fi
+        bh_progress_row_clear
+        bh_progress_row "${_step:-}" "${BH_PROGRESS_DESC:-}"
+        printf '[%s]%s' "$_bhp_bracket" "$BH_PROGRESS_ROW" 1>&2
+        BH_PROGRESS_DRAWN=$BH_PROGRESS_ROW_LINES
     fi
 }
 
@@ -1585,6 +1578,7 @@ bh_progress_hide() {
     BH_PROGRESS_DONE_GLYPH=${1:-√}
     bh_progress_render
     printf '\n' 1>&2
+    BH_PROGRESS_DRAWN=0
 }
 
 # bh_spin_until <pid>
@@ -1910,7 +1904,10 @@ bh_run() {
 # bh_newer_project_file <file>
 #
 # Prints the first .pro, .pri, or .prf under BH_ROOT (only .pro under
-# --ignore-pri) that is newer than <file>, or nothing when none is.
+# --ignore-pri) that is newer than <file>, or nothing when none is. `-H` walks
+# into BH_ROOT even when it is a link (a junction on Windows); a plain `find`
+# prints only the link itself then. Each walk of a root folder here takes `-H`
+# too.
 bh_newer_project_file() {
     # `|| true`: `head -1` closes the pipe after the first match, so
     # `find` is killed by SIGPIPE and pipefail (best-effort in
@@ -1919,12 +1916,12 @@ bh_newer_project_file() {
     # (e.g. a fresh checkout or a bulk touch). Same idiom as
     # the `make -n | grep -c || true` precount below.
     if [ "${BH_IGNORE_PRI:-0}" -eq 0 ]; then
-        find "$BH_ROOT" \
+        find -H "$BH_ROOT" \
             \( -name '*.pro' -o -name '*.pri' -o -name '*.prf' \) \
             ! -path '*/build/*' ! -path '*/.git/*' \
             -newer "$1" 2>/dev/null | head -1 || true
     else
-        find "$BH_ROOT" -name '*.pro' \
+        find -H "$BH_ROOT" -name '*.pro' \
             ! -path '*/build/*' ! -path '*/.git/*' \
             -newer "$1" 2>/dev/null | head -1 || true
     fi
@@ -2008,12 +2005,15 @@ bh_run_qmake() {
     # the freshness check back to just `.pro` files for cases where an
     # unchanged-in-effect `.pri` keeps tripping a re-qmake
     # (e.g. an IDE that `touch`-es a .pri on save).
+    bh_qmake_trace_inputs
     if [ "${BH_FORCE_QMAKE:-0}" -eq 0 ] && [ -f "$_bhq_makefile" ] \
         && [ "$_bhq_build_differs" -eq 0 ] \
         && ! bh_static_list_newer "$_bhq_makefile"
     then
         _bhq_newer=$(bh_newer_project_file "$_bhq_makefile")
+        bh_qmake_trace_newer "$_bhq_newer"
         if [ -z "$_bhq_newer" ]; then
+            bh_qmake_trace "Skips qmake."
             # Treat the skip as a successful step: show the row
             # with the checkmark + description so the user can see
             # that qmake decided to skip.
@@ -2024,6 +2024,7 @@ bh_run_qmake() {
             return 0
         fi
     fi
+    bh_qmake_trace "Runs qmake."
 
     if [ "$_bhq_build_differs" -eq 1 ]; then
         echo "$(pwd): its Makefile was made for another toolchain or variant; cleaning what that build made first."
@@ -2183,7 +2184,7 @@ bh_clean() {
 # `find | sort` hands them over; a project never built (no Makefile) is
 # passed over.
 bh_clean_candidates() {
-    { find "$BH_ROOT" -name '*.pro' \
+    { find -H "$BH_ROOT" -name '*.pro' \
         ! -path '*/build/*' ! -path '*/.git/*' 2>/dev/null || true; } \
     | sort \
     | while IFS= read -r _bcc_pro; do
@@ -2396,7 +2397,7 @@ bh_static_record() {
     if [ -n "${BH_STATIC:-}" ]; then
         # Sorts each `.pro` that --filter keeps as static or shared.
         _sr_projects=$(
-            { find "$BH_ROOT" -name '*.pro' \
+            { find -H "$BH_ROOT" -name '*.pro' \
                 ! -path '*/build/*' ! -path '*/.git/*' 2>/dev/null || true; } \
             | sort \
             | while IFS= read -r _sr_pro; do
@@ -2468,7 +2469,7 @@ bh_static_clean_switched() {
     fi
     # The `.Debug` and `.Release` Makefiles of a debug_and_release project
     # are cleaned through its main Makefile.
-    { find "$BUILD_DIR" -type f -name 'Makefile*' \
+    { find -H "$BUILD_DIR" -type f -name 'Makefile*' \
         ! -name '*.Debug' ! -name '*.Release' 2>/dev/null || true; } \
     | sort \
     | while IFS= read -r _scs_makefile; do
@@ -2843,12 +2844,10 @@ bh_make() {
     fi
     # Pre-generate all moc output (fixes QRemote _remote.h ordering and,
     # in case of a moc crash, isolates it). See bh_mocables_prepass.
-    bh_mocables_prepass
+    bh_run_silent_fg 'Running meta-object-compiler (moc tool).' bh_mocables_prepass
     # Race-aware detection: cheap grep beats `make -n <tgt>` which
     # would re-evaluate the full Makefile (seconds on a big tree).
-    if [ -f "$_bh_makefile" ] \
-        && grep -q '^release-all:' "$_bh_makefile" \
-        && grep -q '^debug-all:'   "$_bh_makefile"
+    if bh_make_is_split "$_bh_makefile"
     then
         # The split makes two bh_make_step calls instead of one,
         # and each bh_make_step contributes two visible phases
@@ -2861,11 +2860,25 @@ bh_make() {
         if [ -n "${BH_STEPS_TOTAL:-}" ]; then
             BH_STEPS_TOTAL=$((BH_STEPS_TOTAL + 2))
         fi
+        # The second make run's build-plan step, when the progress mode
+        # hides it (see `bh_progress_plan_steps`).
+        bh_progress_plan_steps 1
         bh_make_step make-release  release-all "$_bh_jobs" "$@"
         bh_make_step make-debug    debug-all   "$_bh_jobs" "$@"
     else
         bh_make_step make ""        "$_bh_jobs" "$@"
     fi
+}
+
+# bh_make_is_split <makefile>
+#
+# Tells whether <makefile> builds the release and the debug variant through
+# targets of their own (`release-all` and `debug-all`), which `bh_make`
+# then runs one after the other.
+bh_make_is_split() {
+    [ -f "$1" ] \
+        && grep -q '^release-all:' "$1" \
+        && grep -q '^debug-all:'   "$1"
 }
 
 # bh_make_step <log-name> <target-or-empty> <jobs> [extra-make-args...]
@@ -2894,35 +2907,15 @@ bh_make() {
 bh_make_step() {
     _bh_name=$1; _bh_tgt=$2; _bh_jobs=$3; shift 3
 
-    # Phase 1 of two: "computing build plan". Advances the
-    # `(step/total)` counter by one and shows a rotating spinner while
-    # `make -n` runs in the background (its textual output redirected to
-    # a temp file the user never sees).
-    # See also docs of: bh_spin_until, for the background-poll spinner.
-    _step=$((_step + 1))
-    bh_progress_setType spinner
-    bh_progress_setMax 0
-    bh_progress_setDescription "Makefile runner ($_bh_name) is computing build plan."
-    bh_progress_render                       # initial frame so the row appears
-
-    # `make -n` still remakes an out-of-date Makefile (running qmake), hence
-    # it runs to its end even on Ctrl+C (see `bh_held_start`). A spinner
-    # turns meanwhile when the row shows; `grep -c` exits 1 on zero matches,
-    # and `|| true` keeps pipefail+errexit quiet (grep still prints "0").
-    _bh_precount=$LOGS/$(printf '%02d-%s.precount.tmp' "$_step" "$_bh_name")
+    # Phase 1 of two: "computing build plan", whose dry run of make sizes
+    # the bar of phase 2, in the mode that `BH_PROGRESS_MODE` picks (see
+    # `bh_progress_plan_start`).
+    _bh_precount=$LOGS/$(printf '%02d-%s.precount.tmp' "$((_step + 1))" "$_bh_name")
     if [ -n "$_bh_tgt" ]; then
-        bh_held_start bh_make_run -n "$@" "$_bh_tgt" 2>/dev/null > "$_bh_precount"
+        bh_progress_plan_start "$_bh_name" "$_bh_precount" "$@" "$_bh_tgt"
     else
-        bh_held_start bh_make_run -n "$@" 2>/dev/null > "$_bh_precount"
+        bh_progress_plan_start "$_bh_name" "$_bh_precount" "$@"
     fi
-    if bh_progress_active; then
-        bh_spin_until "$_bh_held_pid"
-    fi
-    bh_held_finish || true
-    _bh_total=$(grep -cE "$BH_BUILD_STEP_RE" \
-        "$_bh_precount" 2>/dev/null || true)
-    rm -f "$_bh_precount"
-    bh_progress_hide                         # row settles on [√] (N/M)
 
     # Phase 2 of two: "compiling source-codes". A separate step --
     # increment again so the counter walks (qmake -> computing
@@ -2930,25 +2923,16 @@ bh_make_step() {
     # number for the actual make output.
     _step=$((_step + 1))
     _bh_log=$LOGS/$(printf '%02d-%s.log' "$_step" "$_bh_name")
-    # Track whether this is a no-op build (make -n found zero
-    # compile commands). When there's no computable progress to
-    # display, we switch to spinner mode rather than show a fake
-    # `(0/1) 0%` bar that wouldn't move -- spinner mode is the
-    # rule for "progress is unknown / indeterminate"; the bar (with
-    # its embedded leading-edge spinner) is reserved for "progress
-    # is known and bounded".
-    _bh_no_work=0
-    if [ "${_bh_total:-0}" -le 0 ]; then
-        _bh_total=1
-        _bh_no_work=1
-    fi
-
-    if [ "$_bh_no_work" -eq 1 ]; then
-        bh_progress_setType spinner
-        bh_progress_setMax 0
+    # Starts as the build plan says (see `bh_progress_plan_start`): a bar
+    # of the build steps it counted, or a spinner while that is unknown.
+    bh_progress_setType "$BH_PLAN_TYPE"
+    if [ "$BH_PLAN_TYPE" = bar ]; then
+        bh_progress_setMax "$BH_PLAN_MAX"
+        if [ "$BH_PLAN_MAX" -le 0 ]; then
+            bh_progress_setMax 1
+        fi
     else
-        bh_progress_setType bar
-        bh_progress_setMax "$_bh_total"
+        bh_progress_setMax 0
     fi
     bh_progress_setDescription "Makefile runner ($_bh_name) is compiling source-codes."
     bh_progress_render                # row appears immediately so
@@ -3033,6 +3017,7 @@ bh_make_step() {
                         # line on it, then re-render the bar on
                         # the next row -- visually pins the bar
                         # below the scrolling stream.
+                        bh_progress_row_clear
                         printf '\r\033[K%s\n' "${_bhm_line#L }"
                         bh_progress_render
                         ;;
@@ -3042,6 +3027,8 @@ bh_make_step() {
                         # keeps one pace whether compile lines come in
                         # bursts or not at all. No `BH_PROGRESS_VALUE`
                         # change, as no compile happened.
+                        bh_progress_plan_tick
+                        bh_progress_clock
                         bh_progress_tick
                         ;;
                 esac
@@ -3053,13 +3040,15 @@ bh_make_step() {
         [ "$_bh_make_status" -eq 0 ] || _bh_status=$_bh_make_status
     fi
     rm -f "$_bh_statusfile"
+    bh_progress_plan_finish
+    bh_progress_actions_performed "$_bh_log"
     set -e
     # The pipeline's `while read` ran in a subshell, so the
     # BH_PROGRESS_VALUE increments per compile-line never reached
     # this (parent) shell -- parent's VALUE is still 0. Snap it to
     # MAX on success so `bh_progress_hide` renders the bar row's
     # final state as `[√] (N/N)` instead of `[√] (0/N)`.
-    if [ "$_bh_status" -eq 0 ] && [ "$_bh_no_work" -eq 0 ]; then
+    if [ "$_bh_status" -eq 0 ] && [ "$BH_PROGRESS_TYPE" = bar ]; then
         BH_PROGRESS_VALUE=$BH_PROGRESS_MAX
     fi
     if [ "$_bh_status" -eq 0 ]; then
@@ -3458,6 +3447,15 @@ bh_template_app() {
     # `--test` adds: test-qmake + test-make-computing + test-make-compiling + tests = 4
     [ "${BH_RUN_TESTS:-0}"   -gt 0 ] && BH_STEPS_TOTAL=$((BH_STEPS_TOTAL + 4))
     [ "${BH_RUN_TARGET:-0}"  -gt 0 ] && BH_STEPS_TOTAL=$((BH_STEPS_TOTAL + 1))
+    # `bh_make` runs the moc pass as a step of its own (see
+    # bh_mocables_prepass), and the progress mode may hide the build-plan step
+    # of each make run (see bh_progress_plan_steps): the app's, and the tests'.
+    BH_STEPS_TOTAL=$((BH_STEPS_TOTAL + 1))
+    if [ "${BH_RUN_TESTS:-0}" -gt 0 ]; then
+        bh_progress_plan_steps 2
+    else
+        bh_progress_plan_steps 1
+    fi
 
     # Consumer must have resolved the XD framework before calling us.
     [ -n "${XD_DIR:-}" ] || bh_error "XD_DIR not set -- resolve the XD framework first"
@@ -3786,7 +3784,7 @@ bh_build_order_record() {
     # searches its mkspecs before .qmake.conf, missing MODULE_VERSION and dying
     # with "Module does not define version." They hold no config (0 bytes), so
     # removing them is safe -- qmake recreates the real root marker as needed.
-    find "$BUILD_DIR" -name .qmake.cache -size 0 -delete 2>/dev/null || :
+    find -H "$BUILD_DIR" -name .qmake.cache -size 0 -delete 2>/dev/null || :
     echo "Recording build order via qmake..."
     if [ "${BH_SAVE_SPACE:-0}" -eq 1 ]; then
         bh_qmake_in_build_order "$_bor_pro"
@@ -4469,6 +4467,11 @@ bh_template_subdirs() {
     if [ "${BH_RUN_TARGET:-0}" -gt 0 ] && [ "${BH_RUN_TESTS:-0}" -eq 0 ]; then
         BH_STEPS_TOTAL=$((BH_STEPS_TOTAL + 1))                    # Staging in --run block
     fi
+    # `bh_make` runs the moc pass as a step of its own (see
+    # bh_mocables_prepass), and the progress mode may hide the build-plan step
+    # of its make run (see bh_progress_plan_steps).
+    BH_STEPS_TOTAL=$((BH_STEPS_TOTAL + 1))
+    bh_progress_plan_steps 1
 
     [ -n "${XD_DIR:-}" ] || bh_error "XD_DIR not set -- resolve the XD framework first (or set XD_DIR=\$ROOT when building XD itself)"
 
@@ -4751,6 +4754,9 @@ bh_template_makefile() {
     BH_STEPS_TOTAL=$((BH_ARCH_COUNT * 2))            # computing + compiling per arch
     [ "$BH_ARCH_COUNT" -gt 1 ] && BH_STEPS_TOTAL=$((BH_STEPS_TOTAL + 1))  # lipo
     [ "${BH_CLEAN:-0}" -gt 0 ] && BH_STEPS_TOTAL=$((BH_STEPS_TOTAL + 1))
+    # The progress mode may hide the build-plan step of each arch's make run
+    # (see bh_progress_plan_steps).
+    bh_progress_plan_steps "$BH_ARCH_COUNT"
 
     [ -n "${BH_ROOT:-}" ] || bh_error "BH_ROOT not set -- caller must set it to the source root"
     : "${BUILD_DIR:=$(dirname "$BH_ROOT")/build/$(basename "$BH_ROOT")-$BH_MODE${BH_BUILD_DIR_SUFFIX:-}}"
@@ -4771,7 +4777,7 @@ bh_template_makefile() {
     # build folder, which has no Makefile of qmake's for bh_clean to run.
     if [ "${BH_CLEAN:-0}" -gt 0 ] || [ -n "${BH_REBUILD:-}" ]; then
         echo "Removing what $BUILD_DIR holds, except its logs."
-        find "$BUILD_DIR" -mindepth 1 -maxdepth 1 ! -name logs -exec rm -rf {} +
+        find -H "$BUILD_DIR" -mindepth 1 -maxdepth 1 ! -name logs -exec rm -rf {} +
     fi
     bh_logs_init "$BUILD_DIR/logs"
     [ "${BH_NO_BUILD:-0}" -gt 0 ] && return 0
@@ -4800,3 +4806,36 @@ bh_template_makefile() {
         bh_run --whole lipo lipo -create $_bhmkf_parts -output "$_bhmkf_binary"
     fi
 }
+
+
+# MARK: Libraries.
+
+# Usage: bh_tools_dir
+#
+# Prints the folder that holds this file, whose `shell-libs` folder holds the
+# libraries below: `BH_TOOLS_DIR` when a caller preset it, else the folder of
+# this file that bash names in `BASH_SOURCE`, else the `tools` folder of
+# `XD_DIR` or of `BH_ROOT`, else the folder of the running script, or its
+# `tools` folder; the first that holds `shell-libs` wins. Fails when none does.
+bh_tools_dir() {
+    for _btd_dir in "${BH_TOOLS_DIR:-}" "${BASH_SOURCE:+${BASH_SOURCE%[/\\]*}}" \
+        "${XD_DIR:+$XD_DIR/tools}" "${BH_ROOT:+$BH_ROOT/tools}" \
+        "$(dirname "$0")" "$(dirname "$0")/tools"
+    do
+        if [ -n "$_btd_dir" ] && [ -d "$_btd_dir/shell-libs" ]; then
+            echo "$_btd_dir"
+            return 0
+        fi
+    done
+    bh_error "build-handler.sh: no folder holds its shell-libs; set BH_TOOLS_DIR to its own folder."
+}
+
+# Loads build-handler's own shell dependencies.
+BH_TOOLS_DIR=$(bh_tools_dir)
+. "$BH_TOOLS_DIR/shell-libs/build-handler-progress.sh"
+. "$BH_TOOLS_DIR/shell-libs/build-handler-debug.sh"
+case "$(uname -s)" in
+    MINGW*|MSYS*|CYGWIN*)
+        . "$BH_TOOLS_DIR/shell-libs/build-handler-win.sh"
+        ;;
+esac

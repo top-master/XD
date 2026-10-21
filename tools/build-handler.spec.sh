@@ -30,7 +30,18 @@ _spec_dir=${0%[/\\]*}
 # interpolate -- no command in this file actually runs `bh_error`.
 BH_ROOT=$_spec_dir
 BH_SCRIPT_NAME=build-handler.spec.sh
+# The `sh -c` runs below source `build-handler.sh` too, with no other way to
+# find its `shell-libs` folder (see `bh_tools_dir`).
+BH_TOOLS_DIR=$_spec_dir
+export BH_TOOLS_DIR
+# The builds below end with no note of their build actions, which the note
+# specs turn on again (see `bh_progress_actions_note`).
+BH_LOG_NOTES=0
+export BH_LOG_NOTES
 . "$_spec_dir/build-handler.sh"
+# `build-handler.sh` loads the helpers of a Windows host only on such a host;
+# the specs load them on any host.
+. "$_spec_dir/shell-libs/build-handler-win.sh"
 . "$_spec_dir/test-helpers.sh"
 
 test_begin 'build-handler.spec'
@@ -659,6 +670,339 @@ expect '--rebuild removes them first, keeping the logs' 'logs ' \
 expect '--clean removes them too' 'logs ' "$(_bh_spec_makefile_build --clean)"
 rm -rf "$_bh_spec_sandbox"
 
+test_section 'build-handler-win.sh -- loaded on a Windows host'
+
+# A stub `uname` first on PATH names a Windows host; bash stands in for the
+# shell there, as it names the sourced file in `BASH_SOURCE`.
+_bh_spec_sandbox=$(mktemp -d)
+printf '#!/bin/sh\necho MINGW64_NT-10.0\n' > "$_bh_spec_sandbox/uname"
+chmod +x "$_bh_spec_sandbox/uname"
+# _bh_spec_load <code>
+# Sources build-handler.sh in bash on the stub Windows host, then runs <code>.
+_bh_spec_load() {
+    PATH=$_bh_spec_sandbox:$PATH bash -c '. "$1/build-handler.sh"; '"$1" \
+        _bh_spec_load "$_spec_dir"
+}
+expect 'a Windows host adds the on-exit tool check' 1 \
+    "$(_bh_spec_load 'printf "%s\n" "$BH_HOOKS_on_exit"' | grep -cx bh_tool_check_on_failure)"
+expect 'another host loads nothing of it' 0 \
+    "$(bash -c '. "$1/build-handler.sh"; printf "%s\n" "${BH_HOOKS_on_exit:-}"' \
+        _bh_spec_load "$_spec_dir" | grep -cx bh_tool_check_on_failure)"
+rm -rf "$_bh_spec_sandbox"
+
+test_section 'bh_path_before_windows -- the POSIX folder before the Windows ones'
+
+expect 'before the first Windows folder, others keep their order' \
+    '/mingw64/bin:/usr/bin:/c/WINDOWS/system32:/c/x' \
+    "$(bh_path_before_windows /usr/bin '/mingw64/bin:/c/WINDOWS/system32:/usr/bin:/c/x')"
+expect 'already first, its later copies dropped' '/usr/bin:/c/Windows/system32:' \
+    "$(bh_path_before_windows /usr/bin '/usr/bin:/c/Windows/system32::/usr/bin/')"
+expect 'missing, before the Windows folder still' '/a:/usr/bin:/c/windows' \
+    "$(bh_path_before_windows /usr/bin '/a:/c/windows')"
+expect 'no Windows folder' '/a:/b' "$(bh_path_before_windows /usr/bin '/a:/b')"
+expect 'a folder only named like one' '/a/windowsx:/b' \
+    "$(bh_path_before_windows /usr/bin '/a/windowsx:/b')"
+
+# A sandbox stands in for a System32 folder first on PATH.
+_bh_spec_sandbox=$(mktemp -d)
+mkdir -p "$_bh_spec_sandbox/Windows/System32"
+printf '#!/bin/sh\necho windows "$@"\n' > "$_bh_spec_sandbox/Windows/System32/find"
+chmod +x "$_bh_spec_sandbox/Windows/System32/find"
+
+test_section 'bh_tool_check -- external tools missing or Windows ones'
+
+_bh_spec_check() {
+    ( BH_EXTERNAL_TOOLS=$1
+      PATH=$_bh_spec_sandbox/Windows/System32:$PATH
+      bh_tool_check 2>&1 )
+}
+expect 'nothing when each tool is fine' '' "$(_bh_spec_check sh)"
+expect 'a Windows tool' \
+    "find: runs $_bh_spec_sandbox/Windows/System32/find, the Windows tool, not the POSIX one." \
+    "$(_bh_spec_check find | sed -n 's/^ *//; /^find:/p')"
+expect 'a missing tool' 'bh-spec-none: not found.' \
+    "$(_bh_spec_check 'sh bh-spec-none' | sed -n 's/^ *//; /^bh-spec-none:/p')"
+mkdir -p "$_bh_spec_sandbox/posix" "$_bh_spec_sandbox/other"
+printf '#!/bin/sh\n' > "$_bh_spec_sandbox/posix/sort"
+cp "$_bh_spec_sandbox/posix/sort" "$_bh_spec_sandbox/other/sort"
+chmod +x "$_bh_spec_sandbox/posix/sort" "$_bh_spec_sandbox/other/sort"
+_bh_spec_shadow() {
+    ( BH_EXTERNAL_TOOLS=sort; PATH=$1:$PATH
+      bh_tool_check "$_bh_spec_sandbox/posix" 2>&1 | sed -n 's/^ *//; /^sort:/p' )
+}
+expect 'another copy that shadows the POSIX one' \
+    "sort: runs $_bh_spec_sandbox/other/sort, which shadows the POSIX $_bh_spec_sandbox/posix/sort." \
+    "$(_bh_spec_shadow "$_bh_spec_sandbox/other:$_bh_spec_sandbox/posix")"
+expect 'the POSIX copy itself' '' "$(_bh_spec_shadow "$_bh_spec_sandbox/posix")"
+expect 'a failed run ends with the check' 'bh-spec-none: not found.' \
+    "$( ( BH_EXTERNAL_TOOLS=bh-spec-none; trap '_bh_on_exit' EXIT; exit 3 ) 2>&1 \
+        | sed -n 's/^ *//; /^bh-spec-none:/p')"
+expect 'a Ctrl+C stop does not' '' \
+    "$( ( BH_EXTERNAL_TOOLS=bh-spec-none; trap '_bh_on_exit' EXIT; exit 130 ) 2>&1)"
+rm -rf "$_bh_spec_sandbox"
+
+test_section 'bh_qmake_trace -- --very-verbose tells what the qmake check compared'
+
+# A source folder with an older and a newer `.pro`, a build folder whose
+# Makefile sits between them, and a link to the source folder; the files'
+# times are set by hand. The trace goes to stderr; the times come from
+# `bh_file_time`, hence the expected lines name them through it too.
+_bh_spec_sandbox=$(mktemp -d)
+mkdir -p "$_bh_spec_sandbox/src/sub" "$_bh_spec_sandbox/bd"
+: > "$_bh_spec_sandbox/src/top.pro"
+: > "$_bh_spec_sandbox/src/sub/sub.pro"
+: > "$_bh_spec_sandbox/bd/Makefile"
+touch -t 199901010000 "$_bh_spec_sandbox/src/top.pro"
+touch -t 200001010000 "$_bh_spec_sandbox/bd/Makefile"
+touch -t 200101010000 "$_bh_spec_sandbox/src/sub/sub.pro"
+ln -s src "$_bh_spec_sandbox/linked"
+_bh_spec_mf=$_bh_spec_sandbox/bd/Makefile
+_bh_spec_sub=$_bh_spec_sandbox/src/sub/sub.pro
+_bh_spec_trace() {
+    ( BH_ROOT=$_bh_spec_sandbox/$1 BUILD_DIR=$_bh_spec_sandbox/bd
+      BH_LOG_LEVEL=$2 _label=root-project _bhq_makefile=Makefile
+      _bhq_build_differs=0 BH_IGNORE_PRI=0
+      cd "$_bh_spec_sandbox/bd" && shift 2 && "$@" 2>&1 >/dev/null )
+}
+expect 'nothing below --very-verbose' '' \
+    "$(_bh_spec_trace src 2 bh_qmake_trace_newer "$_bh_spec_sub")"
+expect 'the newer file, with both times' \
+    "qmake check: Looks under $_bh_spec_sandbox/src for a .pro, .pri, or .prf newer than
+qmake check: $_bh_spec_mf ($(bh_file_time "$_bh_spec_mf")):
+qmake check:   found $_bh_spec_sub ($(bh_file_time "$_bh_spec_sub"))." \
+    "$(_bh_spec_trace src 3 bh_qmake_trace_newer "$_bh_spec_sub")"
+expect 'that none is newer' 'qmake check:   none.' \
+    "$(_bh_spec_trace src 3 bh_qmake_trace_newer '' | tail -1)"
+expect 'a source folder that is no link' 'qmake check:   '"$_bh_spec_sandbox"'/src is a link: no' \
+    "$(_bh_spec_trace src 3 bh_qmake_trace_inputs | grep 'is a link')"
+expect 'a source folder that is a link, and where it points' \
+    'qmake check:   '"$_bh_spec_sandbox"'/linked is a link: yes, to src' \
+    "$(_bh_spec_trace linked 3 bh_qmake_trace_inputs | grep 'is a link')"
+expect 'the time of a missing file' missing "$(bh_file_time "$_bh_spec_sandbox/none")"
+expect 'the time of a file, as stat tells it' \
+    "$(stat -c '%y' "$_bh_spec_sub")" "$(bh_file_time "$_bh_spec_sub")"
+
+test_section 'bh_newer_project_file -- a source folder that is a link'
+
+expect 'the newer .pro, through the link' "$_bh_spec_sandbox/linked/sub/sub.pro" \
+    "$(BH_ROOT=$_bh_spec_sandbox/linked; bh_newer_project_file "$_bh_spec_mf")"
+rm -rf "$_bh_spec_sandbox"
+
+test_section 'bh_make_plan -- the dry run walks the sub-makes of jom and nmake'
+
+# A stub jom prints each line of its `-f` file (`Makefile` by default) after a
+# tab, as jom's dry run prints each command, and runs none of them; the files
+# hold the lines a dry run of qmake's Makefiles prints.
+_bh_spec_sandbox=$(mktemp -d)
+mkdir -p "$_bh_spec_sandbox/bd/src/corelib" "$_bh_spec_sandbox/bd/src/angle"
+cat > "$_bh_spec_sandbox/jom" <<'}'
+#!/bin/sh
+file=Makefile
+while [ "$#" -gt 0 ]; do
+    case "$1" in
+        -f) file=$2; shift 2 ;;
+        *) shift ;;
+    esac
+done
+sed 's/^/	/' "$file"
+}
+chmod +x "$_bh_spec_sandbox/jom"
+_bh_spec_jom=$_bh_spec_sandbox/jom
+printf '%s\n' \
+    "cd src\\corelib\\ && ( if not exist Makefile qmake.exe corelib.pro -o Makefile ) && $_bh_spec_jom -f Makefile" \
+    "cd src\\angle\\ && $_bh_spec_jom -f Makefile" > "$_bh_spec_sandbox/bd/Makefile"
+printf '%s\n' "$_bh_spec_jom -f Makefile.Debug all" \
+    > "$_bh_spec_sandbox/bd/src/corelib/Makefile"
+printf '%s\n' 'cl -c -nologo a.cpp' 'cl -c -nologo b.cpp' 'link /DLL a.obj b.obj' \
+    > "$_bh_spec_sandbox/bd/src/corelib/Makefile.Debug"
+printf '%s\n' 'set MAKEFLAGS=x' 'cl -c x.cpp' > "$_bh_spec_sandbox/bd/src/angle/Makefile"
+# _bh_spec_plan [BH_MAKE_PLAN_DEPTH]
+# Prints how many build steps the stub's dry run shows from the top folder.
+_bh_spec_plan() {
+    ( cd "$_bh_spec_sandbox/bd" && BH_MAKE=$_bh_spec_jom BH_MAKE_TYPE=jom \
+        BH_MAKE_PLAN_DEPTH=${1:-32} bh_make_plan | grep -cE "$BH_BUILD_STEP_RE" )
+}
+expect 'the steps of every sub-make, two levels deep' 4 "$(_bh_spec_plan)"
+expect 'no deeper than BH_MAKE_PLAN_DEPTH' 1 "$(_bh_spec_plan 1)"
+expect 'a sub-make line, after cd and a qmake call' "src\\corelib\\
+-f
+Makefile" \
+    "$(printf '\tcd src\\corelib\\ && ( if not exist Makefile q -o Makefile ) && D:\\b\\jom.exe -f Makefile\n' \
+        | bh_make_sub_call)"
+expect 'a quoted tool, in the current folder' "
+-f
+Makefile.Debug
+all" \
+    "$(printf '\t"C:\\Program Files\\jom.exe" -f Makefile.Debug all\n' | bh_make_sub_call)"
+expect 'a line that calls no sub-make' '' \
+    "$(printf '\tcl -c -nologo a.cpp\n' | bh_make_sub_call)"
+expect 'a step that jom prints after a tab counts' 1 \
+    "$(printf '\tcl -c -nologo a.cpp\n' | grep -cE "$BH_BUILD_STEP_RE")"
+_bh_spec_plan_file=$_bh_spec_sandbox/plan
+printf '\tcl -c a.cpp\n\tcl -c b.cpp\n' > "$_bh_spec_plan_file"
+expect 'the steps of a plan file' 2 "$(bh_make_plan_count "$_bh_spec_plan_file")"
+expect 'no steps in a missing plan file' 0 "$(bh_make_plan_count "$_bh_spec_sandbox/none")"
+: > "$_bh_spec_sandbox/stop"
+expect 'a plan walks no more once its stop file exists' 0 \
+    "$( ( cd "$_bh_spec_sandbox/bd" && BH_MAKE=$_bh_spec_jom BH_MAKE_TYPE=jom \
+        BH_MAKE_PLAN_STOP=$_bh_spec_sandbox/stop bh_make_plan \
+        | grep -cE "$BH_BUILD_STEP_RE" ) )"
+expect 'a plan walks no more once its owner ended' 0 \
+    "$( ( sh -c 'exit 0' & _bh_spec_gone=$!; wait "$_bh_spec_gone"
+          cd "$_bh_spec_sandbox/bd" && BH_MAKE=$_bh_spec_jom BH_MAKE_TYPE=jom \
+          BH_MAKE_PLAN_OWNER=$_bh_spec_gone bh_make_plan \
+          | grep -cE "$BH_BUILD_STEP_RE" ) )"
+test_section 'bh_progress_row -- a step row wraps, each further line below the description'
+
+# _bh_spec_row <width> <total> <step> <description>
+# Prints the row of a step at <width> columns, then its count of lines.
+_bh_spec_row() {
+    ( _bpr_width=$1 _bpr_last_key= BH_STEPS_TOTAL=$2
+      bh_progress_row "$3" "$4"
+      printf '[/]%s|%s' "$BH_PROGRESS_ROW" "$BH_PROGRESS_ROW_LINES" )
+}
+expect 'a row that fits' '[/] (1/3): Short.|1' "$(_bh_spec_row 80 3 1 'Short.')"
+expect 'wraps between words, padded as wide as the prefix' '[/] (1/3): My long message
+           that goes on here.|2' "$(_bh_spec_row 30 3 1 'My long message that goes on here.')"
+expect 'a longer counter pads further' '[/] (1/345): My long message
+             that goes on here.|2' \
+    "$(_bh_spec_row 31 345 1 'My long message that goes on here.')"
+expect 'a word longer than a line stands alone' '[/] (1/3): a
+           unbreakable-word-here
+           b|3' "$(_bh_spec_row 20 3 1 'a unbreakable-word-here b')"
+expect 'no counter without a total' '[/]: My long
+     message|2' "$(_bh_spec_row 14 '' 1 'My long message')"
+expect 'no description' '[/] (1/3)|1' "$(_bh_spec_row 80 3 1 '')"
+unset -f _bh_spec_row
+
+test_section 'bh_progress_plan_start -- the modes of BH_PROGRESS_MODE'
+
+# _bh_spec_mode [BH_PROGRESS_MODE]
+# Prints the mode that a BH_PROGRESS_MODE resolves to, then what it warned.
+_bh_spec_mode() {
+    ( BH_PROGRESS_MODE=$1 _bhpp_mode_warned=0
+      bh_progress_mode_resolve 2>"$_bh_spec_sandbox/warned"
+      printf '%s|%s' "$_bhpp_mode" "$(grep -c BH_PROGRESS_MODE "$_bh_spec_sandbox/warned")" )
+}
+expect 'precise when unset' 'precise|0' "$(_bh_spec_mode '')"
+expect 'spinner' 'spinner|0' "$(_bh_spec_mode spinner)"
+expect 'estimate' 'estimate|0' "$(_bh_spec_mode estimate)"
+expect 'precise' 'precise|0' "$(_bh_spec_mode precise)"
+expect 'another value warns, and counts as precise' 'precise|1' \
+    "$(_bh_spec_mode jump-back)"
+
+# _bh_spec_start <mode> [code]
+# Starts the build plan of the stub tree in <mode>, waits for a plan that runs
+# beside the build to end, then runs [code]; prints the type the compile step
+# starts with, its maximum unless a plan runs beside the build (whose count by
+# then is a matter of timing), and what [code] prints.
+_bh_spec_start() {
+    ( cd "$_bh_spec_sandbox/bd" && BH_MAKE=$_bh_spec_jom BH_MAKE_TYPE=jom
+      BH_PROGRESS_MODE=$1 BH_NO_PROGRESS=1 _step=0
+      bh_progress_plan_start make "$_bh_spec_sandbox/plan" 2>/dev/null
+      printf '%s' "$BH_PLAN_TYPE"
+      if [ -n "$_bhpp_pid" ]; then
+          wait "$_bhpp_pid"
+      else
+          printf '|%s' "$BH_PLAN_MAX"
+      fi
+      eval "${2:-}" )
+}
+expect 'spinner skips the plan' 'spinner|0|no plan' \
+    "$(_bh_spec_start spinner '[ -f "$_bh_spec_sandbox/plan" ] || printf "|no plan"')"
+expect 'precise counts the whole plan first, taking a step' 'bar|4|1|3' \
+    "$( ( BH_STEPS_TOTAL=3; _bh_spec_start precise 'printf "|%s|%s" "$_step" "$BH_STEPS_TOTAL"' ) )"
+expect 'estimate starts a bar of BH_ESTIMATED_ACTIONS, and takes no step' \
+    'bar|0|3' \
+    "$( ( BH_ESTIMATED_ACTIONS=9 BH_STEPS_TOTAL=3
+          _bh_spec_start estimate 'printf "|%s|%s" "$_step" "$BH_STEPS_TOTAL"' ) )"
+expect 'estimate spins with no BH_ESTIMATED_ACTIONS' 'spinner' \
+    "$( ( BH_ESTIMATED_ACTIONS=; _bh_spec_start estimate ) )"
+expect 'the tick after a hidden plan turns a spinner into a bar of its count' \
+    'spinner|bar|4|4' \
+    "$( ( BH_ESTIMATED_ACTIONS=; _bh_spec_start estimate 'bh_progress_plan_tick
+        printf "|%s|%s|%s" "$BH_PROGRESS_TYPE" "$BH_PROGRESS_MAX" \
+            "$(cat "$_bh_spec_sandbox/plan.bar")"' ) )"
+expect 'the tick sets the bar of an estimate to the count' 'bar|4' \
+    "$( ( BH_ESTIMATED_ACTIONS=9; _bh_spec_start estimate 'BH_PROGRESS_TYPE=bar
+        BH_PROGRESS_MAX=9; bh_progress_plan_tick; printf "|%s" "$BH_PROGRESS_MAX"' ) )"
+expect 'the finish hands the bar on to the shell the ticks ran beside' \
+    'spinner|bar|4|1|' \
+    "$( ( BH_ESTIMATED_ACTIONS=; _bh_spec_start estimate '( bh_progress_plan_tick )
+        bh_progress_plan_finish
+        printf "|%s|%s|%s|%s" "$BH_PROGRESS_TYPE" "$BH_PROGRESS_MAX" \
+            "$BH_PROGRESS_HEADER_PRINTED" "$(ls "$_bh_spec_sandbox" | grep "^plan")"' ) )"
+expect 'the exit hook stops a plan that still counts' 'bar|stopped' \
+    "$( ( BH_ESTIMATED_ACTIONS=9; _bh_spec_start estimate 'rm -f "$_bh_spec_sandbox/plan.stop"
+        sleep 30 & _bhpp_pid=$!
+        bh_progress_plan_on_exit
+        wait "$_bhpp_pid" 2>/dev/null
+        [ "$?" -ne 0 ] && [ -f "$_bh_spec_sandbox/plan.stop" ] && printf "|stopped"' ) )"
+rm -f "$_bh_spec_sandbox/plan.stop"
+
+expect 'it tells a split build' 'split|' \
+    "$( ( printf 'release-all: x\ndebug-all: y\n' > "$_bh_spec_sandbox/split.mk"
+          : > "$_bh_spec_sandbox/one.mk"
+          bh_make_is_split "$_bh_spec_sandbox/split.mk" && printf split
+          bh_make_is_split "$_bh_spec_sandbox/one.mk" && printf one
+          printf '|' ) )"
+
+# The whole step in each mode ends fine, and leaves no plan file behind.
+mkdir -p "$_bh_spec_sandbox/logs"
+for _bh_spec_each in spinner estimate precise; do
+    expect "a whole step under $_bh_spec_each" '0|' \
+        "$( ( cd "$_bh_spec_sandbox/bd" && BH_MAKE=$_bh_spec_jom BH_MAKE_TYPE=jom \
+              LOGS=$_bh_spec_sandbox/logs BH_PROGRESS_MODE=$_bh_spec_each \
+              BH_NO_PROGRESS=1 _step=0
+              bh_make_step make '' 2 >/dev/null 2>&1
+              printf '%s|%s' "$?" "$(ls "$_bh_spec_sandbox/logs" | grep precount)" ) )"
+done
+rm -f "$_bh_spec_sandbox"/logs/actions-*
+
+# _bh_spec_note <performed> [estimated] [filter]
+# Records build actions as one make run would, then prints the note that the
+# run ends with; the start and the end are 75 seconds apart.
+_bh_spec_note() {
+    ( LOGS=$_bh_spec_sandbox/logs BH_FILTER=${3:-} BH_REBUILD= BH_EXIT_STATUS=0
+      BH_LOG_NOTES=1
+      printf '\tcl -c a.cpp\n' > "$_bh_spec_sandbox/one.log"
+      _bh_spec_i=0
+      while [ "$_bh_spec_i" -lt "$1" ]; do
+          bh_progress_actions_performed "$_bh_spec_sandbox/one.log"
+          _bh_spec_i=$((_bh_spec_i + 1))
+      done
+      if [ -n "${2:-}" ]; then
+          bh_progress_actions_estimated "$2"
+      fi
+      echo 1000 > "$(bh_progress_actions_file start)"
+      echo 1075 > "$(bh_progress_actions_file end)"
+      bh_progress_actions_note 2>&1
+      ls "$_bh_spec_sandbox/logs" | grep '^actions-' )
+}
+expect 'the note, with the estimate' \
+    'Note: performed 3 build actions in 00:01:15 duration
+   (while estimated 9).' "$(_bh_spec_note 3 9)"
+expect 'the note of a filtered build leaves the estimate out' \
+    'Note: performed 3 build actions in 00:01:15 duration.' "$(_bh_spec_note 3 9 corelib)"
+expect 'the note with no estimate' \
+    'Note: performed 2 build actions in 00:01:15 duration.' "$(_bh_spec_note 2)"
+expect 'no note under BH_LOG_NOTES=0' '' \
+    "$( ( LOGS=$_bh_spec_sandbox/logs BH_EXIT_STATUS=0 BH_LOG_NOTES=0
+          bh_progress_actions_performed "$_bh_spec_sandbox/one.log"
+          bh_progress_actions_note 2>&1
+          ls "$_bh_spec_sandbox/logs" | grep '^actions-' ) )"
+expect 'no note after a failure' '' \
+    "$( ( LOGS=$_bh_spec_sandbox/logs BH_EXIT_STATUS=2 BH_LOG_NOTES=1
+          bh_progress_actions_performed "$_bh_spec_sandbox/one.log"
+          bh_progress_actions_note 2>&1
+          ls "$_bh_spec_sandbox/logs" | grep '^actions-' ) )"
+expect 'the --estimate-actions flag' 'estimate|120' \
+    "$( ( bh_parse_args --estimate-actions=120 >/dev/null 2>&1
+          printf '%s|%s' "$BH_PROGRESS_MODE" "$BH_ESTIMATED_ACTIONS" ) )"
+unset -f _bh_spec_note
+rm -rf "$_bh_spec_sandbox"
+unset -f _bh_spec_plan _bh_spec_mode _bh_spec_start
+
 test_section 'bh_command_variant -- the one build variant of a qmake call'
 
 expect 'debug' debug "$(bh_command_variant \
@@ -1002,9 +1346,9 @@ _bh_spec_render_body=$(awk '/^bh_progress_render\(\) \{/,/^\}$/' \
     "$_spec_dir/build-handler.sh")
 
 expect_int_gt 'bar DONE prints `: description`' \
-    "$(printf '%s\n' "$_bh_spec_render_body" | grep -cF "printf ': %s' \"\$BH_PROGRESS_DESC\"")" 1
+    "$(printf '%s\n' "$_bh_spec_render_body" | grep -cF 'bh_progress_row "${_step:-}" "${BH_PROGRESS_DESC:-}"')" 1
 expect_int_gt 'bar DONE moves cursor up over the header row (\\033[1A)' \
-    "$(printf '%s\n' "$_bh_spec_render_body" | grep -cF '\033[1A')" 0
+    "$(printf '%s\n' "$_bh_spec_render_body" | grep -cF '\033[%dA')" 0
 expect_int_gt 'bar DONE resets BH_PROGRESS_HEADER_PRINTED' \
     "$(printf '%s\n' "$_bh_spec_render_body" | grep -cE 'BH_PROGRESS_HEADER_PRINTED=0')" 0
 
@@ -1541,7 +1885,34 @@ _bh_spec_test_env() (
 )
 expect 'bh_run_tests runs the test-env hooks before the test' \
     'env|ran /bin/true|' "$(_bh_spec_test_env)"
-unset -f _bh_spec_hooked _bh_spec_hook_function _bh_spec_test_env
+
+# _bh_spec_exit <status>
+# Adds a hook to each exit stage, the last stage first, and an `on-exit` hook
+# that fails, then exits <status> once bh_strict_mode ran; prints what the
+# hooks saw, in the order they ran, then the status the subshell exited with.
+_bh_spec_exit() {
+    (
+        BH_HOOKS_pre_exit= BH_HOOKS_on_exit= BH_HOOKS_post_exit=
+        bh_hook post-exit <<'}'
+    printf 'post:%s|' "$BH_EXIT_STATUS"
+}
+        bh_hook on-exit <<'}'
+    printf 'on:%s|' "$BH_EXIT_STATUS"
+    false
+}
+        bh_hook pre-exit <<'}'
+    printf 'pre:%s|' "$BH_EXIT_STATUS"
+}
+        bh_strict_mode
+        exit "$1"
+    )
+    printf 'exit:%s' "$?"
+}
+expect 'the exit stages run in order, each seeing the exit status' \
+    'pre:3|on:3|post:3|exit:3' "$(_bh_spec_exit 3)"
+expect 'a successful exit runs them too' 'pre:0|on:0|post:0|exit:0' \
+    "$(_bh_spec_exit 0)"
+unset -f _bh_spec_hooked _bh_spec_hook_function _bh_spec_test_env _bh_spec_exit
 unset BH_HOOKS_spec_stage BH_HOOKS_spec_added _bh_spec_when
 
 # Each hook's output shows, and is its result, which the next hook reads as
@@ -1634,17 +2005,17 @@ expect 'bh_template_subdirs does NOT bump BH_STEPS_TOTAL for --wipe' '' \
 
 test_section 'bh_make_step -- "computing build plan" phase polls in background'
 
-# Regression guard: "computing build plan" must background `bh_make_run -n`
-# and foreground-poll through bh_spin_until (`kill -0` + `bh_progress_render`
+# Regression guard: "computing build plan" under `precise-blocking` (see
+# `bh_progress_plan_start`) must background `bh_make_plan` and foreground-poll through bh_spin_until (`kill -0` + `bh_progress_render`
 # + a `sleep` of BH_SPIN_INTERVAL).
 
-_bh_spec_body=$(awk '/^bh_make_step\(\) \{/,/^\}$/' \
-    "$_spec_dir/build-handler.sh")
+_bh_spec_body=$(awk '/^bh_progress_plan_start\(\) \{/,/^\}$/' \
+    "$_spec_dir/shell-libs/build-handler-progress.sh")
 
-expect_int_gt 'body contains `bh_make_run -n` (the precount itself)' \
-    "$(printf '%s\n' "$_bh_spec_body" | grep -cE '\bbh_make_run -n\b')" 0
-expect_int_gt 'body runs `bh_make_run -n` held, in the background (`bh_held_start`)' \
-    "$(printf '%s\n' "$_bh_spec_body" | grep -cE 'bh_held_start bh_make_run -n')" 0
+expect_int_gt 'body contains `bh_make_plan` (the precount itself)' \
+    "$(printf '%s\n' "$_bh_spec_body" | grep -cE '\bbh_make_plan\b')" 0
+expect_int_gt 'body runs `bh_make_plan` held, in the background (`bh_held_start`)' \
+    "$(printf '%s\n' "$_bh_spec_body" | grep -cE 'bh_held_start bh_make_plan')" 0
 expect_int_gt 'body polls through bh_spin_until' \
     "$(printf '%s\n' "$_bh_spec_body" | grep -c 'bh_spin_until')" 0
 _bh_spec_spin_body=$(awk '/^bh_spin_until\(\) \{/,/^\}$/' \
@@ -1715,6 +2086,13 @@ _bh_spec_total=$(
     echo "$BH_STEPS_TOTAL"
 )
 expect 'bh_make bumps BH_STEPS_TOTAL by +2 on race-aware split' 5 "$_bh_spec_total"
+_bh_spec_total=$(
+    BH_STEPS_TOTAL=3 BH_PROGRESS_MODE=estimate
+    cd "$_bh_spec_sandbox"
+    bh_make 1 >/dev/null 2>&1
+    echo "$BH_STEPS_TOTAL"
+)
+expect 'estimate hides the build-plan step of the second make run' 4 "$_bh_spec_total"
 
 # Sandbox with NO race-aware targets -- counter should stay.
 rm -f "$_bh_spec_sandbox/Makefile"
@@ -1729,6 +2107,13 @@ _bh_spec_total=$(
     echo "$BH_STEPS_TOTAL"
 )
 expect 'bh_make leaves BH_STEPS_TOTAL alone on single-make path' 3 "$_bh_spec_total"
+_bh_spec_total=$(
+    BH_STEPS_TOTAL=3 BH_PROGRESS_MODE=estimate
+    cd "$_bh_spec_sandbox"
+    bh_make 1 >/dev/null 2>&1
+    echo "$BH_STEPS_TOTAL"
+)
+expect 'estimate leaves it alone too, as the template counts that step' 3 "$_bh_spec_total"
 
 rm -rf "$_bh_spec_sandbox"
 

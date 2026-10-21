@@ -270,6 +270,18 @@ values to change behavior. A few useful ones:
 - `BH_STATIC`: same as `--static=<regexp>`, which lets a project build
   static by default (`BH_STATIC='^.*$'` for every project); `--no-static`
   still turns it off.
+- `BH_PROGRESS_MODE`: how the compile step shows its progress, from a count
+  of the build actions (the build plan):
+  - `precise` (the default) counts the whole plan before the build starts.
+  - `estimate` shows a bar of `BH_ESTIMATED_ACTIONS` build actions at once,
+    while the plan counts in the background, with no row of its own; the bar
+    then takes the plan's count. `--estimate-actions=<count>` picks this mode
+    with that estimate.
+  - `spinner` skips the plan, and only spins.
+
+  A build that ends well notes how many build actions it performed, and how
+  long they took; the note also gives the estimate, unless `--filter` or
+  `--rebuild` narrowed the build.
 
 A `build.sh` can also run its own code once the flags are read, while that
 code can still change what the flags set:

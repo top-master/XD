@@ -25,6 +25,10 @@ XD_DIR=$ROOT
 BH_ROOT=$ROOT
 BH_SCRIPT_NAME=build.sh
 BH_TEST_ROOT=$ROOT/tests/auto/auto.pro
+# A whole build counts its plan for long, hence the bar starts from an
+# estimate of the build actions per make run, while the plan counts hidden.
+: "${BH_PROGRESS_MODE:=estimate}"
+: "${BH_ESTIMATED_ACTIONS:=3300}"
 . "$ROOT/tools/build-handler.sh"
 
 # MARK: --static: XD-only flag.
