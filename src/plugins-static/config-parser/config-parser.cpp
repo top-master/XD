@@ -189,7 +189,7 @@ static QByteArray iniWithPlainCommas(const QByteArray & data)
 */
 bool Config::Parser::readFile(const QString & file, QString *error)
 {
-    const QString origin = QDir::toNativeSeparators(file);
+    const QString origin = QDir::fromNativeSeparators(file);
     if ( ! QFileInfo(file).isFile()) {
         *error = QString(QLL("%1: no such settings file")).arg(origin);
         return false;
