@@ -60,7 +60,9 @@ struct Q_CORE_EXPORT QArrayData
         if (offset < 0)
             return QPtrSafetyTable::decodeTypedData(-offset);
 #endif
-        return reinterpret_cast<char *>(this) + offset;
+        char *result = reinterpret_cast<char *>(this) + offset;
+        Q_PTR_HIDE(result);
+        return result;
     }
 
     const void *data() const
@@ -73,7 +75,9 @@ struct Q_CORE_EXPORT QArrayData
         if (offset < 0)
             return QPtrSafetyTable::decodeTypedData(-offset);
 #endif
-        return reinterpret_cast<const char *>(this) + offset;
+        const char *result = reinterpret_cast<const char *>(this) + offset;
+        Q_PTR_HIDE(result);
+        return result;
     }
 
     // This refers to array data mutability, not "header data" represented by

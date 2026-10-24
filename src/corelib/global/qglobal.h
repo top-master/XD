@@ -1527,6 +1527,12 @@ Q_DECL_CONSTEXPR Q_ALWAYS_INLINE QtPrivate::QFinally<Func1 > qScopeGuard(Func1 &
 #  define Q_FIELD_PTR(CLASS_PTR, FIELD) (static_cast<void *>(&((CLASS_PTR)->FIELD)))
 #  endif
 
+#  if defined(Q_CC_GNU) && !defined(QT_PTR_TRACKING)
+#  define Q_PTR_HIDE(Pointer) __asm__("" : "+r"(Pointer))
+#  else
+#  define Q_PTR_HIDE(Pointer) qt_noop()
+#  endif
+
 #  define Q_PTR_DISTANCE QT_PREPEND_NAMESPACE(qPtrDistance)
 
 // Calculate the byte offset of a field in a structure of type "TYPE".
