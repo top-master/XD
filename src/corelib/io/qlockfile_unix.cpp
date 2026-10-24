@@ -74,7 +74,7 @@ static QByteArray localHostName() // from QHostInfo::localHostName(), modified t
     QByteArray hostName(512, Qt::Uninitialized);
     if (gethostname(hostName.data(), hostName.size()) == -1)
         return QByteArray();
-    hostName.truncate(strlen(hostName.data()));
+    hostName.truncate(qstrnlen(hostName.constData(), uint(hostName.size())));
     return hostName;
 }
 
