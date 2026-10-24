@@ -110,7 +110,7 @@ QString FormatAgentGuides::write(
     if (request.endLine > request.line) {
         lines += QLatin1Char('-') + QString::number(request.endLine);
     }
-    text.replace(QLL("{{file}}"), QDir::toNativeSeparators(path));
+    text.replace(QLL("{{file}}"), QDir::fromNativeSeparators(path));
     text.replace(QLL("{{lines}}"), lines);
     text.replace(QLL("{{columnLimit}}"), QString::number(request.columnLimit));
 
@@ -128,7 +128,7 @@ QString FormatAgentGuides::write(
         return QString();
     }
     this->m_prompts << target.fileName();
-    return QDir::toNativeSeparators(QFileInfo(target).absoluteFilePath());
+    return QFileInfo(target).absoluteFilePath();
 }
 
 /*!
@@ -209,7 +209,7 @@ QString FormatAgentGuides::writeUsage()
         return QString();
     }
     QString text = QString::fromUtf8(source.readAll());
-    text.replace(QLL("{{folder}}"), QDir::toNativeSeparators(this->m_folder));
+    text.replace(QLL("{{folder}}"), this->m_folder);
 
     // Writes the filled template into the folder.
     if ( ! this->makeFolder()) {
@@ -224,7 +224,7 @@ QString FormatAgentGuides::writeUsage()
     ) {
         return QString();
     }
-    return QDir::toNativeSeparators(QFileInfo(target).absoluteFilePath());
+    return QFileInfo(target).absoluteFilePath();
 }
 
 /*!

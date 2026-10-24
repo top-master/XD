@@ -48,6 +48,61 @@ static bool isDirectorySpelling(const QString & path)
 }
 
 /*!
+    Builds the path that the relative @p path names from the shell's own
+    folder, the logical working folder in `$PWD`, which keeps each symbolic
+    link the shell went through; hence a `..` leaves such a link to the
+    link's own parent, not to the parent of its target.
+
+    @p path stays as given, and resolves from the process's working folder
+    (the link's target), when it is absolute, when `$PWD` names no folder or
+    another folder than the working one, when nothing exists at the logical
+    path, or when both folders reach the same file. A directory spelling
+    keeps its trailing slash (see isDirectorySpelling()).
+*/
+static QString logicalPath(const QString & path)
+{
+    if (path.isEmpty() || QFileInfo(path).isAbsolute()) {
+        return path;
+    }
+    const QString shellFolder = QDir::fromNativeSeparators(
+        QString::fromLocal8Bit(qgetenv("PWD")));
+    const QString workingFolder = QDir::currentPath();
+    if (shellFolder.isEmpty() || ! QFileInfo(shellFolder).isAbsolute()
+        || shellFolder == workingFolder
+        || QFileInfo(shellFolder).canonicalFilePath()
+            != QFileInfo(workingFolder).canonicalFilePath()
+    ) {
+        return path;
+    }
+    QString logical = QDir::cleanPath(shellFolder + QLatin1Char('/')
+                                      + QDir::fromNativeSeparators(path));
+    const QFileInfo logicalInfo(logical);
+    const QFileInfo workingInfo(path);
+    if ( ! logicalInfo.exists()
+        || (workingInfo.exists()
+            && workingInfo.canonicalFilePath() == logicalInfo.canonicalFilePath())
+    ) {
+        return path;
+    }
+    if (isDirectorySpelling(path)) {
+        logical += QLatin1Char('/');
+    }
+    return logical;
+}
+
+/*!
+    Builds the list of @p paths, each one resolved through logicalPath().
+*/
+static QStringList logicalPaths(const QStringList & paths)
+{
+    QStringList resolved;
+    for (int i = 0; i < paths.size(); ++i) {
+        resolved << logicalPath(paths.at(i));
+    }
+    return resolved;
+}
+
+/*!
     Builds the name filters of the C, C++, Objective-C and Objective-C++
     files a folder scan formats.
 */
@@ -171,7 +226,7 @@ static QString agentRequests(const QList<FormatFileResult > & results,
             const QString message = prompt.isEmpty()
                 ? request.message : QString(QLL("Run prompt at: \"%1\"")).arg(prompt);
             text += QString(QLL("#: %1:%2: %3: %4\n")).arg(
-                QDir::toNativeSeparators(result.path),
+                QDir::fromNativeSeparators(result.path),
                 lines,
                 QString::fromLatin1(request.rule),
                 message
@@ -205,7 +260,7 @@ static int logResults(Logger *logger, const QList<FormatFileResult > & results,
     int code = ExitClean;
     for (int i = 0; i < results.size(); ++i) {
         const FormatFileResult & result = results.at(i);
-        const QString path = QDir::toNativeSeparators(result.path);
+        const QString path = QDir::fromNativeSeparators(result.path);
         if ( ! result.error.isEmpty()) {
             logger->logDiagnostic(QString(QLL("%1: error: %2")).arg(
                 path,
@@ -419,9 +474,9 @@ int main(int argc, char *argv[])
     // Reads the settings over the `.formatrc` files; a short `-c=<setting>`
     // hands its `=` on as the first character of the value.
     FormatConfig config;
-    config.file = parser.value(configFileOption);
-    config.adds = parser.values(configAddOption);
-    const QStringList includes = parser.values(includeOption);
+    config.file = logicalPath(parser.value(configFileOption));
+    config.adds = logicalPaths(parser.values(configAddOption));
+    const QStringList includes = logicalPaths(parser.values(includeOption));
     for (int i = 0; i < includes.size(); ++i) {
         config.includePaths
             << QDir::cleanPath(QFileInfo(includes.at(i)).absoluteFilePath());
@@ -430,9 +485,9 @@ int main(int argc, char *argv[])
     // Learns the files and the include folders of each project from qmake,
     // for the first spec now; a thread reads the other specs once the
     // formatting starts.
-    const QStringList projects = parser.values(projectOption);
+    const QStringList projects = logicalPaths(parser.values(projectOption));
     const QString qmake = parser.isSet(qmakeOption)
-        ? parser.value(qmakeOption) : defaultQmake();
+        ? logicalPath(parser.value(qmakeOption)) : defaultQmake();
     QStringList specs;
     const QStringList specLists = parser.values(specsOption);
     for (int i = 0; i < specLists.size(); ++i) {
@@ -494,23 +549,25 @@ int main(int argc, char *argv[])
     IgnoreParser ignores;
     ignores.addIgnoreFileName(QString(QLL(".formatignore")));
     QStringList folders;
-    const QStringList dirs = parser.values(dirOption);
+    const QStringList dirs = logicalPaths(parser.values(dirOption));
     for (int i = 0; i < dirs.size(); ++i) {
         if ( ! QFileInfo(dirs.at(i)).isDir()) {
-            logger.logError(QString(QLL("not a directory: %1")).arg(dirs.at(i)));
+            logger.logError(QString(QLL("not a directory: %1"))
+                           .arg(QDir::fromNativeSeparators(dirs.at(i))));
             return ExitError;
         }
         folders << dirs.at(i);
     }
     QStringList files;
-    const QStringList paths = parser.positionalArguments();
+    const QStringList paths = logicalPaths(parser.positionalArguments());
     for (int i = 0; i < paths.size(); ++i) {
         const QString & path = paths.at(i);
         if (isDirectorySpelling(path)) {
             QString dir = path;
             dir.chop(1);
             if ( ! QFileInfo(dir.isEmpty() ? path : dir).isDir()) {
-                logger.logError(QString(QLL("not a directory: %1")).arg(path));
+                logger.logError(QString(QLL("not a directory: %1"))
+                           .arg(QDir::fromNativeSeparators(path)));
                 return ExitError;
             }
             folders << (dir.isEmpty() ? path : dir);
@@ -519,7 +576,7 @@ int main(int argc, char *argv[])
         const QFileInfo info(path);
         if (info.isDir()) {
             logger.logError(QString(QLL("is a directory, end it with / or pass --dir: %1"))
-                       .arg(path));
+                       .arg(QDir::fromNativeSeparators(path)));
             return ExitError;
         }
         files.append(path);
@@ -567,7 +624,7 @@ int main(int argc, char *argv[])
             if ( ! rule.isEmpty()) {
                 logger.logWarning(QString(QLL("%1 is left out by the ignore rule %2"))
                                   .arg(
-                                      QDir::toNativeSeparators(named.at(i)),
+                                      QDir::fromNativeSeparators(named.at(i)),
                                       rule
                                   ));
                 ++excluded;
