@@ -65,7 +65,8 @@ bool Project::Parser::runOne(const QString & projectFile, const QString & qmake,
         QFileInfo(projectFile).absoluteFilePath()
     );
     if ( ! QFileInfo(project).isFile()) {
-        *error = QString(QLL("%1: no such project file")).arg(QDir::toNativeSeparators(project));
+        *error = QString(QLL("%1: no such project file"))
+            .arg(QDir::fromNativeSeparators(project));
         return false;
     }
     if (this->m_projects.contains(project) || depth > 32) {
@@ -85,8 +86,8 @@ bool Project::Parser::runOne(const QString & projectFile, const QString & qmake,
     );
     if ( ! process.waitForStarted() || ! process.waitForFinished(-1)) {
         *error = QString(QLL("%1: cannot run %2")).arg(
-            QDir::toNativeSeparators(project),
-            qmake
+            QDir::fromNativeSeparators(project),
+            QDir::fromNativeSeparators(qmake)
         );
         return false;
     }
@@ -96,7 +97,7 @@ bool Project::Parser::runOne(const QString & projectFile, const QString & qmake,
     ) {
         const QByteArray diagnostics = process.readAllStandardError();
         *error = QString(QLL("%1: qmake failed: %2")).arg(
-            QDir::toNativeSeparators(project),
+            QDir::fromNativeSeparators(project),
             QString::fromLocal8Bit(diagnostics).trimmed()
         );
         return false;

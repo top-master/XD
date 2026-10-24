@@ -84,6 +84,11 @@ format --list-rules
 - `--worker`: prints the results in the form a parent `format` process reads;
   the `process` runner passes it to its children.
 
+A relative path that an option or a `paths` entry names resolves from the
+shell's own folder first (the one `$PWD` names, which keeps each symbolic
+link the shell went through), hence `../<name>` reaches a sibling of the
+link; when nothing exists there, it resolves from the link's target.
+
 ## Directories
 
 A directory is searched with all of its subdirectories, for the files ending
@@ -392,6 +397,8 @@ Each line names a file and what happened to it:
 - `<path>:<line>: <rule>: <message>`, for a break a person has to fix;
 - `<path>: error: <message>` (on the standard error), for a file the tool
   could not read, format, or write.
+
+Every path the tool prints uses `/` between its folders, on Windows too.
 
 The exit code is `0` when no file needed a change and no break is left, `1`
 when the tool changed a file (or would have, with `--check`) or a break is

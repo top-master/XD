@@ -57,6 +57,7 @@ private slots:
     void testInclude_shouldFindClassHeader();
     void testSkipIgnored_shouldDropIgnoredNamedFile();
     void testProject_shouldFormatItsFiles();
+    void testProject_shouldResolveFromShellFolderFirst();
     void testThisMode_shouldLeaveOwnMembersOfSourceBare();
     void testSpecs_shouldFormatFilesOfEverySpec();
     void testAnyComment_shouldRewrapShortComments();
@@ -79,6 +80,10 @@ private:
             QByteArray *err) const;
     int runWithInput(const QStringList & arguments, const QByteArray & input,
                      QByteArray *out, QByteArray *err) const;
+    int runInFolder(const QStringList & arguments, const QString & folder,
+                    const QString & shellFolder,
+                    QByteArray *out,
+                    QByteArray *err) const;
     QString writeFile(const QString & relative, const QByteArray & text) const;
     QByteArray readFile(const QString & path) const;
     bool waitForError(QProcess *process, QByteArray *err,
@@ -142,6 +147,32 @@ int tst_FormatCli::runWithInput(
     QProcess process;
     process.start(this->m_format, arguments);
     process.write(input);
+    process.closeWriteChannel();
+    if ( ! process.waitForFinished(120000)) {
+        process.kill();
+        process.waitForFinished();
+        return -1;
+    }
+    *out = process.readAllStandardOutput();
+    *err = process.readAllStandardError();
+    return process.exitStatus() == QProcess::NormalExit
+        ? process.exitCode() : -1;
+}
+
+/// Runs the tool just like run(), in the working folder @p folder, with
+/// @p shellFolder as `$PWD`, the folder a shell names when it went through a
+/// symbolic link to reach @p folder.
+int tst_FormatCli::runInFolder(
+        const QStringList & arguments, const QString & folder,
+        const QString & shellFolder, QByteArray *out,
+        QByteArray *err) const
+{
+    QProcessEnvironment environment = QProcessEnvironment::systemEnvironment();
+    environment.insert(QString(QLL("PWD")), shellFolder);
+    QProcess process;
+    process.setProcessEnvironment(environment);
+    process.setWorkingDirectory(folder);
+    process.start(this->m_format, arguments);
     process.closeWriteChannel();
     if ( ! process.waitForFinished(120000)) {
         process.kill();
@@ -827,6 +858,58 @@ void tst_FormatCli::testProject_shouldFormatItsFiles()
     qExpect(this->readFile(source))->toContain(QByteArray("    this->count = 1;"));
     qExpect(this->readFile(vendor))->toEqual(vendored);
     qExpect(err)->toBeEmpty();
+}
+
+/// Runs the tool inside a symbolic link to a folder, with `$PWD` naming the
+/// link: `../<name>` reaches a sibling of the link first, and a sibling of
+/// the link's target only when the link has no such sibling.
+void tst_FormatCli::testProject_shouldResolveFromShellFolderFirst()
+{
+    const QString root = this->m_dir.path() + QLL("/link-run");
+    this->writeFile(QString(QLL("link-run/.git/HEAD")), "ref: refs/heads/main\n");
+    this->writeFile(QString(QLL("link-run/parent/xd/x.cpp")), "int x;\n");
+    const QByteArray unbraced = "void f()\n{\n    if (a) b();\n}\n";
+    const QString sibling = this->writeFile(
+        QString(QLL("link-run/jom/jom.cpp")),
+        unbraced
+    );
+    this->writeFile(QString(QLL("link-run/jom/jom.pro")), "SOURCES = jom.cpp\n");
+    const QString targetSibling = this->writeFile(
+        QString(QLL("link-run/parent/real/real.cpp")),
+        unbraced
+    );
+    this->writeFile(QString(QLL("link-run/parent/real/real.pro")), "SOURCES = real.cpp\n");
+    const QString link = root + QLL("/xd");
+    if ( ! QFile::link(root + QLL("/parent/xd"), link)
+        || ! QFileInfo(link).isSymLink()
+    ) {
+        QSKIP("This platform makes no symbolic link to a folder.");
+    }
+    QByteArray out;
+    QByteArray err;
+    const QStringList arguments = QStringList()
+        << QString(QLL("--rules=control-braces"));
+    const QString siblingProject = QString(QLL("--project=../jom/jom.pro"));
+    qExpect(this->runInFolder(
+        QStringList(arguments) << siblingProject,
+        link,
+        link,
+        &out,
+        &err
+    ))->toEqual(1);
+    qExpect(err)->toBeEmpty();
+    qExpect(out)->toContain((sibling + QLL(": formatted")).toLocal8Bit());
+    qExpect(this->readFile(sibling))->Not->toEqual(unbraced);
+    const QString targetProject = QString(QLL("--project=../real/real.pro"));
+    qExpect(this->runInFolder(
+        QStringList(arguments) << targetProject,
+        link,
+        link,
+        &out,
+        &err
+    ))->toEqual(1);
+    qExpect(err)->toBeEmpty();
+    qExpect(this->readFile(targetSibling))->Not->toEqual(unbraced);
 }
 
 /// Reads a project whose platform scopes list one file each: the default spec
