@@ -1334,7 +1334,7 @@ expect_int_gt 'hide sets BH_PROGRESS_DONE=1' \
 expect_int_gt 'hide calls bh_progress_render to repaint the row' \
     "$(printf '%s\n' "$_bh_spec_hide_body" | grep -c 'bh_progress_render')" 0
 expect_int_gt 'hide trails with a stderr newline (no trailing %% sign)' \
-    "$(printf '%s\n' "$_bh_spec_hide_body" | grep -cF "printf '\\n' 1>&2")" 0
+    "$(printf '%s\n' "$_bh_spec_hide_body" | grep -cF "bh_progress_settle")" 0
 
 
 test_section 'bh_progress_render -- bar DONE collapses two rows into one with description'
