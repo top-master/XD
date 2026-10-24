@@ -1444,22 +1444,24 @@ bh_progress_format_bracket() {
     fi
     if [ "${BH_PROGRESS_TYPE:-spinner}" = "bar" ] \
         && [ "${BH_PROGRESS_MAX:-0}" -gt 0 ]; then
-        # 40-char bar. Centi-percent / 250 maps to 0..40 hashes.
+        # A bar of BH_PROGRESS_BAR_CELLS chars (40 by default, see
+        # bh_progress_bar_cells). Centi-percent maps to 0..cells hashes.
         # At full fill the spinner sits at the last position so its
         # rotating frame is still visible (matters most for no-op
         # builds where the bar lands at 100% immediately).
         _bhpf_c=$((BH_PROGRESS_VALUE * 10000 / BH_PROGRESS_MAX))
         [ "$_bhpf_c" -gt 10000 ] && _bhpf_c=10000
-        _bhpf_bars=$((_bhpf_c / 250))
-        if [ "$_bhpf_bars" -ge 40 ]; then
-            _bhpf_hash=$(printf '%*s' 39 '' | tr ' ' '#')
+        _bhpf_cells=${BH_PROGRESS_BAR_CELLS:-40}
+        _bhpf_bars=$((_bhpf_c * _bhpf_cells / 10000))
+        if [ "$_bhpf_bars" -ge "$_bhpf_cells" ]; then
+            _bhpf_hash=$(printf '%*s' $((_bhpf_cells - 1)) '' | tr ' ' '#')
             printf '%s%s' "$_bhpf_hash" "$_bhpf_spin"
         else
             _bhpf_hash=$(printf '%*s' "$_bhpf_bars" '' | tr ' ' '#')
             # Bar's empty cells use `_` rather than `-` so the
             # `-` frame of the embedded |/-\ spinner stays
             # visually distinct against the bar's trough.
-            _bhpf_dash=$(printf '%*s' $((40 - _bhpf_bars - 1)) '' | tr ' ' '_')
+            _bhpf_dash=$(printf '%*s' $((_bhpf_cells - _bhpf_bars - 1)) '' | tr ' ' '_')
             printf '%s%s%s' "$_bhpf_hash" "$_bhpf_spin" "$_bhpf_dash"
         fi
     else
@@ -1494,6 +1496,14 @@ bh_progress_tick() {
 
 bh_progress_render() {
     bh_progress_active || return 0
+    bh_progress_unpark
+    # The bar row ends with its value, its maximum, and the clock, and its bar
+    # takes the cells left of the width (see `bh_progress_bar_cells`).
+    _bhp_tail=" (${BH_PROGRESS_VALUE:-0}/${BH_PROGRESS_MAX:-0})"
+    if [ -n "${BH_PROGRESS_CLOCK:-}" ]; then
+        _bhp_tail="$_bhp_tail $BH_PROGRESS_CLOCK"
+    fi
+    bh_progress_bar_cells "$_bhp_tail"
     # Both modes animate |/-\ from the frame counter of `bh_progress_tick`,
     # via `bh_progress_format_bracket`.
     _bhp_bracket=$(bh_progress_format_bracket)
@@ -1515,13 +1525,13 @@ bh_progress_render() {
             #   \033[J      clear the header rows
             #   \r          col 0
             if [ "${BH_PROGRESS_HEADER_PRINTED:-0}" -eq 1 ]; then
-                printf '\r\033[K\033[%dA\033[J\r' "${BH_PROGRESS_HEADER_LINES:-1}" 1>&2
+                bh_progress_out '\r\033[K\033[%dA\033[J\r' "${BH_PROGRESS_HEADER_LINES:-1}"
                 BH_PROGRESS_HEADER_PRINTED=0
             else
-                printf '\r\033[K' 1>&2
+                bh_progress_out '\r\033[K'
             fi
             bh_progress_row "${_step:-}" "${BH_PROGRESS_DESC:-}"
-            printf '[%s]%s' "$_bhp_bracket" "$BH_PROGRESS_ROW" 1>&2
+            bh_progress_out '[%s]%s' "$_bhp_bracket" "$BH_PROGRESS_ROW"
         else
             # Active bar: description sits on its own header row,
             # the bar row updates in place on the next row. The
@@ -1533,7 +1543,7 @@ bh_progress_render() {
                 && [ -n "${BH_PROGRESS_DESC:-}" ]; then
                 bh_progress_row_clear
                 bh_progress_row "${_step:-}" "$BH_PROGRESS_DESC"
-                printf '\r\033[K[R]%s\n' "$BH_PROGRESS_ROW" 1>&2
+                bh_progress_out '\r\033[K[R]%s\n' "$BH_PROGRESS_ROW"
                 BH_PROGRESS_HEADER_LINES=$BH_PROGRESS_ROW_LINES
                 BH_PROGRESS_HEADER_PRINTED=1
             fi
@@ -1546,12 +1556,8 @@ bh_progress_render() {
             [ "$_bhp_c" -gt 10000 ] && _bhp_c=10000
             _bhp_int=$((_bhp_c / 100))
             _bhp_frac=$((_bhp_c % 100))
-            printf '\r\033[K  [%s] %3d.%02d %%' \
-                "$_bhp_bracket" "$_bhp_int" "$_bhp_frac" 1>&2
-            printf ' (%d/%d)' "$BH_PROGRESS_VALUE" "$BH_PROGRESS_MAX" 1>&2
-            if [ -n "${BH_PROGRESS_CLOCK:-}" ]; then
-                printf ' %s' "$BH_PROGRESS_CLOCK" 1>&2
-            fi
+            bh_progress_out '\r\033[K  [%s] %3d.%02d %%%s' \
+                "$_bhp_bracket" "$_bhp_int" "$_bhp_frac" "$_bhp_tail"
         fi
     else
         # Spinner mode: single line, `[sym] (step/total): desc`
@@ -1560,9 +1566,10 @@ bh_progress_render() {
         # but spinner-mode rows are top-level and don't want that).
         bh_progress_row_clear
         bh_progress_row "${_step:-}" "${BH_PROGRESS_DESC:-}"
-        printf '[%s]%s' "$_bhp_bracket" "$BH_PROGRESS_ROW" 1>&2
+        bh_progress_out '[%s]%s' "$_bhp_bracket" "$BH_PROGRESS_ROW"
         BH_PROGRESS_DRAWN=$BH_PROGRESS_ROW_LINES
     fi
+    bh_progress_park
 }
 
 bh_progress_hide() {
@@ -1577,7 +1584,7 @@ bh_progress_hide() {
     BH_PROGRESS_DONE=1
     BH_PROGRESS_DONE_GLYPH=${1:-√}
     bh_progress_render
-    printf '\n' 1>&2
+    bh_progress_settle
     BH_PROGRESS_DRAWN=0
 }
 
@@ -2019,7 +2026,8 @@ bh_run_qmake() {
             # that qmake decided to skip.
             bh_progress_setType spinner
             bh_progress_setMax 0
-            bh_progress_setDescription "QMake skipped for $_label (Makefile is up-to-date, pass --qmake to force rerun it)."
+            bh_progress_setDescription "QMake skipped for $_label (Makefile is up-to-date,
+pass --qmake to force rerun it)."
             bh_progress_hide
             return 0
         fi
@@ -3018,6 +3026,7 @@ bh_make_step() {
                         # the next row -- visually pins the bar
                         # below the scrolling stream.
                         bh_progress_row_clear
+                        bh_progress_flush
                         printf '\r\033[K%s\n' "${_bhm_line#L }"
                         bh_progress_render
                         ;;
