@@ -3940,6 +3940,25 @@ quint8 qHexDecode(quint16 hexEncoded_)
 */
 
 /*!
+    @macro Q_PTR_HIDE(Pointer)
+    @relates <QtGlobal>
+
+    Hides where @p Pointer comes from, without changing its value; hence the
+    compiler takes it as a pointer of unknown origin.
+
+    A compiler that sees a pointer computed from a struct, such as one just
+    past a header struct, takes the room after it from that struct's size,
+    which may be none at all. With `_FORTIFY_SOURCE`, a checked libc call
+    (such as `gethostname()`) then aborts on any length it gets with that
+    pointer. After Q_PTR_HIDE(), the compiler checks no room for it.
+
+    @p Pointer must be a variable. On GCC and Clang, the macro is an empty
+    `asm` statement that takes the pointer in and out of a register, which
+    costs no instruction; with other compilers, and under #QT_PTR_TRACKING,
+    it does nothing.
+*/
+
+/*!
     \macro QT_POINTER_SIZE
     \relates <QtGlobal>
 
