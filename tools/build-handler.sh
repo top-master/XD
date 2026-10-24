@@ -1446,9 +1446,10 @@ bh_progress_format_bracket() {
         # builds where the bar lands at 100% immediately).
         _bhpf_c=$((BH_PROGRESS_VALUE * 10000 / BH_PROGRESS_MAX))
         [ "$_bhpf_c" -gt 10000 ] && _bhpf_c=10000
-        _bhpf_bars=$((_bhpf_c / 250))
-        if [ "$_bhpf_bars" -ge 40 ]; then
-            _bhpf_hash=$(printf '%*s' 39 '' | tr ' ' '#')
+        _bhpf_cells=${BH_PROGRESS_BAR_CELLS:-40}
+        _bhpf_bars=$((_bhpf_c * _bhpf_cells / 10000))
+        if [ "$_bhpf_bars" -ge "$_bhpf_cells" ]; then
+            _bhpf_hash=$(printf '%*s' $((_bhpf_cells - 1)) '' | tr ' ' '#')
             printf '%s%s' "$_bhpf_hash" "$_bhpf_spin"
         else
             _bhpf_hash=$(printf '%*s' "$_bhpf_bars" '' | tr ' ' '#')
@@ -1490,6 +1491,14 @@ bh_progress_tick() {
 
 bh_progress_render() {
     bh_progress_active || return 0
+    bh_progress_unpark
+    # The bar row ends with its value, its maximum, and the clock, and its bar
+    # takes the cells left of the width (see `bh_progress_bar_cells`).
+    _bhp_tail=" (${BH_PROGRESS_VALUE:-0}/${BH_PROGRESS_MAX:-0})"
+    if [ -n "${BH_PROGRESS_CLOCK:-}" ]; then
+        _bhp_tail="$_bhp_tail $BH_PROGRESS_CLOCK"
+    fi
+    bh_progress_bar_cells "$_bhp_tail"
     # Both modes animate |/-\ from the frame counter of `bh_progress_tick`,
     # via `bh_progress_format_bracket`.
     _bhp_bracket=$(bh_progress_format_bracket)
@@ -1511,13 +1520,13 @@ bh_progress_render() {
             #   \033[J      clear the header rows
             #   \r          col 0
             if [ "${BH_PROGRESS_HEADER_PRINTED:-0}" -eq 1 ]; then
-                printf '\r\033[K\033[%dA\033[J\r' "${BH_PROGRESS_HEADER_LINES:-1}" 1>&2
+                bh_progress_out '\r\033[K\033[%dA\033[J\r' "${BH_PROGRESS_HEADER_LINES:-1}"
                 BH_PROGRESS_HEADER_PRINTED=0
             else
-                printf '\r\033[K' 1>&2
+                bh_progress_out '\r\033[K'
             fi
             bh_progress_row "${_step:-}" "${BH_PROGRESS_DESC:-}"
-            printf '[%s]%s' "$_bhp_bracket" "$BH_PROGRESS_ROW" 1>&2
+            bh_progress_out '[%s]%s' "$_bhp_bracket" "$BH_PROGRESS_ROW"
         else
             # Active bar: description sits on its own header row,
             # the bar row updates in place on the next row. The
@@ -1529,7 +1538,7 @@ bh_progress_render() {
                 && [ -n "${BH_PROGRESS_DESC:-}" ]; then
                 bh_progress_row_clear
                 bh_progress_row "${_step:-}" "$BH_PROGRESS_DESC"
-                printf '\r\033[K[R]%s\n' "$BH_PROGRESS_ROW" 1>&2
+                bh_progress_out '\r\033[K[R]%s\n' "$BH_PROGRESS_ROW"
                 BH_PROGRESS_HEADER_LINES=$BH_PROGRESS_ROW_LINES
                 BH_PROGRESS_HEADER_PRINTED=1
             fi
@@ -1542,12 +1551,8 @@ bh_progress_render() {
             [ "$_bhp_c" -gt 10000 ] && _bhp_c=10000
             _bhp_int=$((_bhp_c / 100))
             _bhp_frac=$((_bhp_c % 100))
-            printf '\r\033[K  [%s] %3d.%02d %%' \
-                "$_bhp_bracket" "$_bhp_int" "$_bhp_frac" 1>&2
-            printf ' (%d/%d)' "$BH_PROGRESS_VALUE" "$BH_PROGRESS_MAX" 1>&2
-            if [ -n "${BH_PROGRESS_CLOCK:-}" ]; then
-                printf ' %s' "$BH_PROGRESS_CLOCK" 1>&2
-            fi
+            bh_progress_out '\r\033[K  [%s] %3d.%02d %%%s' \
+                "$_bhp_bracket" "$_bhp_int" "$_bhp_frac" "$_bhp_tail"
         fi
     else
         # Spinner mode: single line, `[sym] (step/total): desc`
@@ -1556,9 +1561,10 @@ bh_progress_render() {
         # but spinner-mode rows are top-level and don't want that).
         bh_progress_row_clear
         bh_progress_row "${_step:-}" "${BH_PROGRESS_DESC:-}"
-        printf '[%s]%s' "$_bhp_bracket" "$BH_PROGRESS_ROW" 1>&2
+        bh_progress_out '[%s]%s' "$_bhp_bracket" "$BH_PROGRESS_ROW"
         BH_PROGRESS_DRAWN=$BH_PROGRESS_ROW_LINES
     fi
+    bh_progress_park
 }
 
 bh_progress_hide() {
@@ -1573,8 +1579,22 @@ bh_progress_hide() {
     BH_PROGRESS_DONE=1
     BH_PROGRESS_DONE_GLYPH=${1:-√}
     bh_progress_render
-    printf '\n' 1>&2
+    bh_progress_settle
     BH_PROGRESS_DRAWN=0
+}
+
+# bh_progress_note <line>
+#
+# Prints <line> above the progress row.
+bh_progress_note() {
+    if ! bh_progress_active; then
+        echo "$1" 1>&2
+        return 0
+    fi
+    bh_progress_row_clear
+    bh_progress_flush
+    printf '\r\033[K%s\n' "$1" 1>&2
+    bh_progress_render
 }
 
 # bh_spin_until <pid>
@@ -2208,18 +2228,65 @@ bh_clean_candidates() {
     { find -H "$BH_ROOT" -name '*.pro' \
         ! -path '*/build/*' ! -path '*/.git/*' 2>/dev/null || true; } \
     | sort \
-    | while IFS= read -r _bcc_pro; do
-        _bcc_rel=${_bcc_pro#"$BH_ROOT"/}
-        bh_filter_candidate "$_bcc_rel"
-        if [ "$BH_CANDIDATE" = skip ] \
-                || { [ -n "${BH_REBUILD:-}" ] && [ "$BH_CANDIDATE" != rebuild ]; }; then
-            continue
+    | {
+        _bcc_spin=0
+        _bcc_status=0
+        while IFS= read -r _bcc_pro; do
+            _bcc_rel=${_bcc_pro#"$BH_ROOT"/}
+            bh_filter_candidate "$_bcc_rel"
+            if [ "$BH_CANDIDATE" = skip ] \
+                    || { [ -n "${BH_REBUILD:-}" ] && [ "$BH_CANDIDATE" != rebuild ]; }; then
+                continue
+            fi
+            _bcc_makefile=$BUILD_DIR/$(dirname "$_bcc_rel")/$(bh_makefile_of "$_bcc_pro")
+            [ -f "$_bcc_makefile" ] || continue
+
+            # Starts the step at the first project to clean.
+            if [ ! -f "$_bcc_log" ]; then
+                : > "$_bcc_log"
+                if bh_progress_active && [ "${BH_LOG_LEVEL:-1}" -lt 2 ]; then
+                    _bcc_spin=1
+                    bh_progress_setType spinner
+                    bh_progress_setMax 0
+                    bh_progress_setDescription "clean is running."
+                fi
+            fi
+
+            # Cleans the project, with its line above the row.
+            bh_progress_note "  make clean for $_bcc_rel"
+            if [ "$_bcc_spin" -eq 1 ]; then
+                bh_held_start bh_make_clean "$_bcc_makefile" "$_bcc_log"
+                bh_spin_until "$_bh_held_pid"
+                bh_held_finish || _bcc_status=$?
+            elif [ "${BH_LOG_LEVEL:-1}" -ge 2 ]; then
+                # Verbose: shows the clean's output too, as bh_run does.
+                : > "$_bcc_log.part"
+                bh_make_clean "$_bcc_makefile" "$_bcc_log.part" || _bcc_status=$?
+                tee -a "$_bcc_log" < "$_bcc_log.part" 1>&2
+                rm -f "$_bcc_log.part"
+            else
+                bh_make_clean "$_bcc_makefile" "$_bcc_log" || _bcc_status=$?
+            fi
+            [ "$_bcc_status" -eq 0 ] || break
+        done
+
+        # Ends the step: an empty line between the lines and the row.
+        if [ "$_bcc_spin" -eq 1 ]; then
+            bh_progress_note ''
+            if [ "$_bcc_status" -eq 0 ]; then
+                bh_progress_hide
+            else
+                bh_progress_hide X
+            fi
         fi
-        _bcc_makefile=$BUILD_DIR/$(dirname "$_bcc_rel")/$(bh_makefile_of "$_bcc_pro")
-        [ -f "$_bcc_makefile" ] || continue
-        echo "  make clean for $_bcc_rel" 1>&2
-        bh_make_clean "$_bcc_makefile"
-    done || bh_error "--clean: cleaning a named project failed"
+        if [ "$_bcc_status" -ne 0 ]; then
+            bh_dump_fail "$_bcc_log" "$_bcc_status"
+        fi
+        exit "$_bcc_status"
+    } || bh_error "--clean: cleaning a named project failed"
+    if [ ! -f "$_bcc_log" ]; then
+        _step=$((_step - 1))
+    fi
 }
 
 # bh_makefile_of <pro>
@@ -3049,6 +3116,7 @@ bh_make_step() {
                         # the next row -- visually pins the bar
                         # below the scrolling stream.
                         bh_progress_row_clear
+                        bh_progress_flush
                         printf '\r\033[K%s\n' "${_bhm_line#L }"
                         bh_progress_render
                         ;;

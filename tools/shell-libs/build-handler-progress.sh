@@ -28,6 +28,23 @@ bh_progress_width() {
     esac
 }
 
+# Usage: bh_progress_bar_cells <tail>
+#
+# Sets `BH_PROGRESS_BAR_CELLS` to the cells that a bar row fits (40 at most,
+# 10 at least) within `_bpr_width` (see `bh_progress_width`), next to its
+# 2-space indent, its brackets, its percent, and <tail>; hence a narrow
+# terminal wraps the bar row in no way, which would move each later row off
+# the lines it counts.
+bh_progress_bar_cells() {
+    bh_progress_width
+    BH_PROGRESS_BAR_CELLS=$((_bpr_width - 2 - 2 - 9 - ${#1}))
+    if [ "$BH_PROGRESS_BAR_CELLS" -gt 40 ]; then
+        BH_PROGRESS_BAR_CELLS=40
+    elif [ "$BH_PROGRESS_BAR_CELLS" -lt 10 ]; then
+        BH_PROGRESS_BAR_CELLS=10
+    fi
+}
+
 # Usage: bh_progress_row <step> <description>
 #
 # Sets `BH_PROGRESS_ROW` to what a step's row shows after its `[/]`: the
@@ -64,6 +81,14 @@ bh_progress_row() {
                 used = 4
             }
             lines = 1
+        }
+        # A line break in the description starts a further line.
+        NR > 1 {
+            row = row "\n" indent
+            used = pad
+            lines++
+        }
+        {
             count = split($0, words, / +/)
             first = 1
             for (i = 1; i <= count; i++) {
@@ -81,6 +106,8 @@ bh_progress_row() {
                     lines++
                 }
             }
+        }
+        END {
             print lines
             printf "%s", row
         }')
@@ -96,12 +123,101 @@ bh_progress_row() {
 # `bh_progress_unpark`), and leaves the cursor at the start of its first.
 bh_progress_row_clear() {
     bh_progress_active || return 0
+    bh_progress_unpark
     if [ "${BH_PROGRESS_DRAWN:-0}" -gt 1 ]; then
-        printf '\033[%dA\r\033[J' $((BH_PROGRESS_DRAWN - 1)) 1>&2
+        bh_progress_out '\033[%dA\r\033[J' $((BH_PROGRESS_DRAWN - 1))
     else
-        printf '\r\033[K' 1>&2
+        bh_progress_out '\r\033[K'
     fi
     BH_PROGRESS_DRAWN=0
+}
+
+
+# Usage: bh_progress_park
+#
+# Ends what `bh_progress_render` drew with an empty line, which the cursor
+# then stays on, hence the rows stay off the screen's bottom edge, and the
+# next render, which starts from there (see `bh_progress_unpark`), draws that
+# line again too; then writes the whole frame at once (see
+# `bh_progress_flush`).
+bh_progress_park() {
+    bh_progress_out '\n\033[K'
+    bh_progress_flush
+    BH_PROGRESS_PARKED=1
+    bh_progress_echo_off
+}
+
+# Usage: bh_progress_out <format> [argument...]
+#
+# Adds the `printf` output of <format> and its arguments to the frame that
+# `bh_progress_flush` writes; bash's `printf -v` starts no process for it.
+bh_progress_out() {
+    if [ -n "${BASH_VERSION:-}" ]; then
+        # shellcheck disable=SC2059  # <format> is the caller's format.
+        printf -v _bpo_part "$@"
+    else
+        # shellcheck disable=SC2059  # <format> is the caller's format.
+        _bpo_part=$(printf "$@"; printf .)
+        _bpo_part=${_bpo_part%.}
+    fi
+    BH_PROGRESS_OUT=${BH_PROGRESS_OUT:-}$_bpo_part
+}
+
+# Usage: bh_progress_flush
+#
+# Writes the frame that `bh_progress_out` built up to stderr, in one write;
+# hence a Ctrl+C that stops the drawing leaves no half frame, and the cursor
+# where the shell that settles the rows counts it.
+bh_progress_flush() {
+    [ -n "${BH_PROGRESS_OUT:-}" ] || return 0
+    printf '%s' "$BH_PROGRESS_OUT" 1>&2
+    BH_PROGRESS_OUT=
+}
+
+# Usage: bh_progress_unpark
+#
+# Moves the cursor from the empty line that `bh_progress_park` left up to
+# the last row drawn, for a render to draw from there.
+bh_progress_unpark() {
+    if [ "${BH_PROGRESS_PARKED:-0}" -eq 1 ]; then
+        bh_progress_out '\033[A'
+        BH_PROGRESS_PARKED=0
+    fi
+}
+
+# Usage: bh_progress_settle
+#
+# Leaves the settled rows of a step behind: the next output starts on the
+# empty line below them (see `bh_progress_park`), or on a new line.
+bh_progress_settle() {
+    bh_progress_echo_on
+    if [ "${BH_PROGRESS_PARKED:-0}" -eq 1 ]; then
+        BH_PROGRESS_PARKED=0
+        return 0
+    fi
+    printf '\n' 1>&2
+}
+
+# Usage: bh_progress_echo_off
+#
+# Stops the terminal from showing the keys typed while a step draws its rows
+# (see `bh_progress_park`), hence an Enter moves the cursor off those rows in
+# no way; `bh_progress_echo_on` shows them again.
+bh_progress_echo_off() {
+    [ -z "${_bpe_saved:-}" ] || return 0
+    _bpe_saved=$(stty -g <&2 2>/dev/null) || _bpe_saved=
+    [ -n "$_bpe_saved" ] || return 0
+    stty -echo <&2 2>/dev/null || true
+}
+
+# Usage: bh_progress_echo_on
+#
+# Shows the keys typed again, which `bh_progress_echo_off` hid; as an
+# `on-exit` hook (see `bh_hook`) too, hence a stop amid a step does so as well.
+bh_progress_echo_on() {
+    [ -n "${_bpe_saved:-}" ] || return 0
+    stty "$_bpe_saved" <&2 2>/dev/null || true
+    _bpe_saved=
 }
 
 
@@ -536,3 +652,4 @@ bh_progress_actions_sum() {
 
 bh_hook_add on-exit bh_progress_plan_on_exit
 bh_hook_add on-exit bh_progress_actions_note
+bh_hook_add on-exit bh_progress_echo_on
