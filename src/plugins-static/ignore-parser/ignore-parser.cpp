@@ -237,9 +237,10 @@ QString IgnoreParser::excludingRule(const QString & path, bool isDirectory)
             continue;
         }
         if (decider == Q_NULLPTR) {
-            return QDir::toNativeSeparators(current) + QLL(": the .git folder");
+            return QDir::fromNativeSeparators(current)
+                + QLL(": the .git folder");
         }
-        return QString(QLL("%1:%2: %3")).arg(QDir::toNativeSeparators(decider->file))
+        return QString(QLL("%1:%2: %3")).arg(QDir::fromNativeSeparators(decider->file))
             .arg(decider->line).arg(decider->text);
     }
     return QString();
