@@ -222,11 +222,14 @@ moveSuffix = " "
   past it gets a line of its own. The default is `40%`; `0%` breaks before
   every operator, and `100%` only where the line would not fit.
 - `wrapArgsAt` (in `[Structure]`): where a call whose arguments do not fit
-  one line breaks after its `(` (see `args-wrap` under "Laying out code"
-  below): a condition of the same names, and of percents from `0%` to
-  `100%`. A percent holds when the column right after the `(` is past that
-  share of `wrapMax`; with `wrapMax = 80`, `40%` holds from column 33 on.
-  The default is `40%`; a name alone needs no percent:
+  one line breaks after its `(`, and where the parameters of a declaration
+  that passes `wrapMax` start on the next line (see `args-wrap` and
+  `param-wrap` under "Laying out code" below): a condition like
+  `wrapChainAt`, whose percent holds when the column right after the `(` is
+  past that share of `wrapMax`; with `wrapMax = 80`, `40%` holds from
+  column 33 on. Until a `.formatrc` sets it, it follows `wrapChainAt` (an
+  argument list being a chain of commas), hence `40%` by default; a name
+  alone needs no percent:
 
   ```
   [Structure]
@@ -336,20 +339,95 @@ The code rules lay out a few constructs on their own:
   operand line starts with its operator, one step past the line that opened
   its group. A group that holds a parenthesized operand closes its `)` on a
   line of its own, and so does the condition, at the keyword's indent, with
-  the body's `{` after it.
-- `args-wrap` breaks a call of 2 arguments or more after its `(` when the
-  call, written on one line, would pass the wrap column, and it takes more
-  than 3 arguments or `[Structure] wrapArgsAt` holds at its `(`: each
-  argument on a line of its own, one step past the line of the `(`, and the
-  `)` back at that line's indent. A call that fits one line keeps its
-  layout, and so does a call already broken after its `(` whose lines fit
-  `wrapMax` (such as one whose related arguments share a line):
+  the body's `{` after it. A continuation line whose operator binds tighter
+  than that of an earlier line of its group (a `!=` below a `||`) continues
+  that line's operand, one step past it (the rule `continuation-indent`).
+- `operator-wrap` breaks a statement that passes `wrapMax` and holds a chain
+  of binary operators (`<<`, `+`, `-`, `|`, `^`, `&&`, `||`, and the like)
+  outside of its brackets, or as the last argument of its call. It breaks
+  before the operators of the loosest level only, each operand on a line of
+  its own, one step past the line it breaks from (the leading operators
+  that start before `[Structure] wrapChainAt` stay on the chain's first
+  line); a tighter level inside an
+  operand breaks only when that operand still does not fit, one step
+  further in. A chain of one operator whose right operand is a
+  parenthesized group stays on its line up to the group's `(`, the group's
+  chain breaking inside it; a group that follows the `)` of another one
+  joins that line:
+
+  ```
+  QTest::newRow("process runner") << (QStringList()
+      << QString(QLL("--runner=process"))
+      << QString(QLL("--config"))
+  );
+  QTest::newRow("thread runner")
+      << (QStringList()
+          << QString(QLL("--runner=thread"))
+      ) << (QStringList()
+          << QString(QLL("--config"))
+      );
+  ```
+- `args-wrap` lays out a call of 2 arguments or more, or a brace
+  initializer list, when its one-line form would pass the wrap column and
+  it may break: it takes more than 3 arguments, `[Structure] wrapArgsAt`
+  holds at its `(`, its last argument is an operator chain, or it is a
+  brace list. On the same terms, it lays out a list the user broke over
+  lines whose lines are not one step past the line of its opening. The
+  leading arguments, and the head of a last argument that is a chain, stay
+  on the line of the opening when they fit, the chain going on below with
+  the `)` on a line of its own; otherwise the list breaks after its
+  opening, each argument one step past that line, and the closing bracket
+  goes back to that line's indent. In the head of an `if` or `while`, the
+  list steps from the condition's operand level:
 
   ```
   const QByteArray input = makeFile(
       "first",
       "second"
   );
+  process.start(QString(QLL("git")), QStringList()
+      << QString(QLL("-c")) << QString(QLL("user.name=format-test"))
+      << arguments
+  );
+  if ( ! this->matchesLast(
+          root,
+          current,
+          last ? isDirectory : true,
+          &decider
+      )
+  ) {
+  ```
+
+  Both `operator-wrap` and `args-wrap` keep the user's line groups:
+  arguments, or operands, that shared a line keep sharing one where it
+  fits, and a line group that does not fit gets a line per item. A list or
+  chain the user wrote on one line gets an item per line.
+- `param-wrap` wraps the parameter list of a declaration or definition
+  whose line passes `wrapMax` (a function, a constructor, a destructor, or
+  an operator such as `operator==`, `operator()`, or `operator bool`). A
+  list of more than 3 parameters starts on the next line, two steps (8
+  spaces) past the line it starts on, one parameter per line. A shorter one
+  wraps after a comma, each line under the first parameter, as many per
+  line as fit; it starts on the next line instead when the first parameter
+  does not fit under the `(`, or when `[Structure] wrapArgsAt` holds at the
+  `(`:
+
+  ```
+  void Widget::reloadEverythingNow(
+          const QString & name, int id, const QObject *receiver);
+  ```
+
+  A list the user broke over lines keeps its line groups: they stay under
+  the first parameter while they fit there, lined up right; otherwise the
+  list breaks at its `(`, each group on a line of its own, when every group
+  fits that way; when one does not, the groups stay under the first
+  parameter, and the last parameters of the group that does not fit go on
+  to the next line:
+
+  ```
+  bool Config::Condition::compile(
+          const QString & text, const QStringList & names,
+          QStringList *program, QString *error, bool takesPercents)
   ```
 - `ternary-wrap` breaks a statement with a conditional expression that passes
   the wrap column before its `?`, one step past the statement's line, then
