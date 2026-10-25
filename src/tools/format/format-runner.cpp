@@ -5,7 +5,9 @@
 #include "./format-process-runner.h"
 #include "./format-thread-runner.h"
 
+#include <QtCore/QDir>
 #include <QtCore/QFile>
+#include <QtCore/QFileInfo>
 #include <QtCore/QSaveFile>
 
 #ifndef QT_NO_THREAD
@@ -131,11 +133,12 @@ FormatFileResult FormatRunner::formatFile(const QString & path) const
     const QByteArray text = file.readAll();
     file.close();
 
-    // Formats it.
+    // Formats it, on the changed lines when `--git` lists the file.
+    const QString key = QDir::cleanPath(QFileInfo(path).absoluteFilePath());
     const FormatResult formatted = this->m_formatter->format(
         text,
         path,
-        this->m_options.lineSpecs,
+        this->m_options.fileLineSpecs.value(key, this->m_options.lineSpecs),
         this->m_options.config,
         this->m_options.agent
     );

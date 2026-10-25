@@ -6,6 +6,7 @@
 
 #include "./format-config.h"
 
+#include <QtCore/QHash>
 #include <QtCore/QStringList>
 
 /*!
@@ -16,6 +17,10 @@
     (see FormatConfig), whether to only check, whether an agent reads the
     requests the rules leave (`--ai`), and how many jobs may run at once (0
     picks one per CPU core).
+
+    The `--git` range, as given, travels along for child processes; its line
+    ranges, keyed by each changed file's absolute path, take the place of
+    the command line's ranges for that file.
 */
 class FormatOptions
 {
@@ -23,6 +28,8 @@ public:
     inline FormatOptions() : check(false), agent(false), jobs(0) {}
 
     QStringList lineSpecs;
+    QString git;
+    QHash<QString, QStringList > fileLineSpecs;
     QStringList rules;
     FormatConfig config;
     bool check;
