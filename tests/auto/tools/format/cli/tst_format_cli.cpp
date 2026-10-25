@@ -58,6 +58,10 @@ private slots:
     void testSkipIgnored_shouldDropIgnoredNamedFile();
     void testProject_shouldFormatItsFiles();
     void testProject_shouldResolveFromShellFolderFirst();
+    void testGit_shouldFormatChangedLinesOnly_data();
+    void testGit_shouldFormatChangedLinesOnly();
+    void testGit_shouldRunTheGivenGitCommand_data();
+    void testGit_shouldRunTheGivenGitCommand();
     void testThisMode_shouldLeaveOwnMembersOfSourceBare();
     void testSpecs_shouldFormatFilesOfEverySpec();
     void testAnyComment_shouldRewrapShortComments();
@@ -81,9 +85,8 @@ private:
     int runWithInput(const QStringList & arguments, const QByteArray & input,
                      QByteArray *out, QByteArray *err) const;
     int runInFolder(const QStringList & arguments, const QString & folder,
-                    const QString & shellFolder,
-                    QByteArray *out,
-                    QByteArray *err) const;
+                    const QString & shellFolder, QByteArray *out, QByteArray *err) const;
+    bool runGit(const QString & folder, const QStringList & arguments) const;
     QString writeFile(const QString & relative, const QByteArray & text) const;
     QByteArray readFile(const QString & path) const;
     bool waitForError(QProcess *process, QByteArray *err,
@@ -185,6 +188,25 @@ int tst_FormatCli::runInFolder(
         ? process.exitCode() : -1;
 }
 
+/// Runs git with @p arguments in @p folder, as a user of its own, without
+/// signing and without hooks; tells whether git ran and succeeded.
+bool tst_FormatCli::runGit(const QString & folder,
+                           const QStringList & arguments) const
+{
+    QProcess process;
+    process.setWorkingDirectory(folder);
+    process.start(QString(QLL("git")), QStringList()
+        << QString(QLL("-c")) << QString(QLL("user.name=format-test"))
+        << QString(QLL("-c"))
+        << QString(QLL("user.email=format-test@example.com"))
+        << QString(QLL("-c")) << QString(QLL("commit.gpgsign=false"))
+        << QString(QLL("-c")) << QString(QLL("core.hooksPath=/dev/null"))
+        << arguments
+    );
+    return process.waitForFinished(120000)
+        && process.exitStatus() == QProcess::NormalExit && process.exitCode() == 0;
+}
+
 /// Writes `text` into the file `relative` under the test's directory,
 /// creating its folders, and returns the file's path.
 QString tst_FormatCli::writeFile(
@@ -276,7 +298,7 @@ void tst_FormatCli::testHelp_shouldListEveryOption()
         "--config <setting>", "--config-file <file>",
         "--config-add <file>", "--ai", "-I, -i <dir>",
         "--skip-ignored", "-p, --project <file>", "--specs <names>",
-        "--qmake <path>", "--any-comment"
+        "--qmake <path>", "--any-comment", "--git <range>"
     };
     for (size_t i = 0; i < sizeof(options) / sizeof(options[0]); ++i) {
         qExpect(out)->toContain(QByteArray(options[i]));
@@ -910,6 +932,127 @@ void tst_FormatCli::testProject_shouldResolveFromShellFolderFirst()
     ))->toEqual(1);
     qExpect(err)->toBeEmpty();
     qExpect(this->readFile(targetSibling))->Not->toEqual(unbraced);
+}
+
+void tst_FormatCli::testGit_shouldFormatChangedLinesOnly_data()
+{
+    QTest::addColumn<QString >("range");
+    QTest::addColumn<QString >("folder");
+    QTest::newRow("two revisions") << QString(QLL("HEAD~ HEAD"))
+        << QString(QLL("git-two"));
+    QTest::newRow("three dots") << QString(QLL("HEAD~...HEAD"))
+        << QString(QLL("git-dots"));
+    QTest::newRow("one revision") << QString(QLL("HEAD~"))
+        << QString(QLL("git-one"));
+}
+
+/// Commits a source with two one-line `if` bodies, then changes the line of
+/// one of them: `--git` unfolds that body alone, whichever way the range is
+/// written, and leaves a file that the range did not change as it is.
+void tst_FormatCli::testGit_shouldFormatChangedLinesOnly()
+{
+    QFETCH(QString, range);
+    QFETCH(QString, folder);
+    const QString root = this->m_dir.path() + QLatin1Char('/') + folder;
+    const QByteArray untouched = "void h()\n{\n    if (e) f();\n}\n";
+    const QString other = this->writeFile(
+        folder + QLL("/other.cpp"),
+        untouched
+    );
+    const QString file = this->writeFile(
+        folder + QLL("/a.cpp"),
+        "void f()\n{\n    if (a) b();\n}\n\nvoid g()\n{\n    if (c) d();\n}\n"
+    );
+    if ( ! this->runGit(root, QStringList()
+            << QString(QLL("init"))
+            << QString(QLL("-q"))
+        )
+    ) {
+        QSKIP("This machine has no git to run.");
+    }
+    QVERIFY(this->runGit(root, QStringList()
+        << QString(QLL("add"))
+        << QString(QLL("."))
+    ));
+    QVERIFY(this->runGit(root, QStringList()
+        << QString(QLL("commit")) << QString(QLL("-q"))
+        << QString(QLL("-m")) << QString(QLL("one"))
+    ));
+    this->writeFile(folder + QLL("/a.cpp"),
+        "void f()\n{\n    if (a) b();\n}\n\nvoid g()\n{\n    if (c) e();\n}\n");
+    QVERIFY(this->runGit(root, QStringList()
+        << QString(QLL("commit")) << QString(QLL("-q"))
+        << QString(QLL("-a")) << QString(QLL("-m")) << QString(QLL("two"))
+    ));
+    QByteArray out;
+    QByteArray err;
+    const QStringList arguments = QStringList() << QString(QLL("--rules=control-braces"))
+        << QString(QLL("--git")) << range;
+    qExpect(this->runInFolder(arguments, root, root, &out, &err))->toEqual(1);
+    qExpect(err)->toBeEmpty();
+    const QByteArray formatted = this->readFile(file);
+    qExpect(formatted)->toContain(QByteArray("    if (a) b();\n"));
+    qExpect(formatted)->Not->toContain(QByteArray("if (c) e();"));
+    qExpect(this->readFile(other))->toEqual(untouched);
+}
+
+void tst_FormatCli::testGit_shouldRunTheGivenGitCommand_data()
+{
+    QTest::addColumn<QString >("range");
+    QTest::addColumn<bool >("stage");
+    QTest::addColumn<QString >("folder");
+    QTest::newRow("unstaged lines") << QString(QLL("!diff")) << false
+        << QString(QLL("git-diff"));
+    QTest::newRow("staged lines") << QString(QLL("!diff --cached")) << true
+        << QString(QLL("git-cached"));
+}
+
+/// Commits a source with two one-line `if` bodies, then changes the line of
+/// one of them without committing it (staged for one row): a `--git` value
+/// that starts with `!` runs that git command for the changed lines, hence
+/// it unfolds that body alone, and needs no commit.
+void tst_FormatCli::testGit_shouldRunTheGivenGitCommand()
+{
+    QFETCH(QString, range);
+    QFETCH(bool, stage);
+    QFETCH(QString, folder);
+    const QString root = this->m_dir.path() + QLatin1Char('/') + folder;
+    const QString file = this->writeFile(
+        folder + QLL("/a.cpp"),
+        "void f()\n{\n    if (a) b();\n}\n\nvoid g()\n{\n    if (c) d();\n}\n"
+    );
+    if ( ! this->runGit(root, QStringList()
+            << QString(QLL("init"))
+            << QString(QLL("-q"))
+        )
+    ) {
+        QSKIP("This machine has no git to run.");
+    }
+    QVERIFY(this->runGit(root, QStringList()
+        << QString(QLL("add"))
+        << QString(QLL("."))
+    ));
+    QVERIFY(this->runGit(root, QStringList()
+        << QString(QLL("commit")) << QString(QLL("-q"))
+        << QString(QLL("-m")) << QString(QLL("one"))
+    ));
+    this->writeFile(folder + QLL("/a.cpp"),
+        "void f()\n{\n    if (a) b();\n}\n\nvoid g()\n{\n    if (c) e();\n}\n");
+    if (stage) {
+        QVERIFY(this->runGit(root, QStringList()
+            << QString(QLL("add"))
+            << QString(QLL("."))
+        ));
+    }
+    QByteArray out;
+    QByteArray err;
+    const QStringList arguments = QStringList() << QString(QLL("--rules=control-braces"))
+        << QString(QLL("--git")) << range;
+    qExpect(this->runInFolder(arguments, root, root, &out, &err))->toEqual(1);
+    qExpect(err)->toBeEmpty();
+    const QByteArray formatted = this->readFile(file);
+    qExpect(formatted)->toContain(QByteArray("    if (a) b();\n"));
+    qExpect(formatted)->Not->toContain(QByteArray("if (c) e();"));
 }
 
 /// Reads a project whose platform scopes list one file each: the default spec

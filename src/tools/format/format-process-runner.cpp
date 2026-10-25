@@ -107,6 +107,9 @@ QStringList FormatProcessRunner::workerArguments() const
     for (int i = 0; i < this->m_options.lineSpecs.size(); ++i) {
         arguments << QString(QLL("-L")) << this->m_options.lineSpecs.at(i);
     }
+    if ( ! this->m_options.git.isEmpty()) {
+        arguments << QString(QLL("--git")) << this->m_options.git;
+    }
     if ( ! this->m_options.rules.isEmpty()) {
         arguments << QString(QLL("--rules="))
             + this->m_options.rules.join(QLatin1Char(','));

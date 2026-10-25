@@ -20,6 +20,8 @@
 #include <QtCore/QDir>
 #include <QtCore/QFile>
 #include <QtCore/QFileInfo>
+#include <QtCore/QProcess>
+#include <QtCore/QRegularExpression>
 
 #if defined(Q_OS_WIN)
 #  include <io.h>
@@ -192,6 +194,193 @@ static QStringList keptProjectFiles(
 }
 
 /*!
+    Builds the arguments of the git command that prints the changes the
+    `--git` @p range names, with no context lines: its words, split at
+    spaces, are revisions for `git diff` (such as `HEAD~ HEAD`), and a
+    single revision without `..` stands for `<revision>...HEAD`, the change
+    from the commit both revisions share up to `HEAD`.
+
+    A @p range that starts with `!` names the git command itself instead,
+    such as `!diff` for the changes not staged yet, or `!diff --cached` for
+    the staged ones. The tool puts its options for the diff's form right
+    after the command's name.
+*/
+static QStringList gitDiffArguments(const QString & range)
+{
+    const bool isCommand = range.trimmed().startsWith(QLatin1Char('!'));
+    QStringList words = range.trimmed().mid(isCommand ? 1 : 0).split(
+        QRegularExpression(QString(QLL("\\s+"))),
+        QString::SkipEmptyParts
+    );
+    if ( ! isCommand
+        && words.size() == 1
+        && ! words.first().contains(QLL(".."))
+    ) {
+        words.first() += QLL("...HEAD");
+    }
+    const QString command = isCommand && ! words.isEmpty()
+        ? words.takeFirst() : QString(QLL("diff"));
+    return QStringList() << QString(QLL("-c")) << QString(QLL("core.quotePath=false"))
+        << command << QString(QLL("--no-color")) << QString(QLL("--no-ext-diff"))
+        << QString(QLL("--unified=0")) << words << QString(QLL("--"));
+}
+
+/*!
+    Runs git with @p arguments in the working folder, and hands what it
+    prints to @p output. Returns false, with @p error, when git fails to
+    start or exits with an error.
+*/
+static bool runGit(const QStringList & arguments, QByteArray *output,
+                   QString *error)
+{
+#ifndef QT_NO_PROCESS
+    QProcess process;
+    process.setProcessChannelMode(QProcess::SeparateChannels);
+    process.start(QString(QLL("git")), arguments);
+    if ( ! process.waitForStarted() || ! process.waitForFinished(-1)) {
+        *error = QString(QLL("--git: cannot run git"));
+        return false;
+    }
+    *output = process.readAllStandardOutput();
+    if (process.exitStatus() != QProcess::NormalExit
+        || process.exitCode() != 0
+    ) {
+        const QString diagnostics = QString::fromLocal8Bit(process.readAllStandardError());
+        *error = QString(QLL("--git: git %1 failed: %2"))
+            .arg(arguments.join(QLatin1Char(' ')), diagnostics.trimmed());
+        return false;
+    }
+    return true;
+#else
+    Q_UNUSED(arguments);
+    Q_UNUSED(output);
+    *error = QString(QLL("--git: this build cannot run processes"));
+    return false;
+#endif
+}
+
+/*!
+    Builds the path that git prints as @p name in a diff: as it is, or, for
+    a name with a quote, a backslash, or a control character, in double
+    quotes with C escapes (`\t`, `\"`, `\\`, or three octal digits a byte).
+*/
+static QString gitPath(const QByteArray & name)
+{
+    if (name.size() < 2
+        || ! name.startsWith('"')
+        || ! name.endsWith('"')
+    ) {
+        return QString::fromUtf8(name);
+    }
+    QByteArray path;
+    const int end = name.size() - 1;
+    for (int i = 1; i < end; ++i) {
+        if (name.at(i) != '\\' || i + 1 >= end) {
+            path += name.at(i);
+            continue;
+        }
+        ++i;
+        const char escaped = name.at(i);
+        if (escaped >= '0' && escaped <= '7') {
+            int value = 0;
+            int digits = 0;
+            while (digits < 3
+                && i < end
+                && name.at(i) >= '0'
+                && name.at(i) <= '7'
+            ) {
+                value = value * 8 + (name.at(i) - '0');
+                ++i;
+                ++digits;
+            }
+            --i;
+            path += char(value);
+            continue;
+        }
+        switch (escaped) {
+        case 'a': path += '\a'; break;
+        case 'b': path += '\b'; break;
+        case 'f': path += '\f'; break;
+        case 'n': path += '\n'; break;
+        case 'r': path += '\r'; break;
+        case 't': path += '\t'; break;
+        case 'v': path += '\v'; break;
+        default: path += escaped; break;
+        }
+    }
+    return QString::fromUtf8(path);
+}
+
+/*!
+    Reads the lines that the git command of @p arguments changed (see
+    gitDiffArguments()): for each file that still exists after the change,
+    its git-blame style ranges of changed lines (`<first>,<last>`) go into
+    @p lineSpecs, keyed by the file's absolute path. A file whose change only
+    removed lines gets none. Returns false, with @p error, when git fails.
+*/
+static bool readGitChanges(const QStringList & arguments,
+                           QHash<QString, QStringList > *lineSpecs,
+                           QString *error)
+{
+    QByteArray topLevel;
+    if ( ! runGit(QStringList() << QString(QLL("rev-parse")) << QString(QLL("--show-toplevel")),
+                  &topLevel, error)
+    ) {
+        return false;
+    }
+    const QString root = QDir::fromNativeSeparators(QString::fromLocal8Bit(topLevel).trimmed());
+    QByteArray diff;
+    if ( ! runGit(arguments, &diff, error)) {
+        return false;
+    }
+
+    // Walks each file's header, which names the file after the change,
+    // then its hunks; a line of content never counts as a header line.
+    const QRegularExpression hunk(QString(QLL("^@@ -\\d+(?:,\\d+)? \\+(\\d+)(?:,(\\d+))? @@")));
+    const QList<QByteArray > lines = diff.split('\n');
+    QString file;
+    bool inHeader = false;
+    for (int i = 0; i < lines.size(); ++i) {
+        QByteArray line = lines.at(i);
+        if (line.endsWith('\r')) {
+            line.chop(1);
+        }
+        if (line.startsWith("diff ")) {
+            inHeader = true;
+            file.clear();
+            continue;
+        }
+        if (inHeader && line.startsWith("+++ ")) {
+            const QByteArray name = line.mid(4);
+            if (name != "/dev/null") {
+                QString path = gitPath(name);
+                if (path.startsWith(QLL("b/"))) {
+                    path.remove(0, 2);
+                }
+                file = QDir::cleanPath(root + QLatin1Char('/') + path);
+            }
+            continue;
+        }
+        if ( ! line.startsWith("@@ ")) {
+            continue;
+        }
+        inHeader = false;
+        const QRegularExpressionMatch found = hunk.match(QString::fromLatin1(line));
+        if (file.isEmpty() || ! found.hasMatch()) {
+            continue;
+        }
+        const int first = found.captured(1).toInt();
+        const int count = found.captured(2).isEmpty()
+            ? 1 : found.captured(2).toInt();
+        if (count > 0) {
+            (*lineSpecs)[file]
+                << QString(QLL("%1,%2")).arg(first).arg(first + count - 1);
+        }
+    }
+    return true;
+}
+
+/*!
     Tells whether the file descriptor @a fd is a terminal; Qt has no
     interface for it, hence the platform's own call.
 */
@@ -329,6 +518,17 @@ int main(int argc, char *argv[])
         QString(QLL("range"))
     );
     parser.addOption(lineOption);
+    QCommandLineOption gitOption(
+        QStringList() << QString(QLL("git")),
+        QString(QLL("Formats only the lines that the git <range> changed, in each "
+            "source file it changed: two revisions in one argument (\"HEAD~ HEAD\"), "
+            "or any range git diff takes (HEAD~...HEAD); a single revision such as "
+            "HEAD~ means HEAD~...HEAD. A <range> that starts with ! names the git "
+            "command instead, such as !diff or \"!diff --cached\", for changes not "
+            "committed yet. Cannot run with -L.")),
+        QString(QLL("range"))
+    );
+    parser.addOption(gitOption);
     QCommandLineOption dirOption(
         QStringList() << QString(QLL("dir")),
         QString(QLL("Formats the source files under <path>, a directory with or " "without a trailing slash; may be given more than once.")),
@@ -586,6 +786,20 @@ int main(int argc, char *argv[])
         ignores.addExplicitPath(folders.at(i));
     }
 
+    // Reads the lines that the `--git` range changed.
+    QHash<QString, QStringList > gitLineSpecs;
+    if (parser.isSet(gitOption)) {
+        if (parser.isSet(lineOption)) {
+            logger.logError(QString(QLL("--git cannot run with -L: the range picks the "
+                                        "lines")));
+            return ExitError;
+        }
+        if ( ! readGitChanges(gitDiffArguments(parser.value(gitOption)), &gitLineSpecs, &error)) {
+            logger.logError(error);
+            return ExitError;
+        }
+    }
+
     // Skips each named path that the ignore files leave out, when asked to.
     if (parser.isSet(skipIgnoredOption)) {
         QStringList keptFiles;
@@ -656,6 +870,25 @@ int main(int argc, char *argv[])
     // Adds the projects' files that the ignore files keep.
     files
         << keptProjectFiles(projectFiles.takeUnparsed(false), &ignores, files);
+
+    // Adds each source file that the `--git` range changed and the ignore
+    // files keep; a worker formats only the files its parent hands it.
+    if ( ! parser.isSet(workerOption)) {
+        QStringList changed = gitLineSpecs.keys();
+        changed.sort();
+        QStringList sources;
+        for (int i = 0; i < changed.size(); ++i) {
+            if (QDir::match(sourceFilters(), QFileInfo(changed.at(i)).fileName())) {
+                sources << changed.at(i);
+            }
+        }
+        files << keptProjectFiles(sources, &ignores, files);
+    }
+    if (files.isEmpty() && folders.isEmpty() && projects.isEmpty()
+        && parser.isSet(gitOption)
+    ) {
+        return ExitClean;
+    }
     if (files.isEmpty()
         && folders.isEmpty()
         && ! projects.isEmpty()
@@ -671,6 +904,8 @@ int main(int argc, char *argv[])
     // Reads the run's options.
     FormatOptions options;
     options.lineSpecs = parser.values(lineOption);
+    options.git = parser.value(gitOption);
+    options.fileLineSpecs = gitLineSpecs;
     options.rules = rules;
     options.config = config;
     options.check = parser.isSet(checkOption);
