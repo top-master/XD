@@ -522,6 +522,22 @@ void tst_FormatRules::testFix_shouldRewrite_data()
         << QString(QLL("param-wrap"))
         << QByteArray("QSharedPointer<DocumentRepositoryEntry > DocumentRepository::findEntryByName(const QString & name);\n")
         << QByteArray("QSharedPointer<DocumentRepositoryEntry > DocumentRepository::findEntryByName(\n        const QString & name);\n");
+    QTest::newRow("param-wrap past wrapArgsAt")
+        << QString(QLL("param-wrap"))
+        << QByteArray("void Widget::reloadEverythingNow(const QString & name, int id, const QObject *receiver);\n")
+        << QByteArray("void Widget::reloadEverythingNow(\n        const QString & name, int id, const QObject *receiver);\n");
+    QTest::newRow("param-wrap operator")
+        << QString(QLL("param-wrap"))
+        << QByteArray("bool DocumentRepositoryEntryHandle::operator==(const DocumentRepositoryEntryHandle & other) const;\n")
+        << QByteArray("bool DocumentRepositoryEntryHandle::operator==(\n        const DocumentRepositoryEntryHandle & other) const;\n");
+    QTest::newRow("param-wrap call operator in a class")
+        << QString(QLL("param-wrap"))
+        << QByteArray("class A\n{\npublic:\n    QSharedPointer<DocumentRepositoryEntry > operator()(const QString & name, int id) const;\n};\n")
+        << QByteArray("class A\n{\npublic:\n    QSharedPointer<DocumentRepositoryEntry > operator()(\n            const QString & name, int id) const;\n};\n");
+    QTest::newRow("param-wrap conversion operator")
+        << QString(QLL("param-wrap"))
+        << QByteArray("DocumentRepositoryEntryHandle::operator QSharedPointer<DocumentRepositoryEntry >(int id, int count) const;\n")
+        << QByteArray("DocumentRepositoryEntryHandle::operator QSharedPointer<DocumentRepositoryEntry >(\n        int id, int count) const;\n");
     QTest::newRow("param-wrap init list")
         << QString(QLL("param-wrap"))
         << QByteArray("class A : public B\n{\n    inline A()\n        : super(\"name-of-the-rule\", \"A long summary text that runs past eighty columns.\")\n    {\n    }\n    inline A(const char *name, const char *summary, int count) : super(name, summary) {}\n};\n")
