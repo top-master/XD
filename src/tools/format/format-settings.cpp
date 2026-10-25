@@ -59,10 +59,12 @@
       `40%` without a `.formatrc`;
     * `wrapArgsAt` (`[Structure]`): where a call whose arguments do not fit
       one line breaks after its `(`, one argument per line (see
-      FormatArgsWrapRule): a condition of the same names and of percents,
-      such as `(40% & is-non-header) | (30% & is-header)`, where a percent
-      holds when the column of the `(` is past that share of `wrapMax`;
-      `40%` without a `.formatrc`.
+      FormatArgsWrapRule), and where a declaration's parameter list past
+      `wrapMax` starts on the next line (see FormatParamWrapRule): a
+      condition like `wrapChainAt`, where a percent holds when the column of
+      the `(` is past that share of `wrapMax`. It follows `wrapChainAt`
+      until a `.formatrc` sets it, since an argument list is a chain of
+      commas.
 
     Each spacing key takes any run of spaces and/or tabs to write there
     (`" "` for one space, `"\t"` for a tab, `""` or `none` for no space),

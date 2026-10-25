@@ -5,9 +5,12 @@
 
 #include "../format-document.h"
 #include "../parser/code-helpers.h"
+#include "../parser/layout-helpers.h"
+#include "../parser/scope-conditions.h"
 
 #include <QtCore/QByteArray>
 #include <QtCore/QList>
+#include <QtCore/QPair>
 #include <QtCore/QString>
 
 /*!
@@ -15,10 +18,17 @@
     @internal
 
     Wraps the parameter list of a declaration or definition whose line runs
-    past the column limit (`[Structure] wrapMax`, 80 by default): after a
-    comma, each line under the first parameter, as many parameters per line
-    as fit; when even the first one does not fit there, the list starts on
-    the next line, indented two steps past the line it starts on.
+    past the column limit (`[Structure] wrapMax`, 80 by default). A list of
+    more than 3 parameters starts on the next line, indented two steps past
+    the line it starts on, one parameter per line. A shorter list wraps after
+    a comma, each line under the first parameter, as many parameters per
+    line as fit; it starts on the next line instead when even the first
+    parameter does not fit under the `(`, or when `[Structure] wrapArgsAt`
+    holds at the `(` (whose percents compare the column after the `(` with
+    `wrapMax`, as for a call, see FormatArgsWrapRule). A function, a
+    constructor, a destructor, and an operator count alike, at file,
+    namespace, or class scope. A list the user already broke over lines
+    keeps its line groups (see regroup()).
 */
 
 /*!
@@ -27,6 +37,7 @@
 */
 void FormatParamWrapRule::run(FormatDocument *document) const
 {
+    FormatScopeConditions conditions(document);
     const int limit = document->settings().wrapMax;
     for (int line = 1; line <= document->lineCount(); ++line) {
         const int first = document->firstSymbolOfLine(line);
@@ -81,11 +92,30 @@ void FormatParamWrapRule::run(FormatDocument *document) const
                 end - document->symbols().at(close).from
             );
 
-            // Fills under the first parameter, or else from the next line.
+            // Gives each of more than 3 parameters a line of its own, from
+            // the next line; fills fewer under the first parameter, or else
+            // from the next line, which `wrapArgsAt` may ask for too.
             QList<QByteArray > lines;
             const QByteArray head = prefix + items.first()
                 + (items.size() == 1 ? suffix : ",");
-            if (textWidth(head) <= limit) {
+            const qreal percent = textWidth(prefix) * 100.0 / qMax(
+                1,
+                limit
+            );
+            const bool breaksAfterOpen = conditions.holds(
+                document->settings().wrapArgsAt,
+                i,
+                percent,
+                FormatSettings::defaultWrapChainAt()
+            );
+            if (items.size() > 3) {
+                const QByteArray pad = document->indentOf(line) + "        ";
+                lines << prefix;
+                for (int k = 0; k < items.size(); ++k) {
+                    lines << pad + items.at(k)
+                        + (k + 1 < items.size() ? QByteArray(",") : suffix);
+                }
+            } else if (textWidth(head) <= limit && ! breaksAfterOpen) {
                 lines = this->fill(
                     prefix + items.first(),
                     QByteArray(textWidth(prefix), ' '),
@@ -283,23 +313,47 @@ QList<QByteArray > FormatParamWrapRule::groupedLines(
 /*!
     Tells whether the `(` at @a paren of @a document opens the parameter list
     of a function's declaration or definition, at file, namespace or class
-    scope: its name follows a type, or it is a constructor or destructor.
+    scope: its name follows a type, or it is a constructor, a destructor, or
+    an operator, such as `operator==`, `operator()`, or a conversion
+    (`operator bool`, `operator QString`).
 */
 bool FormatParamWrapRule::isDeclarationParen(
         const FormatDocument *document,
         int paren) const
 {
     const FormatDocument::Scope scope = document->scopeOf(paren);
-    if ((scope != FormatDocument::FileScope && scope != FormatDocument::NamespaceScope
-        && scope != FormatDocument::ClassScope)
-        || document->token(paren - 1) != IDENTIFIER
+    if (scope != FormatDocument::FileScope && scope != FormatDocument::NamespaceScope
+        && scope != FormatDocument::ClassScope
     ) {
         return false;
     }
+
+    // Finds where the name starts: at the `operator` keyword of an operator,
+    // whose symbol or conversion type (up to 16 tokens) comes between it and
+    // the `(`; a `;`, a brace, or a `:` ends the search, as does a bracket
+    // other than the `()` of `operator()`.
     int name = paren - 1;
-    if (document->token(name - 1) == TILDE) {
+    bool isOperator = false;
+    for (int k = paren - 1; k >= qMax(1, paren - 16); --k) {
+        const Token token = document->token(k);
+        if (token == OPERATOR) {
+            name = k;
+            isOperator = true;
+            break;
+        }
+        if (token == SEMIC || token == LBRACE || token == RBRACE || token == COLON
+            || ((token == LPAREN || token == RPAREN) && k < paren - 2)
+        ) {
+            break;
+        }
+    }
+    if ( ! isOperator && document->token(name) != IDENTIFIER) {
+        return false;
+    }
+    if ( ! isOperator && document->token(name - 1) == TILDE) {
         return true;
     }
+    const int unqualified = name;
     while (name >= 2
         && document->token(name - 1) == SCOPE
         && document->token(name - 2) == IDENTIFIER
@@ -310,8 +364,12 @@ bool FormatParamWrapRule::isDeclarationParen(
     if (isTypeEnd(typeEnd) || typeEnd == AND) {
         return true;
     }
-    if (name < paren - 1) {
-        return document->lexem(paren - 1) == document->lexem(paren - 3);
+
+    // A qualified name with no type before it: an operator, such as a
+    // conversion, or a constructor, whose name repeats its class's.
+    if (name < unqualified) {
+        return isOperator
+            || document->lexem(paren - 1) == document->lexem(paren - 3);
     }
     const Token label = document->token(name - 2);
     const bool afterAccess = typeEnd == COLON
