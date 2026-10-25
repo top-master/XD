@@ -19,6 +19,19 @@ format --list-rules
 - `-L <range>`, `--range <range>`: formats only the lines of `<range>`, in any
   form that `git blame -L` takes (see "Line ranges" below). Give it more than
   once for more ranges; without it, the whole file is formatted.
+- `--git <range>`: formats the source files that the git `<range>` changed,
+  each only on the lines it changed, as `git diff --unified=0 <range>`
+  shows them; the lines are those of the range's last revision, and the
+  files on disk get formatted. `<range>` holds what `git diff` takes: two
+  revisions in one argument (`--git "HEAD~ HEAD"`), or a range such as
+  `HEAD~...HEAD`. A single revision without `..` stands for
+  `<revision>...HEAD`; hence `--git HEAD~` formats what the last commit
+  changed. A `<range>` that starts with `!` names the git command itself,
+  for changes that are not committed yet: `--git !diff` formats the lines
+  not staged, and `--git "!diff --cached"` the staged ones; the tool adds
+  its diff options (`--unified=0` and the like) right after the command's
+  name. A file that the ignore files leave out is skipped without a word;
+  `--git` cannot run with `-L`.
 - `--dir <path>`: formats the C and C++ files under the directory `<path>`,
   with or without a trailing slash. Give it more than once for more
   directories.
