@@ -616,6 +616,58 @@ bh_license_gate() {
     bh_license_accept
 }
 
+bh_build_dir_gate() {
+    bh_hook_run display-build-dir > /dev/null
+    # Shows a folder once: a dependency's build (see bh_dependency_build) in
+    # the folder this run showed does not show it again.
+    if [ "${BH_BUILD_DIR_SHOWN:-}" != "$BH_HOOK_RESULT" ]; then
+        echo "Build directory:"
+        echo "  $BH_HOOK_RESULT"
+        echo
+    fi
+    BH_BUILD_DIR_SHOWN=$BH_HOOK_RESULT
+    bh_license_gate
+}
+
+bh_build_dir() {
+    if [ -n "${BUILD_DIR:-}" ]; then
+        echo "$BUILD_DIR"
+        return 0
+    fi
+    echo "$(bh_build_dir_root "$BH_ROOT")/$(bh_build_dir_name)"
+}
+
+bh_build_dir_name() {
+    _bbn_name=$(basename "$BH_ROOT")
+    case "${BH_TEMPLATE:-}" in
+        app) echo "$_bbn_name${BH_STATIC:+-static}-$BH_MODE${BH_BUILD_DIR_SUFFIX:-}" ;;
+        makefile) echo "$_bbn_name-$BH_MODE${BH_BUILD_DIR_SUFFIX:-}" ;;
+        *) echo "$_bbn_name${BH_STATIC:+-static}${BH_BUILD_DIR_SUFFIX:-}" ;;
+    esac
+}
+
+# Args: <dir>
+bh_build_dir_root() {
+    _bbdr_top=$(git -C "$1" rev-parse --show-toplevel 2>/dev/null) || _bbdr_top=
+    if [ -z "$_bbdr_top" ] \
+            || [ -z "$(git -C "$_bbdr_top" rev-parse --show-superproject-working-tree 2>/dev/null)" ]; then
+        echo "$(dirname "$1")/build"
+        return 0
+    fi
+    # Goes up the submodule chain, to its outermost repo.
+    while _bbdr_super=$(git -C "$_bbdr_top" rev-parse --show-superproject-working-tree 2>/dev/null) \
+            && [ -n "$_bbdr_super" ]; do
+        _bbdr_top=$_bbdr_super
+    done
+    case "$_bbdr_top" in
+        / | [A-Za-z]: | [A-Za-z]:/) echo "${_bbdr_top%/}/build" ;;
+        *) echo "$(dirname "$_bbdr_top")/build" ;;
+    esac
+}
+
+# See bh_build_dir_gate.
+BH_HOOKS_display_build_dir=bh_build_dir
+
 
 # ---- macOS Xcode developer dir auto-detection --------------------------
 
@@ -653,40 +705,7 @@ bh_macos_developer_dir() {
 #
 # Defaults: --debug, log level 1 (normal), non-headless, no tests, no run.
 #
-# Flags recognised (covers every flag the consumer + XD build.sh
-# files used to handle locally):
-#   -q | --quiet       log level 0: errors only (no progress bar)
-#   -v | --verbose     log level 2: tee live make + test output
-#   -vv | --very-verbose  log level 3: also qmake's "Reading ..." firehose
-#   --no-verbose       back to level 1 (normal)
-#   --test | --tests   build + run the project's test suite
-#   --run              launch the freshly-built app
-#   --headless         skip interactive prompts (XD-style scripts use this)
-#   --no-progress      disable bh_make_step's live progress bar (silent
-#                      make output instead, dump-on-failure as bh_run)
-#   --clean            `make clean` the build dir before building
-#   --wipe           rm -rf the build dir before building (total
-#                      wipe; no Makefile dependency)
-#   --no-build         skip the build step (useful with --clean /
-#                      --wipe to wipe without rebuilding)
-#   --only-clean       alias for `--clean --no-build` -- the most
-#                      common "just clean, don't build" shorthand
-#   --build-tests      force the --test step to (re)build each test
-#   --no-build-tests   force the --test step to just run a pre-built test
-#                      (these default to follow --build / --no-build)
-#   --qmake            force the qmake step to run even when its
-#                      Makefile is up-to-date (qmake is otherwise
-#                      skipped when no .pro / .pri / .prf file is
-#                      newer than the Makefile under the build dir)
-#   --refresh          alias for the same force-qmake behaviour --
-#                      reads naturally for "give me a fresh
-#                      Makefile" without implying a clean/wipe
-#   --ignore-pri       narrow the freshness check to just `.pro`
-#                      files (skip `.pri` and `.prf`) -- useful
-#                      when an unchanged-in-effect `.pri` keeps
-#                      tripping a re-qmake because some IDE keeps
-#                      `touch`-ing it on save
-#   --                 stop parsing; rest forwarded as BH_REMAINING_ARGS
+# build-handler.md lists the flags.
 #
 # True (exit 0) when there are post-build tasks to run -- i.e. --test or
 # --run was requested. Such tasks consume the executable's TARGET name
@@ -860,7 +879,7 @@ bh_hook_add() {
 # prints is its result: it shows as it comes, and BH_HOOK_RESULT holds it
 # afterwards, hence the next hook can build on it (BH_HOOK_RESULT is empty for
 # the first). A caller that wants the result alone sends this output to
-# /dev/null.
+# /dev/null (see bh_build_dir_gate).
 bh_hook_run() {
     BH_HOOK_RESULT=
     _bhr_variable=$(bh_hook_variable "$1")
@@ -939,6 +958,8 @@ bh_parse_args() {
     done
 
     BH_FORWARD_ARGS=
+    BH_XD_ARGS=
+    _bhpa_child=0
     while [ $# -gt 0 ]; do
         # Keeps what the case below reads (one argument, or two for a flag
         # with a value), for bh_forward_note.
@@ -1082,6 +1103,7 @@ bh_parse_args() {
             # so an unrelated broken .pro (one that needs an SDK we lack, say)
             # cannot block the subset asked for.
             --filter=*|--only=*) BH_FILTER="${1#*=}"; shift;;
+            --child)          _bhpa_child=1; shift;;
             --filter|--only)     [ $# -ge 2 ] || bh_error "$1 requires a regexp"; BH_FILTER="$2"; shift 2;;
             # --rebuild[=<regexp>]: under --save-space, build the projects whose
             # path relative to the build root matches (default every project)
@@ -1098,10 +1120,8 @@ bh_parse_args() {
             --static=*)       BH_STATIC="${1#*=}"; shift;;
             --static)         BH_STATIC='^.*$'; shift;;
             --no-static)      BH_STATIC=; shift;;
-            # --no-xd-build (alias --no-qt-build): never build the XD framework
-            # itself, neither normally (see bh_xd_build) nor in static mode (see
-            # bh_xd_build_static).
-            --no-xd-build|--no-qt-build) BH_NO_XD_BUILD=1; shift;;
+            --no-xd-* | --no-qt-*) bh_xd_arg_add "--no-${1#--no-??-}"; shift;;
+            --xd-* | --qt-*)  bh_xd_arg_add "--${1#--??-}"; shift;;
             # --get=<what>: print a single resolved path and exit without
             # building, so a caller can capture and forward it (e.g. bind-mount
             # XD's already-built dirs into a cross-build container instead of
@@ -1133,6 +1153,11 @@ bh_parse_args() {
         for _bhpa_argument in "$@"; do
             bh_forward_add "$_bhpa_argument"
         done
+    fi
+
+    if [ "$_bhpa_child" -eq 1 ]; then
+        bh_filter_add "$_bh_parent_xd_build_filter"
+        BH_BUILD_DIR_SHOWN=$_bh_parent_build_dir_shown
     fi
 
     # Lets a build.sh adjust what the flags set (see bh_hook).
@@ -1245,14 +1270,22 @@ bh_parse_args() {
 # --static regexp (the framework gets a plain --static),
 # --estimate-actions (the count of this project's build), --test,
 # --tests, and
-# --test-review with their test project, --run with its subdir, and -d
-# (--directory). --test-review's own defaults go along, in front of every
-# flag, just as bh_parse_args sets them before it reads the flags.
+# --test-review with their test project, --run with its subdir, -d
+# (--directory), and --clean, which would clean what the framework built (its
+# --static regexp names the projects to clean then); hence --only-clean passes
+# on its --no-build only. --test-review's own defaults go along, in front of
+# every flag, just as bh_parse_args sets them before it reads the flags.
 bh_forward_note() {
     case "$2" in
-        --filter | --filter=* | --only | --only=* | --static | --static=* \
+        --filter | --filter=* | --child | --only | --only=* \
+                | --static | --static=* \
                 | --estimate-actions=* \
-                | --test | --tests | --run | -d | --directory)
+                | --test | --tests | --run | -d | --directory | --clean \
+                | --xd-* | --no-xd-* | --qt-* | --no-qt-*)
+            return 0
+            ;;
+        --only-clean)
+            bh_forward_add --no-build
             return 0
             ;;
         --test-review)
@@ -1590,10 +1623,7 @@ bh_progress_hide() {
 
 # bh_progress_note <line>
 #
-# Prints <line> above the progress row: clears the row, prints <line> where
-# it was, then draws the row again below it; hence the row stays pinned under
-# the lines a step prints. Without a live progress display, it only prints
-# <line> to stderr.
+# Prints <line> above the progress row.
 bh_progress_note() {
     if ! bh_progress_active; then
         echo "$1" 1>&2
@@ -2226,12 +2256,6 @@ bh_clean() {
 # --rebuild accepts too when it was given. One `.pro` at a time as
 # `find | sort` hands them over; a project never built (no Makefile) is
 # passed over.
-#
-# All of them make one `clean` step, with one log and one spinner row; the
-# `make clean for <project>` line of each goes above that row as it starts
-# (see bh_progress_note). Each clean runs to its end even on Ctrl+C, and the
-# build stops right after (see `bh_held_start`), as the spinner turns in the
-# foreground meanwhile.
 bh_clean_candidates() {
     # The step's number, taken back below when no project gets cleaned.
     _step=$((_step + 1))
@@ -2321,20 +2345,25 @@ bh_makefile_of() {
 #
 # Builds the XD framework, through XD's own build.sh (see
 # bh_dependency_build), for a project that builds on XD while XD has no whole
-# build yet (see bh_xd_missing). Does nothing when XD builds itself, under
-# --no-xd-build (or --no-qt-build), or when every project of this run builds
-# in `qt_static` mode (see bh_static_record), as those need XD's static build
-# alone (see bh_xd_build_static). A library that XD's build still lacks
+# build yet (see bh_xd_missing). Does nothing when XD builds itself, or when
+# every project of this run builds in `qt_static` mode (see bh_static_record),
+# as those need XD's static build alone (see bh_xd_build_static); under
+# --no-xd-build (or --no-qt-build), XD's build gets --no-build, hence leaves XD
+# as it is. A library that XD's build still lacks
 # afterwards only warns, since a module file that an older build left behind
 # may name a library XD's tree no longer builds.
 bh_xd_build() {
     [ "${BH_NO_XD_BUILD:-0}" -eq 0 ] || return 0
     [ "$XD_DIR" != "$BH_ROOT" ] || return 0
     [ "${BH_STATIC_ALL:-0}" -eq 0 ] || return 0
-    _xb_missing=$(bh_xd_missing shared)
-    [ -n "$_xb_missing" ] || return 0
-    echo "XD at $XD_DIR has no $_xb_missing yet; building XD (pass --no-xd-build to skip)."
-    bh_dependency_build "$XD_DIR/build.sh"
+    set --
+    if [ -z "${BH_XD_BUILD_FILTER:-}" ] && [ -z "${BH_XD_ARGS:-}" ]; then
+        _xb_missing=$(bh_xd_missing shared)
+        [ -n "$_xb_missing" ] || return 0
+        echo "XD at $XD_DIR has no $_xb_missing yet; building XD (pass --no-xd-build to skip)."
+    fi
+    bh_xd_dependency_build "$@"
+    [ -z "${BH_XD_BUILD_FILTER:-}" ] || return 0
     _xb_missing=$(bh_xd_missing shared)
     if [ -n "$_xb_missing" ]; then
         bh_warning "XD's build.sh built no $_xb_missing under \"$XD_DIR\"." \
@@ -2348,23 +2377,93 @@ bh_xd_build() {
 # bh_dependency_build_static), for a project that builds on XD under
 # --static, since its static projects link XD's static libraries. Does nothing
 # when the `.qmake.static` list at the build root names no project (see
-# bh_static_record, which runs first), when XD builds itself, under
-# --no-xd-build (or --no-qt-build), or when XD has a whole static build
-# already (see bh_xd_missing). A static library that XD's build still lacks
-# afterwards only warns, just like in bh_xd_build.
+# bh_static_record, which runs first), when XD builds itself, or when XD has a
+# whole static build already (see bh_xd_missing); under --no-xd-build (or
+# --no-qt-build), XD's build gets --no-build, hence leaves XD as it is. A static
+# library that XD's build still lacks afterwards only warns, just like in
+# bh_xd_build.
 bh_xd_build_static() {
     [ -s "$BUILD_DIR/.qmake.static" ] || return 0
     [ "${BH_NO_XD_BUILD:-0}" -eq 0 ] || return 0
     [ "$XD_DIR" != "$BH_ROOT" ] || return 0
-    _sxb_missing=$(bh_xd_missing static)
-    [ -n "$_sxb_missing" ] || return 0
-    echo "--static: XD at $XD_DIR has no static $_sxb_missing yet; building XD in static mode (pass --no-xd-build to skip)."
-    bh_dependency_build_static "$XD_DIR/build.sh"
+    if [ -z "${BH_XD_BUILD_FILTER:-}" ] && [ -z "${BH_XD_ARGS:-}" ]; then
+        _sxb_missing=$(bh_xd_missing static)
+        [ -n "$_sxb_missing" ] || return 0
+        echo "--static: XD at $XD_DIR has no static $_sxb_missing yet; building XD in static mode (pass --no-xd-build to skip)."
+    fi
+    set -- --static
+    bh_xd_dependency_build "$@"
+    [ -z "${BH_XD_BUILD_FILTER:-}" ] || return 0
     _sxb_missing=$(bh_xd_missing static)
     if [ -n "$_sxb_missing" ]; then
         bh_warning "--static: XD's build.sh --static built no static $_sxb_missing under \"$XD_DIR\"." \
             "The build goes on; a static project that needs it may fail to link."
     fi
+}
+
+# Args: [argument...]
+bh_xd_dependency_build() {
+    _bxdb_forward=${BH_FORWARD_ARGS:-}
+    if [ -n "${BH_XD_ARGS:-}" ]; then
+        # Splits the forwarded flags from the qmake arguments, at `--`.
+        _bxdb_flags=
+        _bxdb_qmake=
+        while IFS= read -r _bxdb_line; do
+            [ -n "$_bxdb_line" ] || continue
+            if [ -n "$_bxdb_qmake" ] || [ "$_bxdb_line" = -- ]; then
+                _bxdb_qmake="${_bxdb_qmake:+$_bxdb_qmake
+}$_bxdb_line"
+            else
+                _bxdb_flags="${_bxdb_flags:+$_bxdb_flags
+}$_bxdb_line"
+            fi
+        done <<EOF
+$_bxdb_forward
+EOF
+        BH_FORWARD_ARGS="${_bxdb_flags:+$_bxdb_flags
+}$BH_XD_ARGS${_bxdb_qmake:+
+$_bxdb_qmake}"
+    fi
+    bh_dependency_build "$XD_DIR/build.sh" "$@"
+    BH_FORWARD_ARGS=$_bxdb_forward
+}
+
+# bh_xd_arg_add <flag>
+#
+# Adds <flag> as one more line to BH_XD_ARGS (see bh_xd_dependency_build).
+bh_xd_arg_add() {
+    BH_XD_ARGS="${BH_XD_ARGS:+$BH_XD_ARGS
+}$1"
+}
+
+# Args: [<subdir>]
+bh_xd_build_dir() {
+    if [ -n "${BUILD_DIR:-}" ]; then
+        # Drops the path of BH_ROOT in XD from the end, which
+        # bh_xd_module_build_dir may have put there.
+        _bxb_dir=$BUILD_DIR
+        _bxb_path=$(bh_xd_module_path) || _bxb_path=
+        if [ -n "$_bxb_path" ]; then
+            _bxb_dir=${_bxb_dir%/"$_bxb_path"}
+        fi
+        echo "$_bxb_dir${1:+/$1}"
+        return 0
+    fi
+    echo "$(bh_build_dir_root "$XD_DIR")/$(basename "$XD_DIR")${BH_STATIC:+-static}${BH_BUILD_DIR_SUFFIX:-}${1:+/$1}"
+}
+
+bh_xd_module_path() {
+    [ "$BH_ROOT" != "$XD_DIR" ] || return 0
+    case "$BH_ROOT" in
+        "$XD_DIR"/*) echo "${BH_ROOT#"$XD_DIR"/}" ;;
+        *) return 1 ;;
+    esac
+}
+
+bh_xd_module_build_dir() {
+    _bxm_path=$(bh_xd_module_path) \
+        || bh_error "\"$BH_ROOT\" is not inside XD at \"$XD_DIR\""
+    bh_xd_build_dir "$_bxm_path"
 }
 
 # bh_dependency_build_static <build.sh>
@@ -2389,9 +2488,26 @@ bh_dependency_build_static() {
 # bh_hook). Runs it in a subshell without the exported settings that describe
 # this project (its build dir, above all); every other exported setting
 # reaches that build as well. Stops the build when <build.sh> fails.
+#
+# That build is always --headless: this run asks whatever it needs in advance
+# (see bh_build_dir_gate), hence nothing stops a dependency's build to ask. It
+# is also a --child run, which gets the build folder this run showed
+# (BH_BUILD_DIR_SHOWN), and XD's build also BH_XD_BUILD_FILTER, for that build
+# alone.
 bh_dependency_build() {
     _db_script=$1
     shift
+    # Comes ahead of the forwarded flags, which may end with qmake arguments,
+    # unless those carry it already.
+    set -- "$@" --child
+    case "
+${BH_FORWARD_ARGS:-}
+" in
+        *"
+--headless
+"*) ;;
+        *) set -- "$@" --headless ;;
+    esac
     # shellcheck disable=SC2046,SC2086  # intentional word-split of names.
     (
         set -f
@@ -2406,6 +2522,10 @@ bh_dependency_build() {
             BH_RUN_TARGET BH_RUN_TARGET_PATH BH_TARGET_NAME \
             BH_REMAINING_ARGS BH_FORWARD_ARGS \
             $(env | sed -n 's/^\(BH_HOOKS_[A-Za-z0-9_]*\)=.*/\1/p')
+        [ -z "${BH_BUILD_DIR_SHOWN:-}" ] || export BH_BUILD_DIR_SHOWN
+        if [ "$_db_script" = "$XD_DIR/build.sh" ]; then
+            export BH_XD_BUILD_FILTER
+        fi
         sh "$_db_script" "$@"
     ) || bh_error "building through \"$_db_script\" failed (see the output above)"
 }
@@ -2471,6 +2591,27 @@ bh_xd_has_library() {
     return 1
 }
 
+# bh_filter_static
+#
+# Prints each `.pro` under BH_ROOT that --filter keeps, as `static <path>` or
+# `shared <path>`, one per line: static when bh_filter_candidate marks it so
+# (--static's regexp, as a sub-filter of --filter). Prints nothing without
+# --static.
+bh_filter_static() {
+    [ -n "${BH_STATIC:-}" ] || return 0
+    { find -H "$BH_ROOT" -name '*.pro' \
+        ! -path '*/build/*' ! -path '*/.git/*' 2>/dev/null || true; } \
+    | sort \
+    | while IFS= read -r _bfs_pro; do
+        bh_filter_candidate "${_bfs_pro#"$BH_ROOT"/}"
+        if [ "$BH_CANDIDATE_STATIC" -eq 1 ]; then
+            printf 'static %s\n' "$_bfs_pro"
+        elif [ "$BH_CANDIDATE" != skip ]; then
+            printf 'shared %s\n' "$_bfs_pro"
+        fi
+    done
+}
+
 # bh_static_record
 #
 # Names, in the `.qmake.static` list at the build root, the projects that
@@ -2497,20 +2638,7 @@ bh_static_record() {
     _sr_wanted=
     BH_STATIC_ALL=0
     if [ -n "${BH_STATIC:-}" ]; then
-        # Sorts each `.pro` that --filter keeps as static or shared.
-        _sr_projects=$(
-            { find -H "$BH_ROOT" -name '*.pro' \
-                ! -path '*/build/*' ! -path '*/.git/*' 2>/dev/null || true; } \
-            | sort \
-            | while IFS= read -r _sr_pro; do
-                bh_filter_candidate "${_sr_pro#"$BH_ROOT"/}"
-                if [ "$BH_CANDIDATE_STATIC" -eq 1 ]; then
-                    printf 'static %s\n' "$_sr_pro"
-                elif [ "$BH_CANDIDATE" != skip ]; then
-                    printf 'shared %s\n' "$_sr_pro"
-                fi
-            done
-        )
+        _sr_projects=$(bh_filter_static)
         _sr_wanted=$(printf '%s\n' "$_sr_projects" | sed -n 's/^static //p')
         case "$_sr_nl$_sr_projects" in
             *"${_sr_nl}shared "*) ;;
@@ -3563,22 +3691,20 @@ bh_template_app() {
     # Consumer must have resolved the XD framework before calling us.
     [ -n "${XD_DIR:-}" ] || bh_error "XD_DIR not set -- resolve the XD framework first"
 
-    # Per-mode build dir lives as a sibling to the source root, under a
+    # Per-mode build dir lives as a sibling to the source root (or to the
+    # outermost repo of its submodule chain, see bh_build_dir_root), under a
     # shared `build/` folder named after this repo plus the build mode.
     # Keeping the mode in the dir name lets debug and release artifacts
     # coexist without stomping each other (the underlying Makefile
     # carries different QMAKE_CXXFLAGS, library paths, and link names
     # per mode). Under --static a `-static` comes before the mode (as in
     # `<repo>-static-debug`), which keeps the shared build as it is.
-    : "${BUILD_DIR:=$(dirname "$BH_ROOT")/build/$(basename "$BH_ROOT")${BH_STATIC:+-static}-$BH_MODE}"
+    : "${BUILD_DIR:=$(bh_build_dir)}"
     bh_handle_get   # --get=<what>: print a path and exit (no build)
 
     # Show + gate. Same license-accept dance XD's build.sh runs, so
     # both templates share one user-facing flow.
-    echo "Build directory:"
-    echo "  $BUILD_DIR"
-    echo
-    bh_license_gate
+    bh_build_dir_gate
 
     # --wipe first, then bail early on `--wipe --no-build` so we
     # don't immediately recreate the empty dir via the mkdir below.
@@ -4082,6 +4208,7 @@ bh_build_candidate() {
             bh_build_alone "$_bc_pro" "$_bc_rel" "[$_bw_total/$_bw_count]"
             return 0
         fi
+        echo
         echo "Filtered build [$_bw_total/$_bw_count]: $_bc_rel"
         ( cd "$_bc_bd" && BH_MAKEFILE=$_bc_makefile bh_make "$JOBS" ) \
             || bh_error "--filter: build failed for $_bc_rel"
@@ -4129,6 +4256,7 @@ bh_build_alone() {
         _ba_force=1
     fi
     _ba_clean=0
+    echo
     if [ "$BH_CANDIDATE" = rebuild ] && [ "${BH_SAVE_SPACE:-0}" -ne 1 ]; then
         echo "--rebuild: $2 matches; building it again."
         _ba_clean=1
@@ -4145,11 +4273,7 @@ bh_build_alone() {
     fi
 }
 
-# bh_qmake_clean <makefile> <label>
-#
-# Cleans what the last build of <makefile> made, as the end of the qmake step
-# that `bh_run_qmake` runs for it: on that step's row and number, with a log
-# of its own (`<step>-qmake-clean.log`).
+# Args: <makefile> <label>
 bh_qmake_clean() {
     [ -f "$1" ] || return 0
     _bqc_log=$LOGS/$(printf '%02d-%s.log' "$_step" qmake-clean)
@@ -4166,15 +4290,7 @@ bh_qmake_clean() {
     bh_ticker_stop
 }
 
-# bh_make_clean <makefile> [<log>]
-#
-# Runs the `clean` target of <makefile>, so the next make builds every object
-# of that project again; a no-op when <makefile> does not exist yet. GNU make
-# gets `-o <makefile>`, hence it never runs qmake first through the Makefile's
-# own rule, with the old Makefile's command line; the qmake step decides about
-# qmake (see `bh_run_qmake`). It is a `clean` step of its own; with <log>, it
-# only adds its output to <log> and returns make's exit code, as a part of a
-# step the caller shows (see bh_clean_candidates).
+# Args: <makefile> [<log>]
 bh_make_clean() {
     [ -f "$1" ] || return 0
     _bmc_file=$(basename "$1")
@@ -4639,13 +4755,10 @@ bh_template_subdirs() {
 
     [ -n "${XD_DIR:-}" ] || bh_error "XD_DIR not set -- resolve the XD framework first (or set XD_DIR=\$ROOT when building XD itself)"
 
-    : "${BUILD_DIR:=$(dirname "$BH_ROOT")/build/$(basename "$BH_ROOT")${BH_STATIC:+-static}${BH_BUILD_DIR_SUFFIX:-}}"
+    : "${BUILD_DIR:=$(bh_build_dir)}"
     bh_handle_get   # --get=<what>: print a path and exit (no build)
 
-    echo "Build directory:"
-    echo "  $BUILD_DIR"
-    echo
-    bh_license_gate
+    bh_build_dir_gate
 
     if [ "${BH_WIPE:-0}" -gt 0 ]; then
         bh_wipe
@@ -4923,13 +5036,10 @@ bh_template_makefile() {
     bh_progress_plan_steps "$BH_ARCH_COUNT"
 
     [ -n "${BH_ROOT:-}" ] || bh_error "BH_ROOT not set -- caller must set it to the source root"
-    : "${BUILD_DIR:=$(dirname "$BH_ROOT")/build/$(basename "$BH_ROOT")-$BH_MODE${BH_BUILD_DIR_SUFFIX:-}}"
+    : "${BUILD_DIR:=$(bh_build_dir)}"
     bh_handle_get   # --get=<what>: print a path and exit (no build)
 
-    echo "Build directory:"
-    echo "  $BUILD_DIR"
-    echo
-    bh_license_gate
+    bh_build_dir_gate
 
     if [ "${BH_WIPE:-0}" -gt 0 ]; then
         bh_wipe
@@ -4993,6 +5103,12 @@ bh_tools_dir() {
     done
     bh_error "build-handler.sh: no folder holds its shell-libs; set BH_TOOLS_DIR to its own folder."
 }
+
+# Keeps what a parent run passed on for --child alone, and clears it; a
+# build.sh sets its own BH_XD_BUILD_FILTER after loading this file.
+_bh_parent_xd_build_filter=${BH_XD_BUILD_FILTER:-}
+_bh_parent_build_dir_shown=${BH_BUILD_DIR_SHOWN:-}
+unset BH_XD_BUILD_FILTER BH_BUILD_DIR_SHOWN
 
 # Loads build-handler's own shell dependencies.
 BH_TOOLS_DIR=$(bh_tools_dir)
