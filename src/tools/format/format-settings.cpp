@@ -44,6 +44,9 @@
       paragraph that has a line past the limit, and `any` also one whose
       lines leave room unused (see FormatCommentWidthRule); the command line's
       `--any-comment` sets `any`;
+    * `docTagSign` (`[Comments]`): the sign a new doc-comment writes its
+      commands with, `@` (the default) or `\` (also spelled `at` and
+      `backslash`), see FormatDocTagSignRule;
     * `thisMode` (`[Relations]`): where a member function reaches a member of
       its own class, or of a base class, through `this->`: a condition (see
       Config::Condition) of the names FormatScopeConditions::names() lists,
@@ -158,6 +161,14 @@ Config::Schema FormatSettings::schema()
     comments.addKey(QString(QLL("target")),
                     QStringList() << QString(QLL("long")) << QString(QLL("any")),
                     QString(QLL("long")));
+    QHash<QString, QString > signs;
+    signs.insert(QString(QLL("at")), QString(QLL("@")));
+    signs.insert(QString(QLL("backslash")), QString(QLL("\\")));
+    comments.addKey(
+        QString(QLL("docTagSign")),
+        QStringList() << QString(QLL("@")) << QString(QLL("\\")),
+        QString(QLL("@")), signs
+    );
     schema.addSection(comments);
     Config::Section relations(QString(QLL("Relations")));
     relations.addKey(QString(QLL("thisMode")),
@@ -275,6 +286,8 @@ bool FormatSettings::load(const QString & path, const FormatConfig & config,
         ? WrapCommaHard : WrapCommaSoft;
     settings->commentTarget = parser.value(QString(QLL("comments.target"))) == QLL("any")
         ? CommentTargetAny : CommentTargetLong;
+    settings->docTagSign = parser.value(QString(QLL("comments.docTagSign"))) == QLL("\\")
+        ? '\\' : '@';
     Config::Condition::compile(
         parser.value(QString(QLL("relations.thisMode"))),
         FormatScopeConditions::names(),

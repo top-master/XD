@@ -46,6 +46,7 @@ HEADERS += \
     $$PWD/rules/code-shape.h \
     $$PWD/rules/comment-case.h \
     $$PWD/rules/comment-period.h \
+    $$PWD/rules/doc-tag-sign.h \
     $$PWD/rules/comment-width.h \
     $$PWD/rules/comment.h \
     $$PWD/rules/condition-close.h \
@@ -110,6 +111,7 @@ SOURCES += \
     $$PWD/rules/code-shape.cpp \
     $$PWD/rules/comment-case.cpp \
     $$PWD/rules/comment-period.cpp \
+    $$PWD/rules/doc-tag-sign.cpp \
     $$PWD/rules/comment-width.cpp \
     $$PWD/rules/comment.cpp \
     $$PWD/rules/condition-close.cpp \
