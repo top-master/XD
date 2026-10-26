@@ -20,14 +20,16 @@ class FormatThreadQueue
 {
 public:
     inline explicit FormatThreadQueue(const QStringList & files)
-        : files(files), next(0)
+        : files(files), next(0), told(0)
     {
         for (int i = 0; i < files.size(); ++i) {
             results.append(FormatFileResult());
+            done.append(false);
         }
     }
 
-    /// Guards `next` and `results`, which every thread of the run changes.
+    /// Guards `next`, `results`, `done` and `told`, which every thread of the
+    /// run changes, and the runner's listener, which they call.
     QMutex mutex;
     /// Lists the files of the run, in the order their results keep.
     QStringList files;
@@ -35,6 +37,11 @@ public:
     int next;
     /// Collects each file's result at the file's index.
     QList<FormatFileResult > results;
+    /// Marks the files whose result is in `results` already.
+    QList<bool > done;
+    /// Points at the first file whose result the listener was not told yet;
+    /// it is told in the order of the files, once the files before it are.
+    int told;
 };
 
 /*!
@@ -63,8 +70,9 @@ private:
 };
 
 /*!
-    Takes the next file of the queue, formats it, and stores its result,
-    until the queue is empty.
+    Takes the next file of the queue, formats it, stores its result, and
+    tells the runner's listener of each result whose files before it are
+    done (see FormatRunner::tellFinished()), until the queue is empty.
 */
 void FormatThread::run()
 {
@@ -80,6 +88,13 @@ void FormatThread::run()
         const FormatFileResult result = qMove(this->m_runner->formatFile(this->m_queue->files.at(index)));
         QMutexLocker locker(&this->m_queue->mutex);
         this->m_queue->results[index] = result;
+        this->m_queue->done[index] = true;
+        while (this->m_queue->told < this->m_queue->files.size()
+            && this->m_queue->done.at(this->m_queue->told)
+        ) {
+            this->m_runner->tellFinished(this->m_queue->results.at(this->m_queue->told));
+            ++this->m_queue->told;
+        }
     }
 }
 

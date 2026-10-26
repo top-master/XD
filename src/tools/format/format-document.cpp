@@ -626,6 +626,44 @@ bool FormatDocument::isLineSelected(int line) const
 */
 bool FormatDocument::replace(int offset, int length, const QByteArray & text)
 {
+    if ( ! this->canReplace(offset, length)) {
+        return false;
+    }
+    this->m_edits.append(Edit(offset, length, text));
+    return true;
+}
+
+/*!
+    Queues two replacements that only make sense together, such as a token
+    removed from one line and put on the next one: the @a length bytes at
+    @a offset with @a text, and the @a otherLength bytes at @a otherOffset
+    with @a otherText. Returns whether both were queued: neither one is when
+    either would be dropped (see the one-edit replace()), or when they overlap.
+*/
+bool FormatDocument::replace(int offset, int length, const QByteArray & text,
+                             int otherOffset, int otherLength,
+                             const QByteArray & otherText)
+{
+    const bool apart = offset + length <= otherOffset
+        || otherOffset + otherLength <= offset;
+    if ( ! apart
+        || ! this->canReplace(offset, length)
+        || ! this->canReplace(otherOffset, otherLength)
+    ) {
+        return false;
+    }
+    this->m_edits.append(Edit(offset, length, text));
+    this->m_edits.append(Edit(otherOffset, otherLength, otherText));
+    return true;
+}
+
+/*!
+    Tells whether an edit of the @a length bytes at @a offset may be queued:
+    its line is selected, and it overlaps no edit queued before it (two
+    insertions at the same offset count as overlapping).
+*/
+bool FormatDocument::canReplace(int offset, int length) const
+{
     if ( ! this->isLineSelected(this->lineOf(offset))) {
         return false;
     }
@@ -639,7 +677,6 @@ bool FormatDocument::replace(int offset, int length, const QByteArray & text)
             return false;
         }
     }
-    this->m_edits.append(Edit(offset, length, text));
     return true;
 }
 

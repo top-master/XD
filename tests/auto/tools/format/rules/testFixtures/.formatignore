@@ -1,0 +1,4 @@
+# The fixtures keep the exact text a test compares with; hence the format
+# tool leaves them as they are.
+*
+!.formatignore

@@ -21,6 +21,7 @@ public:
     static QByteArray encode(const FormatFileResult & result);
     static bool decode(const QByteArray & line,
                        QList<FormatFileResult > *results);
+    static bool decodeEnd(const QByteArray & line, QString *path);
 
 private:
     QStringList workerArguments() const;
