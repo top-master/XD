@@ -5,13 +5,21 @@
 #
 # Applies the formatting rules to C and C++ files, all at once, and reports
 # what a rule cannot fix on its own; see README.md for its usage.
+#
+# Links the static QtCore when build.sh builds the tool in `qt_static` mode
+# (see build.sh beside this file); hence that tool runs without the shared Qt
+# libraries. Else it links the shared ones.
 QT = core-private
 DEFINES += QT_NO_CAST_FROM_ASCII
 
 include(format.pri)
+include(format-target.pri)
 
 SOURCES += main.cpp
 
+# Keeps the tool's module name (see qt_tool.prf) the same on every platform.
+TARGET = $$FORMAT_TARGET
+MODULE = format
 load(qt_tool)
 
 # Finds the shared Qt libraries in the `lib` folder beside the tool's `bin`

@@ -1,0 +1,80 @@
+#!/bin/sh
+
+# License: Apache 2.0 without attribution need.
+
+# Runs the host's format tool, and builds it first when this host has none.
+#
+# Each host builds the tool under its own name, so that no build overwrites
+# another's (see src/tools/format/format-target.pri, and .gitignore's
+# bin/format* rule): macOS -> format-macos (Mach-O), Windows -> format.exe
+# (PE), everything else -> format-linux (ELF).
+here=$(dirname "$0")
+case "$(uname -s)" in
+    Darwin)               real=$here/format-macos ;;
+    MINGW*|MSYS*|CYGWIN*) real=$here/format.exe ;;
+    *)                    real=$here/format-linux ;;
+esac
+
+# Build mode: release by default. A leading --debug picks a debug build of
+# the tool instead, but only while there is no tool yet to take the flag:
+# once built, every argument goes to the tool as it is.
+build_mode=--release
+if [ "$1" = "--debug" ] && [ ! -x "$real" ]; then
+    build_mode=--debug
+    shift
+fi
+
+# Tells whether the process <pid> still runs. `kill -0` sends no signal, and
+# fails for a process of another user too; `ps -p` answers for that one.
+is_running() {
+    kill -0 "$1" 2> /dev/null || ps -p "$1" > /dev/null 2>&1
+}
+
+# Builds the tool on first use, through src/tools/format/build.sh, with its
+# output in a log file; hence a caller that reads the tool's output gets only
+# the tool's. One build at a time: other callers wait for the lock, and drop
+# it when the process its `pid` file names no longer runs.
+if [ ! -x "$real" ]; then
+    lock=$here/.format-build.lock
+    log=$here/.format-build.log
+    script=$here/../src/tools/format/build.sh
+    waiting=
+    while ! mkdir "$lock" 2> /dev/null; do
+        owner=$(cat "$lock/pid" 2> /dev/null)
+        # Drops the lock only while it still names that same process, so that
+        # a lock another caller took in the meantime stays.
+        if [ -n "$owner" ] && ! is_running "$owner" \
+                && [ "$(cat "$lock/pid" 2> /dev/null)" = "$owner" ]; then
+            rm -rf "$lock"
+            continue
+        fi
+        if [ -z "$waiting" ]; then
+            printf '%s: waiting for another build of the format tool ...\n' \
+                "$0" >&2
+            waiting=1
+        fi
+        sleep 2
+    done
+    trap 'rm -rf "$lock"' EXIT
+    trap 'exit 130' INT
+    trap 'exit 143' TERM
+    echo "$$" > "$lock/pid"
+
+    # A build of another caller may have made the tool while this one waited.
+    if [ ! -x "$real" ]; then
+        printf '%s: building the format tool first (log: %s) ...\n' \
+            "$0" "$log" >&2
+        if ! "$script" --headless "$build_mode" > "$log" 2>&1; then
+            printf '%s: building the format tool failed; see %s, or run %s\n' \
+                "$0" "$log" "\"$script\"" >&2
+            exit 127
+        fi
+    fi
+    rm -rf "$lock"
+    trap - EXIT INT TERM
+    if [ ! -x "$real" ]; then
+        printf '%s: no %s after the build; see %s\n' "$0" "$real" "$log" >&2
+        exit 127
+    fi
+fi
+exec "$real" "$@"

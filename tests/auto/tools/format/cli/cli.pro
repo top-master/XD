@@ -11,6 +11,10 @@ TARGET = tst_format_cli
 # relative to the running app).
 DEFINES += FORMAT_BINS=\\\"$$[QT_INSTALL_BINS]\\\"
 
+# Names the built tool's binary in that folder (see format-target.pri).
+include($$PWD/../../../../../src/tools/format/format-target.pri)
+DEFINES += FORMAT_TARGET=\\\"$$FORMAT_TARGET\\\"
+
 # Names the source tree, whose real headers and sources some tests format a
 # copy of.
 DEFINES += FORMAT_SOURCE_TREE=\\\"$$clean_path($$PWD/../../../../..)\\\"
