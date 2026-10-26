@@ -105,6 +105,10 @@ bin/*.rar
 !bin/qmake.exe
 # The cross-platform dispatch script (forwards to qmake-macos/.exe/-linux by host).
 !bin/qmake
+# The format tool's dispatch script (forwards to format-macos/.exe/-linux by
+# host), and the lock and log of the build it starts.
+!bin/format
+bin/.format-build.*
 bin/qdoc*
 bin/qt3to4*
 bin/qttracereplay*
