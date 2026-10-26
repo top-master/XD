@@ -184,6 +184,15 @@ moveSuffix = " "
 - `target` (in `[Comments]`): `long` (the default) wraps again only a comment
   paragraph with a line past `wrapMax`; `any` also wraps one whose lines leave
   room unused (see "Wrapping comments" below). `--any-comment` sets `any`.
+- `docTagSign` (in `[Comments]`): the sign that a new doc-comment writes its
+  commands with (`@p`, `@class`, or `\a`, `\class`): `@` (the default), or a
+  backslash. In a `.formatrc`, write the backslash as `backslash`, since the
+  `.ini` form reads a lone `\` as an escape; `at` names `@` too.
+  The rule `doc-tag-sign` uses it for a doc-comment whose lines are all
+  among the lines to format (with `-L` or `--git`) while others are not; any
+  other doc-comment takes the sign most of the file's commands use, hence
+  one file never mixes the two (the setting decides a tie, or a file with no
+  command yet). A sign inside backticks stays as it is.
 - `thisMode` (in `[Relations]`): where a member function reaches a member
   of its class, or of a base class, through `this->` (the rule
   `outline-this` adds the `this->` there, and drops it elsewhere): a

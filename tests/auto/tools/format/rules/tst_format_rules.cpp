@@ -89,6 +89,10 @@ private slots:
     void testScopeConditions_shouldFallBackWithoutPercent();
     void testArgsWrap_shouldFollowSettings_data();
     void testArgsWrap_shouldFollowSettings();
+    void testDocTagSign_shouldPickSign_data();
+    void testWrapChainAt_shouldKeepLeadingOperators_data();
+    void testWrapChainAt_shouldKeepLeadingOperators();
+    void testDocTagSign_shouldPickSign();
 
 private:
     Symbols tokenize(const QByteArray & text, bool keepComments) const;
@@ -2477,6 +2481,125 @@ void tst_FormatRules::testArgsWrap_shouldFollowSettings()
         path
     ));
     QCOMPARE(again.text, output);
+}
+
+void tst_FormatRules::testDocTagSign_shouldPickSign_data()
+{
+    // Two doc-comments: the first writes its commands with backslashes, the
+    // second with a `@`.
+    const QByteArray twoDocs = "/*!\n    Reads \\a name, see \\l Widget.\n*/\nvoid f(int name);\n"
+                               "/*!\n    Writes @p name.\n*/\nvoid g(int name);\n";
+    const QByteArray allBackslashes = "/*!\n    Reads \\a name, see \\l Widget.\n*/\n"
+                                      "void f(int name);\n/*!\n    Writes \\p name.\n*/\n"
+                                      "void g(int name);\n";
+    const QByteArray oneDoc = "/*!\n    Reads @p name.\n*/\nvoid f(int name);\nint x;\n";
+    QTest::addColumn<QString >("setting");
+    QTest::addColumn<QStringList >("specs");
+    QTest::addColumn<QByteArray >("input");
+    QTest::addColumn<QByteArray >("output");
+    QTest::newRow("the whole file follows its most used sign")
+        << QString() << QStringList() << twoDocs << allBackslashes;
+    QTest::newRow("a new doc-comment takes the setting")
+        << QString() << (QStringList() << QString(QLL("5,7")))
+        << QByteArray(allBackslashes) << twoDocs;
+    QTest::newRow("an edited doc-comment follows the file")
+        << QString() << (QStringList() << QString(QLL("6,6"))) << twoDocs << allBackslashes;
+    QTest::newRow("a new doc-comment takes a backslash setting")
+        << QString(QLL("\\")) << (QStringList() << QString(QLL("1,3"))) << oneDoc
+        << QByteArray("/*!\n    Reads \\p name.\n*/\nvoid f(int name);\nint x;\n");
+    QTest::newRow("the setting's word for a backslash")
+        << QString(QLL("backslash")) << (QStringList() << QString(QLL("1,3"))) << oneDoc
+        << QByteArray("/*!\n    Reads \\p name.\n*/\nvoid f(int name);\nint x;\n");
+    QTest::newRow("a sign in backticks stays")
+        << QString() << QStringList()
+        << QByteArray("/*!\n    Reads \\a name; `@p` stays.\n*/\nvoid f(int name);\n")
+        << QByteArray("/*!\n    Reads \\a name; `@p` stays.\n*/\nvoid f(int name);\n");
+}
+
+/// Formats each row's text with the rule alone, on the row's lines (the
+/// whole text without any), and with `[Comments] docTagSign` set to the
+/// row's value when it has one.
+void tst_FormatRules::testDocTagSign_shouldPickSign()
+{
+    QFETCH(QString, setting);
+    QFETCH(QStringList, specs);
+    QFETCH(QByteArray, input);
+    QFETCH(QByteArray, output);
+    Formatter formatter;
+    QString error;
+    qExpect(formatter.selectRules(
+        QStringList() << QString(QLL("doc-tag-sign")),
+        &error
+    ))
+        ->toBeTruthy();
+    FormatConfig config;
+    if ( ! setting.isEmpty()) {
+        config.assignments << QString(QLL("comments.docTagSign=")) + setting;
+    }
+    const FormatResult result = qMove(formatter.format(
+        input,
+        QString(),
+        specs,
+        config
+    ));
+    qExpect(result.error)->toBeEmpty();
+    QCOMPARE(result.text, output);
+}
+
+void tst_FormatRules::testWrapChainAt_shouldKeepLeadingOperators_data()
+{
+    // The operators of `chain` start at columns 8, 19, and 33 (10%, 24%, and
+    // 41% of 80), and the line would reach column 75 up to `fourthValue`.
+    const QByteArray chain = "void f()\n{\n    out << \"label\" << firstValue << secondValue"
+                             " << thirdValue << fourthValue << fifthValue << sixthValue;\n}\n";
+    const QByteArray near = "near";
+    QTest::addColumn<QString >("formatrc");
+    QTest::addColumn<QString >("rule");
+    QTest::addColumn<QByteArray >("input");
+    QTest::addColumn<QByteArray >("output");
+    QTest::newRow("by default, the operators before 40% stay") << QString()
+        << QString(QLL("operator-wrap")) << chain
+        << QByteArray("void f()\n{\n    out << \"label\" << firstValue\n        << secondValue\n"
+                      "        << thirdValue\n        << fourthValue\n        << fifthValue\n"
+                      "        << sixthValue;\n}\n");
+    QTest::newRow("at 0%, every operator breaks")
+        << QString(QLL("[Structure]\nwrapChainAt = 0%\n")) << QString(QLL("operator-wrap"))
+        << chain
+        << QByteArray("void f()\n{\n    out\n        << \"label\"\n        << firstValue\n"
+                      "        << secondValue\n        << thirdValue\n        << fourthValue\n"
+                      "        << fifthValue\n        << sixthValue;\n}\n");
+    QTest::newRow("at 100%, the operators stay while the line fits")
+        << QString(QLL("[Structure]\nwrapChainAt = 100%\n")) << QString(QLL("operator-wrap"))
+        << chain
+        << QByteArray("void f()\n{\n    out << \"label\" << firstValue << secondValue"
+                      " << thirdValue << fourthValue\n        << fifthValue\n"
+                      "        << sixthValue;\n}\n");
+    QTest::newRow("wrapArgsAt follows it")
+        << QString(QLL("[Structure]\nwrapChainAt = 0%\n")) << QString(QLL("args-wrap"))
+        << argsWrapFile(near) << argsWrapBroken(near);
+    QTest::newRow("wrapArgsAt set on its own wins")
+        << QString(QLL("[Structure]\nwrapChainAt = 0%\nwrapArgsAt = 100%\n"))
+        << QString(QLL("args-wrap")) << argsWrapFile(near) << argsWrapFile(near);
+}
+
+/// Formats each row's text, in a project whose `.formatrc` holds the row's
+/// settings (none for an empty one), with the row's rule.
+void tst_FormatRules::testWrapChainAt_shouldKeepLeadingOperators()
+{
+    QFETCH(QString, formatrc);
+    QFETCH(QString, rule);
+    QFETCH(QByteArray, input);
+    QFETCH(QByteArray, output);
+    QTemporaryDir dir;
+    QStringList files;
+    if ( ! formatrc.isEmpty()) {
+        files << QString(QLL(".formatrc")) << formatrc;
+    }
+    writeProject(dir, files);
+    const QString path = dir.path() + QLL("/a.cpp");
+    const FormatResult result = qMove(this->formatWith(rule, input, path));
+    qExpect(result.error)->toBeEmpty();
+    QCOMPARE(result.text, output);
 }
 
 QTEST_APPLESS_MAIN(tst_FormatRules)
