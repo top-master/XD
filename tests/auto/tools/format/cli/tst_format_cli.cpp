@@ -103,7 +103,8 @@ private:
 };
 
 tst_FormatCli::tst_FormatCli()
-    : m_format(QString::fromLocal8Bit(FORMAT_BINS) + QLL("/format"))
+    : m_format(QString::fromLocal8Bit(FORMAT_BINS) + QLatin1Char('/')
+               + QLL(FORMAT_TARGET))
 {
 }
 

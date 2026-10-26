@@ -7,6 +7,20 @@ Run it on the code you added or changed: on a file you wrote, or with `-L` on
 the lines you edited in an existing file, so that the rest of the file keeps
 the layout it has.
 
+## Building
+
+`bin/format` runs the tool, and builds it first when the host has none yet:
+each host builds it under its own name (`format-linux`, `format-macos`, or
+`format.exe` on Windows), the way `bin/qmake` picks `qmake-linux`. A
+leading `--debug` there builds a debug tool instead of a release one, as
+long as no tool is built yet. The build's output goes to
+`bin/.format-build.log`.
+
+`src/tools/format/build.sh` builds the tool alone, in `qt_static` mode;
+hence it runs without the shared Qt libraries. It first builds only the parts
+of XD the tool needs (`--no-xd-build` skips them), and takes the flags of any
+build script; `--no-static` builds the tool shared instead.
+
 ## Usage
 
 ```
