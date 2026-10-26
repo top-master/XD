@@ -9,6 +9,7 @@
 #include "./rules/code-shape.h"
 #include "./rules/comment-case.h"
 #include "./rules/comment-period.h"
+#include "./rules/doc-tag-sign.h"
 #include "./rules/comment-width.h"
 #include "./rules/condition-close.h"
 #include "./rules/condition-wrap.h"
@@ -98,7 +99,7 @@ static QList<FormatRule * > formatCreateCommentRules()
     rules << new FormatMarkBannerRule << new FormatTrailingCommentRule;
     rules << new FormatAsWithRule << new FormatUsSpellingRule;
     rules << new FormatCodeBackticksRule << new FormatCommentCaseRule
-        << new FormatCommentPeriodRule;
+        << new FormatCommentPeriodRule << new FormatDocTagSignRule;
     rules << new FormatCommentWidthRule << new FormatStubLineRule
         << new FormatDocPlacementRule;
     rules << new FormatPatternReportRule(

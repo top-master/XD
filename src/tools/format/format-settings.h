@@ -20,8 +20,8 @@ public:
 
     inline FormatSettings()
         : refSuffix(" "), moveSuffix(FormatSpacing::keep())
-        , wrapMax(80), commentWrapMax(80), wrapExtendsForKeywords(20), wrapEmptyLimit(8)
-        , wrapComma(WrapCommaSoft), commentTarget(CommentTargetLong)
+        , wrapMax(80), wrapArgsOver(3), commentWrapMax(80), wrapExtendsForKeywords(20), wrapEmptyLimit(8)
+        , wrapComma(WrapCommaSoft), commentTarget(CommentTargetLong), docTagSign('@')
     {
         wrapBegin << 75;
         commentWrapBegin << 75;
@@ -43,12 +43,14 @@ public:
     FormatSpacing moveSuffix;
     QList<int > wrapBegin;
     int wrapMax;
+    int wrapArgsOver;
     QList<int > commentWrapBegin;
     int commentWrapMax;
     int wrapExtendsForKeywords;
     int wrapEmptyLimit;
     WrapComma wrapComma;
     CommentTarget commentTarget;
+    char docTagSign;
     QStringList thisMode;
     QStringList wrapChainAt;
     QStringList wrapArgsAt;

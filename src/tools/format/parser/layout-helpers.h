@@ -12,6 +12,9 @@ class FormatDocument;
 
 int wrapColumn(const FormatDocument *document);
 QByteArray continuationPad(int indent);
+bool hasMisplacedLines(const FormatDocument *document, int open, int close,
+                       int indent);
+bool startsWithStringLiteral(const FormatDocument *document, int token);
 QByteArray sourceText(const FormatDocument *document, int first, int last);
 bool findTernary(const FormatDocument *document, int first, int last,
                  int *question, int *colon);

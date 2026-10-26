@@ -78,11 +78,9 @@ void FormatInitListRule::run(FormatDocument *document) const
             ) {
                 continue;
             }
-            document->replace(from, document->symbolEnd(k) - from, QByteArray());
             document->replace(
-                document->symbols().at(k + 1).from,
-                0,
-                document->lexem(k) + ' '
+                from, document->symbolEnd(k) - from, QByteArray(),
+                document->symbols().at(k + 1).from, 0, document->lexem(k) + ' '
             );
         }
 

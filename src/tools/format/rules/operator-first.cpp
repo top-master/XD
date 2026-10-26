@@ -47,11 +47,9 @@ void FormatOperatorFirstRule::run(FormatDocument *document) const
         ) {
             continue;
         }
-        document->replace(from, document->symbolEnd(i) - from, QByteArray());
         document->replace(
-            document->symbols().at(i + 1).from,
-            0,
-            document->lexem(i) + ' '
+            from, document->symbolEnd(i) - from, QByteArray(),
+            document->symbols().at(i + 1).from, 0, document->lexem(i) + ' '
         );
     }
 }

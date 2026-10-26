@@ -13,6 +13,7 @@
 #include "parser/scope-conditions.h"
 #include "preprocessor.h"
 
+#include <QtCore/QDir>
 #include <QtCore/QLockFile>
 #include <QtCore/QTemporaryDir>
 #include <QtTest/QtTest>
@@ -41,6 +42,7 @@ private slots:
     void testSymbols_shouldLeaveOutCommentsAndWhitespace();
     void testReplace_shouldDropEditOutsideRanges();
     void testReplace_shouldDropOverlappingEdit();
+    void testReplace_shouldQueueBothEditsOrNeither();
     void testApplyEdits_shouldMoveRangesAndIssues();
 
     /// Line ranges.
@@ -66,6 +68,7 @@ private slots:
     void testProjectFiles_shouldHandEachFileOnce();
     void testCommentWidth_shouldWrap_data();
     void testAgentMode_shouldAskForOperatorGroups();
+    void testAgentMode_shouldAskForLongSplitCondition();
     void testAgentMode_shouldAskForDocAccessChains();
     void testAgentMode_shouldAskNothingWhenOff();
     void testAgentMode_shouldAskForArgumentGroups();
@@ -90,6 +93,14 @@ private slots:
     void testScopeConditions_shouldFallBackWithoutPercent();
     void testArgsWrap_shouldFollowSettings_data();
     void testArgsWrap_shouldFollowSettings();
+    void testDocTagSign_shouldPickSign_data();
+    void testWrapChainAt_shouldKeepLeadingOperators_data();
+    void testWrapChainAt_shouldKeepLeadingOperators();
+    void testDocTagSign_shouldPickSign();
+
+    /// Fixtures.
+    void testFixtures_shouldMatchAfter_data();
+    void testFixtures_shouldMatchAfter();
 
 private:
     Symbols tokenize(const QByteArray & text, bool keepComments) const;
@@ -257,6 +268,24 @@ void tst_FormatRules::testReplace_shouldDropOverlappingEdit()
     qExpect(document.text())->toEqual(QByteArray("aXZef\n"));
 }
 
+void tst_FormatRules::testReplace_shouldQueueBothEditsOrNeither()
+{
+    Formatter formatter;
+    FormatDocument document("a,\nb\nc,\nd\n");
+    document.setLineRanges(LineRanges() << qMakePair(2, 4));
+
+    // Moving the comma of the unselected line 1 leaves both lines as they are.
+    qExpect(document.replace(1, 1, QByteArray(), 3, 0, ","))->toBeFalsy();
+
+    // Two edits that overlap each other are not queued either.
+    qExpect(document.replace(5, 2, QByteArray(), 6, 0, ","))->toBeFalsy();
+
+    // Moving the comma of line 3 to line 4 queues both edits.
+    qExpect(document.replace(6, 1, QByteArray(), 8, 0, ", "))->toBeTruthy();
+    qExpect(document.applyEdits())->toBeTruthy();
+    qExpect(document.text())->toEqual(QByteArray("a,\nb\nc\n, d\n"));
+}
+
 void tst_FormatRules::testApplyEdits_shouldMoveRangesAndIssues()
 {
     Formatter formatter;
@@ -376,6 +405,14 @@ void tst_FormatRules::testEncode_shouldRoundTripThroughDecode()
     qExpect(decoded.at(0).requests.at(0).endLine)->toEqual(6);
     qExpect(decoded.at(0).requests.at(0).columnLimit)->toEqual(70);
     qExpect(decoded.at(0).requests.at(0).rule)->toEqual(QByteArray("ask-rule"));
+
+    // The last line ends the result, which a parent reads as it arrives.
+    QString endPath;
+    qExpect(FormatProcessRunner::decodeEnd(
+        lines.at(lines.size() - 2),
+        &endPath
+    ))->toBeTruthy();
+    qExpect(endPath)->toEqual(result.path);
 #endif
 }
 
@@ -809,7 +846,7 @@ void tst_FormatRules::testFix_shouldRewrite_data()
                       "        + QString(QLL(\" and more text\"))\n"
                       "    );\n"
                       "}\n");
-    QTest::newRow("operator-wrap carries a chain through a nested call")
+    QTest::newRow("operator-wrap moves a whole chain argument of a nested call to its own line")
         << QString(QLL("operator-wrap,args-wrap"))
         << QByteArray("void f()\n"
                       "{\n"
@@ -817,9 +854,8 @@ void tst_FormatRules::testFix_shouldRewrite_data()
                       "}\n")
         << QByteArray("void f()\n"
                       "{\n"
-                      "    QVERIFY(this->runGit(root, QStringList()\n"
-                      "        << QString(QLL(\"add\"))\n"
-                      "        << QString(QLL(\".\"))\n"
+                      "    QVERIFY(this->runGit(root,\n"
+                      "        QStringList() << QString(QLL(\"add\")) << QString(QLL(\".\"))\n"
                       "    ));\n"
                       "}\n");
     QTest::newRow("args-wrap keeps the line groups of a chain argument")
@@ -858,7 +894,7 @@ void tst_FormatRules::testFix_shouldRewrite_data()
         << QByteArray("void f()\n{\n    const QByteArray input = makeFile(\"firstArgumentText\"\n"
                       "                                      \"more\", i < n, count);\n}\n")
         << QByteArray("void f()\n{\n    const QByteArray input = makeFile(\n"
-                      "        \"firstArgumentText\"\n            \"more\",\n        i < n,\n"
+                      "        \"firstArgumentText\"\n        \"more\",\n        i < n,\n"
                       "        count\n    );\n}\n");
     QTest::newRow("args-wrap fits one line")
         << QString(QLL("args-wrap"))
@@ -1808,6 +1844,35 @@ void tst_FormatRules::testAgentMode_shouldAskForOperatorGroups()
     qExpect(result.requests.at(0).columnLimit)->toEqual(80);
 }
 
+/// Asks the agent to regroup a condition that already spans lines, one of
+/// them past `wrapMax`, in agent mode, and leaves its lines as they are.
+void tst_FormatRules::testAgentMode_shouldAskForLongSplitCondition()
+{
+    Formatter formatter;
+    QString error;
+    qExpect(formatter.selectRules(
+        QStringList() << QString(QLL("condition-wrap")),
+        &error
+    ))
+        ->toBeTruthy();
+    const QByteArray input = "void f()\n{\n    if (hasData && isBuffered && socketType == UdpSocketType"
+                             " && engine->isConnected()\n        && engine->lastError() == RefusedError) {\n"
+                             "        reset();\n    }\n}\n";
+    const FormatResult result = qMove(formatter.format(
+        input,
+        QString(),
+        QStringList(),
+        FormatConfig(),
+        true
+    ));
+    qExpect(result.changed)->toBeFalsy();
+    qExpect(result.requests.size())->toEqual(1);
+    qExpect(result.requests.at(0).rule)->toEqual(QByteArray("condition-wrap"));
+    qExpect(result.requests.at(0).line)->toEqual(3);
+    qExpect(result.requests.at(0).endLine)->toEqual(4);
+    qExpect(result.requests.at(0).columnLimit)->toEqual(80);
+}
+
 /// Asks the agent about an access chain of a doc-comment in agent mode,
 /// instead of wrapping it in backticks, and leaves the comment as it is.
 void tst_FormatRules::testAgentMode_shouldAskForDocAccessChains()
@@ -2149,11 +2214,7 @@ void tst_FormatRules::testRules_shouldRewriteFile_data()
         << QString(QLL("not-space,condition-wrap")) << QString(QLL("a.cpp"))
         << conditionSample("ov = m ? m->override() : MyTypeDef()")
         << QByteArray("if ( ! myFirstCondition\n"
-                      "    && (mySecond\n"
-                      "        || (myThird\n"
-                      "            && (ov = m ? m->override() : MyTypeDef())\n"
-                      "        )\n"
-                      "    )\n"
+                      "    && (mySecond || (myThird && (ov = m ? m->override() : MyTypeDef())))\n"
                       ") {\n"
                       "    x();\n"
                       "}\n");
@@ -2534,5 +2595,212 @@ void tst_FormatRules::testArgsWrap_shouldFollowSettings()
     QCOMPARE(again.text, output);
 }
 
+void tst_FormatRules::testDocTagSign_shouldPickSign_data()
+{
+    // Two doc-comments: the first writes its commands with backslashes, the
+    // second with a `@`.
+    const QByteArray twoDocs = "/*!\n    Reads \\a name, see \\l Widget.\n*/\nvoid f(int name);\n"
+                               "/*!\n    Writes @p name.\n*/\nvoid g(int name);\n";
+    const QByteArray allBackslashes = "/*!\n    Reads \\a name, see \\l Widget.\n*/\n"
+                                      "void f(int name);\n/*!\n    Writes \\p name.\n*/\n"
+                                      "void g(int name);\n";
+    const QByteArray oneDoc = "/*!\n    Reads @p name.\n*/\nvoid f(int name);\nint x;\n";
+    QTest::addColumn<QString >("setting");
+    QTest::addColumn<QStringList >("specs");
+    QTest::addColumn<QByteArray >("input");
+    QTest::addColumn<QByteArray >("output");
+    QTest::newRow("the whole file follows its most used sign")
+        << QString() << QStringList() << twoDocs << allBackslashes;
+    QTest::newRow("a new doc-comment takes the setting")
+        << QString() << (QStringList() << QString(QLL("5,7")))
+        << QByteArray(allBackslashes) << twoDocs;
+    QTest::newRow("an edited doc-comment follows the file")
+        << QString() << (QStringList() << QString(QLL("6,6"))) << twoDocs << allBackslashes;
+    QTest::newRow("a new doc-comment takes a backslash setting")
+        << QString(QLL("\\")) << (QStringList() << QString(QLL("1,3"))) << oneDoc
+        << QByteArray("/*!\n    Reads \\p name.\n*/\nvoid f(int name);\nint x;\n");
+    QTest::newRow("the setting's word for a backslash")
+        << QString(QLL("backslash")) << (QStringList() << QString(QLL("1,3"))) << oneDoc
+        << QByteArray("/*!\n    Reads \\p name.\n*/\nvoid f(int name);\nint x;\n");
+    QTest::newRow("a sign in backticks stays")
+        << QString() << QStringList()
+        << QByteArray("/*!\n    Reads \\a name; `@p` stays.\n*/\nvoid f(int name);\n")
+        << QByteArray("/*!\n    Reads \\a name; `@p` stays.\n*/\nvoid f(int name);\n");
+}
+
+/// Formats each row's text with the rule alone, on the row's lines (the
+/// whole text without any), and with `[Comments] docTagSign` set to the
+/// row's value when it has one.
+void tst_FormatRules::testDocTagSign_shouldPickSign()
+{
+    QFETCH(QString, setting);
+    QFETCH(QStringList, specs);
+    QFETCH(QByteArray, input);
+    QFETCH(QByteArray, output);
+    Formatter formatter;
+    QString error;
+    qExpect(formatter.selectRules(
+        QStringList() << QString(QLL("doc-tag-sign")),
+        &error
+    ))
+        ->toBeTruthy();
+    FormatConfig config;
+    if ( ! setting.isEmpty()) {
+        config.assignments << QString(QLL("comments.docTagSign=")) + setting;
+    }
+    const FormatResult result = qMove(formatter.format(
+        input,
+        QString(),
+        specs,
+        config
+    ));
+    qExpect(result.error)->toBeEmpty();
+    QCOMPARE(result.text, output);
+}
+
+void tst_FormatRules::testWrapChainAt_shouldKeepLeadingOperators_data()
+{
+    // The operators of `chain` start at columns 8, 19, and 33 (10%, 24%, and
+    // 41% of 80), and the line would reach column 75 up to `fourthValue`.
+    const QByteArray chain = "void f()\n{\n    out << \"label\" << firstValue << secondValue"
+                             " << thirdValue << fourthValue << fifthValue << sixthValue;\n}\n";
+    const QByteArray near = "near";
+    QTest::addColumn<QString >("formatrc");
+    QTest::addColumn<QString >("rule");
+    QTest::addColumn<QByteArray >("input");
+    QTest::addColumn<QByteArray >("output");
+    QTest::newRow("by default, the operators before 40% stay") << QString()
+        << QString(QLL("operator-wrap")) << chain
+        << QByteArray("void f()\n{\n    out << \"label\" << firstValue\n        << secondValue\n"
+                      "        << thirdValue\n        << fourthValue\n        << fifthValue\n"
+                      "        << sixthValue;\n}\n");
+    QTest::newRow("at 0%, every operator breaks")
+        << QString(QLL("[Structure]\nwrapChainAt = 0%\n")) << QString(QLL("operator-wrap"))
+        << chain
+        << QByteArray("void f()\n{\n    out\n        << \"label\"\n        << firstValue\n"
+                      "        << secondValue\n        << thirdValue\n        << fourthValue\n"
+                      "        << fifthValue\n        << sixthValue;\n}\n");
+    QTest::newRow("at 100%, the operators stay while the line fits")
+        << QString(QLL("[Structure]\nwrapChainAt = 100%\n")) << QString(QLL("operator-wrap"))
+        << chain
+        << QByteArray("void f()\n{\n    out << \"label\" << firstValue << secondValue"
+                      " << thirdValue << fourthValue\n        << fifthValue\n"
+                      "        << sixthValue;\n}\n");
+    QTest::newRow("wrapArgsAt follows it")
+        << QString(QLL("[Structure]\nwrapChainAt = 0%\n")) << QString(QLL("args-wrap"))
+        << argsWrapFile(near) << argsWrapBroken(near);
+    QTest::newRow("wrapArgsAt set on its own wins")
+        << QString(QLL("[Structure]\nwrapChainAt = 0%\nwrapArgsAt = 100%\n"))
+        << QString(QLL("args-wrap")) << argsWrapFile(near) << argsWrapFile(near);
+}
+
+/// Formats each row's text, in a project whose `.formatrc` holds the row's
+/// settings (none for an empty one), with the row's rule.
+void tst_FormatRules::testWrapChainAt_shouldKeepLeadingOperators()
+{
+    QFETCH(QString, formatrc);
+    QFETCH(QString, rule);
+    QFETCH(QByteArray, input);
+    QFETCH(QByteArray, output);
+    QTemporaryDir dir;
+    QStringList files;
+    if ( ! formatrc.isEmpty()) {
+        files << QString(QLL(".formatrc")) << formatrc;
+    }
+    writeProject(dir, files);
+    const QString path = dir.path() + QLL("/a.cpp");
+    const FormatResult result = qMove(this->formatWith(rule, input, path));
+    qExpect(result.error)->toBeEmpty();
+    QCOMPARE(result.text, output);
+}
+
+/// Makes a row of each file in `testFixtures/before`, with its rules and lines.
+///
+/// A fixture is a file in `before/` and the file of the same name in
+/// `after/`, which is what formatting the first one gives. Three optional
+/// side files beside the `before/` one choose how: `<name>.rules` names the
+/// rules, joined by commas (every rule without it), `<name>.lines` the lines
+/// to format, one git-blame style range per line (the whole file without
+/// it), and `<name>.config` the settings, one `<section>.<key>=<value>` per
+/// line, just like `-c` (the `.formatrc` files alone without it).
+void tst_FormatRules::testFixtures_shouldMatchAfter_data()
+{
+    QTest::addColumn<QString >("name");
+    const QString root = QFINDTESTDATA("testFixtures");
+    QVERIFY2( ! root.isEmpty(), "testFixtures is missing");
+    const QDir before(root + QLL("/before"));
+    const QStringList names = before.entryList(QDir::Files, QDir::Name);
+    for (int i = 0; i < names.size(); ++i) {
+        const QString & name = names.at(i);
+        if (name.endsWith(QLL(".rules"))
+            || name.endsWith(QLL(".lines"))
+            || name.endsWith(QLL(".config"))
+        ) {
+            continue;
+        }
+        QTest::newRow(qPrintable(name)) << name;
+    }
+}
+
+/// Formats the fixture `name` (see testFixtures_shouldMatchAfter_data()) and
+/// compares the result with its `after/` file.
+void tst_FormatRules::testFixtures_shouldMatchAfter()
+{
+    QFETCH(QString, name);
+    const QString root = QFINDTESTDATA("testFixtures");
+    const QString path = root + QLL("/before/") + name;
+
+    // Reads the fixture, its side files, and the text it should become.
+    QFile file(path);
+    QVERIFY2(file.open(QIODevice::ReadOnly), qPrintable(path));
+    const QByteArray text = file.readAll();
+    QFile expectedFile(root + QLL("/after/") + name);
+    QVERIFY2(expectedFile.open(QIODevice::ReadOnly), qPrintable(
+        QLL("no after/ file for ") + name
+    ));
+    const QByteArray expected = expectedFile.readAll();
+    QString rules;
+    QFile rulesFile(path + QLL(".rules"));
+    if (rulesFile.open(QIODevice::ReadOnly)) {
+        rules = QString::fromUtf8(rulesFile.readAll()).trimmed();
+    }
+    QStringList lineSpecs;
+    QFile linesFile(path + QLL(".lines"));
+    if (linesFile.open(QIODevice::ReadOnly)) {
+        lineSpecs = QString::fromUtf8(linesFile.readAll()).split(
+            QLatin1Char('\n'),
+            QString::SkipEmptyParts
+        );
+    }
+    FormatConfig config;
+    QFile configFile(path + QLL(".config"));
+    if (configFile.open(QIODevice::ReadOnly)) {
+        config.assignments = QString::fromUtf8(configFile.readAll()).split(
+            QLatin1Char('\n'),
+            QString::SkipEmptyParts
+        );
+    }
+
+    // Formats it with those rules and settings, on those lines.
+    Formatter formatter;
+    QString error;
+    QVERIFY2(
+        formatter.selectRules(rules.split(
+            QLatin1Char(','),
+            QString::SkipEmptyParts
+        ), &error),
+        qPrintable(error)
+    );
+    const FormatResult result = qMove(formatter.format(
+        text,
+        path,
+        lineSpecs,
+        config
+    ));
+    QVERIFY2(result.error.isEmpty(), qPrintable(result.error));
+    QCOMPARE(QString::fromUtf8(result.text), QString::fromUtf8(expected));
+}
+
 QTEST_APPLESS_MAIN(tst_FormatRules)
+
 #include "tst_format_rules.moc"
