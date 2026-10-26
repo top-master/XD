@@ -92,7 +92,7 @@ done
 # Makefile.Release ends up targeting the shared dylib instead of the
 # static .a archive).
 if [ "$_xd_static" -eq 1 ]; then
-    : "${BUILD_DIR:=$(dirname "$BH_ROOT")/build/$(basename "$BH_ROOT")${BH_BUILD_DIR_SUFFIX:-}}"
+    BUILD_DIR=$(bh_xd_build_dir) || exit 1
     mkdir -p "$BUILD_DIR"
     printf 'CONFIG += qt_static\n' > "$BUILD_DIR/.qmake.cache"
     export BUILD_DIR

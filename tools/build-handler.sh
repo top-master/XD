@@ -638,6 +638,45 @@ bh_build_dir_gate() {
     bh_license_gate
 }
 
+bh_build_dir() {
+    if [ -n "${BUILD_DIR:-}" ]; then
+        echo "$BUILD_DIR"
+        return 0
+    fi
+    echo "$(bh_build_dir_root "$BH_ROOT")/$(bh_build_dir_name)"
+}
+
+bh_build_dir_name() {
+    _bbn_name=$(basename "$BH_ROOT")
+    case "${BH_TEMPLATE:-}" in
+        app) echo "$_bbn_name${BH_STATIC:+-static}-$BH_MODE${BH_BUILD_DIR_SUFFIX:-}" ;;
+        makefile) echo "$_bbn_name-$BH_MODE${BH_BUILD_DIR_SUFFIX:-}" ;;
+        *) echo "$_bbn_name${BH_STATIC:+-static}${BH_BUILD_DIR_SUFFIX:-}" ;;
+    esac
+}
+
+# Args: <dir>
+bh_build_dir_root() {
+    _bbdr_top=$(git -C "$1" rev-parse --show-toplevel 2>/dev/null) || _bbdr_top=
+    if [ -z "$_bbdr_top" ] \
+            || [ -z "$(git -C "$_bbdr_top" rev-parse --show-superproject-working-tree 2>/dev/null)" ]; then
+        echo "$(dirname "$1")/build"
+        return 0
+    fi
+    # Goes up the submodule chain, to its outermost repo.
+    while _bbdr_super=$(git -C "$_bbdr_top" rev-parse --show-superproject-working-tree 2>/dev/null) \
+            && [ -n "$_bbdr_super" ]; do
+        _bbdr_top=$_bbdr_super
+    done
+    case "$_bbdr_top" in
+        / | [A-Za-z]: | [A-Za-z]:/) echo "${_bbdr_top%/}/build" ;;
+        *) echo "$(dirname "$_bbdr_top")/build" ;;
+    esac
+}
+
+# See bh_build_dir_gate.
+BH_HOOKS_display_build_dir=bh_build_dir
+
 
 # ---- macOS Xcode developer dir auto-detection --------------------------
 
@@ -928,6 +967,8 @@ bh_parse_args() {
     done
 
     BH_FORWARD_ARGS=
+    BH_XD_ARGS=
+    _bhpa_child=0
     while [ $# -gt 0 ]; do
         # Keeps what the case below reads (one argument, or two for a flag
         # with a value), for bh_forward_note.
@@ -1071,6 +1112,7 @@ bh_parse_args() {
             # so an unrelated broken .pro (one that needs an SDK we lack, say)
             # cannot block the subset asked for.
             --filter=*|--only=*) BH_FILTER="${1#*=}"; shift;;
+            --child)          _bhpa_child=1; shift;;
             --filter|--only)     [ $# -ge 2 ] || bh_error "$1 requires a regexp"; BH_FILTER="$2"; shift 2;;
             # --rebuild[=<regexp>]: under --save-space, build the projects whose
             # path relative to the build root matches (default every project)
@@ -1130,6 +1172,11 @@ bh_parse_args() {
             BH_REMAINING_ARGS="${BH_REMAINING_ARGS:+$BH_REMAINING_ARGS }$_bhpa_argument"
         fi
     done
+
+    if [ "$_bhpa_child" -eq 1 ]; then
+        bh_filter_add "$_bh_parent_xd_build_filter"
+        BH_BUILD_DIR_SHOWN=$_bh_parent_build_dir_shown
+    fi
 
     # Lets a build.sh adjust what the flags set (see bh_hook).
     bh_hook_run args-parsed
@@ -2318,10 +2365,14 @@ bh_xd_build() {
     [ "${BH_NO_XD_BUILD:-0}" -eq 0 ] || return 0
     [ "$XD_DIR" != "$BH_ROOT" ] || return 0
     [ "${BH_STATIC_ALL:-0}" -eq 0 ] || return 0
-    _xb_missing=$(bh_xd_missing shared)
-    [ -n "$_xb_missing" ] || return 0
-    echo "XD at $XD_DIR has no $_xb_missing yet; building XD (pass --no-xd-build to skip)."
-    bh_dependency_build "$XD_DIR/build.sh"
+    set --
+    if [ -z "${BH_XD_BUILD_FILTER:-}" ] && [ -z "${BH_XD_ARGS:-}" ]; then
+        _xb_missing=$(bh_xd_missing shared)
+        [ -n "$_xb_missing" ] || return 0
+        echo "XD at $XD_DIR has no $_xb_missing yet; building XD (pass --no-xd-build to skip)."
+    fi
+    bh_xd_dependency_build "$@"
+    [ -z "${BH_XD_BUILD_FILTER:-}" ] || return 0
     _xb_missing=$(bh_xd_missing shared)
     if [ -n "$_xb_missing" ]; then
         bh_warning "XD's build.sh built no $_xb_missing under \"$XD_DIR\"." \
@@ -2344,15 +2395,30 @@ bh_xd_build_static() {
     [ -s "$BUILD_DIR/.qmake.static" ] || return 0
     [ "${BH_NO_XD_BUILD:-0}" -eq 0 ] || return 0
     [ "$XD_DIR" != "$BH_ROOT" ] || return 0
-    _sxb_missing=$(bh_xd_missing static)
-    [ -n "$_sxb_missing" ] || return 0
-    echo "--static: XD at $XD_DIR has no static $_sxb_missing yet; building XD in static mode (pass --no-xd-build to skip)."
-    bh_dependency_build_static "$XD_DIR/build.sh"
+    if [ -z "${BH_XD_BUILD_FILTER:-}" ] && [ -z "${BH_XD_ARGS:-}" ]; then
+        _sxb_missing=$(bh_xd_missing static)
+        [ -n "$_sxb_missing" ] || return 0
+        echo "--static: XD at $XD_DIR has no static $_sxb_missing yet; building XD in static mode (pass --no-xd-build to skip)."
+    fi
+    set -- --static
+    bh_xd_dependency_build "$@"
+    [ -z "${BH_XD_BUILD_FILTER:-}" ] || return 0
     _sxb_missing=$(bh_xd_missing static)
     if [ -n "$_sxb_missing" ]; then
         bh_warning "--static: XD's build.sh --static built no static $_sxb_missing under \"$XD_DIR\"." \
             "The build goes on; a static project that needs it may fail to link."
     fi
+}
+
+# Args: [argument...]
+bh_xd_dependency_build() {
+    _bxdb_forward=${BH_FORWARD_ARGS:-}
+    if [ -n "${BH_XD_ARGS:-}" ]; then
+        BH_FORWARD_ARGS="${_bxdb_forward:+$_bxdb_forward
+}$BH_XD_ARGS"
+    fi
+    bh_dependency_build "$XD_DIR/build.sh" "$@"
+    BH_FORWARD_ARGS=$_bxdb_forward
 }
 
 # bh_xd_arg_add <flag>
@@ -2361,6 +2427,36 @@ bh_xd_build_static() {
 bh_xd_arg_add() {
     BH_XD_ARGS="${BH_XD_ARGS:+$BH_XD_ARGS
 }$1"
+}
+
+# Args: [<subdir>]
+bh_xd_build_dir() {
+    if [ -n "${BUILD_DIR:-}" ]; then
+        # Drops the path of BH_ROOT in XD from the end, which
+        # bh_xd_module_build_dir may have put there.
+        _bxb_dir=$BUILD_DIR
+        _bxb_path=$(bh_xd_module_path) || _bxb_path=
+        if [ -n "$_bxb_path" ]; then
+            _bxb_dir=${_bxb_dir%/"$_bxb_path"}
+        fi
+        echo "$_bxb_dir${1:+/$1}"
+        return 0
+    fi
+    echo "$(bh_build_dir_root "$XD_DIR")/$(basename "$XD_DIR")${BH_STATIC:+-static}${BH_BUILD_DIR_SUFFIX:-}${1:+/$1}"
+}
+
+bh_xd_module_path() {
+    [ "$BH_ROOT" != "$XD_DIR" ] || return 0
+    case "$BH_ROOT" in
+        "$XD_DIR"/*) echo "${BH_ROOT#"$XD_DIR"/}" ;;
+        *) return 1 ;;
+    esac
+}
+
+bh_xd_module_build_dir() {
+    _bxm_path=$(bh_xd_module_path) \
+        || bh_error "\"$BH_ROOT\" is not inside XD at \"$XD_DIR\""
+    bh_xd_build_dir "$_bxm_path"
 }
 
 # bh_dependency_build_static <build.sh>
@@ -2385,9 +2481,26 @@ bh_dependency_build_static() {
 # bh_hook). Runs it in a subshell without the exported settings that describe
 # this project (its build dir, above all); every other exported setting
 # reaches that build as well. Stops the build when <build.sh> fails.
+#
+# That build is always --headless: this run asks whatever it needs in advance
+# (see bh_build_dir_gate), hence nothing stops a dependency's build to ask. It
+# is also a --child run, which gets the build folder this run showed
+# (BH_BUILD_DIR_SHOWN), and XD's build also BH_XD_BUILD_FILTER, for that build
+# alone.
 bh_dependency_build() {
     _db_script=$1
     shift
+    # Comes ahead of the forwarded flags, which may end with qmake arguments,
+    # unless those carry it already.
+    set -- "$@" --child
+    case "
+${BH_FORWARD_ARGS:-}
+" in
+        *"
+--headless
+"*) ;;
+        *) set -- "$@" --headless ;;
+    esac
     # shellcheck disable=SC2046,SC2086  # intentional word-split of names.
     (
         set -f
@@ -2402,6 +2515,10 @@ bh_dependency_build() {
             BH_RUN_TARGET BH_RUN_TARGET_PATH BH_TARGET_NAME \
             BH_REMAINING_ARGS BH_FORWARD_ARGS BH_FORWARD_TAIL BH_MAKE_ARGS \
             $(env | sed -n 's/^\(BH_HOOKS_[A-Za-z0-9_]*\)=.*/\1/p')
+        [ -z "${BH_BUILD_DIR_SHOWN:-}" ] || export BH_BUILD_DIR_SHOWN
+        if [ "$_db_script" = "$XD_DIR/build.sh" ]; then
+            export BH_XD_BUILD_FILTER
+        fi
         sh "$_db_script" "$@"
     ) || bh_error "building through \"$_db_script\" failed (see the output above)"
 }
@@ -2467,6 +2584,27 @@ bh_xd_has_library() {
     return 1
 }
 
+# bh_filter_static
+#
+# Prints each `.pro` under BH_ROOT that --filter keeps, as `static <path>` or
+# `shared <path>`, one per line: static when bh_filter_candidate marks it so
+# (--static's regexp, as a sub-filter of --filter). Prints nothing without
+# --static.
+bh_filter_static() {
+    [ -n "${BH_STATIC:-}" ] || return 0
+    { find -H "$BH_ROOT" -name '*.pro' \
+        ! -path '*/build/*' ! -path '*/.git/*' 2>/dev/null || true; } \
+    | sort \
+    | while IFS= read -r _bfs_pro; do
+        bh_filter_candidate "${_bfs_pro#"$BH_ROOT"/}"
+        if [ "$BH_CANDIDATE_STATIC" -eq 1 ]; then
+            printf 'static %s\n' "$_bfs_pro"
+        elif [ "$BH_CANDIDATE" != skip ]; then
+            printf 'shared %s\n' "$_bfs_pro"
+        fi
+    done
+}
+
 # bh_static_record
 #
 # Names, in the `.qmake.static` list at the build root, the projects that
@@ -2493,20 +2631,7 @@ bh_static_record() {
     _sr_wanted=
     BH_STATIC_ALL=0
     if [ -n "${BH_STATIC:-}" ]; then
-        # Sorts each `.pro` that --filter keeps as static or shared.
-        _sr_projects=$(
-            { find -H "$BH_ROOT" -name '*.pro' \
-                ! -path '*/build/*' ! -path '*/.git/*' 2>/dev/null || true; } \
-            | sort \
-            | while IFS= read -r _sr_pro; do
-                bh_filter_candidate "${_sr_pro#"$BH_ROOT"/}"
-                if [ "$BH_CANDIDATE_STATIC" -eq 1 ]; then
-                    printf 'static %s\n' "$_sr_pro"
-                elif [ "$BH_CANDIDATE" != skip ]; then
-                    printf 'shared %s\n' "$_sr_pro"
-                fi
-            done
-        )
+        _sr_projects=$(bh_filter_static)
         _sr_wanted=$(printf '%s\n' "$_sr_projects" | sed -n 's/^static //p')
         case "$_sr_nl$_sr_projects" in
             *"${_sr_nl}shared "*) ;;
@@ -3585,7 +3710,7 @@ bh_template_app() {
     # carries different QMAKE_CXXFLAGS, library paths, and link names
     # per mode). Under --static a `-static` comes before the mode (as in
     # `<repo>-static-debug`), which keeps the shared build as it is.
-    : "${BUILD_DIR:=$(dirname "$BH_ROOT")/build/$(basename "$BH_ROOT")${BH_STATIC:+-static}-$BH_MODE}"
+    : "${BUILD_DIR:=$(bh_build_dir)}"
     bh_handle_get   # --get=<what>: print a path and exit (no build)
 
     # Show + gate. Same license-accept dance XD's build.sh runs, so
@@ -4000,7 +4125,7 @@ bh_template_subdirs() {
 
     [ -n "${XD_DIR:-}" ] || bh_error "XD_DIR not set -- resolve the XD framework first (or set XD_DIR=\$ROOT when building XD itself)"
 
-    : "${BUILD_DIR:=$(dirname "$BH_ROOT")/build/$(basename "$BH_ROOT")${BH_STATIC:+-static}${BH_BUILD_DIR_SUFFIX:-}}"
+    : "${BUILD_DIR:=$(bh_build_dir)}"
     bh_handle_get   # --get=<what>: print a path and exit (no build)
 
     bh_build_dir_gate
@@ -4274,7 +4399,7 @@ bh_template_makefile() {
     bh_progress_plan_steps "$BH_ARCH_COUNT"
 
     [ -n "${BH_ROOT:-}" ] || bh_error "BH_ROOT not set -- caller must set it to the source root"
-    : "${BUILD_DIR:=$(dirname "$BH_ROOT")/build/$(basename "$BH_ROOT")-$BH_MODE${BH_BUILD_DIR_SUFFIX:-}}"
+    : "${BUILD_DIR:=$(bh_build_dir)}"
     bh_handle_get   # --get=<what>: print a path and exit (no build)
 
     bh_build_dir_gate
@@ -4341,6 +4466,12 @@ bh_tools_dir() {
     done
     bh_error "build-handler.sh: no folder holds its shell-libs; set BH_TOOLS_DIR to its own folder."
 }
+
+# Keeps what a parent run passed on for --child alone, and clears it; a
+# build.sh sets its own BH_XD_BUILD_FILTER after loading this file.
+_bh_parent_xd_build_filter=${BH_XD_BUILD_FILTER:-}
+_bh_parent_build_dir_shown=${BH_BUILD_DIR_SHOWN:-}
+unset BH_XD_BUILD_FILTER BH_BUILD_DIR_SHOWN
 
 # Loads build-handler's own shell dependencies.
 BH_TOOLS_DIR=$(bh_tools_dir)

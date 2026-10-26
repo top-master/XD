@@ -319,6 +319,7 @@ bh_build_candidate() {
             bh_build_alone "$_bc_pro" "$_bc_rel" "[$_bw_total/$_bw_count]"
             return 0
         fi
+        echo
         echo "Filtered build [$_bw_total/$_bw_count]: $_bc_rel"
         ( cd "$_bc_bd" && BH_MAKEFILE=$_bc_makefile bh_make "$JOBS" ) \
             || bh_error "--filter: build failed for $_bc_rel"
@@ -366,6 +367,7 @@ bh_build_alone() {
         _ba_force=1
     fi
     _ba_clean=0
+    echo
     if [ "$BH_CANDIDATE" = rebuild ] && [ "${BH_SAVE_SPACE:-0}" -ne 1 ]; then
         echo "--rebuild: $2 matches; building it again."
         _ba_clean=1

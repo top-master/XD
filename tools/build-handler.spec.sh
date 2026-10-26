@@ -788,6 +788,89 @@ expect 'the newer .pro, through the link' "$_bh_spec_sandbox/linked/sub/sub.pro"
     "$(BH_ROOT=$_bh_spec_sandbox/linked; bh_newer_project_file "$_bh_spec_mf")"
 rm -rf "$_bh_spec_sandbox"
 
+test_section 'bh_build_dir_root -- build/ stays out of a submodule chain'
+
+if command -v git > /dev/null 2>&1; then
+    _bh_spec_sandbox=$(mktemp -d)
+    # _bh_spec_git <args...>: git, with an identity and local submodules allowed.
+    _bh_spec_git() {
+        git -c user.name=spec -c user.email=spec@spec -c protocol.file.allow=always "$@" \
+            > /dev/null 2>&1
+    }
+    # _bh_spec_repo <dir>: a repo with one commit.
+    _bh_spec_repo() {
+        mkdir -p "$1" && _bh_spec_git -C "$1" init -q \
+            && : > "$1/f" && _bh_spec_git -C "$1" add f \
+            && _bh_spec_git -C "$1" commit -q -m f
+    }
+    mkdir -p "$_bh_spec_sandbox/plain/dir"
+    _bh_spec_repo "$_bh_spec_sandbox/lone"
+    _bh_spec_repo "$_bh_spec_sandbox/src/lib"
+    _bh_spec_repo "$_bh_spec_sandbox/src/mid"
+    _bh_spec_git -C "$_bh_spec_sandbox/src/mid" submodule add "$_bh_spec_sandbox/src/lib" lib
+    _bh_spec_git -C "$_bh_spec_sandbox/src/mid" commit -q -m lib
+    _bh_spec_repo "$_bh_spec_sandbox/all/top"
+    _bh_spec_git -C "$_bh_spec_sandbox/all/top" submodule add "$_bh_spec_sandbox/src/mid" mid
+    _bh_spec_git -C "$_bh_spec_sandbox/all/top" submodule update --init --recursive
+    expect 'a folder outside git keeps build/ beside it' "$_bh_spec_sandbox/plain/build" \
+        "$(bh_build_dir_root "$_bh_spec_sandbox/plain/dir")"
+    expect 'so does a repo that is no submodule' "$_bh_spec_sandbox/build" \
+        "$(bh_build_dir_root "$_bh_spec_sandbox/lone")"
+    expect 'a submodule puts it beside the repo that holds it' "$_bh_spec_sandbox/all/build" \
+        "$(bh_build_dir_root "$_bh_spec_sandbox/all/top/mid")"
+    expect 'and a submodule of a submodule beside the outermost repo' "$_bh_spec_sandbox/all/build" \
+        "$(bh_build_dir_root "$_bh_spec_sandbox/all/top/mid/lib")"
+    unset -f _bh_spec_git _bh_spec_repo
+    rm -rf "$_bh_spec_sandbox"
+else
+    test_skip 'build/ stays out of a submodule chain' 'needs git'
+fi
+
+test_section 'bh_xd_build_dir, bh_xd_module_build_dir -- XD'"'"'s build folder'
+
+# An XD tree with a project's folder in it, and a folder outside it.
+_bh_spec_sandbox=$(mktemp -d)
+mkdir -p "$_bh_spec_sandbox/xd/src/app" "$_bh_spec_sandbox/other"
+# _bh_spec_xd <BH_ROOT> <BH_STATIC> <BH_BUILD_DIR_SUFFIX> <command...>
+# Runs <command> with those settings, in a subshell, for XD at the sandbox's
+# `xd` folder, and BUILD_DIR set to <_BD> (unset without it).
+_bh_spec_xd() (
+    BH_ROOT=$1 BH_STATIC=$2 BH_BUILD_DIR_SUFFIX=$3 BUILD_DIR=${_BD:-}
+    XD_DIR=$_bh_spec_sandbox/xd
+    shift 3
+    "$@"
+)
+expect 'a project'"'"'s path in XD is its path below XD_DIR' src/app \
+    "$(_bh_spec_xd "$_bh_spec_sandbox/xd/src/app" '' '' bh_xd_module_path)"
+expect 'a static build folder sits beside the XD tree' "$_bh_spec_sandbox/build/xd-static" \
+    "$(_bh_spec_xd "$_bh_spec_sandbox/xd" '^.*$' '' bh_xd_build_dir)"
+expect 'so it does for XD'"'"'s own --static (its suffix)' "$_bh_spec_sandbox/build/xd-static" \
+    "$(_bh_spec_xd "$_bh_spec_sandbox/xd" '' -static bh_xd_build_dir)"
+expect 'a shared one has no suffix' "$_bh_spec_sandbox/build/xd" \
+    "$(_bh_spec_xd "$_bh_spec_sandbox/xd" '' '' bh_xd_build_dir)"
+expect 'a subfolder goes below it' "$_bh_spec_sandbox/build/xd-static/src/app" \
+    "$(_bh_spec_xd "$_bh_spec_sandbox/xd" '^.*$' '' bh_xd_build_dir src/app)"
+expect 'a project inside XD builds at its own path in XD'"'"'s static build folder' \
+    "$_bh_spec_sandbox/build/xd-static/src/app" \
+    "$(_bh_spec_xd "$_bh_spec_sandbox/xd/src/app" '^.*$' '' bh_xd_module_build_dir)"
+expect 'and in the shared one without --static' \
+    "$_bh_spec_sandbox/build/xd/src/app" \
+    "$(_bh_spec_xd "$_bh_spec_sandbox/xd/src/app" '' '' bh_xd_module_build_dir)"
+expect 'XD itself builds in the build folder' "$_bh_spec_sandbox/build/xd" \
+    "$(_bh_spec_xd "$_bh_spec_sandbox/xd" '' '' bh_xd_module_build_dir)"
+expect 'a set BUILD_DIR is that build folder, with no suffix' /x/bd \
+    "$(_BD=/x/bd _bh_spec_xd "$_bh_spec_sandbox/xd" '^.*$' '' bh_xd_build_dir)"
+expect 'and a project inside XD builds at its own path below it' /x/bd/src/app \
+    "$(_BD=/x/bd _bh_spec_xd "$_bh_spec_sandbox/xd/src/app" '^.*$' '' bh_xd_module_build_dir)"
+expect 'a BUILD_DIR that already is its folder shows the build folder as root' /x/bd \
+    "$(_BD=/x/bd/src/app _bh_spec_xd "$_bh_spec_sandbox/xd/src/app" '^.*$' '' bh_xd_build_dir)"
+expect 'and stays the project'"'"'s folder, not getting its path twice' /x/bd/src/app \
+    "$(_BD=/x/bd/src/app _bh_spec_xd "$_bh_spec_sandbox/xd/src/app" '^.*$' '' bh_xd_module_build_dir)"
+expect_returns 'outside an XD tree it stops the build' 1 \
+    _bh_spec_xd "$_bh_spec_sandbox/other" '' '' bh_xd_module_build_dir
+unset -f _bh_spec_xd
+rm -rf "$_bh_spec_sandbox"
+
 test_section 'bh_makefile_stale, bh_make_clean -- the rule that remakes a Makefile'
 
 # A Makefile whose own rule, as qmake writes one, remakes it from `input.pro`
@@ -1613,6 +1696,7 @@ _bh_spec_xd_bd=$(mktemp -d)
 cat > "$_bh_spec_fake_xd/build.sh" <<'EOF'
 cd "${0%/*}" || exit 1
 echo "$* [${BUILD_DIR:-}|${BH_ROOT:-}|${BH_HEADLESS:-}]" > args
+echo "${BH_XD_BUILD_FILTER:-}" > xd-filter
 case " $* " in
     *" --static "*)
         mkdir -p lib mkspecs/modules/static
@@ -1726,6 +1810,12 @@ _bh_spec_no_gui
 expect 'but not a flag that redoes or drops what XD built' '--static --child --headless [||]' \
     "$(_bh_spec_xd_build --static --rebuild=x --rebuild --wipe --qmake --refresh --force-qmake)"
 _bh_spec_no_gui
+expect 'but not --clean, which would clean what the framework built' \
+    '--static --child --headless --release [||]' "$(_bh_spec_xd_build --static --clean --release)"
+_bh_spec_no_gui
+expect 'and of --only-clean only its --no-build' \
+    '--static --child --headless --no-build [||]' "$(_bh_spec_xd_build --static --only-clean)"
+_bh_spec_no_gui
 expect 'but no flag that names this project'"'"'s own paths or steps' \
     '--static --child --headless --release [||]' \
     "$(_bh_spec_xd_build --filter src/ --only=src --static=app --test \
@@ -1770,6 +1860,9 @@ _bh_spec_xd_shared_build() (
 )
 expect '--no-xd-build passes --no-build to XD'"'"'s shared build' '--child --headless --no-build [||]' \
     "$(_bh_spec_xd_shared_build --no-xd-build)"
+rm -f "$_bh_spec_fake_xd"/lib/libQt5Core.* "$_bh_spec_fake_xd/lib/libQt5Bootstrap.a" \
+    "$_bh_spec_fake_xd/mkspecs/modules/qt_lib_core.pri" \
+    "$_bh_spec_fake_xd/mkspecs/modules/qt_lib_bootstrap_private.pri"
 expect 'a run whose every project builds static needs no shared XD' none \
     "$(_bh_spec_static_all=1; _bh_spec_xd_shared_build)"
 expect 'without --static, an unbuilt XD builds, with this run'"'"'s flags' \
@@ -1880,11 +1973,44 @@ expect 'app: a shared build dir names the mode' /p/build/ws-debug \
     "$(_bh_spec_build_dir bh_template_app)"
 expect 'app: --static puts -static before the mode' /p/build/ws-static-release \
     "$(_bh_spec_build_dir bh_template_app --static=x --release)"
+expect 'app: BH_BUILD_DIR_SUFFIX comes after the mode' /p/build/ws-debug-x \
+    "$(BH_BUILD_DIR_SUFFIX=-x; _bh_spec_build_dir bh_template_app)"
 expect 'subdirs: --static adds -static' /p/build/ws-static \
     "$(_bh_spec_build_dir bh_template_subdirs --static)"
 expect 'subdirs: ahead of a preset suffix' /p/build/ws-static-debug \
     "$(BH_BUILD_DIR_SUFFIX=-debug; _bh_spec_build_dir bh_template_subdirs --static)"
 unset -f _bh_spec_build_dir
+
+# _bh_spec_gate [<function>]
+# Prints the folder that bh_build_dir_gate shows, with a display-build-dir hook
+# <function> added after the default one.
+_bh_spec_gate() (
+    BUILD_DIR=/b/ws BH_HEADLESS=1
+    _bh_spec_parent() { echo "$(dirname "$BH_HOOK_RESULT")"; }
+    if [ -n "${1:-}" ]; then
+        bh_hook_add display-build-dir "$1"
+    fi
+    bh_build_dir_gate | sed -n 's/^  //p'
+)
+expect 'the gate shows BUILD_DIR by default' /b/ws "$(_bh_spec_gate)"
+expect 'but not the folder an outer run showed already' '' \
+    "$(BH_BUILD_DIR_SHOWN=/b/ws; _bh_spec_gate)"
+expect 'while it shows another one' /b/ws "$(BH_BUILD_DIR_SHOWN=/b; _bh_spec_gate)"
+expect 'and keeps the folder it showed to itself' '' \
+    "$(BUILD_DIR=/b/ws BH_HEADLESS=1; bh_build_dir_gate > /dev/null; sh -c 'echo "${BH_BUILD_DIR_SHOWN:-}"')"
+expect 'which a build it starts gets' /b/ws \
+    "$(_bh_spec_sd=$(mktemp -d); printf 'echo "$BH_BUILD_DIR_SHOWN"\n' > "$_bh_spec_sd/build.sh"
+       BUILD_DIR=/b/ws BH_HEADLESS=1 BH_FORWARD_ARGS=
+       bh_build_dir_gate > /dev/null; bh_dependency_build "$_bh_spec_sd/build.sh"; rm -rf "$_bh_spec_sd")"
+expect 'bh_build_dir gives an empty BUILD_DIR the folder its template would' \
+    /p/build/ws-static-debug \
+    "$(BUILD_DIR= BH_ROOT=/p/ws BH_TEMPLATE=app BH_MODE=debug BH_STATIC=x; bh_build_dir)"
+expect 'named as each template names it' /p/build/ws-release-x \
+    "$(unset BUILD_DIR; BH_ROOT=/p/ws BH_TEMPLATE=makefile BH_MODE=release BH_BUILD_DIR_SUFFIX=-x
+       bh_build_dir)"
+expect 'or what a later display-build-dir hook prints, from the result before it' \
+    /b "$(_bh_spec_gate _bh_spec_parent)"
+unset -f _bh_spec_gate
 
 
 test_section 'bh_filter_add -- joins a regexp to --filter from an args-parsed hook'
