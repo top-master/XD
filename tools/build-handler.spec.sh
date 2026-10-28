@@ -788,6 +788,44 @@ expect 'the newer .pro, through the link' "$_bh_spec_sandbox/linked/sub/sub.pro"
     "$(BH_ROOT=$_bh_spec_sandbox/linked; bh_newer_project_file "$_bh_spec_mf")"
 rm -rf "$_bh_spec_sandbox"
 
+test_section 'bh_makefile_stale, bh_make_clean -- the rule that remakes a Makefile'
+
+# A Makefile whose own rule, as qmake writes one, remakes it from `input.pro`
+# (here: leaves a `remade` file), and whose `clean` leaves a `cleaned` file.
+if command -v make > /dev/null 2>&1 && make --version 2>/dev/null | grep -q '^GNU Make'; then
+    _bh_spec_sandbox=$(mktemp -d)
+    printf 'Makefile: input.pro\n\ttouch remade Makefile\nclean:\n\ttouch cleaned\n' \
+        > "$_bh_spec_sandbox/Makefile"
+    : > "$_bh_spec_sandbox/input.pro"
+    touch -t 200001010000 "$_bh_spec_sandbox/input.pro"
+    touch -t 200101010000 "$_bh_spec_sandbox/Makefile"
+    _bh_spec_mf=$_bh_spec_sandbox/Makefile
+    expect_returns 'a Makefile newer than what its rule names is not stale' 1 \
+        sh -c '. "$BH_TOOLS_DIR/build-handler.sh"; BH_MAKE=make BH_MAKE_TYPE=gnu
+               bh_makefile_stale "'"$_bh_spec_mf"'"'
+    touch "$_bh_spec_sandbox/input.pro"
+    expect_returns 'one older than a file its rule names is stale' 0 \
+        sh -c '. "$BH_TOOLS_DIR/build-handler.sh"; BH_MAKE=make BH_MAKE_TYPE=gnu
+               bh_makefile_stale "'"$_bh_spec_mf"'"'
+    expect 'and asking remakes nothing' '' "$(ls "$_bh_spec_sandbox/remade" 2>/dev/null)"
+    expect_returns 'under --ignore-pri it never holds, the rule naming every .pri' 1 \
+        sh -c '. "$BH_TOOLS_DIR/build-handler.sh"; BH_MAKE=make BH_MAKE_TYPE=gnu
+               BH_IGNORE_PRI=1 bh_makefile_stale "'"$_bh_spec_mf"'"'
+    expect_returns 'nmake never remakes a Makefile, hence never finds it stale' 1 \
+        sh -c '. "$BH_TOOLS_DIR/build-handler.sh"; BH_MAKE=nmake BH_MAKE_TYPE=nmake
+               bh_makefile_stale "'"$_bh_spec_mf"'"'
+    mkdir "$_bh_spec_sandbox/logs"
+    ( . "$BH_TOOLS_DIR/build-handler.sh"; BH_MAKE=make BH_MAKE_TYPE=gnu
+      LOGS=$_bh_spec_sandbox/logs _step=0
+      bh_make_clean "$_bh_spec_mf" > /dev/null 2>&1 )
+    expect 'a clean of a stale Makefile cleans' cleaned \
+        "$(ls "$_bh_spec_sandbox/cleaned" 2>/dev/null | sed 's#.*/##')"
+    expect 'without remaking the Makefile first' '' "$(ls "$_bh_spec_sandbox/remade" 2>/dev/null)"
+    rm -rf "$_bh_spec_sandbox"
+else
+    test_skip 'the rule that remakes a Makefile' 'needs GNU make'
+fi
+
 test_section 'bh_make_plan -- the dry run walks the sub-makes of jom and nmake'
 
 # A stub jom prints each line of its `-f` file (`Makefile` by default) after a
@@ -2522,6 +2560,28 @@ else
         "$(grep -c -- '-DQT_NO_DEBUG' "$_bh_spec_bd/zlib/Makefile")"
     expect 'cleaning what the other variant built first' 1 \
         "$(printf '%s\n' "$_bh_spec_out" | grep -c 'made for another toolchain or variant')"
+    # _bh_spec_logs <regexp>: the names of the build logs that match.
+    _bh_spec_logs() {
+        ls "$_bh_spec_bd/logs" | grep -E -- "$1" | tr '\n' ' '
+    }
+    expect 'the clean writes a log of its own' 1 \
+        "$(_bh_spec_logs -qmake-clean\.log$ | wc -w)"
+    expect 'inside the qmake step, under its number' \
+        "$(_bh_spec_logs '[0-9]-qmake\.log$' | sed 's/-qmake\.log/-qmake-clean.log/g')" \
+        "$(_bh_spec_logs -qmake-clean\.log$)"
+    expect 'with no step of its own' '' \
+        "$(_bh_spec_logs '[0-9]-clean\.log$')"
+    expect 'after qmake made the Makefile again, hence make remakes none' 0 \
+        "$(cat "$_bh_spec_bd"/logs/*-qmake-clean.log | grep -c 'qmake')"
+    _bh_spec_build --filter 'zlib' --rebuild=zlib --debug
+    expect 'a --rebuild of a project succeeds' 0 "$_bh_spec_rc"
+    expect 'and names it with the counter of the walk' 1 \
+        "$(printf '%s\n' "$_bh_spec_out" | grep -c '^Filtered build \[1/1\]: zlib/zlib\.pro$')"
+    expect 'and cleans inside the qmake step too' 1 \
+        "$(_bh_spec_logs -qmake-clean\.log$ | wc -w)"
+    expect 'with no step of its own either' '' \
+        "$(_bh_spec_logs '[0-9]-clean\.log$')"
+    unset -f _bh_spec_logs
 
     _bh_spec_build --clean --no-build
     expect 'a bare --clean removes the cache' '' \
@@ -2541,6 +2601,15 @@ else
     expect 'and leaves the rest (zlib, dr, t1) alone' \
         "1 $(_bh_spec_objects dr) 1" \
         "$(_bh_spec_objects zlib) $(_bh_spec_objects dr) $(_bh_spec_objects tests/t1)"
+    _bh_spec_build --clean --no-build --filter 'zlib|tests/t1'
+    expect 'a filtered --clean of several projects is one step, with one log' 1 \
+        "$(ls "$_bh_spec_bd/logs" | grep -c -- '-clean\.log$')"
+    expect 'which names each project it cleans, in the order they run' \
+        'tests/t1/t1.pro zlib/zlib.pro' \
+        "$(printf '%s\n' "$_bh_spec_out" | sed -n 's/^  make clean for //p' | tr '\n' ' ' | sed 's/ $//')"
+    expect 'and cleans them all' '0 0' \
+        "$(_bh_spec_objects zlib) $(_bh_spec_objects tests/t1)"
+    _bh_spec_build --filter 'zlib|tests/t1'
     _bh_spec_build --clean --no-build --filter 'zlib|dr' --rebuild=dr
     expect '--clean with both filters cleans only what both name (dr)' 0 \
         "$(_bh_spec_objects dr)"
@@ -2590,6 +2659,10 @@ else
         "$(printf '%s\n' "$_bh_spec_out" | grep '^--static:')"
     expect 'its match is qmaked in qt_static mode, the rest shared' '1 0' \
         "$(_bh_spec_static zlib) $(_bh_spec_static app)"
+    rm -rf "$_bh_spec_bd"
+    _bh_spec_build --filter 'zlib|app' --no-static
+    expect '--no-static in a fresh build dir makes no static list either' '' \
+        "$(ls "$_bh_spec_bd/.qmake.static" 2>/dev/null)"
     rm -rf "$_bh_spec_bd"
     _bh_spec_build --filter 'zlib|app'
     expect 'a build without --static makes no static list' '' \

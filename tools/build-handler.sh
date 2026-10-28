@@ -1588,6 +1588,23 @@ bh_progress_hide() {
     BH_PROGRESS_DRAWN=0
 }
 
+# bh_progress_note <line>
+#
+# Prints <line> above the progress row: clears the row, prints <line> where
+# it was, then draws the row again below it; hence the row stays pinned under
+# the lines a step prints. Without a live progress display, it only prints
+# <line> to stderr.
+bh_progress_note() {
+    if ! bh_progress_active; then
+        echo "$1" 1>&2
+        return 0
+    fi
+    bh_progress_row_clear
+    bh_progress_flush
+    printf '\r\033[K%s\n' "$1" 1>&2
+    bh_progress_render
+}
+
 # bh_spin_until <pid>
 #
 # Foreground spinner: poll until the background <pid> exits, advancing
@@ -1993,10 +2010,16 @@ bh_run_qmake() {
     # A Makefile made for another toolchain or variant (see
     # `bh_makefile_build_differs`) comes with objects that build compiled,
     # which make keeps, as no rule of it names the compiler or the variant;
-    # hence they are cleaned below, before qmake runs again.
+    # hence they are cleaned at the end of this step (see `bh_qmake_clean`),
+    # as is what the last build made when --rebuild asks (`BH_QMAKE_CLEAN`).
     _bhq_build_differs=0
     if [ -f "$_bhq_makefile" ] && bh_makefile_build_differs "$_bhq_makefile"; then
         _bhq_build_differs=1
+        echo "$(pwd): its Makefile was made for another toolchain or variant; cleaning what that build made, after qmake."
+    fi
+    _bhq_clean=0
+    if [ "$_bhq_build_differs" -eq 1 ] || [ "${BH_QMAKE_CLEAN:-0}" -eq 1 ]; then
+        _bhq_clean=1
     fi
 
     # Skip qmake when its output would be a no-op: Makefile in the
@@ -2008,7 +2031,8 @@ bh_run_qmake() {
     # sub-project Makefiles again too, which `make` would otherwise keep, as
     # it runs qmake only for a missing one. A `.qmake.static` list newer
     # than the Makefile forces one too (see `bh_static_list_newer`), as it
-    # may move projects in or out of `qt_static` mode. `--ignore-pri` narrows
+    # may move projects in or out of `qt_static` mode; a Makefile that GNU make
+    # finds stale does too (see `bh_makefile_stale`). `--ignore-pri` narrows
     # the freshness check back to just `.pro` files for cases where an
     # unchanged-in-effect `.pri` keeps tripping a re-qmake
     # (e.g. an IDE that `touch`-es a .pri on save).
@@ -2018,9 +2042,15 @@ bh_run_qmake() {
         && ! bh_static_list_newer "$_bhq_makefile"
     then
         _bhq_newer=$(bh_newer_project_file "$_bhq_makefile")
+        if [ -z "$_bhq_newer" ] && bh_makefile_stale "$_bhq_makefile"; then
+            _bhq_newer="a file that GNU make's rule for $_bhq_makefile names"
+        fi
         bh_qmake_trace_newer "$_bhq_newer"
         if [ -z "$_bhq_newer" ]; then
             bh_qmake_trace "Skips qmake."
+            if [ "$_bhq_clean" -eq 1 ]; then
+                bh_qmake_clean "$_bhq_makefile" "$_label"
+            fi
             # Treat the skip as a successful step: show the row
             # with the checkmark + description so the user can see
             # that qmake decided to skip.
@@ -2034,11 +2064,6 @@ pass --qmake to force rerun it)."
     fi
     bh_qmake_trace "Runs qmake."
 
-    if [ "$_bhq_build_differs" -eq 1 ]; then
-        echo "$(pwd): its Makefile was made for another toolchain or variant; cleaning what that build made first."
-        bh_make_clean_lenient "$(pwd)/$_bhq_makefile"
-    fi
-
     _bhq_r=-r
     if [ "${BH_QMAKE_PLAIN:-0}" -ne 0 ]; then
         _bhq_r=
@@ -2050,9 +2075,13 @@ pass --qmake to force rerun it)."
     # Makefile it leaves half-written looks up-to-date to the next run.
     if [ "${BH_LOG_LEVEL:-1}" -ge 3 ]; then
         # shellcheck disable=SC2086  # $_bhq_r is intentionally word-split.
+        _status=0
         bh_run_held bh_tee_status "$_log" "$QMAKE" $_bhq_r -spec "$XD_DIR/mkspecs/$QMAKESPEC" \
-            -xspec "$XD_DIR/mkspecs/${BH_CROSS_SPEC:-$QMAKESPEC}" "$_pro" "$@"
-        return $?
+            -xspec "$XD_DIR/mkspecs/${BH_CROSS_SPEC:-$QMAKESPEC}" "$_pro" "$@" || _status=$?
+        if [ "$_status" -eq 0 ] && [ "$_bhq_clean" -eq 1 ]; then
+            bh_qmake_clean "$_bhq_makefile" "$_label"
+        fi
+        return "$_status"
     fi
 
     _status=0
@@ -2066,6 +2095,9 @@ pass --qmake to force rerun it)."
         bh_spin_until "$_bh_held_pid"
         bh_held_finish || _status=$?
         if [ "$_status" -eq 0 ]; then
+            if [ "$_bhq_clean" -eq 1 ]; then
+                bh_qmake_clean "$_bhq_makefile" "$_label"
+            fi
             bh_progress_hide
         else
             bh_progress_hide X
@@ -2077,8 +2109,11 @@ pass --qmake to force rerun it)."
         bh_held_finish || _status=$?
         if [ "$_status" -ne 0 ]; then
             bh_dump_fail "$_log" "$_status"
+        elif [ "$_bhq_clean" -eq 1 ]; then
+            bh_qmake_clean "$_bhq_makefile" "$_label"
         fi
     fi
+    return "$_status"
 }
 
 
@@ -2191,22 +2226,81 @@ bh_clean() {
 # --rebuild accepts too when it was given. One `.pro` at a time as
 # `find | sort` hands them over; a project never built (no Makefile) is
 # passed over.
+#
+# All of them make one `clean` step, with one log and one spinner row; the
+# `make clean for <project>` line of each goes above that row as it starts
+# (see bh_progress_note). Each clean runs to its end even on Ctrl+C, and the
+# build stops right after (see `bh_held_start`), as the spinner turns in the
+# foreground meanwhile.
 bh_clean_candidates() {
+    # The step's number, taken back below when no project gets cleaned.
+    _step=$((_step + 1))
+    _bcc_log=$LOGS/$(printf '%02d-%s.log' "$_step" clean)
+    rm -f "$_bcc_log"
+    # The loop runs in the subshell of the pipe; hence the step ends there
+    # too, with the progress row it drew.
     { find -H "$BH_ROOT" -name '*.pro' \
         ! -path '*/build/*' ! -path '*/.git/*' 2>/dev/null || true; } \
     | sort \
-    | while IFS= read -r _bcc_pro; do
-        _bcc_rel=${_bcc_pro#"$BH_ROOT"/}
-        bh_filter_candidate "$_bcc_rel"
-        if [ "$BH_CANDIDATE" = skip ] \
-                || { [ -n "${BH_REBUILD:-}" ] && [ "$BH_CANDIDATE" != rebuild ]; }; then
-            continue
+    | {
+        _bcc_spin=0
+        _bcc_status=0
+        while IFS= read -r _bcc_pro; do
+            _bcc_rel=${_bcc_pro#"$BH_ROOT"/}
+            bh_filter_candidate "$_bcc_rel"
+            if [ "$BH_CANDIDATE" = skip ] \
+                    || { [ -n "${BH_REBUILD:-}" ] && [ "$BH_CANDIDATE" != rebuild ]; }; then
+                continue
+            fi
+            _bcc_makefile=$BUILD_DIR/$(dirname "$_bcc_rel")/$(bh_makefile_of "$_bcc_pro")
+            [ -f "$_bcc_makefile" ] || continue
+
+            # Starts the step at the first project to clean.
+            if [ ! -f "$_bcc_log" ]; then
+                : > "$_bcc_log"
+                if bh_progress_active && [ "${BH_LOG_LEVEL:-1}" -lt 2 ]; then
+                    _bcc_spin=1
+                    bh_progress_setType spinner
+                    bh_progress_setMax 0
+                    bh_progress_setDescription "clean is running."
+                fi
+            fi
+
+            # Cleans the project, with its line above the row.
+            bh_progress_note "  make clean for $_bcc_rel"
+            if [ "$_bcc_spin" -eq 1 ]; then
+                bh_held_start bh_make_clean "$_bcc_makefile" "$_bcc_log"
+                bh_spin_until "$_bh_held_pid"
+                bh_held_finish || _bcc_status=$?
+            elif [ "${BH_LOG_LEVEL:-1}" -ge 2 ]; then
+                # Verbose: shows the clean's output too, as bh_run does.
+                : > "$_bcc_log.part"
+                bh_make_clean "$_bcc_makefile" "$_bcc_log.part" || _bcc_status=$?
+                tee -a "$_bcc_log" < "$_bcc_log.part" 1>&2
+                rm -f "$_bcc_log.part"
+            else
+                bh_make_clean "$_bcc_makefile" "$_bcc_log" || _bcc_status=$?
+            fi
+            [ "$_bcc_status" -eq 0 ] || break
+        done
+
+        # Ends the step: an empty line between the lines and the row.
+        if [ "$_bcc_spin" -eq 1 ]; then
+            bh_progress_note ''
+            if [ "$_bcc_status" -eq 0 ]; then
+                bh_progress_hide
+            else
+                bh_progress_hide X
+            fi
         fi
-        _bcc_makefile=$BUILD_DIR/$(dirname "$_bcc_rel")/$(bh_makefile_of "$_bcc_pro")
-        [ -f "$_bcc_makefile" ] || continue
-        echo "  make clean for $_bcc_rel" 1>&2
-        bh_make_clean "$_bcc_makefile"
-    done || bh_error "--clean: cleaning a named project failed"
+        if [ "$_bcc_status" -ne 0 ]; then
+            bh_dump_fail "$_bcc_log" "$_bcc_status"
+        fi
+        exit "$_bcc_status"
+    } || bh_error "--clean: cleaning a named project failed"
+    if [ ! -f "$_bcc_log" ]; then
+        _step=$((_step - 1))
+    fi
 }
 
 # bh_makefile_of <pro>
@@ -3978,14 +4072,15 @@ bh_build_candidate() {
             || bh_makefile_mode_differs "$_bc_bd/$_bc_makefile" \
             || bh_makefile_build_differs "$_bc_bd/$_bc_makefile" \
             || bh_static_list_newer "$_bc_bd/$_bc_makefile" \
+            || bh_makefile_stale "$_bc_bd/$_bc_makefile" \
             || [ "${BH_FORCE_QMAKE:-0}" -gt 0 ]; then
-        bh_build_alone "$_bc_pro" "$_bc_rel"
+        bh_build_alone "$_bc_pro" "$_bc_rel" "[$_bw_total/$_bw_count]"
         return 0
     fi
     if [ "${BH_SAVE_SPACE:-0}" -ne 1 ]; then
         if [ "$BH_CANDIDATE" = rebuild ]; then
-            echo "--rebuild: $_bc_rel matches; building it again."
-            bh_make_clean "$_bc_bd/$_bc_makefile"
+            bh_build_alone "$_bc_pro" "$_bc_rel" "[$_bw_total/$_bw_count]"
+            return 0
         fi
         echo "Filtered build [$_bw_total/$_bw_count]: $_bc_rel"
         ( cd "$_bc_bd" && BH_MAKEFILE=$_bc_makefile bh_make "$JOBS" ) \
@@ -4015,16 +4110,17 @@ bh_pro_is_subdirs() {
     grep -Eq '^[[:space:]]*TEMPLATE[[:space:]]*=[[:space:]]*subdirs[[:space:]]*$' "$1" 2>/dev/null
 }
 
-# bh_build_alone <pro> <path>
+# bh_build_alone <pro> <path> [<counter>]
 #
 # Builds one project alone, <path> being <pro> relative to BH_ROOT: makes it
 # in its own out-of-source dir (mirroring the source layout under BUILD_DIR),
 # from the Makefile `bh_makefile_of` names for it, after a qmake of just that
 # project when none ran for it yet, when its Makefile was made for the other
 # --save-space mode, or when --qmake/--refresh asks. A `rebuild` candidate is
-# cleaned first, unless --save-space (which keeps no objects) already asked
-# for it. Under --save-space it then makes sure the project is marked
-# finished. Cross-project deps are not pulled in automatically.
+# cleaned in its qmake step, unless --save-space (which keeps no objects)
+# already asked for it. Under --save-space it then makes sure the project is
+# marked finished. Cross-project deps are not pulled in automatically.
+# <counter>, such as `[3/9]`, goes into the line that names the project.
 bh_build_alone() {
     _ba_bd=$BUILD_DIR/$(dirname "$2")
     _ba_mf=$(bh_makefile_of "$1")
@@ -4032,14 +4128,15 @@ bh_build_alone() {
     if [ -f "$_ba_bd/$_ba_mf" ] && bh_makefile_mode_differs "$_ba_bd/$_ba_mf"; then
         _ba_force=1
     fi
+    _ba_clean=0
     if [ "$BH_CANDIDATE" = rebuild ] && [ "${BH_SAVE_SPACE:-0}" -ne 1 ]; then
         echo "--rebuild: $2 matches; building it again."
-        bh_make_clean "$_ba_bd/$_ba_mf"
+        _ba_clean=1
     fi
-    echo "Filtered build: $2"
+    echo "Filtered build${3:+ $3}: $2"
     # shellcheck disable=SC2086  # intentional word-split of forwarded args.
     ( mkdir -p "$_ba_bd" && cd "$_ba_bd" \
-        && BH_MAKEFILE=$_ba_mf BH_FORCE_QMAKE=$_ba_force \
+        && BH_MAKEFILE=$_ba_mf BH_FORCE_QMAKE=$_ba_force BH_QMAKE_CLEAN=$_ba_clean \
             bh_run_qmake qmake "$1" $BH_REMAINING_ARGS \
         && BH_MAKEFILE=$_ba_mf bh_make "$JOBS" ) \
         || bh_error "--filter: build failed for $2"
@@ -4048,30 +4145,88 @@ bh_build_alone() {
     fi
 }
 
-# bh_make_clean <makefile>
+# bh_qmake_clean <makefile> <label>
+#
+# Cleans what the last build of <makefile> made, as the end of the qmake step
+# that `bh_run_qmake` runs for it: on that step's row and number, with a log
+# of its own (`<step>-qmake-clean.log`).
+bh_qmake_clean() {
+    [ -f "$1" ] || return 0
+    _bqc_log=$LOGS/$(printf '%02d-%s.log' "$_step" qmake-clean)
+    if ! bh_progress_active; then
+        bh_make_clean_lenient "$1" "$_bqc_log"
+        return 0
+    fi
+    bh_progress_setType spinner
+    bh_progress_setMax 0
+    bh_progress_setDescription "QMake step is cleaning what the last build of $2 made."
+    bh_progress_render
+    bh_ticker_start
+    bh_make_clean_lenient "$1" "$_bqc_log"
+    bh_ticker_stop
+}
+
+# bh_make_clean <makefile> [<log>]
 #
 # Runs the `clean` target of <makefile>, so the next make builds every object
-# of that project again; a no-op when <makefile> does not exist yet.
+# of that project again; a no-op when <makefile> does not exist yet. GNU make
+# gets `-o <makefile>`, hence it never runs qmake first through the Makefile's
+# own rule, with the old Makefile's command line; the qmake step decides about
+# qmake (see `bh_run_qmake`). It is a `clean` step of its own; with <log>, it
+# only adds its output to <log> and returns make's exit code, as a part of a
+# step the caller shows (see bh_clean_candidates).
 bh_make_clean() {
     [ -f "$1" ] || return 0
-    ( cd "$(dirname "$1")" && bh_run clean bh_make_run -f "$(basename "$1")" clean ) \
+    _bmc_file=$(basename "$1")
+    _bmc_log=${2:-}
+    bh_make_find
+    if [ "$BH_MAKE_TYPE" = gnu ]; then
+        set -- "$1" -o "$_bmc_file"
+    else
+        set -- "$1"
+    fi
+    if [ -n "$_bmc_log" ]; then
+        ( cd "$(dirname "$1")" && shift \
+            && bh_make_run "$@" -f "$_bmc_file" clean ) >> "$_bmc_log" 2>&1
+        return
+    fi
+    ( cd "$(dirname "$1")" && shift \
+        && bh_run clean bh_make_run "$@" -f "$_bmc_file" clean ) \
         || bh_error "clean failed in $(dirname "$1")"
 }
 
-# bh_make_clean_lenient <makefile>
+# bh_make_clean_lenient <makefile> [<log>]
 #
 # Runs the `clean` target of <makefile> like bh_make_clean, but goes on past
 # the sub-Makefiles that fail to clean (`make -k`), such as a subproject not
-# made yet, and only notes a failure, with its log; a no-op when <makefile>
-# does not exist.
+# made yet, and only notes a failure, with its log (<log>, else a `clean` log
+# of the current step); a no-op when <makefile> does not exist. It runs right
+# after qmake (see `bh_qmake_clean`); hence it needs no `-o` (see
+# `bh_make_clean`).
 bh_make_clean_lenient() {
     [ -f "$1" ] || return 0
-    _step=$((_step + 1))
-    _mcl_log=$LOGS/$(printf '%02d-%s.log' "$_step" clean)
+    _mcl_log=${2:-}
+    if [ -z "$_mcl_log" ]; then
+        _mcl_log=$LOGS/$(printf '%02d-%s.log' "$_step" clean)
+    fi
     if ! ( cd "$(dirname "$1")" && bh_make_run -f "$(basename "$1")" -k clean ) \
             > "$_mcl_log" 2>&1; then
         echo "  (note: cleaning had partial failures; see $_mcl_log)" 1>&2
     fi
+}
+
+# bh_makefile_stale <makefile>
+#
+# Tells whether GNU make would run qmake again for <makefile> through the
+# Makefile's own rule, which names every file qmake read; `make -q` answers
+# that, and runs nothing. Never under --ignore-pri (that rule names every
+# `.pri`), nor for nmake and jom, which never remake a Makefile.
+bh_makefile_stale() {
+    [ "${BH_IGNORE_PRI:-0}" -eq 0 ] || return 1
+    bh_make_find
+    [ "$BH_MAKE_TYPE" = gnu ] || return 1
+    ! ( cd "$(dirname "$1")" \
+        && "$BH_MAKE" -q -f "$(basename "$1")" "$(basename "$1")" ) > /dev/null 2>&1
 }
 
 # bh_makefile_mode_differs <makefile>
