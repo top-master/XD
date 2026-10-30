@@ -1173,6 +1173,18 @@ bh_parse_args() {
         fi
     done
 
+    # Picks the label before a parent's filter joins --filter;
+    # build-handler.md lists the labels.
+    if [ -n "${BH_FILTER:-}" ]; then
+        BH_BUILD_LABEL='Filtered build'
+    elif [ "$_bhpa_child" -eq 1 ]; then
+        BH_BUILD_LABEL='Dependency build'
+    elif [ "${BH_SAVE_SPACE:-0}" -eq 1 ]; then
+        BH_BUILD_LABEL='--save-space build'
+    else
+        BH_BUILD_LABEL='Building root project'
+    fi
+
     if [ "$_bhpa_child" -eq 1 ]; then
         bh_filter_add "$_bh_parent_xd_build_filter"
         BH_BUILD_DIR_SHOWN=$_bh_parent_build_dir_shown
@@ -3772,6 +3784,9 @@ bh_template_app() {
     # builds the per-mode symlink farm (~4 s for full Qt). Without
     # spinners these looked like the script had hung after the `[√]` of
     # the previous step, so each shows a spinner row.
+    if [ "${BH_NO_BUILD:-0}" -eq 0 ]; then
+        bh_build_header "$_pro"
+    fi
     bh_target_resolve "$_pro"
     bh_run_silent_fg 'Staging Qt plugins for runtime search path' \
         bh_searchpath_plugins
@@ -3869,6 +3884,12 @@ bh_template_app() {
 
 
 # ---- one-stop driver for subdirs (workspace) consumers ----------------
+
+# Args: <pro>
+bh_build_header() {
+    echo
+    echo "$BH_BUILD_LABEL: ${1#"$BH_ROOT"/}"
+}
 
 # Args: <makefile> <label>
 bh_qmake_clean() {
@@ -4176,6 +4197,7 @@ bh_template_subdirs() {
         bh_build_in_order "$_pro"
     elif [ "${BH_NO_BUILD:-0}" -eq 0 ]; then
         # Normal build: (re)generate Makefiles, then compile.
+        bh_build_header "$_pro"
         # shellcheck disable=SC2086  # intentional word-split of forwarded args.
         bh_run_qmake qmake "$_pro" $BH_REMAINING_ARGS
         bh_make "$JOBS"

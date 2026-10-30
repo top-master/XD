@@ -345,7 +345,7 @@ bh_build_candidate() {
             return 0
         fi
         echo
-        echo "Filtered build [$_bw_total/$_bw_count]: $_bc_rel"
+        echo "$BH_BUILD_LABEL [$_bw_total/$_bw_count]: $_bc_rel"
         ( cd "$_bc_bd" && BH_MAKEFILE=$_bc_makefile bh_make "$JOBS" ) \
             || bh_error "--filter: build failed for $_bc_rel"
         return 0
@@ -397,7 +397,7 @@ bh_build_alone() {
         echo "--rebuild: $2 matches; building it again."
         _ba_clean=1
     fi
-    echo "Filtered build${3:+ $3}: $2"
+    echo "$BH_BUILD_LABEL${3:+ $3}: $2"
     _ba_order=
     if [ "${BH_SAVE_SPACE:-0}" -ne 1 ] \
             && ! BU_PRO=$1 bh_save_space_has_line 'NF == 3 && $1 == ENVIRON["BU_PRO"]'; then
