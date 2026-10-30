@@ -2603,7 +2603,7 @@ else
     # Prints the projects the last build built, in order, space-separated.
     _bh_spec_built() {
         printf '%s\n' "$_bh_spec_out" \
-            | sed -n 's/^Filtered build\( \[[0-9/]*\]\)\{0,1\}: //p; s/^--save-space build \[[0-9/]*\]: //p' \
+            | sed -nE 's/^(Filtered build|Dependency build|Building root project|--save-space build)( \[[0-9/]*\])?: //p' \
             | tr '\n' ' '
     }
     # _bh_spec_lines <order|finished|unfinished>
@@ -2619,6 +2619,8 @@ else
 
     _bh_spec_build
     expect 'plain build succeeds' 0 "$_bh_spec_rc"
+    expect 'under a header that names the project, after an empty line' 1 \
+        "$(printf '%s\n' "$_bh_spec_out" | grep -B1 '^Building root project: top\.pro$' | grep -c '^$')"
     expect 'plain build writes no cache' '' \
         "$(ls "$_bh_spec_bd/.qmake.save_space" 2>/dev/null)"
 
@@ -2800,6 +2802,12 @@ else
     expect 'with no step of its own either' '' \
         "$(_bh_spec_logs '[0-9]-clean\.log$')"
     unset -f _bh_spec_logs
+    _bh_spec_build --child --rebuild=zlib --debug
+    expect 'a --child run with no --filter names it a dependency build' 1 \
+        "$(printf '%s\n' "$_bh_spec_out" | grep -c '^Dependency build \[1/[0-9]*\]: zlib/zlib\.pro$')"
+    _bh_spec_build --rebuild=zlib --debug
+    expect 'and a run of its own, with no --filter, the root project' 1 \
+        "$(printf '%s\n' "$_bh_spec_out" | grep -c '^Building root project \[1/[0-9]*\]: zlib/zlib\.pro$')"
 
     _bh_spec_build --clean --no-build
     expect 'a bare --clean removes the cache' '' \

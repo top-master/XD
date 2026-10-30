@@ -306,6 +306,13 @@ values to change behavior. A few useful ones:
   `build.sh` sets it after loading `build-handler.sh`. Those builds then run
   on every run, doing only what changed, as the run cannot tell whether XD
   has those parts already; `--xd-filter` only narrows it further.
+- `BH_BUILD_LABEL`: the name that a build's header starts with, both the
+  header of each project of a project-by-project build (such as
+  `Filtered build [3/9]: <path>`) and the one of the whole project (see
+  `bh_build_header`). It is `Filtered build` when the run got `--filter`, else
+  `Dependency build` in a `--child` run, else `--save-space build` under
+  `--save-space`, else `Building root project`. The run sets it itself, once
+  the flags are read.
 
 Two variables are special, as a run passes them on to the builds it starts
 (see `bh_dependency_build`), and only a `--child` run takes them from its
@@ -430,6 +437,11 @@ reads that whole file.
   the row, prints `<line>` where it was, then draws the row again below it;
   hence the row stays pinned under the lines a step prints. Without a live
   progress display, it only prints `<line>` to stderr.
+- `bh_build_header <pro>` prints an empty line, then `BH_BUILD_LABEL` and the
+  path of `<pro>` relative to `BH_ROOT` (such as
+  `Building root project: <path>`), ahead of the steps that build the whole
+  project; hence that build gets a header like each project of a
+  project-by-project build.
 
 ### XD build helper
 
