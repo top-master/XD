@@ -15,6 +15,29 @@ bh_pro_files() {
         ! -path "$BH_ROOT/todo/*" 2>/dev/null || true; } | sort
 }
 
+# Args: [--relax]
+bh_filter_paths() {
+    if [ "${1:-}" = --relax ]; then
+        awk -v root="$BH_ROOT/" '{ print substr($0, length(root) + 1) }'
+    else
+        awk -v root="$BH_ROOT/" 'index($0, root) == 1 { print substr($0, length(root) + 1) }'
+    fi \
+    | bh_grep_lines "${BH_FILTER:-${BH_REBUILD:-}}" \
+    | awk -v root="$BH_ROOT/" '{ print root $0 }'
+}
+
+# Args: <regexp>
+bh_grep_lines() {
+    _bgl_line=${1%%"
+"*}
+    if [ "$_bgl_line" = "$1" ]; then
+        grep -E -- "$_bgl_line" || [ $? -eq 1 ]
+        return
+    fi
+    { grep -E -- "$_bgl_line" || [ $? -eq 1 ]; } | bh_grep_lines "${1#*"
+"}"
+}
+
 # bh_build_in_order <pro>
 #
 # The build path of --save-space and of --filter. It drives the build from the
@@ -55,6 +78,7 @@ bh_build_in_order() {
     BH_ORDER_ROOT=$1
     # Without --filter, only a --rebuild that names its matches reaches the
     # projects the cache does not list; the root project covers the rest.
+    _bio_unrecorded=1
     if [ -z "${BH_FILTER:-}" ] \
             && { [ -z "${BH_REBUILD:-}" ] || [ "$BH_REBUILD" = '^.*$' ]; }; then
         _bio_unrecorded=0
@@ -67,6 +91,7 @@ bh_build_in_order() {
     if [ "${BH_SAVE_SPACE:-0}" -eq 1 ]; then
         echo "--save-space: built $_bw_made, skipped $_bw_skipped up-to-date, of $_bw_total project(s)."
     fi
+    [ "$_bio_unrecorded" -eq 1 ] || return 0
     _bio_status=0
     bh_build_unrecorded || _bio_status=$?
     case "$_bio_status" in
@@ -373,10 +398,15 @@ bh_build_alone() {
         _ba_clean=1
     fi
     echo "Filtered build${3:+ $3}: $2"
+    _ba_order=
+    if [ "${BH_SAVE_SPACE:-0}" -ne 1 ] \
+            && ! BU_PRO=$1 bh_save_space_has_line 'NF == 3 && $1 == ENVIRON["BU_PRO"]'; then
+        _ba_order=CONFIG+=save_order
+    fi
     # shellcheck disable=SC2086  # intentional word-split of forwarded args.
     ( mkdir -p "$_ba_bd" && cd "$_ba_bd" \
         && BH_MAKEFILE=$_ba_mf BH_FORCE_QMAKE=$_ba_force BH_QMAKE_CLEAN=$_ba_clean \
-            bh_run_qmake qmake "$1" $BH_REMAINING_ARGS \
+            bh_run_qmake qmake "$1" $_ba_order $BH_REMAINING_ARGS \
         && BH_MAKEFILE=$_ba_mf bh_make "$JOBS" ) \
         || bh_error "--filter: build failed for $2"
     if [ "${BH_SAVE_SPACE:-0}" -eq 1 ]; then
@@ -402,11 +432,12 @@ bh_build_alone() {
 # status: 0 when a project was left for it, 10 when none was, and the failed
 # step's own status else.
 bh_build_unrecorded() {
+    _bu_mode=${1:-build}
     # fd 4 keeps the caller's stdin for the build steps, while the loop reads
     # the pipe on fd 3. `|| true`: a `find` that could not read some dir still
     # listed the rest.
     {
-        bh_pro_files \
+        bh_pro_files | bh_filter_paths --relax \
         | {
             _bu_total=0
             while IFS= read -r _bu_pro <&3; do
@@ -421,6 +452,7 @@ bh_build_unrecorded() {
                     continue
                 fi
                 _bu_total=$((_bu_total + 1))
+                [ "$_bu_mode" = build ] || continue
                 if [ "${BH_SAVE_SPACE:-0}" -eq 1 ] && bh_pro_is_subdirs "$_bu_pro"; then
                     echo "--save-space: $_bu_rel is a subdirs project; its subprojects build on their own."
                     continue
@@ -436,6 +468,10 @@ bh_build_unrecorded() {
                 bh_build_alone "$_bu_pro" "$_bu_rel" \
                     "[$((_bw_total + _bu_total))/$_bw_count]"
             done
+            if [ "$_bu_mode" = count ]; then
+                echo "$_bu_total"
+                exit 0
+            fi
             [ "$_bu_total" -gt 0 ] || exit 10
         } 3<&0 0<&4
     } 4<&0

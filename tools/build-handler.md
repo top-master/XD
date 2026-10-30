@@ -237,6 +237,10 @@ A run passes these to the builds it starts itself; you never need to type them.
   so it doesn't redo work for nothing. `--qmake` forces it anyway.
 - It **redoes qmake** when `--static=<regexp>` picks other projects than when
   the plans were made; hence the new choice always takes effect.
+- It **remembers the build order**: a project's first qmake records its place
+  in that order when it has none yet (one the root project does not list, say;
+  `--save-space` records every project anyway). Hence `--filter` builds its
+  matches in their right order, whatever filter a later run uses.
 - It **cleans** when a build folder was made with another toolchain (another
   spec, or `--memory-safe` turned on or off), right after it redoes qmake;
   hence nothing the old compiler built ends up in the new link.
@@ -402,6 +406,10 @@ A run reaches these hook stages in this order:
 - `test-env`: right before each test runs; a hook exports what the test
   binaries read from their environment.
 
+The helpers below are documented here rather than in `build-handler.sh`,
+whose own comments stay short: every run, and every sub-shell build it starts,
+reads that whole file.
+
 ### Build folder helpers
 
 - `bh_build_dir_gate` shows the build folder and asks whether to go on with it
@@ -430,6 +438,23 @@ A run reaches these hook stages in this order:
   this run (`BH_XD_ARGS`) as `--<flag>`, after this run's other flags (hence
   they win) and ahead of the qmake arguments; that build also gets
   `BH_XD_BUILD_FILTER` (see `bh_xd_build`).
+
+### Build order helper
+
+- `bh_build_unrecorded [mode-tag]` builds the projects that the build order
+  does not list. If the mode-tag is set to "count" without quotes, then it only
+  prints how many projects it would build, hence the counter of each line can
+  cover the recorded projects and these at once.
+- `bh_filter_paths [--relax]` passes on, from the absolute `.pro` paths on its
+  input, the ones that `--filter` can keep (or, without `--filter`,
+  `--rebuild`), with one `grep -E` per line of its regexp for all of them at
+  once; hence a loop asks `bh_filter_candidate` about the few that pass, not
+  about every `.pro` of the tree. It drops a path that does not start with
+  `"$BH_ROOT/"`, unless the caller passes `--relax`, which skips that check;
+  pass it only when every path is sure to start with `"$BH_ROOT/"` (as the
+  paths of `bh_pro_files` do, since `find` prints them under `BH_ROOT`).
+- `bh_grep_lines <regexp>` passes on the input lines that every line of
+  `<regexp>` matches (see `bh_regexp_matches`); finding no line is no failure.
 
 ### Clean helpers
 

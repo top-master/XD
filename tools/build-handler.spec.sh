@@ -1981,6 +1981,41 @@ expect 'subdirs: ahead of a preset suffix' /p/build/ws-static-debug \
     "$(BH_BUILD_DIR_SUFFIX=-debug; _bh_spec_build_dir bh_template_subdirs --static)"
 unset -f _bh_spec_build_dir
 
+# A project built alone records its place in the build order: its qmake gets
+# CONFIG+=save_order, unless --save-space logs that already.
+# _bh_spec_alone <BH_SAVE_SPACE>
+# Prints the qmake arguments bh_build_alone passes after the `.pro`.
+_bh_spec_alone() (
+    BUILD_DIR=$(mktemp -d) BH_ROOT=/p BH_CANDIDATE=build BH_SAVE_SPACE=$1
+    BH_REMAINING_ARGS=
+    bh_run_qmake() { shift 2; echo "qmake: $*"; }
+    bh_make() { :; }
+    bh_save_space_mark_finished() { :; }
+    bh_build_alone /p/a/a.pro a/a.pro | sed -n 's/^qmake: //p'
+    rm -rf "$BUILD_DIR"
+)
+expect 'a project built alone records its build order line too' CONFIG+=save_order \
+    "$(_bh_spec_alone 0)"
+expect 'except under --save-space, which records it already' '' "$(_bh_spec_alone 1)"
+expect 'nor for a project that has its order line already' '' \
+    "$(bh_save_space_has_line() { true; }; _bh_spec_alone 0)"
+unset -f _bh_spec_alone
+
+# bh_filter_paths keeps only the paths every line of the filter matches, for
+# all of them at once.
+_bh_spec_paths() (
+    BH_ROOT=/p BH_FILTER=$1 BH_REBUILD=
+    printf '%s\n' /p/a/a.pro /p/b/b.pro /p/ab/ab.pro | bh_filter_paths | tr '\n' ' '
+)
+expect 'bh_filter_paths keeps what every line of --filter matches' '/p/ab/ab.pro ' \
+    "$(_bh_spec_paths "a
+b")"
+expect 'and passes every path without one' '/p/a/a.pro /p/b/b.pro /p/ab/ab.pro ' \
+    "$(_bh_spec_paths '')"
+expect 'and drops a path that is not under BH_ROOT' '' \
+    "$( (BH_ROOT=/p BH_FILTER=a; printf '/q/a/a.pro\n' | bh_filter_paths) 2>&1)"
+unset -f _bh_spec_paths
+
 # _bh_spec_gate [<function>]
 # Prints the folder that bh_build_dir_gate shows, with a display-build-dir hook
 # <function> added after the default one.
@@ -2597,6 +2632,8 @@ else
         "$(grep -c '^Recording build order' "$_bh_spec_bd"/logs/*-build-order.log)"
     expect '--filter builds in dependency order' \
         'zlib/zlib.pro app/app.pro dr/dr.pro tests/t1/t1.pro ' "$(_bh_spec_built)"
+    expect 'numbering each of one total' 1 \
+        "$(printf '%s\n' "$_bh_spec_out" | grep -c '^Filtered build \[4/4\]: tests/t1/t1\.pro$')"
     expect 'the cache lists one order line per variant' \
         'zlib/zlib.pro app/app.pro dr/dr.pro dr/dr.pro tests/t1/t1.pro tests/t2/t2.pro pair/one.pro pair/two.pro ' \
         "$(_bh_spec_lines order)"

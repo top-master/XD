@@ -1299,6 +1299,8 @@ bh_forward_note() {
                 | --static | --static=* \
                 | --format | --estimate-actions=* \
                 | --test | --tests | --run | -d | --directory | --clean \
+                | --rebuild | --rebuild=* | --wipe | --qmake | --refresh \
+                | --force-qmake \
                 | --xd-* | --no-xd-* | --qt-* | --no-qt-*)
             return 0
             ;;
