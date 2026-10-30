@@ -1768,8 +1768,8 @@ expect '--xd-<flag> passes --<flag> to XD'"'"'s static build, even a whole one' 
     '--static --child --headless --clean [||]' \
     "$(_bh_spec_xd_build --static >/dev/null; _bh_spec_xd_build --static --xd-clean)"
 expect 'after this run'"'"'s flags, hence it wins, and ahead of the qmake arguments' \
-    '--static --child --headless --rebuild=x --rebuild=y -- CONFIG+=a [||]' \
-    "$(_bh_spec_xd_build --static --rebuild=x --xd-rebuild=y -- CONFIG+=a)"
+    '--static --child --headless --release --debug -- CONFIG+=a [||]' \
+    "$(_bh_spec_xd_build --static --release --xd-debug -- CONFIG+=a)"
 # BH_XD_BUILD_FILTER narrows XD's build, which then runs on every run.
 expect 'BH_XD_BUILD_FILTER reaches XD'"'"'s static build, which builds only what it matches' \
     '--static --child --headless [||] ^src/a\.pro$' \
@@ -1803,10 +1803,12 @@ expect 'every flag goes along as given, with its value' \
     "$(_bh_spec_xd_build --release -v --static --no-progress --save-space \
         --headless --get build-dir)"
 _bh_spec_no_gui
-expect 'so do --rebuild, --qmake, and the qmake arguments' \
-    '--static --child --headless --rebuild=x --qmake --libc=musl --cross-compile -- CONFIG+=a b [||]' \
-    "$(_bh_spec_xd_build --static --rebuild=x --qmake --libc=musl \
-        --cross-compile -- CONFIG+=a b)"
+expect 'so do the build settings and the qmake arguments' \
+    '--static --child --headless --libc=musl --cross-compile -- CONFIG+=a b [||]' \
+    "$(_bh_spec_xd_build --static --libc=musl --cross-compile -- CONFIG+=a b)"
+_bh_spec_no_gui
+expect 'but not a flag that redoes or drops what XD built' '--static --child --headless [||]' \
+    "$(_bh_spec_xd_build --static --rebuild=x --rebuild --wipe --qmake --refresh --force-qmake)"
 _bh_spec_no_gui
 expect 'but not --clean, which would clean what the framework built' \
     '--static --child --headless --release [||]' "$(_bh_spec_xd_build --static --clean --release)"
@@ -1978,6 +1980,41 @@ expect 'subdirs: --static adds -static' /p/build/ws-static \
 expect 'subdirs: ahead of a preset suffix' /p/build/ws-static-debug \
     "$(BH_BUILD_DIR_SUFFIX=-debug; _bh_spec_build_dir bh_template_subdirs --static)"
 unset -f _bh_spec_build_dir
+
+# A project built alone records its place in the build order: its qmake gets
+# CONFIG+=save_order, unless --save-space logs that already.
+# _bh_spec_alone <BH_SAVE_SPACE>
+# Prints the qmake arguments bh_build_alone passes after the `.pro`.
+_bh_spec_alone() (
+    BUILD_DIR=$(mktemp -d) BH_ROOT=/p BH_CANDIDATE=build BH_SAVE_SPACE=$1
+    BH_REMAINING_ARGS=
+    bh_run_qmake() { shift 2; echo "qmake: $*"; }
+    bh_make() { :; }
+    bh_save_space_mark_finished() { :; }
+    bh_build_alone /p/a/a.pro a/a.pro | sed -n 's/^qmake: //p'
+    rm -rf "$BUILD_DIR"
+)
+expect 'a project built alone records its build order line too' CONFIG+=save_order \
+    "$(_bh_spec_alone 0)"
+expect 'except under --save-space, which records it already' '' "$(_bh_spec_alone 1)"
+expect 'nor for a project that has its order line already' '' \
+    "$(bh_save_space_has_line() { true; }; _bh_spec_alone 0)"
+unset -f _bh_spec_alone
+
+# bh_filter_paths keeps only the paths every line of the filter matches, for
+# all of them at once.
+_bh_spec_paths() (
+    BH_ROOT=/p BH_FILTER=$1 BH_REBUILD=
+    printf '%s\n' /p/a/a.pro /p/b/b.pro /p/ab/ab.pro | bh_filter_paths | tr '\n' ' '
+)
+expect 'bh_filter_paths keeps what every line of --filter matches' '/p/ab/ab.pro ' \
+    "$(_bh_spec_paths "a
+b")"
+expect 'and passes every path without one' '/p/a/a.pro /p/b/b.pro /p/ab/ab.pro ' \
+    "$(_bh_spec_paths '')"
+expect 'and drops a path that is not under BH_ROOT' '' \
+    "$( (BH_ROOT=/p BH_FILTER=a; printf '/q/a/a.pro\n' | bh_filter_paths) 2>&1)"
+unset -f _bh_spec_paths
 
 # _bh_spec_gate [<function>]
 # Prints the folder that bh_build_dir_gate shows, with a display-build-dir hook
@@ -2594,8 +2631,10 @@ else
         "$(printf '%s\n' "$_bh_spec_out" | grep -c '^Recording build order')"
     expect '--filter builds in dependency order, then the unrecorded match' \
         'zlib/zlib.pro app/app.pro dr/dr.pro tests/t1/t1.pro ' "$(_bh_spec_built)"
+    expect 'numbering it after the recorded ones, of one total' 1 \
+        "$(printf '%s\n' "$_bh_spec_out" | grep -c '^Filtered build \[4/4\]: tests/t1/t1\.pro$')"
     expect 'the cache lists one order line per variant' \
-        'zlib/zlib.pro app/app.pro dr/dr.pro dr/dr.pro ' "$(_bh_spec_lines order)"
+        'zlib/zlib.pro app/app.pro dr/dr.pro dr/dr.pro tests/t1/t1.pro ' "$(_bh_spec_lines order)"
     expect 'without --save-space no finished line is written' '' \
         "$(_bh_spec_lines finished)"
 
@@ -2632,7 +2671,7 @@ else
     expect '--qmake with --filter records again, then filters' 1 \
         "$(printf '%s\n' "$_bh_spec_out" | grep -c '^Recording build order')"
     expect '--qmake keeps the order lines' \
-        'zlib/zlib.pro app/app.pro dr/dr.pro dr/dr.pro ' "$(_bh_spec_lines order)"
+        'zlib/zlib.pro app/app.pro dr/dr.pro dr/dr.pro tests/t1/t1.pro tests/t2/t2.pro pair/one.pro pair/two.pro ' "$(_bh_spec_lines order)"
 
     _bh_spec_build --filter 'zlib|app' --rebuild=app
     expect 'without --save-space, --rebuild builds every match, in order' \
@@ -2642,13 +2681,13 @@ else
         "$(printf '%s\n' "$_bh_spec_out" | grep '^--rebuild:')"
     expect 'and it still writes no finished line' '' "$(_bh_spec_lines finished)"
     _bh_spec_build --rebuild
-    expect 'a bare --rebuild alone rebuilds the whole root in order' \
-        'zlib/zlib.pro app/app.pro dr/dr.pro ' "$(_bh_spec_built)"
-    expect 'cleaning each project first' 3 \
+    expect 'a bare --rebuild rebuilds every recorded project, in order' \
+        'zlib/zlib.pro app/app.pro dr/dr.pro tests/t1/t1.pro tests/t2/t2.pro pair/one.pro pair/two.pro ' "$(_bh_spec_built)"
+    expect 'cleaning each project first' 7 \
         "$(printf '%s\n' "$_bh_spec_out" | grep -c '^--rebuild:')"
     _bh_spec_build --rebuild=tests/t2
-    expect '--rebuild alone builds the root, then reaches its unrecorded match' \
-        'zlib/zlib.pro app/app.pro dr/dr.pro tests/t2/t2.pro ' "$(_bh_spec_built)"
+    expect '--rebuild alone builds the root, then the projects built alone before, recorded since' \
+        'zlib/zlib.pro app/app.pro dr/dr.pro tests/t1/t1.pro tests/t2/t2.pro pair/one.pro pair/two.pro ' "$(_bh_spec_built)"
     expect 'cleaning only that match' 1 \
         "$(printf '%s\n' "$_bh_spec_out" | grep -c '^--rebuild:')"
 
