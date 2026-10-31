@@ -175,6 +175,15 @@ unset BH_REMAINING_ARGS BH_MAKE_ARGS
 bh_parse_args --headless CONFIG+=foo bar -- -k V=1
 expect 'the qmake arguments end at `--`' \
     'CONFIG+=foo bar' "$BH_REMAINING_ARGS"
+expect 'what follows `--` goes to make' '-k V=1' "$BH_MAKE_ARGS"
+
+unset BH_REMAINING_ARGS BH_MAKE_ARGS
+bh_parse_args --headless -- -k
+expect '`--` right after the flags leaves no qmake argument' '' "$BH_REMAINING_ARGS"
+expect '`--` right after the flags hands make the rest' '-k' "$BH_MAKE_ARGS"
+
+expect 'an unknown flag stops the run, naming `--`' 1 \
+    "$( (bh_parse_args --headless --help) 2>&1 | grep -c "unknown flag '--help'.*build.sh -- --help")"
 
 unset BH_REMAINING_ARGS
 bh_parse_args --headless CONFIG+=qux
@@ -271,6 +280,42 @@ expect 'a relative BH_ROOT still puts an absolute folder on PATH' \
     "$(cd "$_bh_spec_sandbox/top" && BH_ROOT=mid/xd \
         BH_FILC_OPT_DIR=$_bh_spec_sandbox/opt bh_find_filc && command -v clang++)"
 
+# A fake whose banner names Fil-C, but which fails every compile.
+printf '#!/bin/sh\ncase "$1" in --version) echo "clang version 20 (Fil-C 0.686) fil-c-light";; *) exit 1;; esac\n' \
+    > "$_bh_spec_sandbox/top/fil-c-light/build/bin/clang++"
+expect 'a Fil-C-Light tree whose clang++ fails the compile check loses to the next one' \
+    filc-light "$(_bh_spec_find_filc)"
+
+rm -rf "$_bh_spec_sandbox"
+
+
+test_section 'bh_compile_check_cxx -- a passed check is cached by the compiler hash'
+
+_bh_spec_sandbox=$(mktemp -d)
+# A fake compiler that builds once, then fails; hence a second success can
+# only come from the cache.
+printf '#!/bin/sh\n[ -f "%s/built" ] && exit 1\n: > "%s/built"\n' \
+    "$_bh_spec_sandbox" "$_bh_spec_sandbox" > "$_bh_spec_sandbox/once"
+printf '#!/bin/sh\nexit 1\n' > "$_bh_spec_sandbox/never"
+chmod +x "$_bh_spec_sandbox/once" "$_bh_spec_sandbox/never"
+_bh_spec_checks=$_bh_spec_sandbox/cache/build-handler/compile-checks
+
+_bh_spec_check() (
+    XDG_CACHE_HOME=$_bh_spec_sandbox/cache
+    bh_compile_check_cxx "$1" && echo pass || echo fail
+)
+
+expect 'a compiler that builds the check passes' pass "$(_bh_spec_check "$_bh_spec_sandbox/once")"
+expect 'the pass is kept under the hash of the compiler and where it sits' \
+    "cxx-$(bh_compile_check_key "$_bh_spec_sandbox/once")" "$(ls "$_bh_spec_checks")"
+cp "$_bh_spec_sandbox/once" "$_bh_spec_sandbox/once-copy"
+expect 'a copy of a passed compiler elsewhere is checked on its own' \
+    fail "$(_bh_spec_check "$_bh_spec_sandbox/once-copy")"
+expect 'a kept pass answers without running the compiler again' \
+    pass "$(_bh_spec_check "$_bh_spec_sandbox/once")"
+expect 'a compiler that fails the check fails' fail "$(_bh_spec_check "$_bh_spec_sandbox/never")"
+expect 'a failed check is not kept' 1 "$(ls "$_bh_spec_checks" | wc -l | tr -d ' ')"
+
 rm -rf "$_bh_spec_sandbox"
 
 
@@ -356,6 +401,11 @@ expect 'nmake drops a trailing -j' \
     "$(_bh_spec_make win32-msvc2015 8 -k -j)"
 expect '-C <dir> runs nmake in <dir>' \
     'nmake sub -nologo mocables' "$(_bh_spec_make win32-msvc2017 -C sub mocables)"
+expect 'the arguments after -- go to every make run, after its own' \
+    'make sub -k clean V=1' "$(BH_MAKE_ARGS='V=1'; _bh_spec_make linux-g++ -C sub -k clean)"
+expect 'nmake gets the arguments after -- in its own form' \
+    "nmake ${_bh_spec_sandbox##*/} -nologo all -k" \
+    "$(BH_MAKE_ARGS='-j4 -k'; _bh_spec_make win32-msvc2017 all)"
 expect 'the cross target spec decides over the host one' \
     "make ${_bh_spec_sandbox##*/} all" \
     "$(BH_CROSS_SPEC=win32-g++; QMAKESPEC=win32-msvc2017; unset BH_MAKE BH_MAKE_TYPE
@@ -2521,6 +2571,29 @@ expect_returns 'bh_strict_mode aborts subshell on first failure' 1 sh -c '
 
 # ---- specs: build modes, end to end ------------------------------------
 
+test_section 'save_order -- Windows drive paths'
+
+_bh_spec_qmake=$_spec_dir/../bin/qmake
+if [ ! -x "$_bh_spec_qmake" ]; then
+    test_skip 'Windows drive path conversion' 'needs XD qmake'
+else
+    _bh_spec_sandbox=$(mktemp -d)
+    _bh_spec_qmake=$(cd "$_spec_dir/../bin" && pwd)/qmake
+    cat > "$_bh_spec_sandbox/path.pro" <<'EOF'
+TEMPLATE = aux
+CONFIG -= qt
+QMAKE_HOST.os = Windows
+include($$[QT_HOST_DATA]/mkspecs/xd/save_order.prf)
+message(converted=$$saveOrderShellPath(R:/workspace/output/module))
+EOF
+    _bh_spec_path_out=$(cd "$_bh_spec_sandbox" \
+        && "$_bh_spec_qmake" path.pro 2>&1)
+    expect 'Windows drive paths use the shell spelling' 1 \
+        "$(printf '%s\n' "$_bh_spec_path_out" \
+            | grep -q 'converted=/r/workspace/output/module' && echo 1 || echo 0)"
+    rm -rf "$_bh_spec_sandbox"
+fi
+
 test_section 'build modes -- --filter / --save-space / --rebuild / --clean, end to end'
 
 # Drives bh_template_subdirs on a small project in a sandbox: a static lib,
@@ -2566,6 +2639,15 @@ else
             > "$_bh_spec_src/pair/$_bh_spec_t.pro"
     done
     cp "$_bh_spec_src/dr/m.cpp" "$_bh_spec_src/pair/"
+    printf 'TEMPLATE = subdirs\nSUBDIRS = one.pro two.pro\n' > "$_bh_spec_src/pair/pair.pro"
+    printf 'TEMPLATE = app\nQT =\nSOURCES = m.cpp\n' > "$_bh_spec_src/extra/extra.pro"
+    # A test that tests.pro does not list, as on another platform.
+    printf 'TEMPLATE = app\nQT =\nSOURCES = m.cpp\n' > "$_bh_spec_src/tests/t3/t3.pro"
+    cp "$_bh_spec_src/dr/m.cpp" "$_bh_spec_src/tests/t3/"
+    # The root of another build beside the root project, which lists extra/;
+    # hence it shows whether the walk up takes the build's own root project.
+    printf 'TEMPLATE = subdirs\nSUBDIRS = extra\n' > "$_bh_spec_src/other.pro"
+    cp "$_bh_spec_src/dr/m.cpp" "$_bh_spec_src/extra/"
     _bh_spec_tab=$(printf '\t')
 
     # _bh_spec_build [flags...]
@@ -2662,10 +2744,24 @@ else
     expect 'a single match builds in its recorded order' 'tests/t2/t2.pro ' \
         "$(_bh_spec_built)"
 
+    _bh_spec_build --filter 'tests/t3'
+    expect 'a project its subdirs project does not list is left out' '' "$(_bh_spec_built)"
+    expect 'saying which subdirs project leaves it out' 1 \
+        "$(printf '%s\n' "$_bh_spec_out" \
+            | grep -c '^--filter: tests/t3/t3.pro is not listed by tests/tests.pro; leaving it out\.$')"
+    expect 'and failing, as the filter matches no project of the build' 1 "$_bh_spec_rc"
+
+    _bh_spec_build --filter 'extra/'
+    expect 'a project the root project does not list builds on its own' \
+        'extra/extra.pro ' "$(_bh_spec_built)"
+    expect 'never through the root of another build beside the root project' 0 \
+        "$(printf '%s\n' "$_bh_spec_out" | grep -c 'other\.pro')"
+
     _bh_spec_build --filter 'tests/tests.pro'
     expect 'a subdirs .pro the filter names builds too' 'tests/tests.pro ' \
         "$(_bh_spec_built)"
 
+    # The filter matches their subdirs project too, which builds after them.
     _bh_spec_build --filter 'pair/'
     expect 'two projects of one dir build in their recorded order' \
         'pair/one.pro pair/two.pro pair/pair.pro ' "$(_bh_spec_built)"
@@ -2989,12 +3085,90 @@ else
         'zlib/zlib.pro app/app.pro ' "$(_bh_spec_lines order)"
     expect 'while every match still builds' 'zlib/zlib.pro app/app.pro ' \
         "$(_bh_spec_built)"
+    _bh_spec_build --filter 'tests/t1'
+    expect 'a match the stopped recording never reached builds' 'tests/t1/t1.pro ' \
+        "$(_bh_spec_built)"
+    expect 'once the subdirs project that the root lists above it is qmaked' 1 \
+        "$(grep -c '^Recording build order of tests/tests.pro via qmake\.\.\.$' \
+            "$_bh_spec_bd"/logs/*-build-order.log)"
+    expect 'which records its whole subtree' \
+        'zlib/zlib.pro app/app.pro tests/t1/t1.pro tests/t2/t2.pro ' "$(_bh_spec_lines order)"
+    _bh_spec_build --filter 'tests/t3'
+    expect 'a subdirs project whose list is on record needs no qmake again' 0 \
+        "$(printf '%s\n' "$_bh_spec_out" | grep -c '^Recording build order of')"
+    expect 'and its list alone leaves the match out' 1 \
+        "$(printf '%s\n' "$_bh_spec_out" | grep -c 'is not listed by tests/tests.pro')"
+    sleep 1
+    touch "$_bh_spec_src/tests/tests.pro"
+    _bh_spec_build --filter 'tests/t3'
+    expect 'until its .pro is newer than its Makefile, then it is qmaked again' 1 \
+        "$(grep -c '^Recording build order of tests/tests.pro via qmake\.\.\.$' \
+            "$_bh_spec_bd"/logs/*-build-order.log)"
     _bh_spec_build --force-qmake --filter 'zlib|app'
     expect '--force-qmake records past the broken project' \
         'zlib/zlib.pro app/app.pro tests/t1/t1.pro tests/t2/t2.pro dr/dr.pro dr/dr.pro ' \
         "$(_bh_spec_lines order)"
     _bh_spec_build --save-space
     expect 'a broken project fails a --save-space build' 2 "$_bh_spec_rc"
+
+    _bh_spec_capture=$_bh_spec_sandbox/test-qmake-args
+    _bh_spec_test_mode() {
+        (
+            BH_ROOT=$_bh_spec_src
+            BUILD_DIR=$_bh_spec_sandbox/test-mode
+            BH_TEST_STATIC=1 BH_STATIC_ALL=$1 BH_MODE=release
+            BH_BUILD_TESTS=1 BH_REMAINING_ARGS='CONFIG+=example'
+            _bh_tests_total=0 _bh_tests_failed=0
+            bh_run_qmake() { printf '%s\n' "$@" > "$_bh_spec_capture"; }
+            bh_make() { :; }
+            bh_run_tests() { :; }
+            bh_run_one_test "$_bh_spec_check/src/check.pro"
+        )
+    }
+    _bh_spec_test_mode 1
+    expect 'a static app builds its configured tests in static mode' 1 \
+        "$(grep -c '^CONFIG+=qt_static$' "$_bh_spec_capture")"
+    _bh_spec_test_mode 0
+    expect 'a shared app leaves its configured tests in shared mode' 0 \
+        "$(grep -c '^CONFIG+=qt_static$' "$_bh_spec_capture")"
+    unset -f _bh_spec_test_mode
+
+    _bh_spec_app_tests=$_bh_spec_sandbox/app-tests
+    mkdir -p "$_bh_spec_app_tests/first test" "$_bh_spec_app_tests/second"
+    for _bh_spec_test in 'first test' second; do
+        printf 'TEMPLATE = app\nQT =\nCONFIG += testcase\nSOURCES = m.cpp\nTARGET = tst_app_check\n' \
+            > "$_bh_spec_app_tests/$_bh_spec_test/check.pro"
+        printf 'int main() { return 0; }\n' > "$_bh_spec_app_tests/$_bh_spec_test/m.cpp"
+    done
+    _bh_spec_app_run() {
+        _bh_spec_app_out=$(
+            . "$_bh_spec_xd_dir/tools/build-handler.sh"
+            BH_ROOT=$_bh_spec_src/app
+            XD_DIR=$_bh_spec_xd_dir
+            BUILD_DIR=$_bh_spec_sandbox/app-build
+            BH_SCRIPT_NAME=build.sh
+            BH_HEADLESS=1 BH_NO_PROGRESS=1 BH_NO_XD_BUILD=1
+            BH_TEST_ROOT="$_bh_spec_app_tests/first test/check.pro
+$_bh_spec_app_tests/second/check.pro"
+            unset BH_RUN_TESTS BH_RUN_TARGET BH_NO_BUILD BH_BUILD_TESTS BH_MODE
+            unset BH_TEST_GLOB BH_REMAINING_ARGS BH_MAKE_ARGS BH_FORWARD_TAIL
+            unset BH_TARGET_NAME BH_CROSS_SPEC BH_STATIC BH_WIPE BH_CLEAN
+            unset BH_FORCE_QMAKE BH_MODE_GIVEN BH_LOG_LEVEL BH_VERBOSE QMAKE QMAKESPEC
+            bh_template_app "$_bh_spec_src/app/app.pro" \
+                --no-build --build-tests --test --no-xd-build </dev/null 2>&1
+        )
+        _bh_spec_app_rc=$?
+    }
+    _bh_spec_app_run
+    expect 'app --test runs both configured test projects' 0 "$_bh_spec_app_rc"
+    expect 'app --test records both test runs' 2 \
+        "$(find "$_bh_spec_sandbox/app-build/tests-build" -name .test-result -type f | wc -l | tr -d ' ')"
+    printf 'int main() { return 1; }\n' > "$_bh_spec_app_tests/second/m.cpp"
+    _bh_spec_app_run
+    expect 'app --test propagates a test failure' 1 "$_bh_spec_app_rc"
+    expect 'app --test reports the failed project count' 1 \
+        "$(printf '%s\n' "$_bh_spec_app_out" | grep -c 'tests: 1 of 2 test project(s) failed')"
+    unset -f _bh_spec_app_run
 
     rm -rf "$_bh_spec_sandbox"
     unset -f _bh_spec_build _bh_spec_built _bh_spec_lines _bh_spec_lists

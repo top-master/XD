@@ -36,15 +36,19 @@ host_build:contains(memory_safe, filc) {
     # bare `clang++` to the system compiler and silently emit a NATIVE .so -- which
     # links against libc.so.6 instead of Fil-C's libc.so.6666 + libpizlo and mixes
     # catastrophically with the Fil-C Qt libraries (this is exactly how the openssl
-    # .so regressed to native). Bake the ABSOLUTE Fil-C clang path into the
-    # Makefile so the link is PATH-independent and reproducible. Non-C++ targets
-    # (openssl is CONFIG-=qt C) still link via QMAKE_LINK, so pinning it is enough;
-    # QMAKE_LINK_C is pinned too for the C-linker path.
-    _ms_filc_cxx = $$system(command -v clang++)
-    _ms_filc_cc  = $$system(command -v clang)
+    # .so regressed to native). Bake the ABSOLUTE path of the compiler the banner
+    # above named into the Makefile, for compiling and linking alike, so the build
+    # is PATH-independent and reproducible; the C compiler and linker follow it.
+    _ms_filc_cxx = $$system(command -v $$QMAKE_CXX)
+    _ms_filc_cc  = $$system(command -v $$QMAKE_CC)
     !isEmpty(_ms_filc_cxx) {
-        QMAKE_LINK       = $$_ms_filc_cxx
-        QMAKE_LINK_SHLIB = $$_ms_filc_cxx
+        QMAKE_CXX          = $$_ms_filc_cxx
+        QMAKE_LINK         = $$_ms_filc_cxx
+        QMAKE_LINK_SHLIB   = $$_ms_filc_cxx
     }
-    !isEmpty(_ms_filc_cc): QMAKE_LINK_C = $$_ms_filc_cc
+    !isEmpty(_ms_filc_cc) {
+        QMAKE_CC           = $$_ms_filc_cc
+        QMAKE_LINK_C       = $$_ms_filc_cc
+        QMAKE_LINK_C_SHLIB = $$_ms_filc_cc
+    }
 }

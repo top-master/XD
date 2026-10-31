@@ -83,6 +83,9 @@ bh_build_in_order() {
             && { [ -z "${BH_REBUILD:-}" ] || [ "$BH_REBUILD" = '^.*$' ]; }; then
         _bio_unrecorded=0
     fi
+    bh_run --whole build-order bh_prepare_build_order "$1" "$_bio_unrecorded"
+    bh_build_walk prepare
+    _bw_count=$_bw_total
     # Counts those projects too, hence the counter of each line covers both.
     if [ "$_bio_unrecorded" -eq 1 ]; then
         _bw_count=$((_bw_count + $(bh_build_unrecorded count)))
@@ -102,6 +105,13 @@ bh_build_in_order() {
             ;;
         *) exit "$_bio_status" ;;
     esac
+}
+
+bh_prepare_build_order() {
+    bh_build_order_record "$1"
+    if [ "$2" -eq 1 ]; then
+        bh_build_order_extend
+    fi
 }
 
 # bh_build_order_record <pro>
@@ -442,15 +452,18 @@ bh_build_unrecorded() {
             _bu_total=0
             while IFS= read -r _bu_pro <&3; do
                 _bu_rel=${_bu_pro#"$BH_ROOT"/}
-                bh_filter_candidate "$_bu_rel"
-                [ "$BH_CANDIDATE" != skip ] || continue
-                if [ -z "${BH_FILTER:-}" ] && [ "$BH_CANDIDATE" != rebuild ]; then
-                    continue
-                fi
-                if BU_PRO=$_bu_pro bh_save_space_has_line \
-                        'NF == 3 && $1 == ENVIRON["BU_PRO"]'; then
-                    continue
-                fi
+                bh_unrecorded_candidate "$_bu_pro" || continue
+                # Builds only what a subdirs project lists, or what has none
+                # above it; bh_build_order_extend already qmaked the rest.
+                case "$BH_REACH" in
+                    left-out)
+                        if [ "$_bu_mode" = build ]; then
+                            echo "--filter: $_bu_rel is not listed by ${BH_REACH_PRO#"$BH_ROOT"/}; leaving it out."
+                        fi
+                        continue
+                        ;;
+                    qmake) continue ;;
+                esac
                 _bu_total=$((_bu_total + 1))
                 [ "$_bu_mode" = build ] || continue
                 if [ "${BH_SAVE_SPACE:-0}" -eq 1 ] && bh_pro_is_subdirs "$_bu_pro"; then
@@ -474,6 +487,182 @@ bh_build_unrecorded() {
             fi
             [ "$_bu_total" -gt 0 ] || exit 10
         } 3<&0 0<&4
+    } 4<&0
+}
+
+# bh_unrecorded_candidate <pro>
+#
+# Tells whether <pro> is a project that the filters name (see
+# bh_filter_candidate) and that the cache has no order line for, for the
+# loops over the projects the cache does not list; then BH_CANDIDATE holds
+# its kind, and BH_REACH what bh_order_reach finds for it.
+bh_unrecorded_candidate() {
+    bh_filter_candidate "${1#"$BH_ROOT"/}"
+    [ "$BH_CANDIDATE" != skip ] || return 1
+    if [ -z "${BH_FILTER:-}" ] && [ "$BH_CANDIDATE" != rebuild ]; then
+        return 1
+    fi
+    if BU_PRO=$1 bh_save_space_has_line \
+            'NF == 3 && $1 == ENVIRON["BU_PRO"]'; then
+        return 1
+    fi
+    bh_order_reach "$1"
+    return 0
+}
+
+# bh_order_lists <pro>
+#
+# Tells whether a subdirs project on record in the `.qmake.save_space` cache
+# lists <pro> as one of its subprojects (see saveOrderSubdirs() in
+# save_order.prf).
+bh_order_lists() {
+    BU_PRO=$1 bh_save_space_has_line 'NF == 2 && $2 == ENVIRON["BU_PRO"]'
+}
+
+# bh_order_qmaked <pro>
+#
+# Tells whether the subdirs project <pro> has its subprojects on record, from
+# a qmake run of it that is newer than <pro>; an older one may list what the
+# project no longer does, hence it counts as none.
+bh_order_qmaked() {
+    BU_PRO=$1 bh_save_space_has_line \
+        'NF == 2 && $1 == ENVIRON["BU_PRO"] && $2 == ""' || return 1
+    _boq_makefile=$(bh_order_makefile "$1")
+    [ -f "$_boq_makefile" ] && [ ! "$1" -nt "$_boq_makefile" ]
+}
+
+# bh_order_makefile <pro>
+#
+# Prints the path of the Makefile that a build's qmake writes for <pro> in its
+# shadow build dir: `$BUILD_DIR/Makefile` for a .pro in BH_ROOT itself, which
+# the root's qmake writes whatever the .pro's name, else the one
+# bh_makefile_of names.
+bh_order_makefile() {
+    _bom_rel=${1#"$BH_ROOT"/}
+    if [ "$(dirname "$_bom_rel")" = . ]; then
+        printf '%s\n' "$BUILD_DIR/Makefile"
+    else
+        printf '%s\n' "$BUILD_DIR/$(dirname "$_bom_rel")/$(bh_makefile_of "$1")"
+    fi
+}
+
+# bh_pro_parent <pro>
+#
+# Prints the subdirs project nearest above <pro>: a `TEMPLATE = subdirs` .pro
+# in the folder of <pro> (but <pro> itself), else in the nearest folder above
+# it, up to BH_ROOT; prints nothing when there is none. Of several in one
+# folder, the one named after the folder wins, and in BH_ROOT the build's root
+# project (BH_ORDER_ROOT, see bh_build_in_order), since the others there are
+# roots of other builds.
+bh_pro_parent() {
+    _bpp_dir=$(dirname "$1")
+    while :; do
+        if [ "$_bpp_dir" = "$BH_ROOT" ] && [ -n "${BH_ORDER_ROOT:-}" ]; then
+            [ "$BH_ORDER_ROOT" = "$1" ] || printf '%s\n' "$BH_ORDER_ROOT"
+            return 0
+        fi
+        for _bpp_pro in "$_bpp_dir/$(basename "$_bpp_dir").pro" "$_bpp_dir"/*.pro; do
+            [ "$_bpp_pro" != "$1" ] && [ -f "$_bpp_pro" ] || continue
+            if bh_pro_is_subdirs "$_bpp_pro"; then
+                printf '%s\n' "$_bpp_pro"
+                return 0
+            fi
+        done
+        [ "$_bpp_dir" != "$BH_ROOT" ] && [ "$_bpp_dir" != / ] || return 0
+        _bpp_dir=$(dirname "$_bpp_dir")
+    done
+}
+
+# bh_order_reach <pro>
+#
+# Tells, through BH_REACH, whether the build reaches <pro>, a project of the
+# source tree that has no order line, by walking up its chain of subdirs
+# projects (see bh_pro_parent) and asking the `.qmake.save_space` cache:
+#
+#   listed     a subdirs project on record lists <pro> (such as a
+#              `TEMPLATE = aux` project, which links nothing);
+#   left-out   the nearest subdirs project on record above it lists neither
+#              <pro> nor the chain down to it, as on another platform;
+#   qmake      no qmake has listed that chain yet, hence BH_REACH_PRO, the
+#              subdirs project highest up it that is still unknown, has to be
+#              qmaked first;
+#   alone      no subdirs project lies above <pro> at all.
+#
+# The build's root project (BH_ORDER_ROOT) lists only what a plain build makes
+# (XD's leaves out its tests, say); hence a chain it does not list is no
+# left-out one, but a part of the tree of its own, whose top subdirs project
+# is qmaked (or <pro> built `alone`, when that is <pro> itself).
+#
+# Next to `left-out`, BH_REACH_PRO names the project that leaves it out.
+bh_order_reach() {
+    _bre_cur=$1
+    BH_REACH_PRO=
+    while :; do
+        if bh_order_lists "$_bre_cur"; then
+            if [ "$_bre_cur" = "$1" ]; then
+                BH_REACH=listed
+            else
+                BH_REACH=qmake
+                BH_REACH_PRO=$_bre_cur
+            fi
+            return 0
+        fi
+        _bre_parent=$(bh_pro_parent "$_bre_cur")
+        if [ -z "$_bre_parent" ]; then
+            if [ "$_bre_cur" = "$1" ]; then
+                BH_REACH=alone
+            else
+                BH_REACH=qmake
+                BH_REACH_PRO=$_bre_cur
+            fi
+            return 0
+        fi
+        if bh_order_qmaked "$_bre_parent"; then
+            if [ "$_bre_parent" != "${BH_ORDER_ROOT:-}" ]; then
+                BH_REACH=left-out
+                BH_REACH_PRO=$_bre_parent
+            elif [ "$_bre_cur" = "$1" ]; then
+                BH_REACH=alone
+            else
+                BH_REACH=qmake
+                BH_REACH_PRO=$_bre_cur
+            fi
+            return 0
+        fi
+        _bre_cur=$_bre_parent
+    done
+}
+
+# bh_build_order_extend
+#
+# Records, before bh_build_walk, the build order of each part of the source
+# tree that --filter (or --rebuild) names but no qmake listed yet: for every
+# match without an order line whose chain is unknown (see bh_order_reach), it
+# qmakes that chain's subdirs project in its shadow build dir the way
+# bh_build_order_record qmakes the root, which writes the order lines of its
+# whole subtree and the list of each subdirs project in it. Hence bh_build_walk
+# then builds those matches in their build order too, and a match that no
+# subdirs project lists on this platform is left out. One `.pro` at a time, as
+# `find | sort` hands them over; a qmake that fails only warns.
+bh_build_order_extend() {
+    # fd 4 keeps the caller's stdin for the qmake steps, while the loop reads
+    # the pipe on fd 3, as in bh_build_unrecorded.
+    {
+        bh_pro_files | bh_filter_paths --relax \
+        | while IFS= read -r _boe_pro <&3; do
+            bh_unrecorded_candidate "$_boe_pro" || continue
+            [ "$BH_REACH" = qmake ] || continue
+            _boe_parent_rel=${BH_REACH_PRO#"$BH_ROOT"/}
+            echo "Recording build order of $_boe_parent_rel via qmake..."
+            _boe_makefile=$(bh_order_makefile "$BH_REACH_PRO")
+            # In a subshell, since a failed step exits its shell.
+            ( mkdir -p "$(dirname "$_boe_makefile")" \
+                && cd "$(dirname "$_boe_makefile")" \
+                && BH_MAKEFILE=$(basename "$_boe_makefile") \
+                    bh_qmake_in_build_order "$BH_REACH_PRO" CONFIG+=save_order ) \
+                || bh_warning "Recording the build order of $_boe_parent_rel failed." \
+                    "Its projects that the filters name are left out."
+        done 3<&0 0<&4
     } 4<&0
 }
 

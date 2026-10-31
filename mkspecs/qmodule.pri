@@ -34,11 +34,14 @@ sql-drivers    -= $$eval(sql-plugins)
 win32 {
     styles     += windows fusion windowsxp windowsvista
 } else: macx {
-    # macOS native style; styles.pri also force-adds `mac` on macx.
-    styles     += mac
+    # The `windows` style is the base of `QStyleSheetStyle`, hence without it
+    # `QWidget::setStyleSheet()` is declared but never built. And
+    # `styles.pri` also force-adds `mac` on macx.
+    styles     += windows fusion mac
 } else: unix {
-    # X11/other unix: Fusion is the platform-neutral default.
-    styles     += fusion
+    # Same as macx, `windows` keeps style sheets built, where Fusion is the
+    # platform-neutral default.
+    styles     += windows fusion
 } else {
     # This file may be loaded by `.qmake.conf` (which runs before mkspecs),
     # hence checking `QMAKE_PLATFORM` as well.

@@ -222,6 +222,16 @@ them.
   leaves `<regexp>` to this run, which may break this run, meaning `<regexp>` \
   is never passed to XD's build if the `=` sign is missing. |
 | `-d <dir>` / `--directory <dir>` | Build into a different folder than the usual one. A relative folder is measured from where you run the command; an absolute one (including a Windows path like `C:\…`) is kept as-is. |
+| `<word>…` \
+| Words after the flags that start with no `-` (such as `CONFIG+=x`) go to \
+  every qmake run, up to a lone `--`. |
+| `-- <argument>…` \
+| Everything after a lone `--` goes to every make run, after the run's own \
+  arguments (such as `build.sh -- -k V=1`); jom and nmake get it in their \
+  own form. |
+
+A flag that the table does not list stops the run with an error, rather than
+reach qmake unseen; pass an option of make after `--` instead.
 
 ### Internal flags
 
@@ -241,6 +251,11 @@ A run passes these to the builds it starts itself; you never need to type them.
   in that order when it has none yet (one the root project does not list, say;
   `--save-space` records every project anyway). Hence `--filter` builds its
   matches in their right order, whatever filter a later run uses.
+- It **remembers what each `subdirs` project lists**, hence `--filter` knows
+  which projects belong to the build. When a match lies in a part of the tree
+  that no qmake reached yet (a recording that stopped at a broken project,
+  say), it first qmakes the `subdirs` project above that part ("Recording
+  build order of <pro> via qmake...").
 - It **cleans** when a build folder was made with another toolchain (another
   spec, or `--memory-safe` turned on or off), right after it redoes qmake;
   hence nothing the old compiler built ends up in the new link.
@@ -453,6 +468,13 @@ reads that whole file.
 
 ### Build order helper
 
+These live in `shell-libs/bh-filtering.sh`.
+
+- `bh_order_reach <pro>` tells, through `BH_REACH`, whether the build reaches
+  a project that has no order line: `listed` (a `subdirs` project on record
+  lists it), `left-out` (the nearest one on record does not; `BH_REACH_PRO`
+  names it), `qmake` (`BH_REACH_PRO`, a `subdirs` project above it, has to be
+  qmaked first), or `alone` (no `subdirs` project lies above it).
 - `bh_build_unrecorded [mode-tag]` builds the projects that the build order
   does not list. If the mode-tag is set to "count" without quotes, then it only
   prints how many projects it would build, hence the counter of each line can
@@ -467,6 +489,24 @@ reads that whole file.
   paths of `bh_pro_files` do, since `find` prints them under `BH_ROOT`).
 - `bh_grep_lines <regexp>` passes on the input lines that every line of
   `<regexp>` matches (see `bh_regexp_matches`); finding no line is no failure.
+
+### Compile check helpers
+
+These live in `shell-libs/bh-compile-checks.sh`.
+
+- `bh_compile_check_cxx <compiler>` succeeds when <compiler> compiles and links
+  a small C++ program that includes `<cstddef>` and `<string>`, the way CMake's
+  `check_cxx_source_compiles` tests a compiler. `bh_find_filc` passes over a
+  Fil-C toolchain that fails it, such as one without libc++'s headers. A pass is
+  kept in `build-handler/compile-checks/` of `$XDG_CACHE_HOME` (else
+  `~/.cache`), named after `bh_compile_check_key`; a failure is never kept,
+  hence it runs again next time.
+- `bh_compile_check_key <compiler>` prints the sha256 hash of the compiler's
+  resolved path together with its size and time; hence a copy of the same
+  binary in another toolchain is checked on its own, and a changed binary is
+  checked again.
+- `bh_sha256` prints the sha256 hash of its input, through `sha256sum`,
+  `shasum -a 256` or `openssl dgst -sha256`, whichever is there.
 
 ### Clean helpers
 

@@ -205,6 +205,7 @@ bh_find_filc() {
 # in `_bhf_first` when it is the first working one found.
 bh_find_filc_try() {
     [ -x "$1/clang++" ] && "$1/clang++" --version 2>/dev/null | grep -qi "Fil-C" || return 1
+    bh_compile_check_cxx "$1/clang++" || return 1
     if [ -f "$2/share/fil-c-light.ini" ]; then
         PATH="$1:$PATH"; export PATH
         return 0
@@ -967,7 +968,9 @@ bh_parse_args() {
     done
 
     BH_FORWARD_ARGS=
+    BH_FORWARD_TAIL=
     BH_XD_ARGS=
+    BH_MAKE_ARGS=
     _bhpa_child=0
     while [ $# -gt 0 ]; do
         # Keeps what the case below reads (one argument, or two for a flag
@@ -2427,6 +2430,8 @@ bh_xd_build_static() {
 # Args: [argument...]
 bh_xd_dependency_build() {
     _bxdb_forward=${BH_FORWARD_ARGS:-}
+    # The `--xd-<flag>` flags follow this run's flags (hence they win); the
+    # qmake and make arguments still come last (see bh_dependency_build).
     if [ -n "${BH_XD_ARGS:-}" ]; then
         BH_FORWARD_ARGS="${_bxdb_forward:+$_bxdb_forward
 }$BH_XD_ARGS"
@@ -2900,6 +2905,11 @@ bh_make_run() {
     if [ "${1:-}" = -C ]; then
         ( _bmr_dir=$2; shift 2; cd "$_bmr_dir" && bh_make_run "$@" )
         return
+    fi
+    # The arguments after `--` on the command line go to every make run.
+    if [ -n "${BH_MAKE_ARGS:-}" ]; then
+        # shellcheck disable=SC2086
+        set -- "$@" $BH_MAKE_ARGS
     fi
     case "$BH_MAKE_TYPE" in
         gnu)
@@ -3544,6 +3554,11 @@ bh_run_one_test() {
     _bhrot_rc=0
     # shellcheck disable=SC2086  # intentional split of forwarded args.
     (
+        # The consumer may use its app's static Qt mode for these tests.
+        _bhrot_static=
+        if [ "${BH_TEST_STATIC:-0}" -eq 1 ] && [ "${BH_STATIC_ALL:-0}" -eq 1 ]; then
+            _bhrot_static=CONFIG+=qt_static
+        fi
         LOGS=$BUILD_DIR/logs/tests/$_bhrot_name
         _bhrot_tb=$BUILD_DIR/tests-build/$_bhrot_name
         _step=0
@@ -3560,7 +3575,8 @@ bh_run_one_test() {
         else
             mkdir -p "$LOGS" "$_bhrot_tb" \
                 && cd "$_bhrot_tb" \
-                && bh_run_qmake test-qmake "$_bhrot_pro" $BH_REMAINING_ARGS \
+                && bh_run_qmake test-qmake "$_bhrot_pro" CONFIG+="$BH_MODE" \
+                    $_bhrot_static $BH_REMAINING_ARGS \
                 && bh_make "$JOBS" \
                 && bh_run_tests "$_bhrot_tb" --subdirs
         fi
@@ -3647,6 +3663,28 @@ bh_export_test_paths() {
         export QT_PLUGIN_PATH=$QT_PLUGINS_STAGE${QT_PLUGIN_PATH:+:$QT_PLUGIN_PATH}
         export QT_QPA_PLATFORM_PLUGIN_PATH=$QT_PLUGINS_STAGE/platforms
     fi
+}
+
+# Runs each test project that `BH_TEST_ROOT` lists, one per line, through
+# `bh_run_one_test`; with a `1` argument, skips a project that is no test
+# case (`CONFIG += testcase`).
+bh_run_test_root() {
+    _bhrtr_vet=$1
+    _bhrtr_ifs=$IFS
+    IFS='
+'
+    for _bhrtr_pro in $BH_TEST_ROOT; do
+        IFS=$_bhrtr_ifs
+        if [ "$_bhrtr_vet" -gt 0 ] && ! bh_is_testcase "$_bhrtr_pro"; then
+            IFS='
+'
+            continue
+        fi
+        bh_run_one_test "$_bhrtr_pro"
+        IFS='
+'
+    done
+    IFS=$_bhrtr_ifs
 }
 
 # Stops the build when a test project that `bh_run_one_test` ran failed.
@@ -3808,7 +3846,16 @@ bh_template_app() {
     # build entirely and fall through to the post-build action below.
 
     # Tests (--test / --tests).
-    if [ "$BH_RUN_TESTS" -gt 0 ]; then
+    if [ "$BH_RUN_TESTS" -gt 0 ] && [ -n "${BH_TEST_ROOT:-}" ]; then
+        bh_export_test_paths
+        _bh_tests_total=0
+        _bh_tests_failed=0
+        bh_run_test_root "${BH_TEST_GLOB:-0}"
+        if [ "$_bh_tests_total" -eq 0 ]; then
+            bh_error "--test: no test project (CONFIG += testcase) matched the glob"
+        fi
+        bh_fail_on_tests
+    elif [ "$BH_RUN_TESTS" -gt 0 ]; then
         _bhtest_pro=""
         if [ -f "$BH_ROOT/tests/test.pro" ]; then
             _bhtest_pro=$BH_ROOT/tests/test.pro
@@ -3885,6 +3932,58 @@ bh_template_app() {
 
 # ---- one-stop driver for subdirs (workspace) consumers ----------------
 
+# bh_template_subdirs <top-pro> [argv...]
+#
+# All-in-one driver for a `TEMPLATE = subdirs` Qt project (one .pro
+# orchestrating many SUBDIRS). XD's own build.sh uses this; so does
+# any workspace that recurses through multiple sub-.pros.
+#
+# Each numbered point below captures a structural assumption a
+# `TEMPLATE = subdirs` project violates if it tries to drive
+# `bh_template_app` instead, and how this driver handles it:
+#
+#   1. XD_DIR may point at the source root (when XD is *being*
+#      built, BH_ROOT == XD_DIR). The check below still requires it
+#      to be set so non-self-builders error out cleanly.
+#
+#   2. BUILD_DIR has NO -mode suffix (subdirs trees typically run
+#      debug_and_release + build_all, dropping both flavours into
+#      one tree). A project that genuinely wants per-mode dirs can
+#      pre-set $BH_BUILD_DIR_SUFFIX (e.g. "-${BH_MODE}"). Under
+#      --static a `-static` comes before that suffix.
+#
+#   3. qmake is NOT given CONFIG+=$BH_MODE -- the subdir .pro files
+#      decide mode themselves (debug_and_release, build_all, etc.).
+#      bh_make's race-aware release-all/debug-all split serialises
+#      the per-config link/mv race.
+#
+#   4. Plugin search path is adjusted AFTER make (postponed). For
+#      projects that BUILD their own plugins (XD itself), pre-make
+#      setup would point at an empty/partial tree; post-make works
+#      for both self-builders and external consumers. Skip entirely
+#      with BH_SKIP_PLUGIN_STAGE=1.
+#
+#   5. bh_qmake_prepare runs as normal: if the qmake binary is
+#      absent at $XD_DIR/bin/qmake, it self-bootstraps via
+#      $XD_DIR/qmake/build.sh -- works for XD-as-self-builder.
+#
+#   6. License gate is the shared bh_license_gate (identical
+#      interactive prompt as bh_template_app).
+#
+#   7. No top-level TARGET resolution -- subdirs has none. --run
+#      requires a subdir path and resolves TARGET from that subdir's
+#      .pro instead.
+#
+#   8. --test requires the consumer to have set $BH_TEST_ROOT to its
+#      test subdirs .pro. Builds in `$BUILD_DIR/tests-build/` and runs
+#      via `make -k check`. Skip with a notice when BH_TEST_ROOT is
+#      unset.
+#
+#   9. --run REQUIRES a relative subdir path
+#      (`./build.sh --run path/to/subdir`). The path is taken from
+#      $BH_RUN_TARGET_PATH (bh_parse_args consumes it when
+#      BH_TEMPLATE=subdirs). We .pro-eval that subdir to find its
+#      TARGET, then exec the binary out of $BUILD_DIR/<path>/.
 # Args: <pro>
 bh_build_header() {
     echo
@@ -4319,16 +4418,7 @@ bh_template_subdirs() {
             else
                 # Literal `.pro` or the default subdirs root: trusted
                 # entr(y/ies), run as-is without real-ness vetting.
-                _bh_oldifs=$IFS
-                IFS='
-'
-                for _bh_pro in $BH_TEST_ROOT; do
-                    IFS=$_bh_oldifs
-                    bh_run_one_test "$_bh_pro"
-                    IFS='
-'
-                done
-                IFS=$_bh_oldifs
+                bh_run_test_root 0
             fi
             cd "$BUILD_DIR"
             bh_fail_on_tests
@@ -4501,6 +4591,7 @@ unset BH_XD_BUILD_FILTER BH_BUILD_DIR_SHOWN
 BH_TOOLS_DIR=$(bh_tools_dir)
 . "$BH_TOOLS_DIR/shell-libs/build-handler-progress.sh"
 . "$BH_TOOLS_DIR/shell-libs/build-handler-debug.sh"
+. "$BH_TOOLS_DIR/shell-libs/bh-compile-checks.sh"
 . "$BH_TOOLS_DIR/shell-libs/bh-filtering.sh"
 case "$(uname -s)" in
     MINGW*|MSYS*|CYGWIN*)
