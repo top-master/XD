@@ -525,6 +525,14 @@ void QFtpDTP::socketReadyRead()
         } else {
             qDebug_FDTP << "readyRead:" << bytesAvailable() << "bytes available (total" << bytesDone << "bytes read)";
             emit dataTransferProgress(bytesDone+socket->bytesAvailable(), bytesTotal);
+            // A slot of the progress may abort the transfer, which closes the
+            // data socket and drops the data that `readyRead()` would announce.
+            // The abort may even complete in that slot (the server's reply
+            // came first); hence the closed socket tells it, not only the
+            // abort state.
+            if (pi->abortState != QFtpPI::None || !socket || !socket->isOpen()) {
+                return;
+            }
             emit readyRead();
         }
     }
@@ -695,7 +703,7 @@ void QFtpPI::abort()
         //Most FTP servers do not support ABOR, or require the telnet
         //IP & synch sequence (TCP urgent data) which is not supported by QTcpSocket.
         //Following what most FTP clients do, just reset the data connection and wait for 426
-        abortState = WaitForAbortToFinish;
+        abortState = WaitForTransferReply;
         dtp.abortConnection();
     }
 }
@@ -830,6 +838,11 @@ bool QFtpPI::processReply()
     switch (abortState) {
         case AbortStarted:
             abortState = WaitForAbortToFinish;
+            break;
+        case WaitForTransferReply:
+            // The transfer's own reply (426, or 226 when it finished first)
+            // ends the command like any other reply.
+            abortState = None;
             break;
         case WaitForAbortToFinish:
             abortState = None;
@@ -2025,6 +2038,12 @@ void QFtpPrivate::_q_startNextCommand()
     if (pending.isEmpty())
         return;
     QFtpCommand *c = pending.first();
+    // The start that `addCommand()` posted may come after another path already
+    // started this command.
+    if (c->id == runningId) {
+        return;
+    }
+    runningId = c->id;
 
     error = QFtp::NoError;
     errorString = QT_TRANSLATE_NOOP(QFtp, QLatin1String("Unknown error"));
@@ -2097,6 +2116,12 @@ void QFtpPrivate::_q_piFinished(const QString&)
     if (pending.isEmpty())
         return;
     QFtpCommand *c = pending.first();
+    // The protocol interpreter reports a failed reply as an error, then as
+    // finished; the error already ended that command, and the first pending
+    // one now may be a command a `done()` slot queued, which never started.
+    if (c->id != runningId) {
+        return;
+    }
 
     if (c->command == QFtp::Close) {
         // The order of in which the slots are called is arbitrary, so
@@ -2108,6 +2133,7 @@ void QFtpPrivate::_q_piFinished(const QString&)
             return;
         }
     }
+    runningId = -1;
     emit q_func()->commandFinished(c->id, false);
     pending.removeFirst();
 
@@ -2186,6 +2212,7 @@ void QFtpPrivate::_q_piError(int errorCode, const QString &text)
 
     pi.clearPendingCommands();
     q->clearPendingCommands();
+    runningId = -1;
     emit q->commandFinished(c->id, true);
 
     pending.removeFirst();
