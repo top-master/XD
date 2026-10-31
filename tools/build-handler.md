@@ -223,6 +223,16 @@ them.
   leaves `<regexp>` to this run, which may break this run, meaning `<regexp>` \
   is never passed to XD's build if the `=` sign is missing. |
 | `-d <dir>` / `--directory <dir>` | Build into a different folder than the usual one. A relative folder is measured from where you run the command; an absolute one (including a Windows path like `C:\…`) is kept as-is. |
+| `<word>…` \
+| Words after the flags that start with no `-` (such as `CONFIG+=x`) go to \
+  every qmake run, up to a lone `--`. |
+| `-- <argument>…` \
+| Everything after a lone `--` goes to every make run, after the run's own \
+  arguments (such as `build.sh -- -k V=1`); jom and nmake get it in their \
+  own form. |
+
+A flag that the table does not list stops the run with an error, rather than
+reach qmake unseen; pass an option of make after `--` instead.
 
 ### Internal flags
 

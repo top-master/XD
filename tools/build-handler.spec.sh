@@ -152,7 +152,7 @@ expect 'env BH_MODE=release survives bh_parse_args' release "$BH_MODE"
 # tree's own configuration decides, and an app takes CONFIG+=$BH_MODE.
 unset BH_MODE BH_MODE_GIVEN BH_DEBUG_INFO BH_SAVE_SPACE BH_MEMSAFE
 BH_TEMPLATE=subdirs
-bh_parse_args --debug -- CONFIG+=x
+bh_parse_args --debug CONFIG+=x
 expect '--debug: a subdirs tree builds the debug variant only' \
     'CONFIG+=no_debug_and_release CONFIG-=debug_and_release CONFIG-=build_all CONFIG-=release CONFIG+=debug CONFIG+=x' \
     "$BH_REMAINING_ARGS"
@@ -162,19 +162,28 @@ expect '--release-debug: the release variant, with debug info' \
     'CONFIG+=no_debug_and_release CONFIG-=debug_and_release CONFIG-=build_all CONFIG-=debug CONFIG+=release CONFIG+=force_debug_info' \
     "$BH_REMAINING_ARGS"
 unset BH_MODE BH_MODE_GIVEN BH_DEBUG_INFO
-bh_parse_args -- CONFIG+=x
+bh_parse_args CONFIG+=x
 expect 'no mode: a subdirs tree keeps its own variants' 'CONFIG+=x' "$BH_REMAINING_ARGS"
 unset BH_TEMPLATE BH_MODE BH_MODE_GIVEN BH_DEBUG_INFO
-bh_parse_args --debug -- CONFIG+=x
+bh_parse_args --debug CONFIG+=x
 expect '--debug: an app gets no variant values here' 'CONFIG+=x' "$BH_REMAINING_ARGS"
 unset BH_MODE BH_MODE_GIVEN BH_REMAINING_ARGS
 
 test_section 'bh_parse_args -- remaining args'
 
-unset BH_REMAINING_ARGS
-bh_parse_args --headless -- CONFIG+=foo bar
-expect '`--` stops parsing and remainder hits BH_REMAINING_ARGS' \
+unset BH_REMAINING_ARGS BH_MAKE_ARGS
+bh_parse_args --headless CONFIG+=foo bar -- -k V=1
+expect 'the qmake arguments end at `--`' \
     'CONFIG+=foo bar' "$BH_REMAINING_ARGS"
+expect 'what follows `--` goes to make' '-k V=1' "$BH_MAKE_ARGS"
+
+unset BH_REMAINING_ARGS BH_MAKE_ARGS
+bh_parse_args --headless -- -k
+expect '`--` right after the flags leaves no qmake argument' '' "$BH_REMAINING_ARGS"
+expect '`--` right after the flags hands make the rest' '-k' "$BH_MAKE_ARGS"
+
+expect 'an unknown flag stops the run, naming `--`' 1 \
+    "$( (bh_parse_args --headless --help) 2>&1 | grep -c "unknown flag '--help'.*build.sh -- --help")"
 
 unset BH_REMAINING_ARGS
 bh_parse_args --headless CONFIG+=qux
@@ -356,6 +365,11 @@ expect 'nmake drops a trailing -j' \
     "$(_bh_spec_make win32-msvc2015 8 -k -j)"
 expect '-C <dir> runs nmake in <dir>' \
     'nmake sub -nologo mocables' "$(_bh_spec_make win32-msvc2017 -C sub mocables)"
+expect 'the arguments after -- go to every make run, after its own' \
+    'make sub -k clean V=1' "$(BH_MAKE_ARGS='V=1'; _bh_spec_make linux-g++ -C sub -k clean)"
+expect 'nmake gets the arguments after -- in its own form' \
+    "nmake ${_bh_spec_sandbox##*/} -nologo all -k" \
+    "$(BH_MAKE_ARGS='-j4 -k'; _bh_spec_make win32-msvc2017 all)"
 expect 'the cross target spec decides over the host one' \
     "make ${_bh_spec_sandbox##*/} all" \
     "$(BH_CROSS_SPEC=win32-g++; QMAKESPEC=win32-msvc2017; unset BH_MAKE BH_MAKE_TYPE
@@ -1768,8 +1782,8 @@ expect '--xd-<flag> passes --<flag> to XD'"'"'s static build, even a whole one' 
     '--static --child --headless --clean [||]' \
     "$(_bh_spec_xd_build --static >/dev/null; _bh_spec_xd_build --static --xd-clean)"
 expect 'after this run'"'"'s flags, hence it wins, and ahead of the qmake arguments' \
-    '--static --child --headless --release --debug -- CONFIG+=a [||]' \
-    "$(_bh_spec_xd_build --static --release --xd-debug -- CONFIG+=a)"
+    '--static --child --headless --release --debug CONFIG+=a [||]' \
+    "$(_bh_spec_xd_build --static --release --xd-debug CONFIG+=a)"
 # BH_XD_BUILD_FILTER narrows XD's build, which then runs on every run.
 expect 'BH_XD_BUILD_FILTER reaches XD'"'"'s static build, which builds only what it matches' \
     '--static --child --headless [||] ^src/a\.pro$' \
@@ -1804,8 +1818,8 @@ expect 'every flag goes along as given, with its value' \
         --headless --get build-dir)"
 _bh_spec_no_gui
 expect 'so do the build settings and the qmake arguments' \
-    '--static --child --headless --libc=musl --cross-compile -- CONFIG+=a b [||]' \
-    "$(_bh_spec_xd_build --static --libc=musl --cross-compile -- CONFIG+=a b)"
+    '--static --child --headless --libc=musl --cross-compile CONFIG+=a b -- -k [||]' \
+    "$(_bh_spec_xd_build --static --libc=musl --cross-compile CONFIG+=a b -- -k)"
 _bh_spec_no_gui
 expect 'but not a flag that redoes or drops what XD built' '--static --child --headless [||]' \
     "$(_bh_spec_xd_build --static --rebuild=x --rebuild --wipe --qmake --refresh --force-qmake)"

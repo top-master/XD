@@ -699,9 +699,9 @@ bh_macos_developer_dir() {
 # bh_parse_args "$@"
 #
 # Pulls common build-driver flags off the argument list and stores them
-# in BH_* globals. Anything we don't recognise (after `--` or at the
-# first non-flag) stays for the caller via BH_REMAINING_ARGS, so a
-# consumer can still forward custom args to qmake.
+# in BH_* globals. An unknown flag stops the run; the words after the flags
+# go to qmake through BH_REMAINING_ARGS, and what follows a lone `--` goes
+# to make through BH_MAKE_ARGS.
 #
 # Defaults: --debug, log level 1 (normal), non-headless, no tests, no run.
 #
@@ -959,7 +959,9 @@ bh_parse_args() {
     done
 
     BH_FORWARD_ARGS=
+    BH_FORWARD_TAIL=
     BH_XD_ARGS=
+    BH_MAKE_ARGS=
     _bhpa_child=0
     while [ $# -gt 0 ]; do
         # Keeps what the case below reads (one argument, or two for a flag
@@ -1144,20 +1146,32 @@ bh_parse_args() {
                     BUILD_DIR=$(pwd)/$2
                 fi
                 shift 2;;
-            --)               shift; break;;
+            --)               break;;
+            -*)
+                bh_error "unknown flag '$1'; pass an option of make after ' -- ', such as: build.sh -- $1" ;;
             *)                break;;
         esac
         bh_forward_note "$((_bhpa_count - $#))" "$_bhpa_flag" "$_bhpa_value"
     done
-    BH_REMAINING_ARGS="$*"
-    # Hands the qmake arguments after the flags on to a framework's static
-    # build too (see bh_dependency_build_static).
-    if [ $# -gt 0 ]; then
-        bh_forward_add --
-        for _bhpa_argument in "$@"; do
-            bh_forward_add "$_bhpa_argument"
-        done
-    fi
+    # Splits what follows the flags: the qmake arguments, then, after a
+    # `--`, the arguments of every make run (see bh_make_run).
+    BH_REMAINING_ARGS=
+    _bhpa_make=0
+    for _bhpa_argument in "$@"; do
+        if [ "$_bhpa_make" -eq 0 ] && [ "$_bhpa_argument" = -- ]; then
+            _bhpa_make=1
+        elif [ "$_bhpa_make" -eq 1 ]; then
+            BH_MAKE_ARGS="${BH_MAKE_ARGS:+$BH_MAKE_ARGS }$_bhpa_argument"
+        else
+            BH_REMAINING_ARGS="${BH_REMAINING_ARGS:+$BH_REMAINING_ARGS }$_bhpa_argument"
+        fi
+    done
+    # Hands the qmake arguments and the make arguments on to a dependency's
+    # build too, after every flag (see bh_dependency_build).
+    for _bhpa_argument in "$@"; do
+        BH_FORWARD_TAIL="${BH_FORWARD_TAIL:+$BH_FORWARD_TAIL
+}$_bhpa_argument"
+    done
 
     # Picks the label before a parent's filter joins --filter;
     # build-handler.md lists the labels.
@@ -2488,25 +2502,11 @@ bh_xd_build_static() {
 # Args: [argument...]
 bh_xd_dependency_build() {
     _bxdb_forward=${BH_FORWARD_ARGS:-}
+    # The `--xd-<flag>` flags follow this run's flags (hence they win); the
+    # qmake and make arguments still come last (see bh_dependency_build).
     if [ -n "${BH_XD_ARGS:-}" ]; then
-        # Splits the forwarded flags from the qmake arguments, at `--`.
-        _bxdb_flags=
-        _bxdb_qmake=
-        while IFS= read -r _bxdb_line; do
-            [ -n "$_bxdb_line" ] || continue
-            if [ -n "$_bxdb_qmake" ] || [ "$_bxdb_line" = -- ]; then
-                _bxdb_qmake="${_bxdb_qmake:+$_bxdb_qmake
-}$_bxdb_line"
-            else
-                _bxdb_flags="${_bxdb_flags:+$_bxdb_flags
-}$_bxdb_line"
-            fi
-        done <<EOF
-$_bxdb_forward
-EOF
-        BH_FORWARD_ARGS="${_bxdb_flags:+$_bxdb_flags
-}$BH_XD_ARGS${_bxdb_qmake:+
-$_bxdb_qmake}"
+        BH_FORWARD_ARGS="${_bxdb_forward:+$_bxdb_forward
+}$BH_XD_ARGS"
     fi
     bh_dependency_build "$XD_DIR/build.sh" "$@"
     BH_FORWARD_ARGS=$_bxdb_forward
@@ -2598,13 +2598,13 @@ ${BH_FORWARD_ARGS:-}
         _db_ifs=$IFS
         IFS='
 '
-        set -- "$@" ${BH_FORWARD_ARGS:-}
+        set -- "$@" ${BH_FORWARD_ARGS:-} ${BH_FORWARD_TAIL:-}
         IFS=$_db_ifs
         unset BUILD_DIR BH_ROOT BH_SCRIPT_NAME BH_TEMPLATE BH_BUILD_DIR_SUFFIX \
             BH_FILTER BH_REBUILD BH_STATIC BH_STATIC_ALL BH_CLEAN_EXTRA BH_GET \
             BH_TEST_ROOT BH_TEST_GLOB BH_TEST_PATTERN BH_RUN_TESTS \
             BH_RUN_TARGET BH_RUN_TARGET_PATH BH_TARGET_NAME \
-            BH_REMAINING_ARGS BH_FORWARD_ARGS \
+            BH_REMAINING_ARGS BH_FORWARD_ARGS BH_FORWARD_TAIL BH_MAKE_ARGS \
             $(env | sed -n 's/^\(BH_HOOKS_[A-Za-z0-9_]*\)=.*/\1/p')
         [ -z "${BH_BUILD_DIR_SHOWN:-}" ] || export BH_BUILD_DIR_SHOWN
         if [ "$_db_script" = "$XD_DIR/build.sh" ]; then
@@ -2977,6 +2977,11 @@ bh_make_run() {
     if [ "${1:-}" = -C ]; then
         ( _bmr_dir=$2; shift 2; cd "$_bmr_dir" && bh_make_run "$@" )
         return
+    fi
+    # The arguments after `--` on the command line go to every make run.
+    if [ -n "${BH_MAKE_ARGS:-}" ]; then
+        # shellcheck disable=SC2086
+        set -- "$@" $BH_MAKE_ARGS
     fi
     case "$BH_MAKE_TYPE" in
         gnu)
