@@ -479,6 +479,24 @@ reads that whole file.
 - `bh_grep_lines <regexp>` passes on the input lines that every line of
   `<regexp>` matches (see `bh_regexp_matches`); finding no line is no failure.
 
+### Compile check helpers
+
+These live in `shell-libs/bh-compile-checks.sh`.
+
+- `bh_compile_check_cxx <compiler>` succeeds when <compiler> compiles and links
+  a small C++ program that includes `<cstddef>` and `<string>`, the way CMake's
+  `check_cxx_source_compiles` tests a compiler. `bh_find_filc` passes over a
+  Fil-C toolchain that fails it, such as one without libc++'s headers. A pass is
+  kept in `build-handler/compile-checks/` of `$XDG_CACHE_HOME` (else
+  `~/.cache`), named after `bh_compile_check_key`; a failure is never kept,
+  hence it runs again next time.
+- `bh_compile_check_key <compiler>` prints the sha256 hash of the compiler's
+  resolved path together with the sha256 hash of its binary; hence a copy of
+  the same binary in another toolchain is checked on its own.
+- `bh_sha256_file <file>` and `bh_sha256_stdin` print a sha256 hash, through
+  `sha256sum`, `shasum -a 256` or `openssl dgst -sha256`, whichever is there.
+- `bh_real_path <path>` prints <path> with its links resolved.
+
 ### Clean helpers
 
 - `bh_make_clean <makefile> [<log>]` runs the `clean` target of `<makefile>`,

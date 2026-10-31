@@ -280,6 +280,42 @@ expect 'a relative BH_ROOT still puts an absolute folder on PATH' \
     "$(cd "$_bh_spec_sandbox/top" && BH_ROOT=mid/xd \
         BH_FILC_OPT_DIR=$_bh_spec_sandbox/opt bh_find_filc && command -v clang++)"
 
+# A fake whose banner names Fil-C, but which fails every compile.
+printf '#!/bin/sh\ncase "$1" in --version) echo "clang version 20 (Fil-C 0.686) fil-c-light";; *) exit 1;; esac\n' \
+    > "$_bh_spec_sandbox/top/fil-c-light/build/bin/clang++"
+expect 'a Fil-C-Light tree whose clang++ fails the compile check loses to the next one' \
+    filc-light "$(_bh_spec_find_filc)"
+
+rm -rf "$_bh_spec_sandbox"
+
+
+test_section 'bh_compile_check_cxx -- a passed check is cached by the compiler hash'
+
+_bh_spec_sandbox=$(mktemp -d)
+# A fake compiler that builds once, then fails; hence a second success can
+# only come from the cache.
+printf '#!/bin/sh\n[ -f "%s/built" ] && exit 1\n: > "%s/built"\n' \
+    "$_bh_spec_sandbox" "$_bh_spec_sandbox" > "$_bh_spec_sandbox/once"
+printf '#!/bin/sh\nexit 1\n' > "$_bh_spec_sandbox/never"
+chmod +x "$_bh_spec_sandbox/once" "$_bh_spec_sandbox/never"
+_bh_spec_checks=$_bh_spec_sandbox/cache/build-handler/compile-checks
+
+_bh_spec_check() (
+    XDG_CACHE_HOME=$_bh_spec_sandbox/cache
+    bh_compile_check_cxx "$1" && echo pass || echo fail
+)
+
+expect 'a compiler that builds the check passes' pass "$(_bh_spec_check "$_bh_spec_sandbox/once")"
+expect 'the pass is kept under the hash of the compiler and where it sits' \
+    "cxx-$(bh_compile_check_key "$_bh_spec_sandbox/once")" "$(ls "$_bh_spec_checks")"
+cp "$_bh_spec_sandbox/once" "$_bh_spec_sandbox/once-copy"
+expect 'a copy of a passed compiler elsewhere is checked on its own' \
+    fail "$(_bh_spec_check "$_bh_spec_sandbox/once-copy")"
+expect 'a kept pass answers without running the compiler again' \
+    pass "$(_bh_spec_check "$_bh_spec_sandbox/once")"
+expect 'a compiler that fails the check fails' fail "$(_bh_spec_check "$_bh_spec_sandbox/never")"
+expect 'a failed check is not kept' 1 "$(ls "$_bh_spec_checks" | wc -l | tr -d ' ')"
+
 rm -rf "$_bh_spec_sandbox"
 
 

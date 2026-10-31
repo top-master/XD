@@ -190,12 +190,14 @@ bh_find_filc() {
 # Usage: bh_find_filc_try <bin folder> <toolchain root>
 #
 # Tries one candidate of `bh_find_filc`. When <bin folder> holds a working
-# Fil-C `clang++` and <toolchain root> is a Fil-C-Light one (it has
-# `share/fil-c-light.ini`), puts <bin folder> first on `PATH` and succeeds.
+# Fil-C `clang++` (its banner names Fil-C, and it passes `bh_compile_check_cxx`)
+# and <toolchain root> is a Fil-C-Light one (it has `share/fil-c-light.ini`),
+# puts <bin folder> first on `PATH` and succeeds.
 # Otherwise it fails, hence the search goes on; a working one is still kept
 # in `_bhf_first` when it is the first working one found.
 bh_find_filc_try() {
     [ -x "$1/clang++" ] && "$1/clang++" --version 2>/dev/null | grep -qi "Fil-C" || return 1
+    bh_compile_check_cxx "$1/clang++" || return 1
     if [ -f "$2/share/fil-c-light.ini" ]; then
         PATH="$1:$PATH"; export PATH
         return 0
@@ -5249,6 +5251,7 @@ unset BH_XD_BUILD_FILTER BH_BUILD_DIR_SHOWN
 BH_TOOLS_DIR=$(bh_tools_dir)
 . "$BH_TOOLS_DIR/shell-libs/build-handler-progress.sh"
 . "$BH_TOOLS_DIR/shell-libs/build-handler-debug.sh"
+. "$BH_TOOLS_DIR/shell-libs/bh-compile-checks.sh"
 case "$(uname -s)" in
     MINGW*|MSYS*|CYGWIN*)
         . "$BH_TOOLS_DIR/shell-libs/build-handler-win.sh"
