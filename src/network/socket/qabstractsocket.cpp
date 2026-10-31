@@ -724,6 +724,15 @@ bool QAbstractSocketPrivate::canReadNotification()
         emittedReadyRead = true;
         emit q->readyRead();
     }
+#ifndef QT_NO_UDPSOCKET
+    // A connected datagram socket gets a read notification without a datagram
+    // when the peer refused an earlier one (an ICMP "port unreachable").
+    if (!hasData && !isBuffered && socketType == QAbstractSocket::UdpSocket && socketEngine
+        && socketEngine->error() == QAbstractSocket::ConnectionRefusedError)
+    {
+        setErrorAndEmit(socketEngine->error(), socketEngine->errorString());
+    }
+#endif
 
     // If we were closed as a result of the readyRead() signal,
     // return.

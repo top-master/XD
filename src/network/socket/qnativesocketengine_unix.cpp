@@ -769,6 +769,12 @@ bool QNativeSocketEnginePrivate::nativeHasPendingDatagrams() const
     // If there's no error, or if our buffer was too small, there must be a
     // pending datagram.
     bool result = (readBytes != -1) || errno == EMSGSIZE;
+    // The peek takes the pending ICMP "port unreachable" of a connected
+    // datagram socket off the socket; hence it keeps that error for the caller.
+    if (readBytes == -1 && errno == ECONNREFUSED) {
+        const_cast<QNativeSocketEnginePrivate *>(this)->setError(
+            QAbstractSocket::ConnectionRefusedError, ConnectionRefusedErrorString);
+    }
 
     qDebug_NSE << "nativeHasPendingDatagrams() == " << (result ? "true" : "false");
     return result;
@@ -836,7 +842,13 @@ qint64 QNativeSocketEnginePrivate::nativeReceiveDatagram(char *data, qint64 maxS
     } while (recvResult == -1 && errno == EINTR);
 
     if (recvResult == -1) {
-        setError(QAbstractSocket::NetworkError, ReceiveDatagramErrorString);
+        // A connected datagram socket reports the peer's ICMP "port
+        // unreachable" for an earlier datagram as `ECONNREFUSED`.
+        if (errno == ECONNREFUSED) {
+            setError(QAbstractSocket::ConnectionRefusedError, ConnectionRefusedErrorString);
+        } else {
+            setError(QAbstractSocket::NetworkError, ReceiveDatagramErrorString);
+        }
         if (header)
             header->clear();
     } else if (options != QAbstractSocketEngine::WantNone) {
@@ -1115,6 +1127,11 @@ qint64 QNativeSocketEnginePrivate::nativeWrite(const char *data, qint64 len)
         case EMSGSIZE:
             setError(QAbstractSocket::DatagramTooLargeError, DatagramTooLargeErrorString);
             break;
+        case ECONNREFUSED:
+            // A connected datagram socket reports the peer's earlier ICMP
+            // "port unreachable" on its next write, and stays connected.
+            setError(QAbstractSocket::ConnectionRefusedError, ConnectionRefusedErrorString);
+            break;
         default:
             break;
         }
@@ -1150,6 +1167,15 @@ qint64 QNativeSocketEnginePrivate::nativeRead(char *data, qint64 maxSize)
         case EAGAIN:
             // No data was available for reading
             r = -2;
+            break;
+        case ECONNREFUSED:
+            // A connected datagram socket reports the peer's ICMP "port
+            // unreachable" for an earlier datagram; it stays connected, and
+            // no data came.
+            if (socketType == QAbstractSocket::UdpSocket) {
+                setError(QAbstractSocket::ConnectionRefusedError, ConnectionRefusedErrorString);
+                r = -2;
+            }
             break;
         case EBADF:
         case EINVAL:
