@@ -12,6 +12,13 @@
 #include <QtCore/QString>
 #include <QtCore/QStringList>
 
+class FormatFileListener
+{
+public:
+    virtual ~FormatFileListener();
+    virtual void fileFinished(const FormatFileResult & result) = 0;
+};
+
 class FormatRunner
 {
 public:
@@ -26,12 +33,15 @@ public:
 
     virtual QList<FormatFileResult > run(const QStringList & files);
     FormatFileResult formatFile(const QString & path) const;
+    inline void setListener(FormatFileListener *listener) { m_listener = listener; }
+    void tellFinished(const FormatFileResult & result) const;
 
 protected:
     int jobCount(int fileCount) const;
 
     const Formatter *m_formatter;
     FormatOptions m_options;
+    FormatFileListener *m_listener;
 };
 
 #endif // FORMAT_RUNNER_H

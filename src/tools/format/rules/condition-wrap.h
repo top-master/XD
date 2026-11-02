@@ -22,6 +22,10 @@ public:
     void run(FormatDocument *document) const Q_DECL_OVERRIDE;
 
 private:
+    void breakPlainCondition(FormatDocument *document, int open,
+                             int close) const;
+    bool isSplitTooLong(const FormatDocument *document, int open,
+                        int close) const;
     QList<int > operators(const FormatDocument *document, int open,
                           int close) const;
     QByteArray group(

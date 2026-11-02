@@ -64,9 +64,8 @@ void FormatTrailingCommentRule::runGroup(
     }
     const QByteArray newline = document->text().mid(lineEnd - 1, 1) == "\r"
         ? "\r\n" : "\n";
-    document->replace(from, end - from, QByteArray());
-    document->replace(document->lineStart(line), 0, document->indentOf(line)
-        + text
-        + newline
+    document->replace(
+        from, end - from, QByteArray(),
+        document->lineStart(line), 0, document->indentOf(line) + text + newline
     );
 }

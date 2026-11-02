@@ -19,8 +19,9 @@
 
     Wraps the parameter list of a declaration or definition whose line runs
     past the column limit (`[Structure] wrapMax`, 80 by default). A list of
-    more than 3 parameters starts on the next line, indented two steps past
-    the line it starts on, one parameter per line. A shorter list wraps after
+    more than `[Structure] wrapArgsOver` parameters (3 by default) starts
+    on the next line, indented two steps past the line it starts on, one
+    parameter per line. A shorter list wraps after
     a comma, each line under the first parameter, as many parameters per
     line as fit; it starts on the next line instead when even the first
     parameter does not fit under the `(`, or when `[Structure] wrapArgsAt`
@@ -108,7 +109,7 @@ void FormatParamWrapRule::run(FormatDocument *document) const
                 percent,
                 FormatSettings::defaultWrapChainAt()
             );
-            if (items.size() > 3) {
+            if (items.size() > document->settings().wrapArgsOver) {
                 const QByteArray pad = document->indentOf(line) + "        ";
                 lines << prefix;
                 for (int k = 0; k < items.size(); ++k) {

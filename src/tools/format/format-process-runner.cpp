@@ -26,9 +26,10 @@ FormatProcessRunner::FormatProcessRunner(const Formatter *formatter, const Forma
 }
 
 /*!
-    Formats @a files in child processes, and returns their results in the
-    order of @a files; a file whose child process failed
-    gets that failure as its error.
+    Formats @a files in child processes, tells the listener of each result as
+    the children write them (see tellFinished()), and returns the results in
+    the order of @a files; a file whose child process failed gets that
+    failure as its error.
 */
 QList<FormatFileResult > FormatProcessRunner::run(const QStringList & files)
 {
@@ -58,41 +59,91 @@ QList<FormatFileResult > FormatProcessRunner::run(const QStringList & files)
         processes.append(process);
     }
 
-    // Gathers the children's results.
-    QList<FormatFileResult > gathered;
-    for (int i = 0; i < processes.size(); ++i) {
-        QProcess *process = processes.at(i);
-        const bool finished = process->waitForFinished(-1);
-        const QList<QByteArray > lines = process->readAllStandardOutput().split('\n');
-        for (int l = 0; l < lines.size(); ++l) {
-            FormatProcessRunner::decode(lines.at(l), &gathered);
-        }
-        if ( ! finished || process->exitStatus() != QProcess::NormalExit) {
-            const QStringList & slice = slices.at(i);
-            for (int f = 0; f < slice.size(); ++f) {
-                FormatFileResult failed;
-                failed.path = slice.at(f);
-                failed.error = QString(QLL("worker failed: %1")).arg(process->errorString());
-                gathered.append(failed);
-            }
-        }
-    }
-    qDeleteAll(processes);
-
-    // Puts the results in the order of the files.
+    // Gathers each child's results as the child writes them, and tells the
+    // listener of each result in the order of the files, once the files
+    // before it are done.
     QList<FormatFileResult > results;
+    QList<bool > done;
     for (int i = 0; i < files.size(); ++i) {
         FormatFileResult result;
         result.path = files.at(i);
         result.error = QString(QLL("worker gave no result"));
-        for (int g = 0; g < gathered.size(); ++g) {
-            if (gathered.at(g).path == files.at(i)) {
-                result = gathered.at(g);
-                break;
+        results.append(result);
+        done.append(false);
+    }
+    QList<QList<FormatFileResult > > partial;
+    QList<bool > ended;
+    for (int i = 0; i < processes.size(); ++i) {
+        partial.append(QList<FormatFileResult >());
+        ended.append(false);
+    }
+    int told = 0;
+    int running = processes.size();
+    while (running > 0) {
+        for (int i = 0; i < processes.size(); ++i) {
+            if (ended.at(i)) {
+                continue;
+            }
+            QProcess *process = processes.at(i);
+            if ( ! process->canReadLine()) {
+                process->waitForReadyRead(100);
+            }
+            const bool finished = process->state() == QProcess::NotRunning;
+
+            // Reads the complete lines, and all that is left of
+            // a child that ended.
+            while (process->canReadLine()
+                || (finished
+                    && process->bytesAvailable() > 0)
+            ) {
+                QByteArray line = process->readLine();
+                if (line.endsWith('\n')) {
+                    line.chop(1);
+                }
+                QString path;
+                if ( ! FormatProcessRunner::decodeEnd(line, &path)) {
+                    FormatProcessRunner::decode(line, &partial[i]);
+                    continue;
+                }
+                for (int p = 0; p < partial.at(i).size(); ++p) {
+                    if (partial.at(i).at(p).path != path) {
+                        continue;
+                    }
+                    const int index = files.indexOf(path);
+                    if (index >= 0 && ! done.at(index)) {
+                        results[index] = partial.at(i).at(p);
+                        done[index] = true;
+                    }
+                    partial[i].removeAt(p);
+                    break;
+                }
+            }
+
+            // Ends the child: a file it gave no result for gets its failure.
+            if (finished) {
+                ended[i] = true;
+                --running;
+                const bool failed = process->exitStatus() != QProcess::NormalExit
+                    || process->error() == QProcess::FailedToStart;
+                const QStringList & slice = slices.at(i);
+                for (int f = 0; f < slice.size(); ++f) {
+                    const int index = files.indexOf(slice.at(f));
+                    if (index < 0 || done.at(index)) {
+                        continue;
+                    }
+                    if (failed) {
+                        results[index].error = QString(QLL("worker failed: %1")).arg(process->errorString());
+                    }
+                    done[index] = true;
+                }
+            }
+            while (told < files.size() && done.at(told)) {
+                this->tellFinished(results.at(told));
+                ++told;
             }
         }
-        results.append(result);
     }
+    qDeleteAll(processes);
     return results;
 }
 
@@ -139,8 +190,9 @@ QStringList FormatProcessRunner::workerArguments() const
 
 /*!
     Writes @a result as lines a parent's decode() reads back: a `file` line,
-    then one `issue` line per issue, each field separated by a tab and each
-    text in percent-encoding.
+    then one `issue` line per issue and one `request` line per request, and
+    last an `end` line that tells the result is complete (see decodeEnd());
+    each field is separated by a tab, and each text is in percent-encoding.
 */
 QByteArray FormatProcessRunner::encode(const FormatFileResult & result)
 {
@@ -161,7 +213,22 @@ QByteArray FormatProcessRunner::encode(const FormatFileResult & result)
             result.requests.at(i)
         );
     }
+    text += "end\t" + path + '\n';
     return text;
+}
+
+/*!
+    Tells whether @a line is the `end` line of a result that encode() wrote,
+    and if so, sets @a path to the result's file.
+*/
+bool FormatProcessRunner::decodeEnd(const QByteArray & line, QString *path)
+{
+    const QList<QByteArray > fields = line.split('\t');
+    if (fields.size() != 2 || fields.at(0) != "end") {
+        return false;
+    }
+    *path = QString::fromUtf8(QByteArray::fromPercentEncoding(fields.at(1)));
+    return true;
 }
 
 /*!

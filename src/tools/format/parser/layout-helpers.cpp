@@ -29,11 +29,161 @@ QByteArray continuationPad(int indent)
 }
 
 /*!
+    Tells whether @a token is a binary operator that may start a line.
+*/
+static bool isBinaryOperator(Token token)
+{
+    switch (token) {
+    case PLUS: case MINUS: case STAR: case SLASH: case PERCENT:
+    case LTLT: case GTGT: case AND: case OR: case HAT:
+    case ANDAND: case OROR: case EQEQ: case NE:
+    case LANGLE: case RANGLE: case LE: case GE:
+    case QUESTION: case COLON:
+        return true;
+    default:
+        return false;
+    }
+}
+
+/*!
+    Tells whether a line of the bracket group from the token @a open of
+    @a document to its closing token @a close, which opens on a line indented
+    by @a indent, sits at another indent than its brackets give it.
+
+    The padding of a line counts one step (4 spaces)
+    per bracket that a line above it left open, and taken away by the
+    bracket's closing one on a later line, from that closing line on.
+    Inside such a bracket, an argument that goes on past the end of its
+    line adds one more step to its next lines, until the `,` that ends it,
+    unless that line opened a bracket of its own, ends with a closing bracket
+    (`)`, `]` or `}`) or a string literal, or starts with a string literal
+    (see startsWithStringLiteral()); a bracket opened while an argument had
+    that step keeps it for its own lines. A line that starts with a
+    binary operator, right below another one that does, sits at that
+    line's indent; hence the operator lines of one chain line up.
+*/
+bool hasMisplacedLines(const FormatDocument *document, int open, int close,
+                       int indent)
+{
+    const int firstLine = document->symbolLine(open);
+    const int lastLine = document->symbolLine(close);
+
+    // Lists the brackets open at the current line: each one's closing token,
+    // and whether the argument its content is at has the extra step.
+    QList<QPair<int, bool > > ranges;
+    int k = open;
+    bool aboveLeadsWithOperator = false;
+    int aboveIndent = -1;
+    for (int l = firstLine; l <= lastLine; ++l) {
+        // Closes the ranges whose closing brackets lead the line.
+        while (k <= close && document->symbolLine(k) == l
+            && ! ranges.isEmpty() && ranges.last().first == k
+        ) {
+            ranges.removeLast();
+            ++k;
+        }
+
+        // Checks the line's indent: an operator line below another one
+        // takes its indent, any other line the one its brackets give it.
+        const int lead = document->firstSymbolOfLine(l);
+        const bool leadsWithOperator = lead >= 0
+            && isBinaryOperator(document->token(lead));
+        if (l > firstLine && lead > open && lead <= close) {
+            int wanted = aboveIndent;
+            if ( ! leadsWithOperator
+                || ! aboveLeadsWithOperator
+                || aboveIndent < 0
+            ) {
+                int steps = 0;
+                for (int r = 0; r < ranges.size(); ++r) {
+                    steps += ranges.at(r).second ? 2 : 1;
+                }
+                wanted = indent + 4 * steps;
+            }
+            if (textWidth(document->indentOf(l)) != wanted) {
+                return true;
+            }
+            aboveIndent = wanted;
+        }
+        aboveLeadsWithOperator = leadsWithOperator;
+
+        // Opens and closes the ranges of the rest of the line.
+        bool opened = false;
+        int last = -1;
+        for (; k <= close && document->symbolLine(k) == l; ++k) {
+            const Token token = document->token(k);
+            const int other = document->match(k);
+            last = k;
+            if ((token == LPAREN || token == LBRACK || token == LBRACE)
+                && other > k && document->symbolLine(other) > l
+            ) {
+                ranges.append(qMakePair(other, false));
+                opened = true;
+            } else if ( ! ranges.isEmpty() && ranges.last().first == k) {
+                ranges.removeLast();
+            }
+        }
+
+        // Gives the argument that goes on past the line its extra step, or
+        // takes it away at its `,`.
+        if (last < 0 || ranges.isEmpty()) {
+            continue;
+        }
+        const Token end = document->token(last);
+        if (end == COMMA) {
+            ranges.last().second = false;
+        } else if ( ! opened && end != RPAREN && end != RBRACK && end != RBRACE
+            && end != STRING_LITERAL
+            && lead >= 0 && ! startsWithStringLiteral(document, lead)
+        ) {
+            ranges.last().second = true;
+        }
+    }
+    return false;
+}
+
+/*!
+    Tells whether the token @a token of @a document starts a string literal:
+    a `"` string, or one with an encoding or raw prefix (`u8"`, `u"`, `U"`,
+    `L"`, `R"`, and the like), which the tokenizer reads as a name right
+    before the string.
+*/
+bool startsWithStringLiteral(const FormatDocument *document, int token)
+{
+    if (token < 0 || token >= document->symbols().size()) {
+        return false;
+    }
+    if (document->token(token) == STRING_LITERAL) {
+        return true;
+    }
+    static const char *const prefixes[] = {
+        "u8", "u", "U", "L", "R", "u8R", "uR", "UR", "LR"
+    };
+    if (document->token(token) != IDENTIFIER
+        || token + 1 >= document->symbols().size()
+        || document->token(token + 1) != STRING_LITERAL
+        || document->symbols().at(token + 1).from != document->symbolEnd(token)
+    ) {
+        return false;
+    }
+    const QByteArray name = document->lexem(token);
+    for (size_t i = 0; i < sizeof(prefixes) / sizeof(prefixes[0]); ++i) {
+        if (name == prefixes[i]) {
+            return true;
+        }
+    }
+    return false;
+}
+
+/*!
     Builds the text of @a document from the start of the token @a first up to
     the end of the token @a last, as the file spells it.
 */
 QByteArray sourceText(const FormatDocument *document, int first, int last)
 {
+    if (last < first) {
+        return QByteArray();
+    }
     const int from = document->symbols().at(first).from;
     return document->text().mid(from, document->symbolEnd(last) - from);
 }
@@ -103,7 +253,8 @@ static int templateClose(const FormatDocument *document, int angle, int end)
     @a open and @a close of @a document, split at the commas outside of
     nested brackets and template arguments (a `<` after a name, closed
     before any `(`, `&&`, `||`, `?` or `;`; any other `<` compares); an
-    empty list for no argument.
+    empty list for no argument. A trailing comma (`{ a, b, }`) ends the last
+    argument, and adds no empty one.
 */
 QList<QPair<int, int > > splitArguments(
         const FormatDocument *document,
@@ -131,7 +282,11 @@ QList<QPair<int, int > > splitArguments(
             from = i + 1;
         }
     }
-    arguments << qMakePair(from, close - 1);
+
+    // Leaves out the empty item after a trailing comma (`{ a, b, }`).
+    if (from <= close - 1) {
+        arguments << qMakePair(from, close - 1);
+    }
     return arguments;
 }
 

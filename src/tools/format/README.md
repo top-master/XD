@@ -261,6 +261,11 @@ moveSuffix = " "
   ; Breaks every wrapped call of a source file.
   wrapArgsAt = is-non-header
   ```
+- `wrapArgsOver` (in `[Structure]`): how many arguments, or parameters, a
+  list holds at most before it may always break, whatever `wrapArgsAt`
+  says; the default is `3`. A broken call of that many arguments or fewer
+  may also move its last arguments whole to lines of their own (see
+  `args-wrap` under "Laying out code" below).
 
 The command line then overrides the `.formatrc` files, in this order:
 
@@ -358,13 +363,28 @@ The code rules lay out a few constructs on their own:
   one step (4 spaces) past the keyword's line, with its `}` on the next line,
   also when it had its braces already.
 - `condition-wrap` breaks an `if` or `while` condition that passes the wrap
-  column before each `&&` and `||`, at each level of parentheses; each
-  operand line starts with its operator, one step past the line that opened
-  its group. A group that holds a parenthesized operand closes its `)` on a
-  line of its own, and so does the condition, at the keyword's indent, with
-  the body's `{` after it. A continuation line whose operator binds tighter
-  than that of an earlier line of its group (a `!=` below a `||`) continues
-  that line's operand, one step past it (the rule `continuation-indent`).
+  column before each `&&` and `||` of its own level; each operand line
+  starts with its operator, one step past the keyword's line. A nested group
+  breaks too only when it does not fit on its line, and its operator lines,
+  whatever their operator, then go one step past those of the group around
+  it (two steps past the keyword's line, for a group opened there). A group
+  that holds a parenthesized operand closes its `)` on a line of its own,
+  and so does the condition, at the keyword's indent, with the body's `{`
+  after it:
+
+  ```
+  if ((first == second
+          || third == fourth)
+      && ready
+  ) {
+  ```
+
+  A condition without a `&&` or `||` of its own breaks before its loosest
+  operator instead (such as `==`), two steps past the keyword's line, and
+  only once its line passes `wrapMax`, not at the wrap column. A
+  continuation line whose operator binds tighter than that of an earlier
+  line of its group (a `!=` below a `||`) continues that line's operand, one
+  step past it (the rule `continuation-indent`).
 - `operator-wrap` breaks a statement that passes `wrapMax` and holds a chain
   of binary operators (`<<`, `+`, `-`, `|`, `^`, `&&`, `||`, and the like)
   outside of its brackets, or as the last argument of its call. It breaks
@@ -392,12 +412,18 @@ The code rules lay out a few constructs on their own:
   ```
 - `args-wrap` lays out a call of 2 arguments or more, or a brace
   initializer list, when its one-line form would pass the wrap column and
-  it may break: it takes more than 3 arguments, `[Structure] wrapArgsAt`
+  it may break: it takes more than `[Structure] wrapArgsOver` arguments,
+  `[Structure] wrapArgsAt`
   holds at its `(`, its last argument is an operator chain, or it is a
   brace list. On the same terms, it lays out a list the user broke over
-  lines whose lines are not one step past the line of its opening. The
-  leading arguments, and the head of a last argument that is a chain, stay
-  on the line of the opening when they fit, the chain going on below with
+  lines whose lines are not one step past the line of its opening. When
+  it takes `wrapArgsOver` arguments or fewer, its last argument is a
+  chain, and its leading arguments sat on the line of its opening, it first
+  moves its last argument whole to a line of its own, one step in, then its
+  last two, and so on, up to every argument but the first: the first count
+  whose leading arguments fit on the line of the opening, and whose moved
+  arguments each fit whole on their line, wins. Otherwise the leading arguments, and the head of a last argument
+  that is a chain, stay on the line of the opening when they fit, the chain going on below with
   the `)` on a line of its own; otherwise the list breaks after its
   opening, each argument one step past that line, and the closing bracket
   goes back to that line's indent. In the head of an `if` or `while`, the
@@ -428,8 +454,8 @@ The code rules lay out a few constructs on their own:
 - `param-wrap` wraps the parameter list of a declaration or definition
   whose line passes `wrapMax` (a function, a constructor, a destructor, or
   an operator such as `operator==`, `operator()`, or `operator bool`). A
-  list of more than 3 parameters starts on the next line, two steps (8
-  spaces) past the line it starts on, one parameter per line. A shorter one
+  list of more than `wrapArgsOver` parameters starts on the next line, two
+  steps (8 spaces) past the line it starts on, one parameter per line. A shorter one
   wraps after a comma, each line under the first parameter, as many per
   line as fit; it starts on the next line instead when the first parameter
   does not fit under the `(`, or when `[Structure] wrapArgsAt` holds at the

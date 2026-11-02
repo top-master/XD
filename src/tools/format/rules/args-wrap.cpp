@@ -32,9 +32,10 @@
     the user wrote on one line gets an item per line.
 
     It lays out a list that does not fit one line (the list's `)` passes
-    the wrap column, see wrapColumn()) when the call takes more than 3
-    arguments, when `[Structure] wrapArgsAt` holds at the `(` (whose
-    percents compare the column after the `(` with `[Structure] wrapMax`),
+    the wrap column, see wrapColumn()) when the call takes more than
+    `[Structure] wrapArgsOver` arguments (3 by default), when
+    `[Structure] wrapArgsAt` holds at the `(` (whose percents compare the
+    column after the `(` with `[Structure] wrapMax`),
     when its last argument is an operator chain, or when it is a brace list;
     and, on the same terms but whether or not it fits, it lays out a list
     the user broke over lines whose lines are not one step past the line of
@@ -86,7 +87,15 @@ void FormatArgsWrapRule::run(FormatDocument *document) const
             i,
             close
         );
-        if ( ! isPlain || arguments.size() < 2) {
+        // Takes a list of one argument only when it spans lines and its
+        // argument is an operator chain (see below), whose padding may be off.
+        const bool isSplit = document->symbolLine(i)
+            != document->symbolLine(close);
+        if ( ! isPlain
+            || arguments.isEmpty()
+            || (arguments.size() < 2
+                && ! isSplit)
+        ) {
             continue;
         }
 
@@ -103,22 +112,27 @@ void FormatArgsWrapRule::run(FormatDocument *document) const
         ));
 
         // Tells whether the list asks for a layout: it does not fit, and may
-        // break, or its lines are not one step past the opening's line.
+        // break, or its lines sit at other indents than its brackets give
+        // them (see `hasMisplacedLines()`).
         const QByteArray oneLine = layout.oneLine(i, close);
         const bool endsInChain = layout.hasChain(
             arguments.last().first,
             arguments.last().second
         );
-        const bool mayBreak = isBrace || endsInChain || arguments.size() > 3
+        if (arguments.size() < 2 && ! endsInChain) {
+            continue;
+        }
+        const bool mayBreak = isBrace || endsInChain
+            || arguments.size() > document->settings().wrapArgsOver
             || this->mayBreakAt(document, &conditions, i);
         const bool needsBreak = mayBreak && column + textWidth(oneLine) > wrap;
         const int closeLine = document->symbolLine(close);
-        bool isMisplaced = false;
-        for (int l = line + 1; l <= closeLine && ! isMisplaced; ++l) {
-            const int lead = document->firstSymbolOfLine(l);
-            isMisplaced = lead > i && lead < close
-                && textWidth(document->indentOf(l)) != indent + 4;
-        }
+        const bool isMisplaced = hasMisplacedLines(
+            document,
+            i,
+            close,
+            indent
+        );
         if ( ! needsBreak && ! (mayBreak && isMisplaced)) {
             continue;
         }

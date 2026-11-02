@@ -67,7 +67,13 @@
       condition like `wrapChainAt`, where a percent holds when the column of
       the `(` is past that share of `wrapMax`. It follows `wrapChainAt`
       until a `.formatrc` sets it, since an argument list is a chain of
-      commas.
+      commas;
+    * `wrapArgsOver` (`[Structure]`): how many arguments, or parameters, a
+      list holds at most before it may always break, whatever
+      `wrapArgsAt` says (see FormatArgsWrapRule and FormatParamWrapRule);
+      a broken call of that many arguments or fewer may also move its last
+      arguments whole to lines of their own (see
+      FormatExpressionLayout::layoutList()). 3 without a `.formatrc`;
 
     Each spacing key takes any run of spaces and/or tabs to write there
     (`" "` for one space, `"\t"` for a tab, `""` or `none` for no space),
@@ -141,6 +147,12 @@ Config::Schema FormatSettings::schema()
                          ),
                      QString::fromLatin1(defaultWrapChainAtText));
     structure.addFollower(QString(QLL("wrapArgsAt")), QString(QLL("wrapChainAt")));
+    structure.addKey(QString(QLL("wrapArgsOver")),
+                     Config::Matchers() << Config::Numbers::create(
+                         1,
+                         100,
+                         1
+                     ), QString(QLL("3")));
     Config::Section comments(QString(QLL("Comments")));
     comments.extendPrefixed(structure, QString(QLL("wrap")));
     comments.addKey(QString(QLL("wrapExtendsForKeywords")),
@@ -276,6 +288,7 @@ bool FormatSettings::load(const QString & path, const FormatConfig & config,
     settings->wrapBegin
         = Config::Numbers::parse(parser.value(QString(QLL("structure.wrapBegin"))));
     settings->wrapMax = parser.value(QString(QLL("structure.wrapMax"))).toInt();
+    settings->wrapArgsOver = parser.value(QString(QLL("structure.wrapArgsOver"))).toInt();
     settings->commentWrapBegin
         = Config::Numbers::parse(parser.value(QString(QLL("comments.wrapBegin"))));
     settings->commentWrapMax = parser.value(QString(QLL("comments.wrapMax"))).toInt();

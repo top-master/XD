@@ -32,12 +32,18 @@ private:
             int trailing);
     QByteArray layoutChainRest(
             int first, int last, const QList<int > & operators,
-            int column, int trailing, bool keepsLeading);
+            int column, int trailing, bool keepsLeading,
+            bool stepsIn = true, bool byLine = false);
+    bool chainStepsIn(int headFirst, int headLast,
+                      const QByteArray & head) const;
     QByteArray layoutGroup(int open, int close, int column, int trailing);
     QByteArray listLines(
             int open, int close, const QList<QPair<int, int > > & items,
             bool keepsGroups);
     QByteArray itemText(int first, int last, int column, int trailing);
+    bool leadsOnOpening(int open,
+                        const QList<QPair<int, int > > & items,
+                        int count) const;
     bool breaksOnlyBetweenLiterals(int first, int last) const;
     bool mayBreakList(int open, int itemCount) const;
     bool isListOpen(int open) const;

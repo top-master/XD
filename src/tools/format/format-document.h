@@ -83,6 +83,9 @@ public:
     bool isLineSelected(int line) const;
 
     bool replace(int offset, int length, const QByteArray & text);
+    bool replace(
+            int offset, int length, const QByteArray & text,
+            int otherOffset, int otherLength, const QByteArray & otherText);
     void report(int offset, const char *rule, const QString & message);
     void request(int offset,
                  const char *rule,
@@ -95,6 +98,7 @@ public:
 
 private:
     static void shiftIssues(QList<FormatIssue > *issues, int line, int delta);
+    bool canReplace(int offset, int length) const;
 
     class Edit
     {

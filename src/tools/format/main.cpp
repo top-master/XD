@@ -439,6 +439,65 @@ static QByteArray readFile(const QString & path)
 }
 
 /*!
+    @class FormatLogListener
+    @internal
+
+    Logs each file's result as soon as the runner finishes the file, and
+    flushes the output, hence a long run shows its progress instead of
+    looking stuck until its end. In a worker process (`--worker`), it writes
+    each result for the parent instead (see FormatProcessRunner::encode()).
+*/
+class FormatLogListener : public FormatFileListener
+{
+    typedef FormatFileListener super;
+public:
+    inline FormatLogListener(Logger *logger, QFile *output, bool check,
+                             bool worker)
+        : code(0), m_logger(logger), m_output(output), m_check(check)
+        , m_worker(worker)
+    {
+    }
+
+    void fileFinished(const FormatFileResult & result) Q_DECL_OVERRIDE;
+
+    /// Adds up the exit code of the results logged so far (see logResults()).
+    int code;
+
+private:
+    /// Writes each result.
+    Logger *m_logger;
+    /// Shows each result at once, as it is flushed after each one.
+    QFile *m_output;
+    /// Tells whether the run only checks the files.
+    bool m_check;
+    /// Tells whether the results go to a parent process.
+    bool m_worker;
+};
+
+static int logResults(Logger *logger, const QList<FormatFileResult > & results,
+                      bool check);
+
+/*!
+    Logs @a result, or writes it for the parent when the process is a worker,
+    and then flushes the output.
+*/
+void FormatLogListener::fileFinished(const FormatFileResult & result)
+{
+#ifndef QT_NO_PROCESS
+    if (this->m_worker) {
+        this->m_logger->logRaw(FormatProcessRunner::encode(result));
+        this->m_output->flush();
+        return;
+    }
+#endif
+    this->code = qMax(
+        this->code,
+        logResults(this->m_logger, QList<FormatFileResult >() << result, this->m_check)
+    );
+    this->m_output->flush();
+}
+
+/*!
     Writes each of @a results with @a logger the way a person reads them,
     and returns the exit code they add up to; @a check tells whether the
     run only checked the files.
@@ -928,6 +987,12 @@ int main(int argc, char *argv[])
         &formatter,
         options
     ));
+    FormatLogListener listener(
+        &logger,
+        &output,
+        options.check,
+        parser.isSet(workerOption)
+    );
     if (runner.isNull()) {
         logger.logError(QString(QLL("unknown runner: %1 (this build has: %2)"))
                    .arg(parser.value(runnerOption), FormatRunner::kinds().join(QString(QLL(", ")))));
@@ -945,16 +1010,11 @@ int main(int argc, char *argv[])
         reader.readFrom(1);
     }
 #endif
+    runner->setListener(&listener);
     QList<FormatFileResult > results = qMove(runner->run(files));
     if (parser.isSet(workerOption)) {
-#ifndef QT_NO_PROCESS
-        for (int i = 0; i < results.size(); ++i) {
-            logger.logRaw(FormatProcessRunner::encode(results.at(i)));
-        }
-#endif
         return ExitClean;
     }
-    int code = logResults(&logger, results, options.check);
 
     // Formats the files that the other specs add, batch by batch, each with
     // the include folders found so far.
@@ -983,14 +1043,14 @@ int main(int argc, char *argv[])
             &formatter,
             options
         ));
-        const QList<FormatFileResult > batchResults = qMove(runner->run(batch));
-        results << batchResults;
+        runner->setListener(&listener);
+        results << runner->run(batch);
         formatted << batch;
-        code = qMax(code, logResults(&logger, batchResults, options.check));
     }
 #ifndef QT_NO_THREAD
     reader.wait();
 #endif
+    int code = listener.code;
     if ( ! reader.error().isEmpty()) {
         logger.logError(reader.error());
         code = ExitError;
@@ -1026,7 +1086,7 @@ int main(int argc, char *argv[])
             break;
         }
         results = qMove(runner->run(changed));
-        code = qMax(code, logResults(&logger, results, options.check));
+        code = qMax(code, listener.code);
     }
 
     // Removes the agent's files once it quit the tool; a run that asked it

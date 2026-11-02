@@ -19,6 +19,14 @@
     group (a `!=` below a `||`) continues that line's operand, one step past
     it. A line inside a call's arguments is left as it is, since those lines
     align under the call's first argument.
+
+    In the parentheses of an `if` or a `while`, an operator that does not
+    chain conditions (any but `&&` and `||`) leads a line two steps past
+    the keyword's line: one step for the parentheses, and one step as an
+    operand of the condition. In a group nested in those parentheses, every
+    operator leads its line one step for each bracket that the group's line
+    opened (see conditionSteps()); hence a group opened on the keyword's
+    line goes two steps in, past the `&&` and `||` of the condition.
 */
 
 /*!
@@ -38,7 +46,7 @@ static int groupOf(const FormatDocument *document, int index, int *base,
     for (; k >= 0; --k) {
         const Token token = document->token(k);
         if ((token == RPAREN
-            || token == RBRACK)
+                || token == RBRACK)
             && document->match(k) >= 0
         ) {
             k = document->match(k);
@@ -52,7 +60,8 @@ static int groupOf(const FormatDocument *document, int index, int *base,
             *base = document->symbolLine(k);
             return k;
         }
-        if (token == LBRACE && document->braceScope(k) != FormatDocument::FunctionScope
+        if (token == LBRACE
+            && document->braceScope(k) != FormatDocument::FunctionScope
             && document->braceScope(k) != FormatDocument::BlockScope
         ) {
             *keepsIndent = document->braceScope(k) == FormatDocument::InitScope
@@ -65,6 +74,36 @@ static int groupOf(const FormatDocument *document, int index, int *base,
     }
     *base = document->symbolLine(0);
     return -1;
+}
+
+/*!
+    Counts the steps of a line in the group that the `(` at @a group of
+    @a document opens, when that group sits nested in the condition of an
+    `if` or a `while`: one for each bracket from @a group out to the
+    condition's own `(` that opened on the line @a base. Returns 0 for a
+    group that is no such nested group, such as the condition itself or the
+    arguments of a call.
+*/
+static int conditionSteps(const FormatDocument *document, int group, int base)
+{
+    int steps = 0;
+    int bracket = group;
+    while (bracket >= 1 && document->token(bracket) == LPAREN) {
+        if (document->symbolLine(bracket) == base) {
+            ++steps;
+        }
+        const Token opener = document->token(bracket - 1);
+        if (opener == IF || opener == WHILE) {
+            return bracket == group ? 0 : steps;
+        }
+        int outerBase = -1;
+        bool keepsIndent = false;
+        bracket = groupOf(document, bracket, &outerBase, &keepsIndent);
+        if (keepsIndent) {
+            return 0;
+        }
+    }
+    return 0;
 }
 
 /*!
@@ -86,15 +125,23 @@ void FormatContinuationIndentRule::run(FormatDocument *document) const
 {
     for (int line = 2; line <= document->lineCount(); ++line) {
         const int first = document->firstSymbolOfLine(line);
-        if (first < 1 || ! isLeadingOperator(document->token(first))
-            || document->isDirectiveLine(line) || document->symbolEndLine(first - 1) >= line
+        if (first < 1
+            || ! isLeadingOperator(document->token(first))
+            || document->isDirectiveLine(line)
+            || document->symbolEndLine(first - 1) >= line
         ) {
             continue;
         }
         // Leaves out a statement's start, and a sign (`-1` after a comma).
         const Token before = document->token(first - 1);
-        if (before == SEMIC || before == LBRACE || before == RBRACE || before == COLON
-            || before == COMMA || before == EQ || before == LPAREN || before == RETURN
+        if (before == SEMIC
+            || before == LBRACE
+            || before == RBRACE
+            || before == COLON
+            || before == COMMA
+            || before == EQ
+            || before == LPAREN
+            || before == RETURN
             || isLeadingOperator(before)
         ) {
             continue;
@@ -107,7 +154,20 @@ void FormatContinuationIndentRule::run(FormatDocument *document) const
         if (keepsIndent || base < 1 || base >= line) {
             continue;
         }
-        QByteArray indent = document->indentOf(base) + "    ";
+        const Token opener = group >= 1
+            ? document->token(group - 1) : NOTOKEN;
+        const Token leading = document->token(first);
+        const bool isOperand = (opener == IF || opener == WHILE)
+            && leading != ANDAND && leading != OROR;
+        QByteArray indent = document->indentOf(base)
+            + (isOperand ? "        " : "    ");
+
+        // Gives a group nested in a condition one step for each of its
+        // brackets that the group's line opened.
+        const int steps = conditionSteps(document, group, base);
+        if (steps > 0) {
+            indent = document->indentOf(base) + QByteArray(4 * steps, ' ');
+        }
 
         // Continues the operand of an earlier line of the group whose
         // operator binds looser, or takes the level of one that binds alike.

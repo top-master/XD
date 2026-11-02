@@ -32,7 +32,7 @@
     Builds the runner that formats with @a formatter as @a options say.
 */
 FormatRunner::FormatRunner(const Formatter *formatter, const FormatOptions & options)
-    : m_formatter(formatter), m_options(options)
+    : m_formatter(formatter), m_options(options), m_listener(0)
 {
 }
 
@@ -103,16 +103,46 @@ FormatRunner *FormatRunner::create(
 }
 
 /*!
-    Formats @a files one after the other, and returns
-    their results in the same order.
+    Formats @a files one after the other, telling the listener of each one as
+    it finishes (see tellFinished()), and returns their results in that order.
 */
 QList<FormatFileResult > FormatRunner::run(const QStringList & files)
 {
     QList<FormatFileResult > results;
     for (int i = 0; i < files.size(); ++i) {
         results.append(this->formatFile(files.at(i)));
+        this->tellFinished(results.last());
     }
     return results;
+}
+
+/*!
+    Hands @a result, the result of one file, to the listener set with
+    setListener(), when there is one. Each runner calls it once per file, in
+    the order of the files, from one thread at a time; hence a listener
+    needs no lock of its own.
+*/
+void FormatRunner::tellFinished(const FormatFileResult & result) const
+{
+    if (this->m_listener) {
+        this->m_listener->fileFinished(result);
+    }
+}
+
+/*!
+    @class FormatFileListener
+    @internal
+
+    Learns of each file's result as soon as a FormatRunner finished the file
+    (see FormatRunner::tellFinished()), before run() returns them all; hence
+    a long run can show its progress.
+*/
+
+/*!
+    Destroys the listener.
+*/
+FormatFileListener::~FormatFileListener()
+{
 }
 
 /*!
