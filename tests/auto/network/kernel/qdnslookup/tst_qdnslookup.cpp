@@ -237,12 +237,22 @@ void tst_QDnsLookup::lookup()
     // * for an ANY row, since a public resolver may refuse or shrink an ANY query on purpose
     //   (RFC 8482), whatever our code does.
     // Any other failure with internet fails, such as a retired record.
+    //
+    // An ANY row asks Quad9 (9.9.9.9) instead, which answers ANY in full, where the system
+    // resolver may be one that refuses it. Quad9 still drops a query now and then, and a drop
+    // is random; hence an ANY row asks up to 3 times before it gives up.
+    QFETCH(int, type);
+    const bool any = type == int(QDnsLookup::ANY);
+    const QHostAddress resolver = any ? QHostAddress(QLL("9.9.9.9")) : QHostAddress();
+    const int attempts = any ? 3 : 1;
     QString detail;
-    if (runLookup(QHostAddress(), 53, &detail))
-        return;
+    for (int attempt = 0; attempt < attempts; ++attempt) {
+        if (runLookup(resolver, 53, &detail)) {
+            return;
+        }
+    }
     if (m_serverDummyCoverage.isCovered()) {
         TestEnv::assertInternet(QLL("Already verified against the bundled server-dummy DNS."), detail);
-        QFETCH(int, type);
         if (type == int(QDnsLookup::ANY)) {
             QSKIP(qPrintable(QStringLiteral("The public resolver refused or shrank this ANY query (")
                              + detail + QStringLiteral("), as RFC 8482 allows; already verified against the bundled server-dummy DNS.")));
@@ -297,12 +307,16 @@ bool tst_QDnsLookup::runLookup(const QHostAddress &nameserver, quint16 port, QSt
     QStringList mx_alternatives = domainNameListAlternatives(mx);
     QStringList srv_alternatives = domainNameListAlternatives(srv);
 
-    // A null nameserver uses the system resolver (plain QDnsLookup); a given one resolves over UDP
-    // against nameserver:port via QDnsOverride (which IS a QDnsLookup).
+    // The plain `QDnsLookup` asks the system resolver for a null nameserver, and asks one on
+    // port 53 through `QDnsLookup::setNameserver()`. It asks port 53 only; hence any other port
+    // is reached over UDP through `QDnsOverride`, which IS a `QDnsLookup`.
     QScopedPointer<QDnsLookup> lookupHolder(
-        nameserver.isNull() ? new QDnsLookup
-                            : new QDnsOverride(nameserver, port));
+        nameserver.isNull() || port == 53 ? new QDnsLookup
+                                          : new QDnsOverride(nameserver, port));
     QDnsLookup &lookup = *lookupHolder;
+    if (!nameserver.isNull() && port == 53) {
+        lookup.setNameserver(nameserver);
+    }
     lookup.setType(static_cast<QDnsLookup::Type>(type));
     lookup.setName(domain);
     lookup.lookup();
