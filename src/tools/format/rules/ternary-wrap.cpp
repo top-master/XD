@@ -5,7 +5,9 @@
 
 #include "../format-document.h"
 #include "../parser/code-helpers.h"
+#include "../parser/condition-layout.h"
 #include "../parser/layout-helpers.h"
+#include "../parser/scope-conditions.h"
 
 #include <QtCore/QByteArray>
 #include <QtCore/QList>
@@ -19,10 +21,13 @@
     bracket pair, such as `Type value = test ? yes : no;`: before its `?`,
     with the `?` and `:` parts on a continuation line one step (4 spaces)
     past the statement's line, and, when that line still does not fit,
-    before its `:` too (see ternaryLines()). A condition does this inside its
-    own layout (see FormatConditionWrapRule). The rule leaves alone a control
-    statement's head, a statement with a brace or a comment, and a
-    preprocessor line.
+    before its `:` too (see ternaryLines()). When the line before the `?`
+    still does not fit, it breaks that line as well, through the
+    FormatConditionLayout that every rule breaking a condition shares (see
+    FormatConditionLayout::layoutHead()); an `if` condition's own `?` is
+    laid out by FormatConditionWrapRule.
+    The rule leaves alone a control statement's head, a statement with a
+    brace or a comment, and a preprocessor line.
 */
 
 /*!
@@ -32,11 +37,16 @@
 void FormatTernaryWrapRule::run(FormatDocument *document) const
 {
     const int wrap = wrapColumn(document);
+    FormatScopeConditions conditions(document);
+    const FormatConditionLayout layout(document, &conditions);
     for (int line = 1; line <= document->lineCount(); ++line) {
         const int first = document->firstSymbolOfLine(line);
         const int last = document->lastSymbolOfLine(line);
-        if (first < 0 || last <= first || document->token(last) != SEMIC
-            || document->isDirectiveLine(line) || textWidth(document->lineText(line)) <= wrap
+        if (first < 0
+            || last <= first
+            || document->token(last) != SEMIC
+            || document->isDirectiveLine(line)
+            || textWidth(document->lineText(line)) <= wrap
         ) {
             continue;
         }
@@ -50,8 +60,14 @@ void FormatTernaryWrapRule::run(FormatDocument *document) const
             continue;
         }
         const Token start = document->token(first);
-        if (start == IF || start == WHILE || start == FOR || start == SWITCH || start == DO
-            || start == ELSE || start == CASE || start == RBRACE
+        if (start == IF
+            || start == WHILE
+            || start == FOR
+            || start == SWITCH
+            || start == DO
+            || start == ELSE
+            || start == CASE
+            || start == RBRACE
         ) {
             continue;
         }
@@ -86,9 +102,19 @@ void FormatTernaryWrapRule::run(FormatDocument *document) const
         if (lines.size() < 2) {
             continue;
         }
+
+        // Breaks the line before the `?` too, when it does not fit.
+        const QList<QByteArray > head = layout.layoutHead(
+            first,
+            question - 1,
+            indent
+        );
         QByteArray text;
-        for (int l = 0; l < lines.size(); ++l) {
-            text += (l > 0 ? "\n" : "") + lines.at(l);
+        for (int l = 0; l < head.size(); ++l) {
+            text += (l > 0 ? "\n" : "") + head.at(l);
+        }
+        for (int l = 1; l < lines.size(); ++l) {
+            text += "\n" + lines.at(l);
         }
         const int from = document->symbols().at(first).from;
         document->replace(from, document->symbols().at(last).from - from, text);

@@ -6,7 +6,7 @@ void sum(Log *log, const QList<int > & values, int count, int total)
     log->line(
         QString::number(count).rightJustified(8, QLatin1Char(' ')).toUpper().trimmed(),
         values[1] + values[2]
-        + count
-        + total
+            + count
+            + total
     );
 }

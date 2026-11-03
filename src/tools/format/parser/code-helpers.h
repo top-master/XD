@@ -15,6 +15,7 @@ int contentEnd(const FormatDocument *document, int line);
 int statementEnd(const FormatDocument *document, int index);
 int lambdaBody(const FormatDocument *document, int bracket);
 bool isLeadingOperator(Token token);
+bool isAssignmentOperator(Token token);
 bool isOperandEnd(Token token);
 int operatorPrecedence(Token token);
 int textWidth(const QByteArray & text);

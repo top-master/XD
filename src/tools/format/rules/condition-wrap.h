@@ -6,8 +6,7 @@
 
 #include "../format-named-rule.h"
 
-#include <QtCore/QByteArray>
-#include <QtCore/QList>
+class FormatConditionLayout;
 
 class FormatConditionWrapRule : public FormatNamedRule
 {
@@ -22,18 +21,9 @@ public:
     void run(FormatDocument *document) const Q_DECL_OVERRIDE;
 
 private:
-    void breakPlainCondition(FormatDocument *document, int open,
-                             int close) const;
-    bool isSplitTooLong(const FormatDocument *document, int open,
+    bool isSplitTooLong(const FormatDocument *document,
+                        const FormatConditionLayout & layout, int open,
                         int close) const;
-    QList<int > operators(const FormatDocument *document, int open,
-                          int close) const;
-    QByteArray group(
-            const FormatDocument *document, int open, int close, int indent,
-            int column, bool isCondition) const;
-    QByteArray atom(
-            const FormatDocument *document, int first, int last, int indent,
-            int column, bool *isComplex) const;
 };
 
 #endif // RULES_CONDITION_WRAP_H

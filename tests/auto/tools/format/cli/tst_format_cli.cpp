@@ -65,6 +65,9 @@ private slots:
     void testThisMode_shouldLeaveOwnMembersOfSourceBare();
     void testSpecs_shouldFormatFilesOfEverySpec();
     void testAnyComment_shouldRewrapShortComments();
+    void testAnyCode_shouldJoinBrokenLines();
+    void testRewrite_shouldJoinCodeAndComments_data();
+    void testRewrite_shouldJoinCodeAndComments();
     void testDirOption_shouldRejectFile();
 
     /// Runners.
@@ -299,7 +302,8 @@ void tst_FormatCli::testHelp_shouldListEveryOption()
         "--config <setting>", "--config-file <file>",
         "--config-add <file>", "--ai", "-I, -i <dir>",
         "--skip-ignored", "-p, --project <file>", "--specs <names>",
-        "--qmake <path>", "--any-comment", "--git <range>"
+        "--qmake <path>", "--any-comment", "--any-code",
+        "--rewrite, --anything", "--git <range>"
     };
     for (size_t i = 0; i < sizeof(options) / sizeof(options[0]); ++i) {
         qExpect(out)->toContain(QByteArray(options[i]));
@@ -1119,6 +1123,61 @@ void tst_FormatCli::testAnyComment_shouldRewrapShortComments()
         ->toEqual(1);
     qExpect(this->readFile(file))
         ->toEqual(QByteArray("// The tool waits for the server to answer each request in turn.\n"));
+    qExpect(err)->toBeEmpty();
+}
+
+/// Keeps the line breaks of a call that fits, and joins them once
+/// `--any-code` asks for the code to be laid out anew.
+void tst_FormatCli::testAnyCode_shouldJoinBrokenLines()
+{
+    this->writeFile(QString(QLL("any-code/.git/HEAD")), "ref: refs/heads/main\n");
+    const QByteArray source = "void f()\n{\n    g(first,\n      second);\n}\n";
+    const QString file = this->writeFile(
+        QString(QLL("any-code/a.cpp")),
+        source
+    );
+    QByteArray out;
+    QByteArray err;
+    const QStringList arguments = QStringList()
+        << QString(QLL("--rules=line-join")) << file;
+    qExpect(this->run(arguments, &out, &err))->toEqual(0);
+    qExpect(this->readFile(file))->toEqual(source);
+    qExpect(this->run(QStringList(arguments) << QString(QLL("--any-code")), &out, &err))
+        ->toEqual(1);
+    qExpect(this->readFile(file))
+        ->toEqual(QByteArray("void f()\n{\n    g(first, second);\n}\n"));
+    qExpect(err)->toBeEmpty();
+}
+
+/// Makes a row for each spelling of the option, `--rewrite` and its
+/// alias `--anything`, which the test runs alike.
+void tst_FormatCli::testRewrite_shouldJoinCodeAndComments_data()
+{
+    QTest::addColumn<QString >("option");
+    QTest::newRow("rewrite") << QString(QLL("--rewrite"));
+    QTest::newRow("anything") << QString(QLL("--anything"));
+}
+
+/// Joins the lines of a call and of a comment in one run, since the option
+/// stands for `--any-comment` and `--any-code` together.
+void tst_FormatCli::testRewrite_shouldJoinCodeAndComments()
+{
+    QFETCH(QString, option);
+    this->writeFile(QString(QLL("rewrite/.git/HEAD")), "ref: refs/heads/main\n");
+    const QString file = this->writeFile(
+        QString(QLL("rewrite/a.cpp")),
+        "void f()\n{\n    // The tool waits for the server to answer\n"
+        "    // each request in turn.\n    g(first,\n      second);\n}\n"
+    );
+    QByteArray out;
+    QByteArray err;
+    const QStringList arguments = QStringList()
+        << QString(QLL("--rules=line-join,comment-width")) << option << file;
+    qExpect(this->run(arguments, &out, &err))->toEqual(1);
+    qExpect(this->readFile(file))->toEqual(QByteArray(
+        "void f()\n{\n    // The tool waits for the server to answer each request in turn.\n"
+        "    g(first, second);\n}\n"
+    ));
     qExpect(err)->toBeEmpty();
 }
 

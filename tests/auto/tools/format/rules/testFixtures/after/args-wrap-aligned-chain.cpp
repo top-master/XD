@@ -3,7 +3,8 @@
 
 void run(Document *document, int open, int close)
 {
-    const QByteArray text = sourceText(document,
+    const QByteArray text = sourceText(
+        document,
         open + 1,
         close - 1
     );

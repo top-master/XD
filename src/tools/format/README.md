@@ -71,6 +71,13 @@ format --list-rules
 - `--any-comment`: wraps again every comment paragraph that leaves room
   unused, not only the ones past `wrapMax`; the same as
   `-c comments.target=any` (see "Wrapping comments" below).
+- `--any-code`: lays the code out anew: it joins the lines of each
+  expression, and the layout rules then break again whatever passes
+  `wrapMax`; the same as `-c structure.target=any` (see "Laying out code"
+  below). Use it for a full rewrite, when the line breaks the code already
+  has are not worth keeping.
+- `--rewrite`, `--anything`: the same as `--any-comment` and `--any-code`
+  together.
 - `-I <dir>`, `-i <dir>`: looks for the headers that quoted `#include`s name
   in `<dir>` too, after the file's own folder, the way a compiler does; give
   it more than once for more folders. A rule that reads a class from its
@@ -173,6 +180,14 @@ moveSuffix = " "
 - `wrapMax` (in `[Structure]`): the column no line may pass, for the code
   lines that the parameter, call, operator, and `connect()` rules wrap; the
   default is `80`.
+- `target` (in `[Structure]`): `long` (the default) keeps the line breaks
+  that the code already has where they fit; `any` joins the lines of each
+  expression first, hence the layout rules lay it out anew (see
+  `line-join`). `--any-code` sets `any`.
+- `bodyBraces` (in `[Structure]`): `true` (the default) lets `body-braces`
+  give a body that closes in a chain of brackets its own lines; `false`
+  leaves such a body as it is. A condition such as `is-header` or
+  `!is-header && is-outline` selects the bodies where the rule applies.
 - `wrapBegin` and `wrapMax` in `[Comments]`: the same for comments (see
   "Wrapping comments" below). `[Comments]` takes every key of `[Structure]`
   whose name starts with `wrap` (`wrapArgsAt` below too, which no comment
@@ -263,9 +278,7 @@ moveSuffix = " "
   ```
 - `wrapArgsOver` (in `[Structure]`): how many arguments, or parameters, a
   list holds at most before it may always break, whatever `wrapArgsAt`
-  says; the default is `3`. A broken call of that many arguments or fewer
-  may also move its last arguments whole to lines of their own (see
-  `args-wrap` under "Laying out code" below).
+  says; the default is `3`.
 
 The command line then overrides the `.formatrc` files, in this order:
 
@@ -357,6 +370,27 @@ The code rules lay out a few constructs on their own:
   becomes `if ( ! ready)`); a run of signs stays together (`!! x`). It leaves
   `!=`, `operator!`, preprocessor lines, and a side that has its space
   already.
+- `line-join` joins the lines of each expression when `[Structure] target`
+  is `any` (`--any-code`), and does nothing otherwise: a break inside a
+  `(`, a `[`, or an initializer list, and a statement's break before an
+  operator line, after an `=`, or before the `:` of a conditional
+  expression. The rules below then break again whatever passes the wrap
+  column, hence the code gets a full rewrite instead of keeping the line
+  breaks it had. It keeps a break next to a comment or a directive, and one
+  between two string literals.
+- `body-braces` runs after every other rule: a function, class, enum, or
+  namespace body (any body but a statement's block) whose closing `}` stands on a line that holds only a chain of closing
+  brackets (`} }`, `) }`, or `); }`) gets its own lines. The text after its
+  `{` moves to the next line, one step in, its later lines move in until
+  the shallowest stands at that step, and its `}` closes on a line of its
+  own. A `}` that shares its line with other code (`{ return count(); }`)
+  is compact formatting and stays. `[Structure] bodyBraces = false` turns
+  the rule off.
+- `namespace-braces` ends the line of `namespace xyz {` at its `{` and
+  puts the namespace's `}` on a line of its own, at the same indent; a
+  named namespace's `}` gets the comment `// Namespace \`xyz\`.` after it,
+  in place of any other comment there (such as `// namespace xyz`). A
+  `using namespace` directive and a namespace alias stay as they are.
 - `control-braces` wraps each body of `if`, `else`, `for`, `while`, `do`, and
   `foreach` in braces. In a header, a body on its keyword's line stays there
   (`if (x) { return; }`); in any other file it moves to a line of its own,
@@ -416,17 +450,11 @@ The code rules lay out a few constructs on their own:
   `[Structure] wrapArgsAt`
   holds at its `(`, its last argument is an operator chain, or it is a
   brace list. On the same terms, it lays out a list the user broke over
-  lines whose lines are not one step past the line of its opening. When
-  it takes `wrapArgsOver` arguments or fewer, its last argument is a
-  chain, and its leading arguments sat on the line of its opening, it first
-  moves its last argument whole to a line of its own, one step in, then its
-  last two, and so on, up to every argument but the first: the first count
-  whose leading arguments fit on the line of the opening, and whose moved
-  arguments each fit whole on their line, wins. Otherwise the leading arguments, and the head of a last argument
-  that is a chain, stay on the line of the opening when they fit, the chain going on below with
-  the `)` on a line of its own; otherwise the list breaks after its
-  opening, each argument one step past that line, and the closing bracket
-  goes back to that line's indent. In the head of an `if` or `while`, the
+  lines whose lines are not one step past the line of its opening. A call
+  that breaks moves every argument below its opening, one step in, and its
+  closing bracket goes back to that line's indent. A list already broken
+  after its opening keeps the arguments that share a line together when
+  they fit. In the head of an `if` or `while`, the
   list steps from the condition's operand level:
 
   ```
