@@ -74,6 +74,10 @@
       a broken call of that many arguments or fewer may also move its last
       arguments whole to lines of their own (see
       FormatExpressionLayout::layoutList()). 3 without a `.formatrc`;
+    * `target` (`[Structure]`): `long` (the default) keeps the line breaks
+      that the code already has where they fit, and `any` lays the code out
+      anew, as if each expression sat on one line (see FormatLineJoinRule);
+      the command line's `--any-code` sets `any`.
 
     Each spacing key takes any run of spaces and/or tabs to write there
     (`" "` for one space, `"\t"` for a tab, `""` or `none` for no space),
@@ -153,6 +157,9 @@ Config::Schema FormatSettings::schema()
                          100,
                          1
                      ), QString(QLL("3")));
+    structure.addKey(QString(QLL("target")),
+                     QStringList() << QString(QLL("long")) << QString(QLL("any")),
+                     QString(QLL("long")));
     Config::Section comments(QString(QLL("Comments")));
     comments.extendPrefixed(structure, QString(QLL("wrap")));
     comments.addKey(QString(QLL("wrapExtendsForKeywords")),
@@ -299,6 +306,8 @@ bool FormatSettings::load(const QString & path, const FormatConfig & config,
         ? WrapCommaHard : WrapCommaSoft;
     settings->commentTarget = parser.value(QString(QLL("comments.target"))) == QLL("any")
         ? CommentTargetAny : CommentTargetLong;
+    settings->codeTarget = parser.value(QString(QLL("structure.target"))) == QLL("any")
+        ? CodeTargetAny : CodeTargetLong;
     settings->docTagSign = parser.value(QString(QLL("comments.docTagSign"))) == QLL("\\")
         ? '\\' : '@';
     Config::Condition::compile(

@@ -17,11 +17,13 @@ class FormatSettings
 public:
     enum WrapComma { WrapCommaSoft, WrapCommaHard };
     enum CommentTarget { CommentTargetLong, CommentTargetAny };
+    enum CodeTarget { CodeTargetLong, CodeTargetAny };
 
     inline FormatSettings()
         : refSuffix(" "), moveSuffix(FormatSpacing::keep())
         , wrapMax(80), wrapArgsOver(3), commentWrapMax(80), wrapExtendsForKeywords(20), wrapEmptyLimit(8)
-        , wrapComma(WrapCommaSoft), commentTarget(CommentTargetLong), docTagSign('@')
+        , wrapComma(WrapCommaSoft), commentTarget(CommentTargetLong), codeTarget(CodeTargetLong)
+        , docTagSign('@')
     {
         wrapBegin << 75;
         commentWrapBegin << 75;
@@ -50,6 +52,7 @@ public:
     int wrapEmptyLimit;
     WrapComma wrapComma;
     CommentTarget commentTarget;
+    CodeTarget codeTarget;
     char docTagSign;
     QStringList thisMode;
     QStringList wrapChainAt;

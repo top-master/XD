@@ -71,6 +71,13 @@ format --list-rules
 - `--any-comment`: wraps again every comment paragraph that leaves room
   unused, not only the ones past `wrapMax`; the same as
   `-c comments.target=any` (see "Wrapping comments" below).
+- `--any-code`: lays the code out anew: it joins the lines of each
+  expression, and the layout rules then break again whatever passes
+  `wrapMax`; the same as `-c structure.target=any` (see "Laying out code"
+  below). Use it for a full rewrite, when the line breaks the code already
+  has are not worth keeping.
+- `--rewrite`, `--anything`: the same as `--any-comment` and `--any-code`
+  together.
 - `-I <dir>`, `-i <dir>`: looks for the headers that quoted `#include`s name
   in `<dir>` too, after the file's own folder, the way a compiler does; give
   it more than once for more folders. A rule that reads a class from its
@@ -173,6 +180,10 @@ moveSuffix = " "
 - `wrapMax` (in `[Structure]`): the column no line may pass, for the code
   lines that the parameter, call, operator, and `connect()` rules wrap; the
   default is `80`.
+- `target` (in `[Structure]`): `long` (the default) keeps the line breaks
+  that the code already has where they fit; `any` joins the lines of each
+  expression first, hence the layout rules lay it out anew (see
+  `line-join`). `--any-code` sets `any`.
 - `wrapBegin` and `wrapMax` in `[Comments]`: the same for comments (see
   "Wrapping comments" below). `[Comments]` takes every key of `[Structure]`
   whose name starts with `wrap` (`wrapArgsAt` below too, which no comment
@@ -357,6 +368,14 @@ The code rules lay out a few constructs on their own:
   becomes `if ( ! ready)`); a run of signs stays together (`!! x`). It leaves
   `!=`, `operator!`, preprocessor lines, and a side that has its space
   already.
+- `line-join` joins the lines of each expression when `[Structure] target`
+  is `any` (`--any-code`), and does nothing otherwise: a break inside a
+  `(`, a `[`, or an initializer list, and a statement's break before an
+  operator line, after an `=`, or before the `:` of a conditional
+  expression. The rules below then break again whatever passes the wrap
+  column, hence the code gets a full rewrite instead of keeping the line
+  breaks it had. It keeps a break next to a comment or a directive, and one
+  between two string literals.
 - `control-braces` wraps each body of `if`, `else`, `for`, `while`, `do`, and
   `foreach` in braces. In a header, a body on its keyword's line stays there
   (`if (x) { return; }`); in any other file it moves to a line of its own,

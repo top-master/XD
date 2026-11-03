@@ -60,6 +60,7 @@ HEADERS += \
     $$PWD/rules/global-static.h \
     $$PWD/rules/init-list.h \
     $$PWD/rules/inline-keyword.h \
+    $$PWD/rules/line-join.h \
     $$PWD/rules/mark-banner.h \
     $$PWD/rules/member-init.h \
     $$PWD/rules/moc-run.h \
@@ -125,6 +126,7 @@ SOURCES += \
     $$PWD/rules/global-static.cpp \
     $$PWD/rules/init-list.cpp \
     $$PWD/rules/inline-keyword.cpp \
+    $$PWD/rules/line-join.cpp \
     $$PWD/rules/mark-banner.cpp \
     $$PWD/rules/member-init.cpp \
     $$PWD/rules/moc-run.cpp \

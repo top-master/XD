@@ -22,6 +22,7 @@
 #include "./rules/global-static.h"
 #include "./rules/init-list.h"
 #include "./rules/inline-keyword.h"
+#include "./rules/line-join.h"
 #include "./rules/mark-banner.h"
 #include "./rules/member-init.h"
 #include "./rules/moc-run.h"
@@ -62,7 +63,7 @@ static QList<FormatRule * > formatCreateCodeRules()
 {
     QList<FormatRule * > rules;
     rules << new FormatMocRunRule << new FormatQllRule << new FormatRelativeIncludeRule
-        << new FormatNotSpaceRule
+        << new FormatNotSpaceRule << new FormatLineJoinRule
         << new FormatControlBracesRule << new FormatOperatorWrapRule
         << new FormatConditionWrapRule << new FormatTernaryWrapRule
         << new FormatOperatorFirstRule << new FormatContinuationIndentRule

@@ -628,6 +628,16 @@ int main(int argc, char *argv[])
         QString(QLL("Rewraps every comment that leaves room unused, not only the " "ones past the limit; the same as -c comments.target=any."))
     );
     parser.addOption(anyCommentOption);
+    QCommandLineOption anyCodeOption(
+        QStringList() << QString(QLL("any-code")),
+        QString(QLL("Lays the code out anew, not keeping the line breaks it already " "has; the same as -c structure.target=any."))
+    );
+    parser.addOption(anyCodeOption);
+    QCommandLineOption rewriteOption(
+        QStringList() << QString(QLL("rewrite")) << QString(QLL("anything")),
+        QString(QLL("Lays out the code and wraps the comments anew; the same as " "--any-comment and --any-code together."))
+    );
+    parser.addOption(rewriteOption);
     QCommandLineOption listRulesOption(
         QStringList() << QString(QLL("list-rules")),
         QString(QLL("Lists the rules, and exits."))
@@ -787,8 +797,11 @@ int main(int argc, char *argv[])
         }
         config.assignments << assignment;
     }
-    if (parser.isSet(anyCommentOption)) {
+    if (parser.isSet(anyCommentOption) || parser.isSet(rewriteOption)) {
         config.assignments << QString(QLL("comments.target=any"));
+    }
+    if (parser.isSet(anyCodeOption) || parser.isSet(rewriteOption)) {
+        config.assignments << QString(QLL("structure.target=any"));
     }
 
     // Checks the settings once, before any file is read.
