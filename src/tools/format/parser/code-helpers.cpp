@@ -154,6 +154,17 @@ bool isLeadingOperator(Token token)
 }
 
 /*!
+    Tells whether @a token assigns a value, including a compound assignment.
+*/
+bool isAssignmentOperator(Token token)
+{
+    return token == EQ || token == PLUS_EQ || token == MINUS_EQ
+        || token == STAR_EQ || token == SLASH_EQ || token == PERCENT_EQ
+        || token == AND_EQ || token == OR_EQ || token == HAT_EQ
+        || token == LTLT_EQ || token == GTGT_EQ;
+}
+
+/*!
     Tells whether @a token ends an operand, hence an operator right after it
     is a binary one (not a unary minus, say).
 */

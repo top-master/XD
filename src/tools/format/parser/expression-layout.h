@@ -19,7 +19,7 @@ public:
             int indent);
 
     QByteArray layout(int first, int last, int column, int trailing);
-    QByteArray layoutList(int first, int open, int close, int column);
+    QByteArray layoutList(int first, int open, int close);
     QByteArray oneLine(int first, int last) const;
     bool hasChain(int first, int last) const;
     bool hasOuterChain(int first, int last) const;
@@ -33,7 +33,7 @@ private:
     QByteArray layoutChainRest(
             int first, int last, const QList<int > & operators,
             int column, int trailing, bool keepsLeading,
-            bool stepsIn = true, bool byLine = false);
+            bool stepsIn, bool byLine, const QByteArray & head);
     bool chainStepsIn(int headFirst, int headLast,
                       const QByteArray & head) const;
     QByteArray layoutGroup(int open, int close, int column, int trailing);
@@ -41,9 +41,6 @@ private:
             int open, int close, const QList<QPair<int, int > > & items,
             bool keepsGroups);
     QByteArray itemText(int first, int last, int column, int trailing);
-    bool leadsOnOpening(int open,
-                        const QList<QPair<int, int > > & items,
-                        int count) const;
     bool breaksOnlyBetweenLiterals(int first, int last) const;
     bool mayBreakList(int open, int itemCount) const;
     bool isListOpen(int open) const;

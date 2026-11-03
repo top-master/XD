@@ -23,9 +23,6 @@ public:
 private:
     bool isCallParen(const FormatDocument *document, int paren) const;
     int controlKeyword(const FormatDocument *document, int paren) const;
-    bool mayBreakAt(
-            const FormatDocument *document, FormatScopeConditions *conditions,
-            int open) const;
 };
 
 #endif // RULES_ARGS_WRAP_H

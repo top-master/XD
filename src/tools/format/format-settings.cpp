@@ -70,10 +70,16 @@
       commas;
     * `wrapArgsOver` (`[Structure]`): how many arguments, or parameters, a
       list holds at most before it may always break, whatever
-      `wrapArgsAt` says (see FormatArgsWrapRule and FormatParamWrapRule);
-      a broken call of that many arguments or fewer may also move its last
-      arguments whole to lines of their own (see
-      FormatExpressionLayout::layoutList()). 3 without a `.formatrc`;
+      `wrapArgsAt` says (see FormatArgsWrapRule and FormatParamWrapRule).
+      3 without a `.formatrc`;
+    * `target` (`[Structure]`): `long` (the default) keeps the line breaks
+      that the code already has where they fit, and `any` lays the code out
+      anew, as if each expression sat on one line (see FormatLineJoinRule);
+      the command line's `--any-code` sets `any`;
+    * `bodyBraces` (`[Structure]`): `true` (the default) lets
+      FormatBodyBracesRule give a body that closes in a chain of brackets
+      its own lines, and `false` leaves such a body as it is; a condition
+      selects the bodies where the rule applies.
 
     Each spacing key takes any run of spaces and/or tabs to write there
     (`" "` for one space, `"\t"` for a tab, `""` or `none` for no space),
@@ -153,6 +159,14 @@ Config::Schema FormatSettings::schema()
                          100,
                          1
                      ), QString(QLL("3")));
+    structure.addKey(QString(QLL("target")),
+                     QStringList() << QString(QLL("long")) << QString(QLL("any")),
+                     QString(QLL("long")));
+    structure.addKey(QString(QLL("bodyBraces")),
+                     Config::Matchers() << Config::Condition::create(
+                         FormatScopeConditions::names()
+                     ),
+                     QString(QLL("true")));
     Config::Section comments(QString(QLL("Comments")));
     comments.extendPrefixed(structure, QString(QLL("wrap")));
     comments.addKey(QString(QLL("wrapExtendsForKeywords")),
@@ -191,6 +205,19 @@ Config::Schema FormatSettings::schema()
     return schema;
 }
 
+static void compileCondition(const QString & text, QStringList *program,
+                             bool takesPercents = false)
+{
+    QString error;
+    QStringList compiled;
+    if ( ! Config::Condition::compile(text, FormatScopeConditions::names(),
+                                     &compiled, &error, takesPercents)) {
+        qWarning("Invalid format condition: %s", qPrintable(error));
+        return;
+    }
+    *program = compiled;
+}
+
 /*!
     Builds the program of the default `[Relations] thisMode`, for settings
     that no `.formatrc` set.
@@ -198,13 +225,7 @@ Config::Schema FormatSettings::schema()
 QStringList FormatSettings::defaultThisMode()
 {
     QStringList program;
-    QString error;
-    Config::Condition::compile(
-        QString::fromLatin1(defaultThisModeText),
-        FormatScopeConditions::names(),
-        &program,
-        &error
-    );
+    compileCondition(QString::fromLatin1(defaultThisModeText), &program);
     return program;
 }
 
@@ -216,14 +237,7 @@ QStringList FormatSettings::defaultThisMode()
 QStringList FormatSettings::defaultWrapChainAt()
 {
     QStringList program;
-    QString error;
-    Config::Condition::compile(
-        QString::fromLatin1(defaultWrapChainAtText),
-        FormatScopeConditions::names(),
-        &program,
-        &error,
-        true
-    );
+    compileCondition(QString::fromLatin1(defaultWrapChainAtText), &program, true);
     return program;
 }
 
@@ -275,6 +289,24 @@ bool FormatSettings::load(const QString & path, const FormatConfig & config,
     if ( ! FormatSettings::readConfig(&parser, config, error)) {
         return false;
     }
+    for (int i = 0; i < config.inlineLayers.size(); ++i) {
+        const QByteArray layer = config.inlineLayers.at(i).trimmed();
+        if (layer.startsWith('[')) {
+            if ( ! parser.readData(layer, QString(QLL("Format rule")), error)) {
+                return false;
+            }
+        } else {
+            const QList<QByteArray > lines = layer.split('\n');
+            for (int j = 0; j < lines.size(); ++j) {
+                const QByteArray line = lines.at(j).trimmed();
+                if ( ! line.isEmpty()
+                    && ! parser.assign(QString::fromUtf8(line), error)
+                ) {
+                    return false;
+                }
+            }
+        }
+    }
     const QString refSuffix = QString(QLL("types.refSuffix"));
     const QString moveSuffix = QString(QLL("types.moveSuffix"));
     settings->refSuffix = FormatSettings::toSpacing(
@@ -288,7 +320,9 @@ bool FormatSettings::load(const QString & path, const FormatConfig & config,
     settings->wrapBegin
         = Config::Numbers::parse(parser.value(QString(QLL("structure.wrapBegin"))));
     settings->wrapMax = parser.value(QString(QLL("structure.wrapMax"))).toInt();
-    settings->wrapArgsOver = parser.value(QString(QLL("structure.wrapArgsOver"))).toInt();
+    settings->wrapArgsOver = parser
+        .value(QString(QLL("structure.wrapArgsOver")))
+        .toInt();
     settings->commentWrapBegin
         = Config::Numbers::parse(parser.value(QString(QLL("comments.wrapBegin"))));
     settings->commentWrapMax = parser.value(QString(QLL("comments.wrapMax"))).toInt();
@@ -299,28 +333,18 @@ bool FormatSettings::load(const QString & path, const FormatConfig & config,
         ? WrapCommaHard : WrapCommaSoft;
     settings->commentTarget = parser.value(QString(QLL("comments.target"))) == QLL("any")
         ? CommentTargetAny : CommentTargetLong;
+    settings->codeTarget = parser.value(QString(QLL("structure.target"))) == QLL("any")
+        ? CodeTargetAny : CodeTargetLong;
+    compileCondition(parser.value(QString(QLL("structure.bodyBraces"))),
+                     &settings->bodyBraces);
     settings->docTagSign = parser.value(QString(QLL("comments.docTagSign"))) == QLL("\\")
         ? '\\' : '@';
-    Config::Condition::compile(
-        parser.value(QString(QLL("relations.thisMode"))),
-        FormatScopeConditions::names(),
-        &settings->thisMode,
-        error
-    );
-    Config::Condition::compile(
-        parser.value(QString(QLL("structure.wrapChainAt"))),
-        FormatScopeConditions::names(),
-        &settings->wrapChainAt,
-        error,
-        true
-    );
-    Config::Condition::compile(
-        parser.value(QString(QLL("structure.wrapArgsAt"))),
-        FormatScopeConditions::names(),
-        &settings->wrapArgsAt,
-        error,
-        true
-    );
+    compileCondition(parser.value(QString(QLL("relations.thisMode"))),
+                     &settings->thisMode);
+    compileCondition(parser.value(QString(QLL("structure.wrapChainAt"))),
+                     &settings->wrapChainAt, true);
+    compileCondition(parser.value(QString(QLL("structure.wrapArgsAt"))),
+                     &settings->wrapArgsAt, true);
     return true;
 }
 

@@ -17,19 +17,17 @@
     @internal
 
     Lays out a call of 2 arguments or more, or a brace initializer list, as
-    FormatExpressionLayout does: the leading items, and the head of a last
-    item that is an operator chain, stay on the line of the opening when
-    they fit, the chain going on below; otherwise a break after the
-    opening, the items one step (4 spaces) past the line of the opening, and
-    the closing bracket back at that line's indent:
+    FormatExpressionLayout does: every item moves below the opening, one
+    step (4 spaces) in, and the closing bracket goes back to that line's
+    indent:
 
         const QByteArray input = makeFile(
             "first",
             "second"
         );
 
-    Items the user put on one line keep sharing one when it fits; a list
-    the user wrote on one line gets an item per line.
+    A list already broken after its opening keeps the items that share a
+    line together when they fit; any other list gets an item per line.
 
     It lays out a list that does not fit one line (the list's `)` passes
     the wrap column, see wrapColumn()) when the call takes more than
@@ -124,7 +122,7 @@ void FormatArgsWrapRule::run(FormatDocument *document) const
         }
         const bool mayBreak = isBrace || endsInChain
             || arguments.size() > document->settings().wrapArgsOver
-            || this->mayBreakAt(document, &conditions, i);
+            || reachesWrapArgsAt(document, &conditions, i);
         const bool needsBreak = mayBreak && column + textWidth(oneLine) > wrap;
         const int closeLine = document->symbolLine(close);
         const bool isMisplaced = hasMisplacedLines(
@@ -138,7 +136,7 @@ void FormatArgsWrapRule::run(FormatDocument *document) const
         }
 
         // Writes the list as the layout breaks it.
-        const QByteArray text = layout.layoutList(i, i, close, column);
+        const QByteArray text = layout.layoutList(i, i, close);
         const int length = closeEnd - from;
         if (document->text().mid(from, length) != text
             && document->replace(from, length, text)
@@ -159,29 +157,6 @@ void FormatArgsWrapRule::run(FormatDocument *document) const
         }
         i = close;
     }
-}
-
-/*!
-    Tells whether `[Structure] wrapArgsAt`, through @a conditions, holds at
-    the `(` at @a open of @a document: its percents compare the column after
-    the `(` with `[Structure] wrapMax`.
-*/
-bool FormatArgsWrapRule::mayBreakAt(
-        const FormatDocument *document,
-        FormatScopeConditions *conditions, int open) const
-{
-    const int lineStart = document->lineStart(document->symbolLine(open));
-    const QByteArray head = document->text().mid(
-        lineStart,
-        document->symbols().at(open).from + 1 - lineStart
-    );
-    const qreal percent = textWidth(head)
-        * 100.0
-        / qMax(1, document->settings().wrapMax);
-    return conditions->holds(
-        document->settings().wrapArgsAt, open, percent,
-        FormatSettings::defaultWrapChainAt()
-    );
 }
 
 /*!

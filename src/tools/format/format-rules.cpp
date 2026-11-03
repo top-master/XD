@@ -5,6 +5,7 @@
 
 #include "./rules/args-wrap.h"
 #include "./rules/as-with.h"
+#include "./rules/body-braces.h"
 #include "./rules/code-backticks.h"
 #include "./rules/code-shape.h"
 #include "./rules/comment-case.h"
@@ -22,7 +23,9 @@
 #include "./rules/global-static.h"
 #include "./rules/init-list.h"
 #include "./rules/inline-keyword.h"
+#include "./rules/line-join.h"
 #include "./rules/mark-banner.h"
+#include "./rules/namespace-braces.h"
 #include "./rules/member-init.h"
 #include "./rules/moc-run.h"
 #include "./rules/no-lambda.h"
@@ -62,8 +65,9 @@ static QList<FormatRule * > formatCreateCodeRules()
 {
     QList<FormatRule * > rules;
     rules << new FormatMocRunRule << new FormatQllRule << new FormatRelativeIncludeRule
-        << new FormatNotSpaceRule
-        << new FormatControlBracesRule << new FormatOperatorWrapRule
+        << new FormatNotSpaceRule << new FormatLineJoinRule
+        << new FormatControlBracesRule << new FormatNamespaceBracesRule
+        << new FormatOperatorWrapRule
         << new FormatConditionWrapRule << new FormatTernaryWrapRule
         << new FormatOperatorFirstRule << new FormatContinuationIndentRule
         << new FormatInitListRule << new FormatParamWrapRule << new FormatArgsWrapRule
@@ -167,7 +171,8 @@ static QList<FormatRule * > formatCreateCommentRules()
 /*!
     Builds one of each formatting rule, in the order the formatter runs them:
     the code and class rules first, since they may move the code that a
-    comment rule looks at afterwards.
+    comment rule looks at afterwards, and `body-braces` last, on what every
+    other rule leaves.
 */
 QList<FormatRule * > formatCreateRules()
 {
@@ -175,6 +180,7 @@ QList<FormatRule * > formatCreateRules()
     rules << formatCreateCodeRules();
     rules << formatCreateClassRules();
     rules << formatCreateCommentRules();
+    rules << new FormatBodyBracesRule;
     return rules;
 }
 
