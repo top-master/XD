@@ -32,7 +32,8 @@
 /*!
     Finds the group that the token at @a index of @a document belongs to:
     the innermost `(` or `[` still open before it, else the start of its
-    statement. Returns that bracket's index, or -1 for the statement, and
+    statement, which a preprocessor line ends just like a `;`. Returns that
+    bracket's index, or -1 for the statement, and
     gives the line that opened the group to @a base; sets @a keepsIndent for
     a group whose lines align under its first item (the arguments of a call,
     an index, or an initializer list).
@@ -45,6 +46,10 @@ static int groupOf(const FormatDocument *document, int index, int *base,
     int k = index - 1;
     for (; k >= 0; --k) {
         const Token token = document->token(k);
+        if (document->isDirectiveLine(document->symbolLine(k))) {
+            *base = document->symbolLine(k + 1);
+            return -1;
+        }
         if ((token == RPAREN
                 || token == RBRACK)
             && document->match(k) >= 0

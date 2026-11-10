@@ -8,12 +8,11 @@ QByteArray lastWord(const QByteArray & text)
             const QByteArray word = text.mid(
                 text.indexOf(
                     ':',
-                    text.indexOf(':',
+                    text.indexOf(
+                        ':',
                         text.indexOf(':', text.indexOf(':') + 1) + 1
-                    )
-                    + 1
-                )
-                + 1
+                    ) + 1
+                ) + 1
             );
             return word;
         }

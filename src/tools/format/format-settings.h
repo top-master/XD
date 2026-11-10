@@ -22,7 +22,7 @@ public:
     inline FormatSettings()
         : refSuffix(" "), moveSuffix(FormatSpacing::keep())
         , wrapMax(80), wrapArgsOver(3), commentWrapMax(80), wrapExtendsForKeywords(20), wrapEmptyLimit(8)
-        , wrapComma(WrapCommaSoft), commentTarget(CommentTargetLong), codeTarget(CodeTargetLong)
+        , wrapComma(WrapCommaSoft), commentTarget(CommentTargetLong), codeTarget(CodeTargetLong), bodyBraces(true)
         , docTagSign('@')
     {
         wrapBegin << 75;
@@ -53,6 +53,7 @@ public:
     WrapComma wrapComma;
     CommentTarget commentTarget;
     CodeTarget codeTarget;
+    bool bodyBraces;
     char docTagSign;
     QStringList thisMode;
     QStringList wrapChainAt;

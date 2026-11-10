@@ -8,12 +8,12 @@ QByteArray lastField(const QByteArray & record)
             const QByteArray field = record.mid(
                 record.indexOf(
                     ':',
-                    record.indexOf(':',
-                        record.indexOf(':', record.indexOf(':') + 1) + 1
-                    )
-                    + 1
-                )
-                + 1
+                    record.indexOf(
+                        ':',
+                        record.indexOf(':', record.indexOf(':') + 1)
+                            + 1
+                    ) + 1
+                ) + 1
             );
             return field;
         }

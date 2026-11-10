@@ -70,14 +70,15 @@
       commas;
     * `wrapArgsOver` (`[Structure]`): how many arguments, or parameters, a
       list holds at most before it may always break, whatever
-      `wrapArgsAt` says (see FormatArgsWrapRule and FormatParamWrapRule);
-      a broken call of that many arguments or fewer may also move its last
-      arguments whole to lines of their own (see
-      FormatExpressionLayout::layoutList()). 3 without a `.formatrc`;
+      `wrapArgsAt` says (see FormatArgsWrapRule and FormatParamWrapRule).
+      3 without a `.formatrc`;
     * `target` (`[Structure]`): `long` (the default) keeps the line breaks
       that the code already has where they fit, and `any` lays the code out
       anew, as if each expression sat on one line (see FormatLineJoinRule);
-      the command line's `--any-code` sets `any`.
+      the command line's `--any-code` sets `any`;
+    * `bodyBraces` (`[Structure]`): `true` (the default) lets
+      FormatBodyBracesRule give a body that closes in a chain of brackets
+      its own lines, and `false` leaves such a body as it is.
 
     Each spacing key takes any run of spaces and/or tabs to write there
     (`" "` for one space, `"\t"` for a tab, `""` or `none` for no space),
@@ -160,6 +161,9 @@ Config::Schema FormatSettings::schema()
     structure.addKey(QString(QLL("target")),
                      QStringList() << QString(QLL("long")) << QString(QLL("any")),
                      QString(QLL("long")));
+    structure.addKey(QString(QLL("bodyBraces")),
+                     QStringList() << QString(QLL("true")) << QString(QLL("false")),
+                     QString(QLL("true")));
     Config::Section comments(QString(QLL("Comments")));
     comments.extendPrefixed(structure, QString(QLL("wrap")));
     comments.addKey(QString(QLL("wrapExtendsForKeywords")),
@@ -295,7 +299,9 @@ bool FormatSettings::load(const QString & path, const FormatConfig & config,
     settings->wrapBegin
         = Config::Numbers::parse(parser.value(QString(QLL("structure.wrapBegin"))));
     settings->wrapMax = parser.value(QString(QLL("structure.wrapMax"))).toInt();
-    settings->wrapArgsOver = parser.value(QString(QLL("structure.wrapArgsOver"))).toInt();
+    settings->wrapArgsOver = parser
+        .value(QString(QLL("structure.wrapArgsOver")))
+        .toInt();
     settings->commentWrapBegin
         = Config::Numbers::parse(parser.value(QString(QLL("comments.wrapBegin"))));
     settings->commentWrapMax = parser.value(QString(QLL("comments.wrapMax"))).toInt();
@@ -308,6 +314,7 @@ bool FormatSettings::load(const QString & path, const FormatConfig & config,
         ? CommentTargetAny : CommentTargetLong;
     settings->codeTarget = parser.value(QString(QLL("structure.target"))) == QLL("any")
         ? CodeTargetAny : CodeTargetLong;
+    settings->bodyBraces = parser.value(QString(QLL("structure.bodyBraces"))) == QLL("true");
     settings->docTagSign = parser.value(QString(QLL("comments.docTagSign"))) == QLL("\\")
         ? '\\' : '@';
     Config::Condition::compile(

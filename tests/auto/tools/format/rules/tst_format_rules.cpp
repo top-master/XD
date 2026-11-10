@@ -407,10 +407,9 @@ void tst_FormatRules::testEncode_shouldRoundTripThroughDecode()
 
     // The last line ends the result, which a parent reads as it arrives.
     QString endPath;
-    qExpect(FormatProcessRunner::decodeEnd(
-        lines.at(lines.size() - 2),
-        &endPath
-    ))->toBeTruthy();
+    qExpect(
+        FormatProcessRunner::decodeEnd(lines.at(lines.size() - 2), &endPath)
+    )->toBeTruthy();
     qExpect(endPath)->toEqual(result.path);
 #endif
 }
@@ -611,9 +610,9 @@ void tst_FormatRules::testFix_shouldRewrite_data()
                       "}\n")
         << QByteArray("void f()\n"
                       "{\n"
-                      "    document.setLineRanges(LineRanges()\n"
-                      "        << qMakePair(firstLine, firstLine)\n"
-                      "        << qMakePair(lastLine, lastLine)\n"
+                      "    document.setLineRanges(\n"
+                      "        LineRanges() << qMakePair(firstLine, firstLine)\n"
+                      "            << qMakePair(lastLine, lastLine)\n"
                       "    );\n"
                       "}\n");
     QTest::newRow("operator-wrap chain then arguments")
@@ -624,12 +623,12 @@ void tst_FormatRules::testFix_shouldRewrite_data()
                       "}\n")
         << QByteArray("void f()\n"
                       "{\n"
-                      "    document.setLineRanges(LineRanges()\n"
-                      "        << qMakePair(1, 1)\n"
-                      "        << qMakePairWhichIsForSomeReasonVeryVeryLong(\n"
-                      "            firstArgumentName,\n"
-                      "            secondArgumentName\n"
-                      "        )\n"
+                      "    document.setLineRanges(\n"
+                      "        LineRanges() << qMakePair(1, 1)\n"
+                      "            << qMakePairWhichIsForSomeReasonVeryVeryLong(\n"
+                      "                firstArgumentName,\n"
+                      "                secondArgumentName\n"
+                      "            )\n"
                       "    );\n"
                       "}\n");
     QTest::newRow("operator-wrap inner level only")
@@ -701,13 +700,15 @@ void tst_FormatRules::testFix_shouldRewrite_data()
                       "}\n")
         << QByteArray("void f()\n"
                       "{\n"
-                      "    process.start(QString(QLL(\"git\")), QStringList()\n"
-                      "        << QString(QLL(\"-c\")) << QString(QLL(\"user.name=format-test\"))\n"
-                      "        << QString(QLL(\"-c\")) << QString(QLL(\"commit.gpgsign=false\"))\n"
-                      "        << arguments\n"
+                      "    process.start(\n"
+                      "        QString(QLL(\"git\")),\n"
+                      "        QStringList()\n"
+                      "            << QString(QLL(\"-c\")) << QString(QLL(\"user.name=format-test\"))\n"
+                      "            << QString(QLL(\"-c\")) << QString(QLL(\"commit.gpgsign=false\"))\n"
+                      "            << arguments\n"
                       "    );\n"
                       "}\n");
-    QTest::newRow("args-wrap brace list keeps its line groups")
+    QTest::newRow("args-wrap brace list gets an item per line")
         << QString(QLL("args-wrap"))
         << QByteArray("void f()\n"
                       "{\n"
@@ -718,9 +719,13 @@ void tst_FormatRules::testFix_shouldRewrite_data()
         << QByteArray("void f()\n"
                       "{\n"
                       "    const char *options[] = {\n"
-                      "        \"-L, --range <range>\", \"--dir <path>\", \"--check\",\n"
-                      "        \"--config <setting>\", \"--config-file <file>\",\n"
-                      "        \"--qmake <path>\", \"--any-comment\"\n"
+                      "        \"-L, --range <range>\",\n"
+                      "        \"--dir <path>\",\n"
+                      "        \"--check\",\n"
+                      "        \"--config <setting>\",\n"
+                      "        \"--config-file <file>\",\n"
+                      "        \"--qmake <path>\",\n"
+                      "        \"--any-comment\"\n"
                       "    };\n"
                       "}\n");
     QTest::newRow("args-wrap keeps the breaks between string literals")
@@ -758,7 +763,7 @@ void tst_FormatRules::testFix_shouldRewrite_data()
                       "        fourthArgumentNameLong\n"
                       "    );\n"
                       "}\n");
-    QTest::newRow("args-wrap splits a line group that does not fit")
+    QTest::newRow("args-wrap gives each argument a line of its own")
         << QString(QLL("args-wrap"))
         << QByteArray("void f()\n"
                       "{\n"
@@ -772,7 +777,8 @@ void tst_FormatRules::testFix_shouldRewrite_data()
                       "        secondArgumentName,\n"
                       "        thirdArgumentName,\n"
                       "        fourthArgumentName,\n"
-                      "        fifth, sixth\n"
+                      "        fifth,\n"
+                      "        sixth\n"
                       "    );\n"
                       "}\n");
     QTest::newRow("param-wrap keeps line groups past wrapArgsAt")
@@ -824,9 +830,10 @@ void tst_FormatRules::testFix_shouldRewrite_data()
                       "}\n")
         << QByteArray("void f()\n"
                       "{\n"
-                      "    log(QString(QLL(\"first part of the message\"))\n"
-                      "        + someVariableName\n"
-                      "        + QString(QLL(\" and more text\"))\n"
+                      "    log(\n"
+                      "        QString(QLL(\"first part of the message\"))\n"
+                      "            + someVariableName\n"
+                      "            + QString(QLL(\" and more text\"))\n"
                       "    );\n"
                       "}\n");
     QTest::newRow("operator-wrap moves a whole chain argument of a nested call to its own line")
@@ -837,9 +844,12 @@ void tst_FormatRules::testFix_shouldRewrite_data()
                       "}\n")
         << QByteArray("void f()\n"
                       "{\n"
-                      "    QVERIFY(this->runGit(root,\n"
-                      "        QStringList() << QString(QLL(\"add\")) << QString(QLL(\".\"))\n"
-                      "    ));\n"
+                      "    QVERIFY(\n"
+                      "        this->runGit(\n"
+                      "            root,\n"
+                      "            QStringList() << QString(QLL(\"add\")) << QString(QLL(\".\"))\n"
+                      "        )\n"
+                      "    );\n"
                       "}\n");
     QTest::newRow("args-wrap keeps the line groups of a chain argument")
         << QString(QLL("args-wrap,continuation-indent"))
@@ -870,8 +880,15 @@ void tst_FormatRules::testFix_shouldRewrite_data()
         << QString(QLL("args-wrap"))
         << QByteArray("void f()\n{\n    run(firstArgumentName, secondArgumentName,\n"
                       "        thirdArgumentName, fourthArgumentName);\n}\n")
-        << QByteArray("void f()\n{\n    run(\n        firstArgumentName, secondArgumentName,\n"
-                      "        thirdArgumentName, fourthArgumentName\n    );\n}\n");
+        << QByteArray("void f()\n"
+                      "{\n"
+                      "    run(\n"
+                      "        firstArgumentName,\n"
+                      "        secondArgumentName,\n"
+                      "        thirdArgumentName,\n"
+                      "        fourthArgumentName\n"
+                      "    );\n"
+                      "}\n");
     QTest::newRow("args-wrap argument lines")
         << QString(QLL("args-wrap"))
         << QByteArray("void f()\n{\n    const QByteArray input = makeFile(\"firstArgumentText\"\n"
@@ -883,8 +900,15 @@ void tst_FormatRules::testFix_shouldRewrite_data()
         << QString(QLL("args-wrap"))
         << QByteArray("void f()\n{\n    const QByteArray input = makeFile(\"first\",\n"
                       "                                      \"second\", third, fourth);\n}\n")
-        << QByteArray("void f()\n{\n    const QByteArray input = makeFile(\n        \"first\",\n"
-                      "        \"second\", third, fourth\n    );\n}\n");
+        << QByteArray("void f()\n"
+                      "{\n"
+                      "    const QByteArray input = makeFile(\n"
+                      "        \"first\",\n"
+                      "        \"second\",\n"
+                      "        third,\n"
+                      "        fourth\n"
+                      "    );\n"
+                      "}\n");
     QTest::newRow("args-wrap regrouped")
         << QString(QLL("args-wrap"))
         << QByteArray("void f()\n{\n    run(\n        firstArgumentName, secondArgumentName,\n"
@@ -921,8 +945,17 @@ void tst_FormatRules::testFix_shouldRewrite_data()
         << QString(QLL("args-wrap,condition-close"))
         << QByteArray("void f()\n{\n    if (check(first, second,\n              third, fourth)) {\n"
                       "    }\n}\n")
-        << QByteArray("void f()\n{\n    if (check(\n            first, second,\n"
-                      "            third, fourth\n        )\n    ) {\n    }\n}\n");
+        << QByteArray("void f()\n"
+                      "{\n"
+                      "    if (check(\n"
+                      "            first,\n"
+                      "            second,\n"
+                      "            third,\n"
+                      "            fourth\n"
+                      "        )\n"
+                      "    ) {\n"
+                      "    }\n"
+                      "}\n");
     QTest::newRow("args-wrap declaration")
         << QString(QLL("args-wrap"))
         << QByteArray("void run(int first, int second,\n         int third, int fourth);\n")
@@ -1830,10 +1863,7 @@ void tst_FormatRules::testAgentMode_shouldAskForLongSplitCondition()
 {
     Formatter formatter;
     QString error;
-    qExpect(formatter.selectRules(
-        QStringList() << QString(QLL("condition-wrap")),
-        &error
-    ))
+    qExpect(formatter.selectRules(QStringList() << QString(QLL("condition-wrap")), &error))
         ->toBeTruthy();
     const QByteArray input = "void f()\n{\n    if (hasData && isBuffered && socketType == UdpSocketType"
                              " && engine->isConnected()\n        && engine->lastError() == RefusedError) {\n"

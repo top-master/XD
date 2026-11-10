@@ -90,12 +90,11 @@ void FormatControlBracesRule::unfold(
     }
     const QByteArray indent = document->indentOf(line);
     const int from = document->symbolEnd(brace);
-    document->replace(from, document->symbols().at(brace + 1).from - from, "\n"
-        + continuationPad(indent.size())
-    );
     const int last = document->symbolEnd(close - 1);
-    document->replace(last, document->symbols().at(close).from - last, "\n"
-        + indent
+    document->replace(
+        from, document->symbols().at(brace + 1).from - from,
+        "\n" + continuationPad(indent.size()),
+        last, document->symbols().at(close).from - last, "\n" + indent
     );
 }
 
@@ -173,18 +172,21 @@ void FormatControlBracesRule::brace(
             return;
         }
         if (document->isHeader()) {
-            document->replace(document->symbolEnd(head), 0, " {");
-            document->replace(document->symbolEnd(end), 0, " }");
+            document->replace(
+                document->symbolEnd(head), 0, " {",
+                document->symbolEnd(end), 0, " }"
+            );
             return;
         }
 
         // Moves the body to a line of its own, and closes it on the next.
         const QByteArray indent = document->indentOf(document->symbolLine(keyword));
         const int from = document->symbolEnd(head);
-        document->replace(from, document->symbols().at(body).from - from, " {\n"
-            + continuationPad(indent.size())
+        document->replace(
+            from, document->symbols().at(body).from - from,
+            " {\n" + continuationPad(indent.size()),
+            document->symbolEnd(end), 0, "\n" + indent + "}"
         );
-        document->replace(document->symbolEnd(end), 0, "\n" + indent + "}");
         return;
     }
 
@@ -203,15 +205,16 @@ void FormatControlBracesRule::brace(
             document->symbolEnd(end),
             document->symbols().at(end + 1).from
         );
-    document->replace(document->symbolEnd(head), 0, " {");
+    int closeFrom = contentEnd(document, endLine);
+    int closeLength = 0;
+    QByteArray closeText = "\n" + indent + "}";
     if (joins) {
-        const int from = document->symbolEnd(end);
-        const int to = document->symbols().at(end + 1).from;
-        document->replace(from, to - from, "\n" + indent + "} ");
-        return;
+        closeFrom = document->symbolEnd(end);
+        closeLength = document->symbols().at(end + 1).from - closeFrom;
+        closeText += ' ';
     }
-    document->replace(contentEnd(document, endLine), 0, "\n"
-        + indent
-        + "}"
+    document->replace(
+        document->symbolEnd(head), 0, " {",
+        closeFrom, closeLength, closeText
     );
 }

@@ -4,20 +4,32 @@
 #ifndef PARSER_LAYOUT_HELPERS_H
 #define PARSER_LAYOUT_HELPERS_H
 
+#include "../format-document.h"
+
 #include <QtCore/QByteArray>
 #include <QtCore/QList>
 #include <QtCore/QPair>
 
-class FormatDocument;
-
 int wrapColumn(const FormatDocument *document);
 QByteArray continuationPad(int indent);
+bool isBinaryOperator(Token token);
+bool isClosingLine(const QByteArray & text);
+bool closesEarlierLine(const FormatDocument *document, int bracket);
 bool hasMisplacedLines(const FormatDocument *document, int open, int close,
                        int indent);
 bool startsWithStringLiteral(const FormatDocument *document, int token);
 QByteArray sourceText(const FormatDocument *document, int first, int last);
 bool findTernary(const FormatDocument *document, int first, int last,
                  int *question, int *colon);
+class FormatScopeConditions;
+
+bool reachesWrapArgsAt(const FormatDocument *document,
+                       FormatScopeConditions *conditions, int token);
+QList<QByteArray > comparisonLines(const FormatDocument *document, int first,
+                                   int last, int column, int indent, int step);
+QList<int > loosestOperators(
+        const FormatDocument *document, int first, int last,
+        int (*rankOf)(Token), int fromRank, int *rank);
 QList<QPair<int, int > > splitArguments(
         const FormatDocument *document,
         int open, int close);

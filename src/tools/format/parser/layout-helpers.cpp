@@ -5,6 +5,8 @@
 
 #include "../format-document.h"
 #include "./code-helpers.h"
+#include "./scope-conditions.h"
+#include "../format-settings.h"
 
 /*!
     Builds the column the code wrap rules break a line at: the first
@@ -31,7 +33,7 @@ QByteArray continuationPad(int indent)
 /*!
     Tells whether @a token is a binary operator that may start a line.
 */
-static bool isBinaryOperator(Token token)
+bool isBinaryOperator(Token token)
 {
     switch (token) {
     case PLUS: case MINUS: case STAR: case SLASH: case PERCENT:
@@ -46,6 +48,39 @@ static bool isBinaryOperator(Token token)
 }
 
 /*!
+    Tells whether @a text holds only closing brackets and whitespace.
+*/
+bool isClosingLine(const QByteArray & text)
+{
+    const QByteArray line = text.trimmed();
+    if (line.isEmpty()) {
+        return false;
+    }
+    for (int i = 0; i < line.size(); ++i) {
+        const char character = line.at(i);
+        if (character != ')' && character != ']' && character != '}'
+            && character != ' ' && character != '\t'
+        ) {
+            return false;
+        }
+    }
+    return true;
+}
+
+/*!
+    Tells whether the closing @a bracket of @a document opened on an earlier
+    line than its own.
+*/
+bool closesEarlierLine(const FormatDocument *document, int bracket)
+{
+    const Token token = document->token(bracket);
+    const int open = document->match(bracket);
+    return (token == RPAREN || token == RBRACK || token == RBRACE)
+        && open >= 0
+        && document->symbolLine(open) < document->symbolLine(bracket);
+}
+
+/*!
     Tells whether a line of the bracket group from the token @a open of
     @a document to its closing token @a close, which opens on a line indented
     by @a indent, sits at another indent than its brackets give it.
@@ -55,8 +90,8 @@ static bool isBinaryOperator(Token token)
     bracket's closing one on a later line, from that closing line on.
     Inside such a bracket, an argument that goes on past the end of its
     line adds one more step to its next lines, until the `,` that ends it,
-    unless that line opened a bracket of its own, ends with a closing bracket
-    (`)`, `]` or `}`) or a string literal, or starts with a string literal
+    unless that line left a bracket open, closes a bracket opened on an
+    earlier line, ends with a string literal, or starts with a string literal
     (see startsWithStringLiteral()); a bracket opened while an argument had
     that step keeps it for its own lines. A line that starts with a
     binary operator, right below another one that does, sits at that
@@ -132,7 +167,7 @@ bool hasMisplacedLines(const FormatDocument *document, int open, int close,
         const Token end = document->token(last);
         if (end == COMMA) {
             ranges.last().second = false;
-        } else if ( ! opened && end != RPAREN && end != RBRACK && end != RBRACE
+        } else if ( ! opened && ! closesEarlierLine(document, last)
             && end != STRING_LITERAL
             && lead >= 0 && ! startsWithStringLiteral(document, lead)
         ) {
@@ -220,6 +255,16 @@ bool findTernary(const FormatDocument *document, int first, int last,
 }
 
 /*!
+    Tells whether a `<` after @a token opens template arguments: after a
+    name, a cast keyword, or `template`.
+*/
+static bool opensTemplate(Token token)
+{
+    return token == IDENTIFIER || token == STATIC_CAST || token == DYNAMIC_CAST
+        || token == CONST_CAST || token == REINTERPRET_CAST || token == TEMPLATE;
+}
+
+/*!
     Builds the index of the `>` that closes the template arguments opened by
     the `<` at @a angle of @a document, before @a end; -1 when a `(`, `&&`,
     `||`, `?` or `;` comes first, hence the `<` compares.
@@ -246,6 +291,134 @@ static int templateClose(const FormatDocument *document, int angle, int end)
         }
     }
     return -1;
+}
+
+/*!
+    Builds the indexes of the operators that break the tokens @a first up to
+    @a last of @a document: those of the loosest rank that @a rankOf gives,
+    from @a fromRank on, outside of nested brackets and template arguments,
+    and that are no unary sign (one that starts the range or follows no end
+    of an operand). Gives that rank to @a rank, unless it is null. Builds an
+    empty list when no operator ranks, or when a brace stands at the
+    range's own level.
+
+    @a rankOf gives each operator its rank, the loosest 0, and -1 to a
+    token that does not break; hence a rule breaks first where its tokens
+    hold together least.
+*/
+QList<int > loosestOperators(
+        const FormatDocument *document, int first, int last,
+        int (*rankOf)(Token), int fromRank, int *rank)
+{
+    QList<int > found;
+    int best = -1;
+    for (int k = first; k <= last; ++k) {
+        const Token token = document->token(k);
+        if (token == LBRACE) {
+            return QList<int >();
+        }
+        if ((token == LPAREN || token == LBRACK) && document->match(k) > k) {
+            k = document->match(k);
+            continue;
+        }
+        if (token == LANGLE && k > first
+            && opensTemplate(document->token(k - 1))
+        ) {
+            const int close = templateClose(document, k, last + 1);
+            if (close > k) {
+                k = close;
+                continue;
+            }
+        }
+        const int tokenRank = rankOf(token);
+        if (tokenRank < fromRank
+            || (best >= 0 && tokenRank > best)
+            || k == first
+            || ! isOperandEnd(document->token(k - 1))
+        ) {
+            continue;
+        }
+        if (tokenRank < best || best < 0) {
+            found.clear();
+            best = tokenRank;
+        }
+        found << k;
+    }
+    if (rank) {
+        *rank = best;
+    }
+    return found;
+}
+
+/*!
+    Tells whether the token at @a token of @a document stands at or past
+    `[Structure] wrapArgsAt`: whether its condition (see
+    FormatScopeConditions::holds()) holds, its percents comparing the column
+    right after the token with `[Structure] wrapMax`. A list may break after
+    such a `(`, and a value may move below such an `=`.
+*/
+bool reachesWrapArgsAt(const FormatDocument *document,
+                       FormatScopeConditions *conditions, int token)
+{
+    const int lineStart = document->lineStart(document->symbolLine(token));
+    const QByteArray head = document->text().mid(
+        lineStart,
+        document->symbolEnd(token) - lineStart
+    );
+    const qreal percent = textWidth(head) * 100.0
+        / qMax(1, document->settings().wrapMax);
+    return conditions->holds(
+        document->settings().wrapArgsAt, token, percent,
+        FormatSettings::defaultWrapChainAt()
+    );
+}
+
+/*!
+    Ranks @a token among the comparison operators, from the loosest:
+    `==` and `!=`, then `<`, `>`, `<=` and `>=`; -1 for any other token.
+*/
+static int comparisonRank(Token token)
+{
+    static const Token ranks[][4] = {
+        { EQEQ, NE, NE, NE },
+        { LANGLE, RANGLE, LE, GE },
+    };
+    for (size_t r = 0; r < sizeof(ranks) / sizeof(ranks[0]); ++r) {
+        for (int t = 0; t < 4; ++t) {
+            if (ranks[r][t] == token) {
+                return int(r);
+            }
+        }
+    }
+    return -1;
+}
+
+/*!
+    Builds the lines of the operand from the token @a first up to @a last
+    of @a document, written from @a column of a line indented by @a indent:
+    one line while it fits `[Structure] wrapMax`, hence a comparison stays
+    whole on a line of its own where it can; else broken before each of its
+    loosest comparison operators (see loosestOperators()), each such line
+    @a step columns past @a indent.
+*/
+QList<QByteArray > comparisonLines(const FormatDocument *document, int first,
+                                   int last, int column, int indent, int step)
+{
+    const QByteArray text = sourceText(document, first, last);
+    const QList<int > operators = loosestOperators(
+        document, first, last, &comparisonRank, 0, Q_NULLPTR
+    );
+    if (column + textWidth(text) <= document->settings().wrapMax || operators.isEmpty()) {
+        return QList<QByteArray >() << text;
+    }
+    const QByteArray pad(indent + step, ' ');
+    QList<QByteArray > lines;
+    lines << sourceText(document, first, operators.first() - 1);
+    for (int k = 0; k < operators.size(); ++k) {
+        const int end = k + 1 < operators.size() ? operators.at(k + 1) - 1 : last;
+        lines << pad + sourceText(document, operators.at(k), end);
+    }
+    return lines;
 }
 
 /*!

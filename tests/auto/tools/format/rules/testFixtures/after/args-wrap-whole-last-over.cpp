@@ -11,8 +11,7 @@ void parse(const QByteArray & line)
                     ' ',
                     line.indexOf(' ', line.indexOf(' ') + 1) + 1,
                     line.indexOf(' ', line.indexOf(' ') + 1) + 1
-                )
-                + 1
+                ) + 1
             );
         }
     }

@@ -36,11 +36,13 @@ HEADERS += \
     $$PWD/lang/member-scope.h \
     $$PWD/parser/class-helpers.h \
     $$PWD/parser/code-helpers.h \
+    $$PWD/parser/condition-layout.h \
     $$PWD/parser/comment-helpers.h \
     $$PWD/parser/expression-layout.h \
     $$PWD/parser/layout-helpers.h \
     $$PWD/parser/scope-conditions.h \
     $$PWD/rules/args-wrap.h \
+    $$PWD/rules/body-braces.h \
     $$PWD/rules/as-with.h \
     $$PWD/rules/code-backticks.h \
     $$PWD/rules/code-shape.h \
@@ -62,6 +64,7 @@ HEADERS += \
     $$PWD/rules/inline-keyword.h \
     $$PWD/rules/line-join.h \
     $$PWD/rules/mark-banner.h \
+    $$PWD/rules/namespace-braces.h \
     $$PWD/rules/member-init.h \
     $$PWD/rules/moc-run.h \
     $$PWD/rules/no-lambda.h \
@@ -102,11 +105,13 @@ SOURCES += \
     $$PWD/formatter.cpp \
     $$PWD/parser/class-helpers.cpp \
     $$PWD/parser/code-helpers.cpp \
+    $$PWD/parser/condition-layout.cpp \
     $$PWD/parser/comment-helpers.cpp \
     $$PWD/parser/expression-layout.cpp \
     $$PWD/parser/layout-helpers.cpp \
     $$PWD/parser/scope-conditions.cpp \
     $$PWD/rules/args-wrap.cpp \
+    $$PWD/rules/body-braces.cpp \
     $$PWD/rules/as-with.cpp \
     $$PWD/rules/code-backticks.cpp \
     $$PWD/rules/code-shape.cpp \
@@ -128,6 +133,7 @@ SOURCES += \
     $$PWD/rules/inline-keyword.cpp \
     $$PWD/rules/line-join.cpp \
     $$PWD/rules/mark-banner.cpp \
+    $$PWD/rules/namespace-braces.cpp \
     $$PWD/rules/member-init.cpp \
     $$PWD/rules/moc-run.cpp \
     $$PWD/rules/no-lambda.cpp \

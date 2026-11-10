@@ -132,7 +132,8 @@ QList<FormatFileResult > FormatProcessRunner::run(const QStringList & files)
                         continue;
                     }
                     if (failed) {
-                        results[index].error = QString(QLL("worker failed: %1")).arg(process->errorString());
+                        results[index].error = QString(QLL("worker failed: %1"))
+                            .arg(process->errorString());
                     }
                     done[index] = true;
                 }
