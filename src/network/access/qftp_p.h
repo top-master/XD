@@ -194,8 +194,8 @@ class QFtpPrivate : public QObjectPrivate
 public:
 
     inline QFtpPrivate() : close_waitForStateChange(false), state(QFtp::Unconnected),
-                           transferMode(QFtp::Passive), error(QFtp::NoError),
-                           runningId(-1)
+                           transferMode(QFtp::Passive), error(QFtp::NoError)
+                           , runningId(-1)
     { }
 
     ~QFtpPrivate();

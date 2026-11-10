@@ -562,6 +562,21 @@ void tst_PlatformSocketEngine::readWriteBufferSize()
 }
 
 //---------------------------------------------------------------------------
+#if defined(RLIMIT_NOFILE)
+/*! Restores the process descriptor limit after an exhaustion test. */
+struct DescriptorLimitRestorer
+{
+    struct rlimit original;
+    bool active;
+    ~DescriptorLimitRestorer()
+    {
+        if (active) {
+            ::setrlimit(RLIMIT_NOFILE, &original);
+        }
+    }
+};
+#endif
+
 void tst_PlatformSocketEngine::tooManySockets()
 {
 #if defined Q_OS_WIN
@@ -578,8 +593,18 @@ void tst_PlatformSocketEngine::tooManySockets()
     int fdCap = 1024 + 16;              // fallback when the limit cannot be queried
     bool limitImpractical = false;
 #if defined(RLIMIT_NOFILE)
+    DescriptorLimitRestorer restore = {};
     struct rlimit rl;
     if (getrlimit(RLIMIT_NOFILE, &rl) == 0) {
+        restore.original = rl;
+        if (rl.rlim_cur == RLIM_INFINITY || rl.rlim_cur > 1024) {
+            // Lowers the limit for this test, so that exhaustion soon reaches a refusal.
+            rl.rlim_cur = 1024;
+            restore.active = ::setrlimit(RLIMIT_NOFILE, &rl) == 0;
+            if ( ! restore.active) {
+                rl = restore.original;
+            }
+        }
         const rlim_t practicalMax = 65536; // beyond this, exhausting the limit is not feasible here
         if (rl.rlim_cur == RLIM_INFINITY || rl.rlim_cur > practicalMax)
             limitImpractical = true;

@@ -243,7 +243,8 @@ void tst_QDnsLookup::lookup()
     // is random; hence an ANY row asks up to 3 times before it gives up.
     QFETCH(int, type);
     const bool any = type == int(QDnsLookup::ANY);
-    const QHostAddress resolver = any ? QHostAddress(QLL("9.9.9.9")) : QHostAddress();
+    const QHostAddress resolver = any
+        ? QHostAddress(QLL("9.9.9.9")) : QHostAddress();
     const int attempts = any ? 3 : 1;
     QString detail;
     for (int attempt = 0; attempt < attempts; ++attempt) {
@@ -312,9 +313,12 @@ bool tst_QDnsLookup::runLookup(const QHostAddress &nameserver, quint16 port, QSt
     // is reached over UDP through `QDnsOverride`, which IS a `QDnsLookup`.
     QScopedPointer<QDnsLookup> lookupHolder(
         nameserver.isNull() || port == 53 ? new QDnsLookup
-                                          : new QDnsOverride(nameserver, port));
+                                          : new QDnsOverride(
+                                              nameserver,
+                                              port
+                                          ));
     QDnsLookup &lookup = *lookupHolder;
-    if (!nameserver.isNull() && port == 53) {
+    if ( ! nameserver.isNull() && port == 53) {
         lookup.setNameserver(nameserver);
     }
     lookup.setType(static_cast<QDnsLookup::Type>(type));

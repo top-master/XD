@@ -546,10 +546,10 @@ private:
             // The live config and its pull acknowledgment steer this server;
             // they are no content of the folder it serves.
             const QString path = e.absoluteFilePath();
-            if (!g_configIniPath.isEmpty()
+            if ( ! g_configIniPath.isEmpty()
                 && (path == QFileInfo(g_configIniPath).absoluteFilePath()
-                    || path == QFileInfo(g_configIniPath + QLL(".pull")).absoluteFilePath()))
-            {
+                    || path == QFileInfo(g_configIniPath + QLL(".pull")).absoluteFilePath())
+            ) {
                 continue;
             }
             out += fileLine(e, namesOnly);

@@ -2,7 +2,7 @@ CONFIG -= app_bundle
 CONFIG += console
 QT = core network-private
 TARGET = server-dummy
-SOURCES = main.cpp
+SOURCES = main.cpp service_base.cpp
 # The HTTP routes every listener answers by default (see routes.ini).
 RESOURCES = server-dummy.qrc
 HEADERS = ../testenv.h ../testserver.h service_base.h dynamic_config.h link_local.h \

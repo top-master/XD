@@ -22,3 +22,18 @@ edge case it targets.
   tests the edge case with the behavior, and its twin tests the edge case
   without it (as `tst_QNetworkReply::backgroundRequestInterruption` does with
   its `close on error` rows).
+
+## SOCKS5 BIND connections
+
+Each BIND listens on an ephemeral port and relays a single connection, as
+SOCKS5 defines it; a listener goes away with its control connection.
+
+`[Connection] bindError` injects a SOCKS5 BIND reply error before a listener is
+created. It defaults to `0` (success); values `1` through `8` are SOCKS5 reply
+codes. Tests can select an error through `TestServerEditor` and restore the
+configuration with `TestServerEditUndoer`.
+
+`[Connection] dualStack` enables an unspecified-family BIND listener that
+accepts IPv4 and IPv6 peers on the same port. It defaults to `false`, which
+keeps the requested address family. Tests select it through
+`TestServerEditor` and restore it with `TestServerEditUndoer`.

@@ -727,9 +727,12 @@ bool QAbstractSocketPrivate::canReadNotification()
 #ifndef QT_NO_UDPSOCKET
     // A connected datagram socket gets a read notification without a datagram
     // when the peer refused an earlier one (an ICMP "port unreachable").
-    if (!hasData && !isBuffered && socketType == QAbstractSocket::UdpSocket && socketEngine
-        && socketEngine->error() == QAbstractSocket::ConnectionRefusedError)
-    {
+    if ( ! hasData
+        && ! isBuffered
+        && socketType == QAbstractSocket::UdpSocket
+        && socketEngine
+        && socketEngine->error() == QAbstractSocket::ConnectionRefusedError
+    ) {
         setErrorAndEmit(socketEngine->error(), socketEngine->errorString());
     }
 #endif
@@ -2003,8 +2006,13 @@ bool QAbstractSocket::waitForConnected(int msecs)
 #endif
     while (state() == ConnectingState && (msecs == -1 || stopWatch.elapsed() < msecs)) {
         int timeout = qt_subtract_from_timeout(msecs, stopWatch.elapsed());
-        if (msecs != -1 && timeout > QT_CONNECT_TIMEOUT)
+        if (msecs != -1 && timeout > QT_CONNECT_TIMEOUT
+#ifndef QT_NO_NETWORKPROXY
+            && ! (d->proxyInUse.capabilities() & QNetworkProxy::HostNameLookupCapability)
+#endif
+        ) {
             timeout = QT_CONNECT_TIMEOUT;
+        }
 #if defined (QABSTRACTSOCKET_DEBUG)
         qDebug_ABS << "waitForConnected(" << msecs << ") waiting " << QString::number(timeout / 1000.0, 'f', 2)
                << " secs for connection attempt #" << attempt++;

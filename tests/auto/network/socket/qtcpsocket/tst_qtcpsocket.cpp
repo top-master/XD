@@ -232,9 +232,6 @@ private:
     QByteArray expectedReplyIMAP();
     void fetchExpectedReplyIMAP();
     QTcpSocket *newSocket() const;
-    /// Marks the rows of connectToMultiIPServerDummy() that passed; hence a row
-    /// of connectToMultiIP() that cannot run may skip, naming that copy.
-    QTestCoverageRow multiIPCoverage;
     QTcpSocket *nonBlockingIMAP_socket;
     QStringList nonBlockingIMAP_data;
     qint64 nonBlockingIMAP_totalWritten;
@@ -2500,7 +2497,6 @@ void tst_QTcpSocket::connectToMultiIPServerDummy()
     socket->connectToHost("multi.dev.qt-project.org", closedPort);
     qExpect(socket->waitForConnected(10000))->toBeFalsy();
     delete socket;
-    multiIPCoverage.cover();
 }
 
 void tst_QTcpSocket::connectToMultiIP()
@@ -2512,15 +2508,6 @@ void tst_QTcpSocket::connectToMultiIP()
     if (ssl)
         return;
     QFETCH_GLOBAL(bool, setProxy);
-    if (setProxy && multiIPCoverage.canSkip()) {
-        QSKIP("Through a proxy, the proxy and not QTcpSocket tries each address, with a 30 s "
-              "connect timeout per dead address, which exceeds this row's 60.5 s budget; "
-              "the server-dummy copy of this row (connectToMultiIPServerDummy) passed.");
-    }
-    if (setProxy) {
-        QSKIP("Through a proxy, the proxy and not QTcpSocket tries each address, with a 30 s "
-              "connect timeout per dead address, which exceeds this row's 60.5 s budget.");
-    }
     // The name's first two addresses are 127.0.0.2 and 127.0.0.3, where the bundled server
     // drops each connection attempt; where those are not local addresses, it cannot.
     {
@@ -2539,8 +2526,10 @@ void tst_QTcpSocket::connectToMultiIP()
     QTime stopWatch;
     stopWatch.start();
     socket->connectToHost("multi.dev.qt-project.org", TestServer::port(80));
-    QVERIFY(socket->waitForConnected(60500));
-    QVERIFY(stopWatch.elapsed() < 70000);
+    // Through a proxy, the proxy tries each dead address with its own 30 s timeout.
+    const int connectBudget = setProxy ? 90000 : 60500;
+    QVERIFY2(socket->waitForConnected(connectBudget), qPrintable(socket->errorString()));
+    QVERIFY(stopWatch.elapsed() < connectBudget + 10000);
     socket->abort();
 
     stopWatch.restart();
@@ -2778,7 +2767,7 @@ void tst_QTcpSocket::taskQtBug7054TimeoutErrorResetting()
 
     // we try to waitForReadyRead another time, but this time instead of a timeout we
     // should get a better error since the server disconnected us
-    QVERIFY(!socket->waitForReadyRead(2*1000));
+    QVERIFY(!socket->waitForReadyRead(TestEnv::timeout(2000)));
     // It must NOT be the SocketTimeoutError that had been set before
     QCOMPARE(socket->error(), QAbstractSocket::RemoteHostClosedError);
 }

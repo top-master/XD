@@ -63,7 +63,7 @@ private:
     /// Gives the managers below network configurations to report the
     /// accessibility of; started before the first of them loads the bearer
     /// engines.
-    QRef<TestBearer> bearer;
+    QRef<TestBearer > bearer;
 #endif
 };
 

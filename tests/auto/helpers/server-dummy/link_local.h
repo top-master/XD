@@ -33,10 +33,11 @@ public:
     /// loopback already is that way, or in a process that is not elevated.
     static void apply(bool wanted)
     {
-        if (wanted == isAdded() || !QCoreApplication::isElevated()) {
+        if (wanted == isAdded() || ! QCoreApplication::isElevated()) {
             return;
         }
-        const QStringList command = wanted ? addCommand() : removeCommand();
+        const QStringList command = wanted
+            ? addCommand() : removeCommand();
         if (command.isEmpty()) {
             return;
         }
@@ -58,7 +59,7 @@ public:
     /// calls only: `fork()` and `execve()` of the command that apply() kept.
     static void removeFromSignal()
     {
-        if (!isAdded() || !removalArgv()[0]) {
+        if ( ! isAdded() || ! removalArgv()[0]) {
             return;
         }
         const pid_t child = ::fork();
@@ -86,15 +87,15 @@ private:
     {
 #if defined(Q_OS_LINUX)
         return QStringList() << QLL("ip") << QLL("addr") << QLL("add")
-                             << (QLatin1String(address()) + QLL("/16")) << QLL("dev") << QLL("lo");
+            << (QLatin1String(address()) + QLL("/16")) << QLL("dev") << QLL("lo");
 #elif defined(Q_OS_UNIX)
         return QStringList() << QLL("ifconfig") << QLL("lo0") << QLL("alias")
-                             << QLatin1String(address()) << QLL("netmask") << QLL("255.255.0.0");
+            << QLatin1String(address()) << QLL("netmask") << QLL("255.255.0.0");
 #elif defined(Q_OS_WIN)
         return QStringList() << QLL("netsh") << QLL("interface") << QLL("ipv4") << QLL("add")
-                             << QLL("address") << QLL("name=Loopback Pseudo-Interface 1")
-                             << (QLL("address=") + QLatin1String(address()))
-                             << QLL("mask=255.255.0.0");
+            << QLL("address") << QLL("name=Loopback Pseudo-Interface 1")
+            << (QLL("address=") + QLatin1String(address()))
+            << QLL("mask=255.255.0.0");
 #else
         return QStringList();
 #endif
@@ -104,14 +105,14 @@ private:
     {
 #if defined(Q_OS_LINUX)
         return QStringList() << QLL("ip") << QLL("addr") << QLL("del")
-                             << (QLatin1String(address()) + QLL("/16")) << QLL("dev") << QLL("lo");
+            << (QLatin1String(address()) + QLL("/16")) << QLL("dev") << QLL("lo");
 #elif defined(Q_OS_UNIX)
         return QStringList() << QLL("ifconfig") << QLL("lo0") << QLL("-alias")
-                             << QLatin1String(address());
+            << QLatin1String(address());
 #elif defined(Q_OS_WIN)
         return QStringList() << QLL("netsh") << QLL("interface") << QLL("ipv4") << QLL("delete")
-                             << QLL("address") << QLL("name=Loopback Pseudo-Interface 1")
-                             << (QLL("address=") + QLatin1String(address()));
+            << QLL("address") << QLL("name=Loopback Pseudo-Interface 1")
+            << (QLL("address=") + QLatin1String(address()));
 #else
         return QStringList();
 #endif
@@ -126,7 +127,8 @@ private:
         return argv;
     }
 
-    static void prepareRemoval(const QString &program, const QStringList &command)
+    static void prepareRemoval(const QString &program,
+                               const QStringList &command)
     {
         static QByteArray storage[8];
         char **argv = removalArgv();

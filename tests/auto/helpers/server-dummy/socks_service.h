@@ -113,7 +113,7 @@ private:
             // BIND: the DST fields are advisory, and only pick the address
             // family to listen on.
             if (cmd == 0x02) {
-                startBind(client, QHostAddress(hostStr));
+                startSocksBind(client, QHostAddress(hostStr));
                 return;
             }
             // UDP ASSOCIATE: likewise the DST is the client's
@@ -140,90 +140,6 @@ private:
         }
     }
 
-    // Encode "ATYP(01) <IPv4> <port>" shared by the TCP reply
-    // and the UDP header.
-    static QByteArray encodeAddrPort(const QHostAddress &addr, quint16 port)
-    {
-        const quint32 v4 = addr.toIPv4Address();
-        QByteArray b;
-        b.append(char(0x01));
-        b.append(char((v4 >> 24) & 0xff)).append(char((v4 >> 16) & 0xff));
-        b.append(char((v4 >> 8) & 0xff)).append(char(v4 & 0xff));
-        b.append(char((port >> 8) & 0xff)).append(char(port & 0xff));
-        return b;
-    }
-
-    // Build a SOCKS5 reply "05 REP 00 <ATYP> <address> <port>", with an
-    // IPv6 address in its own form and every other one as IPv4.
-    static QByteArray socksReply(quint8 rep, const QHostAddress &addr,
-                                 quint16 port)
-    {
-        QByteArray b;
-        b.append(char(0x05)).append(char(rep)).append(char(0x00));
-        bool isIPv4 = false;
-        addr.toIPv4Address(&isIPv4);
-        if (addr.protocol() == QAbstractSocket::IPv6Protocol && !isIPv4) {
-            return b + encodeAddrPortV6(addr, port);
-        }
-        return b + encodeAddrPort(addr, port);
-    }
-
-    // Encode "ATYP(04) <IPv6> <port>", for an IPv6 address and for the UDP
-    // sender field. The client's UDP socket learns its own address through
-    // a dual-stack probe; hence it sees v4-mapped IPv6, and the sender field
-    // keeps that form for the datagram-sender comparison to hold.
-    static QByteArray encodeAddrPortV6(const QHostAddress &addr, quint16 port)
-    {
-        const Q_IPV6ADDR a6 = addr.toIPv6Address();
-        QByteArray b;
-        b.append(char(0x04));
-        for (int i = 0; i < 16; ++i) {
-            b.append(char(a6[i]));
-        }
-        b.append(char((port >> 8) & 0xff)).append(char(port & 0xff));
-        return b;
-    }
-
-    // SOCKS5 BIND: listen on an ephemeral port and tell the client which
-    // one via the first reply; on the first incoming connection send the
-    // second reply (its peer) and relay bytes over the same control socket.
-    // The peer reaches this port through the ordinary CONNECT path,
-    // so no special-casing of the listen port is needed.
-    void startBind(QTcpSocket *control, const QHostAddress &requested)
-    {
-        // The client asks for an IPv6 or an IPv4 address, never for both
-        // families at once (SOCKS5 has no dual-stack bind); hence the
-        // listener takes the loopback address of the family asked for.
-        QHostAddress listenAddress = control->localAddress();
-        if (requested.protocol() == QAbstractSocket::IPv6Protocol) {
-            listenAddress = QHostAddress(QHostAddress::LocalHostIPv6);
-        }
-        QTcpServer *bindServer = new QTcpServer(control);
-        bindServer->listen(listenAddress, 0);
-        bindServer->setProperty("bindControl", QVariant::fromValue<QObject * >(control));
-        control->write(socksReply(0x00, bindServer->serverAddress(), bindServer->serverPort()));
-        connect(bindServer, &QTcpServer::newConnection,
-                this, &SocksService::onBindConnection);
-    }
-
-    void onBindConnection()
-    {
-        QTcpServer *bindServer = qobject_cast<QTcpServer * >(sender());
-        QTcpSocket *control = qobject_cast<QTcpSocket * >(bindServer->property("bindControl").value<QObject * >());
-        QTcpSocket *incoming = bindServer->nextPendingConnection();
-        // BIND relays a single connection, so stop listening.
-        bindServer->close();
-        control->write(socksReply(0x00, incoming->peerAddress(), incoming->peerPort()));
-        linkPeers(control, incoming);
-        connect(incoming, &QTcpSocket::readyRead,
-                this, &SocksService::relayReadyRead);
-        connect(control, &QTcpSocket::readyRead,
-                this, &SocksService::relayReadyRead);
-        connect(incoming, &QTcpSocket::disconnected,
-                this, &SocksService::relayDisconnected);
-        connect(control, &QTcpSocket::disconnected,
-                this, &SocksService::relayDisconnected);
-    }
 
     // A live SOCKS5 UDP association. Its relay socket doubles as the
     // endpoint peers target: QSocks5SocketEngine reports the relay

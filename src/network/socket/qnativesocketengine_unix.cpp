@@ -772,8 +772,10 @@ bool QNativeSocketEnginePrivate::nativeHasPendingDatagrams() const
     // The peek takes the pending ICMP "port unreachable" of a connected
     // datagram socket off the socket; hence it keeps that error for the caller.
     if (readBytes == -1 && errno == ECONNREFUSED) {
-        const_cast<QNativeSocketEnginePrivate *>(this)->setError(
-            QAbstractSocket::ConnectionRefusedError, ConnectionRefusedErrorString);
+        const_cast<QNativeSocketEnginePrivate * >(this)->setError(
+            QAbstractSocket::ConnectionRefusedError,
+            ConnectionRefusedErrorString
+        );
     }
 
     qDebug_NSE << "nativeHasPendingDatagrams() == " << (result ? "true" : "false");

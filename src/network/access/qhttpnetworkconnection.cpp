@@ -437,7 +437,7 @@ bool QHttpNetworkConnectionPrivate::handleAuthenticateChallenge(QAbstractSocket 
             // false) answers the challenge as a fresh one, never with the
             // credentials an earlier request left on this channel; hence the
             // application is asked through `authenticationRequired()`.
-            if (!reply->request().withCredentials()) {
+            if ( ! reply->request().withCredentials()) {
                 *auth = QAuthenticator();
             }
         }

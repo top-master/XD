@@ -1726,14 +1726,16 @@ void tst_QSslSocket::wildcard()
     connect(socket, SIGNAL(sslErrors(QList<QSslError>)),
             this, SLOT(untrustedWorkaroundSlot(QList<QSslError>)));
 #endif
-    socket->connectToHostEncrypted(QtNetworkSettings::wildcardServerName(),
-                                   TestServer::wildcardPort());
+    socket->connectToHostEncrypted(
+        QtNetworkSettings::wildcardServerName(),
+        TestServer::wildcardPort()
+    );
 
     QFETCH_GLOBAL(bool, setProxy);
     if (setProxy && !socket->waitForEncrypted(3000))
         QSKIP("Skipping flaky test - See QTBUG-29941");
     // The peer certificate exists once the handshake is done.
-    if (!setProxy) {
+    if ( ! setProxy) {
         QVERIFY2(socket->waitForEncrypted(10000), qPrintable(socket->errorString()));
     }
 

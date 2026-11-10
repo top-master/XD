@@ -147,7 +147,9 @@ class ServiceConfigDynamic
 {
 public:
     ServiceConfigDynamic()
-        : m_rateLimit(0)
+        : m_dualStack(false)
+        , m_bindError(0)
+        , m_rateLimit(0)
         , m_responseDelayMs(0)
         , m_closeOnError(false)
         , m_fixedSessionTicketKey(false)
@@ -230,6 +232,15 @@ public:
             }
         return 0;
     }
+
+    /// Enables an unspecified-family SOCKS5 BIND listener.
+    bool dualStack() const { return m_dualStack; }
+
+    /// Highest SOCKS5 reply code (8, address type not supported).
+    enum { MaxSocksReplyCode = 8 };
+
+    /// SOCKS5 BIND reply code; 0 permits the listener.
+    int bindError() const { return m_bindError; }
 
     /// Rate cap in bytes per second; 0 means unlimited.
     int rateLimit() const { return m_rateLimit; }
@@ -316,30 +327,38 @@ private:
                 if (!key.isEmpty()) {
                     c->m_unreachable.insert(QDir::cleanPath(dir.absoluteFilePath(key)), val.toInt());
                 }
+            } else if (section == QLL("connection")) {
+                if (key.compare(QLL("bindError"), Qt::CaseInsensitive) == 0) {
+                    c->m_bindError = qBound(0, val.toInt(), int(MaxSocksReplyCode));
+                } else if (key.compare(QLL("dualStack"), Qt::CaseInsensitive) == 0) {
+                    c->m_dualStack = parseBool(val);
+                }
             } else if (section == QLL("io")) {
                 if (key.compare(QLL("rateLimit"), Qt::CaseInsensitive) == 0) {
                     c->m_rateLimit = val.toInt();
                 } else if (key.compare(QLL("responseDelayMs"), Qt::CaseInsensitive) == 0) {
                     c->m_responseDelayMs = val.toInt();
                 } else if (key.compare(QLL("closeOnError"), Qt::CaseInsensitive) == 0) {
-                    c->m_closeOnError = val.compare(QLL("true"), Qt::CaseInsensitive) == 0
-                        || val.toInt() != 0;
+                    c->m_closeOnError = parseBool(val);
                 }
             } else if (section == QLL("tls")) {
                 if (key.compare(QLL("fixedSessionTicketKey"), Qt::CaseInsensitive) == 0) {
-                    c->m_fixedSessionTicketKey = (val.compare(QLL("true"), Qt::CaseInsensitive) == 0
-                        || val.toInt() != 0);
+                    c->m_fixedSessionTicketKey = parseBool(val);
                 } else if (key.compare(QLL("legacyProtocols"), Qt::CaseInsensitive) == 0) {
-                    c->m_legacyProtocols = (val.compare(QLL("true"), Qt::CaseInsensitive) == 0
-                        || val.toInt() != 0);
+                    c->m_legacyProtocols = parseBool(val);
                 }
             } else if (section == QLL("network")) {
                 if (key.compare(QLL("linkLocalIPv4"), Qt::CaseInsensitive) == 0) {
-                    c->m_linkLocalIPv4 = (val.compare(QLL("true"), Qt::CaseInsensitive) == 0
-                        || val.toInt() != 0);
+                    c->m_linkLocalIPv4 = parseBool(val);
                 }
             }
         }
+    }
+
+    /// Reads an ini flag: `true` in any case, or a nonzero number.
+    static bool parseBool(const QString &val)
+    {
+        return val.compare(QLL("true"), Qt::CaseInsensitive) == 0 || val.toInt() != 0;
     }
 
     /// Files one `key = value` line of a route section into `route`.
@@ -365,6 +384,8 @@ private:
     /// Maps each unreachable absolute path to the HTTP-style error code
     /// its denial returns.
     QMap<QString, int > m_unreachable;
+    bool m_dualStack;
+    int m_bindError;
     int m_rateLimit;
     int m_responseDelayMs;
     bool m_closeOnError;

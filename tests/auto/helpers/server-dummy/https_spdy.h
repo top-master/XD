@@ -1088,7 +1088,9 @@ private:
             // expected not-found into a connection-refused). A known name is
             // tunnelled by name, hence the upstream socket tries each of its
             // addresses in turn.
-            if (host != QLL("127.0.0.1") && QHostInfo::fromName(host).addresses().isEmpty()) {
+            if (host != QLL("127.0.0.1")
+                && QHostInfo::fromName(host).addresses().isEmpty()
+            ) {
                 client->write("HTTP/1.1 404 Not Found\r\nContent-Length: 0\r\n\r\n");
                 client->disconnectFromHost();
                 return;
@@ -1362,7 +1364,7 @@ private:
             // BIND: `QTcpServer::listen()` over SOCKS5. DST is
             // advisory; ignore it.
             if (cmd == 0x02) {
-                startBind(client);
+                startSocksBind(client, QHostAddress(hostStr));
                 return;
             }
             QTcpSocket *upstream = new QTcpSocket(client);
@@ -1407,41 +1409,6 @@ private:
         b.append(char((v4 >> 8) & 0xff)).append(char(v4 & 0xff));
         b.append(char((port >> 8) & 0xff)).append(char(port & 0xff));
         return b;
-    }
-
-    /// SOCKS5 BIND: listen on an ephemeral port and hand the client that
-    /// port in the first reply; on the first incoming connection send the
-    /// second reply (its peer) and relay over the same control socket.
-    /// This is what QTcpServer::listen() through a SOCKS5 proxy needs --
-    /// without it the command was misparsed as CONNECT
-    /// and listen() failed.
-    void startBind(QTcpSocket *control)
-    {
-        QTcpServer *bindServer = new QTcpServer(control);
-        bindServer->listen(control->localAddress(), 0);
-        bindServer->setProperty("bindControl", QVariant::fromValue<QObject * >(control));
-        control->write(socksReply(0x00, bindServer->serverAddress(), bindServer->serverPort()));
-        connect(bindServer, &QTcpServer::newConnection,
-                this, &SocksProxyService::onBindConnection);
-    }
-
-    void onBindConnection()
-    {
-        QTcpServer *bindServer = qobject_cast<QTcpServer * >(sender());
-        QTcpSocket *control = qobject_cast<QTcpSocket * >(bindServer->property("bindControl").value<QObject * >());
-        QTcpSocket *incoming = bindServer->nextPendingConnection();
-        // BIND relays a single connection, so stop listening.
-        bindServer->close();
-        control->write(socksReply(0x00, incoming->peerAddress(), incoming->peerPort()));
-        linkPeers(control, incoming);
-        connect(incoming, &QTcpSocket::readyRead,
-                this, &SocksProxyService::relayReadyRead);
-        connect(control, &QTcpSocket::readyRead,
-                this, &SocksProxyService::relayReadyRead);
-        connect(incoming, &QTcpSocket::disconnected,
-                this, &SocksProxyService::relayDisconnected);
-        connect(control, &QTcpSocket::disconnected,
-                this, &SocksProxyService::relayDisconnected);
     }
 
     /// Map an upstream connect failure to the SOCKS5 CONNECT failure reply

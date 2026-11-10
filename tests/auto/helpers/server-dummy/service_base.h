@@ -78,6 +78,53 @@ protected:
         m_port = u->localPort();
         return m_port;
     }
+    // Encode "ATYP(01) <IPv4> <port>" shared by the TCP reply
+    // and the UDP header.
+    static QByteArray encodeAddrPort(const QHostAddress &addr, quint16 port)
+    {
+        const quint32 v4 = addr.toIPv4Address();
+        QByteArray b;
+        b.append(char(0x01));
+        b.append(char((v4 >> 24) & 0xff)).append(char((v4 >> 16) & 0xff));
+        b.append(char((v4 >> 8) & 0xff)).append(char(v4 & 0xff));
+        b.append(char((port >> 8) & 0xff)).append(char(port & 0xff));
+        return b;
+    }
+
+    // Build a SOCKS5 reply "05 REP 00 <ATYP> <address> <port>", with an
+    // IPv6 address in its own form and every other one as IPv4.
+    static QByteArray socksReply(quint8 rep, const QHostAddress &addr,
+                                 quint16 port)
+    {
+        QByteArray b;
+        b.append(char(0x05)).append(char(rep)).append(char(0x00));
+        bool isIPv4 = false;
+        addr.toIPv4Address(&isIPv4);
+        if (addr.protocol() == QAbstractSocket::IPv6Protocol && ! isIPv4) {
+            return b + encodeAddrPortV6(addr, port);
+        }
+        return b + encodeAddrPort(addr, port);
+    }
+
+    // Encode "ATYP(04) <IPv6> <port>", for an IPv6 address and for the UDP
+    // sender field. The client's UDP socket learns its own address through
+    // a dual-stack probe; hence it sees v4-mapped IPv6, and the sender field
+    // keeps that form for the datagram-sender comparison to hold.
+    static QByteArray encodeAddrPortV6(const QHostAddress &addr, quint16 port)
+    {
+        const Q_IPV6ADDR a6 = addr.toIPv6Address();
+        QByteArray b;
+        b.append(char(0x04));
+        for (int i = 0; i < 16; ++i) {
+            b.append(char(a6[i]));
+        }
+        b.append(char((port >> 8) & 0xff)).append(char(port & 0xff));
+        return b;
+    }
+
+    void startSocksBind(QTcpSocket *control, const QHostAddress &requested);
+    void onSocksBindConnection();
+
     /// FTP/textual-protocol reply line: "<code> <text>\r\n".
     static void reply(QTcpSocket *c, int code, const char *text)
     {

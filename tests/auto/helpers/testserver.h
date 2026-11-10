@@ -454,8 +454,10 @@ public:
     ///
     /// Without an `issuer` the cert is a self-signed CA; with one, it is a leaf that `issuer`
     /// signs, hence a client that trusts `issuer` verifies it.
-    static ServerCert generateCert(const QString &tag, const QStringList &commonNames,
-                                   const QString &sanExt, const ServerCert *issuer = Q_NULLPTR)
+    static ServerCert generateCert(
+        const QString &tag, const QStringList &commonNames,
+        const QString &sanExt, const ServerCert *issuer = Q_NULLPTR
+    )
     {
         ServerCert c;
         const QString dir = QDir::tempPath() + QLL("/xd-testcerts");
@@ -473,7 +475,7 @@ public:
              << QLL("-addext") << sanExt;
         if (issuer) {
             args << QLL("-CA") << issuer->certPath << QLL("-CAkey") << issuer->keyPath
-                 << QLL("-addext") << QLL("basicConstraints=critical,CA:FALSE");
+                << QLL("-addext") << QLL("basicConstraints=critical,CA:FALSE");
         } else {
             args << QLL("-addext") << QLL("basicConstraints=critical,CA:TRUE");
         }
@@ -561,11 +563,13 @@ public:
     /// relaunches a running child, just like enableSecondSecurePort().
     void enableWildcardSecurePort()
     {
-        if (m_wildcardSecure)
+        if (m_wildcardSecure) {
             return;
+        }
         m_wildcardSecure = true;
-        if (isRunning())
+        if (isRunning()) {
             restart();
+        }
     }
     /// The port of the --wildcard-port listener; unprivileged, hence unmapped by port().
     static quint16 wildcardPort() { return port(4443); }
@@ -575,12 +579,17 @@ public:
     /// name whichever form the run uses.
     static const ServerCert &wildcardCa()
     {
-        static ServerCert c = generateCert(QLL("wildcard-ca"),
-            (QStringList() << (QtNetworkSettings::serverLocalName() + QLatin1Char('.')
-                                   + QtNetworkSettings::serverDomainName())
-                           << QLL("127.0.0.1")),
+        static ServerCert c = generateCert(
+            QLL("wildcard-ca"),
+            (QStringList()
+                << (QtNetworkSettings::serverLocalName() + QLatin1Char('.')
+                    + QtNetworkSettings::serverDomainName()
+                )
+                << QLL("127.0.0.1")
+            ),
             QLL("subjectAltName=DNS:") + QtNetworkSettings::serverLocalName()
-                + QLatin1Char('.') + QtNetworkSettings::serverDomainName());
+                + QLatin1Char('.') + QtNetworkSettings::serverDomainName()
+        );
         return c;
     }
 
@@ -589,11 +598,17 @@ public:
     /// `*.wildcard.dev.<domain>` is the wildcard that verifies wildcardServerName().
     static const ServerCert &wildcardServerCert()
     {
-        static ServerCert c = generateCert(QLL("wildcard-server"),
-            (QStringList() << (QtNetworkSettings::serverLocalName() + QLL(".*.")
-                                   + QtNetworkSettings::serverDomainName())),
-            QLL("subjectAltName=DNS:*.wildcard.dev.") + QtNetworkSettings::serverDomainName(),
-            &wildcardCa());
+        static ServerCert c = generateCert(
+            QLL("wildcard-server"),
+            (QStringList()
+                << (QtNetworkSettings::serverLocalName() + QLL(".*.")
+                    + QtNetworkSettings::serverDomainName()
+                )
+            ),
+            QLL("subjectAltName=DNS:*.wildcard.dev.")
+                + QtNetworkSettings::serverDomainName(),
+            &wildcardCa()
+        );
         return c;
     }
 
@@ -721,10 +736,11 @@ public:
         // Opt-in TLS listener with the wildcard cert (`enableWildcardSecurePort()`).
         if (m_wildcardSecure) {
             const ServerCert &wildcard = wildcardServerCert();
-            if (wildcard.ok)
+            if (wildcard.ok) {
                 arguments << (QLL("--wildcard-port=") + QString::number(wildcardPort()))
-                          << (QLL("--wildcard-cert=") + wildcard.certPath)
-                          << (QLL("--wildcard-key=") + wildcard.keyPath);
+                    << (QLL("--wildcard-cert=") + wildcard.certPath)
+                    << (QLL("--wildcard-key=") + wildcard.keyPath);
+            }
         }
         m_proc->start(m_program, arguments);
         if (!m_proc->waitForStarted(timeout))

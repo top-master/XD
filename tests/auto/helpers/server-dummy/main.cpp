@@ -190,10 +190,11 @@ static ServiceConfig cfg(TestService::Kind kind, const QHostAddress &host, quint
 /// Binds an opt-in TLS listener that presents its own cert (the
 /// --second-port and --wildcard-port listeners) through newService. No-op
 /// when its port option was not given; hence nothing extra is ever "always up".
-static void startCertListener(const QHostAddress &host, quint16 port, const QString &folder,
-                              const QByteArray &certPem, const QByteArray &keyPem, QObject *parent)
+static void startCertListener(
+        const QHostAddress &host, quint16 port, const QString &folder,
+        const QByteArray &certPem, const QByteArray &keyPem, QObject *parent)
 {
-    if (!port) {
+    if ( ! port) {
         return;
     }
     ServiceConfig c = cfg(TestService::Https, host, port, folder);
@@ -251,10 +252,16 @@ int main(int argc, char **argv)
             wildcardPort = quint16(a.mid(16).toUShort());
         } else if (a.startsWith(QLL("--wildcard-cert="))) {
             QFile f(a.mid(16));
-            if (f.open(QIODevice::ReadOnly)) { wildcardCertPem = f.readAll(); f.close(); }
+            if (f.open(QIODevice::ReadOnly)) {
+                wildcardCertPem = f.readAll();
+                f.close();
+            }
         } else if (a.startsWith(QLL("--wildcard-key="))) {
             QFile f(a.mid(15));
-            if (f.open(QIODevice::ReadOnly)) { wildcardKeyPem = f.readAll(); f.close(); }
+            if (f.open(QIODevice::ReadOnly)) {
+                wildcardKeyPem = f.readAll();
+                f.close();
+            }
         } else {
             positional << a;
         }
@@ -268,7 +275,7 @@ int main(int argc, char **argv)
     }
     // The loopback's link-local address follows [Network] linkLocalIPv4 (see
     // link_local.h), from the start and on every change.
-    if (!g_configIniPath.isEmpty()) {
+    if ( ! g_configIniPath.isEmpty()) {
         const QSharedPointer<IniWatcher > watcher = IniWatcher::shared(g_configIniPath);
         LinkLocalAddress::apply(watcher->load()->linkLocalIPv4());
         QObject::connect(watcher.data(), &IniWatcher::byIniChange, &app, [watcher]() {
@@ -282,10 +289,11 @@ int main(int argc, char **argv)
     // resolver (`server-dummy dnsd`), which knows the test hosts and no others.
     if (which != QLL("dnsd") && which != QLL("dns")) {
         QHostInfoLookupManager *manager =
-            qobject_cast<QHostInfoLookupManager *>(QAbstractHostInfoLookupManager::globalInstance());
-        if (manager && !manager->override()) {
-            manager->setOverride(QSharedPointer<QHostInfoOverride>::create(
-                QHostAddress(QHostAddress::LocalHost), TestServer::port(53)));
+            qobject_cast<QHostInfoLookupManager * >(QAbstractHostInfoLookupManager::globalInstance());
+        if (manager && ! manager->override()) {
+            manager->setOverride(QSharedPointer<QHostInfoOverride >::create(
+                QHostAddress(QHostAddress::LocalHost), TestServer::port(53)
+            ));
         }
     }
 
@@ -329,8 +337,22 @@ int main(int argc, char **argv)
         const QHostAddress host = QHostAddress::LocalHost;
         // Primary HTTPS.
         newService(cfg(TestService::Https, host, TestServer::port(443), folder), &app)->start();
-        startCertListener(host, secondPort, folder, secondCertPem, secondKeyPem, &app);
-        startCertListener(host, wildcardPort, folder, wildcardCertPem, wildcardKeyPem, &app);
+        startCertListener(
+            host,
+            secondPort,
+            folder,
+            secondCertPem,
+            secondKeyPem,
+            &app
+        );
+        startCertListener(
+            host,
+            wildcardPort,
+            folder,
+            wildcardCertPem,
+            wildcardKeyPem,
+            &app
+        );
         // imaps
         newService(cfg(TestService::Imaps, host, TestServer::port(993)), &app)->start();
         // Plain imap.
@@ -455,8 +477,22 @@ int main(int argc, char **argv)
     }
     // Opt-in extra TLS listeners with their own certs (--second-port and
     // --wildcard-port), through `newService`.
-    startCertListener(host, secondPort, folder, secondCertPem, secondKeyPem, &app);
-    startCertListener(host, wildcardPort, folder, wildcardCertPem, wildcardKeyPem, &app);
+    startCertListener(
+        host,
+        secondPort,
+        folder,
+        secondCertPem,
+        secondKeyPem,
+        &app
+    );
+    startCertListener(
+        host,
+        wildcardPort,
+        folder,
+        wildcardCertPem,
+        wildcardKeyPem,
+        &app
+    );
 
     // Let `TestServer` (or a human) know the listeners are bound and
     // it is safe to connect, and on which ports they actually landed

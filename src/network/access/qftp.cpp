@@ -530,7 +530,10 @@ void QFtpDTP::socketReadyRead()
             // The abort may even complete in that slot (the server's reply
             // came first); hence the closed socket tells it, not only the
             // abort state.
-            if (pi->abortState != QFtpPI::None || !socket || !socket->isOpen()) {
+            if (pi->abortState != QFtpPI::None
+                || ! socket
+                || ! socket->isOpen()
+            ) {
                 return;
             }
             emit readyRead();

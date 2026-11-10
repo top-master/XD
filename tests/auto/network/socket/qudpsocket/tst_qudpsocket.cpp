@@ -138,7 +138,7 @@ private:
     /// Gives the fleet a writable `server-config.ini` outside the source tree,
     /// through which a row switches a server behavior on for itself.
     QTemporaryDir fleetFolder;
-    QRef<TestServer> fleet;
+    QRef<TestServer > fleet;
 };
 
 static QHostAddress makeNonAny(const QHostAddress &address, QHostAddress::SpecialAddress preferForAny = QHostAddress::LocalHost)
@@ -198,7 +198,10 @@ void tst_QUdpSocket::initTestCase()
 {
     // Serves the UDP echo `echo()` talks to through the bundled server-dummy fleet.
     QVERIFY2(fleetFolder.isValid(), qPrintable(fleetFolder.errorString()));
-    fleet = TestEnv::getServerForClass(TestServer::Fleet, fleetFolder.path());
+    fleet = TestEnv::getServerForClass(
+        TestServer::Fleet,
+        fleetFolder.path()
+    );
     if (!QtNetworkSettings::verifyTestNetworkSettings())
         QSKIP("No network test server available");
 }
@@ -310,6 +313,22 @@ void tst_QUdpSocket::broadcasting()
                 QHostAddress broadcast = iface.addressEntries().at(i).broadcast();
                 if (broadcast.protocol() == QAbstractSocket::IPv4Protocol)
                     broadcastAddresses.append(broadcast);
+            }
+        }
+    }
+    // Falls back to the loopback subnet's broadcast, which reaches this host.
+    if (broadcastAddresses.isEmpty()) {
+        foreach (const QNetworkInterface &iface, QNetworkInterface::allInterfaces()) {
+            if ( ! (iface.flags() & QNetworkInterface::IsLoopBack)
+                || ! (iface.flags() & QNetworkInterface::IsUp)
+            ) {
+                continue;
+            }
+            foreach (const QNetworkAddressEntry &entry, iface.addressEntries()) {
+                if (entry.ip().protocol() == QAbstractSocket::IPv4Protocol && entry.ip().isLoopback()) {
+                    broadcastAddresses.append(QHostAddress(entry.ip().toIPv4Address()
+                                                           | ~entry.netmask().toIPv4Address()));
+                }
             }
         }
     }
@@ -1370,8 +1389,20 @@ void tst_QUdpSocket::multicast()
                              "QAbstractSocket: cannot bind to QHostAddress::Any (or an IPv6 address) and join an IPv4 multicast group;"
                              " bind to QHostAddress::AnyIPv4 instead if you want to do this");
     }
-    QVERIFY2(receiver.joinMulticastGroup(groupAddress) == joinResult,
-             qPrintable(receiver.errorString()));
+    // Delivers an IPv4 group through the loopback interface, which every host has up.
+    QNetworkInterface deliveryInterface;
+    if (groupAddress.protocol() == QAbstractSocket::IPv4Protocol) {
+        foreach (const QNetworkInterface &iface, QNetworkInterface::allInterfaces()) {
+            if (iface.flags() & QNetworkInterface::IsLoopBack) {
+                deliveryInterface = iface;
+                break;
+            }
+        }
+    }
+    const bool joined = deliveryInterface.isValid()
+        ? receiver.joinMulticastGroup(groupAddress, deliveryInterface)
+        : receiver.joinMulticastGroup(groupAddress);
+    QVERIFY2(joined == joinResult, qPrintable(receiver.errorString()));
     if (!joinResult)
         return;
 
@@ -1385,7 +1416,11 @@ void tst_QUdpSocket::multicast()
 #ifdef FORCE_SESSION
     sender.setProperty("_q_networksession", QVariant::fromValue(networkSession));
 #endif
-    sender.bind();
+    QVERIFY(sender.bind(QHostAddress(groupAddress.protocol() == QAbstractSocket::IPv6Protocol
+                                     ? QHostAddress::AnyIPv6 : QHostAddress::AnyIPv4)));
+    if (deliveryInterface.isValid()) {
+        sender.setMulticastInterface(deliveryInterface);
+    }
     foreach (const QByteArray &datagram, datagrams) {
         QCOMPARE(int(sender.writeDatagram(datagram, groupAddress, receiver.localPort())),
                  int(datagram.size()));
@@ -1407,7 +1442,10 @@ void tst_QUdpSocket::multicast()
     }
     QCOMPARE(receivedDatagrams, datagrams);
 
-    QVERIFY2(receiver.leaveMulticastGroup(groupAddress), qPrintable(receiver.errorString()));
+    const bool left = deliveryInterface.isValid()
+        ? receiver.leaveMulticastGroup(groupAddress, deliveryInterface)
+        : receiver.leaveMulticastGroup(groupAddress);
+    QVERIFY2(left, qPrintable(receiver.errorString()));
 }
 
 void tst_QUdpSocket::echo_data()
