@@ -97,6 +97,11 @@ QDBusServer::QDBusServer(QObject *parent)
 */
 QDBusServer::~QDBusServer()
 {
+    // The constructors leave `d` null when libdbus could not be loaded.
+    if ( ! d) {
+        return;
+    }
+
     QWriteLocker locker(&d->lock);
     if (QDBusConnectionManager::instance()) {
         QMutexLocker locker(&QDBusConnectionManager::instance()->mutex);

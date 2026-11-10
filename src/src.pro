@@ -96,6 +96,9 @@ src_network.depends = src_corelib
 src_openssl.file = $$PWD/3rdparty/openssl-1.1.1w/openssl.pro
 src_openssl.target = sub-openssl
 
+src_3rdparty_libdbus.file = $$PWD/3rdparty/libdbus/libdbus.pro
+src_3rdparty_libdbus.target = sub-3rdparty-libdbus
+
 src_testlib.subdir = $$PWD/testlib
 src_testlib.target = sub-testlib
 src_testlib.depends = src_corelib   # testlib links only to corelib, but see below for the headers
@@ -194,6 +197,10 @@ contains(QT_CONFIG, dbus) {
     force_bootstrap|contains(QT_CONFIG, private_tests): \
         SUBDIRS += src_tools_bootstrap_dbus
     SUBDIRS += src_dbus src_tools_qdbusxml2cpp src_tools_qdbuscpp2xml
+    # A memory-safe build loads only a libdbus-1 built the same way, which the
+    # optional `3rdparty/dbus` submodule holds once it is checked out.
+    memory_safe:exists($$PWD/3rdparty/dbus/dbus/dbus-bus.c): \
+        SUBDIRS += src_3rdparty_libdbus
     TOOLS += src_tools_qdbusxml2cpp src_tools_qdbuscpp2xml
     contains(QT_CONFIG, accessibility-atspi-bridge): \
         src_platformsupport.depends += src_dbus src_tools_qdbusxml2cpp

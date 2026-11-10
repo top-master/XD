@@ -1,3 +1,9 @@
 [submodule "src/3rdparty/openssl-1.1.1w"]
 	path = src/3rdparty/openssl-1.1.1w
 	url = https://bitbucket.org/top-master/openssl.git
+[submodule "src/3rdparty/dbus"]
+	path = src/3rdparty/dbus
+	url = https://github.com/top-master/lib-dbus.git
+	branch = xd
+	update = none
+	shallow = true
