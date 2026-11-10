@@ -54,3 +54,6 @@ QMAKE_MOC_OPTIONS += -Muri=com.company.app -Muri=com.company.app.private
 # Define macro on the command lines used in  parse-defines.h
 QMAKE_MOC_OPTIONS += "-DDEFINE_CMDLINE_EMPTY="  "\"-DDEFINE_CMDLINE_SIGNAL=void cmdlineSignal(const QMap<int, int> &i)\""
 
+
+# Keeps the dynamic exception specifications that moc must still parse.
+contains(QMAKE_COMPILER, clang): QMAKE_CXXFLAGS += -Wno-dynamic-exception-spec

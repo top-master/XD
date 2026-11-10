@@ -114,7 +114,9 @@ void tst_toolsupport::offsets_data()
     {
         QTestData &data = QTest::newRow("QFilePrivate::fileName")
                 << pmm_to_offsetof(&QFilePrivate::fileName);
-        data << 168 << 248;
+        // XD's `QIODevicePrivate` and `QFileDevicePrivate` hold more fields
+        // than upstream's; the 32-bit offset is upstream's, not checked again.
+        data << 168 << 296;
     }
 #endif
 
