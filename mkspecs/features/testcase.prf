@@ -48,6 +48,9 @@ unix {
 # Allow for custom arguments to tests
 $${type}.commands += $(TESTARGS)
 
+# Records the result, for `build.sh --failed` to skip what passed.
+unix: include($$PWD/../xd/test_result.prf)
+
 !isEmpty(TESTRUN_CWD):!contains(TESTRUN_CWD, ^\\./?): \
     $${type}.commands = cd $$shell_path($$TESTRUN_CWD) && $$eval($${type}.commands)
 

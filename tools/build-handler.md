@@ -176,6 +176,7 @@ them.
 | `--test [file.pro \| glob]` / `--tests` | Build, then build and run the tests. You may name one test `.pro` file, or a glob; a glob runs **every** test it matches (e.g. `'**/*qmake*'`). Without one, the project's default tests run. See "Finding a test by glob" below. |
 | `--test-review <file.pro \| glob>` | Shortcut for `--test <file.pro> --headless --verbose --no-build`. Takes a `.pro` path or a glob, same as `--test`. Each of those three defaults can be flipped (see the table above). |
 | `--run [subdir]` | Run the built program. A multi-part project needs the `subdir` to say which one. |
+| `--failed` | With `--test`, run only the tests that failed last time, or that never ran, or that built again since they passed; a passed one is skipped with a note. Without `--test` it does nothing. A `make check` of your own skips the same way with `XD_TEST_FAILED_ONLY=1` in its environment. |
 | `--build` | Force a build. (Used to cancel `--test-review`'s built-in `--no-build`.) |
 | `--no-build` | Don't build — assume it's already done. With `--test`/`--run`, those still happen; if the build wasn't really done, they fail. |
 | `--headless` | Never pause to ask a question. Good for unattended runs. |
@@ -194,7 +195,7 @@ them.
 | `--force-qmake` | Like `--qmake`, and when qmake fails for one project, it goes on with the others (the failure is still reported). |
 | `--save-space` | Save disk while building: each library or program drops its build leftovers (object files, moc/rcc output) right after it links, and a project that finished once is skipped. |
 | `--cross-compile[=<spec>]` / `--cross-build` | Build for another platform (`win32-g++` without a value), while the build tools stay on this one. |
-| `--filter=<regexp>` / `--only=<regexp>` | Build only the projects whose path matches the regexp (`grep -E`), one at a time; `a\|b` names several. |
+| `--filter=<regexp>` / `--only=<regexp>` | Build only the projects whose path matches the regexp (`grep -E`), one at a time; `a\|b` names several. It filters what qmake lists: a project that its `subdirs` project does not list on this platform (a Windows-only helper on Linux, say) is left out, with a note. A part of the tree that the root project does not list (XD's tests, say) still builds, through the `subdirs` project at its top. |
 | `--rebuild[=<regexp>]` | Build the matching projects again (every project without a value): without `--save-space` each is cleaned first, with it each builds even when it finished once. With `--filter`, only among the projects `--filter` keeps. |
 | `--format` | Format the project's sources and headers (with `--filter`, those of each project it picks) with XD's `bin/format` before anything builds; a run that builds nothing only formats. |
 | `--build-tests` | Make the `--test` step build each test again. |
@@ -252,6 +253,11 @@ A run passes these to the builds it starts itself; you never need to type them.
   in that order when it has none yet (one the root project does not list, say;
   `--save-space` records every project anyway). Hence `--filter` builds its
   matches in their right order, whatever filter a later run uses.
+- It **remembers what each `subdirs` project lists**, hence `--filter` knows
+  which projects belong to the build. When a match lies in a part of the tree
+  that no qmake reached yet (a recording that stopped at a broken project,
+  say), it first qmakes the `subdirs` project above that part ("Recording
+  build order of <pro> via qmake...").
 - It **cleans** when a build folder was made with another toolchain (another
   spec, or `--memory-safe` turned on or off), right after it redoes qmake;
   hence nothing the old compiler built ends up in the new link.
@@ -464,6 +470,13 @@ reads that whole file.
 
 ### Build order helper
 
+These live in `shell-libs/bh-filtering.sh`.
+
+- `bh_order_reach <pro>` tells, through `BH_REACH`, whether the build reaches
+  a project that has no order line: `listed` (a `subdirs` project on record
+  lists it), `left-out` (the nearest one on record does not; `BH_REACH_PRO`
+  names it), `qmake` (`BH_REACH_PRO`, a `subdirs` project above it, has to be
+  qmaked first), or `alone` (no `subdirs` project lies above it).
 - `bh_build_unrecorded [mode-tag]` builds the projects that the build order
   does not list. If the mode-tag is set to "count" without quotes, then it only
   prints how many projects it would build, hence the counter of each line can

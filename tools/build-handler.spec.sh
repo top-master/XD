@@ -92,6 +92,15 @@ unset BH_RUN_TESTS
 bh_parse_args --tests
 expect '--tests (plural) sets BH_RUN_TESTS=1' 1 "$BH_RUN_TESTS"
 
+unset BH_FAILED XD_TEST_FAILED_ONLY
+bh_parse_args --failed
+expect '--failed sets BH_FAILED=1'          1 "$BH_FAILED"
+expect 'but tells no make check to skip a test by itself' '' "${XD_TEST_FAILED_ONLY:-}"
+expect 'which only the test step does, by exporting XD_TEST_FAILED_ONLY' 1 \
+    "$(bh_hook_run() { :; }; bh_run() { :; }; bh_run_tests . --subdirs
+        sh -c 'echo "$XD_TEST_FAILED_ONLY"')"
+unset BH_FAILED XD_TEST_FAILED_ONLY
+
 unset BH_MODE
 bh_parse_args --release
 expect '--release sets BH_MODE=release'     release "$BH_MODE"
@@ -2575,7 +2584,8 @@ test_section 'build modes -- --filter / --save-space / --rebuild / --clean, end 
 
 # Drives bh_template_subdirs on a small project in a sandbox: a static lib,
 # an app that needs it (listed before it), a debug_and_release app, two test
-# apps outside the root, and an optional broken project. None of them uses
+# apps under a subdirs project of their own, two apps that share one dir, an
+# app that no subdirs project lists, and an optional broken project. None of them uses
 # Qt; hence --static needs no static XD libraries. Needs XD's qmake, a C++
 # compiler, and make; skipped as a whole where one is missing. Every run goes
 # through a subshell; hence a bh_error ends only that run.
@@ -2590,8 +2600,8 @@ else
     _bh_spec_bd=$_bh_spec_sandbox/bd
     mkdir -p "$_bh_spec_src/zlib" "$_bh_spec_src/app" "$_bh_spec_src/dr" \
         "$_bh_spec_src/tests/t1" "$_bh_spec_src/tests/t2" "$_bh_spec_src/broken" \
-        "$_bh_spec_src/pair"
-    printf 'TEMPLATE = subdirs\nSUBDIRS = app zlib dr\napp.depends = zlib\n' \
+        "$_bh_spec_src/pair" "$_bh_spec_src/extra" "$_bh_spec_src/tests/t3"
+    printf 'TEMPLATE = subdirs\nSUBDIRS = app zlib dr tests pair\napp.depends = zlib\n' \
         > "$_bh_spec_src/top.pro"
     printf 'TEMPLATE = lib\nCONFIG += staticlib\nQT =\nSOURCES = z.cpp\n' \
         > "$_bh_spec_src/zlib/zlib.pro"
@@ -2615,6 +2625,15 @@ else
             > "$_bh_spec_src/pair/$_bh_spec_t.pro"
     done
     cp "$_bh_spec_src/dr/m.cpp" "$_bh_spec_src/pair/"
+    printf 'TEMPLATE = subdirs\nSUBDIRS = one.pro two.pro\n' > "$_bh_spec_src/pair/pair.pro"
+    printf 'TEMPLATE = app\nQT =\nSOURCES = m.cpp\n' > "$_bh_spec_src/extra/extra.pro"
+    # A test that tests.pro does not list, as on another platform.
+    printf 'TEMPLATE = app\nQT =\nSOURCES = m.cpp\n' > "$_bh_spec_src/tests/t3/t3.pro"
+    cp "$_bh_spec_src/dr/m.cpp" "$_bh_spec_src/tests/t3/"
+    # The root of another build beside the root project, which lists extra/;
+    # hence it shows whether the walk up takes the build's own root project.
+    printf 'TEMPLATE = subdirs\nSUBDIRS = extra\n' > "$_bh_spec_src/other.pro"
+    cp "$_bh_spec_src/dr/m.cpp" "$_bh_spec_src/extra/"
     _bh_spec_tab=$(printf '\t')
 
     # _bh_spec_build [flags...]
@@ -2681,12 +2700,23 @@ else
     expect '--filter on a fresh dir succeeds' 0 "$_bh_spec_rc"
     expect '--filter records the order first' 1 \
         "$(printf '%s\n' "$_bh_spec_out" | grep -c '^Recording build order')"
-    expect '--filter builds in dependency order, then the unrecorded match' \
+    expect '--filter builds in dependency order' \
         'zlib/zlib.pro app/app.pro dr/dr.pro tests/t1/t1.pro ' "$(_bh_spec_built)"
-    expect 'numbering it after the recorded ones, of one total' 1 \
+    expect 'numbering each of one total' 1 \
         "$(printf '%s\n' "$_bh_spec_out" | grep -c '^Filtered build \[4/4\]: tests/t1/t1\.pro$')"
     expect 'the cache lists one order line per variant' \
-        'zlib/zlib.pro app/app.pro dr/dr.pro dr/dr.pro tests/t1/t1.pro ' "$(_bh_spec_lines order)"
+        'zlib/zlib.pro app/app.pro dr/dr.pro dr/dr.pro tests/t1/t1.pro tests/t2/t2.pro pair/one.pro pair/two.pro ' \
+        "$(_bh_spec_lines order)"
+    # _bh_spec_lists <pro>: the subprojects that the subdirs <pro> has on record.
+    _bh_spec_lists() {
+        awk -F'\t' -v pro="$_bh_spec_src/$1" '
+            NF == 2 && $1 == pro && $2 != "" {
+                sub(/^.*\/src\//, "", $2); printf "%s ", $2
+            }' "$_bh_spec_bd/.qmake.save_space"
+    }
+    expect 'and the subprojects of each subdirs project' \
+        'app/app.pro zlib/zlib.pro dr/dr.pro tests/tests.pro pair/pair.pro | tests/t1/t1.pro tests/t2/t2.pro | pair/one.pro pair/two.pro ' \
+        "$(_bh_spec_lists top.pro)| $(_bh_spec_lists tests/tests.pro)| $(_bh_spec_lists pair/pair.pro)"
     expect 'without --save-space no finished line is written' '' \
         "$(_bh_spec_lines finished)"
 
@@ -2697,24 +2727,39 @@ else
         'zlib/zlib.pro app/app.pro ' "$(_bh_spec_built)"
 
     _bh_spec_build --filter 'tests/t2'
-    expect 'an unrecorded single match builds alone' 'tests/t2/t2.pro ' \
+    expect 'a single match builds in its recorded order' 'tests/t2/t2.pro ' \
         "$(_bh_spec_built)"
+
+    _bh_spec_build --filter 'tests/t3'
+    expect 'a project its subdirs project does not list is left out' '' "$(_bh_spec_built)"
+    expect 'saying which subdirs project leaves it out' 1 \
+        "$(printf '%s\n' "$_bh_spec_out" \
+            | grep -c '^--filter: tests/t3/t3.pro is not listed by tests/tests.pro; leaving it out\.$')"
+    expect 'and failing, as the filter matches no project of the build' 1 "$_bh_spec_rc"
+
+    _bh_spec_build --filter 'extra/'
+    expect 'a project the root project does not list builds on its own' \
+        'extra/extra.pro ' "$(_bh_spec_built)"
+    expect 'never through the root of another build beside the root project' 0 \
+        "$(printf '%s\n' "$_bh_spec_out" | grep -c 'other\.pro')"
 
     _bh_spec_build --filter 'tests/tests.pro'
     expect 'a subdirs .pro the filter names builds too' 'tests/tests.pro ' \
         "$(_bh_spec_built)"
 
+    # The filter matches their subdirs project too, which builds after them.
     _bh_spec_build --filter 'pair/'
-    expect 'two projects of one dir build alone' 'pair/one.pro pair/two.pro ' \
-        "$(_bh_spec_built)"
+    expect 'two projects of one dir build in their recorded order' \
+        'pair/one.pro pair/two.pro pair/pair.pro ' "$(_bh_spec_built)"
     expect 'each from the Makefile named after its .pro' \
-        'Makefile.one Makefile.two ' \
+        'Makefile Makefile.one Makefile.two ' \
         "$(cd "$_bh_spec_bd/pair" && ls Makefile* | tr '\n' ' ')"
     : > "$_bh_spec_sandbox/pair-built"
     _bh_spec_build --filter 'pair/'
     expect 'built again, they reuse those Makefiles (no qmake run)' '' \
         "$(find "$_bh_spec_bd/pair" -name 'Makefile*' -newer "$_bh_spec_sandbox/pair-built")"
-    expect 'and still build' 'pair/one.pro pair/two.pro ' "$(_bh_spec_built)"
+    expect 'and still build' 'pair/one.pro pair/two.pro pair/pair.pro ' \
+        "$(_bh_spec_built)"
 
     _bh_spec_build --filter 'nothing-here'
     expect 'a filter that matches nothing fails' 1 "$_bh_spec_rc"
@@ -2723,7 +2768,7 @@ else
     expect '--qmake with --filter records again, then filters' 1 \
         "$(printf '%s\n' "$_bh_spec_out" | grep -c '^Recording build order')"
     expect '--qmake keeps the order lines' \
-        'zlib/zlib.pro app/app.pro dr/dr.pro dr/dr.pro tests/t1/t1.pro tests/t2/t2.pro pair/one.pro pair/two.pro ' "$(_bh_spec_lines order)"
+        'zlib/zlib.pro app/app.pro dr/dr.pro dr/dr.pro tests/t1/t1.pro tests/t2/t2.pro pair/one.pro pair/two.pro extra/extra.pro ' "$(_bh_spec_lines order)"
 
     _bh_spec_build --filter 'zlib|app' --rebuild=app
     expect 'without --save-space, --rebuild builds every match, in order' \
@@ -2734,12 +2779,12 @@ else
     expect 'and it still writes no finished line' '' "$(_bh_spec_lines finished)"
     _bh_spec_build --rebuild
     expect 'a bare --rebuild rebuilds every recorded project, in order' \
-        'zlib/zlib.pro app/app.pro dr/dr.pro tests/t1/t1.pro tests/t2/t2.pro pair/one.pro pair/two.pro ' "$(_bh_spec_built)"
-    expect 'cleaning each project first' 7 \
+        'zlib/zlib.pro app/app.pro dr/dr.pro tests/t1/t1.pro tests/t2/t2.pro pair/one.pro pair/two.pro extra/extra.pro ' "$(_bh_spec_built)"
+    expect 'cleaning each project first' 8 \
         "$(printf '%s\n' "$_bh_spec_out" | grep -c '^--rebuild:')"
     _bh_spec_build --rebuild=tests/t2
     expect '--rebuild alone builds the root, then the projects built alone before, recorded since' \
-        'zlib/zlib.pro app/app.pro dr/dr.pro tests/t1/t1.pro tests/t2/t2.pro pair/one.pro pair/two.pro ' "$(_bh_spec_built)"
+        'zlib/zlib.pro app/app.pro dr/dr.pro tests/t1/t1.pro tests/t2/t2.pro pair/one.pro pair/two.pro extra/extra.pro ' "$(_bh_spec_built)"
     expect 'cleaning only that match' 1 \
         "$(printf '%s\n' "$_bh_spec_out" | grep -c '^--rebuild:')"
 
@@ -2747,20 +2792,23 @@ else
     _bh_spec_build --save-space
     expect '--save-space on a fresh dir succeeds' 0 "$_bh_spec_rc"
     expect '--save-space builds the whole root in order' \
-        'zlib/zlib.pro app/app.pro dr/dr.pro ' "$(_bh_spec_built)"
+        'zlib/zlib.pro app/app.pro dr/dr.pro tests/t1/t1.pro tests/t2/t2.pro pair/one.pro pair/two.pro ' \
+        "$(_bh_spec_built)"
     expect '--save-space writes a finished line per variant' \
-        'zlib/zlib.pro app/app.pro dr/dr.pro dr/dr.pro ' "$(_bh_spec_lines finished)"
+        'zlib/zlib.pro app/app.pro dr/dr.pro dr/dr.pro tests/t1/t1.pro tests/t2/t2.pro pair/one.pro pair/two.pro ' \
+        "$(_bh_spec_lines finished)"
     expect '--save-space leaves no object file' 0 \
         "$(find "$_bh_spec_bd" -name '*.o' | wc -l | tr -d ' ')"
 
     _bh_spec_build --save-space
     expect '--save-space again skips every finished project' '' "$(_bh_spec_built)"
     expect '--save-space again reports the skips' 1 \
-        "$(printf '%s\n' "$_bh_spec_out" | grep -c 'built 0, skipped 3 up-to-date, of 3')"
+        "$(printf '%s\n' "$_bh_spec_out" | grep -c 'built 0, skipped 7 up-to-date, of 7')"
 
     _bh_spec_build --save-space --rebuild
     expect 'bare --rebuild builds every project again' \
-        'zlib/zlib.pro app/app.pro dr/dr.pro ' "$(_bh_spec_built)"
+        'zlib/zlib.pro app/app.pro dr/dr.pro tests/t1/t1.pro tests/t2/t2.pro pair/one.pro pair/two.pro ' \
+        "$(_bh_spec_built)"
     expect '--rebuild leaves no emptied finished line behind' '' \
         "$(_bh_spec_lines unfinished)"
 
@@ -2775,16 +2823,13 @@ else
     expect '--rebuild cannot reach past --filter' '' "$(_bh_spec_built)"
 
     _bh_spec_build --save-space --filter 'zlib|tests/t1'
-    expect 'an unrecorded match builds alone under --save-space' 'tests/t1/t1.pro ' \
-        "$(_bh_spec_built)"
-    _bh_spec_build --save-space --filter 'zlib|tests/t1'
-    expect 'and counts as recorded and finished from then on' '' "$(_bh_spec_built)"
+    expect 'a match that finished with the root is skipped' '' "$(_bh_spec_built)"
     _bh_spec_build --save-space --filter 'tests/t1' --rebuild
     expect 'until --rebuild names it' 'tests/t1/t1.pro ' "$(_bh_spec_built)"
 
     _bh_spec_build --save-space --filter 'tests/'
     expect 'under --save-space a matched subdirs .pro is passed over' 0 "$_bh_spec_rc"
-    expect 'while its unfinished leaves build alone' 'tests/t2/t2.pro ' \
+    expect 'while its leaves, finished with the root, build no more' '' \
         "$(_bh_spec_built)"
     expect 'saying why the subdirs .pro itself did not build' 1 \
         "$(printf '%s\n' "$_bh_spec_out" \
@@ -2794,7 +2839,7 @@ else
 
     _bh_spec_build --save-space --qmake
     expect '--qmake keeps every finished line' \
-        'app/app.pro dr/dr.pro dr/dr.pro tests/t1/t1.pro tests/t2/t2.pro zlib/zlib.pro ' \
+        'app/app.pro dr/dr.pro dr/dr.pro pair/one.pro pair/two.pro tests/t1/t1.pro tests/t2/t2.pro zlib/zlib.pro ' \
         "$(_bh_spec_lines finished | tr ' ' '\n' | sort | tr '\n' ' ')"
 
     _bh_spec_build --save-space --clean --filter 'app'
@@ -2815,14 +2860,16 @@ else
     rm -rf "$_bh_spec_bd"
     _bh_spec_build --save-space --debug
     expect '--debug builds the whole root' \
-        'zlib/zlib.pro app/app.pro dr/dr.pro ' "$(_bh_spec_built)"
+        'zlib/zlib.pro app/app.pro dr/dr.pro tests/t1/t1.pro tests/t2/t2.pro pair/one.pro pair/two.pro ' \
+        "$(_bh_spec_built)"
     expect 'as debug only' 0 \
         "$(grep -c -- '-DQT_NO_DEBUG' "$_bh_spec_bd/zlib/Makefile")"
     _bh_spec_build --save-space --debug
     expect '--debug again skips every finished project' '' "$(_bh_spec_built)"
     _bh_spec_build --save-space --release
     expect '--release over it builds every project again' \
-        'zlib/zlib.pro app/app.pro dr/dr.pro ' "$(_bh_spec_built)"
+        'zlib/zlib.pro app/app.pro dr/dr.pro tests/t1/t1.pro tests/t2/t2.pro pair/one.pro pair/two.pro ' \
+        "$(_bh_spec_built)"
     expect 'as release only' 1 \
         "$(grep -c -- '-DQT_NO_DEBUG' "$_bh_spec_bd/zlib/Makefile")"
     _bh_spec_build --filter 'zlib' --debug
@@ -3014,8 +3061,8 @@ else
         test_skip 'a toolchain switch cleans the old objects' 'needs Linux, clang++, and readelf'
     fi
 
-    # A broken project the filter leaves out.
-    printf 'TEMPLATE = subdirs\nSUBDIRS = app broken zlib dr\napp.depends = zlib\n' \
+    # A broken project the filter leaves out, listed before the tests.
+    printf 'TEMPLATE = subdirs\nSUBDIRS = app broken zlib dr tests\napp.depends = zlib\n' \
         > "$_bh_spec_src/top.pro"
     rm -rf "$_bh_spec_bd"
     _bh_spec_build --filter 'zlib|app'
@@ -3024,14 +3071,67 @@ else
         'zlib/zlib.pro app/app.pro ' "$(_bh_spec_lines order)"
     expect 'while every match still builds' 'zlib/zlib.pro app/app.pro ' \
         "$(_bh_spec_built)"
+    _bh_spec_build --filter 'tests/t1'
+    expect 'a match the stopped recording never reached builds' 'tests/t1/t1.pro ' \
+        "$(_bh_spec_built)"
+    expect 'once the subdirs project that the root lists above it is qmaked' 1 \
+        "$(printf '%s\n' "$_bh_spec_out" \
+            | grep -c '^Recording build order of tests/tests.pro via qmake\.\.\.$')"
+    expect 'which records its whole subtree' \
+        'zlib/zlib.pro app/app.pro tests/t1/t1.pro tests/t2/t2.pro ' "$(_bh_spec_lines order)"
+    _bh_spec_build --filter 'tests/t3'
+    expect 'a subdirs project whose list is on record needs no qmake again' 0 \
+        "$(printf '%s\n' "$_bh_spec_out" | grep -c '^Recording build order of')"
+    expect 'and its list alone leaves the match out' 1 \
+        "$(printf '%s\n' "$_bh_spec_out" | grep -c 'is not listed by tests/tests.pro')"
+    sleep 1
+    touch "$_bh_spec_src/tests/tests.pro"
+    _bh_spec_build --filter 'tests/t3'
+    expect 'until its .pro is newer than its Makefile, then it is qmaked again' 1 \
+        "$(printf '%s\n' "$_bh_spec_out" \
+            | grep -c '^Recording build order of tests/tests.pro via qmake\.\.\.$')"
     _bh_spec_build --force-qmake --filter 'zlib|app'
     expect '--force-qmake records past the broken project' \
-        'zlib/zlib.pro app/app.pro dr/dr.pro dr/dr.pro ' "$(_bh_spec_lines order)"
+        'zlib/zlib.pro app/app.pro tests/t1/t1.pro tests/t2/t2.pro dr/dr.pro dr/dr.pro ' \
+        "$(_bh_spec_lines order)"
     _bh_spec_build --save-space
     expect 'a broken project fails a --save-space build' 2 "$_bh_spec_rc"
 
+    # --failed: a test's `make check` records its result, and with
+    # XD_TEST_FAILED_ONLY=1 skips a test that passed until it builds again.
+    _bh_spec_check=$_bh_spec_sandbox/check
+    mkdir -p "$_bh_spec_check/src" "$_bh_spec_check/bd"
+    printf 'TEMPLATE = app\nQT =\nCONFIG += testcase\nSOURCES = m.cpp\nTARGET = tst_check\n' \
+        > "$_bh_spec_check/src/check.pro"
+    echo 'int main() { return 0; }' > "$_bh_spec_check/src/m.cpp"
+    (
+        cd "$_bh_spec_check/bd" \
+            && "$_bh_spec_xd_dir/bin/qmake" -spec "$_bh_spec_xd_dir/mkspecs/linux-g++" \
+                "$_bh_spec_check/src/check.pro" \
+            && make
+    ) > /dev/null 2>&1
+    _bh_spec_check_run() {
+        ( cd "$_bh_spec_check/bd" && XD_TEST_FAILED_ONLY=$1 make check 2>&1 )
+    }
+    _bh_spec_check_run 0 > /dev/null
+    expect 'a test run records that it passed' passed \
+        "$(cat "$_bh_spec_check/bd/.test-result" 2>/dev/null)"
+    expect 'a --failed run skips a test that passed' 1 \
+        "$(_bh_spec_check_run 1 | grep -c '^Skipping ./tst_check: it passed')"
+    touch "$_bh_spec_check/bd/tst_check"
+    expect 'until the test builds again' 0 \
+        "$(_bh_spec_check_run 1 | grep -c '^Skipping')"
+    printf 'int main() { return 1; }\n' > "$_bh_spec_check/src/m.cpp"
+    ( cd "$_bh_spec_check/bd" && make ) > /dev/null 2>&1
+    _bh_spec_check_run 0 > /dev/null
+    expect 'a test run records that it failed' failed \
+        "$(cat "$_bh_spec_check/bd/.test-result" 2>/dev/null)"
+    expect 'which a --failed run runs again' 0 \
+        "$(_bh_spec_check_run 1 | grep -c '^Skipping')"
+    unset -f _bh_spec_check_run
+
     rm -rf "$_bh_spec_sandbox"
-    unset -f _bh_spec_build _bh_spec_built _bh_spec_lines
+    unset -f _bh_spec_build _bh_spec_built _bh_spec_lines _bh_spec_lists
 fi
 
 

@@ -101,4 +101,57 @@ defineTest(saveOrder) {
     return(true)
 }
 
+# saveOrderSubproject(entry)
+#
+# Returns the .pro file that the SUBDIRS entry `entry` names, resolved the way
+# qmake's QMakeProject::fetchSubdir() does: the entry's `.file`, else its
+# `.subdir`, else the entry itself; a folder names the .pro inside it that is
+# named after it.
+defineReplace(saveOrderSubproject) {
+    key = $$replace(1, [^a-zA-Z0-9_], -)
+    file = $$eval($${key}.file)
+    !isEmpty(file): return($$absolute_path($$file, $$_PRO_FILE_PWD_))
+    dir = $$eval($${key}.subdir)
+    isEmpty(dir) {
+        contains(1, .*\\.pro$): return($$absolute_path($$1, $$_PRO_FILE_PWD_))
+        dir = $$1
+    }
+    dir = $$absolute_path($$dir, $$_PRO_FILE_PWD_)
+    return($$dir/$$basename(dir).pro)
+}
+
+# saveOrderSubdirs()
+#
+# Logs the subprojects that the subdirs project being generated lists, as
+# two-column lines: "<pro>\t" tells that qmake ran for this project, and one
+# "<pro>\t<subproject-pro>" line per subproject follows. A make of this
+# project's Makefile qmakes those subprojects only once it reaches them,
+# hence the lines tell build.sh, before that, which projects of the source
+# tree belong to the build (see bh_order_reach in build-handler.sh). They
+# replace the lines that an earlier qmake of this project wrote, so that a
+# subproject it no longer lists drops out.
+defineTest(saveOrderSubdirs) {
+    cache = $$saveOrderCacheFile()
+    isEmpty(cache): return(true)
+    tab = $$escape_expand(\\t)
+    wanted = $${_PRO_FILE_}$${tab}
+    for(entry, SUBDIRS): wanted += $${_PRO_FILE_}$${tab}$$saveOrderSubproject($$entry)
+    # A subdirs project has no other lines, as it has no target.
+    existing = $$cat($$cache, lines)
+    kept =
+    old =
+    for(each, existing) {
+        head = $$section(each, $$tab, 0, 0)
+        equals(head, $$_PRO_FILE_): old += $$each
+        else: kept += $$each
+    }
+    oldText = $$join(old, $$tab)
+    wantedText = $$join(wanted, $$tab)
+    equals(oldText, $$wantedText): return(true)
+    kept += $$wanted
+    write_file($$cache, kept)
+    return(true)
+}
+
 have_target: saveOrder()
+contains(TEMPLATE, subdirs): saveOrderSubdirs()
