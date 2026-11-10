@@ -804,8 +804,13 @@ void tst_qmessagehandler::qMessagePattern_data()
 
 #ifndef QT_NO_DEBUG
     QTest::newRow("backtrace") << "[%{backtrace}] %{message}" << true << (QList<QByteArray>()
+#ifndef QT_PTR_TRACKING
             // MyClass::qt_static_metacall is explicitly marked as hidden in the Q_OBJECT macro
             << "[MyClass::myFunction|MyClass::mySlot1|?app?|" QT_NAMESPACE_STR "QMetaMethod::invoke|" QT_NAMESPACE_STR "QMetaObject::invokeMethod] from_a_function 34");
+#else
+            // Fil-C's stack walk names even a hidden function.
+            << "[MyClass::myFunction|MyClass::mySlot1|MyClass::qt_static_metacall|" QT_NAMESPACE_STR "QMetaMethod::invoke|" QT_NAMESPACE_STR "QMetaObject::invokeMethod] from_a_function 34");
+#endif
 #endif
 
     QTest::newRow("backtrace depth,separator") << "[%{backtrace depth=2 separator=\"\n\"}] %{message}" << true << (QList<QByteArray>()

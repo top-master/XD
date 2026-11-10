@@ -112,10 +112,13 @@ void *qReallocAligned(void *oldptr, size_t newsize, size_t oldsize, size_t align
     if (!real)
         return 0;
 
-    quintptr faked = reinterpret_cast<quintptr>(real) + alignment;
-    faked &= ~(alignment - 1);
-
-    void **faked_ptr = reinterpret_cast<void **>(faked);
+    // Rounds `real + alignment` down to the alignment by stepping the
+    // pointer itself, since under Fil-C a pointer rebuilt from an integer
+    // cannot be dereferenced.
+    const quintptr misalignment =
+        reinterpret_cast<quintptr >(real) & (alignment - 1);
+    void **faked_ptr = reinterpret_cast<void ** >(
+        static_cast<char * >(real) + alignment - misalignment);
 
     // now save the value of the real pointer at faked-sizeof(void*)
     // by construction, alignment > sizeof(void*) and is a power of 2, so

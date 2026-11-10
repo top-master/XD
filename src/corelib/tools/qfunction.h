@@ -73,10 +73,17 @@ public:
         : super(f)
     {}
 #else
-    // Move or copy.
-    template <typename F>
+    /// Move or copy, of anything but a `std::function` (or this class),
+    /// since libc++'s converting constructor takes such one by value, which
+    /// comes back here, without end.
+    template <typename F, typename = typename std::enable_if<
+        ! std::is_base_of<super, typename std::decay<F >::type >::value>::type>
     Q_INLINE_TEMPLATE QFunction(F && f) Q_DECL_NOEXCEPT
         : super(f)
+    {}
+
+    inline QFunction(const super &other) Q_DECL_NOEXCEPT
+        : super(other)
     {}
 #endif
 

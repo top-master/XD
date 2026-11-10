@@ -38,6 +38,7 @@
 
 #include "qlibrary_p.h"
 #include <qdebug.h>
+#include <string.h>
 
 QT_BEGIN_NAMESPACE
 
@@ -124,7 +125,13 @@ int QElfParser::parse(const char *dataStart, ulong fdlen, const QString &library
 
     qelfhalf_t e_shentsize = read<qelfhalf_t> (data);
 
-    if (e_shentsize % 4){
+    // `parseSectionHeader()` reads up to `sh_size`, hence a shorter entry
+    // would read into the next one, or past the end of the file.
+    const qelfhalf_t sectionHeaderSize = qelfhalf_t(
+        2 * sizeof(qelfword_t)
+            + 2 * sizeof(qelfaddr_t) + 2 * sizeof(qelfoff_t)
+    );
+    if (e_shentsize % 4 || e_shentsize < sectionHeaderSize) {
         if (lib)
             lib->errorString = QLibrary::tr("'%1' is an invalid ELF object (%2)").arg(library).arg(QLatin1String("unexpected e_shentsize"));
         return Corrupt;
@@ -135,7 +142,9 @@ int QElfParser::parse(const char *dataStart, ulong fdlen, const QString &library
     qelfhalf_t e_shtrndx   = read<qelfhalf_t> (data);
     data += sizeof(qelfhalf_t); // e_shtrndx
 
-    if ((quint32)(e_shnum * e_shentsize) > fdlen) {
+    if ((quint32)(e_shnum * e_shentsize) > fdlen
+        || e_shoff > fdlen - (quint32)(e_shnum * e_shentsize)
+    ) {
         if (lib)
             lib->errorString = QLibrary::tr("'%1' is an invalid ELF object (%2)").arg(library)
                                .arg(QLatin1String("announced %2 sections, each %3 bytes, exceed file size"))
@@ -183,7 +192,15 @@ int QElfParser::parse(const char *dataStart, ulong fdlen, const QString &library
         }
         const char *shnam = dataStart + m_stringTableFileOffset + sh.name;
 
-        if (m_stringTableFileOffset + sh.name > fdlen) {
+        // The name is compared up to its terminator, hence the name and
+        // its terminator must end inside the file.
+        if (m_stringTableFileOffset + sh.name >= fdlen
+            || ! memchr(
+                shnam,
+                0,
+                fdlen - (m_stringTableFileOffset + sh.name)
+            )
+        ) {
             if (lib)
                 lib->errorString = QLibrary::tr("'%1' is an invalid ELF object (%2)").arg(library)
                                   .arg(QLatin1String("section name %2 of %3 behind end of file"))

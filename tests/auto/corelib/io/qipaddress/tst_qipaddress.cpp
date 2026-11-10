@@ -360,10 +360,24 @@ void tst_QIpAddress::parseIp6()
     QFETCH(Ip6, expected);
 
 #if defined(__GLIBC__) && defined(AF_INET6)
-    Ip6 inet_result;
-    bool inet_ok = inet_pton(AF_INET6, address.toLatin1(), &inet_result.u8);
-    QVERIFY(inet_ok);
-    QCOMPARE(inet_result, expected);
+    // Since 2.26, glibc rejects a group of more than four hex digits, which
+    // `QIPAddressUtils::parseIp6()` still accepts.
+    bool longGroup = false;
+    foreach (const QString &group, address.split(QLatin1Char(':'))) {
+        longGroup = longGroup || (group.size() > 4
+            && ! group.contains(QLatin1Char('.'))
+        );
+    }
+    if ( ! longGroup || ! __GLIBC_PREREQ(2, 26)) {
+        Ip6 inet_result;
+        bool inet_ok = inet_pton(
+            AF_INET6,
+            address.toLatin1(),
+            &inet_result.u8
+        );
+        QVERIFY(inet_ok);
+        QCOMPARE(inet_result, expected);
+    }
 #endif
 
     Ip6 result;

@@ -2,7 +2,7 @@ SOURCES = main.cpp
 CONFIG -= qt app_bundle
 CONFIG += console
 DESTDIR = ./
-isEmpty(OBJECTS_DIR): OBJECTS_DIR = onespace
+isEmpty(OBJECTS_DIR): OBJECTS_DIR = .obj-onespace
 else:                 OBJECTS_DIR = $${OBJECTS_DIR}-onespace
 
 TARGET = "one space"

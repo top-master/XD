@@ -52,10 +52,28 @@ struct QPtrSafetyPool
     }
 };
 
-} // unnamed namespace
+/*!
+    Returns the one QPtrSafetyTypedTable, which lives as long as the process,
+    never destroyed like a `Q_GLOBAL_STATIC`, since code that runs at exit (a
+    destructor function, a static's destructor) still makes raw-data aliases.
+*/
+QPtrSafetyTypedTable *qPtrSafetyTypedTable()
+{
+    static QPtrSafetyTypedTable *const result = new QPtrSafetyTypedTable;
+    return result;
+}
 
-Q_GLOBAL_STATIC(QPtrSafetyTypedTable, qPtrSafetyTypedTable)
-Q_GLOBAL_STATIC(QPtrSafetyPool, qPtrSafetyPool)
+/*!
+    Returns the one QPtrSafetyPool, which lives as long as the process, as
+    qPtrSafetyTypedTable() does.
+*/
+QPtrSafetyPool *qPtrSafetyPool()
+{
+    static QPtrSafetyPool *const result = new QPtrSafetyPool;
+    return result;
+}
+
+} // unnamed namespace
 
 /*!
     Returns the one weak table shared by every QArrayData raw-data alias; QString
@@ -74,7 +92,7 @@ zexact_ptrtable *QPtrSafetyTable::forPtr(const void *ptr)
 {
     // Pick a table by hashing the object pointer into the pool, the same way
     // QObjectPrivate::sharedMutex picks a mutex from its pool.
-    QRef<QPtrSafetyPool > pool = qPtrSafetyPool();
+    QPtrSafetyPool *pool = qPtrSafetyPool();
     return pool->tables[
         quint32(quintptr(ptr)) % sizeof(pool->tables) / sizeof(pool->tables[0])];
 }

@@ -51,9 +51,9 @@ void tst_QHooks::initTestCase()
 
 void tst_QHooks::testVersion()
 {
-    QVERIFY(qtHookData[QHooks::HookDataVersion] >= 1);
-    QCOMPARE(qtHookData[QHooks::HookDataSize], (quintptr)QHooks::LastHookIndex);
-    QCOMPARE(qtHookData[QHooks::QtVersion], (quintptr)QT_VERSION);
+    QVERIFY(quintptr(qtHookData[QHooks::HookDataVersion]) >= 1);
+    QCOMPARE(quintptr(qtHookData[QHooks::HookDataSize]), (quintptr)QHooks::LastHookIndex);
+    QCOMPARE(quintptr(qtHookData[QHooks::QtVersion]), (quintptr)QT_VERSION);
 }
 
 static int objectCount = 0;
@@ -70,11 +70,11 @@ static void objectRemoveHook(QObject*)
 
 void tst_QHooks::testAddRemoveObject()
 {
-    QCOMPARE(qtHookData[QHooks::AddQObject], (quintptr)0);
-    QCOMPARE(qtHookData[QHooks::RemoveQObject], (quintptr)0);
+    QCOMPARE(quintptr(qtHookData[QHooks::AddQObject]), (quintptr)0);
+    QCOMPARE(quintptr(qtHookData[QHooks::RemoveQObject]), (quintptr)0);
 
-    qtHookData[QHooks::AddQObject] = (quintptr)&objectAddHook;
-    qtHookData[QHooks::RemoveQObject] = (quintptr)&objectRemoveHook;
+    qtHookData[QHooks::AddQObject] = QHooks::HookData(&objectAddHook);
+    qtHookData[QHooks::RemoveQObject] = QHooks::HookData(&objectRemoveHook);
 
     QCOMPARE(objectCount, 0);
     QObject *obj = new QObject;

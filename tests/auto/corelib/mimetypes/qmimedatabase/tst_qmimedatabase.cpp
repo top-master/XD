@@ -229,8 +229,13 @@ void tst_QMimeDatabase::mimeTypeForName()
         qWarning() << "ls not found";
     else {
         const QString executableType = QString::fromLatin1("application/x-executable");
+        // A position-independent executable is an ELF shared object to the
+        // magic rules, hence `ls` built as PIE matches `x-sharedlib`.
+        const QString sharedLibType =
+            QString::fromLatin1("application/x-sharedlib");
         //QTest::newRow("executable") << exePath << executableType;
-        QCOMPARE(db.mimeTypeForFile(exePath).name(), executableType);
+        const QString exeType = db.mimeTypeForFile(exePath).name();
+        QVERIFY2(exeType == executableType || exeType == sharedLibType, qPrintable(exeType));
     }
 #endif
 

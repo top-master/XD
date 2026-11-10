@@ -8218,23 +8218,24 @@ QString QString::fromRawData(const QChar *unicode, int size)
 */
 QString &QString::setRawData(const QChar *unicode, int size)
 {
-#ifndef QT_PTR_TRACKING
     if (d->ref.isShared() || d->alloc) {
         *this = fromRawData(unicode, size);
     } else {
         if (unicode) {
             d->size = size;
+#ifndef QT_PTR_TRACKING
             d->offset = reinterpret_cast<const char *>(unicode) - reinterpret_cast<char *>(d);
+#else
+            // TRACE/corelib/memory-safety QArrayData: raw-data alias kept in a weak ptrtable #2,
+            // hence the recycled header stores the buffer's table index, as
+            // `QTypedArrayData::fromRawData()` does (#5), not a raw offset.
+            d->offset = -QPtrSafetyTable::encodeTypedData(const_cast<QChar * >(unicode));
+#endif
         } else {
             d->offset = sizeof(QStringData);
             d->size = 0;
         }
     }
-#else
-    // TRACE/corelib/memory-safety QArrayData: raw-data alias kept in a weak ptrtable #2,
-    // hence alias through fromRawData rather than storing a raw header offset here.
-    *this = fromRawData(unicode, size);
-#endif
     return *this;
 }
 

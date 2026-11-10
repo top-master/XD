@@ -6,6 +6,11 @@ SOURCES = tst_qmetatype.cpp
 TESTDATA=./typeFlags.bin
 DEFINES += QT_DISABLE_DEPRECATED_BEFORE=0
 
+# Keeps source backtraces while limiting compiler debug-type memory use.
+memory_safe {
+    QMAKE_CXXFLAGS_DEBUG += -gline-tables-only
+}
+
 win32-msvc*|wince|winrt {
     # Prevents "fatal error C1128: number of sections exceeded object file format limit".
     QMAKE_CXXFLAGS += /bigobj

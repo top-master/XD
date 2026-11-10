@@ -212,8 +212,10 @@ QSettings *QLibraryInfoPrivate::findConfiguration()
         }
     }
 
-    // Try finding by QtCore lib's binary folder.
-#if defined(Q_OS_WIN) && !defined(Q_OS_WINRT) && !defined(Q_OS_WINCE)
+    // Try finding by QtCore lib's binary folder, on each platform where
+    // `QLibraryInfo::binaryPath()` can find it.
+#if (defined(Q_OS_WIN) && !defined(Q_OS_WINRT) && !defined(Q_OS_WINCE)) \
+    || defined(QT_LIBRARYINFO_DL)
     // An unknown path is skipped, since an empty QDir is the current dir.
     const QString path = QLibraryInfo::binaryPath();
     if ( ! path.isEmpty()) {
@@ -221,7 +223,7 @@ QSettings *QLibraryInfoPrivate::findConfiguration()
             return result;
         }
     }
-#endif // Q_OS_WIN
+#endif // Q_OS_WIN || QT_LIBRARYINFO_DL
 
 #endif // !QT_BUILD_QMAKE
     return 0;     //no luck

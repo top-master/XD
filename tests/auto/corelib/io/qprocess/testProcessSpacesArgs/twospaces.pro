@@ -2,7 +2,7 @@ SOURCES = main.cpp
 CONFIG -= qt app_bundle
 CONFIG += console
 DESTDIR = ./
-isEmpty(OBJECTS_DIR): OBJECTS_DIR = twospaces
+isEmpty(OBJECTS_DIR): OBJECTS_DIR = .obj-twospaces
 else:                 OBJECTS_DIR = $${OBJECTS_DIR}-twospaces
 
 TARGET = "two space s"

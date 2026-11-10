@@ -170,7 +170,9 @@ void tst_QCollator::compare()
 
     QCollator collator(locale);
 
-#if defined(Q_OS_ANDROID) && !defined(Q_OS_ANDROID_NO_SDK)
+// Without ICU, every Unix but macOS builds the POSIX collation as well.
+#if (defined(Q_OS_ANDROID) && !defined(Q_OS_ANDROID_NO_SDK)) \
+    || (!defined(QT_USE_ICU) && !defined(Q_OS_WIN) && !defined(Q_OS_MAC))
     if (collator.locale() != QLocale())
         QSKIP("Posix implementation of collation only supports default locale");
 #endif

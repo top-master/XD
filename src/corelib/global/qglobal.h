@@ -1466,8 +1466,16 @@ template <typename Func1>
 class QFinally {
     Func1 data;
 public:
+    // TRACE/corelib scope-guard: forwards the callback, MSVC keeps `qMove` #1,
+    // since a named callback (an lvalue) makes `Func1` a reference, which
+    // cannot bind the rvalue that `qMove` makes of it; forwarding keeps an
+    // lvalue an lvalue and an rvalue an rvalue.
     Q_DECL_CONSTEXPR Q_ALWAYS_INLINE QFinally(Func1 &&f)
+#ifdef Q_CC_MSVC
         : data(qMove(f))
+#else
+        : data(static_cast<Func1 &&>(f))
+#endif
     {}
 
     Q_ALWAYS_INLINE ~QFinally() {
@@ -1481,7 +1489,12 @@ public:
 template <typename Func1>
 Q_DECL_CONSTEXPR Q_ALWAYS_INLINE QtPrivate::QFinally<Func1 > qScopeGuard(Func1 && f)
 {
+    // TRACE/corelib scope-guard: forwards the callback, MSVC keeps `qMove` #2,
+#ifdef Q_CC_MSVC
     return QtPrivate::QFinally<Func1 >(qMove(f));
+#else
+    return QtPrivate::QFinally<Func1 >(static_cast<Func1 &&>(f));
+#endif
 }
 
 #endif /* __cplusplus end */

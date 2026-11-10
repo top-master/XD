@@ -3111,10 +3111,12 @@ void tst_QVariant::compareCustomTypes() const
     const QVariant variant1(QVariant::fromValue(f1));
 
     WontCompare f2;
-    f2.x = 0;
+    f2.x = 1;
     const QVariant variant2(QVariant::fromValue(f2));
 
-    /* We compare pointers. */
+    // Without `operator==()` the memory is compared, hence the values differ
+    // in a set field, not only in the uninitialized ones (which a compiler
+    // such as Fil-C zero-fills).
     QVERIFY(variant1 != variant2);
     QVERIFY(variant1 == variant1);
     QVERIFY(variant2 == variant2);

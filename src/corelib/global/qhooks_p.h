@@ -68,9 +68,17 @@ typedef void(*AddQObjectCallback)(QObject*);
 typedef void(*RemoveQObjectCallback)(QObject*);
 typedef void(*StartupCallback)();
 
+// Under Fil-C a callback stored as an integer can no longer be called, hence
+// there each entry is a pointer, the number entries cast into one.
+#ifndef QT_PTR_TRACKING
+typedef quintptr HookData;
+#else
+typedef void *HookData;
+#endif
+
 }
 
-extern quintptr Q_CORE_EXPORT qtHookData[];
+extern QHooks::HookData Q_CORE_EXPORT qtHookData[];
 
 QT_END_NAMESPACE
 

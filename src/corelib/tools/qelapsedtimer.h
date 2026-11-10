@@ -89,6 +89,15 @@ public:
     static QString toStringLabel(qint64 msec, FormatFlags flags = Precise);
     inline QString toStringLabel(FormatFlags flags = Precise) const
         { return QElapsedTimer::toStringLabel(elapsed(), flags); }
+    /// Takes flags passed as `int`, which else would pick the static
+    /// overload and format the flags themselves as the elapsed time.
+    inline QString toStringLabel(int flags) const
+        {
+            return QElapsedTimer::toStringLabel(
+                elapsed(),
+                FormatFlags(flags)
+            );
+        }
     static QString label(qint64 msec, FormatFlags flags = NoFlags);
 
     bool operator==(const QElapsedTimer &other) const Q_DECL_NOTHROW
