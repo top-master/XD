@@ -1,0 +1,16 @@
+# test_result.prf
+#
+# XD's test results, loaded by an explicit include() from testcase.prf on Unix,
+# once the `check` (or `benchmark`) command is complete but before it changes
+# into the test's folder. It hands that command to tools/test-result.sh, which
+# runs it and writes `passed` or `failed` into the `.test-result` file of the
+# test's build folder; hence `build.sh --failed` (XD_TEST_FAILED_ONLY=1) can
+# skip a test whose last run passed, and whose binary was not built again
+# since.
+
+app_bundle: testResultBinary = $${TEST_TARGET_DIR}/$(QMAKE_TARGET).app/Contents/MacOS/$(QMAKE_TARGET)
+else:       testResultBinary = $${TEST_TARGET_DIR}/$(QMAKE_TARGET)
+$${type}.commands = \
+    sh $$shell_quote($$clean_path($$PWD/../../tools/test-result.sh)) \
+    $$shell_quote($$OUT_PWD/.test-result) $$testResultBinary \
+    $$shell_quote($$join($${type}.commands, " "))

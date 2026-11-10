@@ -92,6 +92,15 @@ unset BH_RUN_TESTS
 bh_parse_args --tests
 expect '--tests (plural) sets BH_RUN_TESTS=1' 1 "$BH_RUN_TESTS"
 
+unset BH_FAILED XD_TEST_FAILED_ONLY
+bh_parse_args --failed
+expect '--failed sets BH_FAILED=1'          1 "$BH_FAILED"
+expect 'but tells no make check to skip a test by itself' '' "${XD_TEST_FAILED_ONLY:-}"
+expect 'which only the test step does, by exporting XD_TEST_FAILED_ONLY' 1 \
+    "$(bh_hook_run() { :; }; bh_run() { :; }; bh_run_tests . --subdirs
+        sh -c 'echo "$XD_TEST_FAILED_ONLY"')"
+unset BH_FAILED XD_TEST_FAILED_ONLY
+
 unset BH_MODE
 bh_parse_args --release
 expect '--release sets BH_MODE=release'     release "$BH_MODE"
@@ -3110,6 +3119,39 @@ else
         "$(_bh_spec_lines order)"
     _bh_spec_build --save-space
     expect 'a broken project fails a --save-space build' 2 "$_bh_spec_rc"
+
+    # --failed: a test's `make check` records its result, and with
+    # XD_TEST_FAILED_ONLY=1 skips a test that passed until it builds again.
+    _bh_spec_check=$_bh_spec_sandbox/check
+    mkdir -p "$_bh_spec_check/src" "$_bh_spec_check/bd"
+    printf 'TEMPLATE = app\nQT =\nCONFIG += testcase\nSOURCES = m.cpp\nTARGET = tst_check\n' \
+        > "$_bh_spec_check/src/check.pro"
+    echo 'int main() { return 0; }' > "$_bh_spec_check/src/m.cpp"
+    (
+        cd "$_bh_spec_check/bd" \
+            && "$_bh_spec_xd_dir/bin/qmake" -spec "$_bh_spec_xd_dir/mkspecs/linux-g++" \
+                "$_bh_spec_check/src/check.pro" \
+            && make
+    ) > /dev/null 2>&1
+    _bh_spec_check_run() {
+        ( cd "$_bh_spec_check/bd" && XD_TEST_FAILED_ONLY=$1 make check 2>&1 )
+    }
+    _bh_spec_check_run 0 > /dev/null
+    expect 'a test run records that it passed' passed \
+        "$(cat "$_bh_spec_check/bd/.test-result" 2>/dev/null)"
+    expect 'a --failed run skips a test that passed' 1 \
+        "$(_bh_spec_check_run 1 | grep -c '^Skipping ./tst_check: it passed')"
+    touch "$_bh_spec_check/bd/tst_check"
+    expect 'until the test builds again' 0 \
+        "$(_bh_spec_check_run 1 | grep -c '^Skipping')"
+    printf 'int main() { return 1; }\n' > "$_bh_spec_check/src/m.cpp"
+    ( cd "$_bh_spec_check/bd" && make ) > /dev/null 2>&1
+    _bh_spec_check_run 0 > /dev/null
+    expect 'a test run records that it failed' failed \
+        "$(cat "$_bh_spec_check/bd/.test-result" 2>/dev/null)"
+    expect 'which a --failed run runs again' 0 \
+        "$(_bh_spec_check_run 1 | grep -c '^Skipping')"
+    unset -f _bh_spec_check_run
 
     _bh_spec_capture=$_bh_spec_sandbox/test-qmake-args
     _bh_spec_test_mode() {

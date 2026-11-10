@@ -176,6 +176,7 @@ them.
 | `--test [file.pro \| glob]` / `--tests` | Build, then build and run the tests. You may name one test `.pro` file, or a glob; a glob runs **every** test it matches (e.g. `'**/*qmake*'`). Without one, the project's default tests run. See "Finding a test by glob" below. |
 | `--test-review <file.pro \| glob>` | Shortcut for `--test <file.pro> --headless --verbose --no-build`. Takes a `.pro` path or a glob, same as `--test`. Each of those three defaults can be flipped (see the table above). |
 | `--run [subdir]` | Run the built program. A multi-part project needs the `subdir` to say which one. |
+| `--failed` | With `--test`, run only the tests that failed last time, or that never ran, or that built again since they passed; a passed one is skipped with a note. Without `--test` it does nothing. A `make check` of your own skips the same way with `XD_TEST_FAILED_ONLY=1` in its environment. |
 | `--build` | Force a build. (Used to cancel `--test-review`'s built-in `--no-build`.) |
 | `--no-build` | Don't build — assume it's already done. With `--test`/`--run`, those still happen; if the build wasn't really done, they fail. |
 | `--headless` | Never pause to ask a question. Good for unattended runs. |

@@ -1121,6 +1121,10 @@ bh_parse_args() {
             # path relative to the build root matches (default every project)
             # even though the .qmake.save_space cache lists them as finished --
             # for instance after editing a header they include.
+            # --failed: with --test, run only the tests that failed, or that
+            # never ran or built again since they passed (see bh_run_tests);
+            # without --test there is nothing to skip, hence it does nothing.
+            --failed)         BH_FAILED=1; shift;;
             --rebuild=*)      BH_REBUILD="${1#*=}"; shift;;
             --rebuild)        BH_REBUILD='^.*$'; shift;;
             # --static[=<regexp>]: build the projects whose path relative to
@@ -3520,6 +3524,11 @@ bh_run_target() {
 bh_run_tests() {
     _target=$1
     bh_hook_run test-env
+    # Under --failed, a test that passed is skipped (see tools/test-result.sh).
+    if [ "${BH_FAILED:-0}" -eq 1 ]; then
+        XD_TEST_FAILED_ONLY=1
+        export XD_TEST_FAILED_ONLY
+    fi
     case "${2:-}" in
         --subdirs)
             bh_run tests bh_make_run -k check
