@@ -533,6 +533,13 @@ static QProcessEnvironment processEnvironment()
                 || key == QLatin1String("GRAPHICS_ROOT") || key == QLatin1String("TZ")
 #elif defined(Q_OS_UNIX)
                 || key == QLatin1String("HOME") || key == QLatin1String("USER") // Required for X11 on openSUSE
+                // The subtests find the libraries they link where this test
+                // finds its own, since they carry no rpath to them.
+#  if defined(Q_OS_MAC)
+                || key == QLL("DYLD_LIBRARY_PATH") || key == QLL("DYLD_FRAMEWORK_PATH")
+#  else
+                || key == QLL("LD_LIBRARY_PATH")
+#  endif
 #  if !defined(Q_OS_MAC)
                 || key == QLatin1String("DISPLAY") || key == QLatin1String("XAUTHLOCALHOSTNAME")
                 || key.startsWith(QLatin1String("XDG_"))
