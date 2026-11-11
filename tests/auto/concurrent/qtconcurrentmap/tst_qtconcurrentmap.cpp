@@ -2335,7 +2335,7 @@ void tst_QtConcurrentMap::qFutureAssignmentLeak()
 
     QCOMPARE(currentInstanceCount.load(), 1000);
     future = QFuture<InstanceCounter>();
-    QCOMPARE(currentInstanceCount.load(), 0);
+    QTRY_COMPARE(currentInstanceCount.load(), 0);
 }
 
 inline void increment(int &num)
