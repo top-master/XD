@@ -65,7 +65,6 @@ void Parser::error(const char *msg) {
         dbg.nospace() << "moc: Parse error at \""
                       << symbol().lexem().data() << '"';
     }
-    xd("moc: exit");
     this->onExit(EXIT_FAILURE);
 }
 

@@ -752,7 +752,8 @@ void tst_Moc::oldStyleCasts()
 #endif
 #if defined(Q_OS_LINUX) && defined(Q_CC_GNU) && !defined(QT_NO_PROCESS)
     QProcess proc;
-    proc.start(m_moc, QStringList(m_sourceDirectory + QStringLiteral("/oldstyle-casts.h")));
+    const QString header = m_sourceDirectory + QStringLiteral("/oldstyle-casts.h");
+    proc.start(m_moc, QStringList() << "-i" << header);
     QVERIFY2(proc.waitForFinished(), qPrintable(proc.errorString()));
     QCOMPARE(proc.exitCode(), 0);
     QByteArray mocOut = proc.readAllStandardOutput();
@@ -761,7 +762,8 @@ void tst_Moc::oldStyleCasts()
 
     QStringList args;
     args << "-c" << "-x" << "c++" << "-Wold-style-cast" << "-I" << "."
-         << "-I" << qtIncludePath << "-o" << "/dev/null" << "-fPIC" << "-";
+         << "-I" << qtIncludePath << "-include" << header
+         << "-o" << "/dev/null" << "-fPIC" << "-";
     proc.start("gcc", args);
     QVERIFY2(proc.waitForStarted(), qPrintable(proc.errorString()));
     proc.write(mocOut);
@@ -791,7 +793,7 @@ void tst_Moc::warnOnExtraSignalSlotQualifiaction()
     QString mocWarning = QString::fromLocal8Bit(proc.readAllStandardError());
     QCOMPARE(mocWarning, header +
                 QString(":48: Warning: Function declaration Test::badFunctionDeclaration contains extra qualification. Ignoring as signal or slot.\n") +
-                header + QString(":51: Warning: parsemaybe: Function declaration Test::anotherOne contains extra qualification. Ignoring as signal or slot.\n"));
+                header + QString(":51: Warning: Function declaration Test::anotherOne contains extra qualification. Ignoring as signal or slot.\n"));
 #else
     QSKIP("Only tested on linux/gcc");
 #endif
