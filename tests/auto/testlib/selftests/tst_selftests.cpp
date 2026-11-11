@@ -623,7 +623,13 @@ void tst_Selftests::doRunSubTest(QString const& subdir, QStringList const& logge
     // Also, tests which use valgrind may generate warnings if the toolchain is
     // newer than the valgrind version, such that valgrind can't understand the
     // debug information on the binary.
-    if (subdir != QLatin1String("exceptionthrow")
+    if (
+#ifdef QT_PTR_TRACKING
+        ! (crashes && (err.startsWith("filc user error: abort(3) called.")
+                       || err.startsWith("filc safety error:")))
+        &&
+#endif
+        subdir != QLatin1String("exceptionthrow")
         && subdir != QLatin1String("cmptest") // QImage comparison requires QGuiApplication
         && subdir != QLatin1String("fetchbogus")
         && subdir != QLatin1String("xunit")
