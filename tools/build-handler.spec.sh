@@ -2699,7 +2699,7 @@ else
     _bh_spec_build --filter 'zlib|app|dr|tests/t1'
     expect '--filter on a fresh dir succeeds' 0 "$_bh_spec_rc"
     expect '--filter records the order first' 1 \
-        "$(printf '%s\n' "$_bh_spec_out" | grep -c '^Recording build order')"
+        "$(grep -c '^Recording build order' "$_bh_spec_bd"/logs/*-build-order.log)"
     expect '--filter builds in dependency order' \
         'zlib/zlib.pro app/app.pro dr/dr.pro tests/t1/t1.pro ' "$(_bh_spec_built)"
     expect 'numbering each of one total' 1 \
@@ -2766,7 +2766,7 @@ else
 
     _bh_spec_build --qmake --filter 'app'
     expect '--qmake with --filter records again, then filters' 1 \
-        "$(printf '%s\n' "$_bh_spec_out" | grep -c '^Recording build order')"
+        "$(grep -c '^Recording build order' "$_bh_spec_bd"/logs/*-build-order.log)"
     expect '--qmake keeps the order lines' \
         'zlib/zlib.pro app/app.pro dr/dr.pro dr/dr.pro tests/t1/t1.pro tests/t2/t2.pro pair/one.pro pair/two.pro extra/extra.pro ' "$(_bh_spec_lines order)"
 
@@ -3075,8 +3075,8 @@ else
     expect 'a match the stopped recording never reached builds' 'tests/t1/t1.pro ' \
         "$(_bh_spec_built)"
     expect 'once the subdirs project that the root lists above it is qmaked' 1 \
-        "$(printf '%s\n' "$_bh_spec_out" \
-            | grep -c '^Recording build order of tests/tests.pro via qmake\.\.\.$')"
+        "$(grep -c '^Recording build order of tests/tests.pro via qmake\.\.\.$' \
+            "$_bh_spec_bd"/logs/*-build-order.log)"
     expect 'which records its whole subtree' \
         'zlib/zlib.pro app/app.pro tests/t1/t1.pro tests/t2/t2.pro ' "$(_bh_spec_lines order)"
     _bh_spec_build --filter 'tests/t3'
@@ -3088,8 +3088,8 @@ else
     touch "$_bh_spec_src/tests/tests.pro"
     _bh_spec_build --filter 'tests/t3'
     expect 'until its .pro is newer than its Makefile, then it is qmaked again' 1 \
-        "$(printf '%s\n' "$_bh_spec_out" \
-            | grep -c '^Recording build order of tests/tests.pro via qmake\.\.\.$')"
+        "$(grep -c '^Recording build order of tests/tests.pro via qmake\.\.\.$' \
+            "$_bh_spec_bd"/logs/*-build-order.log)"
     _bh_spec_build --force-qmake --filter 'zlib|app'
     expect '--force-qmake records past the broken project' \
         'zlib/zlib.pro app/app.pro tests/t1/t1.pro tests/t2/t2.pro dr/dr.pro dr/dr.pro ' \

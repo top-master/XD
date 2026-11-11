@@ -76,7 +76,6 @@ bh_grep_lines() {
 #      a project that no subdirs project lists on this platform is left out.
 bh_build_in_order() {
     BH_ORDER_ROOT=$1
-    bh_build_order_record "$1"
     # Without --filter, only a --rebuild that names its matches reaches the
     # projects the cache does not list; the root project covers the rest.
     _bio_unrecorded=1
@@ -84,9 +83,7 @@ bh_build_in_order() {
             && { [ -z "${BH_REBUILD:-}" ] || [ "$BH_REBUILD" = '^.*$' ]; }; then
         _bio_unrecorded=0
     fi
-    if [ "$_bio_unrecorded" -eq 1 ]; then
-        bh_build_order_extend
-    fi
+    bh_run --whole build-order bh_prepare_build_order "$1" "$_bio_unrecorded"
     bh_build_walk prepare
     _bw_count=$_bw_total
     # Counts those projects too, hence the counter of each line covers both.
@@ -108,6 +105,13 @@ bh_build_in_order() {
             ;;
         *) exit "$_bio_status" ;;
     esac
+}
+
+bh_prepare_build_order() {
+    bh_build_order_record "$1"
+    if [ "$2" -eq 1 ]; then
+        bh_build_order_extend
+    fi
 }
 
 # bh_build_order_record <pro>

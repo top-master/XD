@@ -57,6 +57,23 @@ defineReplace(saveOrderTarget) {
     return($$QMAKE_RESOLVED_TARGET)
 }
 
+# saveOrderShellPath(path)
+#
+# Uses the shell's drive path spelling for cache entries on Windows.
+defineReplace(saveOrderShellPath) {
+    path = $$1
+    equals(QMAKE_HOST.os, Windows) {
+        path ~= s,\\\\,/,g
+        drive = $$section(path, /, 0, 0)
+        contains(drive, ^[A-Za-z]:$) {
+            drive ~= s,:$,,
+            drive = $$lower($$drive)
+            path ~= s,^[A-Za-z]:,/$$drive,
+        }
+    }
+    return($$path)
+}
+
 # saveOrderLine()
 #
 # Returns the order line of the variant being generated,
@@ -68,7 +85,9 @@ defineReplace(saveOrderLine) {
     debug_and_release: tag = debug_and_release:
     CONFIG(debug, debug|release): tag = $${tag}debug
     else:                         tag = $${tag}release
-    line = $$_PRO_FILE_$${tab}$${tag}$${tab}$$saveOrderTarget()
+    pro = $$saveOrderShellPath($$_PRO_FILE_)
+    target = $$saveOrderShellPath($$saveOrderTarget())
+    line = $${pro}$${tab}$${tag}$${tab}$${target}
     return($$line)
 }
 
@@ -134,15 +153,16 @@ defineTest(saveOrderSubdirs) {
     cache = $$saveOrderCacheFile()
     isEmpty(cache): return(true)
     tab = $$escape_expand(\\t)
-    wanted = $${_PRO_FILE_}$${tab}
-    for(entry, SUBDIRS): wanted += $${_PRO_FILE_}$${tab}$$saveOrderSubproject($$entry)
+    pro = $$saveOrderShellPath($$_PRO_FILE_)
+    wanted = $${pro}$${tab}
+    for(entry, SUBDIRS): wanted += $${pro}$${tab}$$saveOrderShellPath($$saveOrderSubproject($$entry))
     # A subdirs project has no other lines, as it has no target.
     existing = $$cat($$cache, lines)
     kept =
     old =
     for(each, existing) {
         head = $$section(each, $$tab, 0, 0)
-        equals(head, $$_PRO_FILE_): old += $$each
+        equals(head, $$pro): old += $$each
         else: kept += $$each
     }
     oldText = $$join(old, $$tab)
