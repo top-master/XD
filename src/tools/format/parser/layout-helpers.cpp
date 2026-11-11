@@ -22,12 +22,19 @@ int wrapColumn(const FormatDocument *document)
 }
 
 /*!
-    Builds the indent of a continuation line: one step (4 spaces) past the
-    @a indent of the line that opened its group or its statement.
+    Returns the column @a steps (4 spaces each) past @a indent.
 */
-QByteArray continuationPad(int indent)
+int continuationIndent(int indent, int steps)
 {
-    return QByteArray(indent + 4, ' ');
+    return indent + 4 * steps;
+}
+
+/*!
+    Builds spaces up to the column @a steps past @a indent.
+*/
+QByteArray continuationPad(int indent, int steps)
+{
+    return QByteArray(continuationIndent(indent, steps), ' ');
 }
 
 /*!
@@ -133,7 +140,7 @@ bool hasMisplacedLines(const FormatDocument *document, int open, int close,
                 for (int r = 0; r < ranges.size(); ++r) {
                     steps += ranges.at(r).second ? 2 : 1;
                 }
-                wanted = indent + 4 * steps;
+                wanted = continuationIndent(indent, steps);
             }
             if (textWidth(document->indentOf(l)) != wanted) {
                 return true;

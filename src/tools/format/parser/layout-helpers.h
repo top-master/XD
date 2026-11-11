@@ -11,7 +11,8 @@
 #include <QtCore/QPair>
 
 int wrapColumn(const FormatDocument *document);
-QByteArray continuationPad(int indent);
+int continuationIndent(int indent, int steps = 1);
+QByteArray continuationPad(int indent, int steps = 1);
 bool isBinaryOperator(Token token);
 bool isClosingLine(const QByteArray & text);
 bool closesEarlierLine(const FormatDocument *document, int bracket);

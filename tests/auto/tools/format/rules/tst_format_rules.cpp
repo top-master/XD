@@ -822,6 +822,38 @@ void tst_FormatRules::testFix_shouldRewrite_data()
                       "        g();\n"
                       "    }\n"
                       "}\n");
+    QTest::newRow("continuation-indent condition across directive")
+        << QString(QLL("continuation-indent"))
+        << QByteArray("void f()\n{\n    if (\n#ifdef FEATURE\n"
+                      "        ! (a && (first()\n"
+                      "            || second()))\n"
+                      "            &&\n#endif\n"
+                      "        ready\n    ) {}\n}\n")
+        << QByteArray("void f()\n{\n    if (\n#ifdef FEATURE\n"
+                      "        ! (a && (first()\n"
+                      "            || second()))\n"
+                      "        &&\n#endif\n"
+                      "        ready\n    ) {}\n}\n");
+    QTest::newRow("continuation-indent for condition across directive")
+        << QString(QLL("continuation-indent"))
+        << QByteArray("void f()\n{\n    for (int i = 0;\n#ifdef FEATURE\n"
+                      "        (first() || second())\n"
+                      "            &&\n#endif\n"
+                      "        ready; ++i) {}\n}\n")
+        << QByteArray("void f()\n{\n    for (int i = 0;\n#ifdef FEATURE\n"
+                      "        (first() || second())\n"
+                      "        &&\n#endif\n"
+                      "        ready; ++i) {}\n}\n");
+    QTest::newRow("continuation-indent expression in call across directive")
+        << QString(QLL("continuation-indent"))
+        << QByteArray("void f()\n{\n    use(\n#ifdef FEATURE\n"
+                      "        (first() || second())\n"
+                      "        &&\n#endif\n"
+                      "        ready ? one : two);\n}\n")
+        << QByteArray("void f()\n{\n    use(\n#ifdef FEATURE\n"
+                      "        (first() || second())\n"
+                      "        &&\n#endif\n"
+                      "        ready ? one : two);\n}\n");
     QTest::newRow("operator-wrap plus chain in a call")
         << QString(QLL("operator-wrap,args-wrap"))
         << QByteArray("void f()\n"

@@ -5,6 +5,7 @@
 
 #include "../format-document.h"
 #include "../parser/code-helpers.h"
+#include "../parser/layout-helpers.h"
 
 #include <QtCore/QByteArray>
 
@@ -20,23 +21,39 @@
     it. A line inside a call's arguments is left as it is, since those lines
     align under the call's first argument.
 
-    In the parentheses of an `if` or a `while`, an operator that does not
-    chain conditions (any but `&&` and `||`) leads a line two steps past
-    the keyword's line: one step for the parentheses, and one step as an
-    operand of the condition. In a group nested in those parentheses, every
-    operator leads its line one step for each bracket that the group's line
-    opened (see conditionSteps()); hence a group opened on the keyword's
-    line goes two steps in, past the `&&` and `||` of the condition.
+    In an `if`, `while`, or the condition clause of a `for`, a non-logical
+    operator leads its line two steps past the keyword's line: one step for
+    the parentheses, and one step as an operand of the condition. In any
+    nested group, each bracket opened on that group's line adds a step (see
+    conditionSteps()). A preprocessor directive does not end a group whose
+    matching close comes later, so the same padding applies across branches.
 */
+
+static bool groupKeepsIndent(const FormatDocument *document, int group)
+{
+    const Token token = document->token(group);
+    if (token == LBRACE) {
+        const FormatDocument::Scope scope = document->braceScope(group);
+        return scope == FormatDocument::InitScope
+            || scope == FormatDocument::EnumScope;
+    }
+    if (token == LBRACK) {
+        return true;
+    }
+    const Token opener = document->token(group - 1);
+    return opener == IDENTIFIER || opener == RANGLE || opener == GTGT
+        || opener == RBRACK || opener == RPAREN || opener == STATIC_CAST
+        || opener == SIZEOF;
+}
 
 /*!
     Finds the group that the token at @a index of @a document belongs to:
-    the innermost `(` or `[` still open before it, else the start of its
-    statement, which a preprocessor line ends just like a `;`. Returns that
-    bracket's index, or -1 for the statement, and
-    gives the line that opened the group to @a base; sets @a keepsIndent for
-    a group whose lines align under its first item (the arguments of a call,
-    an index, or an initializer list).
+    the innermost `(` or `[` still open before it, or a braced initializer,
+    else the start of its statement. A preprocessor line ends the search
+    unless a matching open bracket spans it. Returns that bracket's index,
+    or -1 for the statement, and gives the line that opened the group to
+    @a base; sets @a keepsIndent for a group whose lines align under its
+    first item.
 */
 static int groupOf(const FormatDocument *document, int index, int *base,
                    bool *keepsIndent)
@@ -47,6 +64,23 @@ static int groupOf(const FormatDocument *document, int index, int *base,
     for (; k >= 0; --k) {
         const Token token = document->token(k);
         if (document->isDirectiveLine(document->symbolLine(k))) {
+            for (int group = k - 1; group >= 1; --group) {
+                if (document->isDirectiveLine(document->symbolLine(group))) {
+                    continue;
+                }
+                const Token groupToken = document->token(group);
+                if ((groupToken == LPAREN
+                        || groupToken == LBRACK
+                        || groupToken == LBRACE)
+                    && document->match(group) >= index
+                ) {
+                    *keepsIndent = groupKeepsIndent(document, group);
+                    if (groupToken != LBRACE || *keepsIndent) {
+                        *base = document->symbolLine(group);
+                        return group;
+                    }
+                }
+            }
             *base = document->symbolLine(k + 1);
             return -1;
         }
@@ -58,10 +92,7 @@ static int groupOf(const FormatDocument *document, int index, int *base,
             continue;
         }
         if (token == LPAREN || token == LBRACK) {
-            const Token opener = document->token(k - 1);
-            *keepsIndent = token == LBRACK || opener == IDENTIFIER || opener == RANGLE
-                || opener == GTGT || opener == RBRACK || opener == RPAREN
-                || opener == STATIC_CAST || opener == SIZEOF;
+            *keepsIndent = groupKeepsIndent(document, k);
             *base = document->symbolLine(k);
             return k;
         }
@@ -69,8 +100,7 @@ static int groupOf(const FormatDocument *document, int index, int *base,
             && document->braceScope(k) != FormatDocument::FunctionScope
             && document->braceScope(k) != FormatDocument::BlockScope
         ) {
-            *keepsIndent = document->braceScope(k) == FormatDocument::InitScope
-                || document->braceScope(k) == FormatDocument::EnumScope;
+            *keepsIndent = groupKeepsIndent(document, k);
         }
         if (token == SEMIC || token == LBRACE || token == RBRACE) {
             *base = document->symbolLine(k + 1);
@@ -81,15 +111,30 @@ static int groupOf(const FormatDocument *document, int index, int *base,
     return -1;
 }
 
-/*!
-    Counts the steps of a line in the group that the `(` at @a group of
-    @a document opens, when that group sits nested in the condition of an
-    `if` or a `while`: one for each bracket from @a group out to the
-    condition's own `(` that opened on the line @a base. Returns 0 for a
-    group that is no such nested group, such as the condition itself or the
-    arguments of a call.
-*/
-static int conditionSteps(const FormatDocument *document, int group, int base)
+static bool isForCondition(const FormatDocument *document, int group, int index)
+{
+    if (document->token(group - 1) != FOR) {
+        return false;
+    }
+    int semicolons = 0;
+    for (int k = group + 1; k < index; ++k) {
+        if (document->isDirectiveLine(document->symbolLine(k))) {
+            continue;
+        }
+        const Token token = document->token(k);
+        if ((token == LPAREN || token == LBRACK || token == LBRACE)
+            && document->match(k) > k
+        ) {
+            k = document->match(k);
+        } else if (token == SEMIC) {
+            ++semicolons;
+        }
+    }
+    return semicolons == 1;
+}
+
+static int conditionSteps(const FormatDocument *document, int group, int base,
+                          int index)
 {
     int steps = 0;
     int bracket = group;
@@ -98,7 +143,15 @@ static int conditionSteps(const FormatDocument *document, int group, int base)
             ++steps;
         }
         const Token opener = document->token(bracket - 1);
-        if (opener == IF || opener == WHILE) {
+        if (opener == IF || opener == WHILE
+            || (opener == FOR && isForCondition(document, bracket, index))
+        ) {
+            if (bracket != group
+                && document->symbolLine(bracket) != base
+                && steps > 0
+            ) {
+                --steps;
+            }
             return bracket == group ? 0 : steps;
         }
         int outerBase = -1;
@@ -162,16 +215,19 @@ void FormatContinuationIndentRule::run(FormatDocument *document) const
         const Token opener = group >= 1
             ? document->token(group - 1) : NOTOKEN;
         const Token leading = document->token(first);
-        const bool isOperand = (opener == IF || opener == WHILE)
-            && leading != ANDAND && leading != OROR;
+        const bool isCondition = opener == IF || opener == WHILE
+            || (opener == FOR && isForCondition(document, group, first));
+        const bool isOperand = isCondition
+            && leading != ANDAND
+            && leading != OROR;
         QByteArray indent = document->indentOf(base)
-            + (isOperand ? "        " : "    ");
+            + continuationPad(0, isOperand ? 2 : 1);
 
         // Gives a group nested in a condition one step for each of its
         // brackets that the group's line opened.
-        const int steps = conditionSteps(document, group, base);
+        const int steps = conditionSteps(document, group, base, first);
         if (steps > 0) {
-            indent = document->indentOf(base) + QByteArray(4 * steps, ' ');
+            indent = document->indentOf(base) + continuationPad(0, steps);
         }
 
         // Continues the operand of an earlier line of the group whose
@@ -189,7 +245,7 @@ void FormatContinuationIndentRule::run(FormatDocument *document) const
             }
             const int earlierRank = leadRank(document->token(lead));
             if (earlierRank < rank) {
-                indent = document->indentOf(earlier) + "    ";
+                indent = document->indentOf(earlier) + continuationPad(0);
                 break;
             }
             if (earlierRank == rank) {

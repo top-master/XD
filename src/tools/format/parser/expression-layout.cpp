@@ -912,7 +912,7 @@ QList<QList<int > > FormatExpressionLayout::lineGroups(
 */
 QByteArray FormatExpressionLayout::pad() const
 {
-    return QByteArray(m_indent + 4 * m_paddingLevel, ' ');
+    return continuationPad(m_indent, m_paddingLevel);
 }
 
 /*!

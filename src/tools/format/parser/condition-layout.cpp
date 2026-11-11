@@ -183,7 +183,7 @@ QByteArray FormatConditionLayout::group(
             text += '\n' + continuationPad(indent)
                 + m_document->lexem(ops.at(k - 1)) + ' ';
             lineStart = text.lastIndexOf('\n') + 1;
-            operandIndent = indent + 4;
+            operandIndent = continuationIndent(indent);
         }
         const int operandColumn = text.size() - lineStart;
 
@@ -212,7 +212,7 @@ QByteArray FormatConditionLayout::group(
             text += signs + this->group(
                 start,
                 last,
-                indent + 4,
+                continuationIndent(indent),
                 operandColumn + signs.size(),
                 false
             );
@@ -275,7 +275,7 @@ QByteArray FormatConditionLayout::atom(
             last,
             column,
             indent,
-            textWidth(continuationPad(0))
+            continuationIndent(0)
         );
         if (lines.size() > 1) {
             *isComplex = true;
@@ -360,7 +360,7 @@ QList<QByteArray > FormatConditionLayout::headLines(
     if (column + textWidth(text) <= wrap) {
         return QList<QByteArray >() << text;
     }
-    const int step = textWidth(continuationPad(0));
+    const int step = continuationIndent(0);
     const QList<QByteArray > compared = comparisonLines(
         m_document,
         first,
