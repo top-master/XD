@@ -53,25 +53,40 @@ struct QPtrSafetyPool
     }
 };
 
-/*!
-    Returns the one QPtrSafetyTypedTable, which lives as long as the process,
-    never destroyed like a `Q_GLOBAL_STATIC`, since code that runs at exit (a
-    destructor function, a static's destructor) still makes raw-data aliases.
-*/
-QPtrSafetyTypedTable *qPtrSafetyTypedTable()
-{
-    static QPtrSafetyTypedTable *const result = new QPtrSafetyTypedTable;
-    return result;
-}
+Q_GLOBAL_STATIC(QPtrSafetyTypedTable, typedTable)
+Q_GLOBAL_STATIC(QPtrSafetyPool, tablePool)
+
+QBasicAtomicPointer<QSharedPointer<QPtrSafetyTypedTable > > retainedTypedTable
+    = Q_BASIC_ATOMIC_INITIALIZER(Q_NULLPTR);
+QBasicAtomicPointer<QSharedPointer<QPtrSafetyPool > > retainedTablePool
+    = Q_BASIC_ATOMIC_INITIALIZER(Q_NULLPTR);
 
 /*!
-    Returns the one QPtrSafetyPool, which lives as long as the process, as
-    qPtrSafetyTypedTable() does.
+    Keeps a shared reference to @a global through process shutdown and returns
+    its object. @a retained publishes that reference to every caller.
 */
+template <typename T, typename Global>
+T *retainForProcess(Global & global, QBasicAtomicPointer<QSharedPointer<T > > & retained)
+{
+    QSharedPointer<T > *owner = retained.loadAcquire();
+    if ( ! owner) {
+        QSharedPointer<T > *candidate = new QSharedPointer<T >(global());
+        if ( ! retained.testAndSetOrdered(Q_NULLPTR, candidate)) {
+            delete candidate;
+        }
+        owner = retained.loadAcquire();
+    }
+    return owner->data();
+}
+
+QPtrSafetyTypedTable *qPtrSafetyTypedTable()
+{
+    return retainForProcess(typedTable, retainedTypedTable);
+}
+
 QPtrSafetyPool *qPtrSafetyPool()
 {
-    static QPtrSafetyPool *const result = new QPtrSafetyPool;
-    return result;
+    return retainForProcess(tablePool, retainedTablePool);
 }
 
 } // unnamed namespace
