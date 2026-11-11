@@ -356,11 +356,7 @@ void tst_QNetworkProxyFactory::inNetworkAccessManager()
     QNetworkAccessManager manager;
     manager.setConfiguration(config);
 
-    QUrl url;
-    url.setScheme(QLL("http"));
-    url.setHost(m_server->domainName());
-    url.setPort(m_server->port());
-    QNetworkRequest req(url);
+    QNetworkRequest req(m_server->url(QString(), QString(QLL("http"))));
     QNetworkReply *reply = manager.get(req);
     connect(reply, SIGNAL(finished()), &QTestEventLoop::instance(), SLOT(exitLoop()));
     QTestEventLoop::instance().enterLoop(30);
