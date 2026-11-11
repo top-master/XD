@@ -263,12 +263,15 @@ static bool findPatternUnloaded(const QString &library, QLibraryPrivate *lib)
                 qWarning("QElfParser: %s",qPrintable(lib->errorString));
             }
             return false;
-    } else if (r == QElfParser::QtMetaDataSection) {
+    } else if (r == QElfParser::QtMetaDataSection
+        || (r == QElfParser::NoQtSection && pos > 0)
+    ) {
         long rel = qt_find_pattern(filedata + pos, fdlen, pattern, plen);
-        if (rel < 0)
+        if (rel < 0) {
             pos = -1;
-        else
+        } else {
             pos += rel;
+        }
         hasMetaData = true;
     }
 #elif defined (Q_OF_MACH_O)

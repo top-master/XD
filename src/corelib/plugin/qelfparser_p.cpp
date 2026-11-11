@@ -212,7 +212,9 @@ int QElfParser::parse(const char *dataStart, ulong fdlen, const QString &library
         qDebug() << "++++" << i << shnam;
 #endif
 
-        if (qstrcmp(shnam, ".qtmetadata") == 0 || qstrcmp(shnam, ".rodata") == 0) {
+        if (qstrcmp(shnam, ".qtmetadata") == 0 || qstrcmp(shnam, ".rodata") == 0
+            || qstrcmp(shnam, ".data.rel.ro") == 0
+        ) {
             if (!(sh.type & 0x1)) {
                 if (shnam[1] == 'r') {
                     if (lib)
@@ -233,9 +235,24 @@ int QElfParser::parse(const char *dataStart, ulong fdlen, const QString &library
                                       .arg(QLatin1String("missing section data. This is not a library."));
                 return Corrupt;
             }
+            if (shnam[1] == 'd') {
+                char pattern[] = "qTMETADATA  ";
+                pattern[0] = 'Q';
+                bool found = false;
+                for (ulong offset = 0; offset + sizeof(pattern) - 1 <= sh.size; ++offset) {
+                    if (memcmp(dataStart + sh.offset + offset, pattern, sizeof(pattern) - 1) == 0) {
+                        found = true;
+                        break;
+                    }
+                }
+                if ( ! found) {
+                    s += e_shentsize;
+                    continue;
+                }
+            }
             *pos = sh.offset;
             *sectionlen = sh.size - 1;
-            if (shnam[1] == 'q')
+            if (shnam[1] == 'q' || shnam[1] == 'd')
                 return QtMetaDataSection;
         }
         s += e_shentsize;
