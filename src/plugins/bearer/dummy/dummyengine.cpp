@@ -285,7 +285,7 @@ void DummySession::chooseActiveConfig()
     };
     for (size_t i = 0; i < sizeof(preferred) / sizeof(preferred[0]); ++i) {
         foreach (const QNetworkConfiguration &member, members) {
-            if ((member.state() & preferred[i]) == preferred[i]) {
+            if (member.state().includes(preferred[i])) {
                 activeConfig = member;
                 return;
             }
@@ -298,20 +298,15 @@ void DummySession::chooseActiveConfig()
 
     QNetworkConfiguration::StateFlag values are CUMULATIVE masks, not
     single bits (Defined=0x2, Discovered=0x6, Active=0xe);
-    hence test with "== flag", never a bare "& flag"
-    (which would treat every Discovered config as Active).
+    so each state includes all the bits of the preceding states.
 */
 QNetworkSession::State DummySession::stateFromConfig() const
 {
     const QNetworkConfiguration::StateFlags cfgState = activeConfig.state();
-    if ((cfgState & QNetworkConfiguration::Active)
-            == QNetworkConfiguration::Active
-    ) {
+    if (cfgState.includes(QNetworkConfiguration::Active)) {
         return QNetworkSession::Connected;
     }
-    if ((cfgState & QNetworkConfiguration::Discovered)
-            == QNetworkConfiguration::Discovered
-    ) {
+    if (cfgState.includes(QNetworkConfiguration::Discovered)) {
         return QNetworkSession::Disconnected;
     }
     return QNetworkSession::NotAvailable;
@@ -472,9 +467,7 @@ QNetworkConfigurationPrivatePointer DummyEngine::defaultConfiguration()
         if ( ! first) {
             first = it.value();
         }
-        if ((it.value()->state & QNetworkConfiguration::Active)
-                == QNetworkConfiguration::Active
-        ) {
+        if (it.value()->state.includes(QNetworkConfiguration::Active)) {
             return it.value();
         }
     }
@@ -661,11 +654,9 @@ void DummyEngine::updateGroup(
             continue;
         }
         members.insert(unsigned(members.size()), member);
-        if ((member->state & QNetworkConfiguration::Active)
-                == QNetworkConfiguration::Active
-        ) {
+        if (member->state.includes(QNetworkConfiguration::Active)) {
             best = QNetworkConfiguration::Active;
-        } else if ((member->state & QNetworkConfiguration::Discovered) == QNetworkConfiguration::Discovered
+        } else if (member->state.includes(QNetworkConfiguration::Discovered)
             && best != QNetworkConfiguration::Active
         ) {
             best = QNetworkConfiguration::Discovered;
