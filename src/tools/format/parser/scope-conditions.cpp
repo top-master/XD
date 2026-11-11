@@ -51,7 +51,6 @@ FormatScopeConditions::FormatScopeConditions(const FormatDocument *document)
 QStringList FormatScopeConditions::names()
 {
     return QStringList() << QString(QLL("always")) << QString(QLL("never"))
-        << QString(QLL("true")) << QString(QLL("false"))
         << QString(QLL("already-existing")) << QString(QLL("is-base-member"))
         << QString(QLL("is-template")) << QString(QLL("is-outline"))
         << QString(QLL("is-header")) << QString(QLL("is-non-header"));
@@ -100,7 +99,7 @@ bool FormatScopeConditions::holds(
 QSet<QString > FormatScopeConditions::holding(int token)
 {
     QSet<QString > names;
-    names << QString(QLL("always")) << QString(QLL("true"));
+    names << QString(QLL("always"));
     if (this->m_document->isHeader()) {
         names << QString(QLL("is-header"));
     } else {

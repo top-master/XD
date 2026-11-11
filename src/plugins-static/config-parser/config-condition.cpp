@@ -157,7 +157,8 @@ bool Config::Condition::compile(const QString & input, const QStringList & names
                     *error = QString(QLL("%1 is not from 0% to 100%")).arg(name);
                     return false;
                 }
-            } else if ( ! names.contains(name)) {
+            } else if (name != QLL("true") && name != QLL("false")
+                       && ! names.contains(name)) {
                 *error = QString(QLL("unknown name %1")).arg(name);
                 return false;
             }
@@ -296,6 +297,10 @@ bool Config::Condition::run(
                 return false;
             }
             stack << (*percent > item.left(item.size() - 1).toInt());
+        } else if (item == QLL("true")) {
+            stack << true;
+        } else if (item == QLL("false")) {
+            stack << false;
         } else {
             stack << holding.contains(item);
         }

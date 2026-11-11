@@ -317,16 +317,12 @@ bool FormatSettings::load(const QString & path, const FormatConfig & config,
         ? CommentTargetAny : CommentTargetLong;
     settings->codeTarget = parser.value(QString(QLL("structure.target"))) == QLL("any")
         ? CodeTargetAny : CodeTargetLong;
-    QString bodyBraces = parser.value(QString(QLL("structure.bodyBraces")));
-    if (bodyBraces == QLL("true")) {
-        bodyBraces = QString(QLL("always"));
-    } else if (bodyBraces == QLL("false")) {
-        bodyBraces = QString(QLL("never"));
-    }
-    if ( ! Config::Condition::compile(bodyBraces, FormatScopeConditions::names(),
-                                     &settings->bodyBraces, error)) {
-        return false;
-    }
+    Config::Condition::compile(
+        parser.value(QString(QLL("structure.bodyBraces"))),
+        FormatScopeConditions::names(),
+        &settings->bodyBraces,
+        error
+    );
     settings->docTagSign = parser.value(QString(QLL("comments.docTagSign"))) == QLL("\\")
         ? '\\' : '@';
     Config::Condition::compile(
