@@ -186,7 +186,8 @@ moveSuffix = " "
   `line-join`). `--any-code` sets `any`.
 - `bodyBraces` (in `[Structure]`): `true` (the default) lets `body-braces`
   give a body that closes in a chain of brackets its own lines; `false`
-  leaves such a body as it is.
+  leaves such a body as it is. A condition such as `is-header` or
+  `!is-header && is-outline` selects the bodies where the rule applies.
 - `wrapBegin` and `wrapMax` in `[Comments]`: the same for comments (see
   "Wrapping comments" below). `[Comments]` takes every key of `[Structure]`
   whose name starts with `wrap` (`wrapArgsAt` below too, which no comment

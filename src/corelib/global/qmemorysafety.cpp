@@ -24,6 +24,7 @@
 
 #include <QtCore/qmemorysafety.h>
 #include <QtCore/qglobal.h>
+#include "qmemorysafety_backtrace_p.h"
 
 #ifdef QT_PTR_TRACKING
 
@@ -138,3 +139,44 @@ __PTRDIFF_TYPE__ QPtrSafetyTable::encodeTypedData(void *ptr)
 }
 
 #endif // QT_PTR_TRACKING
+
+#if defined(QT_PTR_TRACKING) && !defined(QT_BOOTSTRAPPED)
+QT_BEGIN_NAMESPACE
+
+QByteArray qCleanupFuncinfo(QByteArray info);
+
+/*!
+    @internal
+
+    Adds the function of @a frame to the QFilcBacktrace that @a arg points to,
+    and tells whether the walk goes on. The frames before the first one kept
+    are those of the logging itself, as in the `backtrace()` form.
+*/
+static filc_bool qFilcBacktraceFrame(
+        const zstack_frame_description *frame, void *arg)
+{
+    QFilcBacktrace *trace = static_cast<QFilcBacktrace * >(arg);
+    const QString function = frame->function_name
+        ? QString::fromUtf8(qCleanupFuncinfo(frame->function_name)) : QString();
+    if (trace->functions.isEmpty()
+        && (function.isEmpty()
+            || function.contains(
+                QLL("Message"),
+                Qt::CaseInsensitive
+            )
+            || function.contains(QLL("QDebug")))
+    ) {
+        return true;
+    }
+    trace->functions
+        .append(function.isEmpty() ? QStringLiteral("???") : function);
+    return trace->functions.size() < trace->depth;
+}
+
+void qFilcBacktraceScan(QFilcBacktrace *trace)
+{
+    zstack_scan(qFilcBacktraceFrame, trace);
+}
+
+QT_END_NAMESPACE
+#endif

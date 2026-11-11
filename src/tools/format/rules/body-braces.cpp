@@ -5,6 +5,7 @@
 
 #include "../format-document.h"
 #include "../parser/layout-helpers.h"
+#include "../parser/scope-conditions.h"
 
 #include <QtCore/QByteArray>
 #include <QtCore/QList>
@@ -63,13 +64,12 @@ static bool closesChain(const FormatDocument *document, int close)
 */
 void FormatBodyBracesRule::run(FormatDocument *document) const
 {
-    if ( ! document->settings().bodyBraces) {
-        return;
-    }
+    FormatScopeConditions conditions(document);
     for (int close = 1; close < document->symbols().size(); ++close) {
         const int open = document->match(close);
         if (document->token(close) != RBRACE || open < 0
             || ! closesChain(document, close)
+            || ! conditions.holds(document->settings().bodyBraces, open)
         ) {
             continue;
         }

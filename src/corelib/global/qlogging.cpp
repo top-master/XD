@@ -35,6 +35,7 @@
 ****************************************************************************/
 
 #include "qlogging.h"
+#include "qmemorysafety_backtrace_p.h"
 #include "qlist.h"
 #include "qbytearray.h"
 #include "qstring.h"
@@ -968,46 +969,7 @@ Q_AUTOTEST_EXPORT QByteArray qCleanupFuncinfo(QByteArray info)
     return info;
 }
 
-#if defined(QLOGGING_HAVE_BACKTRACE) && defined(QT_PTR_TRACKING)
-/*!
-    @internal
 
-    The frames that `%{backtrace}` prints under Fil-C, and how many it may.
-*/
-struct QFilcBacktrace
-{
-    QStringList functions;
-    int depth;
-};
-
-/*!
-    @internal
-
-    Adds the function of @a frame to the QFilcBacktrace that @a arg points to,
-    and tells whether the walk goes on. The frames before the first one kept
-    are those of the logging itself, as in the `backtrace()` form.
-*/
-static filc_bool qFilcBacktraceFrame(
-        const zstack_frame_description *frame, void *arg)
-{
-    QFilcBacktrace *trace = static_cast<QFilcBacktrace * >(arg);
-    const QString function = frame->function_name
-        ? QString::fromUtf8(qCleanupFuncinfo(frame->function_name)) : QString();
-    if (trace->functions.isEmpty()
-        && (function.isEmpty()
-            || function.contains(
-                QLL("Message"),
-                Qt::CaseInsensitive
-            )
-            || function.contains(QLL("QDebug")))
-    ) {
-        return true;
-    }
-    trace->functions
-        .append(function.isEmpty() ? QStringLiteral("???") : function);
-    return trace->functions.size() < trace->depth;
-}
-#endif
 
 // tokens as recognized in QT_MESSAGE_PATTERN
 static const char categoryTokenC[] = "%{category}";
@@ -1406,7 +1368,7 @@ QString qFormatLogMessage(QtMsgType type, const QMessageLogContext &context, con
             // stack walk lists them, with the name of each function.
             QFilcBacktrace trace;
             trace.depth = backtraceDepth;
-            zstack_scan(qFilcBacktraceFrame, &trace);
+            qFilcBacktraceScan(&trace);
             message += trace.functions.join(backtraceSeparator);
 #else
             QVarLengthArray<void*, 32> buffer(7 + backtraceDepth);

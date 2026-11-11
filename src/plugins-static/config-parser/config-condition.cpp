@@ -9,8 +9,9 @@
 
     Matches a condition over a fixed set of names, such as
     `is-base-member | already-existing | (is-outline & is-header)`: names
-    joined by `|` (or) and `&` (and, which binds closer), with parentheses
-    for grouping. A name is any of the names the schema gives, in any case;
+    joined by `|` or `||` (or) and `&` or `&&` (and, which binds closer),
+    with `!` for negation and parentheses for grouping. A name is any of
+    the names the schema gives, in any case;
     spaces around names and signs do not count.
 
     A condition that takes percents also takes terms such as `40%` (from 0%
@@ -51,10 +52,13 @@ QSharedPointer<const Config::ValueMatcher > Config::Condition::create(
 */
 bool Config::Condition::match(const QString & value, QString *matched) const
 {
+    QString normalized = value;
+    normalized.replace(QLL("&&"), QLL("&"));
+    normalized.replace(QLL("||"), QLL("|"));
     QStringList program;
     QString error;
     if ( ! Config::Condition::compile(
-            value, this->m_names, &program, &error,
+            normalized, this->m_names, &program, &error,
             this->m_takesPercents
         )
     ) {
@@ -63,8 +67,8 @@ bool Config::Condition::match(const QString & value, QString *matched) const
 
     // Spells the condition the way the schema does.
     QString text;
-    for (int i = 0; i < value.size(); ++i) {
-        const QChar c = value.at(i);
+    for (int i = 0; i < normalized.size(); ++i) {
+        const QChar c = normalized.at(i);
         if (c == QLatin1Char('|') || c == QLatin1Char('&')) {
             text += QLatin1Char(' ') + c + QLatin1Char(' ');
         } else if ( ! c.isSpace()) {
@@ -99,11 +103,14 @@ QString Config::Condition::describe() const
     operands); returns false, with @a error, for a text that is no such
     condition, or that uses a name outside @a names.
 */
-bool Config::Condition::compile(const QString & text, const QStringList & names,
+bool Config::Condition::compile(const QString & input, const QStringList & names,
                                 QStringList *program,
                                 QString *error,
                                 bool takesPercents)
 {
+    QString text = input;
+    text.replace(QLL("&&"), QLL("&"));
+    text.replace(QLL("||"), QLL("|"));
     program->clear();
     QStringList signs;
     bool expectOperand = true;
@@ -161,7 +168,13 @@ bool Config::Condition::compile(const QString & text, const QStringList & names,
         }
 
         // Reads a sign or a parenthesis; `&` binds closer than `|`.
-        if (c == QLatin1Char('(')) {
+        if (c == QLatin1Char('!')) {
+            if ( ! expectOperand) {
+                *error = QString(QLL("a sign is missing before !"));
+                return false;
+            }
+            signs << QString(c);
+        } else if (c == QLatin1Char('(')) {
             if ( ! expectOperand) {
                 *error = QString(QLL("a sign is missing before ("));
                 return false;
@@ -186,7 +199,8 @@ bool Config::Condition::compile(const QString & text, const QStringList & names,
                 return false;
             }
             while ( ! signs.isEmpty() && signs.last() != QLL("(")
-                && (signs.last() == QLL("&") || c == QLatin1Char('|'))
+                && (signs.last() == QLL("!") || signs.last() == QLL("&")
+                    || c == QLatin1Char('|'))
             ) {
                 *program << signs.takeLast();
             }
@@ -265,7 +279,10 @@ bool Config::Condition::run(
     QList<bool > stack;
     for (int i = 0; i < program.size(); ++i) {
         const QString & item = program.at(i);
-        if ((item == QLL("|") || item == QLL("&")) && stack.size() >= 2) {
+        if (item == QLL("!") && ! stack.isEmpty()) {
+            const bool operand = stack.takeLast();
+            stack << ! operand;
+        } else if ((item == QLL("|") || item == QLL("&")) && stack.size() >= 2) {
             const bool right = stack.takeLast();
             const bool left = stack.takeLast();
             stack << (item == QLL("|") ? left || right : left && right);

@@ -78,7 +78,8 @@
       the command line's `--any-code` sets `any`;
     * `bodyBraces` (`[Structure]`): `true` (the default) lets
       FormatBodyBracesRule give a body that closes in a chain of brackets
-      its own lines, and `false` leaves such a body as it is.
+      its own lines, and `false` leaves such a body as it is; a condition
+      selects the bodies where the rule applies.
 
     Each spacing key takes any run of spaces and/or tabs to write there
     (`" "` for one space, `"\t"` for a tab, `""` or `none` for no space),
@@ -162,7 +163,9 @@ Config::Schema FormatSettings::schema()
                      QStringList() << QString(QLL("long")) << QString(QLL("any")),
                      QString(QLL("long")));
     structure.addKey(QString(QLL("bodyBraces")),
-                     QStringList() << QString(QLL("true")) << QString(QLL("false")),
+                     Config::Matchers() << Config::Condition::create(
+                         FormatScopeConditions::names()
+                     ),
                      QString(QLL("true")));
     Config::Section comments(QString(QLL("Comments")));
     comments.extendPrefixed(structure, QString(QLL("wrap")));
@@ -314,7 +317,16 @@ bool FormatSettings::load(const QString & path, const FormatConfig & config,
         ? CommentTargetAny : CommentTargetLong;
     settings->codeTarget = parser.value(QString(QLL("structure.target"))) == QLL("any")
         ? CodeTargetAny : CodeTargetLong;
-    settings->bodyBraces = parser.value(QString(QLL("structure.bodyBraces"))) == QLL("true");
+    QString bodyBraces = parser.value(QString(QLL("structure.bodyBraces")));
+    if (bodyBraces == QLL("true")) {
+        bodyBraces = QString(QLL("always"));
+    } else if (bodyBraces == QLL("false")) {
+        bodyBraces = QString(QLL("never"));
+    }
+    if ( ! Config::Condition::compile(bodyBraces, FormatScopeConditions::names(),
+                                     &settings->bodyBraces, error)) {
+        return false;
+    }
     settings->docTagSign = parser.value(QString(QLL("comments.docTagSign"))) == QLL("\\")
         ? '\\' : '@';
     Config::Condition::compile(

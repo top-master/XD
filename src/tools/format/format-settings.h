@@ -22,7 +22,7 @@ public:
     inline FormatSettings()
         : refSuffix(" "), moveSuffix(FormatSpacing::keep())
         , wrapMax(80), wrapArgsOver(3), commentWrapMax(80), wrapExtendsForKeywords(20), wrapEmptyLimit(8)
-        , wrapComma(WrapCommaSoft), commentTarget(CommentTargetLong), codeTarget(CodeTargetLong), bodyBraces(true)
+        , wrapComma(WrapCommaSoft), commentTarget(CommentTargetLong), codeTarget(CodeTargetLong)
         , docTagSign('@')
     {
         wrapBegin << 75;
@@ -30,6 +30,7 @@ public:
         thisMode = FormatSettings::defaultThisMode();
         wrapChainAt = FormatSettings::defaultWrapChainAt();
         wrapArgsAt = FormatSettings::defaultWrapChainAt();
+        bodyBraces << QString::fromLatin1("always");
     }
 
     static QString fileName();
@@ -53,7 +54,7 @@ public:
     WrapComma wrapComma;
     CommentTarget commentTarget;
     CodeTarget codeTarget;
-    bool bodyBraces;
+    QStringList bodyBraces;
     char docTagSign;
     QStringList thisMode;
     QStringList wrapChainAt;
