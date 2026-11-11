@@ -1369,6 +1369,11 @@ void tst_QDBusConnection::pendingCallWhenDisconnected()
         QSKIP("Test requires a QCoreApplication");
 
     QProcess daemon;
+#ifdef Q_OS_UNIX
+    QProcessEnvironment environment = QProcessEnvironment::systemEnvironment();
+    environment.remove(QStringLiteral("LD_LIBRARY_PATH"));
+    daemon.setProcessEnvironment(environment);
+#endif
     daemon.start("dbus-daemon", QStringList() << "--session" << "--nofork" << "--print-address");
     QVERIFY2(daemon.waitForReadyRead(2000),
              "Daemon didn't print its address in time; error: \"" + daemon.errorString().toLocal8Bit() +
