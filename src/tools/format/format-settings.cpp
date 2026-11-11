@@ -205,6 +205,19 @@ Config::Schema FormatSettings::schema()
     return schema;
 }
 
+static void compileCondition(const QString & text, QStringList *program,
+                             bool takesPercents = false)
+{
+    QString error;
+    QStringList compiled;
+    if ( ! Config::Condition::compile(text, FormatScopeConditions::names(),
+                                     &compiled, &error, takesPercents)) {
+        qWarning("Invalid format condition: %s", qPrintable(error));
+        return;
+    }
+    *program = compiled;
+}
+
 /*!
     Builds the program of the default `[Relations] thisMode`, for settings
     that no `.formatrc` set.
@@ -212,13 +225,7 @@ Config::Schema FormatSettings::schema()
 QStringList FormatSettings::defaultThisMode()
 {
     QStringList program;
-    QString error;
-    Config::Condition::compile(
-        QString::fromLatin1(defaultThisModeText),
-        FormatScopeConditions::names(),
-        &program,
-        &error
-    );
+    compileCondition(QString::fromLatin1(defaultThisModeText), &program);
     return program;
 }
 
@@ -230,14 +237,7 @@ QStringList FormatSettings::defaultThisMode()
 QStringList FormatSettings::defaultWrapChainAt()
 {
     QStringList program;
-    QString error;
-    Config::Condition::compile(
-        QString::fromLatin1(defaultWrapChainAtText),
-        FormatScopeConditions::names(),
-        &program,
-        &error,
-        true
-    );
+    compileCondition(QString::fromLatin1(defaultWrapChainAtText), &program, true);
     return program;
 }
 
@@ -317,34 +317,16 @@ bool FormatSettings::load(const QString & path, const FormatConfig & config,
         ? CommentTargetAny : CommentTargetLong;
     settings->codeTarget = parser.value(QString(QLL("structure.target"))) == QLL("any")
         ? CodeTargetAny : CodeTargetLong;
-    Config::Condition::compile(
-        parser.value(QString(QLL("structure.bodyBraces"))),
-        FormatScopeConditions::names(),
-        &settings->bodyBraces,
-        error
-    );
+    compileCondition(parser.value(QString(QLL("structure.bodyBraces"))),
+                     &settings->bodyBraces);
     settings->docTagSign = parser.value(QString(QLL("comments.docTagSign"))) == QLL("\\")
         ? '\\' : '@';
-    Config::Condition::compile(
-        parser.value(QString(QLL("relations.thisMode"))),
-        FormatScopeConditions::names(),
-        &settings->thisMode,
-        error
-    );
-    Config::Condition::compile(
-        parser.value(QString(QLL("structure.wrapChainAt"))),
-        FormatScopeConditions::names(),
-        &settings->wrapChainAt,
-        error,
-        true
-    );
-    Config::Condition::compile(
-        parser.value(QString(QLL("structure.wrapArgsAt"))),
-        FormatScopeConditions::names(),
-        &settings->wrapArgsAt,
-        error,
-        true
-    );
+    compileCondition(parser.value(QString(QLL("relations.thisMode"))),
+                     &settings->thisMode);
+    compileCondition(parser.value(QString(QLL("structure.wrapChainAt"))),
+                     &settings->wrapChainAt, true);
+    compileCondition(parser.value(QString(QLL("structure.wrapArgsAt"))),
+                     &settings->wrapArgsAt, true);
     return true;
 }
 
