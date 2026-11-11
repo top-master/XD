@@ -42,12 +42,11 @@
 #include <QDebug>
 #include <QFile>
 #include <QTcpSocket>
+#include <QTcpServer>
 #include <QTemporaryDir>
 #include <QTextStream>
 #include <QTextCodec>
 #include <QProcess>
-
-#include "../../../network-settings.h"
 
 
 QT_BEGIN_NAMESPACE
@@ -1231,11 +1230,15 @@ void tst_QTextStream::stillOpenWhenAtEnd()
     while (!stream.readLine().isNull()) {}
     QVERIFY(file.isOpen());
 
-    if (!QtNetworkSettings::verifyTestNetworkSettings())
-        QSKIP("No network test server available");
-
+    QTcpServer server;
+    QVERIFY(server.listen(QHostAddress::LocalHost));
     QTcpSocket socket;
-    socket.connectToHost(QtNetworkSettings::serverName(), 143);
+    socket.connectToHost(QHostAddress::LocalHost, server.serverPort());
+    QTRY_VERIFY(server.hasPendingConnections());
+    QTcpSocket *peer = server.nextPendingConnection();
+    QVERIFY(peer);
+    QCOMPARE(peer->write("ready\n"), qint64(6));
+    QVERIFY(peer->waitForBytesWritten(5000));
     QVERIFY(socket.waitForReadyRead(5000));
 
     QTextStream stream2(&socket);
