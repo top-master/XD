@@ -63,6 +63,7 @@
 #include <qhostinfo.h>
 
 #include <QNetworkProxy>
+#include <QTemporaryDir>
 
 #include <QNetworkSession>
 #include <QNetworkConfiguration>
@@ -124,6 +125,7 @@ private slots:
 private:
 #ifndef QT_NO_BEARERMANAGEMENT
     QNetworkSession *networkSession;
+    QTemporaryDir m_proxySettings;
     QRef<TestServer> m_proxyServer; // server-dummy providing the SOCKS5 proxy for the WithSocks5Proxy rows
     quint16 m_socksPort;
 #endif
@@ -180,7 +182,8 @@ void tst_QTcpServer::initTestCase()
     // a hard-coded port. tryPort aims for the canonical 1080 but falls back to a free port,
     // and the SOCKS5 service listens on the secondary (echo) port.
     m_socksPort = 1080;
-    m_proxyServer = TestEnv::getServer(TestServer::WebProxy);
+    QVERIFY(m_proxySettings.isValid());
+    m_proxyServer = TestEnv::getServer(TestServer::WebProxy, m_proxySettings.path());
     if (m_proxyServer && m_proxyServer->isRunning()) {
         m_proxyServer->tryPort(1080);
         m_socksPort = m_proxyServer->echoPort();
@@ -336,8 +339,15 @@ void tst_QTcpServer::dualStack()
     QTcpSocket v4client;
     v4client.connectToHost(QHostAddress::LocalHost, server.serverPort());
 
+    QTcpServer secondServer;
+    quint16 v6Port = server.serverPort();
+    if (setProxy && v4ok && v6ok) {
+        // A SOCKS BIND listener accepts one connection per request.
+        QVERIFY(secondServer.listen(bindAddress));
+        v6Port = secondServer.serverPort();
+    }
     QTcpSocket v6client;
-    v6client.connectToHost(QHostAddress::LocalHostIPv6, server.serverPort());
+    v6client.connectToHost(QHostAddress::LocalHostIPv6, v6Port);
 
     QCOMPARE(v4client.waitForConnected(5000), v4ok);
     QCOMPARE(v6client.waitForConnected(5000), v6ok);
