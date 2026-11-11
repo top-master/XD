@@ -195,7 +195,7 @@ public:
     */
     template <typename T>
     Q_REQUIRED_RESULT Q_INLINE_TEMPLATE QString stringify(const T &value) {
-        QDebug dbg = qDebug();
+        QDebug dbg = QMessageLogger().debug();
         dbg.nospace().noquote();
         dbg << value;
         // Null-pointer.
