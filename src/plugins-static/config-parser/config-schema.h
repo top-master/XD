@@ -23,6 +23,6 @@ private:
     QList<Section > m_sections;
 };
 
-} // namespace Config
+} // Namespace `Config`.
 
 #endif // CONFIG_SCHEMA_H

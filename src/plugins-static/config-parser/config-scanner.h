@@ -18,6 +18,6 @@ public:
             const QString & path, const QString & fileName);
 };
 
-} // namespace Config
+} // Namespace `Config`.
 
 #endif // CONFIG_SCANNER_H

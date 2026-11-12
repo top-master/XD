@@ -47,11 +47,15 @@ QStringList Config::Scanner::levelFolders(
 {
     QStringList folders;
     folders << root;
-    const QString absolute = QDir::cleanPath(QFileInfo(path).absoluteFilePath());
+    const QString absolute = QDir::cleanPath(
+        QFileInfo(path).absoluteFilePath()
+    );
     if ( ! absolute.startsWith(root + QLatin1Char('/'))) {
         return folders;
     }
-    const QStringList parts = absolute.mid(root.size() + 1).split(QLatin1Char('/'));
+    const QStringList parts = absolute
+        .mid(root.size() + 1)
+        .split(QLatin1Char('/'));
     QString current = root;
     for (int i = 0; i + 1 < parts.size(); ++i) {
         current += QLatin1Char('/') + parts.at(i);

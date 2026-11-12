@@ -61,9 +61,12 @@ bool Project::Parser::runOne(const QString & projectFile, const QString & qmake,
                              QString *error,
                              int depth)
 {
-    const QString project = QDir::cleanPath(QFileInfo(projectFile).absoluteFilePath());
+    const QString project = QDir::cleanPath(
+        QFileInfo(projectFile).absoluteFilePath()
+    );
     if ( ! QFileInfo(project).isFile()) {
-        *error = QString(QLL("%1: no such project file")).arg(QDir::fromNativeSeparators(project));
+        *error = QString(QLL("%1: no such project file"))
+            .arg(QDir::fromNativeSeparators(project));
         return false;
     }
     if (this->m_projects.contains(project) || depth > 32) {
@@ -158,7 +161,8 @@ bool Project::Parser::runOne(const QString & projectFile, const QString & qmake,
         "PLUGIN_SOURCES", "PLUGIN_HEADERS"
     };
     for (size_t v = 0; v < sizeof(fileVariables) / sizeof(fileVariables[0]); ++v) {
-        const QStringList names = values.value(QString::fromLatin1(fileVariables[v]));
+        const QStringList names =
+            values.value(QString::fromLatin1(fileVariables[v]));
         for (int i = 0; i < names.size(); ++i) {
             const QString path = Project::Parser::absolute(
                 folder,
@@ -194,8 +198,10 @@ QHash<QString, QStringList > Project::Parser::parse(
         const QByteArray & output) const
 {
     QHash<QString, QStringList > values;
-    const QRegularExpression line(QString(QLL("^([A-Za-z_][A-Za-z0-9_.]*) = ?(.*)$")));
-    const QStringList lines = QString::fromLocal8Bit(output).split(QLatin1Char('\n'));
+    const QRegularExpression line(
+            QString(QLL("^([A-Za-z_][A-Za-z0-9_.]*) = ?(.*)$")));
+    const QStringList lines = QString::fromLocal8Bit(output)
+        .split(QLatin1Char('\n'));
     for (int i = 0; i < lines.size(); ++i) {
         QString text = lines.at(i);
         if (text.endsWith(QLatin1Char('\r'))) {
@@ -203,7 +209,10 @@ QHash<QString, QStringList > Project::Parser::parse(
         }
         const QRegularExpressionMatch found = line.match(text);
         if (found.hasMatch()) {
-            values.insert(found.captured(1), Project::Parser::words(found.captured(2)));
+            values.insert(
+                found.captured(1),
+                Project::Parser::words(found.captured(2))
+            );
         }
     }
     return values;

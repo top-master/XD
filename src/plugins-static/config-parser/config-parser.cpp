@@ -212,7 +212,8 @@ bool Config::Parser::readFile(const QString & file, QString *error)
         if ( ! input.open(QIODevice::ReadOnly) || ! copy.open()
             || copy.write(iniWithPlainCommas(input.readAll())) < 0
         ) {
-            *error = QString(QLL("%1: cannot read the settings file")).arg(origin);
+            *error = QString(QLL("%1: cannot read the settings file"))
+                .arg(origin);
             return false;
         }
         copy.close();
@@ -269,7 +270,8 @@ bool Config::Parser::assign(const QString & assignment, QString *error)
 {
     const int equals = assignment.indexOf(QLatin1Char('='));
     if (equals <= 0) {
-        *error = QString(QLL("%1: not a <section>.<key>=<value> setting")).arg(assignment);
+        *error = QString(QLL("%1: not a <section>.<key>=<value> setting"))
+            .arg(assignment);
         return false;
     }
     const QString name = assignment.left(equals).trimmed();
@@ -302,7 +304,8 @@ bool Config::Parser::assign(const QString & assignment, QString *error)
 QString Config::Parser::value(const QString & name) const
 {
     const QString lower = name.toLower();
-    QHash<QString, QString >::const_iterator found = this->m_values.constFind(lower);
+    QHash<QString, QString >::const_iterator found =
+        this->m_values.constFind(lower);
     if (found != this->m_values.constEnd()) {
         return found.value();
     }

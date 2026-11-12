@@ -335,10 +335,11 @@ QString Config::Condition::describe() const
     operands); returns false, with @a error, for a text that is no such
     condition, or that uses a name outside @a names.
 */
-bool Config::Condition::compile(const QString & input, const QStringList & names,
-                                QStringList *program,
-                                QString *error,
-                                bool takesPercents)
+bool Config::Condition::compile(
+        const QString & input, const QStringList & names,
+        QStringList *program,
+        QString *error,
+        bool takesPercents)
 {
     QString minusCheck = input;
     for (int i = 0; i < names.size(); ++i) {
@@ -383,8 +384,8 @@ bool Config::Condition::compile(const QString & input, const QStringList & names
         ) {
             int end = i;
             while (end < text.size() && (text.at(end).isLetterOrNumber()
-                || text.at(end) == QLatin1Char('-')
-                || text.at(end) == QLatin1Char('_'))
+                    || text.at(end) == QLatin1Char('-')
+                    || text.at(end) == QLatin1Char('_'))
             ) {
                 ++end;
             }
@@ -410,15 +411,18 @@ bool Config::Condition::compile(const QString & input, const QStringList & names
             }
             if (name.endsWith(QLatin1Char('%'))) {
                 if ( ! takesPercents) {
-                    *error = QString(QLL("the key takes no percent, as in %1")).arg(name);
+                    *error = QString(QLL("the key takes no percent, as in %1"))
+                        .arg(name);
                     return false;
                 }
                 if (percent < 0 || percent > 100) {
-                    *error = QString(QLL("%1 is not from 0% to 100%")).arg(name);
+                    *error = QString(QLL("%1 is not from 0% to 100%"))
+                        .arg(name);
                     return false;
                 }
             } else if (name != QLL("true") && name != QLL("false")
-                       && ! names.contains(name)) {
+                && ! names.contains(name)
+            ) {
                 *error = QString(QLL("unknown name %1")).arg(name);
                 return false;
             }
@@ -557,7 +561,9 @@ bool Config::Condition::run(
         if (item == QLL("!") && ! stack.isEmpty()) {
             const bool operand = stack.takeLast();
             stack << ! operand;
-        } else if ((item == QLL("|") || item == QLL("&")) && stack.size() >= 2) {
+        } else if ((item == QLL("|") || item == QLL("&"))
+            && stack.size() >= 2
+        ) {
             const bool right = stack.takeLast();
             const bool left = stack.takeLast();
             stack << (item == QLL("|") ? left || right : left && right);

@@ -86,7 +86,9 @@ bool Config::Numbers::match(const QString & value, QString *matched) const
 QString Config::Numbers::describe() const
 {
     if (this->m_maximumCount == 1) {
-        return QString(QLL("a number from %1 to %2")).arg(this->m_minimum).arg(this->m_maximum);
+        return QString(QLL("a number from %1 to %2"))
+            .arg(this->m_minimum)
+            .arg(this->m_maximum);
     }
     return QString(QLL("numbers from %1 to %2, joined by |")).arg(this->m_minimum)
         .arg(this->m_maximum);

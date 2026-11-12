@@ -73,9 +73,10 @@ void Logger::logWarning(const QString & message)
 {
     static const char lead[] = "WARNING:";
     const int indent = int(sizeof(lead));
-    const QStringList lines = Logger::wrap(message, qMax(20, this->m_width
-        - indent
-    ));
+    const QStringList lines = Logger::wrap(
+        message,
+        qMax(20, this->m_width - indent)
+    );
     QByteArray text = "\n";
     for (int i = 0; i < lines.size(); ++i) {
         if (i == 0 && this->m_styled) {

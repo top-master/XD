@@ -33,6 +33,6 @@ private:
     QHash<QString, QString > m_values;
 };
 
-} // namespace Config
+} // Namespace `Config`.
 
 #endif // CONFIG_PARSER_H

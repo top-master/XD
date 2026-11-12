@@ -36,6 +36,6 @@ private:
     QStringList m_projects;
 };
 
-} // namespace Project
+} // Namespace `Project`.
 
 #endif // PROJECT_PARSER_H

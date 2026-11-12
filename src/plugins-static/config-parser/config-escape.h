@@ -14,6 +14,6 @@ public:
     static bool decode(const QString & text, QString *decoded, QString *error);
 };
 
-} // namespace Config
+} // Namespace `Config`.
 
 #endif // CONFIG_ESCAPE_H

@@ -42,6 +42,6 @@ public:
     QString extends;
 };
 
-} // namespace Config
+} // Namespace `Config`.
 
 #endif // CONFIG_KEY_H

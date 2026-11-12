@@ -30,6 +30,6 @@ public:
 
 typedef QList<QSharedPointer<const ValueMatcher > > Matchers;
 
-} // namespace Config
+} // Namespace `Config`.
 
 #endif // CONFIG_VALUE_MATCHER_H

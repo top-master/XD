@@ -26,6 +26,6 @@ public:
     QString describe() const Q_DECL_OVERRIDE;
 };
 
-} // namespace Config
+} // Namespace `Config`.
 
 #endif // CONFIG_REGEXP_H

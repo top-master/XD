@@ -52,6 +52,6 @@ private:
     bool m_takesPercents;
 };
 
-} // namespace Config
+} // Namespace `Config`.
 
 #endif // CONFIG_CONDITION_H

@@ -38,6 +38,6 @@ private:
     QList<Key > m_keys;
 };
 
-} // namespace Config
+} // Namespace `Config`.
 
 #endif // CONFIG_SECTION_H

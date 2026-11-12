@@ -55,7 +55,9 @@ void IgnoreParser::addIgnoreFileName(const QString & name)
 */
 void IgnoreParser::addExplicitPath(const QString & path)
 {
-    this->m_explicitPaths.append(QDir::cleanPath(QFileInfo(path).absoluteFilePath()));
+    this->m_explicitPaths.append(
+        QDir::cleanPath(QFileInfo(path).absoluteFilePath())
+    );
 }
 
 /*!
@@ -103,8 +105,7 @@ static QString globToRegex(const QString & glob)
             regex += QLatin1Char('[') + range.replace(
                 QLL("\\"),
                 QLL("\\\\")
-            )
-                + QLatin1Char(']');
+            ) + QLatin1Char(']');
             i = close;
         } else {
             regex += QRegularExpression::escape(QString(c));
@@ -172,11 +173,15 @@ bool IgnoreParser::parseRule(const QString & line, const QString & base,
 */
 bool IgnoreParser::isIgnored(const QString & path, bool isDirectory)
 {
-    const QString absolute = QDir::cleanPath(QFileInfo(path).absoluteFilePath());
+    const QString absolute = QDir::cleanPath(
+        QFileInfo(path).absoluteFilePath()
+    );
     if (this->isOnExplicitPath(absolute)) {
         return false;
     }
-    const QString root = this->rootOf(isDirectory ? absolute : QFileInfo(absolute).absolutePath());
+    const QString root = this->rootOf(isDirectory
+        ? absolute : QFileInfo(absolute).absolutePath()
+    );
     if (absolute == root
         || ! absolute.startsWith(root + QLatin1Char('/'))
     ) {
@@ -213,8 +218,12 @@ bool IgnoreParser::isIgnored(const QString & path, bool isDirectory)
 */
 QString IgnoreParser::excludingRule(const QString & path, bool isDirectory)
 {
-    const QString absolute = QDir::cleanPath(QFileInfo(path).absoluteFilePath());
-    const QString root = this->rootOf(isDirectory ? absolute : QFileInfo(absolute).absolutePath());
+    const QString absolute = QDir::cleanPath(
+        QFileInfo(path).absoluteFilePath()
+    );
+    const QString root = this->rootOf(isDirectory
+        ? absolute : QFileInfo(absolute).absolutePath()
+    );
     if (absolute == root
         || ! absolute.startsWith(root + QLatin1Char('/'))
     ) {
@@ -277,8 +286,10 @@ bool IgnoreParser::matchesLast(
     for (int i = 0; i < folders.size(); ++i) {
         const QString & folder = folders.at(i);
         for (int f = 0; f < this->m_fileNames.size(); ++f) {
-            const QList<IgnoreRule > & rules = this->rulesOf(folder + QLatin1Char('/')
-                                                            + this->m_fileNames.at(f));
+            const QList<IgnoreRule > & rules = this->rulesOf(
+                folder + QLatin1Char('/')
+                    + this->m_fileNames.at(f)
+            );
             const QString relative = path.mid(folder.size() + 1);
             for (int r = 0; r < rules.size(); ++r) {
                 const IgnoreRule & rule = rules.at(r);
@@ -302,7 +313,8 @@ bool IgnoreParser::matchesLast(
 */
 const QList<IgnoreRule > &IgnoreParser::rulesOf(const QString & file)
 {
-    QHash<QString, QList<IgnoreRule > >::const_iterator found = this->m_rules.constFind(file);
+    QHash<QString, QList<IgnoreRule > >::const_iterator found =
+        this->m_rules.constFind(file);
     if (found != this->m_rules.constEnd()) {
         return found.value();
     }
@@ -310,7 +322,8 @@ const QList<IgnoreRule > &IgnoreParser::rulesOf(const QString & file)
     QFile input(file);
     if (input.open(QIODevice::ReadOnly)) {
         const QString base = QFileInfo(file).absolutePath();
-        const QStringList lines = QString::fromUtf8(input.readAll()).split(QLatin1Char('\n'));
+        const QStringList lines =
+            QString::fromUtf8(input.readAll()).split(QLatin1Char('\n'));
         for (int i = 0; i < lines.size(); ++i) {
             IgnoreRule rule;
             if (IgnoreParser::parseRule(lines.at(i), base, &rule)) {

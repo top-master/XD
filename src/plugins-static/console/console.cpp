@@ -36,7 +36,9 @@ Console::Console(QIODevice *input, QIODevice *output)
 */
 bool Console::confirm(const QString & message)
 {
-    const QString answer = this->prompt(message + QLL(" [Y/n]")).trimmed().toLower();
+    const QString answer = this->prompt(message + QLL(" [Y/n]"))
+        .trimmed()
+        .toLower();
     return answer != QLL("n") && answer != QLL("no");
 }
 

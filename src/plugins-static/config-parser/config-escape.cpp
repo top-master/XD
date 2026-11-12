@@ -92,7 +92,9 @@ bool Config::Escape::decode(const QString & text, QString *decoded,
         if (next >= QLatin1Char('0') && next <= QLatin1Char('7')) {
             uint value = 0;
             int read = 0;
-            while (read < 3 && i + read < text.size() && text.at(i + read) >= QLatin1Char('0')
+            while (read < 3
+                && i + read < text.size()
+                && text.at(i + read) >= QLatin1Char('0')
                 && text.at(i + read) <= QLatin1Char('7')
             ) {
                 value = value * 8 + uint(text.at(i + read).unicode() - '0');

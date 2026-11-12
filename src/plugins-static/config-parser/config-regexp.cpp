@@ -136,7 +136,8 @@ bool Config::RegExp::match(const QString & value, QString *matched) const
     bool hasFallback = false;
     QRegularExpression pattern;
     Config::Replacement replacement;
-    if ( ! Config::RegExp::split(value, &head, &fallback, &hasFallback) || hasFallback
+    if ( ! Config::RegExp::split(value, &head, &fallback, &hasFallback)
+        || hasFallback
         || ! Config::RegExp::parse(value, &pattern, &replacement)
     ) {
         return false;

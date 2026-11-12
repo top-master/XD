@@ -27,6 +27,6 @@ private:
     QList<int > m_groups;
 };
 
-} // namespace Config
+} // Namespace `Config`.
 
 #endif // CONFIG_REPLACEMENT_H

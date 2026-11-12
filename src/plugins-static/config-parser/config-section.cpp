@@ -57,13 +57,15 @@ void Config::Section::extend(const Config::Section & base,
                              const QStringList & names)
 {
     for (int n = 0; n < names.size(); ++n) {
-        const QString baseName = (base.name() + QLatin1Char('.') + names.at(n)).toLower();
+        const QString baseName = (base.name() + QLatin1Char('.') + names.at(n))
+            .toLower();
         for (int k = 0; k < base.keys().size(); ++k) {
             Config::Key key = base.keys().at(k);
             if (key.name != baseName) {
                 continue;
             }
-            key.name = (this->m_name + QLatin1Char('.') + names.at(n)).toLower();
+            key.name = (this->m_name + QLatin1Char('.') + names.at(n))
+                .toLower();
             key.extends = baseName;
             this->m_keys.append(key);
         }

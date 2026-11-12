@@ -23,6 +23,6 @@ private:
     QString m_word;
 };
 
-} // namespace Config
+} // Namespace `Config`.
 
 #endif // CONFIG_WORD_H

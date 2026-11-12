@@ -31,6 +31,6 @@ private:
     int m_maximumCount;
 };
 
-} // namespace Config
+} // Namespace `Config`.
 
 #endif // CONFIG_NUMBERS_H
