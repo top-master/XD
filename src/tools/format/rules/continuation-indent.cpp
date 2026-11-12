@@ -223,6 +223,17 @@ void FormatContinuationIndentRule::run(FormatDocument *document) const
         QByteArray indent = document->indentOf(base)
             + continuationPad(0, isOperand ? 2 : 1);
 
+        // A grouped operand followed by a member access has one step for
+        // its parentheses and another for the binary continuation.
+        const int close = group >= 0 ? document->match(group) : -1;
+        const Token afterGroup = close >= 0 ? document->token(close + 1) : NOTOKEN;
+        if (group >= 0 && document->token(group) == LPAREN
+            && ! isCondition && document->symbolLine(group) == base
+            && (afterGroup == DOT || afterGroup == ARROW)
+        ) {
+            indent = document->indentOf(base) + continuationPad(0, 2);
+        }
+
         // Gives a group nested in a condition one step for each of its
         // brackets that the group's line opened.
         const int steps = conditionSteps(document, group, base, first);

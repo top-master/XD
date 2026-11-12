@@ -168,10 +168,29 @@ QByteArray FormatExpressionLayout::layout(
         );
         m_brokeUngrouped |= right.brokeUngrouped();
 
+        // A chained call keeps its first call on the assignment line when
+        // it fits there, even if moving the whole value below `=` would use
+        // fewer lines.
+        const QList<int > valueOperators = right.chainOperators(assignment + 1, last);
+        const int firstBreak = value.indexOf('\n');
+        bool keepsChainedCall = false;
+        if (m_document->token(assignment) == EQ
+            && firstBreak >= 0 && ! valueOperators.isEmpty()
+            && isMemberAccess(m_document->token(valueOperators.first()))
+        ) {
+            const int member = valueOperators.first();
+            const int previousOpen = m_document->match(member - 1);
+            keepsChainedCall = m_document->token(member - 1) == RPAREN
+                && (previousOpen == assignment + 1
+                    || (previousOpen > assignment + 1
+                        && right.isListOpen(previousOpen)))
+                && endColumn + 1 + textWidth(value.left(firstBreak)) <= m_wrapMax;
+        }
+
         // Moves the value one step below an `=` that stands at or past
         // `wrapArgsAt`, when it does not fit after the `=` and takes fewer
         // lines below it; an `=` before `wrapArgsAt` keeps its value.
-        if ( ! isHeadBroken
+        if ( ! isHeadBroken && ! keepsChainedCall
             && (value.contains('\n')
                 || ! this->fits(endColumn + 1, value, trailing))
             && reachesWrapArgsAt(m_document, m_conditions, assignment)
@@ -570,6 +589,31 @@ QByteArray FormatExpressionLayout::layoutChain(
         const QList<int > & operators, int column,
         int trailing)
 {
+    // A parenthesized binary chain gets its own breaks before a following
+    // member chain, when that member chain fits beside the closing bracket.
+    const int firstMember = operators.first();
+    const int groupClose = firstMember - 1;
+    if (isMemberAccess(m_document->token(firstMember))
+        && m_document->token(first) == LPAREN
+        && m_document->match(first) == groupClose
+    ) {
+        const QList<int > inner = this->chainOperators(first + 1, groupClose - 1);
+        const QByteArray suffix = this->oneLine(firstMember, last);
+        if (! inner.isEmpty()
+            && operatorPrecedence(m_document->token(inner.first())) > 0
+            && textWidth(this->pad()) + 4 + 1 + textWidth(suffix) + trailing <= m_wrapMax
+        ) {
+            ++m_paddingLevel;
+            const QByteArray group = this->layoutGroup(
+                first, groupClose, column, textWidth(suffix) + trailing
+            );
+            --m_paddingLevel;
+            if (group.contains('\n')) {
+                return group + suffix;
+            }
+        }
+    }
+
     // Keep an early first operator with the call it introduces. Its argument
     // list may break even when the usual argument thresholds do not ask for
     // it, provided the call head itself fits on the line.

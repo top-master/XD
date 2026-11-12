@@ -3,8 +3,8 @@
 
 void record()
 {
-    results[index].error =
-        makeValue().withExtendedDescription(details);
+    results[index].error = makeValue()
+        .withExtendedDescription(details);
     results[index]
         .veryLongErrorMemberName = makeValue()
             .withExtendedDescription(details);
