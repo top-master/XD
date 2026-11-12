@@ -12,6 +12,43 @@
 #include <QtCore/QByteArray>
 
 /*!
+    Tells whether the member chain ending at @a close starts with a
+    parenthesized binary expression. Its member lines can be joined so the
+    shared expression layout can reconsider the whole statement together.
+*/
+static bool followsBinaryGroup(const FormatDocument *document, int close)
+{
+    while (document->token(close) == RPAREN) {
+        const int open = document->match(close);
+        if (open < 0) {
+            return false;
+        }
+        if (document->token(open - 1) != IDENTIFIER) {
+            for (int i = open + 1; i < close; ++i) {
+                const Token token = document->token(i);
+                if ((token == LPAREN || token == LBRACK || token == LBRACE)
+                    && document->match(i) > i
+                ) {
+                    i = document->match(i);
+                } else if (operatorPrecedence(token) > 0
+                    && isOperandEnd(document->token(i - 1))
+                ) {
+                    return true;
+                }
+            }
+        }
+        if (document->token(open - 1) != IDENTIFIER
+            || (document->token(open - 2) != DOT
+                && document->token(open - 2) != ARROW)
+        ) {
+            return false;
+        }
+        close = open - 3;
+    }
+    return false;
+}
+
+/*!
     @class FormatLineJoinRule
     @internal
 
@@ -24,7 +61,8 @@
 
     It joins a line break inside a `(`, a `[`, or the `{` of an initializer
     list, and, at the level of a statement, one before a line that a binary
-    operator leads (see isLeadingOperator()), one after an `=`, and one
+    operator leads (see isLeadingOperator()), one in a member chain whose
+    head is a parenthesized binary expression, one after an `=`, and one
     before the `:` of a conditional expression. The break turns into one
     space, or into none right after a `(` or a `[` and right before a `)`, a
     `]`, a `,`, or a `;`. It keeps a break next to a comment or a directive,
@@ -161,6 +199,11 @@ bool FormatLineJoinRule::mayJoin(
 
     // Joins a statement's operator line, the value after its `=`, and the
     // `:` of its conditional expression.
-    return isLeadingOperator(next) || document->token(before) == EQ
+    return isLeadingOperator(next)
+        || ((next == DOT || next == ARROW) && followsBinaryGroup(
+            document,
+            before
+        ))
+        || document->token(before) == EQ
         || (next == COLON && questions > 0);
 }

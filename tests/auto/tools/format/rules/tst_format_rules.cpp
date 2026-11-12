@@ -3019,6 +3019,7 @@ void tst_FormatRules::testFixtures_shouldMatchAfter()
         || name == QLL("control-braces-ten-inner.cpp")
         || name == QLL("operator-wrap-priority.cpp")
         || name == QLL("operator-wrap-priority-assignment.cpp")
+        || name == QLL("operator-wrap-priority-long-suffix.cpp")
     ) {
         const FormatResult again = qMove(formatter.format(
             result.text, path, lineSpecs, config
