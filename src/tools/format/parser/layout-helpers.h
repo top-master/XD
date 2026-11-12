@@ -13,6 +13,8 @@
 int wrapColumn(const FormatDocument *document);
 int continuationIndent(int indent, int steps = 1);
 QByteArray continuationPad(int indent, int steps = 1);
+bool logicalBreakBeforeCall(const FormatDocument *document, int open,
+                            int *operatorIndex, QByteArray *indent);
 bool isBinaryOperator(Token token);
 bool isClosingLine(const QByteArray & text);
 bool closesEarlierLine(const FormatDocument *document, int bracket);

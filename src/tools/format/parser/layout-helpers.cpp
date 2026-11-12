@@ -38,6 +38,76 @@ QByteArray continuationPad(int indent, int steps)
 }
 
 /*!
+    Finds a logical operator before the call at @a open whose break keeps
+    both resulting lines within wrapMax. Gives its token and the indentation
+    of its continuation line; leaves comments, directives and already split
+    calls to their own layouts.
+*/
+bool logicalBreakBeforeCall(const FormatDocument *document, int open,
+                            int *operatorIndex, QByteArray *indent)
+{
+    const int close = document->match(open);
+    const int line = document->symbolLine(open);
+    if (close <= open || document->symbolEndLine(close) != line
+        || document->isDirectiveLine(line)
+    ) {
+        return false;
+    }
+    const int lineFirst = document->firstSymbolOfLine(line);
+    int op = open - 1;
+    while (op > lineFirst) {
+        const Token token = document->token(op);
+        if (token == ANDAND || token == OROR) {
+            break;
+        }
+        if (token == RPAREN || token == RBRACK) {
+            const int match = document->match(op);
+            if (match < lineFirst) {
+                return false;
+            }
+            op = match - 1;
+            continue;
+        }
+        if (token == COMMA || token == SEMIC || token == QUESTION
+            || token == COLON || token == EQ || token == LBRACE
+            || token == RBRACE || operatorPrecedence(token) > 0
+        ) {
+            return false;
+        }
+        --op;
+    }
+    if (op <= lineFirst || (document->token(op) != ANDAND
+            && document->token(op) != OROR)
+    ) {
+        return false;
+    }
+    const int from = document->symbolEnd(op - 1);
+    const int at = document->symbols().at(op).from;
+    const int end = contentEnd(document, line);
+    if (document->hasCommentBetween(from, end)
+        || document->spansDirective(from, end)
+    ) {
+        return false;
+    }
+    const QByteArray prefix = document->text().mid(
+        document->lineStart(line), from - document->lineStart(line)
+    );
+    const QByteArray tail = document->text().mid(at, end - at);
+    const QByteArray padding = continuationPad(
+        textWidth(document->indentOf(line))
+    );
+    const int limit = qMax(1, document->settings().wrapMax);
+    if (textWidth(prefix) > limit
+        || textWidth(padding) + textWidth(tail) > limit
+    ) {
+        return false;
+    }
+    *operatorIndex = op;
+    *indent = padding;
+    return true;
+}
+
+/*!
     Tells whether @a token is a binary operator that may start a line.
 */
 bool isBinaryOperator(Token token)

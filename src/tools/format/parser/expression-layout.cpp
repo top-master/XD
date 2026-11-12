@@ -979,7 +979,7 @@ QByteArray FormatExpressionLayout::layoutGroup(
         column + 1,
         0
     );
-    return '(' + lead + this->layoutChainRest(
+    const QByteArray group = '(' + lead + this->layoutChainRest(
         open + 1,
         close - 1,
         operators,
@@ -987,7 +987,17 @@ QByteArray FormatExpressionLayout::layoutGroup(
         0,
         false,
         ! endsWithClosingLine(lead), false, lead
-    ) + "\n" + this->pad() + ')';
+    );
+    const Token firstOperator = m_document->token(operators.first());
+    const Token afterClose = m_document->token(close + 1);
+    if ((firstOperator == ANDAND || firstOperator == OROR)
+        && (afterClose == ANDAND || afterClose == OROR || afterClose == SEMIC)
+        && m_document->symbolEndLine(close - 1) == m_document->symbolLine(close)
+        && lastLineWidth(group) + 1 + trailing <= m_wrapMax
+    ) {
+        return group + ')';
+    }
+    return group + "\n" + this->pad() + ')';
 }
 
 /*!

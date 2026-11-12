@@ -3020,6 +3020,8 @@ void tst_FormatRules::testFixtures_shouldMatchAfter()
         || name == QLL("operator-wrap-priority.cpp")
         || name == QLL("operator-wrap-priority-assignment.cpp")
         || name == QLL("operator-wrap-priority-long-suffix.cpp")
+        || name == QLL("operator-wrap-logical-call.cpp")
+        || name == QLL("args-wrap-logical-priority.cpp")
     ) {
         const FormatResult again = qMove(formatter.format(
             result.text, path, lineSpecs, config

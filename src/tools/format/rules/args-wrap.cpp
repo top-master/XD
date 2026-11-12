@@ -142,6 +142,22 @@ void FormatArgsWrapRule::run(FormatDocument *document) const
             continue;
         }
 
+        int logicalOperator = -1;
+        QByteArray logicalIndent;
+        if (isCall && needsBreak && logicalBreakBeforeCall(
+                document, i, &logicalOperator, &logicalIndent
+            )
+        ) {
+            const int start = document->symbolEnd(logicalOperator - 1);
+            if (document->replace(
+                    start, document->symbols().at(logicalOperator).from - start,
+                    "\n" + logicalIndent
+                )
+            ) {
+                continue;
+            }
+        }
+
         // Writes the list as the layout breaks it.
         const QByteArray text = layout.layoutList(i, i, close, column);
         const int length = closeEnd - from;
