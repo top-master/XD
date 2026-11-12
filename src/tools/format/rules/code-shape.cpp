@@ -71,7 +71,8 @@ void FormatCodeShapeRule::checkStatement(
     if (document->token(start) == STAR) {
         int k = start + 1;
         while (document->token(k) == IDENTIFIER
-            && (document->token(k + 1) == DOT || document->token(k + 1) == ARROW)
+            && (document->token(k + 1) == DOT
+                || document->token(k + 1) == ARROW)
         ) {
             k += 2;
         }
@@ -79,7 +80,10 @@ void FormatCodeShapeRule::checkStatement(
             && document->match(k + 1) > 0
         ) {
             const Token after = document->token(document->match(k + 1) + 1);
-            if (after == EQ || after == PLUS_EQ || after == MINUS_EQ || after == OR_EQ
+            if (after == EQ
+                || after == PLUS_EQ
+                || after == MINUS_EQ
+                || after == OR_EQ
                 || after == AND_EQ
             ) {
                 document->report(
@@ -147,7 +151,9 @@ void FormatCodeShapeRule::checkStatement(
         "QRegularExpression",
         "QRegExp"
     };
-    const QByteArray type = document->lexem(document->token(start) == CONST ? start + 1 : start);
+    const QByteArray type = document->lexem(
+        document->token(start) == CONST ? start + 1 : start
+    );
     for (size_t u = 0; u < sizeof(uncopyable) / sizeof(uncopyable[0]); ++u) {
         if (type == uncopyable[u]) {
             return;
@@ -222,10 +228,13 @@ void FormatCodeShapeRule::checkLines(FormatDocument *document) const
         }
         const int last = document->lastSymbolOfLine(line);
         for (int i = first; i < last; ++i) {
-            if (document->token(i) == RPAREN && document->token(i + 1) == COLON
-                && document->match(i) >= first && document->scopeOf(i) != FormatDocument::FunctionScope
+            if (document->token(i) == RPAREN
+                && document->token(i + 1) == COLON
+                && document->match(i) >= first
+                && document->scopeOf(i) != FormatDocument::FunctionScope
                 && document->scopeOf(i) != FormatDocument::BlockScope
-                && document->symbolLine(i + 1) == line && i + 2 <= last
+                && document->symbolLine(i + 1) == line
+                && i + 2 <= last
             ) {
                 document->report(
                     document->lineStart(line),

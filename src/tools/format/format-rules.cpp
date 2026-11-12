@@ -110,14 +110,14 @@ static QList<FormatRule * > formatCreateCommentRules()
         "so-hence",
         "Reports a bare \"so\" joining two clauses in comments.",
         "(?:[,;]\\s+so\\b(?!\\s+(?:many|much|long|far|few|forth|on|that)\\b)"
-            "|(?:^|[.!?]\\s+)so\\b(?![\\s-]+(?:many|much|long|far|called|that)\\b))",
+        "|(?:^|[.!?]\\s+)so\\b(?![\\s-]+(?:many|much|long|far|called|that)\\b))",
         "join a consequence with hence, or a purpose with so that, not a bare so"
     );
     rules << new FormatPatternReportRule(
         "slash-and-or",
         "Reports a slash between words in comments.",
         "(?:^|\\s)(?!and/or\\b|try/catch\\b|I/O\\b|TCP/IP\\b|N/A\\b)"
-            "[A-Za-z]{2,}/[A-Za-z]{2,}(?=[\\s,.;:)]|$)",
+        "[A-Za-z]{2,}/[A-Za-z]{2,}(?=[\\s,.;:)]|$)",
         "write and/or (or a list with commas) instead of the slash"
     );
     rules << new FormatPatternReportRule(
@@ -130,14 +130,14 @@ static QList<FormatRule * > formatCreateCommentRules()
         "mapping",
         "Reports wordings the comment rules map to another.",
         "\\bi\\.e\\.|,\\s+that is\\b[^,.;]*,|\\bhowever\\s+(?:small|large|big|long|short|many|much"
-            "|few|little|slow|fast|hard|bad|good)\\b",
+        "|few|little|slow|fast|hard|bad|good)\\b",
         "name both terms with and/or, or write no matter how, as the mapping says"
     );
     rules << new FormatPatternReportRule(
         "plain-words",
         "Reports high-register words in comments.",
         "\\b(?:aforementioned|heretofore|notwithstanding|pursuant|hereinafter|inasmuch"
-            "|forthwith)\\b",
+        "|forthwith)\\b",
         "use a plain everyday word"
     );
     rules << new FormatPatternReportRule(
@@ -156,7 +156,7 @@ static QList<FormatRule * > formatCreateCommentRules()
         "host-mention",
         "Reports mentions of the machine the work ran on.",
         "(?i)\\b(?:single[- ]core|one[- ]core|\\d+[- ]core\\s+(?:box|machine|host)"
-            "|slow\\s+(?:box|machine|host)|low[- ]ram)\\b",
+        "|slow\\s+(?:box|machine|host)|low[- ]ram)\\b",
         "state the technical condition, not the machine"
     );
     rules << new FormatTextReportRule(

@@ -27,14 +27,19 @@ void FormatReferenceSpaceRule::run(FormatDocument *document) const
 {
     for (int i = 1; i + 2 < document->symbols().size(); ++i) {
         const Token token = document->token(i);
-        if ((token != AND && token != ANDAND) || document->token(i + 1) != IDENTIFIER
+        if ((token != AND && token != ANDAND)
+            || document->token(i + 1) != IDENTIFIER
             || ! isTypeEnd(document->token(i - 1))
             || document->isDirectiveLine(document->symbolLine(i))
         ) {
             continue;
         }
         const Token after = document->token(i + 2);
-        if (after != COMMA && after != RPAREN && after != EQ && after != SEMIC && after != LBRACK
+        if (after != COMMA
+            && after != RPAREN
+            && after != EQ
+            && after != SEMIC
+            && after != LBRACK
             && after != COLON
         ) {
             continue;
@@ -85,7 +90,10 @@ bool FormatReferenceSpaceRule::isDeclaration(
     bool hasQualifier = false;
     while (start >= 0) {
         const Token token = document->token(start);
-        if (token == CONST || token == VOLATILE || token == RANGLE || token == GTGT
+        if (token == CONST
+            || token == VOLATILE
+            || token == RANGLE
+            || token == GTGT
             || isBuiltinType(token)
         ) {
             hasQualifier = true;
@@ -104,8 +112,12 @@ bool FormatReferenceSpaceRule::isDeclaration(
             --start;
             continue;
         }
-        if (token == IDENTIFIER || token == SCOPE || token == CONST || token == VOLATILE
-            || token == STAR || isBuiltinType(token)
+        if (token == IDENTIFIER
+            || token == SCOPE
+            || token == CONST
+            || token == VOLATILE
+            || token == STAR
+            || isBuiltinType(token)
         ) {
             --start;
             continue;

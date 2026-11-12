@@ -185,7 +185,9 @@ FormatMemberScope FormatScopeConditions::functionScope(int brace)
             scope.isTemplate = scope.isTemplate || token == TEMPLATE;
             scope.isStatic = scope.isStatic || token == STATIC;
             if ( ! scope.isOutline) {
-                if (scope.params < 0 && token == IDENTIFIER && document->token(k + 1) == LPAREN
+                if (scope.params < 0
+                    && token == IDENTIFIER
+                    && document->token(k + 1) == LPAREN
                     && ! isMacroName(document->lexem(k))
                 ) {
                     scope.memberToken = k;
@@ -220,7 +222,8 @@ FormatMemberScope FormatScopeConditions::functionScope(int brace)
             if (document->token(member) == TILDE) {
                 ++member;
             }
-            if (document->token(member) == IDENTIFIER && document->token(member + 1) == LPAREN
+            if (document->token(member) == IDENTIFIER
+                && document->token(member + 1) == LPAREN
                 && document->token(member + 2) != STAR
             ) {
                 className = document->lexem(k);

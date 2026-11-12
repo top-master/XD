@@ -26,8 +26,9 @@ class FormatScopeConditions;
 
 bool reachesWrapArgsAt(const FormatDocument *document,
                        FormatScopeConditions *conditions, int token);
-QList<QByteArray > comparisonLines(const FormatDocument *document, int first,
-                                   int last, int column, int indent, int step);
+QList<QByteArray > comparisonLines(
+        const FormatDocument *document, int first,
+        int last, int column, int indent, int step);
 QList<int > loosestOperators(
         const FormatDocument *document, int first, int last,
         int (*rankOf)(Token), int fromRank, int *rank);

@@ -26,8 +26,10 @@
 void FormatQllRule::run(FormatDocument *document) const
 {
     for (int i = 0; i + 3 < document->symbols().size(); ++i) {
-        if (document->token(i) != IDENTIFIER || document->token(i + 1) != LPAREN
-            || document->token(i + 2) != STRING_LITERAL || document->token(i + 3) != RPAREN
+        if (document->token(i) != IDENTIFIER
+            || document->token(i + 1) != LPAREN
+            || document->token(i + 2) != STRING_LITERAL
+            || document->token(i + 3) != RPAREN
             || document->isDirectiveLine(document->symbolLine(i))
         ) {
             continue;

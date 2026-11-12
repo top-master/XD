@@ -85,14 +85,16 @@ void FormatThread::run()
             }
             index = this->m_queue->next++;
         }
-        const FormatFileResult result = qMove(this->m_runner->formatFile(this->m_queue->files.at(index)));
+        const FormatFileResult result =
+            qMove(this->m_runner->formatFile(this->m_queue->files.at(index)));
         QMutexLocker locker(&this->m_queue->mutex);
         this->m_queue->results[index] = result;
         this->m_queue->done[index] = true;
         while (this->m_queue->told < this->m_queue->files.size()
             && this->m_queue->done.at(this->m_queue->told)
         ) {
-            this->m_runner->tellFinished(this->m_queue->results.at(this->m_queue->told));
+            this->m_runner
+                ->tellFinished(this->m_queue->results.at(this->m_queue->told));
             ++this->m_queue->told;
         }
     }

@@ -62,7 +62,10 @@ void FormatMarkBannerRule::runGroup(
     ) {
         label.chop(1);
     }
-    document->replace(comment.offset, comment.length, "// MARK: "
+    document->replace(
+        comment.offset,
+        comment.length,
+        "// MARK: "
         + label.toUtf8()
         + '.'
     );

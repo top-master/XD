@@ -152,11 +152,16 @@ QByteArray FormatExpressionLayout::layout(
         // `wrapArgsAt`, when it does not fit after the `=` and takes fewer
         // lines below it; an `=` before `wrapArgsAt` keeps its value.
         if ( ! isHeadBroken
-            && (value.contains('\n') || ! this->fits(endColumn + 1, value, trailing))
+            && (value.contains('\n')
+                || ! this->fits(endColumn + 1, value, trailing))
             && reachesWrapArgsAt(m_document, m_conditions, assignment)
         ) {
             const QByteArray belowPad = continuationPad(textWidth(this->pad()));
-            FormatExpressionLayout below(m_document, m_conditions, textWidth(belowPad));
+            FormatExpressionLayout below(
+                m_document,
+                m_conditions,
+                textWidth(belowPad)
+            );
             const QByteArray moved = below.layout(
                 assignment + 1, last, textWidth(belowPad), trailing
             );
@@ -182,7 +187,7 @@ QByteArray FormatExpressionLayout::layout(
     const Token closer = m_document->token(last);
     const int open = m_document->match(last);
     if ((closer == RPAREN
-        || closer == RBRACE)
+            || closer == RBRACE)
         && open > first
         && this->isListOpen(open)
     ) {
@@ -263,8 +268,10 @@ QByteArray FormatExpressionLayout::oneLine(int first, int last) const
         const int from = m_document->symbols().at(i).from;
         if (i > first) {
             const int gapFrom = m_document->symbolEnd(i - 1);
-            QByteArray gap = m_document->text().mid(gapFrom, from
-                - gapFrom
+            QByteArray gap = m_document->text().mid(
+                gapFrom,
+                from
+                    - gapFrom
             );
             if (gap.contains('\n')) {
                 const Token before = m_document->token(i - 1);
@@ -275,8 +282,10 @@ QByteArray FormatExpressionLayout::oneLine(int first, int last) const
             }
             text += gap;
         }
-        text += m_document->text().mid(from, m_document->symbolEnd(i)
-            - from
+        text += m_document->text().mid(
+            from,
+            m_document->symbolEnd(i)
+                - from
         );
     }
     return text;
@@ -311,7 +320,7 @@ bool FormatExpressionLayout::hasOuterChain(int first, int last) const
     const Token closer = m_document->token(last);
     const int open = m_document->match(last);
     if ((closer != RPAREN
-        && closer != RBRACE)
+            && closer != RBRACE)
         || open <= first
         || ! this->isListOpen(open)
     ) {
@@ -341,8 +350,8 @@ QList<int > FormatExpressionLayout::chainOperators(int first, int last) const
         const Token token = m_document->token(i);
         const int match = m_document->match(i);
         if ((token == LPAREN
-            || token == LBRACK
-            || token == LBRACE)
+                || token == LBRACK
+                || token == LBRACE)
             && match > i
         ) {
             i = match;
@@ -497,8 +506,7 @@ QByteArray FormatExpressionLayout::layoutChainRest(
             if (m_conditions->holds(
                     m_document->settings().wrapChainAt, operators.at(end),
                     percent, FormatSettings::defaultWrapChainAt()
-                )
-                || ! this->fits(
+                ) || ! this->fits(
                     column, this->oneLine(first, operandLast),
                     end + 1 < operators.size() ? 0 : trailing
                 )
@@ -530,8 +538,10 @@ QByteArray FormatExpressionLayout::layoutChainRest(
                 ? operators.at(end) - 1 : last;
             const QByteArray more = space
                 + this->oneLine(operators.first(), lastOfLine);
-            if (this->fits(column, this->oneLine(first, operators.first()
-                    - 1
+            if (this->fits(column, this->oneLine(
+                    first,
+                    operators.first()
+                        - 1
                 ) + more,
                            end < operators.size() ? 0 : trailing)
             ) {
@@ -695,8 +705,7 @@ QByteArray FormatExpressionLayout::layoutGroup(
         0,
         false,
         ! endsWithClosingLine(lead), false, lead
-    )
-        + "\n" + this->pad() + ')';
+    ) + "\n" + this->pad() + ')';
 }
 
 /*!
@@ -756,8 +765,7 @@ QByteArray FormatExpressionLayout::listLines(
                 + this->itemText(
                     items.at(k).first, items.at(k).second,
                     textWidth(this->pad()), isLast ? 0 : 1
-                )
-                + (isLast ? "" : ",");
+                ) + (isLast ? "" : ",");
         }
         at += size;
     }
@@ -808,7 +816,8 @@ QByteArray FormatExpressionLayout::itemText(
         steps << ! keepsPadding;
         lineFirst = i;
     }
-    const QList<QByteArray > lines = sourceText(m_document, first, last).split('\n');
+    const QList<QByteArray > lines =
+        sourceText(m_document, first, last).split('\n');
     QByteArray text = lines.first().trimmed();
     for (int l = 1; l < lines.size(); ++l) {
         const bool stepsIn = l - 1 >= steps.size() || steps.at(l - 1);

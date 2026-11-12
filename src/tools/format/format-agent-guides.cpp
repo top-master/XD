@@ -96,8 +96,9 @@ QString FormatAgentGuides::write(
         const QString & path,
         const FormatIssue & request)
 {
-    QFile source(QLL(":/assets/")
-        + FormatAgentGuides::templateName(request.rule)
+    QFile source(
+        QLL(":/assets/")
+            + FormatAgentGuides::templateName(request.rule)
     );
     if ( ! source.open(QIODevice::ReadOnly)) {
         return QString();
@@ -215,9 +216,10 @@ QString FormatAgentGuides::writeUsage()
     if ( ! this->makeFolder()) {
         return QString();
     }
-    QFile target(this->m_folder
-        + QLatin1Char('/')
-        + FormatAgentGuides::usageName()
+    QFile target(
+        this->m_folder
+            + QLatin1Char('/')
+            + FormatAgentGuides::usageName()
     );
     if ( ! target.open(QIODevice::WriteOnly)
         || target.write(text.toUtf8()) < 0
@@ -289,7 +291,8 @@ void FormatAgentGuides::removeLeftovers() const
     );
     for (int n = 0; n < names.size(); ++n) {
         const QString path = temp.filePath(names.at(n));
-        if (names.at(n) == own || ! pattern.exactMatch(names.at(n))
+        if (names.at(n) == own
+            || ! pattern.exactMatch(names.at(n))
             || ! QFile::exists(path + QLatin1Char('/') + FormatAgentGuides::usageName())
         ) {
             continue;
@@ -297,7 +300,10 @@ void FormatAgentGuides::removeLeftovers() const
 
         // Keeps a folder that holds anything the guides do not write.
         const QStringList entries = QDir(path).entryList(
-            QDir::AllEntries | QDir::Hidden | QDir::System | QDir::NoDotAndDotDot);
+            QDir::AllEntries | QDir::Hidden
+                | QDir::System
+                | QDir::NoDotAndDotDot
+        );
         bool isOwn = true;
         for (int e = 0; e < entries.size() && isOwn; ++e) {
             isOwn = QFileInfo(path + QLatin1Char('/') + entries.at(e)).isFile()
@@ -336,7 +342,8 @@ bool FormatAgentGuides::isOwnFile(const QString & name)
         return false;
     }
     const QByteArray rule = prompt.cap(1).toLatin1();
-    return QFile::exists(QLL(":/assets/")
-        + FormatAgentGuides::templateName(rule)
+    return QFile::exists(
+        QLL(":/assets/")
+            + FormatAgentGuides::templateName(rule)
     );
 }

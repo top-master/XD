@@ -91,7 +91,8 @@ void FormatInitListRule::run(FormatDocument *document) const
             const QByteArray indent = document->indentOf(colonLine);
             for (int k = i + 1; k < brace; ++k) {
                 const int line = document->symbolLine(k);
-                if (document->token(k) != COMMA || document->firstSymbolOfLine(line) != k
+                if (document->token(k) != COMMA
+                    || document->firstSymbolOfLine(line) != k
                     || document->indentOf(line) == indent
                 ) {
                     continue;

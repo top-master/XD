@@ -50,7 +50,7 @@ bool isMacroName(const QByteArray & name)
     for (int i = 0; i < name.size(); ++i) {
         const char c = name.at(i);
         if ( ! (c >= 'A'
-            && c <= 'Z')
+                && c <= 'Z')
             && ! (c >= '0'
                 && c <= '9')
             && c != '_'
@@ -163,8 +163,13 @@ FormatClassMembers collectMembers(
         }
         if (token == STATIC) {
             isStatic = true;
-        } else if (token == TYPEDEF || token == USING || token == FRIEND || token == ENUM
-            || token == CLASS || token == STRUCT || token == UNION
+        } else if (token == TYPEDEF
+            || token == USING
+            || token == FRIEND
+            || token == ENUM
+            || token == CLASS
+            || token == STRUCT
+            || token == UNION
         ) {
             skip = true;
         }
@@ -175,8 +180,11 @@ FormatClassMembers collectMembers(
         const Token after = document->token(i + 1);
         const bool declares = after == LPAREN || after == SEMIC || after == EQ || after == LBRACK
             || after == COLON || after == COMMA;
-        if ( ! declares || name == className || isMacroName(name)
-            || ! endsType(document->token(i - 1)) || document->token(i - 1) == TILDE
+        if ( ! declares
+            || name == className
+            || isMacroName(name)
+            || ! endsType(document->token(i - 1))
+            || document->token(i - 1) == TILDE
         ) {
             continue;
         }
@@ -208,7 +216,7 @@ bool isMacroArgument(const FormatDocument *document, int index)
     for (int k = index - 1; k >= 0; --k) {
         const Token token = document->token(k);
         if ((token == RPAREN
-            || token == RBRACK)
+                || token == RBRACK)
             && document->match(k) >= 0
         ) {
             k = document->match(k);
@@ -235,7 +243,8 @@ int findClassBody(const FormatDocument *document,
                   const QByteArray & className)
 {
     for (int i = 0; i < document->symbols().size(); ++i) {
-        if (document->token(i) == LBRACE && document->braceScope(i) == FormatDocument::ClassScope
+        if (document->token(i) == LBRACE
+            && document->braceScope(i) == FormatDocument::ClassScope
             && classNameOf(document, i) == className
         ) {
             return i;
@@ -276,7 +285,7 @@ QByteArray classNameOf(const FormatDocument *document, int brace)
     for (int k = document->headStart(brace); k + 1 < brace; ++k) {
         const Token token = document->token(k);
         if ((token == CLASS
-            || token == STRUCT)
+                || token == STRUCT)
             && document->token(k + 1) == IDENTIFIER
         ) {
             int name = k + 1;

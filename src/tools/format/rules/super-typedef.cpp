@@ -55,7 +55,10 @@ void FormatSuperTypedefRule::run(FormatDocument *document) const
         const Token token = document->token(first);
         const QByteArray line = "typedef " + base + " super;";
         if (token == Q_OBJECT_TOKEN || token == Q_GADGET_TOKEN) {
-            document->replace(contentEnd(document, firstLine), 0, "\n"
+            document->replace(
+                contentEnd(document, firstLine),
+                0,
+                "\n"
                 + document->indentOf(firstLine)
                 + line
             );
@@ -66,9 +69,12 @@ void FormatSuperTypedefRule::run(FormatDocument *document) const
         const QByteArray indent = isAccess
             ? document->indentOf(document->symbolLine(i)) + "    "
                 : document->indentOf(firstLine);
-        document->replace(document->lineStart(firstLine), 0, indent
-            + line
-            + "\n"
+        document->replace(
+            document->lineStart(firstLine),
+            0,
+            indent
+                + line
+                + "\n"
         );
     }
 }
@@ -106,8 +112,10 @@ QByteArray FormatSuperTypedefRule::baseName(
         return QByteArray();
     }
     int first = colon + 1;
-    while (document->token(first) == PUBLIC || document->token(first) == PRIVATE
-        || document->token(first) == PROTECTED || document->token(first) == VIRTUAL
+    while (document->token(first) == PUBLIC
+        || document->token(first) == PRIVATE
+        || document->token(first) == PROTECTED
+        || document->token(first) == VIRTUAL
     ) {
         ++first;
     }

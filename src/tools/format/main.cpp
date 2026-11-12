@@ -76,8 +76,10 @@ static QString logicalPath(const QString & path)
     ) {
         return path;
     }
-    QString logical = QDir::cleanPath(shellFolder + QLatin1Char('/')
-                                      + QDir::fromNativeSeparators(path));
+    QString logical = QDir::cleanPath(
+        shellFolder + QLatin1Char('/')
+            + QDir::fromNativeSeparators(path)
+    );
     const QFileInfo logicalInfo(logical);
     const QFileInfo workingInfo(path);
     if ( ! logicalInfo.exists()
@@ -245,7 +247,8 @@ static bool runGit(const QStringList & arguments, QByteArray *output,
     if (process.exitStatus() != QProcess::NormalExit
         || process.exitCode() != 0
     ) {
-        const QString diagnostics = QString::fromLocal8Bit(process.readAllStandardError());
+        const QString diagnostics =
+            QString::fromLocal8Bit(process.readAllStandardError());
         *error = QString(QLL("--git: git %1 failed: %2"))
             .arg(arguments.join(QLatin1Char(' ')), diagnostics.trimmed());
         return false;
@@ -365,7 +368,8 @@ static bool readGitChanges(const QStringList & arguments,
             continue;
         }
         inHeader = false;
-        const QRegularExpressionMatch found = hunk.match(QString::fromLatin1(line));
+        const QRegularExpressionMatch found =
+            hunk.match(QString::fromLatin1(line));
         if (file.isEmpty() || ! found.hasMatch()) {
             continue;
         }
@@ -518,8 +522,9 @@ static int logResults(Logger *logger, const QList<FormatFileResult > & results,
             continue;
         }
         if (result.changed) {
-            logger->logLine(path
-                + (check ? QLL(": needs formatting") : QLL(": formatted"))
+            logger->logLine(
+                path
+                    + (check ? QLL(": needs formatting") : QLL(": formatted"))
             );
             code = qMax(code, int(ExitDirty));
         }
@@ -580,11 +585,11 @@ int main(int argc, char *argv[])
     QCommandLineOption gitOption(
         QStringList() << QString(QLL("git")),
         QString(QLL("Formats only the lines that the git <range> changed, in each "
-            "source file it changed: two revisions in one argument (\"HEAD~ HEAD\"), "
-            "or any range git diff takes (HEAD~...HEAD); a single revision such as "
-            "HEAD~ means HEAD~...HEAD. A <range> that starts with ! names the git "
-            "command instead, such as !diff or \"!diff --cached\", for changes not "
-            "committed yet. Cannot run with -L.")),
+        "source file it changed: two revisions in one argument (\"HEAD~ HEAD\"), "
+        "or any range git diff takes (HEAD~...HEAD); a single revision such as "
+        "HEAD~ means HEAD~...HEAD. A <range> that starts with ! names the git "
+        "command instead, such as !diff or \"!diff --cached\", for changes not "
+        "committed yet. Cannot run with -L.")),
         QString(QLL("range"))
     );
     parser.addOption(gitOption);
@@ -734,8 +739,10 @@ int main(int argc, char *argv[])
     if (parser.isSet(listRulesOption)) {
         const QList<const FormatRule * > all = formatter.rules();
         for (int i = 0; i < all.size(); ++i) {
-            logger.logLine(QString::fromLatin1(all.at(i)->name()) + QLatin1Char('\t')
-                           + all.at(i)->summary());
+            logger.logLine(
+                QString::fromLatin1(all.at(i)->name()) + QLatin1Char('\t')
+                    + all.at(i)->summary()
+            );
         }
         return ExitClean;
     }
@@ -809,8 +816,7 @@ int main(int argc, char *argv[])
     if (( ! config.file.isEmpty() && ! configCheck.readFile(
             config.file,
             &error
-        ))
-        || ! FormatSettings::readConfig(&configCheck, config, &error)
+        )) || ! FormatSettings::readConfig(&configCheck, config, &error)
     ) {
         logger.logError(error);
         return ExitError;
@@ -991,7 +997,8 @@ int main(int argc, char *argv[])
         bool ok = false;
         options.jobs = parser.value(jobsOption).toInt(&ok);
         if ( ! ok || options.jobs < 1) {
-            logger.logError(QString(QLL("not a job count: %1")).arg(parser.value(jobsOption)));
+            logger
+                .logError(QString(QLL("not a job count: %1")).arg(parser.value(jobsOption)));
             return ExitError;
         }
     }
@@ -1085,8 +1092,9 @@ int main(int argc, char *argv[])
             before << readFile(asked.at(i));
         }
         output.flush();
-        console.page(requests
-            + QLL("#: Handle every request above, then type q.\n")
+        console.page(
+            requests
+                + QLL("#: Handle every request above, then type q.\n")
         );
         answered = true;
         QStringList changed;

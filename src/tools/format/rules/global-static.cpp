@@ -23,7 +23,8 @@
 void FormatGlobalStaticRule::run(FormatDocument *document) const
 {
     for (int i = 0; i + 2 < document->symbols().size(); ++i) {
-        if (document->token(i) != STATIC || document->scopeOf(i) == FormatDocument::ClassScope
+        if (document->token(i) != STATIC
+            || document->scopeOf(i) == FormatDocument::ClassScope
             || document->isDirectiveLine(document->symbolLine(i))
         ) {
             continue;
@@ -34,8 +35,10 @@ void FormatGlobalStaticRule::run(FormatDocument *document) const
         ) {
             ++k;
         }
-        if (document->token(k) != IDENTIFIER || ! document->lexem(k).startsWith('Q')
-            || document->lexem(k).size() < 2 || ! QChar::isUpper(document->lexem(k).at(1))
+        if (document->token(k) != IDENTIFIER
+            || ! document->lexem(k).startsWith('Q')
+            || document->lexem(k).size() < 2
+            || ! QChar::isUpper(document->lexem(k).at(1))
         ) {
             continue;
         }

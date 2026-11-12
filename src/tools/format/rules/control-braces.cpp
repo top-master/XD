@@ -48,7 +48,11 @@ void FormatControlBracesRule::run(FormatDocument *document) const
             continue;
         }
         const Token token = document->token(body);
-        if (token == IF || token == FOR || token == WHILE || token == DO || token == SWITCH
+        if (token == IF
+            || token == FOR
+            || token == WHILE
+            || token == DO
+            || token == SWITCH
             || token == TRY
         ) {
             document->report(document->symbols().at(i).from, "control-braces",
@@ -180,7 +184,8 @@ void FormatControlBracesRule::brace(
         }
 
         // Moves the body to a line of its own, and closes it on the next.
-        const QByteArray indent = document->indentOf(document->symbolLine(keyword));
+        const QByteArray indent =
+            document->indentOf(document->symbolLine(keyword));
         const int from = document->symbolEnd(head);
         document->replace(
             from, document->symbols().at(body).from - from,
@@ -200,8 +205,7 @@ void FormatControlBracesRule::brace(
         && ! document->hasCommentBetween(
             document->symbolEnd(end),
             document->symbols().at(end + 1).from
-        )
-        && ! document->spansDirective(
+        ) && ! document->spansDirective(
             document->symbolEnd(end),
             document->symbols().at(end + 1).from
         );

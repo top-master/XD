@@ -105,9 +105,9 @@ void FormatArgsWrapRule::run(FormatDocument *document) const
             indent += 4;
         }
         FormatExpressionLayout layout(document, &conditions, indent);
-        const int column = textWidth(document->text().mid(lineStart, from
-            - lineStart
-        ));
+        const int column = textWidth(
+            document->text().mid(lineStart, from - lineStart)
+        );
 
         // Tells whether the list asks for a layout: it does not fit, and may
         // break, or its lines sit at other indents than its brackets give
@@ -149,8 +149,8 @@ void FormatArgsWrapRule::run(FormatDocument *document) const
                 from,
                 "args-wrap",
                 QString(QLL("the tool put each argument on a line of its own; "
-                    "put the arguments that belong together on one "
-                    "line, each line within %1 columns")).arg(wrapMax),
+                "put the arguments that belong together on one "
+                "line, each line within %1 columns")).arg(wrapMax),
                 closeLine - line + 1,
                 wrapMax
             );

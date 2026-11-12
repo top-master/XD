@@ -244,8 +244,8 @@ bool findTernary(const FormatDocument *document, int first, int last,
     for (int k = first; k <= last; ++k) {
         const Token token = document->token(k);
         if ((token == LPAREN
-            || token == LBRACK
-            || token == LBRACE)
+                || token == LBRACK
+                || token == LBRACE)
             && document->match(k) > k
         ) {
             k = document->match(k);
@@ -281,7 +281,10 @@ static int templateClose(const FormatDocument *document, int angle, int end)
     int depth = 0;
     for (int i = angle; i < end; ++i) {
         const Token token = document->token(i);
-        if (token == LPAREN || token == ANDAND || token == OROR || token == QUESTION
+        if (token == LPAREN
+            || token == ANDAND
+            || token == OROR
+            || token == QUESTION
             || token == SEMIC
         ) {
             return -1;
@@ -324,7 +327,9 @@ QList<int > loosestOperators(
         if (token == LBRACE) {
             return QList<int >();
         }
-        if ((token == LPAREN || token == LBRACK) && document->match(k) > k) {
+        if ((token == LPAREN || token == LBRACK)
+            && document->match(k) > k
+        ) {
             k = document->match(k);
             continue;
         }
@@ -408,21 +413,25 @@ static int comparisonRank(Token token)
     loosest comparison operators (see loosestOperators()), each such line
     @a step columns past @a indent.
 */
-QList<QByteArray > comparisonLines(const FormatDocument *document, int first,
-                                   int last, int column, int indent, int step)
+QList<QByteArray > comparisonLines(
+        const FormatDocument *document, int first,
+        int last, int column, int indent, int step)
 {
     const QByteArray text = sourceText(document, first, last);
     const QList<int > operators = loosestOperators(
         document, first, last, &comparisonRank, 0, Q_NULLPTR
     );
-    if (column + textWidth(text) <= document->settings().wrapMax || operators.isEmpty()) {
+    if (column + textWidth(text) <= document->settings().wrapMax
+        || operators.isEmpty()
+    ) {
         return QList<QByteArray >() << text;
     }
     const QByteArray pad(indent + step, ' ');
     QList<QByteArray > lines;
     lines << sourceText(document, first, operators.first() - 1);
     for (int k = 0; k < operators.size(); ++k) {
-        const int end = k + 1 < operators.size() ? operators.at(k + 1) - 1 : last;
+        const int end = k + 1 < operators.size()
+            ? operators.at(k + 1) - 1 : last;
         lines << pad + sourceText(document, operators.at(k), end);
     }
     return lines;

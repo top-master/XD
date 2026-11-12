@@ -255,7 +255,8 @@ void FormatContinuationIndentRule::run(FormatDocument *document) const
         }
         const QByteArray current = document->indentOf(line);
         if (current != indent) {
-            document->replace(document->lineStart(line), current.size(), indent);
+            document
+                ->replace(document->lineStart(line), current.size(), indent);
         }
     }
 }

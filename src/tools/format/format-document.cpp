@@ -59,8 +59,12 @@ void FormatDocument::analyze()
     int previousCodeLine = 0;
     for (int i = 0; i < all.size(); ++i) {
         const Symbol & symbol = all.at(i);
-        if (symbol.len <= 0 || symbol.token == WHITESPACE || symbol.token == PP_WHITESPACE
-            || symbol.token == NOTOKEN || symbol.token == PP_NEWLINE || symbol.token == NEWLINE
+        if (symbol.len <= 0
+            || symbol.token == WHITESPACE
+            || symbol.token == PP_WHITESPACE
+            || symbol.token == NOTOKEN
+            || symbol.token == PP_NEWLINE
+            || symbol.token == NEWLINE
         ) {
             continue;
         }
@@ -278,7 +282,10 @@ FormatDocument::Scope FormatDocument::classifyBrace(
     }
     if (last == RPAREN && this->match(index - 1) >= 0) {
         const Token keyword = this->token(this->match(index - 1) - 1);
-        if (keyword == IF || keyword == FOR || keyword == WHILE || keyword == SWITCH
+        if (keyword == IF
+            || keyword == FOR
+            || keyword == WHILE
+            || keyword == SWITCH
             || keyword == CATCH
         ) {
             return BlockScope;
@@ -915,7 +922,8 @@ QStringList FormatDocument::quotedIncludes() const
         QString(QLL("^\\s*#\\s*include\\s*\"([^\"]+)\"")),
         QRegularExpression::MultilineOption
     );
-    QRegularExpressionMatchIterator found = include.globalMatch(QString::fromUtf8(this->m_text));
+    QRegularExpressionMatchIterator found =
+        include.globalMatch(QString::fromUtf8(this->m_text));
     while (found.hasNext()) {
         names << found.next().captured(1);
     }

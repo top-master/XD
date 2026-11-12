@@ -152,7 +152,8 @@ Config::Schema FormatSettings::schema()
                              true
                          ),
                      QString::fromLatin1(defaultWrapChainAtText));
-    structure.addFollower(QString(QLL("wrapArgsAt")), QString(QLL("wrapChainAt")));
+    structure
+        .addFollower(QString(QLL("wrapArgsAt")), QString(QLL("wrapChainAt")));
     structure.addKey(QString(QLL("wrapArgsOver")),
                      Config::Matchers() << Config::Numbers::create(
                          1,
@@ -210,8 +211,14 @@ static void compileCondition(const QString & text, QStringList *program,
 {
     QString error;
     QStringList compiled;
-    if ( ! Config::Condition::compile(text, FormatScopeConditions::names(),
-                                     &compiled, &error, takesPercents)) {
+    if ( ! Config::Condition::compile(
+            text,
+            FormatScopeConditions::names(),
+            &compiled,
+            &error,
+            takesPercents
+        )
+    ) {
         qWarning("Invalid format condition: %s", qPrintable(error));
         return;
     }
@@ -307,10 +314,14 @@ bool FormatSettings::load(const QString & path, const FormatConfig & config,
         .toInt();
     settings->commentWrapBegin
         = Config::Numbers::parse(parser.value(QString(QLL("comments.wrapBegin"))));
-    settings->commentWrapMax = parser.value(QString(QLL("comments.wrapMax"))).toInt();
+    settings->commentWrapMax = parser
+        .value(QString(QLL("comments.wrapMax")))
+        .toInt();
     settings->wrapExtendsForKeywords
         = parser.value(QString(QLL("comments.wrapExtendsForKeywords"))).toInt();
-    settings->wrapEmptyLimit = parser.value(QString(QLL("comments.wrapEmptyLimit"))).toInt();
+    settings->wrapEmptyLimit = parser
+        .value(QString(QLL("comments.wrapEmptyLimit")))
+        .toInt();
     settings->wrapComma = parser.value(QString(QLL("comments.wrapComma"))) == QLL("hard")
         ? WrapCommaHard : WrapCommaSoft;
     settings->commentTarget = parser.value(QString(QLL("comments.target"))) == QLL("any")

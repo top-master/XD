@@ -28,7 +28,8 @@ void FormatExcludesRule::run(FormatDocument *document) const
         }
         int k = i + 1;
         while (document->token(k) == IDENTIFIER
-            && (document->token(k + 1) == DOT || document->token(k + 1) == ARROW)
+            && (document->token(k + 1) == DOT
+                || document->token(k + 1) == ARROW)
         ) {
             k += 2;
         }

@@ -57,7 +57,8 @@ void FormatConditionCloseRule::run(FormatDocument *document) const
             );
         } else if (document->indentOf(closeLine) != indent) {
             const int start = document->lineStart(closeLine);
-            document->replace(start, document->indentOf(closeLine).size(), indent);
+            document
+                ->replace(start, document->indentOf(closeLine).size(), indent);
         }
 
         // Puts the `{` right after it.

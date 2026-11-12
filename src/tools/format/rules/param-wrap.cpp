@@ -54,8 +54,7 @@ void FormatParamWrapRule::run(FormatDocument *document) const
                 || document->token(i + 1) == RPAREN || ! this->isDeclarationParen(
                     document,
                     i
-                )
-                || document->hasCommentBetween(
+                ) || document->hasCommentBetween(
                     document->symbolEnd(i),
                     document->symbols().at(close).from
                 )
@@ -323,7 +322,8 @@ bool FormatParamWrapRule::isDeclarationParen(
         int paren) const
 {
     const FormatDocument::Scope scope = document->scopeOf(paren);
-    if (scope != FormatDocument::FileScope && scope != FormatDocument::NamespaceScope
+    if (scope != FormatDocument::FileScope
+        && scope != FormatDocument::NamespaceScope
         && scope != FormatDocument::ClassScope
     ) {
         return false;
@@ -342,7 +342,10 @@ bool FormatParamWrapRule::isDeclarationParen(
             isOperator = true;
             break;
         }
-        if (token == SEMIC || token == LBRACE || token == RBRACE || token == COLON
+        if (token == SEMIC
+            || token == LBRACE
+            || token == RBRACE
+            || token == COLON
             || ((token == LPAREN || token == RPAREN) && k < paren - 2)
         ) {
             break;
@@ -396,8 +399,8 @@ QList<QByteArray > FormatParamWrapRule::parameters(
     for (int i = open + 1; i <= close; ++i) {
         const Token token = document->token(i);
         if ((token == LPAREN
-            || token == LBRACK
-            || token == LBRACE)
+                || token == LBRACK
+                || token == LBRACE)
             && i != close
         ) {
             i = qMax(i, document->match(i));
@@ -410,8 +413,10 @@ QList<QByteArray > FormatParamWrapRule::parameters(
         }
         const int start = document->symbols().at(from).from;
         items
-            << document->text().mid(start, document->symbolEnd(i - 1)
-                - start
+            << document->text().mid(
+                start,
+                document->symbolEnd(i - 1)
+                    - start
             );
         from = i + 1;
     }

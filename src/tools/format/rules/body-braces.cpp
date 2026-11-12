@@ -112,7 +112,8 @@ void FormatBodyBracesRule::run(FormatDocument *document) const
             }
         }
 
-        // Moves the later lines in until the shallowest stands at the body's indent.
+        // Moves the later lines in until the shallowest stands at
+        // the body's indent.
         int shallowest = -1;
         for (int l = 0; l < lines.size(); ++l) {
             const QByteArray & line = lines.at(l);

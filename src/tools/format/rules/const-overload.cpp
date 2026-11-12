@@ -39,8 +39,10 @@ void FormatConstOverloadRule::run(FormatDocument *document) const
         const QList<int > tokens = classBodyTokens(document, brace);
         for (int t = 0; t < tokens.size(); ++t) {
             const int i = tokens.at(t);
-            if (document->token(i) != IDENTIFIER || document->token(i + 1) != LPAREN
-                || ! endsType(document->token(i - 1)) || document->match(i + 1) < 0
+            if (document->token(i) != IDENTIFIER
+                || document->token(i + 1) != LPAREN
+                || ! endsType(document->token(i - 1))
+                || document->match(i + 1) < 0
             ) {
                 continue;
             }

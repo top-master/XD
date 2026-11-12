@@ -40,9 +40,9 @@ void FormatConnectLayoutRule::run(FormatDocument *document) const
         // Leaves out a declaration or a definition of such a function.
         const Token before = document->token(i - 1);
         if ((before == SCOPE && endsType(document->token(i - 3))) || (before != SCOPE
-            && before != DOT
-            && before != ARROW
-            && endsType(before))
+                && before != DOT
+                && before != ARROW
+                && endsType(before))
         ) {
             continue;
         }
@@ -51,8 +51,7 @@ void FormatConnectLayoutRule::run(FormatDocument *document) const
         if (close < 0 || document->hasCommentBetween(
                 document->symbols().at(open).from,
                 document->symbols().at(close).from
-            )
-            || document->spansDirective(
+            ) || document->spansDirective(
                 document->symbols().at(open).from,
                 document->symbols().at(close).from
             )
@@ -67,8 +66,8 @@ void FormatConnectLayoutRule::run(FormatDocument *document) const
         for (int k = open + 1; k <= close; ++k) {
             const Token token = document->token(k);
             if ((token == LPAREN
-                || token == LBRACK
-                || token == LBRACE)
+                    || token == LBRACK
+                    || token == LBRACE)
                 && k != close
             ) {
                 k = qMax(k, document->match(k));
@@ -83,8 +82,10 @@ void FormatConnectLayoutRule::run(FormatDocument *document) const
             }
             const int start = document->symbols().at(from).from;
             const int end = document->symbolEnd(k - 1);
-            const QByteArray argument = document->text().mid(start, end
-                - start
+            const QByteArray argument = document->text().mid(
+                start,
+                end
+                    - start
             );
             singleLines = singleLines && ! argument.contains('\n');
             arguments.append(argument);
@@ -98,10 +99,12 @@ void FormatConnectLayoutRule::run(FormatDocument *document) const
 
         // Builds the layout: one line when it fits, else one line per pair.
         const int line = document->symbolLine(open);
-        const int column = QString::fromUtf8(document->text().mid(
-            document->lineStart(line),
-            document->symbolEnd(open) - document->lineStart(line)
-        )).size();
+        const int column = QString::fromUtf8(
+            document->text().mid(
+                document->lineStart(line),
+                document->symbolEnd(open) - document->lineStart(line)
+            )
+        ).size();
         const QByteArray pad(column, ' ');
         const QByteArray rest = document->text().mid(
             document->symbolEnd(close),

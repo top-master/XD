@@ -26,7 +26,7 @@ QList<FormatCommentLine > commentLines(
     if (comment.isLine()) {
         int start = 2;
         while (start < text.size() && (text.at(start) == '/' || text.at(start) == '!'
-            || text.at(start) == '<')
+                || text.at(start) == '<')
             && start < 4
         ) {
             ++start;

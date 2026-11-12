@@ -16,8 +16,8 @@
 #include <QtCore/QStringList>
 
 /*!
-    @class FormatOutlineThisRule
-    @internal
+    \class FormatOutlineThisRule
+    \internal
 
     Reaches the members of a member function's own class, and of its base
     classes, through `this->` where `[Relations] thisMode` asks for it (see
@@ -79,9 +79,11 @@ void FormatOutlineThisRule::run(FormatDocument *document) const
             continue;
         }
         const FormatMemberScope scope = conditions.functionScope(brace);
-        if (scope.className.isEmpty() || scope.isStatic
+        if (scope.className.isEmpty()
+            || scope.isStatic
             || scope.members.statics.contains(document->lexem(scope.memberToken))
-            || (scope.members.names.isEmpty() && scope.baseMembers.isEmpty())
+            || (scope.members.names.isEmpty()
+                && scope.baseMembers.isEmpty())
         ) {
             continue;
         }
@@ -110,8 +112,10 @@ void FormatOutlineThisRule::run(FormatDocument *document) const
                 continue;
             }
             const QByteArray name = document->lexem(i);
-            if (( ! scope.members.names.contains(name) && ! scope.baseMembers.contains(name))
-                || scope.members.statics.contains(name) || shadowed.contains(name)
+            if (( ! scope.members.names.contains(name)
+                    && ! scope.baseMembers.contains(name))
+                || scope.members.statics.contains(name)
+                || shadowed.contains(name)
             ) {
                 continue;
             }
@@ -120,8 +124,8 @@ void FormatOutlineThisRule::run(FormatDocument *document) const
             const bool hasThis = before == ARROW
                 && document->token(i - 2) == THIS;
             if (( ! hasThis
-                && (before == DOT || before == ARROW || before == SCOPE || before == TILDE
-                    || before == GOTO))
+                    && (before == DOT || before == ARROW || before == SCOPE || before == TILDE
+                        || before == GOTO))
                 || after == SCOPE || (after == COLON && before == SEMIC)
                 || isMacroArgument(document, i)
             ) {
@@ -177,8 +181,13 @@ QSet<QByteArray > FormatOutlineThisRule::localNames(
             continue;
         }
         const Token after = document->token(i + 1);
-        if (after != SEMIC && after != EQ && after != COMMA && after != RPAREN && after != LPAREN
-            && after != LBRACK && after != COLON
+        if (after != SEMIC
+            && after != EQ
+            && after != COMMA
+            && after != RPAREN
+            && after != LPAREN
+            && after != LBRACK
+            && after != COLON
         ) {
             continue;
         }

@@ -189,7 +189,8 @@ FormatFileResult FormatRunner::formatFile(const QString & path) const
         || output.write(formatted.text) != formatted.text.size()
         || ! output.commit()
     ) {
-        result.error = QString(QLL("cannot write: %1")).arg(output.errorString());
+        result.error = QString(QLL("cannot write: %1"))
+            .arg(output.errorString());
     }
     return result;
 }

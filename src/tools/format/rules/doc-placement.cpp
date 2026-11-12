@@ -67,8 +67,10 @@ QString FormatDocPlacementRule::headerSource(const QString & path) const
     }
     const char *const sources[] = { "cpp", "cc", "cxx", "c", "mm" };
     for (size_t i = 0; i < sizeof(sources) / sizeof(sources[0]); ++i) {
-        const QString candidate = info.dir().filePath(stem + QLatin1Char('.')
-                                                      + QString::fromLatin1(sources[i]));
+        const QString candidate = info.dir().filePath(
+            stem + QLatin1Char('.')
+                + QString::fromLatin1(sources[i])
+        );
         if (QFileInfo(candidate).isFile()) {
             return candidate;
         }
@@ -138,9 +140,17 @@ void FormatDocPlacementRule::runGroup(
     }
 
     // Reports a comment on a header declaration that its source defines.
-    if (atDeclarationScope && isMember && attached && isDeclaration && ! isField
-        && token != CLASS && token != STRUCT && token != TYPEDEF && token != USING
-        && token != FRIEND && token != ENUM
+    if (atDeclarationScope
+        && isMember
+        && attached
+        && isDeclaration
+        && ! isField
+        && token != CLASS
+        && token != STRUCT
+        && token != TYPEDEF
+        && token != USING
+        && token != FRIEND
+        && token != ENUM
     ) {
         const QString source = this->headerSource(document->path());
         if ( ! source.isEmpty()) {

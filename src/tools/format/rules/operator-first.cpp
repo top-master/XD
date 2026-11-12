@@ -27,7 +27,9 @@ static bool isTernaryColon(const FormatDocument *document, int index)
 {
     for (int k = index - 1; k >= 0; --k) {
         const Token token = document->token(k);
-        if ((token == RPAREN || token == RBRACK) && document->match(k) >= 0) {
+        if ((token == RPAREN || token == RBRACK)
+            && document->match(k) >= 0
+        ) {
             k = document->match(k);
             continue;
         }
@@ -71,7 +73,10 @@ static bool joinsClosingLine(FormatDocument *document, int index)
         || document->isDirectiveLine(line)
         || document->isDirectiveLine(line - 1)
         || ! isClosingLine(document->lineText(line - 1))
-        || document->hasCommentBetween(document->symbolEnd(before), document->lineEnd(line))
+        || document->hasCommentBetween(
+            document->symbolEnd(before),
+            document->lineEnd(line)
+        )
     ) {
         return false;
     }
@@ -84,7 +89,10 @@ static bool joinsClosingLine(FormatDocument *document, int index)
     }
     if (closer == RPAREN && open > 0) {
         const Token keyword = document->token(open - 1);
-        if (keyword == IF || keyword == WHILE || keyword == FOR || keyword == SWITCH
+        if (keyword == IF
+            || keyword == WHILE
+            || keyword == FOR
+            || keyword == SWITCH
             || keyword == CATCH
         ) {
             return false;
@@ -96,7 +104,10 @@ static bool joinsClosingLine(FormatDocument *document, int index)
     const QByteArray text = document->lineText(line).trimmed();
     const int previousStart = document->lineStart(line - 1);
     const int previousEnd = document->symbolEnd(before);
-    const QByteArray joined = document->text().mid(previousStart, previousEnd - previousStart)
+    const QByteArray joined = document->text().mid(
+        previousStart,
+        previousEnd - previousStart
+    )
         + space + text;
     if (textWidth(joined) > document->settings().wrapMax) {
         return false;
@@ -105,7 +116,9 @@ static bool joinsClosingLine(FormatDocument *document, int index)
     const int lineEnd = document->lineEnd(line);
     const bool hasNewline = lineEnd < document->text().size();
     return document->replace(
-        previousEnd, from - previousEnd, space + text + (hasNewline ? "\n" : ""),
+        previousEnd,
+        from - previousEnd,
+        space + text + (hasNewline ? "\n" : ""),
         from, lineEnd - from + (hasNewline ? 1 : 0), QByteArray()
     );
 }
@@ -123,8 +136,14 @@ void FormatOperatorFirstRule::run(FormatDocument *document) const
         if (joinsClosingLine(document, i)) {
             continue;
         }
-        if (token != ANDAND && token != OROR && token != LTLT && token != PLUS && token != MINUS
-            && token != OR && token != HAT && token != QUESTION
+        if (token != ANDAND
+            && token != OROR
+            && token != LTLT
+            && token != PLUS
+            && token != MINUS
+            && token != OR
+            && token != HAT
+            && token != QUESTION
         ) {
             continue;
         }

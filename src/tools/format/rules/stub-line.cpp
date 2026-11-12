@@ -37,10 +37,18 @@ void FormatStubLineRule::runGroup(
     for (int i = 1; i < lines.size(); ++i) {
         const QByteArray & text = lines.at(i).text;
         const QByteArray & above = lines.at(i - 1).text;
-        if (fenced.at(i) || text.isEmpty() || above.isEmpty() || above.startsWith('\\')
-            || text.startsWith('*') || text.startsWith('-') || text.startsWith('\\')
-            || text.startsWith('@') || above.endsWith(':')
-            || (text.size() > 1 && QChar::isDigit(uchar(text.at(0))) && text.at(1) == '.')
+        if (fenced.at(i)
+            || text.isEmpty()
+            || above.isEmpty()
+            || above.startsWith('\\')
+            || text.startsWith('*')
+            || text.startsWith('-')
+            || text.startsWith('\\')
+            || text.startsWith('@')
+            || above.endsWith(':')
+            || (text.size() > 1
+                && QChar::isDigit(uchar(text.at(0)))
+                && text.at(1) == '.')
         ) {
             continue;
         }
