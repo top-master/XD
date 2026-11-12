@@ -620,14 +620,11 @@ bool Config::Condition::evaluate(
             const QString name = item.mid(2);
             if (name == QLL("true")) {
                 stack << Operand(1);
-            }
-            else if (name == QLL("false")) {
+            } else if (name == QLL("false")) {
                 stack << Operand(0);
-            }
-            else if (normalized.contains(name)) {
+            } else if (normalized.contains(name)) {
                 stack << Operand(normalized.value(name));
-            }
-            else if (name == QLL("value")
+            } else if (name == QLL("value")
                 || name == QLL("spaceremaining")
             ) {
                 if (ok) {
@@ -655,7 +652,9 @@ bool Config::Condition::evaluate(
         } else if (item.startsWith(QLL("op:"))) {
             const QString op = item.mid(3);
             if (stack.isEmpty()) {
-                if (ok) *ok = false;
+                if (ok) {
+                    *ok = false;
+                }
                 return false;
             }
             Operand right = stack.takeLast();
@@ -679,7 +678,9 @@ bool Config::Condition::evaluate(
                 continue;
             }
             if (stack.isEmpty()) {
-                if (ok) *ok = false;
+                if (ok) {
+                    *ok = false;
+                }
                 return false;
             }
             Operand left = stack.takeLast();
@@ -707,45 +708,41 @@ bool Config::Condition::evaluate(
                     );
             } else if (op == QLL("+")) {
                 stack << Operand(left.number + right.number);
-            }
-            else if (op == QLL("-")) {
+            } else if (op == QLL("-")) {
                 stack << Operand(left.number - right.number);
-            }
-            else if (op == QLL("*")) {
+            } else if (op == QLL("*")) {
                 stack << Operand(left.number * right.number);
-            }
-            else if (op == QLL("/") && right.number != 0) {
+            } else if (op == QLL("/") && right.number != 0) {
                 stack << Operand(left.number / right.number);
-            }
-            else if (op == QLL("<")) {
+            } else if (op == QLL("<")) {
                 stack << Operand(left.number < right.number);
-            }
-            else if (op == QLL("<=")) {
+            } else if (op == QLL("<=")) {
                 stack << Operand(left.number <= right.number);
-            }
-            else if (op == QLL(">")) {
+            } else if (op == QLL(">")) {
                 stack << Operand(left.number > right.number);
-            }
-            else if (op == QLL(">=")) {
+            } else if (op == QLL(">=")) {
                 stack << Operand(left.number >= right.number);
-            }
-            else if (op == QLL("==")) {
+            } else if (op == QLL("==")) {
                 stack << Operand(left.number == right.number);
-            }
-            else if (op == QLL("!=")) {
+            } else if (op == QLL("!=")) {
                 stack << Operand(left.number != right.number);
-            }
-            else {
-                if (ok) *ok = false;
+            } else {
+                if (ok) {
+                    *ok = false;
+                }
                 return false;
             }
         } else {
-            if (ok) *ok = false;
+            if (ok) {
+                *ok = false;
+            }
             return false;
         }
     }
     if (stack.size() != 1) {
-        if (ok) *ok = false;
+        if (ok) {
+            *ok = false;
+        }
         return false;
     }
     if (stack.first().percent) {

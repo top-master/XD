@@ -21,7 +21,7 @@ public:
 private:
     int bodyStart(const FormatDocument *document, int keyword) const;
     void brace(FormatDocument *document, int keyword, int head, int body) const;
-    void unfold(FormatDocument *document, int keyword, int brace) const;
+    bool unfold(FormatDocument *document, int keyword, int brace) const;
 };
 
 #endif // RULES_CONTROL_BRACES_H

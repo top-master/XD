@@ -570,6 +570,40 @@ QByteArray FormatExpressionLayout::layoutChain(
         const QList<int > & operators, int column,
         int trailing)
 {
+    // Keep an early first operator with the call it introduces. Its argument
+    // list may break even when the usual argument thresholds do not ask for
+    // it, provided the call head itself fits on the line.
+    const int firstOperator = operators.first();
+    const int firstOperandLast = operators.size() > 1
+        ? operators.at(1) - 1 : last;
+    const int callOpen = m_document->match(firstOperandLast);
+    if ( ! isMemberAccess(m_document->token(firstOperator))
+        && m_document->symbolLine(firstOperator) == m_document->symbolLine(first)
+        && column + textWidth(this->oneLine(first, firstOperator - 1)) + 1 < m_wrap
+        && m_document->token(firstOperandLast) == RPAREN
+        && callOpen > firstOperator + 1 && this->isListOpen(callOpen)
+        && callOpen + 1 < firstOperandLast
+        && column + textWidth(this->oneLine(first, callOpen)) <= m_wrapMax
+        && ! this->fits(
+            column, this->oneLine(first, firstOperandLast),
+            operators.size() == 1 ? trailing : 0
+        )
+    ) {
+        const QByteArray head = this->layoutList(
+            first, callOpen, firstOperandLast, column
+        );
+        if (operators.size() == 1) {
+            return head;
+        }
+        return head + this->layoutChainRest(
+            first, last, operators.mid(1), column, trailing,
+            false,
+            this->chainStepsIn(first, firstOperandLast, head),
+            false,
+            head
+        );
+    }
+
     // Keeps a chain of one operator on its line up to the `(` of its right
     // operand, when that operand is a parenthesized group, and the user did
     // not break the chain.

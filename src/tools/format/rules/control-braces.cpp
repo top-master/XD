@@ -33,12 +33,26 @@ void FormatControlBracesRule::run(FormatDocument *document) const
         if (document->isDirectiveLine(document->symbolLine(i))) {
             continue;
         }
+        if (document->token(i) == ELSE && document->token(i - 1) == RBRACE
+            && document->symbolEndLine(i - 1) < document->symbolLine(i)
+            && ! document->hasCommentBetween(
+                document->symbolEnd(i - 1), document->symbols().at(i).from
+            ) && ! document->spansDirective(
+                document->symbolEnd(i - 1), document->symbols().at(i).from
+            )
+        ) {
+            const int from = document->symbolEnd(i - 1);
+            document->replace(from, document->symbols().at(i).from - from, " ");
+        }
         const int body = this->bodyStart(document, i);
         if (body >= 0
             && document->token(body) == LBRACE
             && ! document->isHeader()
         ) {
-            this->unfold(document, i, body);
+            if (this->unfold(document, i, body)) {
+                // Its children need the indentation the next pass sees.
+                i = document->match(body);
+            }
             continue;
         }
         if (body < 0
@@ -72,7 +86,7 @@ void FormatControlBracesRule::run(FormatDocument *document) const
     and so does one that a directive splits, or that has a brace or a
     comment of its own.
 */
-void FormatControlBracesRule::unfold(
+bool FormatControlBracesRule::unfold(
         FormatDocument *document, int keyword,
         int brace) const
 {
@@ -85,17 +99,17 @@ void FormatControlBracesRule::unfold(
             document->symbols().at(close).from
         )
     ) {
-        return;
+        return false;
     }
     for (int k = brace + 1; k < close; ++k) {
         if (document->token(k) == LBRACE) {
-            return;
+            return false;
         }
     }
     const QByteArray indent = document->indentOf(line);
     const int from = document->symbolEnd(brace);
     const int last = document->symbolEnd(close - 1);
-    document->replace(
+    return document->replace(
         from, document->symbols().at(brace + 1).from - from,
         "\n" + continuationPad(indent.size()),
         last, document->symbols().at(close).from - last, "\n" + indent
@@ -172,7 +186,11 @@ void FormatControlBracesRule::brace(
     const bool followedOnLine = end + 1 < document->symbols().size()
         && document->symbolLine(end + 1) == endLine;
     if (document->symbolLine(body) == headLine) {
-        if (followedOnLine && after != ELSE && after != WHILE) {
+        if (followedOnLine && after != ELSE && after != WHILE
+            && (document->isHeader() || document->hasCommentBetween(
+                document->symbolEnd(end), document->symbols().at(end + 1).from
+            ))
+        ) {
             return;
         }
         if (document->isHeader()) {
@@ -187,10 +205,18 @@ void FormatControlBracesRule::brace(
         const QByteArray indent =
             document->indentOf(document->symbolLine(keyword));
         const int from = document->symbolEnd(head);
+        const int endFrom = document->symbolEnd(end);
+        const bool movesNext = followedOnLine
+            && after != ELSE
+            && after != WHILE;
+        const int endLength = movesNext
+            ? document->symbols().at(end + 1).from - endFrom : 0;
+        const QByteArray endText = "\n" + indent + "}"
+            + (movesNext ? "\n" + indent : QByteArray());
         document->replace(
             from, document->symbols().at(body).from - from,
             " {\n" + continuationPad(indent.size()),
-            document->symbolEnd(end), 0, "\n" + indent + "}"
+            endFrom, endLength, endText
         );
         return;
     }

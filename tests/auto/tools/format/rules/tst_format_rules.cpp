@@ -3012,6 +3012,11 @@ void tst_FormatRules::testFixtures_shouldMatchAfter()
         || name == QLL("member-chain-ternary.cpp")
         || name == QLL("short-call-adjacent-literals.cpp")
         || name == QLL("ternary-priority.cpp")
+        || name == QLL("operator-wrap-first-call.cpp")
+        || name == QLL("operator-wrap-first-call-condition.cpp")
+        || name == QLL("control-braces-joined-else.cpp")
+        || name == QLL("control-braces-nested-inline.cpp")
+        || name == QLL("control-braces-ten-inner.cpp")
     ) {
         const FormatResult again = qMove(formatter.format(
             result.text, path, lineSpecs, config
