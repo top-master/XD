@@ -125,9 +125,11 @@ void FormatArgsWrapRule::run(FormatDocument *document) const
         }
         const bool argumentsBelow =
             document->symbolLine(arguments.first().first) > line;
-        const bool mayBreak = isBrace || (endsInChain && ( ! isSplit || argumentsBelow))
-            || arguments.size() > document->settings().wrapArgsOver
-            || reachesWrapArgsAt(document, &conditions, i);
+        const bool over = conditions.argsOver(i, arguments.size());
+        const bool mayBreak = document->settings().wrapArgsOverCondition.isEmpty()
+            ? isBrace || (endsInChain && ( ! isSplit || argumentsBelow))
+                || over || reachesWrapArgsAt(document, &conditions, i)
+            : over;
         const bool needsBreak = mayBreak && column + textWidth(oneLine) > wrap;
         const int closeLine = document->symbolLine(close);
         const bool isMisplaced = hasMisplacedLines(

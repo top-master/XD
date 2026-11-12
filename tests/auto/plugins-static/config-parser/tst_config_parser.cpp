@@ -81,6 +81,7 @@ private slots:
     void testCondition_shouldRejectBadPercent_data();
     void testCondition_shouldRejectBadPercent();
     void testCondition_shouldWarnWithoutPercent();
+    void testCondition_shouldEvaluateExpressions();
 
 private:
     void write(const QString & relative,
@@ -905,6 +906,81 @@ void tst_ConfigParser::testCondition_shouldWarnWithoutPercent()
     ))->toBeTruthy();
     qExpect(Config::Condition::evaluate(program, holding, &ok))->toBeFalsy();
     qExpect(ok)->toBeTruthy();
+}
+
+namespace {
+class TestArgumentContext : public Config::Condition::Context
+{
+    typedef Config::Condition::Context super;
+public:
+    qreal argumentCount(int depth, int argument) const Q_DECL_OVERRIDE
+    { return depth == -2 && argument == 3 ? 7 : -1; }
+};
+}
+
+void tst_ConfigParser::testCondition_shouldEvaluateExpressions()
+{
+    const QStringList names = QStringList() << QString(QLL("is-signature"));
+    QStringList program;
+    QString error;
+    const QString expression = QString(QLL(
+        "argCount(-2, 3) - 1 == value && (space_remaining <= 18.75% || is_signature)"
+    ));
+    QVERIFY2(Config::Condition::compile(
+        expression,
+        names,
+        &program,
+        &error,
+        true
+    ), qPrintable(error));
+    TestArgumentContext context;
+    QHash<QString, qreal > values;
+    values.insert(QString(QLL("value")), 6);
+    values.insert(QString(QLL("spaceRemaining")), 18.75);
+    bool ok = false;
+    QVERIFY(Config::Condition::evaluate(
+        program,
+        QSet<QString >(),
+        values,
+        &context,
+        &ok
+    ));
+    QVERIFY(ok);
+    values.insert(QString(QLL("space_remaining")), 19);
+    values.remove(QString(QLL("spaceRemaining")));
+    QVERIFY( ! Config::Condition::evaluate(
+        program,
+        QSet<QString >(),
+        values,
+        &context,
+        &ok
+    ));
+    QVERIFY(ok);
+    QVERIFY(Config::Condition::evaluate(
+        program,
+        QSet<QString >() << QString(QLL("is-signature")),
+        values,
+        &context,
+        &ok
+    ));
+    QVERIFY( ! Config::Condition::compile(
+        QString(QLL("space-remaining < 20%")), names, &program, &error, true
+    ));
+    QVERIFY(Config::Condition::compile(
+        QString(QLL("is-signature-1 == 0")), names, &program, &error, true
+    ));
+    QVERIFY(Config::Condition::evaluate(
+        program,
+        QSet<QString >() << QString(QLL("is-signature")),
+        values,
+        &context,
+        &ok
+    ));
+    QVERIFY( ! Config::Condition::compile(
+        QString(QLL("odd-name")),
+        names + (QStringList() << QString(QLL("odd-name"))),
+        &program, &error, true
+    ));
 }
 
 QTEST_APPLESS_MAIN(tst_ConfigParser)

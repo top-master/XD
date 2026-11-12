@@ -103,7 +103,8 @@ void FormatTernaryWrapRule::run(FormatDocument *document) const
         }
 
         // Breaks the line before the `?` too, when it does not fit.
-        const QByteArray originalHead = sourceText(document, first, question - 1);
+        const QByteArray originalHead =
+            sourceText(document, first, question - 1);
         const QList<QByteArray > head = lines.first() == originalHead
             ? layout.layoutHead(first, question - 1, indent)
             : QList<QByteArray >() << lines.first();

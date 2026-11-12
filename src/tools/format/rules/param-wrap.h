@@ -32,7 +32,6 @@ private:
             const QByteArray & suffix, bool breaksAfterOpen,
             const QByteArray & breakPad, int limit,
             bool *fits) const;
-    bool isDeclarationParen(const FormatDocument *document, int paren) const;
     QList<QByteArray > parameters(
             const FormatDocument *document, int open,
             int close) const;

@@ -90,6 +90,7 @@ private slots:
     void testThisMode_shouldReachMembersInBlocks();
     void testScopeConditions_shouldNameScopeOfToken();
     void testScopeConditions_shouldFallBackWithoutPercent();
+    void testScopeConditions_shouldEvaluateArgumentExpressions();
     void testArgsWrap_shouldFollowSettings_data();
     void testArgsWrap_shouldFollowSettings();
     void testDocTagSign_shouldPickSign_data();
@@ -2621,6 +2622,107 @@ void tst_FormatRules::testScopeConditions_shouldFallBackWithoutPercent()
     qExpect(conditions.holds(program, token, 30, fallback))->toBeFalsy();
 }
 
+void tst_FormatRules::testScopeConditions_shouldEvaluateArgumentExpressions()
+{
+    FormatDocument document(
+        "void declareThing(int first, int second, int third, int fourth);\n"
+        "void work() { outer(inner(one, nested(x, y)), second(empty(), last(1, 2, 3)), plain, fourth); }\n",
+        QString(QLL("sample.cpp"))
+    );
+    const int outer = symbolIndex(document, "outer") + 1;
+    const int inner = symbolIndex(document, "inner") + 1;
+    const int declaration = symbolIndex(document, "declareThing") + 1;
+    FormatScopeConditions conditions(&document);
+    QCOMPARE(conditions.argumentCount(outer, 0), 4);
+    QCOMPARE(conditions.argumentCount(inner, -1), 4);
+    QCOMPARE(conditions.argumentCount(inner, -2), -1);
+    QCOMPARE(conditions.argumentCount(outer, 1, 1), 2);
+    QCOMPARE(conditions.argumentCount(outer, 1, 2), 2);
+    QCOMPARE(conditions.argumentCount(outer, 1, 0), 4);
+    QCOMPARE(conditions.argumentCount(outer, 2, 0), 5);
+    QCOMPARE(conditions.argumentCount(outer, 3, 0), -1);
+    const FormatDocument deepDocument(
+        "void sample() { root(one, two, third(child(grand(last(1, 2))))); }\n",
+        QString(QLL("deep.cpp"))
+    );
+    FormatScopeConditions deep(&deepDocument);
+    const int root = symbolIndex(deepDocument, "root") + 1;
+    const int last = symbolIndex(deepDocument, "last") + 1;
+    QCOMPARE(deep.argumentCount(root, 1, 3), 1);
+    QCOMPARE(deep.argumentCount(root, 4, 3), 2);
+    QCOMPARE(deep.argumentCount(root, 5, 3), -1);
+    QCOMPARE(deep.argumentCount(last, -4), 3);
+    QCOMPARE(deep.argumentCount(last, -5), -1);
+    QVERIFY(conditions.holding(declaration).contains(QString(QLL("is-signature"))));
+    QVERIFY( ! conditions.holding(outer).contains(QString(QLL("is-signature"))));
+
+    FormatSettings settings;
+    QString error;
+    QVERIFY(Config::Condition::compile(
+        QString(QLL("argCount(0) > 3 && (space_remaining <= 18.75% || is_signature)")),
+        FormatScopeConditions::names(),
+        &settings.wrapArgsOverCondition,
+        &error,
+        true
+    ));
+    document.setSettings(settings);
+    QVERIFY(conditions.argsOver(outer, 4, 18.75));
+    QVERIFY(conditions.argsOver(outer, 4, -2));
+    QVERIFY( ! conditions.argsOver(outer, 4, 18.76));
+    QVERIFY( ! conditions.argsOver(inner, 2, 10));
+    QVERIFY(conditions.argsOver(declaration, 4, 90));
+    QVERIFY(Config::Condition::compile(
+        QString(QLL("argCount(-1) == 4 && argCount(1, 2) - 1 == 1")),
+        FormatScopeConditions::names(),
+        &settings.wrapArgsOverCondition,
+        &error,
+        true
+    ));
+    document.setSettings(settings);
+    QVERIFY(conditions.argsOver(inner, 2, 0));
+    QVERIFY(conditions.holds(settings.wrapArgsOverCondition, inner));
+    QCOMPARE(conditions.argumentCount(
+        symbolIndex(document, "empty") + 1,
+        0
+    ), 0);
+    QCOMPARE(conditions.argumentCount(outer, 1, 3), -1);
+    const int definition = symbolIndex(document, "work") + 1;
+    QVERIFY(conditions.holding(definition).contains(QString(QLL("is-signature"))));
+    QVERIFY(Config::Condition::compile(
+        QString(QLL("value - 1 == 3 && isSignature")),
+        FormatScopeConditions::names(),
+        &settings.wrapArgsOverCondition,
+        &error,
+        true
+    ));
+    document.setSettings(settings);
+    QVERIFY(conditions.argsOver(declaration, 4, 70));
+    QVERIFY(Config::Condition::compile(
+        QString(QLL("argCount(0) > 3 && 40%")),
+        FormatScopeConditions::names(),
+        &settings.wrapArgsOverCondition,
+        &error,
+        true
+    ));
+    const QStringList fallback = QStringList() << QString(QLL("never"));
+    QVERIFY( ! conditions.holds(
+        settings.wrapArgsOverCondition,
+        outer,
+        40,
+        fallback
+    ));
+    QVERIFY(conditions.holds(
+        settings.wrapArgsOverCondition,
+        outer,
+        41,
+        fallback
+    ));
+    QVERIFY( ! Config::Condition::compile(
+        QString(QLL("space-remaining < 20%")), FormatScopeConditions::names(),
+        &settings.wrapArgsOverCondition, &error, true
+    ));
+}
+
 /// Builds a function body that calls `run` with two arguments over two
 /// lines, the `(` at the column after `prefix`; on one line, the call would
 /// pass the wrap column.
@@ -2665,6 +2767,12 @@ void tst_FormatRules::testArgsWrap_shouldFollowSettings_data()
         << argsWrapFile(total) << argsWrapFile(total);
     QTest::newRow("every column") << QString(QLL("0%")) << QString(QLL("a.h"))
         << argsWrapFile(near) << argsWrapBroken(near);
+    QTest::newRow("argument query with a passed percent")
+        << QString(QLL("argCount(0) == 2 && 10%")) << QString(QLL("a.cpp"))
+        << argsWrapFile(near) << argsWrapBroken(near);
+    QTest::newRow("argument query with an unpassed percent")
+        << QString(QLL("argCount(0) == 2 && 20%")) << QString(QLL("a.cpp"))
+        << argsWrapFile(near) << argsWrapFile(near);
 }
 
 /// Formats one call with the `args-wrap` rule under each row's

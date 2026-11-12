@@ -22,6 +22,7 @@ bool startsWithStringLiteral(const FormatDocument *document, int token);
 QByteArray sourceText(const FormatDocument *document, int first, int last);
 bool findTernary(const FormatDocument *document, int first, int last,
                  int *question, int *colon);
+bool isDeclarationParen(const FormatDocument *document, int paren);
 class FormatScopeConditions;
 
 bool reachesWrapArgsAt(const FormatDocument *document,

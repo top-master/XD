@@ -71,7 +71,8 @@
     * `wrapArgsOver` (`[Structure]`): how many arguments, or parameters, a
       list holds at most before it may always break, whatever
       `wrapArgsAt` says (see FormatArgsWrapRule and FormatParamWrapRule).
-      3 without a `.formatrc`;
+      A condition can instead decide per target using its argument count,
+      remaining space, and scope; 3 without a `.formatrc`;
     * `target` (`[Structure]`): `long` (the default) keeps the line breaks
       that the code already has where they fit, and `any` lays the code out
       anew, as if each expression sat on one line (see FormatLineJoinRule);
@@ -159,7 +160,11 @@ Config::Schema FormatSettings::schema()
                          1,
                          100,
                          1
-                     ), QString(QLL("3")));
+                     ) << Config::Condition::create(
+                         FormatScopeConditions::names(),
+                         true
+                     ),
+                     QString(QLL("3")));
     structure.addKey(QString(QLL("target")),
                      QStringList() << QString(QLL("long")) << QString(QLL("any")),
                      QString(QLL("long")));
@@ -309,9 +314,17 @@ bool FormatSettings::load(const QString & path, const FormatConfig & config,
     settings->wrapBegin
         = Config::Numbers::parse(parser.value(QString(QLL("structure.wrapBegin"))));
     settings->wrapMax = parser.value(QString(QLL("structure.wrapMax"))).toInt();
-    settings->wrapArgsOver = parser
-        .value(QString(QLL("structure.wrapArgsOver")))
-        .toInt();
+    const QString argsOver = parser.value(
+        QString(QLL("structure.wrapArgsOver"))
+    );
+    bool argsOverIsNumber = false;
+    const int argsOverNumber = argsOver.toInt(&argsOverIsNumber);
+    if (argsOverIsNumber) {
+        settings->wrapArgsOver = argsOverNumber;
+        settings->wrapArgsOverCondition.clear();
+    } else {
+        compileCondition(argsOver, &settings->wrapArgsOverCondition, true);
+    }
     settings->commentWrapBegin
         = Config::Numbers::parse(parser.value(QString(QLL("comments.wrapBegin"))));
     settings->commentWrapMax = parser
@@ -356,8 +369,8 @@ FormatSpacing FormatSettings::toSpacing(
     QString fallback;
     bool hasFallback = false;
     if (Config::RegExp::split(value, &head, &fallback, &hasFallback)) {
-        FormatSpacing spacing = FormatSettings::toSpacing(
-            hasFallback ? fallback : defaultValue,
+        FormatSpacing spacing = FormatSettings::toSpacing(hasFallback
+                ? fallback : defaultValue,
             defaultValue
         );
         Config::RegExp::parse(head, &spacing.pattern, &spacing.replacement);

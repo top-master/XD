@@ -341,7 +341,8 @@ static bool readGitChanges(const QStringList & arguments,
 
     // Walks each file's header, which names the file after the change,
     // then its hunks; a line of content never counts as a header line.
-    const QRegularExpression hunk(QString(QLL("^@@ -\\d+(?:,\\d+)? \\+(\\d+)(?:,(\\d+))? @@")));
+    const QRegularExpression hunk(
+            QString(QLL("^@@ -\\d+(?:,\\d+)? \\+(\\d+)(?:,(\\d+))? @@")));
     const QList<QByteArray > lines = diff.split('\n');
     QString file;
     bool inHeader = false;

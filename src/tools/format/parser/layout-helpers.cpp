@@ -514,3 +514,79 @@ QList<QByteArray > ternaryLines(
     }
     return QList<QByteArray >() << head << pad + middle << pad + tail;
 }
+
+/*!
+    Tells whether the `(` at @a paren of @a document opens the parameter
+    list of a function's declaration or definition, at file, namespace or
+    class or block scope: its name follows a type, or it is a constructor,
+    a destructor, or an operator, such as `operator==`, `operator()`,
+    or a conversion (`operator bool`, `operator QString`).
+*/
+bool isDeclarationParen(
+        const FormatDocument *document,
+        int paren)
+{
+    const FormatDocument::Scope scope = document->scopeOf(paren);
+    if (scope != FormatDocument::FileScope
+        && scope != FormatDocument::NamespaceScope
+        && scope != FormatDocument::ClassScope
+        && scope != FormatDocument::FunctionScope
+        && scope != FormatDocument::BlockScope
+    ) {
+        return false;
+    }
+
+    // Finds where the name starts: at the `operator` keyword of an operator,
+    // whose symbol or conversion type (up to 16 tokens) comes between it and
+    // the `(`; a `;`, a brace, or a `:` ends the search, as does a bracket
+    // other than the `()` of `operator()`.
+    int name = paren - 1;
+    bool isOperator = false;
+    for (int k = paren - 1; k >= qMax(1, paren - 16); --k) {
+        const Token token = document->token(k);
+        if (token == OPERATOR) {
+            name = k;
+            isOperator = true;
+            break;
+        }
+        if (token == SEMIC
+            || token == LBRACE
+            || token == RBRACE
+            || token == COLON
+            || ((token == LPAREN || token == RPAREN) && k < paren - 2)
+        ) {
+            break;
+        }
+    }
+    if ( ! isOperator && document->token(name) != IDENTIFIER) {
+        return false;
+    }
+    if ( ! isOperator && document->token(name - 1) == TILDE) {
+        return true;
+    }
+    const int unqualified = name;
+    while (name >= 2
+        && document->token(name - 1) == SCOPE
+        && document->token(name - 2) == IDENTIFIER
+    ) {
+        name -= 2;
+    }
+    const Token typeEnd = document->token(name - 1);
+    if (isTypeEnd(typeEnd) || typeEnd == AND) {
+        return true;
+    }
+
+    // A qualified name with no type before it: an operator, such as a
+    // conversion, or a constructor, whose name repeats its class's.
+    if (name < unqualified) {
+        return isOperator
+            || document->lexem(paren - 1) == document->lexem(paren - 3);
+    }
+    const Token label = document->token(name - 2);
+    const bool afterAccess = typeEnd == COLON
+        && (label == PUBLIC || label == PRIVATE || label == PROTECTED || label == SLOTS
+            || label == SIGNALS);
+    return scope == FormatDocument::ClassScope
+        && (typeEnd == SEMIC || typeEnd == LBRACE || typeEnd == RBRACE || afterAccess
+            || typeEnd == EXPLICIT || typeEnd == INLINE);
+}

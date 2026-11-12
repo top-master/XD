@@ -5,6 +5,8 @@
 
 #include "../format-document.h"
 #include "./class-helpers.h"
+#include "./code-helpers.h"
+#include "./layout-helpers.h"
 
 #include "config-condition.h"
 
@@ -53,7 +55,23 @@ QStringList FormatScopeConditions::names()
     return QStringList() << QString(QLL("always")) << QString(QLL("never"))
         << QString(QLL("already-existing")) << QString(QLL("is-base-member"))
         << QString(QLL("is-template")) << QString(QLL("is-outline"))
-        << QString(QLL("is-header")) << QString(QLL("is-non-header"));
+        << QString(QLL("is-header")) << QString(QLL("is-non-header"))
+        << QString(QLL("is-signature"));
+}
+
+namespace {
+class ArgumentContext : public Config::Condition::Context
+{
+    typedef Config::Condition::Context super;
+public:
+    ArgumentContext(const FormatScopeConditions *scope, int token)
+        : m_scope(scope), m_token(token) {}
+    qreal argumentCount(int depth, int argument) const Q_DECL_OVERRIDE
+    { return m_scope->argumentCount(m_token, depth, argument); }
+private:
+    const FormatScopeConditions *m_scope;
+    int m_token;
+};
 }
 
 /*!
@@ -62,6 +80,25 @@ QStringList FormatScopeConditions::names()
 */
 bool FormatScopeConditions::holds(const QStringList & program, int token)
 {
+    if ( ! program.isEmpty() && program.first() == QLL("@expression")) {
+        ArgumentContext context(this, token);
+        QHash<QString, qreal > values;
+        values.insert(QString(QLL("value")), this->argumentCount(token, 0));
+        values.insert(
+            QString(QLL("spaceremaining")),
+            this->remainingSpace(token)
+        );
+        values.insert(
+            QString(QLL("percent")),
+            100 - this->remainingSpace(token)
+        );
+        return Config::Condition::evaluate(
+            program,
+            this->holding(token),
+            values,
+            &context
+        );
+    }
     return Config::Condition::evaluate(program, this->holding(token));
 }
 
@@ -79,7 +116,23 @@ bool FormatScopeConditions::holds(
     const QSet<QString > names = this->holding(token);
     bool ok = true;
     bool result = false;
-    if (percent < 0) {
+    if ( ! program.isEmpty() && program.first() == QLL("@expression")) {
+        ArgumentContext context(this, token);
+        QHash<QString, qreal > values;
+        values.insert(QString(QLL("value")), this->argumentCount(token, 0));
+        values.insert(QString(QLL("spaceremaining")), percent >= 0
+            ? 100 - percent : this->remainingSpace(token));
+        if (percent >= 0) {
+            values.insert(QString(QLL("percent")), percent);
+        }
+        result = Config::Condition::evaluate(
+            program,
+            names,
+            values,
+            &context,
+            &ok
+        );
+    } else if (percent < 0) {
         result = Config::Condition::evaluate(program, names, &ok);
     } else {
         result = Config::Condition::evaluate(program, names, percent, &ok);
@@ -100,6 +153,10 @@ QSet<QString > FormatScopeConditions::holding(int token)
 {
     QSet<QString > names;
     names << QString(QLL("always"));
+    const int target = this->argumentTarget(token);
+    if (target >= 0 && isDeclarationParen(m_document, target)) {
+        names << QString(QLL("is-signature"));
+    }
     if (this->m_document->isHeader()) {
         names << QString(QLL("is-header"));
     } else {
@@ -362,4 +419,157 @@ QSet<QByteArray > FormatScopeConditions::baseMembersOf(
     }
     names.subtract(members.names);
     return names;
+}
+
+namespace {
+static bool isArgumentTarget(const FormatDocument *document, int open)
+{
+    if (open < 1
+        || document->token(open) != LPAREN
+        || document->match(open) <= open
+    ) {
+        return false;
+    }
+    const Token before = document->token(open - 1);
+    return before == IDENTIFIER || before == RPAREN || before == RBRACK
+        || before == RANGLE || before == GTGT;
+}
+
+static int enclosingArgumentTarget(const FormatDocument *document, int token)
+{
+    for (int i = token - 1; i >= 1; --i) {
+        if (isArgumentTarget(document, i) && document->match(i) >= token) {
+            return i;
+        }
+    }
+    return -1;
+}
+
+static void directCalls(const FormatDocument *document, int first, int last,
+                        QList<int > *calls)
+{
+    for (int i = first; i <= last; ++i) {
+        if (isArgumentTarget(document, i)) {
+            calls->append(i);
+            i = document->match(i);
+        }
+    }
+}
+}
+
+/*!
+    Counts arguments of calls reached from the target: zero selects the
+    target, negative depths select parents, and positive depths select calls
+    within its arguments. A positive argument selects that one-based item;
+    zero selects all items. Returns -1 when no target exists at that depth.
+*/
+int FormatScopeConditions::argumentTarget(int token) const
+{
+    if (isArgumentTarget(m_document, token)) {
+        return token;
+    }
+    if (isArgumentTarget(m_document, token + 1)) {
+        return token + 1;
+    }
+    return enclosingArgumentTarget(m_document, token);
+}
+
+qreal FormatScopeConditions::remainingSpace(int token) const
+{
+    const int open = this->argumentTarget(token);
+    if (open < 0) {
+        return 0;
+    }
+    const int line = m_document->symbolLine(open);
+    const QByteArray head = m_document->text().mid(
+        m_document->lineStart(line),
+        m_document->symbolEnd(open) - m_document->lineStart(line)
+    );
+    const int maximum = qMax(1, m_document->settings().wrapMax);
+    return 100.0 * (maximum - textWidth(head)) / maximum;
+}
+
+int FormatScopeConditions::argumentCount(
+        int token, int depth, int argument) const
+{
+    int target = this->argumentTarget(token);
+    if (target < 0 || argument < 0) {
+        return -1;
+    }
+    while (depth < 0) {
+        target = enclosingArgumentTarget(m_document, target);
+        if (target < 0) {
+            return -1;
+        }
+        ++depth;
+    }
+    QList<int > targets;
+    targets << target;
+    for (int level = 0; level < depth; ++level) {
+        QList<int > next;
+        for (int k = 0; k < targets.size(); ++k) {
+            const int open = targets.at(k);
+            const QList<QPair<int, int > > items =
+                splitArguments(m_document, open, m_document->match(open));
+            for (int i = 0; i < items.size(); ++i) {
+                if (level == 0 && argument > 0 && i + 1 != argument) {
+                    continue;
+                }
+                directCalls(
+                    m_document,
+                    items.at(i).first,
+                    items.at(i).second,
+                    &next
+                );
+            }
+        }
+        if (next.isEmpty()) {
+            return -1;
+        }
+        targets = next;
+    }
+    int count = 0;
+    for (int i = 0; i < targets.size(); ++i) {
+        const int open = targets.at(i);
+        const int close = m_document->match(open);
+        const QList<QPair<int, int > > items =
+            splitArguments(m_document, open, close);
+        if (items.size() == 1 && m_document->token(items.first().first) == VOID
+            && items.first().first == items.first().second
+            && isDeclarationParen(m_document, open)
+        ) {
+            continue;
+        }
+        count += items.size();
+    }
+    return count;
+}
+
+/*!
+    Evaluates the argument-count setting at @a token. A supplied percentage
+    overrides the remaining space calculated from the target's column.
+*/
+bool FormatScopeConditions::argsOver(int token, int count, qreal spaceRemaining)
+{
+    const FormatSettings &settings = m_document->settings();
+    if (settings.wrapArgsOverCondition.isEmpty()) {
+        return count > settings.wrapArgsOver;
+    }
+    if (spaceRemaining < -1e99) {
+        spaceRemaining = this->remainingSpace(token);
+    }
+    QHash<QString, qreal > values;
+    values.insert(QString(QLL("value")), count);
+    values.insert(QString(QLL("spaceremaining")), spaceRemaining);
+    values.insert(QString(QLL("percent")), 100 - spaceRemaining);
+    ArgumentContext context(this, token);
+    bool ok = true;
+    const bool result = Config::Condition::evaluate(
+        settings.wrapArgsOverCondition,
+        this->holding(token),
+        values,
+        &context,
+        &ok
+    );
+    return ok ? result : count > settings.wrapArgsOver;
 }

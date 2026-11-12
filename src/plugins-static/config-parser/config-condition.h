@@ -7,6 +7,7 @@
 #include "./config-value-matcher.h"
 
 #include <QtCore/QSet>
+#include <QtCore/QHash>
 #include <QtCore/QStringList>
 
 namespace Config {
@@ -15,6 +16,12 @@ class Condition : public ValueMatcher
 {
     typedef ValueMatcher super;
 public:
+    class Context
+    {
+    public:
+        virtual ~Context() {}
+        virtual qreal argumentCount(int depth, int argument) const = 0;
+    };
     explicit Condition(const QStringList & names, bool takesPercents = false);
     static QSharedPointer<const ValueMatcher > create(
             const QStringList & names, bool takesPercents = false);
@@ -32,6 +39,10 @@ public:
     static bool evaluate(const QStringList & program,
                          const QSet<QString > & holding, qreal percent,
                          bool *ok = Q_NULLPTR);
+    static bool evaluate(const QStringList & program,
+                         const QSet<QString > & holding,
+                         const QHash<QString, qreal > & values,
+                         const Context *context, bool *ok = Q_NULLPTR);
 
 private:
     static bool run(const QStringList & program, const QSet<QString > & holding,

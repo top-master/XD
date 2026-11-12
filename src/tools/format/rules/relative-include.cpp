@@ -31,7 +31,8 @@ void FormatRelativeIncludeRule::run(FormatDocument *document) const
         return;
     }
     const QDir dir = QFileInfo(document->path()).absoluteDir();
-    const QRegularExpression include(QString(QLL("^\\s*#\\s*include\\s*\"([^\"]+)\"")));
+    const QRegularExpression include(
+            QString(QLL("^\\s*#\\s*include\\s*\"([^\"]+)\"")));
     for (int line = 1; line <= document->lineCount(); ++line) {
         if ( ! document->isDirectiveLine(line)) {
             continue;

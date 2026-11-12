@@ -278,7 +278,25 @@ moveSuffix = " "
   ```
 - `wrapArgsOver` (in `[Structure]`): how many arguments, or parameters, a
   list holds at most before it may always break, whatever `wrapArgsAt`
-  says; the default is `3`.
+  says; the default is `3`. It can also be a condition evaluated at the
+  opening parenthesis, for example:
+
+  ```ini
+  wrapArgsOver = argCount(0) > 3 && (spaceRemaining <= 18.75% || isSignature)
+  ```
+
+  `value` and `argCount(0)` give the target's argument or parameter count.
+  `spaceRemaining` is the percentage of `wrapMax` after the opening
+  parenthesis; `isSignature` identifies a function declaration or definition.
+  A condition decides whether the target's argument list may be wrapped and
+  preserves an existing list when it is false, including with `target=any`.
+  Names also accept underscores, such as `space_remaining` and
+  `is_signature`. `argCount` is available in conditions on other keys too.
+  A negative depth visits parent calls; a positive depth visits calls in
+  the target's arguments. At positive depths, the optional second argument
+  selects a one-based argument, or zero selects all arguments. Calls at the
+  selected depth contribute their argument counts; no reachable call gives
+  `-1`, and a call without arguments contributes zero.
 
 The command line then overrides the `.formatrc` files, in this order:
 

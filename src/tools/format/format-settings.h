@@ -47,6 +47,7 @@ public:
     QList<int > wrapBegin;
     int wrapMax;
     int wrapArgsOver;
+    QStringList wrapArgsOverCondition;
     QList<int > commentWrapBegin;
     int commentWrapMax;
     int wrapExtendsForKeywords;

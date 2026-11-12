@@ -277,7 +277,9 @@ QByteArray FormatExpressionLayout::layout(
             && this->hasChain(items.last().first, items.last().second);
         const bool chainMayBreak = endsInChain
             && (m_document->symbolLine(open) == m_document->symbolLine(last)
-                || m_document->symbolLine(items.first().first) > m_document->symbolLine(open));
+                || m_document->symbolLine(items.first().first) > m_document->symbolLine(open))
+            && (m_document->settings().wrapArgsOverCondition.isEmpty()
+                || m_conditions->argsOver(open, items.size()));
         if (chainMayBreak || (this->mayBreakList(open, items.size())
                 && (operators.isEmpty() || items.size() > 1))
         ) {
@@ -353,8 +355,14 @@ QByteArray FormatExpressionLayout::layoutList(
     int colon = -1;
     const QPair<int, int > firstItem = items.first();
     if (column >= 0 && ! isBrace
-        && items.size() <= m_document->settings().wrapArgsOver
-        && findTernary(m_document, firstItem.first, firstItem.second, &question, &colon)
+        && ! m_conditions->argsOver(open, items.size())
+        && findTernary(
+            m_document,
+            firstItem.first,
+            firstItem.second,
+            &question,
+            &colon
+        )
         && question > firstItem.first
         && column + textWidth(head)
             + textWidth(this->oneLine(firstItem.first, question - 1)) <= m_wrap
@@ -376,7 +384,12 @@ QByteArray FormatExpressionLayout::layoutList(
         ) {
             QByteArray text = head + item;
             if (items.size() > 1) {
-                text += ',' + this->listLines(open, close, items.mid(1), false);
+                text += ',' + this->listLines(
+                    open,
+                    close,
+                    items.mid(1),
+                    false
+                );
             }
             return text + '\n' + this->pad() + closer;
         }
@@ -981,7 +994,13 @@ QByteArray FormatExpressionLayout::itemText(
 {
     int question = -1;
     int colon = -1;
-    const bool isPlain = ! findTernary(m_document, first, last, &question, &colon)
+    const bool isPlain = ! findTernary(
+        m_document,
+        first,
+        last,
+        &question,
+        &colon
+    )
         && this->chainOperators(first, last).isEmpty()
         && m_document->token(last) != RPAREN && m_document->token(last) != RBRACE;
     if ( ! (isPlain || this->breaksOnlyBetweenLiterals(first, last))
@@ -1046,13 +1065,16 @@ bool FormatExpressionLayout::breaksOnlyBetweenLiterals(
 */
 bool FormatExpressionLayout::mayBreakList(int open, int itemCount) const
 {
+    if ( ! m_document->settings().wrapArgsOverCondition.isEmpty()) {
+        return m_conditions->argsOver(open, itemCount);
+    }
     if (m_document->token(open) == LBRACE) {
         return true;
     }
     if (itemCount < 1) {
         return false;
     }
-    if (itemCount > m_document->settings().wrapArgsOver) {
+    if (m_conditions->argsOver(open, itemCount)) {
         return true;
     }
     const int line = m_document->symbolLine(open);

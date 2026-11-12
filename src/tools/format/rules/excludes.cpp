@@ -45,10 +45,7 @@ void FormatExcludesRule::run(FormatDocument *document) const
                 document->symbols().at(i).from,
                 "excludes",
                 QString(QLL("check a cleared flag with %1(), not !%2()"))
-                    .arg(
-                        name == "includes" ? QLL("excludes")
-                                           : QLL("excludesLax")
-                    )
+                    .arg(name == "includes" ? QLL("excludes") : QLL("excludesLax"))
                     .arg(QString::fromLatin1(name))
             );
         }

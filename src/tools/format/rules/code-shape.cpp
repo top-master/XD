@@ -152,8 +152,8 @@ void FormatCodeShapeRule::checkStatement(
         "QRegularExpression",
         "QRegExp"
     };
-    const QByteArray type = document->lexem(
-        document->token(start) == CONST ? start + 1 : start
+    const QByteArray type = document->lexem(document->token(start) == CONST
+        ? start + 1 : start
     );
     for (size_t u = 0; u < sizeof(uncopyable) / sizeof(uncopyable[0]); ++u) {
         if (type == uncopyable[u]) {

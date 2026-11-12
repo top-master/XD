@@ -7,6 +7,7 @@
 #include "../format-settings.h"
 #include "../parser/code-helpers.h"
 #include "../parser/layout-helpers.h"
+#include "../parser/scope-conditions.h"
 
 #include <QtCore/QByteArray>
 
@@ -45,6 +46,7 @@ void FormatLineJoinRule::run(FormatDocument *document) const
         return;
     }
     QList<int > brackets;
+    FormatScopeConditions conditions(document);
     int questions = 0;
     for (int i = 0; i + 1 < document->symbols().size(); ++i) {
         // Tracks the brackets still open, and the `?` of the statement
@@ -70,6 +72,24 @@ void FormatLineJoinRule::run(FormatDocument *document) const
             || ! this->mayJoin(document, i, brackets, questions)
         ) {
             continue;
+        }
+        // A conditional argument policy can retain an existing list rather
+        // than having this rule flatten it before the wrapping rules run.
+        if ( ! document->settings().wrapArgsOverCondition.isEmpty()
+            && ! brackets.isEmpty()
+        ) {
+            const int open = brackets.last();
+            const int close = document->match(open);
+            const Token beforeOpen = document->token(open - 1);
+            if (document->token(open) == LPAREN && close > open
+                && (beforeOpen == IDENTIFIER || beforeOpen == RPAREN
+                    || beforeOpen == RANGLE || beforeOpen == GTGT)
+                && ! conditions.argsOver(
+                    open, splitArguments(document, open, close).size()
+                )
+            ) {
+                continue;
+            }
         }
         const Token after = document->token(i + 1);
         const bool isTight = token == LPAREN || token == LBRACK

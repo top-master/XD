@@ -25,11 +25,15 @@ public:
     bool holds(const QStringList & program, int token);
     bool holds(const QStringList & program, int token, qreal percent,
                const QStringList & fallback);
+    bool argsOver(int token, int count, qreal spaceRemaining = -1e100);
+    int argumentCount(int token, int depth, int argument = 0) const;
     QSet<QString > holding(int token);
     FormatMemberScope scopeOf(int token);
     FormatMemberScope functionScope(int brace);
 
 private:
+    int argumentTarget(int token) const;
+    qreal remainingSpace(int token) const;
     int enclosingFunctionBody(int token) const;
     FormatClassMembers membersOf(const QByteArray & className);
     QSet<QByteArray > baseMembersOf(const FormatClassMembers & members);
