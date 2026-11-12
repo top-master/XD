@@ -135,7 +135,12 @@ void FormatOperatorWrapRule::run(FormatDocument *document) const
             document->request(
                 from,
                 "operator-wrap",
-                QString(QLL("the tool broke this expression at its operators " "by width alone; regroup its lines so that the " "operands that belong together (a key and its " "value, a format and its arguments) share one, " "each line within %1 columns and led by its " "operator")).arg(limit),
+                QString(QLL("the tool broke this expression at its operators "
+                    "by width alone; regroup its lines so that the "
+                    "operands that belong together (a key and its "
+                    "value, a format and its arguments) share one, "
+                    "each line within %1 columns and led by its " "operator"))
+                .arg(limit),
                 1,
                 limit
             );

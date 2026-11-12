@@ -700,13 +700,10 @@ void tst_FormatRules::testFix_shouldRewrite_data()
                       "}\n")
         << QByteArray("void f()\n"
                       "{\n"
-                      "    process.start(\n"
-                      "        QString(QLL(\"git\")),\n"
-                      "        QStringList()\n"
-                      "            << QString(QLL(\"-c\")) << QString(QLL(\"user.name=format-test\"))\n"
-                      "            << QString(QLL(\"-c\")) << QString(QLL(\"commit.gpgsign=false\"))\n"
-                      "            << arguments\n"
-                      "    );\n"
+                      "    process.start(QString(QLL(\"git\")), QStringList()\n"
+                      "                  << QString(QLL(\"-c\")) << QString(QLL(\"user.name=format-test\"))\n"
+                      "                  << QString(QLL(\"-c\")) << QString(QLL(\"commit.gpgsign=false\"))\n"
+                      "                  << arguments);\n"
                       "}\n");
     QTest::newRow("args-wrap brace list gets an item per line")
         << QString(QLL("args-wrap"))
@@ -822,6 +819,104 @@ void tst_FormatRules::testFix_shouldRewrite_data()
                       "        g();\n"
                       "    }\n"
                       "}\n");
+    QTest::newRow("args-wrap indents adjacent string fragments")
+        << QString(QLL("args-wrap"))
+        << QByteArray("void f()\n{\n    send(\n        one,\n        two,\n"
+                      "        \"alpha\"\n        \"beta\",\n        four\n    );\n}\n")
+        << QByteArray("void f()\n{\n    send(\n        one,\n        two,\n"
+                      "        \"alpha\"\n            \"beta\",\n        four\n    );\n}\n");
+    QTest::newRow("args-wrap indents prefixed string fragments")
+        << QString(QLL("args-wrap"))
+        << QByteArray("void f()\n{\n    send(\n        one,\n        two,\n"
+                      "        u8\"alpha\"\n        u8\"beta\",\n        four\n    );\n}\n")
+        << QByteArray("void f()\n{\n    send(\n        one,\n        two,\n"
+                      "        u8\"alpha\"\n            u8\"beta\",\n        four\n    );\n}\n");
+    QTest::newRow("operator-wrap keeps a member call head")
+        << QString(QLL("operator-wrap"))
+        << QByteArray("void f()\n{\n    service.dispatchMessage(firstVeryLongArgumentName, secondVeryLongArgumentName, thirdVeryLongArgumentName, fourthVeryLongArgumentName);\n}\n")
+        << QByteArray("void f()\n{\n    service.dispatchMessage(\n"
+                      "        firstVeryLongArgumentName,\n"
+                      "        secondVeryLongArgumentName,\n"
+                      "        thirdVeryLongArgumentName,\n"
+                      "        fourthVeryLongArgumentName\n    );\n}\n");
+    QTest::newRow("operator-wrap keeps a pointer member call head")
+        << QString(QLL("operator-wrap"))
+        << QByteArray("void f()\n{\n    this->broker->publish(firstVeryLongArgumentName, secondVeryLongArgumentName, thirdVeryLongArgumentName, fourthVeryLongArgumentName);\n}\n")
+        << QByteArray("void f()\n{\n    this->broker->publish(\n"
+                      "        firstVeryLongArgumentName,\n"
+                      "        secondVeryLongArgumentName,\n"
+                      "        thirdVeryLongArgumentName,\n"
+                      "        fourthVeryLongArgumentName\n    );\n}\n");
+    QTest::newRow("operator-wrap keeps a pointer call head with one argument")
+        << QString(QLL("operator-wrap"))
+        << QByteArray("void f()\n{\n    this->courier->deliver(widget->readLongIdentifierForQueuedNotificationAndStatus());\n}\n")
+        << QByteArray("void f()\n{\n    this->courier->deliver(\n"
+                      "        widget->readLongIdentifierForQueuedNotificationAndStatus()\n"
+                      "    );\n}\n");
+    QTest::newRow("operator-wrap breaks an oversized member call head")
+        << QString(QLL("operator-wrap"))
+        << QByteArray("void f()\n{\n    registryForSynchronizationAcrossIndependentClientsAndServices.publishMessageForEachObserver(item);\n}\n")
+        << QByteArray("void f()\n{\n    registryForSynchronizationAcrossIndependentClientsAndServices\n"
+                      "        .publishMessageForEachObserver(item);\n}\n");
+    QTest::newRow("operator-first keeps logical operators below closing brackets")
+        << QString(QLL("operator-first"))
+        << QByteArray("void f()\n{\n    if ((check(\n        item\n    ))\n"
+                      "        || ready\n    ) {}\n}\n")
+        << QByteArray("void f()\n{\n    if ((check(\n        item\n    ))\n"
+                      "        || ready\n    ) {}\n}\n");
+    QTest::newRow("operator-first keeps logical operators below other closing brackets")
+        << QString(QLL("operator-first"))
+        << QByteArray("void f()\n{\n    if (items[\n        index\n    ]\n"
+                      "        || ready) {}\n    if (Check{\n        item\n    }\n"
+                      "        && ready) {}\n}\n")
+        << QByteArray("void f()\n{\n    if (items[\n        index\n    ]\n"
+                      "        || ready) {}\n    if (Check{\n        item\n    }\n"
+                      "        && ready) {}\n}\n");
+    QTest::newRow("args-wrap keeps a short call head with one chain argument")
+        << QString(QLL("args-wrap"))
+        << QByteArray("void f()\n{\n    view.show(message\n"
+                      "        + veryLongSuffixForAnExtendedMessageThatKeepsItsOwnLine\n    );\n}\n")
+        << QByteArray("void f()\n{\n    view.show(message\n"
+                      "        + veryLongSuffixForAnExtendedMessageThatKeepsItsOwnLine\n    );\n}\n");
+    QTest::newRow("args-wrap keeps a short call head with two arguments")
+        << QString(QLL("args-wrap"))
+        << QByteArray("void f()\n{\n    view.show(title, message\n"
+                      "        + veryLongSuffixForAnExtendedMessageThatKeepsItsOwnLine\n    );\n}\n")
+        << QByteArray("void f()\n{\n    view.show(title, message\n"
+                      "        + veryLongSuffixForAnExtendedMessageThatKeepsItsOwnLine\n    );\n}\n");
+    QTest::newRow("operator-wrap keeps an assigned member call head")
+        << QString(QLL("operator-wrap"))
+        << QByteArray("void f()\n{\n    const int value = store->measure(firstExtremelyLongArgumentNameForMeasurement, secondExtremelyLongArgumentNameForMeasurement);\n}\n")
+        << QByteArray("void f()\n{\n    const int value = store->measure(\n"
+                      "        firstExtremelyLongArgumentNameForMeasurement,\n"
+                      "        secondExtremelyLongArgumentNameForMeasurement\n    );\n}\n");
+    QTest::newRow("operator-wrap keeps an assigned pointer call head with one argument")
+        << QString(QLL("operator-wrap"))
+        << QByteArray("void f()\n{\n    const int value = store->measure(widget->readLongIdentifierForQueuedNotificationAndStatus());\n}\n")
+        << QByteArray("void f()\n{\n    const int value = store->measure(\n"
+                      "        widget->readLongIdentifierForQueuedNotificationAndStatus()\n"
+                      "    );\n}\n");
+    QTest::newRow("operator-wrap breaks an assigned call head past wrapBegin")
+        << QString(QLL("operator-wrap"))
+        << QByteArray("void f()\n{\n    const int value = registryForSynchronizationAcrossIndependentClients->evaluate(item);\n}\n")
+        << QByteArray("void f()\n{\n    const int value = registryForSynchronizationAcrossIndependentClients\n"
+                      "        ->evaluate(item);\n}\n");
+    QTest::newRow("operator-wrap keeps chained calls as a chain")
+        << QString(QLL("operator-wrap"))
+        << QByteArray("void f()\n{\n    const auto value = store->measure(firstMeasurementRecord, secondMeasurementRecord)->finish();\n}\n")
+        << QByteArray("void f()\n{\n    const auto value = store\n"
+                      "        ->measure(firstMeasurementRecord, secondMeasurementRecord)\n"
+                      "        ->finish();\n}\n");
+    QTest::newRow("condition-wrap prefers arithmetic after an early comparison")
+        << QString(QLL("condition-wrap"))
+        << QByteArray("void f()\n{\n    if (packet.size() > limits.maximumMessageLength + limits.allowedHeaderLength) {\n    }\n}\n")
+        << QByteArray("void f()\n{\n    if (packet.size() > limits.maximumMessageLength\n"
+                      "            + limits.allowedHeaderLength\n    ) {\n    }\n}\n");
+    QTest::newRow("condition-wrap breaks a comparison past wrapBegin")
+        << QString(QLL("condition-wrap"))
+        << QByteArray("void f()\n{\n    if (veryLongCounterNameForTheCurrentNetworkConnectionAndIncomingMessages > limit + extra) {\n    }\n}\n")
+        << QByteArray("void f()\n{\n    if (veryLongCounterNameForTheCurrentNetworkConnectionAndIncomingMessages\n"
+                      "            > limit + extra\n    ) {\n    }\n}\n");
     QTest::newRow("continuation-indent condition across directive")
         << QString(QLL("continuation-indent"))
         << QByteArray("void f()\n{\n    if (\n#ifdef FEATURE\n"
@@ -926,7 +1021,7 @@ void tst_FormatRules::testFix_shouldRewrite_data()
         << QByteArray("void f()\n{\n    const QByteArray input = makeFile(\"firstArgumentText\"\n"
                       "                                      \"more\", i < n, count);\n}\n")
         << QByteArray("void f()\n{\n    const QByteArray input = makeFile(\n"
-                      "        \"firstArgumentText\"\n        \"more\",\n        i < n,\n"
+                      "        \"firstArgumentText\"\n            \"more\",\n        i < n,\n"
                       "        count\n    );\n}\n");
     QTest::newRow("args-wrap fits one line")
         << QString(QLL("args-wrap"))
@@ -2208,9 +2303,8 @@ void tst_FormatRules::testRules_shouldRewriteFile_data()
         << QByteArray("if ( ! myFirstCondition\n"
                       "    && (mySecond\n"
                       "        || (myThird\n"
-                      "            && (ov = manager\n"
-                      "                ? manager->override()\n"
-                      "                : QSharedPointer<QHostInfoOverride >()\n"
+                      "            && (ov = manager ? manager->override()\n"
+                      "                             : QSharedPointer<QHostInfoOverride >()\n"
                       "            )\n"
                       "        )\n"
                       "    )\n"
@@ -2237,13 +2331,12 @@ void tst_FormatRules::testRules_shouldRewriteFile_data()
                       "manager->override() : QSharedPointer<QHostInfoOverride >();\n}\n")
         << QByteArray("void f()\n{\n    QSharedPointer<QHostInfoOverride > ov = manager\n"
                       "        ? manager->override() : QSharedPointer<QHostInfoOverride >();\n}\n");
-    QTest::newRow("ternary-wrap breaks before the colon too")
+    QTest::newRow("ternary-wrap keeps both branches within wrapMax")
         << QString(QLL("ternary-wrap")) << QString(QLL("a.cpp"))
         << QByteArray("void f()\n{\n    QSharedPointer<QHostInfoOverride > ov = theManager ? "
                       "theManager->currentOverride() : QSharedPointer<QHostInfoOverride >();\n}\n")
         << QByteArray("void f()\n{\n    QSharedPointer<QHostInfoOverride > ov = theManager\n"
-                      "        ? theManager->currentOverride()\n"
-                      "        : QSharedPointer<QHostInfoOverride >();\n}\n");
+                      "        ? theManager->currentOverride() : QSharedPointer<QHostInfoOverride >();\n}\n");
     QTest::newRow("ternary-wrap leaves a statement that fits")
         << QString(QLL("ternary-wrap")) << QString(QLL("a.cpp"))
         << QByteArray("void f()\n{\n    int a = b ? c : d;\n}\n")
@@ -2806,6 +2899,18 @@ void tst_FormatRules::testFixtures_shouldMatchAfter()
     ));
     QVERIFY2(result.error.isEmpty(), qPrintable(result.error));
     QCOMPARE(QString::fromUtf8(result.text), QString::fromUtf8(expected));
+    if (name == QLL("member-chain-arguments.cpp")
+        || name == QLL("member-chain-literals.cpp")
+        || name == QLL("member-chain-ternary.cpp")
+        || name == QLL("short-call-adjacent-literals.cpp")
+        || name == QLL("ternary-priority.cpp")
+    ) {
+        const FormatResult again = qMove(formatter.format(
+            result.text, path, lineSpecs, config
+        ));
+        QVERIFY2(again.error.isEmpty(), qPrintable(again.error));
+        QCOMPARE(again.text, result.text);
+    }
 }
 
 QTEST_APPLESS_MAIN(tst_FormatRules)

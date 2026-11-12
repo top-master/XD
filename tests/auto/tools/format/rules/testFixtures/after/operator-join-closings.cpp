@@ -35,10 +35,12 @@ void operators()
     ) ^ other;
     target = calculate(
         value
-    ) && other;
+    )
+        && other;
     target = calculate(
         value
-    ) || other;
+    )
+        || other;
     target = calculate(
         value
     ) == other;

@@ -331,7 +331,9 @@ static bool readGitChanges(const QStringList & arguments,
     ) {
         return false;
     }
-    const QString root = QDir::fromNativeSeparators(QString::fromLocal8Bit(topLevel).trimmed());
+    const QString root = QDir::fromNativeSeparators(
+        QString::fromLocal8Bit(topLevel).trimmed()
+    );
     QByteArray diff;
     if ( ! runGit(arguments, &diff, error)) {
         return false;
@@ -578,24 +580,26 @@ int main(int argc, char *argv[])
     parser.addVersionOption();
     QCommandLineOption lineOption(
         QStringList() << QString(QLL("L")) << QString(QLL("range")),
-        QString(QLL("Formats only the lines of <range>, in any form git blame's -L " "takes; may be given more than once.")),
+        QString(QLL("Formats only the lines of <range>, in any form git blame's -L "
+            "takes; may be given more than once.")),
         QString(QLL("range"))
     );
     parser.addOption(lineOption);
     QCommandLineOption gitOption(
         QStringList() << QString(QLL("git")),
         QString(QLL("Formats only the lines that the git <range> changed, in each "
-        "source file it changed: two revisions in one argument (\"HEAD~ HEAD\"), "
-        "or any range git diff takes (HEAD~...HEAD); a single revision such as "
-        "HEAD~ means HEAD~...HEAD. A <range> that starts with ! names the git "
-        "command instead, such as !diff or \"!diff --cached\", for changes not "
-        "committed yet. Cannot run with -L.")),
+            "source file it changed: two revisions in one argument (\"HEAD~ HEAD\"), "
+            "or any range git diff takes (HEAD~...HEAD); a single revision such as "
+            "HEAD~ means HEAD~...HEAD. A <range> that starts with ! names the git "
+            "command instead, such as !diff or \"!diff --cached\", for changes not "
+            "committed yet. Cannot run with -L.")),
         QString(QLL("range"))
     );
     parser.addOption(gitOption);
     QCommandLineOption dirOption(
         QStringList() << QString(QLL("dir")),
-        QString(QLL("Formats the source files under <path>, a directory with or " "without a trailing slash; may be given more than once.")),
+        QString(QLL("Formats the source files under <path>, a directory with or "
+            "without a trailing slash; may be given more than once.")),
         QString(QLL("path"))
     );
     parser.addOption(dirOption);
@@ -612,7 +616,8 @@ int main(int argc, char *argv[])
     parser.addOption(rulesOption);
     QCommandLineOption configOption(
         QStringList() << QString(QLL("c")) << QString(QLL("config")),
-        QString(QLL("Sets <setting> (<section>.<key>=<value>, the name in any case) over " "the .formatrc files; may be given more than once.")),
+        QString(QLL("Sets <setting> (<section>.<key>=<value>, the name in any case) over "
+            "the .formatrc files; may be given more than once.")),
         QString(QLL("setting"))
     );
     parser.addOption(configOption);
@@ -624,23 +629,27 @@ int main(int argc, char *argv[])
     parser.addOption(configFileOption);
     QCommandLineOption configAddOption(
         QStringList() << QString(QLL("config-add")),
-        QString(QLL("Reads the settings of <file> over the .formatrc files, overriding " "only the keys it sets; may be given more than once.")),
+        QString(QLL("Reads the settings of <file> over the .formatrc files, overriding "
+            "only the keys it sets; may be given more than once.")),
         QString(QLL("file"))
     );
     parser.addOption(configAddOption);
     QCommandLineOption anyCommentOption(
         QStringList() << QString(QLL("any-comment")),
-        QString(QLL("Rewraps every comment that leaves room unused, not only the " "ones past the limit; the same as -c comments.target=any."))
+        QString(QLL("Rewraps every comment that leaves room unused, not only the "
+            "ones past the limit; the same as -c comments.target=any."))
     );
     parser.addOption(anyCommentOption);
     QCommandLineOption anyCodeOption(
         QStringList() << QString(QLL("any-code")),
-        QString(QLL("Lays the code out anew, not keeping the line breaks it already " "has; the same as -c structure.target=any."))
+        QString(QLL("Lays the code out anew, not keeping the line breaks it already "
+            "has; the same as -c structure.target=any."))
     );
     parser.addOption(anyCodeOption);
     QCommandLineOption rewriteOption(
         QStringList() << QString(QLL("rewrite")) << QString(QLL("anything")),
-        QString(QLL("Lays out the code and wraps the comments anew; the same as " "--any-comment and --any-code together."))
+        QString(QLL("Lays out the code and wraps the comments anew; the same as "
+            "--any-comment and --any-code together."))
     );
     parser.addOption(rewriteOption);
     QCommandLineOption listRulesOption(
@@ -656,47 +665,61 @@ int main(int argc, char *argv[])
     parser.addOption(jobsOption);
     QCommandLineOption runnerOption(
         QStringList() << QString(QLL("runner")),
-        QString(QLL("Spreads the files with <kind>: %1; %2 by default.")) .arg(FormatRunner::kinds().join(QString(QLL(", ")))) .arg(FormatRunner::defaultKind()),
+        QString(QLL("Spreads the files with <kind>: %1; %2 by default."))
+            .arg(FormatRunner::kinds().join(QString(QLL(", "))))
+            .arg(FormatRunner::defaultKind()),
         QString(QLL("kind"))
     );
     parser.addOption(runnerOption);
     QCommandLineOption includeOption(
         QStringList() << QString(QLL("I")) << QString(QLL("i")),
-        QString(QLL("Looks for the headers that quoted includes name in <dir> too, after " "the file's own folder; may be given more than once.")),
+        QString(QLL("Looks for the headers that quoted includes name in <dir> too, after "
+            "the file's own folder; may be given more than once.")),
         QString(QLL("dir"))
     );
     parser.addOption(includeOption);
     QCommandLineOption projectOption(
         QStringList() << QString(QLL("p")) << QString(QLL("project")),
-        QString(QLL("Formats the sources and headers that the qmake project <file> " "lists, and those of the projects it holds, with its include folders, " "and skips the ones the ignore files leave out; may be given more " "than once.")),
+        QString(QLL("Formats the sources and headers that the qmake project <file> "
+            "lists, and those of the projects it holds, with its include folders, "
+            "and skips the ones the ignore files leave out; may be given more "
+            "than once.")),
         QString(QLL("file"))
     );
     parser.addOption(projectOption);
     QCommandLineOption specsOption(
         QStringList() << QString(QLL("specs")),
-        QString(QLL("Reads each --project for each qmake spec of the comma-separated " "<names>, which pick the platform scopes, and formats a file that " "several of them list once; may be given more than once. The spec " "of the platform the tool runs on by default.")),
+        QString(QLL("Reads each --project for each qmake spec of the comma-separated "
+            "<names>, which pick the platform scopes, and formats a file that "
+            "several of them list once; may be given more than once. The spec "
+            "of the platform the tool runs on by default.")),
         QString(QLL("names"))
     );
     parser.addOption(specsOption);
     QCommandLineOption qmakeOption(
         QStringList() << QString(QLL("qmake")),
-        QString(QLL("Reads each --project with the qmake at <path>; the one beside the " "tool by default, else the one on the PATH.")),
+        QString(QLL("Reads each --project with the qmake at <path>; the one beside the "
+            "tool by default, else the one on the PATH.")),
         QString(QLL("path"))
     );
     parser.addOption(qmakeOption);
     QCommandLineOption skipIgnoredOption(
         QStringList() << QString(QLL("skip-ignored")),
-        QString(QLL("Skips each named path that the ignore files leave out, without a " "word, instead of formatting it."))
+        QString(QLL("Skips each named path that the ignore files leave out, without a "
+            "word, instead of formatting it."))
     );
     parser.addOption(skipIgnoredOption);
     QCommandLineOption agentOption(
         QStringList() << QString(QLL("ai")),
-        QString(QLL("Asks the agent that runs the tool for the changes only it can " "make, as #: lines on the standard error, waits for q on the " "standard input, then formats each file it changed again."))
+        QString(QLL("Asks the agent that runs the tool for the changes only it can "
+            "make, as #: lines on the standard error, waits for q on the "
+            "standard input, then formats each file it changed again."))
     );
     parser.addOption(agentOption);
     QCommandLineOption headlessOption(
         QStringList() << QString(QLL("headless")),
-        QString(QLL("Asks nothing: formats a named path that the ignore files leave " "out without a warning."))
+        QString(QLL("Asks nothing: formats a named path that the ignore files leave "
+            "out without a warning."))
     );
     parser.addOption(headlessOption);
     QCommandLineOption workerOption(
@@ -939,7 +962,9 @@ int main(int argc, char *argv[])
         const QStringList found = ignores.findFiles(root, sourceFilters());
 
         // Names the files the way the folder was named on the command line.
-        const QString absolute = QDir::cleanPath(QFileInfo(root).absoluteFilePath());
+        const QString absolute = QDir::cleanPath(
+            QFileInfo(root).absoluteFilePath()
+        );
         for (int f = 0; f < found.size(); ++f) {
             files.append(root + found.at(f).mid(absolute.size()));
         }

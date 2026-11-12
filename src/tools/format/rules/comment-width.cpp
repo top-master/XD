@@ -329,7 +329,9 @@ void FormatCommentWidthRule::runGroup(
                 document->report(
                     document->lineStart(line),
                     "comment-width",
-                    QString(QLL("wrap the comment at %1 columns (it has %2)")) .arg(document->settings().commentWrapMax).arg(text.size())
+                    QString(QLL("wrap the comment at %1 columns (it has %2)"))
+                        .arg(document->settings().commentWrapMax)
+                        .arg(text.size())
                 );
             }
         }

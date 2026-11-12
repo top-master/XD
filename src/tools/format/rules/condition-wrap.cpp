@@ -110,9 +110,9 @@ void FormatConditionWrapRule::run(FormatDocument *document) const
                 document->symbols().at(i).from,
                 "condition-wrap",
                 QString(QLL("this condition has a line past %1 columns; "
-                "regroup its lines so that the operands that "
-                "belong together share one, each line within %1 "
-                "columns and led by its && or ||")).arg(limit),
+                    "regroup its lines so that the operands that "
+                    "belong together share one, each line within %1 "
+                    "columns and led by its && or ||")).arg(limit),
                 endLine - line + 1,
                 limit
             );

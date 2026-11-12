@@ -146,7 +146,12 @@ void FormatCodeBackticksRule::runGroup(
                     document->request(
                         lines.at(i).offset,
                         "code-backticks",
-                        QString(QLL("name the member that `%1` reaches by its " "class (such as `Class::member()`), which " "Doxygen links; keep the chain, in " "backticks, only when it shows an " "expression as an example")).arg(chain)
+                        QString(QLL("name the member that `%1` reaches by its "
+                            "class (such as `Class::member()`), which "
+                            "Doxygen links; keep the chain, in "
+                            "backticks, only when it shows an "
+                            "expression as an example"))
+                        .arg(chain)
                     );
                 }
             }

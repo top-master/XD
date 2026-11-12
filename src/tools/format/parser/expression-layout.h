@@ -19,7 +19,7 @@ public:
             int indent);
 
     QByteArray layout(int first, int last, int column, int trailing);
-    QByteArray layoutList(int first, int open, int close);
+    QByteArray layoutList(int first, int open, int close, int column = -1);
     QByteArray oneLine(int first, int last) const;
     bool hasChain(int first, int last) const;
     bool hasOuterChain(int first, int last) const;

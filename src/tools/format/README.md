@@ -415,7 +415,9 @@ The code rules lay out a few constructs on their own:
 
   A condition without a `&&` or `||` of its own breaks before its loosest
   operator instead (such as `==`), two steps past the keyword's line, and
-  only once its line passes `wrapMax`, not at the wrap column. A
+  only once its line passes `wrapMax`, not at the wrap column. When the
+  comparison starts before `wrapBegin`, a later arithmetic operator is used
+  instead if its resulting lines fit `wrapMax`. A
   continuation line whose operator binds tighter than that of an earlier
   line of its group (a `!=` below a `||`) continues that line's operand, one
   step past it (the rule `continuation-indent`).
@@ -430,7 +432,10 @@ The code rules lay out a few constructs on their own:
   further in. A chain of one operator whose right operand is a
   parenthesized group stays on its line up to the group's `(`, the group's
   chain breaking inside it; a group that follows the `)` of another one
-  joins that line:
+  joins that line. Logical operators and chained member calls keep their own
+  lines after a line of closing brackets. A single member call breaks its
+  arguments before its member access when the call head fits `wrapMax` at
+  the start of a statement, or `wrapBegin` after an assignment:
 
   ```
   QTest::newRow("process runner") << (QStringList()
@@ -444,17 +449,21 @@ The code rules lay out a few constructs on their own:
           << QString(QLL("--config"))
       );
   ```
-- `args-wrap` lays out a call of 2 arguments or more, or a brace
-  initializer list, when its one-line form would pass the wrap column and
+- `args-wrap` lays out a call's arguments or a brace initializer list when
+  its one-line form would pass the wrap column and
   it may break: it takes more than `[Structure] wrapArgsOver` arguments,
   `[Structure] wrapArgsAt`
-  holds at its `(`, its last argument is an operator chain, or it is a
-  brace list. On the same terms, it lays out a list the user broke over
+  holds at its `(`, its last argument is an operator chain in a one-line list
+  or a list opened onto its own argument lines, or it is a brace list. On
+  the same terms, it lays out a list the user broke over
   lines whose lines are not one step past the line of its opening. A call
+  with one argument is considered when its list already spans lines and the
+  argument holds an operator chain. A call
   that breaks moves every argument below its opening, one step in, and its
   closing bracket goes back to that line's indent. A list already broken
   after its opening keeps the arguments that share a line together when
-  they fit. In the head of an `if` or `while`, the
+  they fit. Continued adjacent string literals are indented one extra step.
+  In the head of an `if` or `while`, the
   list steps from the condition's operand level:
 
   ```

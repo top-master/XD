@@ -89,7 +89,8 @@ void FormatCodeShapeRule::checkStatement(
                 document->report(
                     document->symbols().at(start).from,
                     "code-shape",
-                    QString(QLL("store the returned pointer in a named local, " "then dereference that"))
+                    QString(QLL("store the returned pointer in a named local, "
+                        "then dereference that"))
                 );
             }
         }
@@ -239,7 +240,8 @@ void FormatCodeShapeRule::checkLines(FormatDocument *document) const
                 document->report(
                     document->lineStart(line),
                     "code-shape",
-                    QString(QLL("break the member-initializer list onto lines " "of its own"))
+                    QString(QLL("break the member-initializer list onto lines "
+                        "of its own"))
                 );
                 break;
             }

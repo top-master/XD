@@ -16,7 +16,8 @@
     Breaks a long expression before its operator, never after it: each `&&`,
     `||`, `<<`, `+`, `-`, `|`, `^` or `?` that ends a line moves to the
     start of the line after it. After a line of only closing brackets, an
-    operator and its operand join that line when they fit.
+    operator and its operand join that line when they fit, except for `&&`
+    and `||`, which keep their own lines.
 */
 
 /*!
@@ -46,13 +47,17 @@ static bool isTernaryColon(const FormatDocument *document, int index)
 /*!
     Joins the line that the operator at @a index of @a document leads to the
     line before it, when that one holds only closing brackets and the joined
-    line fits `wrapMax`. A prefix `++` or `--`, a `:` without its `?`, a
-    block's `}`, and the head of a control statement (whose body follows it)
-    keep their lines. Returns whether the edit was queued.
+    line fits `wrapMax`. The `&&` and `||` operators, a prefix `++` or
+    `--`, a `:` without its `?`, a block's `}`, and the head of a control
+    statement (whose body follows it) keep their lines. Returns whether the
+    edit was queued.
 */
 static bool joinsClosingLine(FormatDocument *document, int index)
 {
     const Token token = document->token(index);
+    if (token == ANDAND || token == OROR) {
+        return false;
+    }
     const Token next = document->token(index + 1);
     const bool isPostfix = (token == INCR || token == DECR)
         && (next == SEMIC || next == RPAREN || next == RBRACK || next == COMMA);
@@ -107,8 +112,7 @@ static bool joinsClosingLine(FormatDocument *document, int index)
     const QByteArray joined = document->text().mid(
         previousStart,
         previousEnd - previousStart
-    )
-        + space + text;
+    ) + space + text;
     if (textWidth(joined) > document->settings().wrapMax) {
         return false;
     }
@@ -127,7 +131,7 @@ static bool joinsClosingLine(FormatDocument *document, int index)
     Moves each binary operator that ends a line to the start of the next
     line, outside of preprocessor directives and when no comment follows it.
     Joins an operator-led line to a closing-only line when both are selected
-    and their combined width fits.
+    and their combined width fits, except for `&&` and `||`.
 */
 void FormatOperatorFirstRule::run(FormatDocument *document) const
 {

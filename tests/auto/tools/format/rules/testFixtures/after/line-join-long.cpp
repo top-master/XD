@@ -16,9 +16,6 @@ void run(Document *document, int open, int close)
         : close;
     const QString message = QString(QLL("first part of the message, "
                                         "second part of it"));
-    document->replace(
-        document->lineStart(line),
-        current.size(),
-        indentation + suffix + prefix
-    );
+    document->replace(document->lineStart(line), current.size(),
+        indentation + suffix + prefix);
 }

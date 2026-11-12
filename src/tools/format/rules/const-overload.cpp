@@ -70,7 +70,8 @@ void FormatConstOverloadRule::run(FormatDocument *document) const
                 document->report(
                     document->symbols().at(firstMutable.value(key)).from,
                     "const-overload-order",
-                    QString(QLL("declare the const overload of %1() first")) .arg(QString::fromLatin1(document->lexem(i)))
+                    QString(QLL("declare the const overload of %1() first"))
+                        .arg(QString::fromLatin1(document->lexem(i)))
                 );
             }
         }

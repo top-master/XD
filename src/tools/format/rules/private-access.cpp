@@ -39,7 +39,9 @@ void FormatPrivateAccessRule::run(FormatDocument *document) const
         document->report(
             document->symbols().at(i).from,
             "q-d-macro",
-            QString(QLL("write Q_%1(<Class>) instead of %2()")) .arg(QLatin1Char(name.at(0) == 'd' ? 'D' : 'Q')) .arg(QString::fromLatin1(name))
+            QString(QLL("write Q_%1(<Class>) instead of %2()"))
+                .arg(QLatin1Char(name.at(0) == 'd' ? 'D' : 'Q'))
+                .arg(QString::fromLatin1(name))
         );
     }
 }

@@ -244,16 +244,22 @@ bool FormatProcessRunner::decode(
     const QList<QByteArray > fields = line.split('\t');
     if (fields.size() == 4 && fields.at(0) == "file") {
         FormatFileResult result;
-        result.path = QString::fromUtf8(QByteArray::fromPercentEncoding(fields.at(1)));
+        result.path = QString::fromUtf8(
+            QByteArray::fromPercentEncoding(fields.at(1))
+        );
         result.changed = fields.at(2) == "1";
-        result.error = QString::fromUtf8(QByteArray::fromPercentEncoding(fields.at(3)));
+        result.error = QString::fromUtf8(
+            QByteArray::fromPercentEncoding(fields.at(3))
+        );
         results->append(result);
         return true;
     }
     if ((fields.size() == 6 || fields.size() == 7)
         && (fields.at(0) == "issue" || fields.at(0) == "request")
     ) {
-        const QString path = QString::fromUtf8(QByteArray::fromPercentEncoding(fields.at(1)));
+        const QString path = QString::fromUtf8(
+            QByteArray::fromPercentEncoding(fields.at(1))
+        );
         for (int i = results->size() - 1; i >= 0; --i) {
             if (results->at(i).path != path) {
                 continue;
@@ -261,7 +267,9 @@ bool FormatProcessRunner::decode(
             const FormatIssue issue(
                 fields.at(2).toInt(),
                 QByteArray::fromPercentEncoding(fields.at(4)),
-                QString::fromUtf8(QByteArray::fromPercentEncoding(fields.at(5))),
+                QString::fromUtf8(
+                    QByteArray::fromPercentEncoding(fields.at(5))
+                ),
                 fields.at(3).toInt(),
                 fields.size() == 7 ? fields.at(6).toInt() : 0
             );

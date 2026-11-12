@@ -16,7 +16,7 @@
     @class FormatArgsWrapRule
     @internal
 
-    Lays out a call of 2 arguments or more, or a brace initializer list, as
+    Lays out call arguments or a brace initializer list as
     FormatExpressionLayout does: every item moves below the opening, one
     step (4 spaces) in, and the closing bracket goes back to that line's
     indent:
@@ -27,14 +27,17 @@
         );
 
     A list already broken after its opening keeps the items that share a
-    line together when they fit; any other list gets an item per line.
+    line together when they fit; any other list gets an item per line. A
+    call with one argument is considered when its list already spans lines
+    and that argument holds an operator chain.
 
     It lays out a list that does not fit one line (the list's `)` passes
     the wrap column, see wrapColumn()) when the call takes more than
     `[Structure] wrapArgsOver` arguments (3 by default), when
     `[Structure] wrapArgsAt` holds at the `(` (whose percents compare the
-    column after the `(` with `[Structure] wrapMax`),
-    when its last argument is an operator chain, or when it is a brace list;
+    column after the `(` with `[Structure] wrapMax`), when a list ending in
+    an operator chain starts its arguments below the opening or has not yet
+    broken, or when it is a brace list;
     and, on the same terms but whether or not it fits, it lays out a list
     the user broke over lines whose lines are not one step past the line of
     the opening. A list in the head of a control
@@ -120,7 +123,9 @@ void FormatArgsWrapRule::run(FormatDocument *document) const
         if (arguments.size() < 2 && ! endsInChain) {
             continue;
         }
-        const bool mayBreak = isBrace || endsInChain
+        const bool argumentsBelow =
+            document->symbolLine(arguments.first().first) > line;
+        const bool mayBreak = isBrace || (endsInChain && ( ! isSplit || argumentsBelow))
             || arguments.size() > document->settings().wrapArgsOver
             || reachesWrapArgsAt(document, &conditions, i);
         const bool needsBreak = mayBreak && column + textWidth(oneLine) > wrap;
@@ -136,7 +141,7 @@ void FormatArgsWrapRule::run(FormatDocument *document) const
         }
 
         // Writes the list as the layout breaks it.
-        const QByteArray text = layout.layoutList(i, i, close);
+        const QByteArray text = layout.layoutList(i, i, close, column);
         const int length = closeEnd - from;
         if (document->text().mid(from, length) != text
             && document->replace(from, length, text)
@@ -149,8 +154,8 @@ void FormatArgsWrapRule::run(FormatDocument *document) const
                 from,
                 "args-wrap",
                 QString(QLL("the tool put each argument on a line of its own; "
-                "put the arguments that belong together on one "
-                "line, each line within %1 columns")).arg(wrapMax),
+                    "put the arguments that belong together on one "
+                    "line, each line within %1 columns")).arg(wrapMax),
                 closeLine - line + 1,
                 wrapMax
             );

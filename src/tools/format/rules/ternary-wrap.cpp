@@ -18,10 +18,9 @@
 
     Breaks a one-line statement that passes the wrap column (see
     wrapColumn()) and holds one conditional expression outside of every
-    bracket pair, such as `Type value = test ? yes : no;`: before its `?`,
-    with the `?` and `:` parts on a continuation line one step (4 spaces)
-    past the statement's line, and, when that line still does not fit,
-    before its `:` too (see ternaryLines()). When the line before the `?`
+    bracket pair, such as `Type value = test ? yes : no;`: first before its
+    `:`, then before its `?`, then before both when needed (see
+    ternaryLines()). When the line before the `?`
     still does not fit, it breaks that line as well, through the
     FormatConditionLayout that every rule breaking a condition shares (see
     FormatConditionLayout::layoutHead()); an `if` condition's own `?` is
@@ -97,18 +96,17 @@ void FormatTernaryWrapRule::run(FormatDocument *document) const
             indent,
             indent,
             1,
-            wrap
+            qMax(1, document->settings().wrapMax)
         );
         if (lines.size() < 2) {
             continue;
         }
 
         // Breaks the line before the `?` too, when it does not fit.
-        const QList<QByteArray > head = layout.layoutHead(
-            first,
-            question - 1,
-            indent
-        );
+        const QByteArray originalHead = sourceText(document, first, question - 1);
+        const QList<QByteArray > head = lines.first() == originalHead
+            ? layout.layoutHead(first, question - 1, indent)
+            : QList<QByteArray >() << lines.first();
         QByteArray text;
         for (int l = 0; l < head.size(); ++l) {
             text += (l > 0 ? "\n" : "") + head.at(l);

@@ -6,6 +6,7 @@
 #include "../format-document.h"
 #include "../format-settings.h"
 #include "../parser/code-helpers.h"
+#include "../parser/layout-helpers.h"
 
 #include <QtCore/QByteArray>
 
@@ -26,8 +27,9 @@
     before the `:` of a conditional expression. The break turns into one
     space, or into none right after a `(` or a `[` and right before a `)`, a
     `]`, a `,`, or a `;`. It keeps a break next to a comment or a directive,
-    one between two string literals (which people split on purpose), and
-    each break between the statements of a body.
+    one between two string literals (which people split on purpose), the
+    closing-only line before `&&` or `||`, and each break between the
+    statements of a body.
 
     The rules run one after the other, each one up to 8 passes; hence this
     rule joins once, before the layout rules, and the line breaks that those
@@ -72,7 +74,8 @@ void FormatLineJoinRule::run(FormatDocument *document) const
         const Token after = document->token(i + 1);
         const bool isTight = token == LPAREN || token == LBRACK
             || after == RPAREN || after == RBRACK || after == COMMA
-            || after == SEMIC;
+            || after == SEMIC || token == DOT || token == ARROW
+            || after == DOT || after == ARROW;
         const int from = document->symbolEnd(i);
         document->replace(
             from,
@@ -109,6 +112,21 @@ bool FormatLineJoinRule::mayJoin(
     ) {
         return false;
     }
+    const Token next = document->token(after);
+    if ((next == ANDAND || next == OROR)
+        && isClosingLine(document->lineText(document->symbolEndLine(before)))
+    ) {
+        return false;
+    }
+    const int nextLine = document->symbolLine(after);
+    const int lineEnd = document->lastSymbolOfLine(nextLine);
+    if (isClosingLine(document->lineText(nextLine)) && lineEnd >= after
+        && (document->token(lineEnd + 1) == ANDAND
+            || document->token(lineEnd + 1) == OROR)
+        && document->symbolLine(lineEnd + 1) > nextLine
+    ) {
+        return false;
+    }
 
     // Joins any break inside a `(`, a `[`, or an initializer list.
     if ( ! brackets.isEmpty()) {
@@ -123,7 +141,6 @@ bool FormatLineJoinRule::mayJoin(
 
     // Joins a statement's operator line, the value after its `=`, and the
     // `:` of its conditional expression.
-    const Token next = document->token(after);
     return isLeadingOperator(next) || document->token(before) == EQ
         || (next == COLON && questions > 0);
 }

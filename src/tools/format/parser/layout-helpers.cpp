@@ -99,8 +99,9 @@ bool closesEarlierLine(const FormatDocument *document, int bracket)
     line adds one more step to its next lines, until the `,` that ends it,
     unless that line left a bracket open, closes a bracket opened on an
     earlier line, ends with a string literal, or starts with a string literal
-    (see startsWithStringLiteral()); a bracket opened while an argument had
-    that step keeps it for its own lines. A line that starts with a
+    (see startsWithStringLiteral()). Adjacent string literals take that extra
+    step; a bracket opened while an argument had that step keeps it for its
+    own lines. A line that starts with a
     binary operator, right below another one that does, sits at that
     line's indent; hence the operator lines of one chain line up.
 */
@@ -174,6 +175,10 @@ bool hasMisplacedLines(const FormatDocument *document, int open, int close,
         const Token end = document->token(last);
         if (end == COMMA) {
             ranges.last().second = false;
+        } else if (end == STRING_LITERAL
+            && startsWithStringLiteral(document, last + 1)
+        ) {
+            ranges.last().second = true;
         } else if ( ! opened && ! closesEarlierLine(document, last)
             && end != STRING_LITERAL
             && lead >= 0 && ! startsWithStringLiteral(document, lead)
@@ -484,9 +489,8 @@ QList<QPair<int, int > > splitArguments(
     is @a head, whose `?` part is @a middle, and whose `:` part is @a tail,
     written from the column @a column of a line indented by @a indent, with
     @a trailing characters after it on its last line: one line when that
-    fits the @a wrap column; else the head, and the `?` and `:` parts on a
-    continuation line (see continuationPad()); else each of those parts on a
-    continuation line of its own.
+    fits the @a wrap column; else tries a break at `:` aligned under `?`,
+    then at `?`, then at both signs on continuation lines.
 */
 QList<QByteArray > ternaryLines(
         const QByteArray & head, const QByteArray & middle,
@@ -496,6 +500,12 @@ QList<QByteArray > ternaryLines(
     const QByteArray oneLine = head + ' ' + middle + ' ' + tail;
     if (column + textWidth(oneLine) + trailing <= wrap) {
         return QList<QByteArray >() << oneLine;
+    }
+    const QByteArray colonPad(column + textWidth(head) + 1, ' ');
+    if (column + textWidth(head) + 1 + textWidth(middle) <= wrap
+        && textWidth(colonPad) + textWidth(tail) + trailing <= wrap
+    ) {
+        return QList<QByteArray >() << head + ' ' + middle << colonPad + tail;
     }
     const QByteArray pad = continuationPad(indent);
     const QByteArray rest = pad + middle + ' ' + tail;

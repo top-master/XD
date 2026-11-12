@@ -4,7 +4,9 @@
 void report(Log *log, const QString & prefix, const QString & suffix, int count)
 {
     log->line(
-        QString::number(count).rightJustified(8, QLatin1Char(' ')).toUpper().trimmed(),
+        QString::number(count).rightJustified(8, QLatin1Char(' '))
+            .toUpper()
+            .trimmed(),
         prefix + "a literal piece of text that is long enough to wrap"
         + suffix
     );
