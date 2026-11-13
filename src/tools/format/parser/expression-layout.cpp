@@ -82,7 +82,6 @@ FormatExpressionLayout::FormatExpressionLayout(const FormatDocument *document,
                                                int indent)
     : m_document(document), m_conditions(conditions)
     , m_indent(indent), m_paddingLevel(0)
-    , m_wrap(wrapColumn(document)), m_wrapMax(qMax(1, document->settings().wrapMax))
     , m_brokeUngrouped(false)
 {
 }

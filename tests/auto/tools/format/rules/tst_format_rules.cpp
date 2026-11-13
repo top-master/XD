@@ -11,10 +11,12 @@
 #include "format-settings.h"
 #include "formatter.h"
 #include "parser/scope-conditions.h"
+#include "parser/comment-helpers.h"
 #include "preprocessor.h"
 
 #include <QtCore/QDir>
 #include <QtCore/QLockFile>
+#include <QtCore/QScopedPointer>
 #include <QtCore/QTemporaryDir>
 #include <QtTest/QtTest>
 
