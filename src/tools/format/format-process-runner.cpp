@@ -254,7 +254,8 @@ bool FormatProcessRunner::decode(
         return true;
     }
     if ((fields.size() == 6 || fields.size() == 7)
-        && (fields.at(0) == "issue" || fields.at(0) == "request")
+        && (fields.at(0) == "issue" || fields.at(0) == "request"
+            || fields.at(0) == "warning")
     ) {
         const QString path = QString::fromUtf8(QByteArray::fromPercentEncoding(fields.at(1)));
         for (int i = results->size() - 1; i >= 0; --i) {
@@ -270,7 +271,7 @@ bool FormatProcessRunner::decode(
             );
             if (fields.at(0) == "issue") {
                 (*results)[i].issues.append(issue);
-            } else {
+            } else if (fields.at(0) == "request") {
                 (*results)[i].requests.append(issue);
             }
             return true;

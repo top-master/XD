@@ -2,12 +2,14 @@
 // SPDX-License-Identifier: Apache-2.0
 
 #include "./format-document.h"
+#include "./parser/comment-helpers.h"
 
 #include "preprocessor.h"
 
 #include <QtCore/QDir>
 #include <QtCore/QFileInfo>
 #include <QtCore/QRegularExpression>
+#include <algorithm>
 
 /*!
     @class FormatDocument

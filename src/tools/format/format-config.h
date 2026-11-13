@@ -6,8 +6,6 @@
 
 #include <QtCore/QString>
 #include <QtCore/QStringList>
-#include <QtCore/QByteArray>
-#include <QtCore/QList>
 
 /*!
     @internal

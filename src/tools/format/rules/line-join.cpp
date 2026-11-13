@@ -39,9 +39,6 @@
 */
 void FormatLineJoinRule::run(FormatDocument *document) const
 {
-    if (document->settings().codeTarget != FormatSettings::CodeTargetAny) {
-        return;
-    }
     QList<int > brackets;
     int questions = 0;
     for (int i = 0; i + 1 < document->symbols().size(); ++i) {
