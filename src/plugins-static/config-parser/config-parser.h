@@ -9,6 +9,7 @@
 
 #include <QtCore/QHash>
 #include <QtCore/QByteArray>
+#include <QtCore/QList>
 #include <QtCore/QString>
 
 namespace Config {
@@ -24,6 +25,7 @@ public:
                     QString *error);
     bool assign(const QString & assignment, QString *error);
     QString value(const QString & name) const;
+    inline const Schema &schema() const { return m_schema; }
 
 private:
     bool set(const QString & name, const QString & shown, const QString & value,
@@ -33,6 +35,31 @@ private:
 
     Schema m_schema;
     QHash<QString, QString > m_values;
+};
+
+class LayeredParser : public Parser
+{
+public:
+    explicit LayeredParser(const Parser &base);
+
+    bool addLines(const QList<QByteArray > &lines, const QString &origin,
+                  QString *error);
+    bool pushLines(const QList<QByteArray > &lines, const QString &origin,
+                   QString *error);
+    bool popLines(QString *error);
+
+private:
+    struct Layer
+    {
+        QList<QByteArray > lines;
+        QString origin;
+    };
+    bool rebuild(QString *error);
+    static bool apply(Parser *parser, const Layer &layer, QString *error);
+
+    Parser m_base;
+    QList<Layer > m_permanent;
+    QList<Layer > m_scoped;
 };
 
 } // Namespace `Config`.

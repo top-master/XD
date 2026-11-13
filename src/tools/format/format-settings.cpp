@@ -287,38 +287,54 @@ bool FormatSettings::readConfig(
 bool FormatSettings::load(const QString & path, const FormatConfig & config,
                           FormatSettings *settings, QString *error)
 {
-    const Config::Schema schema = FormatSettings::schema();
-    Config::Parser parser(schema);
+    Config::Parser parser(FormatSettings::schema());
+    if ( ! FormatSettings::readParser(path, config, &parser, error)) {
+        return false;
+    }
+    FormatSettings::fromParser(parser, settings);
+    return true;
+}
+
+/*!
+    Reads the settings for @a path and @a config into @a parser, reporting
+    validation errors in @a error.
+*/
+bool FormatSettings::readParser(const QString &path, const FormatConfig &config,
+                                Config::Parser *parser, QString *error)
+{
     if ( ! config.file.isEmpty()) {
-        if ( ! parser.readFile(config.file, error)) {
+        if ( ! parser->readFile(config.file, error)) {
             return false;
         }
     } else if ( ! path.isEmpty()
-        && ! parser.readLevels(path, FormatSettings::fileName(), error)
+        && ! parser->readLevels(path, FormatSettings::fileName(), error)
     ) {
         return false;
     }
-    if ( ! FormatSettings::readConfig(&parser, config, error)) {
+    if ( ! FormatSettings::readConfig(parser, config, error)) {
         return false;
     }
-    for (int i = 0; i < config.inlineLayers.size(); ++i) {
-        const QByteArray layer = config.inlineLayers.at(i).trimmed();
-        if (layer.startsWith('[')) {
-            if ( ! parser.readData(layer, QString(QLL("Format rule")), error)) {
+    if ( ! config.inlineLayers.isEmpty()) {
+        Config::LayeredParser layered(*parser);
+        for (int i = 0; i < config.inlineLayers.size(); ++i) {
+            if ( ! layered.addLines(
+                    config.inlineLayers.at(i), QString(QLL("Format rule")), error
+                )
+            ) {
                 return false;
             }
-        } else {
-            const QList<QByteArray > lines = layer.split('\n');
-            for (int j = 0; j < lines.size(); ++j) {
-                const QByteArray line = lines.at(j).trimmed();
-                if ( ! line.isEmpty()
-                    && ! parser.assign(QString::fromUtf8(line), error)
-                ) {
-                    return false;
-                }
-            }
         }
+        *parser = layered;
     }
+    return true;
+}
+
+/*!
+    Converts the validated values in @a parser to @a settings.
+*/
+void FormatSettings::fromParser(const Config::Parser &parser, FormatSettings *settings)
+{
+    const Config::Schema &schema = parser.schema();
     const QString refSuffix = QString(QLL("types.refSuffix"));
     const QString moveSuffix = QString(QLL("types.moveSuffix"));
     settings->refSuffix = FormatSettings::toSpacing(
@@ -369,7 +385,6 @@ bool FormatSettings::load(const QString & path, const FormatConfig & config,
                      &settings->wrapChainAt, true);
     compileCondition(parser.value(QString(QLL("structure.wrapArgsAt"))),
                      &settings->wrapArgsAt, true);
-    return true;
 }
 
 /*!

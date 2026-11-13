@@ -175,6 +175,7 @@ FormatFileResult FormatRunner::formatFile(const QString & path) const
     result.changed = formatted.changed;
     result.issues = formatted.issues;
     result.requests = formatted.requests;
+    result.warnings = formatted.warnings;
     result.error = formatted.error;
     if ( ! result.error.isEmpty()
         || ! formatted.changed

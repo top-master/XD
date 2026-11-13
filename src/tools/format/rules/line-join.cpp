@@ -80,9 +80,6 @@ static bool followsBinaryGroup(const FormatDocument *document, int close)
 */
 void FormatLineJoinRule::run(FormatDocument *document) const
 {
-    if (document->settings().codeTarget != FormatSettings::CodeTargetAny) {
-        return;
-    }
     QList<int > brackets;
     FormatScopeConditions conditions(document);
     int questions = 0;
@@ -106,14 +103,18 @@ void FormatLineJoinRule::run(FormatDocument *document) const
         }
 
         // Joins the line break after the token, when there is one.
-        if (document->symbolEndLine(i) >= document->symbolLine(i + 1)
+        const FormatSettings &settings = document->settingsAt(
+            document->symbols().at(i).from
+        );
+        if (settings.codeTarget != FormatSettings::CodeTargetAny
+            || document->symbolEndLine(i) >= document->symbolLine(i + 1)
             || ! this->mayJoin(document, i, brackets, questions)
         ) {
             continue;
         }
         // A conditional argument policy can retain an existing list rather
         // than having this rule flatten it before the wrapping rules run.
-        if ( ! document->settings().wrapArgsOverCondition.isEmpty()
+        if ( ! settings.wrapArgsOverCondition.isEmpty()
             && ! brackets.isEmpty()
         ) {
             const int open = brackets.last();

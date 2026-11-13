@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: Apache-2.0
 
 #include "./format-document.h"
+#include "./parser/comment-helpers.h"
 
 #include "preprocessor.h"
 
@@ -29,9 +30,143 @@
     rules that look at the file's folder use, and which may be empty).
 */
 FormatDocument::FormatDocument(const QByteArray & text, const QString & path)
-    : m_text(text), m_path(path), m_pass(0), m_agentMode(false)
+    : m_text(text), m_path(path), m_inlineConfigured(false), m_pass(0), m_agentMode(false)
 {
     this->analyze();
+}
+
+/*!
+    Returns the settings active at @a offset in the document.
+*/
+const FormatSettings &FormatDocument::settingsAt(int offset) const
+{
+    int low = 0;
+    int high = m_settingsRegions.size();
+    while (low < high) {
+        const int middle = low + (high - low) / 2;
+        if (m_settingsRegions.at(middle).first <= offset) {
+            low = middle + 1;
+        } else {
+            high = middle;
+        }
+    }
+    return low > 0 ? m_settingsRegions.at(low - 1).second : m_settings;
+}
+
+/*!
+    Resolves the comment configuration over @a config, reporting errors in
+    @a error.
+*/
+bool FormatDocument::setInlineConfiguration(const FormatConfig &config,
+                                             QString *error)
+{
+    const QList<FormatConfigDirective > directives = configDirectives(this);
+    QVector<bool > matched(directives.size(), false);
+    QList<int > openings;
+    for (int i = 0; i < directives.size(); ++i) {
+        if (directives.at(i).kind == FormatConfigDirective::Begin) {
+            openings.append(i);
+        } else if (directives.at(i).kind == FormatConfigDirective::End
+                   && ! openings.isEmpty()) {
+            matched[openings.takeLast()] = true;
+            matched[i] = true;
+        }
+    }
+    Config::Parser base(FormatSettings::schema());
+    if ( ! FormatSettings::readParser(m_path, config, &base, error)) {
+        return false;
+    }
+    Config::LayeredParser layers(base);
+    QVector<QPair<int, FormatSettings > > regions;
+    QVector<QPair<int, int > > protectedRanges;
+    int firstComment = 0;
+    for (int i = 0; i < directives.size(); ++i) {
+        const FormatConfigDirective &directive = directives.at(i);
+        while (firstComment < m_comments.size()
+            && m_comments.at(firstComment).offset + m_comments.at(firstComment).length
+                <= directive.offset
+        ) {
+            ++firstComment;
+        }
+        for (int j = firstComment; j < m_comments.size(); ++j) {
+            const FormatComment &comment = m_comments.at(j);
+            if (comment.offset > directive.endOffset) {
+                break;
+            }
+            if (comment.offset <= directive.endOffset
+                && comment.offset + comment.length > directive.offset
+            ) {
+                protectedRanges.append(qMakePair(comment.offset, comment.offset + comment.length));
+            }
+        }
+    }
+    for (int i = 0; i < directives.size(); ++i) {
+        const FormatConfigDirective &directive = directives.at(i);
+        if (directive.kind == FormatConfigDirective::Begin) {
+            if ( ! matched.at(i)) {
+                continue;
+            }
+            if ( ! layers.pushLines(directive.lines, QString(QLL("Format rule")), error)) {
+                return false;
+            }
+        } else if (directive.kind == FormatConfigDirective::End) {
+            if ( ! matched.at(i)) {
+                continue;
+            }
+            if ( ! layers.popLines(error)) {
+                return false;
+            }
+        } else {
+            if ( ! layers.addLines(directive.lines, QString(QLL("Format rule")), error)) {
+                return false;
+            }
+        }
+        FormatSettings resolved;
+        FormatSettings::fromParser(layers, &resolved);
+        regions.append(qMakePair(directive.endOffset, resolved));
+    }
+    m_settingsRegions = regions;
+    m_inlineRanges = protectedRanges;
+    m_inlineConfig = config;
+    m_inlineConfigured = ! directives.isEmpty();
+    m_inlineError.clear();
+    m_ruleCaches.clear();
+    return true;
+}
+
+/*!
+    Reports unmatched comment configuration markers, including unmatched
+    openings when @a verbose is set.
+*/
+QList<FormatIssue > FormatDocument::inlineWarnings(bool verbose) const
+{
+    const QList<FormatConfigDirective > directives = configDirectives(this);
+    QList<int > openings;
+    QList<FormatIssue > warnings;
+    for (int i = 0; i < directives.size(); ++i) {
+        const FormatConfigDirective &directive = directives.at(i);
+        if (directive.kind == FormatConfigDirective::Begin) {
+            openings.append(i);
+        } else if (directive.kind == FormatConfigDirective::End) {
+            if (openings.isEmpty()) {
+                const int line = this->lineOf(directive.offset);
+                warnings.append(FormatIssue(line, "format-warning",
+                    QString(QLL("#: format warning: unmatched \"Format rule end.\" at line %1")).arg(line)));
+            } else {
+                openings.removeLast();
+            }
+        }
+    }
+    if (verbose) {
+        for (int i = 0; i < openings.size(); ++i) {
+            const int line = this->lineOf(directives.at(openings.at(i)).offset);
+            warnings.append(FormatIssue(line, "format-warning",
+                QString(QLL("#: format warning: consider replacing \"Format rule begin:\" with "
+                    "\"Format rule:\" at line %1 (since it has no \"Format rule end.\" comment)."))
+                .arg(line)));
+        }
+    }
+    return warnings;
 }
 
 /*!
@@ -558,12 +693,32 @@ int FormatDocument::commentEndLine(int index) const
 }
 
 /*!
-    Tells whether the comment at \a index of comments() is one that no rule
-    changes: a `TRACE/` record, or a license header (a Qt license block, or
-    an `SPDX-License-Identifier:` tag, which tools read as it is).
+    Tells whether the comment at @a index carries an inline setting.
+*/
+bool FormatDocument::isInlineConfigComment(int index) const
+{
+    const int offset = m_comments.at(index).offset;
+    int low = 0;
+    int high = m_inlineRanges.size();
+    while (low < high) {
+        const int middle = low + (high - low) / 2;
+        if (m_inlineRanges.at(middle).first <= offset) {
+            low = middle + 1;
+        } else {
+            high = middle;
+        }
+    }
+    return low > 0 && offset < m_inlineRanges.at(low - 1).second;
+}
+
+/*!
+    Tells whether the comment at @a index is protected from formatting.
 */
 bool FormatDocument::isProtectedComment(int index) const
 {
+    if (this->isInlineConfigComment(index)) {
+        return true;
+    }
     const QByteArray text = this->commentText(index);
     return text.contains("TRACE/") || text.contains("$QT_BEGIN_LICENSE")
         || text.contains("SPDX-License-Identifier:") || text.startsWith("/****");
@@ -673,6 +828,24 @@ bool FormatDocument::canReplace(int offset, int length) const
 {
     if ( ! this->isLineSelected(this->lineOf(offset))) {
         return false;
+    }
+    int low = 0;
+    int high = m_inlineRanges.size();
+    while (low < high) {
+        const int middle = low + (high - low) / 2;
+        if (m_inlineRanges.at(middle).second <= offset) {
+            low = middle + 1;
+        } else {
+            high = middle;
+        }
+    }
+    if (low < m_inlineRanges.size()) {
+        const QPair<int, int > &range = m_inlineRanges.at(low);
+        if ((length == 0 && offset > range.first && offset < range.second)
+            || (length > 0 && offset < range.second && offset + length > range.first)
+        ) {
+            return false;
+        }
     }
     for (int i = 0; i < this->m_edits.size(); ++i) {
         const Edit & edit = this->m_edits.at(i);
@@ -796,6 +969,11 @@ bool FormatDocument::applyEdits()
     const bool changed = text != this->m_text;
     this->m_text = text;
     this->analyze();
+    if (m_inlineConfigured) {
+        if ( ! this->setInlineConfiguration(m_inlineConfig, &m_inlineError)) {
+            m_settingsRegions.clear();
+        }
+    }
     return changed;
 }
 

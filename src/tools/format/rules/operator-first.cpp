@@ -113,7 +113,7 @@ static bool joinsClosingLine(FormatDocument *document, int index)
         previousStart,
         previousEnd - previousStart
     ) + space + text;
-    if (textWidth(joined) > document->settings().wrapMax) {
+    if (textWidth(joined) > document->settingsAt(document->lineStart(line)).wrapMax) {
         return false;
     }
     const int from = document->lineStart(line);

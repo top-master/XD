@@ -263,6 +263,109 @@ bool Config::Parser::readData(const QByteArray &data, const QString &origin,
 }
 
 /*!
+    @class Config::LayeredParser
+    @internal
+
+    Applies permanent and scoped groups of setting lines over a base parser.
+    Scoped groups override permanent groups and are removed in reverse order.
+*/
+
+/*! Builds the layers over the settings in @a base. */
+Config::LayeredParser::LayeredParser(const Parser &base)
+    : Parser(base), m_base(base)
+{
+}
+
+/*! Applies @a layer to @a parser, reporting errors in @a error. */
+bool Config::LayeredParser::apply(Parser *parser, const Layer &layer,
+                                  QString *error)
+{
+    QByteArray text;
+    for (int i = 0; i < layer.lines.size(); ++i) {
+        if (i > 0) {
+            text += '\n';
+        }
+        text += layer.lines.at(i);
+    }
+    if (text.trimmed().startsWith('[')) {
+        return parser->readData(text, layer.origin, error);
+    }
+    for (int i = 0; i < layer.lines.size(); ++i) {
+        const QByteArray line = layer.lines.at(i).trimmed();
+        if ( ! line.isEmpty()
+            && ! parser->assign(QString::fromUtf8(line), error)
+        ) {
+            *error = layer.origin + QLL(": ") + *error;
+            return false;
+        }
+    }
+    return true;
+}
+
+/*! Rebuilds the effective settings, reporting errors in @a error. */
+bool Config::LayeredParser::rebuild(QString *error)
+{
+    Parser result(m_base);
+    for (int i = 0; i < m_permanent.size(); ++i) {
+        if ( ! apply(&result, m_permanent.at(i), error)) {
+            return false;
+        }
+    }
+    for (int i = 0; i < m_scoped.size(); ++i) {
+        if ( ! apply(&result, m_scoped.at(i), error)) {
+            return false;
+        }
+    }
+    static_cast<Parser &>(*this) = result;
+    return true;
+}
+
+/*! Adds permanent @a lines from @a origin, reporting errors in @a error. */
+bool Config::LayeredParser::addLines(const QList<QByteArray > &lines,
+                                     const QString &origin, QString *error)
+{
+    Layer layer;
+    layer.lines = lines;
+    layer.origin = origin;
+    m_permanent.append(layer);
+    if ( ! this->rebuild(error)) {
+        m_permanent.removeLast();
+        return false;
+    }
+    return true;
+}
+
+/*! Adds scoped @a lines from @a origin, reporting errors in @a error. */
+bool Config::LayeredParser::pushLines(const QList<QByteArray > &lines,
+                                      const QString &origin, QString *error)
+{
+    Layer layer;
+    layer.lines = lines;
+    layer.origin = origin;
+    m_scoped.append(layer);
+    if ( ! this->rebuild(error)) {
+        m_scoped.removeLast();
+        return false;
+    }
+    return true;
+}
+
+/*! Removes the innermost scope, reporting errors in @a error. */
+bool Config::LayeredParser::popLines(QString *error)
+{
+    if (m_scoped.isEmpty()) {
+        *error = QString(QLL("no scoped settings layer"));
+        return false;
+    }
+    const Layer removed = m_scoped.takeLast();
+    if ( ! this->rebuild(error)) {
+        m_scoped.append(removed);
+        return false;
+    }
+    return true;
+}
+
+/*!
     Reads the files named @a fileName that apply to @a path (see
     Config::Scanner::levelFiles()) over the settings so far, from the
     root's level down.

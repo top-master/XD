@@ -41,6 +41,9 @@ public:
                            QString *error);
     static bool load(const QString & path, const FormatConfig & config,
                      FormatSettings *settings, QString *error);
+    static bool readParser(const QString &path, const FormatConfig &config,
+                           Config::Parser *parser, QString *error);
+    static void fromParser(const Config::Parser &parser, FormatSettings *settings);
 
     FormatSpacing refSuffix;
     FormatSpacing moveSuffix;

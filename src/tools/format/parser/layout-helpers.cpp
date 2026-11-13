@@ -11,11 +11,12 @@
 /*!
     Builds the column the code wrap rules break a line at: the first
     `[Structure] wrapBegin` column, never past `[Structure] wrapMax`; a line
-    wider than it does not fit.
+    wider than it does not fit. Uses the settings at @a offset when supplied.
 */
-int wrapColumn(const FormatDocument *document)
+int wrapColumn(const FormatDocument *document, int offset)
 {
-    const FormatSettings & settings = document->settings();
+    const FormatSettings & settings = offset < 0
+        ? document->settings() : document->settingsAt(offset);
     const int begin = settings.wrapBegin.isEmpty()
         ? settings.wrapMax : settings.wrapBegin.first();
     return qMin(begin, settings.wrapMax);
@@ -96,7 +97,7 @@ bool logicalBreakBeforeCall(const FormatDocument *document, int open,
     const QByteArray padding = continuationPad(
         textWidth(document->indentOf(line))
     );
-    const int limit = qMax(1, document->settings().wrapMax);
+    const int limit = qMax(1, document->settingsAt(at).wrapMax);
     if (textWidth(prefix) > limit
         || textWidth(padding) + textWidth(tail) > limit
     ) {
@@ -452,10 +453,10 @@ bool reachesWrapArgsAt(const FormatDocument *document,
         lineStart,
         document->symbolEnd(token) - lineStart
     );
-    const qreal percent = textWidth(head) * 100.0
-        / qMax(1, document->settings().wrapMax);
+    const FormatSettings &settings = document->settingsAt(document->symbols().at(token).from);
+    const qreal percent = textWidth(head) * 100.0 / qMax(1, settings.wrapMax);
     return conditions->holds(
-        document->settings().wrapArgsAt, token, percent,
+        settings.wrapArgsAt, token, percent,
         FormatSettings::defaultWrapChainAt()
     );
 }
@@ -496,7 +497,7 @@ QList<QByteArray > comparisonLines(
     const QList<int > operators = loosestOperators(
         document, first, last, &comparisonRank, 0, Q_NULLPTR
     );
-    if (column + textWidth(text) <= document->settings().wrapMax
+    if (column + textWidth(text) <= document->settingsAt(document->symbols().at(first).from).wrapMax
         || operators.isEmpty()
     ) {
         return QList<QByteArray >() << text;

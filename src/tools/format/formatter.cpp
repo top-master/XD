@@ -113,6 +113,11 @@ FormatResult Formatter::format(const QByteArray & text, const QString & path,
         return result;
     }
     document.setSettings(settings);
+    if (text.contains("Format rule")
+        && ! document.setInlineConfiguration(config, &result.error)
+    ) {
+        return result;
+    }
 
     // Resolves the lines to format.
     if ( ! lineSpecs.isEmpty()) {
@@ -145,6 +150,10 @@ FormatResult Formatter::format(const QByteArray & text, const QString & path,
             if ( ! document.applyEdits()) {
                 break;
             }
+            if ( ! document.inlineConfigurationError().isEmpty()) {
+                result.error = document.inlineConfigurationError();
+                return result;
+            }
 
             // Drops this pass's issues while another pass follows, since
             // that pass reports again whatever the fixes left.
@@ -158,5 +167,8 @@ FormatResult Formatter::format(const QByteArray & text, const QString & path,
     result.changed = result.text != text;
     result.issues = document.issues();
     result.requests = document.requests();
+    if (text.contains("Format rule")) {
+        result.warnings = document.inlineWarnings(config.verbose);
+    }
     return result;
 }

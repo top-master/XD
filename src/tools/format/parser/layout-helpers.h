@@ -10,7 +10,7 @@
 #include <QtCore/QList>
 #include <QtCore/QPair>
 
-int wrapColumn(const FormatDocument *document);
+int wrapColumn(const FormatDocument *document, int offset = -1);
 int continuationIndent(int indent, int steps = 1);
 QByteArray continuationPad(int indent, int steps = 1);
 bool logicalBreakBeforeCall(const FormatDocument *document, int open,

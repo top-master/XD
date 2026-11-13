@@ -28,12 +28,13 @@
 class FormatConfig
 {
 public:
-    inline FormatConfig() {}
+    inline FormatConfig() : verbose(false) {}
 
     QString file;
     QStringList adds;
     QStringList assignments;
-    QList<QByteArray > inlineLayers;
+    QList<QList<QByteArray > > inlineLayers;
+    bool verbose;
     QStringList includePaths;
 };
 

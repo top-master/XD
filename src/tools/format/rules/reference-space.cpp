@@ -57,8 +57,9 @@ void FormatReferenceSpaceRule::run(FormatDocument *document) const
         // Puts one space before the operator, and after it what the
         // project's setting asks for; a setting by regular expression whose
         // pattern matches the line replaces it instead.
+        const FormatSettings &settings = document->settingsAt(document->symbols().at(i).from);
         const FormatSpacing & setting = token == AND
-            ? document->settings().refSuffix : document->settings().moveSuffix;
+            ? settings.refSuffix : settings.moveSuffix;
         const FormatSpacing spacing = document->onSetting(setting, i);
         if (spacing.isNull()) {
             continue;

@@ -27,6 +27,7 @@ public:
     bool changed;
     QList<FormatIssue > issues;
     QList<FormatIssue > requests;
+    QList<FormatIssue > warnings;
     QString error;
 };
 

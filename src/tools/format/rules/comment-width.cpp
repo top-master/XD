@@ -325,12 +325,13 @@ void FormatCommentWidthRule::runGroup(
         const int last = document->commentEndLine(group.at(g));
         for (int line = first; line <= last; ++line) {
             const QString text = QString::fromUtf8(document->lineText(line));
-            if ( ! FormatCommentWidthRule::fits(text, document->settings())) {
+            const FormatSettings &settings = document->settingsAt(document->lineStart(line));
+            if ( ! FormatCommentWidthRule::fits(text, settings)) {
                 document->report(
                     document->lineStart(line),
                     "comment-width",
                     QString(QLL("wrap the comment at %1 columns (it has %2)"))
-                        .arg(document->settings().commentWrapMax)
+                        .arg(settings.commentWrapMax)
                         .arg(text.size())
                 );
             }
@@ -352,7 +353,7 @@ bool FormatCommentWidthRule::rewrap(
         int first, int count, const QByteArray & nextPrefix) const
 {
     // Checks for a line past the column limit.
-    const FormatSettings & settings = document->settings();
+    const FormatSettings & settings = document->settingsAt(lines.at(first).offset);
     const int firstLine = document->lineOf(lines.at(first).offset);
     bool tooLong = false;
     for (int k = 0; k < count && ! tooLong; ++k) {

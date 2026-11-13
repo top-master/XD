@@ -56,7 +56,6 @@ static void replaceCondition(FormatDocument *document, int open, int close,
 */
 void FormatConditionWrapRule::run(FormatDocument *document) const
 {
-    const int wrap = wrapColumn(document);
     FormatScopeConditions conditions(document);
     const FormatConditionLayout layout(document, &conditions);
     for (int i = 0; i + 1 < document->symbols().size(); ++i) {
@@ -70,6 +69,7 @@ void FormatConditionWrapRule::run(FormatDocument *document) const
         const int open = i + 1;
         const int close = document->match(open);
         const int line = document->symbolLine(i);
+        const FormatSettings &settings = document->settingsAt(document->symbols().at(i).from);
         if (close < 0 || document->isDirectiveLine(line)
             || document->hasCommentBetween(
                 document->symbols().at(open).from,
@@ -85,7 +85,7 @@ void FormatConditionWrapRule::run(FormatDocument *document) const
         // comparison, hence it waits for the hard limit.
         if (layout.operators(open, close).isEmpty()) {
             const bool isLong = document->symbolEndLine(close) == line
-                && textWidth(document->lineText(line)) > document->settings().wrapMax;
+                && textWidth(document->lineText(line)) > settings.wrapMax;
             const QByteArray text = isLong
                 ? layout.layoutPlain(open, close) : QByteArray();
             if ( ! text.isEmpty()) {
@@ -99,13 +99,13 @@ void FormatConditionWrapRule::run(FormatDocument *document) const
         // with a line past `wrapMax`.
         const int endLine = document->symbolEndLine(close);
         if (endLine == line) {
-            if (textWidth(document->lineText(line)) <= wrap) {
+            if (textWidth(document->lineText(line)) <= wrapColumn(document, document->symbols().at(i).from)) {
                 continue;
             }
         } else if ( ! this->isSplitTooLong(document, layout, open, close)) {
             continue;
         } else if (document->agentMode()) {
-            const int limit = document->settings().wrapMax;
+            const int limit = settings.wrapMax;
             document->request(
                 document->symbols().at(i).from,
                 "condition-wrap",
@@ -151,7 +151,7 @@ bool FormatConditionWrapRule::isSplitTooLong(
         const FormatDocument *document, const FormatConditionLayout & layout,
         int open, int close) const
 {
-    const int max = document->settings().wrapMax;
+    const int max = document->settingsAt(document->symbols().at(open).from).wrapMax;
     bool tooLong = false;
     for (int l = document->symbolLine(open); l <= document->symbolEndLine(close); ++l) {
         tooLong = tooLong || textWidth(document->lineText(l)) > max;

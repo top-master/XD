@@ -39,8 +39,9 @@
 void FormatParamWrapRule::run(FormatDocument *document) const
 {
     FormatScopeConditions conditions(document);
-    const int limit = document->settings().wrapMax;
     for (int line = 1; line <= document->lineCount(); ++line) {
+        const FormatSettings &settings = document->settingsAt(document->lineStart(line));
+        const int limit = settings.wrapMax;
         const int first = document->firstSymbolOfLine(line);
         if (first < 0 || document->isDirectiveLine(line)
             || textWidth(document->lineText(line)) <= limit
@@ -103,7 +104,7 @@ void FormatParamWrapRule::run(FormatDocument *document) const
                 limit
             );
             const bool breaksAfterOpen = conditions.holds(
-                document->settings().wrapArgsAt,
+                settings.wrapArgsAt,
                 i,
                 percent,
                 FormatSettings::defaultWrapChainAt()
@@ -168,8 +169,9 @@ void FormatParamWrapRule::regroup(
         FormatDocument *document,
         FormatScopeConditions *conditions) const
 {
-    const int limit = document->settings().wrapMax;
     for (int i = 1; i < document->symbols().size(); ++i) {
+        const FormatSettings &settings = document->settingsAt(document->symbols().at(i).from);
+        const int limit = settings.wrapMax;
         const int close = document->match(i);
         if (document->token(i) != LPAREN || close <= i + 1
             || document->symbolLine(close) == document->symbolLine(i)
@@ -226,7 +228,7 @@ void FormatParamWrapRule::regroup(
         );
         const qreal percent = textWidth(prefix) * 100.0 / qMax(1, limit);
         const bool mustBreak = conditions->holds(
-            document->settings().wrapArgsAt, i,
+            settings.wrapArgsAt, i,
             percent,
             FormatSettings::defaultWrapChainAt()
         );

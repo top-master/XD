@@ -307,6 +307,29 @@ The command line then overrides the `.formatrc` files, in this order:
    (`-c 'types.refSuffix="\t"'` for a tab, `\x20`, `\u00a0`, and so on); a
    value without quotes stays as it is, backslashes included.
 
+### Settings in comments
+
+A `Format rule:` comment overrides the settings that follow it in that file.
+It accepts an assignment on the same line, or a fenced block of assignments
+or `.formatrc` text. A block comment may carry the same forms.
+
+````cpp
+// Format rule: structure.wrapMax=70
+// Format rule:
+// ```
+// [Structure]
+// wrapBegin = 60
+// wrapMax = 70
+// ```
+````
+
+`Format rule begin:` starts a nested override, and `Format rule end.` removes
+the innermost one. A plain `Format rule:` adds a permanent override, including
+when it appears inside a nested override. An unmatched end produces a warning;
+an unmatched begin is ignored and produces a suggestion with `--verbose`.
+These comments override the directory and command-line settings for their
+locations, and the formatter preserves them.
+
 ### Replacements by regular expression
 
 A spacing key also takes `regexp/<pattern>/<replacement>/`. On each line where

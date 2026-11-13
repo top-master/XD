@@ -56,7 +56,6 @@
 void FormatArgsWrapRule::run(FormatDocument *document) const
 {
     FormatScopeConditions conditions(document);
-    const int wrap = wrapColumn(document);
     for (int i = 1; i < document->symbols().size(); ++i) {
         const int close = document->match(i);
         const bool isCall = document->token(i) == LPAREN
@@ -69,6 +68,7 @@ void FormatArgsWrapRule::run(FormatDocument *document) const
         const int line = document->symbolLine(i);
         const int lineStart = document->lineStart(line);
         const int from = document->symbols().at(i).from;
+        const FormatSettings &settings = document->settingsAt(from);
         const int closeFrom = document->symbols().at(close).from;
         const int closeEnd = document->symbolEnd(close);
 
@@ -126,11 +126,11 @@ void FormatArgsWrapRule::run(FormatDocument *document) const
         const bool argumentsBelow =
             document->symbolLine(arguments.first().first) > line;
         const bool over = conditions.argsOver(i, arguments.size());
-        const bool mayBreak = document->settings().wrapArgsOverCondition.isEmpty()
+        const bool mayBreak = settings.wrapArgsOverCondition.isEmpty()
             ? isBrace || (endsInChain && ( ! isSplit || argumentsBelow))
                 || over || reachesWrapArgsAt(document, &conditions, i)
             : over;
-        const bool needsBreak = mayBreak && column + textWidth(oneLine) > wrap;
+        const bool needsBreak = mayBreak && column + textWidth(oneLine) > wrapColumn(document, from);
         const int closeLine = document->symbolLine(close);
         const bool isMisplaced = hasMisplacedLines(
             document,
@@ -167,7 +167,7 @@ void FormatArgsWrapRule::run(FormatDocument *document) const
         ) {
             // Asks the agent to put the arguments that belong together on one
             // line (see FormatAgentGuides for the prompt it gets).
-            const int wrapMax = qMax(1, document->settings().wrapMax);
+            const int wrapMax = qMax(1, settings.wrapMax);
             document->request(
                 from,
                 "args-wrap",

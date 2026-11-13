@@ -485,7 +485,9 @@ qreal FormatScopeConditions::remainingSpace(int token) const
         m_document->lineStart(line),
         m_document->symbolEnd(open) - m_document->lineStart(line)
     );
-    const int maximum = qMax(1, m_document->settings().wrapMax);
+    const int maximum = qMax(1, m_document->settingsAt(
+        m_document->symbols().at(open).from
+    ).wrapMax);
     return 100.0 * (maximum - textWidth(head)) / maximum;
 }
 
@@ -551,7 +553,9 @@ int FormatScopeConditions::argumentCount(
 */
 bool FormatScopeConditions::argsOver(int token, int count, qreal spaceRemaining)
 {
-    const FormatSettings &settings = m_document->settings();
+    const FormatSettings &settings = m_document->settingsAt(
+        m_document->symbols().at(token).from
+    );
     if (settings.wrapArgsOverCondition.isEmpty()) {
         return count > settings.wrapArgsOver;
     }

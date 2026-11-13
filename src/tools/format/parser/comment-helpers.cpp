@@ -216,7 +216,7 @@ QString mapProse(
     doc-comment marker, form one group, and every other
     comment forms a group of its own.
 */
-QList<QList<int > > commentGroups(const FormatDocument *document)
+QList<QList<int > > commentGroups(const FormatDocument *document, bool splitProtected)
 {
     QList<QList<int > > groups;
     for (int i = 0; i < document->comments().size(); ++i) {
@@ -229,6 +229,8 @@ QList<QList<int > > commentGroups(const FormatDocument *document)
             const FormatComment & before = document->comments().at(previous);
             const int line = document->commentLine(i);
             if (before.isLine() && ! before.trailing && before.kind == comment.kind
+                && ( ! splitProtected || ( ! document->isInlineConfigComment(i)
+                    && ! document->isInlineConfigComment(previous)))
                 && document->commentLine(previous) == line - 1
                 && comment.offset - document->lineStart(line)
                     == before.offset - document->lineStart(line - 1)
@@ -240,6 +242,72 @@ QList<QList<int > > commentGroups(const FormatDocument *document)
         groups.append(QList<int >() << i);
     }
     return groups;
+}
+
+/*!
+    Finds configuration directives in the comments of @a document.
+*/
+QList<FormatConfigDirective > configDirectives(const FormatDocument *document)
+{
+    QList<FormatConfigDirective > directives;
+    const QList<QList<int > > groups = commentGroups(document, false);
+    for (int groupIndex = 0; groupIndex < groups.size(); ++groupIndex) {
+        const QList<int > &group = groups.at(groupIndex);
+        const QList<FormatCommentLine > lines = groupLines(document, group);
+        const bool lineComments = document->comments().at(group.first()).isLine();
+        for (int lineIndex = 0; lineIndex < lines.size(); ++lineIndex) {
+            if ( ! lineComments && lineIndex > 0
+                && ! lines.at(lineIndex - 1).text.trimmed().isEmpty()
+            ) {
+                break;
+            }
+            const QByteArray text = lines.at(lineIndex).text.trimmed();
+            FormatConfigDirective directive;
+            directive.offset = lines.at(lineIndex).offset;
+            directive.endOffset = directive.offset + lines.at(lineIndex).text.size();
+            int prefix = 0;
+            if (text.startsWith("Format rule begin:")) {
+                directive.kind = FormatConfigDirective::Begin;
+                prefix = sizeof("Format rule begin:") - 1;
+            } else if (text.startsWith("Format rule:")) {
+                directive.kind = FormatConfigDirective::Add;
+                prefix = sizeof("Format rule:") - 1;
+            } else if (text == "Format rule end.") {
+                directive.kind = FormatConfigDirective::End;
+                directives.append(directive);
+                continue;
+            } else {
+                continue;
+            }
+            QByteArray body = text.mid(prefix).trimmed();
+            if (body.isEmpty() && lineIndex + 1 < lines.size()
+                && lines.at(lineIndex + 1).text.trimmed() == "```"
+            ) {
+                int end = lineIndex + 2;
+                while (end < lines.size() && lines.at(end).text.trimmed() != "```") {
+                    directive.lines.append(lines.at(end).text);
+                    ++end;
+                }
+                if (end < lines.size()) {
+                    directive.endOffset = lines.at(end).offset + lines.at(end).text.size();
+                    lineIndex = end;
+                } else {
+                    directive.lines.clear();
+                }
+            } else if ( ! body.isEmpty()) {
+                if (body.startsWith('`') && body.endsWith("`.")) {
+                    body.chop(2);
+                    body.remove(0, 1);
+                } else if (body.startsWith('`') && body.endsWith('`')) {
+                    body.chop(1);
+                    body.remove(0, 1);
+                }
+                directive.lines.append(body);
+            }
+            directives.append(directive);
+        }
+    }
+    return directives;
 }
 
 /*!

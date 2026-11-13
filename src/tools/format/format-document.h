@@ -45,9 +45,17 @@ public:
     inline const QList<FormatIssue > &issues() const { return m_issues; }
     inline int lineCount() const { return m_lineStarts.size(); }
     inline const FormatSettings &settings() const { return m_settings; }
+    const FormatSettings &settingsAt(int offset) const;
+    bool setInlineConfiguration(const FormatConfig &config, QString *error);
+    inline QString inlineConfigurationError() const { return m_inlineError; }
+    QList<FormatIssue > inlineWarnings(bool verbose) const;
     inline void setSettings(const FormatSettings & settings)
     {
         m_settings = settings;
+        m_settingsRegions.clear();
+        m_inlineRanges.clear();
+        m_inlineConfigured = false;
+        m_inlineError.clear();
         m_ruleCaches.clear();
     }
     inline QVariant ruleCache(const FormatRule *rule, const QByteArray &key) const
@@ -93,6 +101,7 @@ public:
     int commentLine(int index) const;
     int commentEndLine(int index) const;
     bool isProtectedComment(int index) const;
+    bool isInlineConfigComment(int index) const;
     bool hasCommentBetween(int from, int to) const;
     bool isOnlyWhitespace(int from, int to) const;
 
@@ -140,6 +149,11 @@ private:
     QByteArray m_text;
     QString m_path;
     FormatSettings m_settings;
+    QVector<QPair<int, FormatSettings > > m_settingsRegions;
+    QVector<QPair<int, int > > m_inlineRanges;
+    FormatConfig m_inlineConfig;
+    bool m_inlineConfigured;
+    QString m_inlineError;
     QHash<const FormatRule *, QHash<QByteArray, QVariant > > m_ruleCaches;
     int m_pass;
     bool m_agentMode;

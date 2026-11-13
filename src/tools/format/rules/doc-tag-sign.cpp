@@ -144,7 +144,7 @@ void FormatDocTagSignRule::runGroup(
     for (int line = 1; line <= document->lineCount() && ! isRanged; ++line) {
         isRanged = ! document->isLineSelected(line);
     }
-    const char setting = document->settings().docTagSign;
+    const char setting = document->settingsAt(comments.at(group.first()).offset).docTagSign;
     const char sign = isNew && isRanged
         ? setting : this->fileSign(document, setting);
 

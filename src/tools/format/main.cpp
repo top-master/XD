@@ -540,6 +540,9 @@ static int logResults(Logger *logger, const QList<FormatFileResult > & results,
                             ));
             code = qMax(code, int(ExitDirty));
         }
+        for (int k = 0; k < result.warnings.size(); ++k) {
+            logger->logDiagnostic(result.warnings.at(k).message);
+        }
     }
     return code;
 }
@@ -723,6 +726,11 @@ int main(int argc, char *argv[])
             "out without a warning."))
     );
     parser.addOption(headlessOption);
+    QCommandLineOption verboseOption(
+        QStringList() << QString(QLL("verbose")),
+        QString(QLL("Report additional formatting warnings."))
+    );
+    parser.addOption(verboseOption);
     QCommandLineOption workerOption(
         QStringList() << QString(QLL("worker")),
         QString(QLL("Prints the results for a parent format process (internal)."))
@@ -1012,6 +1020,7 @@ int main(int argc, char *argv[])
     options.fileLineSpecs = gitLineSpecs;
     options.rules = rules;
     options.config = config;
+    options.config.verbose = parser.isSet(verboseOption);
     options.check = parser.isSet(checkOption);
     options.agent = parser.isSet(agentOption);
     if (options.agent && options.check) {

@@ -12,6 +12,17 @@
 #include <QtCore/QString>
 #include <QtCore/QVector>
 
+struct FormatConfigDirective
+{
+    enum Kind { Add, Begin, End };
+    Kind kind;
+    int offset;
+    int endOffset;
+    QList<QByteArray > lines;
+};
+
+QList<FormatConfigDirective > configDirectives(const FormatDocument *document);
+
 QList<FormatCommentLine > commentLines(
         const FormatDocument *document,
         int index);
@@ -24,7 +35,8 @@ QVector<bool > fencedLines(const QList<FormatCommentLine > & lines);
 QString mapProse(
         const QString & text, QString (*map)(const QString &, const void *),
         const void *context);
-QList<QList<int > > commentGroups(const FormatDocument *document);
+QList<QList<int > > commentGroups(const FormatDocument *document,
+                                  bool splitProtected = true);
 bool isClosingLabel(const FormatDocument *document, int index);
 bool isInlineLabel(const FormatDocument *document, int index);
 QList<QPair<int, int > > tableRanges(const FormatDocument *document);

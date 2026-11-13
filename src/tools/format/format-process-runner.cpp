@@ -172,6 +172,9 @@ QStringList FormatProcessRunner::workerArguments() const
     if (this->m_options.agent) {
         arguments << QString(QLL("--ai"));
     }
+    if (this->m_options.config.verbose) {
+        arguments << QString(QLL("--verbose"));
+    }
     const FormatConfig & config = this->m_options.config;
     if ( ! config.file.isEmpty()) {
         arguments << QString(QLL("--config-file")) << config.file;
@@ -214,6 +217,9 @@ QByteArray FormatProcessRunner::encode(const FormatFileResult & result)
             result.requests.at(i)
         );
     }
+    for (int i = 0; i < result.warnings.size(); ++i) {
+        text += FormatProcessRunner::encodeIssue("warning", path, result.warnings.at(i));
+    }
     text += "end\t" + path + '\n';
     return text;
 }
@@ -255,7 +261,8 @@ bool FormatProcessRunner::decode(
         return true;
     }
     if ((fields.size() == 6 || fields.size() == 7)
-        && (fields.at(0) == "issue" || fields.at(0) == "request")
+        && (fields.at(0) == "issue" || fields.at(0) == "request"
+            || fields.at(0) == "warning")
     ) {
         const QString path = QString::fromUtf8(
             QByteArray::fromPercentEncoding(fields.at(1))
@@ -275,8 +282,10 @@ bool FormatProcessRunner::decode(
             );
             if (fields.at(0) == "issue") {
                 (*results)[i].issues.append(issue);
-            } else {
+            } else if (fields.at(0) == "request") {
                 (*results)[i].requests.append(issue);
+            } else {
+                (*results)[i].warnings.append(issue);
             }
             return true;
         }

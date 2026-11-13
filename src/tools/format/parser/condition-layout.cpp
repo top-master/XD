@@ -107,6 +107,8 @@ QByteArray FormatConditionLayout::layoutPlain(int open, int close) const
         return QByteArray();
     }
     const int line = m_document->symbolLine(open);
+    const int offset = m_document->symbols().at(open).from;
+    const FormatSettings &settings = m_document->settingsAt(offset);
     const int indent = m_document->indentOf(line).size();
     const int rank = conditionRank(m_document->token(found.first()));
     const int start = m_document->lineStart(line);
@@ -116,7 +118,7 @@ QByteArray FormatConditionLayout::layoutPlain(int open, int close) const
         )
     );
     if (found.size() == 1 && (rank == 3 || rank == 4)
-        && comparisonColumn < wrapColumn(m_document)
+        && comparisonColumn < wrapColumn(m_document, offset)
     ) {
         const QList<int > tighter = loosestOperators(
             m_document,
@@ -133,7 +135,7 @@ QByteArray FormatConditionLayout::layoutPlain(int open, int close) const
                     m_document->symbols().at(tighter.first()).from - start
                 )
             );
-            bool fits = firstWidth <= m_document->settings().wrapMax;
+            bool fits = firstWidth <= settings.wrapMax;
             for (int k = 0; k < tighter.size() && fits; ++k) {
                 const int end = k + 1 < tighter.size()
                     ? tighter.at(k + 1) - 1 : close - 1;
@@ -141,7 +143,7 @@ QByteArray FormatConditionLayout::layoutPlain(int open, int close) const
                     m_document,
                     tighter.at(k),
                     end
-                )) <= m_document->settings().wrapMax;
+                )) <= settings.wrapMax;
             }
             if (fits) {
                 found = tighter;
@@ -169,7 +171,7 @@ QList<QByteArray > FormatConditionLayout::layoutHead(
         int first, int last,
         int indent) const
 {
-    const int wrap = wrapColumn(m_document);
+    const int wrap = wrapColumn(m_document, m_document->symbols().at(first).from);
     return this->headLines(first, last, indent, indent, wrap, 0, true);
 }
 
@@ -243,7 +245,7 @@ QByteArray FormatConditionLayout::group(
             && ! this->operators(start, last).isEmpty();
         const bool fits = operandColumn
             + textWidth(sourceText(m_document, first, last)) + 1
-            <= wrapColumn(m_document);
+            <= wrapColumn(m_document, m_document->symbols().at(first).from);
         if (isNested && ! fits) {
             const QByteArray signs = start > first
                 ? m_document->text().mid(
@@ -301,7 +303,8 @@ QByteArray FormatConditionLayout::atom(
     const int innerLast = isParenthesized ? last - 1 : last;
     int question = -1;
     int colon = -1;
-    if (column + textWidth(text) <= wrapColumn(m_document)) {
+    const int offset = m_document->symbols().at(first).from;
+    if (column + textWidth(text) <= wrapColumn(m_document, offset)) {
         return text;
     }
 
@@ -341,7 +344,7 @@ QByteArray FormatConditionLayout::atom(
         indent,
         column,
         isParenthesized ? 1 : 0,
-        qMax(1, m_document->settings().wrapMax)
+        qMax(1, m_document->settingsAt(offset).wrapMax)
     );
     QByteArray result;
     for (int l = 0; l < lines.size(); ++l) {
