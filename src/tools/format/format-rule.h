@@ -4,6 +4,8 @@
 #ifndef FORMAT_RULE_H
 #define FORMAT_RULE_H
 
+#include "./format-document.h"
+
 #include <QtCore/QByteArray>
 #include <QtCore/QString>
 
@@ -17,6 +19,17 @@ public:
     virtual QByteArray name() const = 0;
     virtual QString summary() const = 0;
     virtual void run(FormatDocument *document) const = 0;
+
+protected:
+    inline QVariant cache(const FormatDocument *document, const QByteArray &key) const
+    {
+        return document->ruleCache(this, key);
+    }
+    inline void setCache(FormatDocument *document, const QByteArray &key,
+                         const QVariant &value) const
+    {
+        document->setRuleCache(this, key, value);
+    }
 };
 
 #endif // FORMAT_RULE_H

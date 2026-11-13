@@ -241,6 +241,28 @@ bool Config::Parser::readFile(const QString & file, QString *error)
 }
 
 /*!
+    Reads the `.ini` text @a data using @a origin when reporting an error.
+*/
+bool Config::Parser::readData(const QByteArray &data, const QString &origin,
+                              QString *error)
+{
+    QTemporaryFile file(QDir::tempPath() + QLL("/format-settings-XXXXXX.ini"));
+    if ( ! file.open() || file.write(data) != data.size() || ! file.flush()) {
+        *error = origin + QLL(": cannot read the settings");
+        return false;
+    }
+    const QString path = file.fileName();
+    file.close();
+    if ( ! this->readFile(path, error)) {
+        if (error->startsWith(path)) {
+            error->replace(0, path.size(), origin);
+        }
+        return false;
+    }
+    return true;
+}
+
+/*!
     Reads the files named @a fileName that apply to @a path (see
     Config::Scanner::levelFiles()) over the settings so far, from the
     root's level down.

@@ -43,6 +43,7 @@ private slots:
     void testReplace_shouldDropEditOutsideRanges();
     void testReplace_shouldDropOverlappingEdit();
     void testReplace_shouldQueueBothEditsOrNeither();
+    void testRuleCache_shouldIsolateDocumentsAndRules();
     void testApplyEdits_shouldMoveRangesAndIssues();
 
     /// Line ranges.
@@ -65,6 +66,7 @@ private slots:
     void testAllRules_shouldKeepCleanCode();
     void testSettings_shouldReadFromRootDown();
     void testSettings_shouldReadWrapColumns();
+    void testSettings_shouldReadInlineIni();
     void testProjectFiles_shouldHandEachFileOnce();
     void testCommentWidth_shouldWrap_data();
     void testAgentMode_shouldAskForOperatorGroups();
@@ -109,6 +111,40 @@ private:
     IssueLines issueLines(const FormatResult & result,
                           const QString & rule) const;
 };
+
+void tst_FormatRules::testRuleCache_shouldIsolateDocumentsAndRules()
+{
+    FormatDocument first(QByteArray("int one;\n"));
+    FormatDocument second(QByteArray("int two;\n"));
+    Formatter formatter;
+    const QList<const FormatRule * > rules = formatter.rules();
+    QVERIFY(rules.size() >= 2);
+    first.setRuleCache(rules.at(0), QByteArray("choice"), QVariant(7));
+    QCOMPARE(first.ruleCache(rules.at(0), QByteArray("choice")).toInt(), 7);
+    QVERIFY( ! first.ruleCache(rules.at(1), QByteArray("choice")).isValid());
+    QVERIFY( ! second.ruleCache(rules.at(0), QByteArray("choice")).isValid());
+    first.setSettings(FormatSettings());
+    QVERIFY( ! first.ruleCache(rules.at(0), QByteArray("choice")).isValid());
+}
+
+void tst_FormatRules::testSettings_shouldReadInlineIni()
+{
+    Config::Parser parser(FormatSettings::schema());
+    QString error;
+    QVERIFY2(parser.readData("[Structure]\ntarget = any\n", QLL("inline"), &error),
+             qPrintable(error));
+    QCOMPARE(parser.value(QLL("structure.target")), QString(QLL("any")));
+    QVERIFY( ! parser.readData("[Structure]\ntarget = invalid\n", QLL("inline"), &error));
+    QVERIFY(error.startsWith(QLL("inline:")));
+    FormatConfig config;
+    config.inlineLayers << QByteArray("[Structure]\ntarget = any\nwrapMax = 90")
+                        << QByteArray("structure.wrapMax=60");
+    FormatSettings settings;
+    QVERIFY2(FormatSettings::load(QString(), config, &settings, &error),
+             qPrintable(error));
+    QCOMPARE(settings.codeTarget, FormatSettings::CodeTargetAny);
+    QCOMPARE(settings.wrapMax, 60);
+}
 
 /// Tokenizes `text` the way the formatter does, with comment tokens only
 /// when `keepComments` is set, and restores moc's switches afterwards.

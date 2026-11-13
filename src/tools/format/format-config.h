@@ -6,6 +6,8 @@
 
 #include <QtCore/QString>
 #include <QtCore/QStringList>
+#include <QtCore/QByteArray>
+#include <QtCore/QList>
 
 /*!
     @internal
@@ -31,6 +33,7 @@ public:
     QString file;
     QStringList adds;
     QStringList assignments;
+    QList<QByteArray > inlineLayers;
     QStringList includePaths;
 };
 

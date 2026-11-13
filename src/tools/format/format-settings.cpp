@@ -301,6 +301,24 @@ bool FormatSettings::load(const QString & path, const FormatConfig & config,
     if ( ! FormatSettings::readConfig(&parser, config, error)) {
         return false;
     }
+    for (int i = 0; i < config.inlineLayers.size(); ++i) {
+        const QByteArray layer = config.inlineLayers.at(i).trimmed();
+        if (layer.startsWith('[')) {
+            if ( ! parser.readData(layer, QString(QLL("Format rule")), error)) {
+                return false;
+            }
+        } else {
+            const QList<QByteArray > lines = layer.split('\n');
+            for (int j = 0; j < lines.size(); ++j) {
+                const QByteArray line = lines.at(j).trimmed();
+                if ( ! line.isEmpty()
+                    && ! parser.assign(QString::fromUtf8(line), error)
+                ) {
+                    return false;
+                }
+            }
+        }
+    }
     const QString refSuffix = QString(QLL("types.refSuffix"));
     const QString moveSuffix = QString(QLL("types.moveSuffix"));
     settings->refSuffix = FormatSettings::toSpacing(

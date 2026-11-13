@@ -8,6 +8,7 @@
 #include "./config-schema.h"
 
 #include <QtCore/QHash>
+#include <QtCore/QByteArray>
 #include <QtCore/QString>
 
 namespace Config {
@@ -18,6 +19,7 @@ public:
     explicit Parser(const Schema & schema);
 
     bool readFile(const QString & file, QString *error);
+    bool readData(const QByteArray &data, const QString &origin, QString *error);
     bool readLevels(const QString & path, const QString & fileName,
                     QString *error);
     bool assign(const QString & assignment, QString *error);

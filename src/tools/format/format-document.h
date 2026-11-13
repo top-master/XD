@@ -11,12 +11,16 @@
 #include "symbols.h"
 
 #include <QtCore/QByteArray>
+#include <QtCore/QHash>
 #include <QtCore/QList>
 #include <QtCore/QPair>
 #include <QtCore/QSet>
 #include <QtCore/QString>
 #include <QtCore/QStringList>
 #include <QtCore/QVector>
+#include <QtCore/QVariant>
+
+class FormatRule;
 
 class FormatDocument
 {
@@ -41,7 +45,20 @@ public:
     inline const QList<FormatIssue > &issues() const { return m_issues; }
     inline int lineCount() const { return m_lineStarts.size(); }
     inline const FormatSettings &settings() const { return m_settings; }
-    inline void setSettings(const FormatSettings & settings) { m_settings = settings; }
+    inline void setSettings(const FormatSettings & settings)
+    {
+        m_settings = settings;
+        m_ruleCaches.clear();
+    }
+    inline QVariant ruleCache(const FormatRule *rule, const QByteArray &key) const
+    {
+        return m_ruleCaches.value(rule).value(key);
+    }
+    inline void setRuleCache(const FormatRule *rule, const QByteArray &key,
+                             const QVariant &value)
+    {
+        m_ruleCaches[rule].insert(key, value);
+    }
     inline int pass() const { return m_pass; }
     inline bool agentMode() const { return m_agentMode; }
     inline const QStringList &includePaths() const { return m_includePaths; }
@@ -123,6 +140,7 @@ private:
     QByteArray m_text;
     QString m_path;
     FormatSettings m_settings;
+    QHash<const FormatRule *, QHash<QByteArray, QVariant > > m_ruleCaches;
     int m_pass;
     bool m_agentMode;
     QStringList m_includePaths;
