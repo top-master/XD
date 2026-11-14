@@ -39,8 +39,10 @@
 void FormatParamWrapRule::run(FormatDocument *document) const
 {
     FormatScopeConditions conditions(document);
-    const int limit = document->settings().wrapMax;
     for (int line = 1; line <= document->lineCount(); ++line) {
+        const FormatFileConfig &fileConfig =
+            document->configAt(document->lineStart(line));
+        const int limit = fileConfig.wrapMax;
         const int first = document->firstSymbolOfLine(line);
         if (first < 0 || document->isDirectiveLine(line)
             || textWidth(document->lineText(line)) <= limit
@@ -51,11 +53,10 @@ void FormatParamWrapRule::run(FormatDocument *document) const
         for (int i = first; i < last; ++i) {
             const int close = document->match(i);
             if (document->token(i) != LPAREN || close < 0 || close > last
-                || document->token(i + 1) == RPAREN || ! this->isDeclarationParen(
+                || document->token(i + 1) == RPAREN || ! isDeclarationParen(
                     document,
                     i
-                )
-                || document->hasCommentBetween(
+                ) || document->hasCommentBetween(
                     document->symbolEnd(i),
                     document->symbols().at(close).from
                 )
@@ -104,12 +105,12 @@ void FormatParamWrapRule::run(FormatDocument *document) const
                 limit
             );
             const bool breaksAfterOpen = conditions.holds(
-                document->settings().wrapArgsAt,
+                fileConfig.wrapArgsAt,
                 i,
                 percent,
-                FormatSettings::defaultWrapChainAt()
+                FormatFileConfig::defaultWrapChainAt()
             );
-            if (items.size() > document->settings().wrapArgsOver) {
+            if (conditions.argsOver(i, items.size())) {
                 const QByteArray pad = document->indentOf(line) + "        ";
                 lines << prefix;
                 for (int k = 0; k < items.size(); ++k) {
@@ -169,13 +170,15 @@ void FormatParamWrapRule::regroup(
         FormatDocument *document,
         FormatScopeConditions *conditions) const
 {
-    const int limit = document->settings().wrapMax;
     for (int i = 1; i < document->symbols().size(); ++i) {
+        const FormatFileConfig &fileConfig =
+            document->configAt(document->symbols().at(i).from);
+        const int limit = fileConfig.wrapMax;
         const int close = document->match(i);
         if (document->token(i) != LPAREN || close <= i + 1
             || document->symbolLine(close) == document->symbolLine(i)
             || document->token(close + 1) == COLON
-            || ! this->isDeclarationParen(document, i)
+            || ! isDeclarationParen(document, i)
             || document->hasCommentBetween(
                 document->symbolEnd(i),
                 document->symbols().at(close).from
@@ -227,9 +230,9 @@ void FormatParamWrapRule::regroup(
         );
         const qreal percent = textWidth(prefix) * 100.0 / qMax(1, limit);
         const bool mustBreak = conditions->holds(
-            document->settings().wrapArgsAt, i,
+            fileConfig.wrapArgsAt, i,
             percent,
-            FormatSettings::defaultWrapChainAt()
+            FormatFileConfig::defaultWrapChainAt()
         );
 
         // Keeps the groups under the first parameter when they fit there and
@@ -312,76 +315,6 @@ QList<QByteArray > FormatParamWrapRule::groupedLines(
 }
 
 /*!
-    Tells whether the `(` at @a paren of @a document opens the parameter list
-    of a function's declaration or definition, at file, namespace or class
-    scope: its name follows a type, or it is a constructor, a destructor, or
-    an operator, such as `operator==`, `operator()`, or a conversion
-    (`operator bool`, `operator QString`).
-*/
-bool FormatParamWrapRule::isDeclarationParen(
-        const FormatDocument *document,
-        int paren) const
-{
-    const FormatDocument::Scope scope = document->scopeOf(paren);
-    if (scope != FormatDocument::FileScope && scope != FormatDocument::NamespaceScope
-        && scope != FormatDocument::ClassScope
-    ) {
-        return false;
-    }
-
-    // Finds where the name starts: at the `operator` keyword of an operator,
-    // whose symbol or conversion type (up to 16 tokens) comes between it and
-    // the `(`; a `;`, a brace, or a `:` ends the search, as does a bracket
-    // other than the `()` of `operator()`.
-    int name = paren - 1;
-    bool isOperator = false;
-    for (int k = paren - 1; k >= qMax(1, paren - 16); --k) {
-        const Token token = document->token(k);
-        if (token == OPERATOR) {
-            name = k;
-            isOperator = true;
-            break;
-        }
-        if (token == SEMIC || token == LBRACE || token == RBRACE || token == COLON
-            || ((token == LPAREN || token == RPAREN) && k < paren - 2)
-        ) {
-            break;
-        }
-    }
-    if ( ! isOperator && document->token(name) != IDENTIFIER) {
-        return false;
-    }
-    if ( ! isOperator && document->token(name - 1) == TILDE) {
-        return true;
-    }
-    const int unqualified = name;
-    while (name >= 2
-        && document->token(name - 1) == SCOPE
-        && document->token(name - 2) == IDENTIFIER
-    ) {
-        name -= 2;
-    }
-    const Token typeEnd = document->token(name - 1);
-    if (isTypeEnd(typeEnd) || typeEnd == AND) {
-        return true;
-    }
-
-    // A qualified name with no type before it: an operator, such as a
-    // conversion, or a constructor, whose name repeats its class's.
-    if (name < unqualified) {
-        return isOperator
-            || document->lexem(paren - 1) == document->lexem(paren - 3);
-    }
-    const Token label = document->token(name - 2);
-    const bool afterAccess = typeEnd == COLON
-        && (label == PUBLIC || label == PRIVATE || label == PROTECTED || label == SLOTS
-            || label == SIGNALS);
-    return scope == FormatDocument::ClassScope
-        && (typeEnd == SEMIC || typeEnd == LBRACE || typeEnd == RBRACE || afterAccess
-            || typeEnd == EXPLICIT || typeEnd == INLINE);
-}
-
-/*!
     Builds the text of each parameter between the brackets at @a open and
     @a close of @a document, split at the commas outside of nested brackets
     and template arguments.
@@ -396,8 +329,8 @@ QList<QByteArray > FormatParamWrapRule::parameters(
     for (int i = open + 1; i <= close; ++i) {
         const Token token = document->token(i);
         if ((token == LPAREN
-            || token == LBRACK
-            || token == LBRACE)
+                || token == LBRACK
+                || token == LBRACE)
             && i != close
         ) {
             i = qMax(i, document->match(i));
@@ -410,8 +343,10 @@ QList<QByteArray > FormatParamWrapRule::parameters(
         }
         const int start = document->symbols().at(from).from;
         items
-            << document->text().mid(start, document->symbolEnd(i - 1)
-                - start
+            << document->text().mid(
+                start,
+                document->symbolEnd(i - 1)
+                    - start
             );
         from = i + 1;
     }

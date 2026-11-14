@@ -6,19 +6,28 @@
 #include "../format-document.h"
 #include "./code-helpers.h"
 #include "./scope-conditions.h"
-#include "../format-settings.h"
+#include "../format-file-config.h"
 
 /*!
     Builds the column the code wrap rules break a line at: the first
     `[Structure] wrapBegin` column, never past `[Structure] wrapMax`; a line
-    wider than it does not fit.
+    wider than it does not fit. Uses the settings at @a offset.
 */
-int wrapColumn(const FormatDocument *document)
+int wrapColumn(const FormatDocument *document, int offset)
 {
-    const FormatSettings & settings = document->settings();
-    const int begin = settings.wrapBegin.isEmpty()
-        ? settings.wrapMax : settings.wrapBegin.first();
-    return qMin(begin, settings.wrapMax);
+    const FormatFileConfig & fileConfig = document->configAt(offset);
+    const int begin = fileConfig.wrapBegin.isEmpty()
+        ? fileConfig.wrapMax : fileConfig.wrapBegin.first();
+    return qMin(begin, fileConfig.wrapMax);
+}
+
+/*!
+    Builds the column no line may pass, `[Structure] wrapMax` at @a offset;
+    at least 1, hence a share of it never divides by zero.
+*/
+int wrapMaxAt(const FormatDocument *document, int offset)
+{
+    return qMax(1, document->configAt(offset).wrapMax);
 }
 
 /*!
@@ -99,8 +108,9 @@ bool closesEarlierLine(const FormatDocument *document, int bracket)
     line adds one more step to its next lines, until the `,` that ends it,
     unless that line left a bracket open, closes a bracket opened on an
     earlier line, ends with a string literal, or starts with a string literal
-    (see startsWithStringLiteral()); a bracket opened while an argument had
-    that step keeps it for its own lines. A line that starts with a
+    (see startsWithStringLiteral()). Adjacent string literals take that extra
+    step; a bracket opened while an argument had that step keeps it for its
+    own lines. A line that starts with a
     binary operator, right below another one that does, sits at that
     line's indent; hence the operator lines of one chain line up.
 */
@@ -174,6 +184,10 @@ bool hasMisplacedLines(const FormatDocument *document, int open, int close,
         const Token end = document->token(last);
         if (end == COMMA) {
             ranges.last().second = false;
+        } else if (end == STRING_LITERAL
+            && startsWithStringLiteral(document, last + 1)
+        ) {
+            ranges.last().second = true;
         } else if ( ! opened && ! closesEarlierLine(document, last)
             && end != STRING_LITERAL
             && lead >= 0 && ! startsWithStringLiteral(document, lead)
@@ -244,8 +258,8 @@ bool findTernary(const FormatDocument *document, int first, int last,
     for (int k = first; k <= last; ++k) {
         const Token token = document->token(k);
         if ((token == LPAREN
-            || token == LBRACK
-            || token == LBRACE)
+                || token == LBRACK
+                || token == LBRACE)
             && document->match(k) > k
         ) {
             k = document->match(k);
@@ -276,12 +290,15 @@ static bool opensTemplate(Token token)
     the `<` at @a angle of @a document, before @a end; -1 when a `(`, `&&`,
     `||`, `?` or `;` comes first, hence the `<` compares.
 */
-static int templateClose(const FormatDocument *document, int angle, int end)
+int templateClose(const FormatDocument *document, int angle, int end)
 {
     int depth = 0;
     for (int i = angle; i < end; ++i) {
         const Token token = document->token(i);
-        if (token == LPAREN || token == ANDAND || token == OROR || token == QUESTION
+        if (token == LPAREN
+            || token == ANDAND
+            || token == OROR
+            || token == QUESTION
             || token == SEMIC
         ) {
             return -1;
@@ -324,7 +341,9 @@ QList<int > loosestOperators(
         if (token == LBRACE) {
             return QList<int >();
         }
-        if ((token == LPAREN || token == LBRACK) && document->match(k) > k) {
+        if ((token == LPAREN || token == LBRACK)
+            && document->match(k) > k
+        ) {
             k = document->match(k);
             continue;
         }
@@ -372,11 +391,15 @@ bool reachesWrapArgsAt(const FormatDocument *document,
         lineStart,
         document->symbolEnd(token) - lineStart
     );
-    const qreal percent = textWidth(head) * 100.0
-        / qMax(1, document->settings().wrapMax);
+    const FormatFileConfig &fileConfig =
+        document->configAt(document->symbols().at(token).from);
+    const qreal percent = textWidth(head) * 100.0 / qMax(
+        1,
+        fileConfig.wrapMax
+    );
     return conditions->holds(
-        document->settings().wrapArgsAt, token, percent,
-        FormatSettings::defaultWrapChainAt()
+        fileConfig.wrapArgsAt, token, percent,
+        FormatFileConfig::defaultWrapChainAt()
     );
 }
 
@@ -384,20 +407,20 @@ bool reachesWrapArgsAt(const FormatDocument *document,
     Ranks @a token among the comparison operators, from the loosest:
     `==` and `!=`, then `<`, `>`, `<=` and `>=`; -1 for any other token.
 */
-static int comparisonRank(Token token)
+int comparisonRank(Token token)
 {
-    static const Token ranks[][4] = {
-        { EQEQ, NE, NE, NE },
-        { LANGLE, RANGLE, LE, GE },
-    };
-    for (size_t r = 0; r < sizeof(ranks) / sizeof(ranks[0]); ++r) {
-        for (int t = 0; t < 4; ++t) {
-            if (ranks[r][t] == token) {
-                return int(r);
-            }
-        }
+    switch (token) {
+    case EQEQ:
+    case NE:
+        return 0;
+    case LANGLE:
+    case RANGLE:
+    case LE:
+    case GE:
+        return 1;
+    default:
+        return -1;
     }
-    return -1;
 }
 
 /*!
@@ -408,21 +431,26 @@ static int comparisonRank(Token token)
     loosest comparison operators (see loosestOperators()), each such line
     @a step columns past @a indent.
 */
-QList<QByteArray > comparisonLines(const FormatDocument *document, int first,
-                                   int last, int column, int indent, int step)
+QList<QByteArray > comparisonLines(
+        const FormatDocument *document, int first,
+        int last, int column, int indent, int step)
 {
     const QByteArray text = sourceText(document, first, last);
     const QList<int > operators = loosestOperators(
         document, first, last, &comparisonRank, 0, Q_NULLPTR
     );
-    if (column + textWidth(text) <= document->settings().wrapMax || operators.isEmpty()) {
+    if (column + textWidth(text)
+        <= document->configAt(document->symbols().at(first).from).wrapMax
+        || operators.isEmpty()
+    ) {
         return QList<QByteArray >() << text;
     }
     const QByteArray pad(indent + step, ' ');
     QList<QByteArray > lines;
     lines << sourceText(document, first, operators.first() - 1);
     for (int k = 0; k < operators.size(); ++k) {
-        const int end = k + 1 < operators.size() ? operators.at(k + 1) - 1 : last;
+        const int end = k + 1 < operators.size()
+            ? operators.at(k + 1) - 1 : last;
         lines << pad + sourceText(document, operators.at(k), end);
     }
     return lines;
@@ -475,9 +503,8 @@ QList<QPair<int, int > > splitArguments(
     is @a head, whose `?` part is @a middle, and whose `:` part is @a tail,
     written from the column @a column of a line indented by @a indent, with
     @a trailing characters after it on its last line: one line when that
-    fits the @a wrap column; else the head, and the `?` and `:` parts on a
-    continuation line (see continuationPad()); else each of those parts on a
-    continuation line of its own.
+    fits the @a wrap column; else tries a break at `:` aligned under `?`,
+    then at `?`, then at both signs on continuation lines.
 */
 QList<QByteArray > ternaryLines(
         const QByteArray & head, const QByteArray & middle,
@@ -488,10 +515,92 @@ QList<QByteArray > ternaryLines(
     if (column + textWidth(oneLine) + trailing <= wrap) {
         return QList<QByteArray >() << oneLine;
     }
+    const QByteArray colonPad(column + textWidth(head) + 1, ' ');
+    if (column + textWidth(head) + 1 + textWidth(middle) <= wrap
+        && textWidth(colonPad) + textWidth(tail) + trailing <= wrap
+    ) {
+        return QList<QByteArray >() << head + ' ' + middle << colonPad + tail;
+    }
     const QByteArray pad = continuationPad(indent);
     const QByteArray rest = pad + middle + ' ' + tail;
     if (textWidth(rest) + trailing <= wrap) {
         return QList<QByteArray >() << head << rest;
     }
     return QList<QByteArray >() << head << pad + middle << pad + tail;
+}
+
+/*!
+    Tells whether the `(` at @a paren of @a document opens the parameter
+    list of a function's declaration or definition, at file, namespace or
+    class or block scope: its name follows a type, or it is a constructor,
+    a destructor, or an operator, such as `operator==`, `operator()`,
+    or a conversion (`operator bool`, `operator QString`).
+*/
+bool isDeclarationParen(
+        const FormatDocument *document,
+        int paren)
+{
+    const FormatDocument::Scope scope = document->scopeOf(paren);
+    if (scope != FormatDocument::FileScope
+        && scope != FormatDocument::NamespaceScope
+        && scope != FormatDocument::ClassScope
+        && scope != FormatDocument::FunctionScope
+        && scope != FormatDocument::BlockScope
+    ) {
+        return false;
+    }
+
+    // Finds where the name starts: at the `operator` keyword of an operator,
+    // whose symbol or conversion type (up to 16 tokens) comes between it and
+    // the `(`; a `;`, a brace, or a `:` ends the search, as does a bracket
+    // other than the `()` of `operator()`.
+    int name = paren - 1;
+    bool isOperator = false;
+    for (int k = paren - 1; k >= qMax(1, paren - 16); --k) {
+        const Token token = document->token(k);
+        if (token == OPERATOR) {
+            name = k;
+            isOperator = true;
+            break;
+        }
+        if (token == SEMIC
+            || token == LBRACE
+            || token == RBRACE
+            || token == COLON
+            || ((token == LPAREN || token == RPAREN) && k < paren - 2)
+        ) {
+            break;
+        }
+    }
+    if ( ! isOperator && document->token(name) != IDENTIFIER) {
+        return false;
+    }
+    if ( ! isOperator && document->token(name - 1) == TILDE) {
+        return true;
+    }
+    const int unqualified = name;
+    while (name >= 2
+        && document->token(name - 1) == SCOPE
+        && document->token(name - 2) == IDENTIFIER
+    ) {
+        name -= 2;
+    }
+    const Token typeEnd = document->token(name - 1);
+    if (isTypeEnd(typeEnd) || typeEnd == AND) {
+        return true;
+    }
+
+    // A qualified name with no type before it: an operator, such as a
+    // conversion, or a constructor, whose name repeats its class's.
+    if (name < unqualified) {
+        return isOperator
+            || document->lexem(paren - 1) == document->lexem(paren - 3);
+    }
+    const Token label = document->token(name - 2);
+    const bool afterAccess = typeEnd == COLON
+        && (label == PUBLIC || label == PRIVATE || label == PROTECTED || label == SLOTS
+            || label == SIGNALS);
+    return scope == FormatDocument::ClassScope
+        && (typeEnd == SEMIC || typeEnd == LBRACE || typeEnd == RBRACE || afterAccess
+            || typeEnd == EXPLICIT || typeEnd == INLINE);
 }

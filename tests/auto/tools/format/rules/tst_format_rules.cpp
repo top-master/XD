@@ -2,16 +2,20 @@
 // SPDX-License-Identifier: Apache-2.0
 
 #include "config-condition.h"
+#include "config-scopes.h"
+#include "config-choice.h"
 #include "format-agent-guides.h"
 #include "format-document.h"
 #include "format-line-spec.h"
 #include "format-process-runner.h"
 #include "format-runner.h"
 #include "format-project-files.h"
-#include "format-settings.h"
+#include "format-file-config.h"
 #include "formatter.h"
+#include "parser/condition-context.h"
 #include "parser/scope-conditions.h"
 #include "parser/comment-helpers.h"
+#include "parser/layout-helpers.h"
 #include "preprocessor.h"
 
 #include <QtCore/QDir>
@@ -24,6 +28,28 @@ typedef QVector<QPair<int, int > > LineRanges;
 Q_DECLARE_METATYPE(LineRanges)
 typedef QList<int > IssueLines;
 Q_DECLARE_METATYPE(IssueLines)
+
+class CountingConditionContext : public FormatConditionContext
+{
+    typedef FormatConditionContext super;
+public:
+    inline CountingConditionContext() : isNew(false), calls(0) {}
+    bool predicate(const QString &name, bool *value) const Q_DECL_OVERRIDE
+    {
+        if (name == QLL("isNewClass")) {
+            *value = isNew;
+            return true;
+        }
+        if (name == QLL("isNeeded")) {
+            ++calls;
+            *value = true;
+            return true;
+        }
+        return false;
+    }
+    bool isNew;
+    mutable int calls;
+};
 
 /// Tests the formatter's logic, linked in directly: moc's comment tokens,
 /// the document under formatting, the git-blame style line ranges, the
@@ -46,6 +72,22 @@ private slots:
     void testReplace_shouldDropOverlappingEdit();
     void testReplace_shouldQueueBothEditsOrNeither();
     void testRuleCache_shouldIsolateDocumentsAndRules();
+    void testConfigDirectives_shouldReadCommentForms();
+    void testInlineSettings_shouldFollowNestedRegions();
+    void testInlineSettings_shouldApplyAtRuleLocation();
+    void testInlineSettings_shouldWarnAboutUnmatchedMarkers();
+    void testInlineSettings_shouldWrapOnlyInConfiguredRegion();
+    void testInlineSettings_shouldIsolateConcurrentFiles();
+    void testInlineWarnings_shouldRoundTripThroughWorker();
+    void testInlineSettings_shouldPreserveAdjacentCommentFormatting();
+    void testInlineSettings_shouldRespectSelectedLines();
+    void testFormatterAliases_shouldApplyScopesAndWhitespace();
+    void testFormatterAliases_shouldProtectDisabledText();
+    void testFormatterAliases_shouldDisableThroughEndOfFile();
+    void testFormatterAliases_shouldSuppressReportsWhileOff();
+    void testFormatterAliases_shouldWarnForInvalidCommand();
+    void testFormatterAliases_shouldReportAfterInlineEnable();
+    void testFormatterAliases_shouldFormatAfterInlineEnable();
     void testApplyEdits_shouldMoveRangesAndIssues();
 
     /// Line ranges.
@@ -68,7 +110,12 @@ private slots:
     void testAllRules_shouldKeepCleanCode();
     void testSettings_shouldReadFromRootDown();
     void testSettings_shouldReadWrapColumns();
+    void testSuperTypedef_shouldFollowPairedFiles();
+    void testSuperTypedef_shouldHandleQualifiedBases();
+    void testSuperTypedef_shouldUseStableRunnerInputs();
+    void testSuperTypedef_shouldFindRelatedExtensions();
     void testSettings_shouldReadInlineIni();
+    void testLayeredParser_shouldReadIndentedIni();
     void testProjectFiles_shouldHandEachFileOnce();
     void testCommentWidth_shouldWrap_data();
     void testAgentMode_shouldAskForOperatorGroups();
@@ -95,8 +142,16 @@ private slots:
     void testThisMode_shouldReachMembersInBlocks();
     void testScopeConditions_shouldNameScopeOfToken();
     void testScopeConditions_shouldFallBackWithoutPercent();
+    void testScopeConditions_shouldEvaluateArgumentExpressions();
+    void testScopeConditions_shouldOfferValueToCountSettingsOnly();
+    void testScopeConditions_shouldCountConditionOperands();
+    void testScopeConditions_shouldCountConditionsPerLine();
+    void testLayoutConfig_shouldResolveConditionAndSubchainOptions();
+    void testLayoutHelpers_shouldRecognizeClosingBracketCombinations();
     void testArgsWrap_shouldFollowSettings_data();
     void testArgsWrap_shouldFollowSettings();
+    void testArgsWrap_shouldJoinArgs_data();
+    void testArgsWrap_shouldJoinArgs();
     void testDocTagSign_shouldPickSign_data();
     void testWrapChainAt_shouldKeepLeadingOperators_data();
     void testWrapChainAt_shouldKeepLeadingOperators();
@@ -125,27 +180,558 @@ void tst_FormatRules::testRuleCache_shouldIsolateDocumentsAndRules()
     QCOMPARE(first.ruleCache(rules.at(0), QByteArray("choice")).toInt(), 7);
     QVERIFY( ! first.ruleCache(rules.at(1), QByteArray("choice")).isValid());
     QVERIFY( ! second.ruleCache(rules.at(0), QByteArray("choice")).isValid());
-    first.setSettings(FormatSettings());
+    first.setConfig(FormatFileConfig());
     QVERIFY( ! first.ruleCache(rules.at(0), QByteArray("choice")).isValid());
+}
+
+void tst_FormatRules::testConfigDirectives_shouldReadCommentForms()
+{
+    Formatter formatter;
+    const QByteArray text(
+        "// Format rule: `structure.wrapMax=70`.\n"
+        "// Ordinary comment.\n"
+        "// Format rule begin:\n"
+        "// ```\n"
+        "// [Structure]\n"
+        "// wrapMax = 50\n"
+        "// ```\n"
+        "int value;\n"
+        "/* Format rule: structure.target=any */\n"
+        "/*\n * Format rule: structure.wrapBegin=45\n */\n"
+        "/*\n * Format rule:\n * ```\n * [Structure]\n * wrapMax = 55\n * ```\n */\n"
+        "// Format rule end.\n"
+    );
+    FormatDocument document(text);
+    const QList<FormatConfigDirective > directives =
+        configDirectives(&document);
+    QCOMPARE(directives.size(), 6);
+    QCOMPARE(int(directives.at(0).kind), int(FormatConfigDirective::Add));
+    QCOMPARE(directives.at(0).lines.text(), QByteArray("structure.wrapMax=70"));
+    QCOMPARE(int(directives.at(1).kind), int(FormatConfigDirective::Begin));
+    QCOMPARE(directives.at(1).lines.text(), QByteArray("[Structure]\nwrapMax = 50"));
+    QCOMPARE(directives.at(2).lines.text(), QByteArray("structure.target=any"));
+    QCOMPARE(directives.at(3).lines.text(), QByteArray("structure.wrapBegin=45"));
+    QCOMPARE(directives.at(4).lines.text(), QByteArray("[Structure]\nwrapMax = 55"));
+    QCOMPARE(int(directives.at(5).kind), int(FormatConfigDirective::End));
+}
+
+void tst_FormatRules::testInlineSettings_shouldFollowNestedRegions()
+{
+    Formatter formatter;
+    const QByteArray text(
+        "int before;\n"
+        "// Format rule: structure.wrapMax=70\n"
+        "int outside;\n"
+        "// Format rule begin: structure.wrapMax=50\n"
+        "int inside;\n"
+        "// Format rule: structure.wrapBegin=40\n"
+        "// Format rule end.\n"
+        "int after;\n"
+        "// Format rule begin: structure.wrapMax=30\n"
+        "int unclosed;\n"
+    );
+    FormatDocument document(text);
+    QString error;
+    QVERIFY2(document.setInlineConfiguration(FormatConfig(), &error), qPrintable(error));
+    QCOMPARE(document.configAt(text.indexOf("int before")).wrapMax, 80);
+    QCOMPARE(document.configAt(text.indexOf("int outside")).wrapMax, 70);
+    QCOMPARE(document.configAt(text.indexOf("int inside")).wrapMax, 50);
+    QCOMPARE(document.configAt(text.indexOf("int after")).wrapMax, 70);
+    QCOMPARE(document.configAt(text.indexOf("int after")).wrapBegin.first(), 40);
+    QCOMPARE(document.configAt(text.indexOf("int unclosed")).wrapMax, 70);
+    QVERIFY(document.replace(0, 0, "int inserted;\n"));
+    QVERIFY(document.applyEdits());
+    QVERIFY(document.inlineConfigurationError().isEmpty());
+    QCOMPARE(document.configAt(document.text().indexOf("int inside")).wrapMax, 50);
+    QCOMPARE(document.configAt(document.text().indexOf("int after")).wrapMax, 70);
+}
+
+void tst_FormatRules::testInlineSettings_shouldApplyAtRuleLocation()
+{
+    Formatter formatter;
+    QString error;
+    QVERIFY(formatter.selectRules(
+        QStringList() << QLL("line-join"),
+        &error
+    ));
+    const QByteArray text(
+        "int first = (one\n    + two);\n"
+        "// Format rule: structure.target=any\n"
+        "int second = (three\n    + four);\n"
+    );
+    FormatDocument document(text);
+    QVERIFY2(document.setInlineConfiguration(FormatConfig(), &error), qPrintable(error));
+    formatter.selectedRules().first()->run(&document);
+    QVERIFY(document.applyEdits());
+    QVERIFY(document.text().contains("int first = (one\n    + two);"));
+    QVERIFY(document.text().contains("int second = (three + four);"));
+    const FormatResult result = formatter.format(
+        text,
+        QString(),
+        QStringList()
+    );
+    QVERIFY2(result.error.isEmpty(), qPrintable(result.error));
+    QCOMPARE(result.text, document.text());
+}
+
+void tst_FormatRules::testInlineSettings_shouldWarnAboutUnmatchedMarkers()
+{
+    Formatter formatter;
+    QString error;
+    QVERIFY(formatter.selectRules(
+        QStringList() << QLL("line-join"),
+        &error
+    ));
+    const QByteArray text(
+        "// Format rule end.\n"
+        "// Format rule begin: structure.wrapMax=40\n"
+        "int example;\n"
+    );
+    FormatConfig config;
+    const FormatResult ordinary =
+        formatter.format(text, QString(), QStringList(), config);
+    QVERIFY(ordinary.error.isEmpty());
+    QCOMPARE(ordinary.warnings.size(), 1);
+    QVERIFY(ordinary.warnings.first().message.contains(QLL("Format rule end.")));
+    config.verbose = true;
+    const FormatResult verbose = formatter.format(
+        text,
+        QString(),
+        QStringList(),
+        config
+    );
+    QVERIFY(verbose.error.isEmpty());
+    QCOMPARE(verbose.warnings.size(), 2);
+    QCOMPARE(verbose.warnings.last().message,
+        QString(QLL("#: format warning: consider replacing \"Format rule begin:\" with "
+                    "\"Format rule:\" at line 2 (since it has no \"Format rule end.\" comment).")));
+}
+
+void tst_FormatRules::testInlineSettings_shouldWrapOnlyInConfiguredRegion()
+{
+    Formatter formatter;
+    QString error;
+    QVERIFY(formatter.selectRules(
+        QStringList() << QLL("args-wrap"),
+        &error
+    ));
+    const QByteArray call(
+            "    sendValues(firstName, secondName, thirdName, fourthName);\n");
+    const QByteArray text = "void run()\n{\n" + call
+        + "// Format rule: structure.wrapMax=40\n"
+        + call + "}\n";
+    const FormatResult result = formatter.format(
+        text,
+        QString(),
+        QStringList()
+    );
+    QVERIFY2(result.error.isEmpty(), qPrintable(result.error));
+    QCOMPARE(result.text.count(call), 1);
+    QVERIFY(result.text.contains("    sendValues(\n"));
+    const FormatResult again = formatter.format(
+        result.text,
+        QString(),
+        QStringList()
+    );
+    QVERIFY2(again.error.isEmpty(), qPrintable(again.error));
+    QCOMPARE(again.text, result.text);
+}
+
+void tst_FormatRules::testInlineSettings_shouldIsolateConcurrentFiles()
+{
+#ifdef QT_NO_THREAD
+    QSKIP("This build has no thread runner.");
+#else
+    QTemporaryDir dir;
+    QVERIFY(dir.isValid());
+    QVERIFY(QDir(dir.path()).mkpath(QLL("first")));
+    QVERIFY(QDir(dir.path()).mkpath(QLL("second")));
+    const QString firstPath = dir.path() + QLL("/first/source.cpp");
+    const QString secondPath = dir.path() + QLL("/second/source.cpp");
+    QFile firstConfig(dir.path() + QLL("/first/.formatrc"));
+    QVERIFY(firstConfig.open(QIODevice::WriteOnly));
+    QVERIFY(firstConfig.write("[Structure]\ntarget = long\n") > 0);
+    firstConfig.close();
+    QFile secondConfig(dir.path() + QLL("/second/.formatrc"));
+    QVERIFY(secondConfig.open(QIODevice::WriteOnly));
+    QVERIFY(secondConfig.write("[Structure]\ntarget = any\n") > 0);
+    secondConfig.close();
+    const QByteArray code("int result = (first\n    + second);\n");
+    QFile first(firstPath);
+    QVERIFY(first.open(QIODevice::WriteOnly));
+    QVERIFY(first.write("// Format rule: structure.target=any\n" + code) > 0);
+    first.close();
+    QFile second(secondPath);
+    QVERIFY(second.open(QIODevice::WriteOnly));
+    QVERIFY(second.write("// Format rule: structure.target=long\n" + code) > 0);
+    second.close();
+    Formatter formatter;
+    QString error;
+    QVERIFY(formatter.selectRules(
+        QStringList() << QLL("line-join"),
+        &error
+    ));
+    FormatOptions options;
+    options.check = true;
+    options.jobs = 2;
+    QScopedPointer<FormatRunner > runner(
+            FormatRunner::create(QLL("thread"), &formatter, options));
+    QVERIFY( ! runner.isNull());
+    const QList<FormatFileResult > results =
+        runner->run(QStringList() << firstPath << secondPath);
+    QCOMPARE(results.size(), 2);
+    QVERIFY(results.at(0).error.isEmpty());
+    QVERIFY(results.at(1).error.isEmpty());
+    QVERIFY(results.at(0).changed);
+    QVERIFY( ! results.at(1).changed);
+#endif
+}
+
+void tst_FormatRules::testInlineWarnings_shouldRoundTripThroughWorker()
+{
+#ifdef QT_NO_PROCESS
+    QSKIP("This build has no process runner.");
+#else
+    FormatFileResult source;
+    source.path = QString(QLL("sample.cpp"));
+    source.warnings << FormatIssue(
+        3,
+        "format-warning",
+        QString(QLL("warning text"))
+    );
+    const QList<QByteArray > lines = FormatProcessRunner::encode(source)
+        .split('\n');
+    QList<FormatFileResult > decoded;
+    for (int i = 0; i < lines.size(); ++i) {
+        FormatProcessRunner::decode(lines.at(i), &decoded);
+    }
+    QCOMPARE(decoded.size(), 1);
+    QCOMPARE(decoded.first().warnings.size(), 1);
+    QCOMPARE(decoded.first().warnings.first().line, 3);
+    QCOMPARE(decoded.first().warnings.first().message, source.warnings.first().message);
+#endif
+}
+
+void tst_FormatRules::testInlineSettings_shouldPreserveAdjacentCommentFormatting()
+{
+    Formatter formatter;
+    QString error;
+    QVERIFY(
+        formatter.selectRules(QStringList() << QLL("comment-case"), &error)
+    );
+    const QByteArray text(
+        "// ordinary sentence.\n"
+        "// Format rule: structure.wrapMax=70\n"
+        "// another sentence.\n"
+        "int value;\n"
+    );
+    const FormatResult result = formatter.format(
+        text,
+        QString(),
+        QStringList()
+    );
+    QVERIFY2(result.error.isEmpty(), qPrintable(result.error));
+    QVERIFY(result.text.contains("// Ordinary sentence.\n"));
+    QVERIFY(result.text.contains("// Format rule: structure.wrapMax=70\n"));
+    QVERIFY(result.text.contains("// Another sentence.\n"));
+}
+
+void tst_FormatRules::testInlineSettings_shouldRespectSelectedLines()
+{
+    Formatter formatter;
+    QString error;
+    QVERIFY(formatter.selectRules(
+        QStringList() << QLL("args-wrap"),
+        &error
+    ));
+    const QByteArray call(
+            "    sendValues(firstName, secondName, thirdName, fourthName);\n");
+    const QByteArray text = "void run()\n{\n// Format rule: structure.wrapMax=40\n"
+        + call + call + "}\n";
+    const FormatResult result = formatter.format(
+        text, QString(), QStringList() << QLL("5,5")
+    );
+    QVERIFY2(result.error.isEmpty(), qPrintable(result.error));
+    QCOMPARE(result.text.count(call), 1);
+    QVERIFY(result.text.contains("    sendValues(\n"));
+    QVERIFY(result.text.contains("// Format rule: structure.wrapMax=40\n"));
+}
+
+void tst_FormatRules::testFormatterAliases_shouldApplyScopesAndWhitespace()
+{
+    Formatter formatter;
+    const QByteArray text(
+        "int before;\n"
+        "// @ \xc2\xa0" "formatter : structure.wrapMax \t =  66\n"
+        "int permanent;\n"
+        "// @formatter.push: `structure.wrapMax = 50`\n"
+        "int pushed;\n"
+        "// @formatter.pop.\n"
+        "int popped;\n"
+        "// @formatter.begin: structure.wrapMax = 40\n"
+        "int begun;\n"
+        "// @formatter.end\n"
+        "int ended;\n"
+        "// @formatter: types.refSuffix = \"  \"\n"
+        "int quoted;\n"
+        "// @formatter:\n// ```\n// [Structure]\n// wrapBegin = \t 41\n// ```\n"
+        "int fenced;\n"
+    );
+    FormatDocument document(text);
+    QString error;
+    QVERIFY2(document.setInlineConfiguration(FormatConfig(), &error), qPrintable(error));
+    QCOMPARE(document.configAt(text.indexOf("int before")).wrapMax, 80);
+    QCOMPARE(document.configAt(text.indexOf("int permanent")).wrapMax, 66);
+    QCOMPARE(document.configAt(text.indexOf("int pushed")).wrapMax, 50);
+    QCOMPARE(document.configAt(text.indexOf("int popped")).wrapMax, 66);
+    QCOMPARE(document.configAt(text.indexOf("int begun")).wrapMax, 40);
+    QCOMPARE(document.configAt(text.indexOf("int ended")).wrapMax, 66);
+    QCOMPARE(document.configAt(text.indexOf("int quoted")).refSuffix.text, QByteArray("  "));
+    QCOMPARE(document.configAt(text.indexOf("int fenced")).wrapBegin.first(), 41);
+    Config::Lines quoted;
+    quoted.appendCompact("sample.name = \"left  \\\"  right\"");
+    QCOMPARE(quoted.text(), QByteArray("sample.name=\"left  \\\"  right\""));
+}
+
+void tst_FormatRules::testFormatterAliases_shouldProtectDisabledText()
+{
+    Formatter formatter;
+    QString error;
+    QVERIFY(
+        formatter
+            .selectRules(QStringList() << QLL("line-join") << QLL("comment-case"), &error)
+    );
+    const QByteArray text(
+        "void run()\n{\n"
+        "// @formater: off\n"
+        "// stays lowercase.\n"
+        "int first = (one\n    + two);\n"
+        "// @formatter: off\n"
+        "// @formatter: structure.target=any\n"
+        "// @formatter.push: structure.wrapMax=50\n"
+        "// Format rule: structure.wrapBegin=35\n"
+        "// @formatter: on\n"
+        "// changes lowercase.\n"
+        "int second = (three\n    + four);\n"
+        "// @formatter.end\n"
+        "int after;\n"
+        "}\n"
+    );
+    const FormatResult result = formatter.format(
+        text,
+        QString(),
+        QStringList()
+    );
+    QVERIFY2(result.error.isEmpty(), qPrintable(result.error));
+    QVERIFY(result.warnings.isEmpty());
+    FormatConfig verboseConfig;
+    verboseConfig.verbose = true;
+    const FormatResult verbose = formatter.format(
+        text,
+        QString(),
+        QStringList(),
+        verboseConfig
+    );
+    QVERIFY2(verbose.error.isEmpty(), qPrintable(verbose.error));
+    QCOMPARE(verbose.text, result.text);
+    QCOMPARE(verbose.warnings.size(), 3);
+    QCOMPARE(verbose.warnings.at(0).line, 8);
+    QCOMPARE(verbose.warnings.at(1).line, 9);
+    QCOMPARE(verbose.warnings.at(2).line, 10);
+    QVERIFY(verbose.warnings.at(0).message.contains(QLL("applied")));
+    QVERIFY(verbose.warnings.at(1).message.contains(QLL("applied")));
+    QVERIFY(verbose.warnings.at(2).message.contains(QLL("applied")));
+    QVERIFY(result.text.contains("// stays lowercase.\n"));
+    QVERIFY(result.text.contains("int first = (one\n    + two);"));
+    QVERIFY(result.text.contains("// @formatter: structure.target=any\n"));
+    QVERIFY(result.text.contains("// Changes lowercase.\n"));
+    QVERIFY(result.text.contains("int second = (three + four);"));
+    FormatDocument document(text);
+    QVERIFY2(document.setInlineConfiguration(FormatConfig(), &error), qPrintable(error));
+    QCOMPARE(document.configAt(text.indexOf("int second")).wrapMax, 50);
+    QCOMPARE(document.configAt(text.indexOf("int after")).wrapMax, 80);
+    QCOMPARE(document.configAt(text.indexOf("int after")).wrapBegin.first(), 35);
+    const FormatResult again = formatter.format(
+        result.text,
+        QString(),
+        QStringList()
+    );
+    QVERIFY2(again.error.isEmpty(), qPrintable(again.error));
+    QCOMPARE(again.text, result.text);
+}
+
+void tst_FormatRules::testFormatterAliases_shouldDisableThroughEndOfFile()
+{
+    Formatter formatter;
+    QString error;
+    QVERIFY(
+        formatter.selectRules(QStringList() << QLL("comment-case"), &error)
+    );
+    const QByteArray text("// @formatter: off\n// keep lowercase.\n");
+    const FormatResult result = formatter.format(
+        text,
+        QString(),
+        QStringList()
+    );
+    QVERIFY2(result.error.isEmpty(), qPrintable(result.error));
+    QCOMPARE(result.text, text);
+}
+
+void tst_FormatRules::testFormatterAliases_shouldSuppressReportsWhileOff()
+{
+    Formatter formatter;
+    QString error;
+    QVERIFY(formatter.selectRules(QStringList() << QLL("em-dash"), &error));
+    const QByteArray text(
+        "// @formatter: off\n"
+        "// ignored \xe2\x80\x94 text.\n"
+        "// @formatter: on\n"
+        "// reported \xe2\x80\x94 text.\n"
+    );
+    const FormatResult result = formatter.format(
+        text,
+        QString(),
+        QStringList()
+    );
+    QVERIFY2(result.error.isEmpty(), qPrintable(result.error));
+    QCOMPARE(result.issues.size(), 1);
+    QCOMPARE(result.issues.first().line, 4);
+}
+
+void tst_FormatRules::testFormatterAliases_shouldWarnForInvalidCommand()
+{
+    Formatter formatter;
+    QString error;
+    QVERIFY(formatter.selectRules(
+        QStringList() << QLL("line-join"),
+        &error
+    ));
+    const QByteArray text("// @formatter: disable\nint value;\n");
+    const FormatResult result = formatter.format(
+        text,
+        QString(),
+        QStringList()
+    );
+    QVERIFY2(result.error.isEmpty(), qPrintable(result.error));
+    QCOMPARE(result.text, text);
+    QCOMPARE(result.warnings.size(), 1);
+    QCOMPARE(result.warnings.first().line, 1);
+    QVERIFY(result.warnings.first().message.contains(QLL("invalid config")));
+    QVERIFY(result.warnings.first().message.contains(QLL("@formatter: off")));
+}
+
+void tst_FormatRules::testFormatterAliases_shouldReportAfterInlineEnable()
+{
+    Formatter formatter;
+    QString error;
+    QVERIFY(formatter.selectRules(QStringList() << QLL("em-dash"), &error));
+    const QByteArray text(
+        "// @formatter: off\n"
+        "const char *first = \"\xe2\x80\x94\"; /* @formatter: on */ "
+        "const char *second = \"\xe2\x80\x94\";\n"
+    );
+    const FormatResult result = formatter.format(
+        text,
+        QString(),
+        QStringList()
+    );
+    QVERIFY2(result.error.isEmpty(), qPrintable(result.error));
+    QCOMPARE(result.issues.size(), 1);
+    QCOMPARE(result.issues.first().line, 2);
+}
+
+void tst_FormatRules::testFormatterAliases_shouldFormatAfterInlineEnable()
+{
+    Formatter formatter;
+    QString error;
+    QVERIFY(formatter.selectRules(
+        QStringList() << QLL("line-join"),
+        &error
+    ));
+    const QByteArray text(
+        "// @formatter: off\n"
+        "// @formatter: structure.target=any\n"
+        "/* @formatter: on */ int value = (first\n    + second);\n"
+    );
+    const FormatResult result = formatter.format(
+        text,
+        QString(),
+        QStringList()
+    );
+    QVERIFY2(result.error.isEmpty(), qPrintable(result.error));
+    QVERIFY(result.text.contains("/* @formatter: on */ int value = (first + second);"));
 }
 
 void tst_FormatRules::testSettings_shouldReadInlineIni()
 {
-    Config::Parser parser(FormatSettings::schema());
+    Config::Parser parser(FormatFileConfig::schema());
     QString error;
     QVERIFY2(parser.readData("[Structure]\ntarget = any\n", QLL("inline"), &error),
              qPrintable(error));
     QCOMPARE(parser.value(QLL("structure.target")), QString(QLL("any")));
     QVERIFY( ! parser.readData("[Structure]\ntarget = invalid\n", QLL("inline"), &error));
     QVERIFY(error.startsWith(QLL("inline:")));
-    FormatConfig config;
-    config.inlineLayers << QByteArray("[Structure]\ntarget = any\nwrapMax = 90")
-                        << QByteArray("structure.wrapMax=60");
-    FormatSettings settings;
-    QVERIFY2(FormatSettings::load(QString(), config, &settings, &error),
-             qPrintable(error));
-    QCOMPARE(settings.codeTarget, FormatSettings::CodeTargetAny);
+    Config::Parser defaults(FormatFileConfig::schema());
+    Config::LayeredParser inlineParser(defaults);
+    QVERIFY(inlineParser.addLines(
+        Config::Lines() << "[Structure]" << "target = any"
+        << "wrapMax = 90",
+        QLL("inline"),
+        &error
+    ));
+    QVERIFY(inlineParser.addLines(
+        Config::Lines() << "structure.wrapMax=60",
+        QLL("inline"),
+        &error
+    ));
+    FormatFileConfig settings;
+    FormatFileConfig::fromParser(inlineParser, &settings);
+    QCOMPARE(settings.codeTarget, FormatFileConfig::CodeTargetAny);
     QCOMPARE(settings.wrapMax, 60);
+
+    Config::Parser base(FormatFileConfig::schema());
+    Config::LayeredParser layers(base);
+    const QString origin(QLL("inline"));
+    QVERIFY(
+        layers
+            .addLines(Config::Lines() << "structure.wrapMax=90", origin, &error)
+    );
+    QVERIFY(layers.pushLines(Config::Lines() << "[Structure]" << "wrapMax = 50",
+                             origin, &error));
+    QVERIFY(
+        layers
+            .addLines(Config::Lines() << "structure.wrapMax=70", origin, &error)
+    );
+
+    // A permanent line comes after the open scope; hence it changes that
+    // scope's layer too.
+    QCOMPARE(layers.value(QLL("structure.wrapMax")), QString(QLL("70")));
+    QVERIFY(
+        layers
+            .pushLines(Config::Lines() << "structure.wrapMax=40", origin, &error)
+    );
+    QCOMPARE(layers.value(QLL("structure.wrapMax")), QString(QLL("40")));
+    QVERIFY(
+        ! layers
+            .pushLines(Config::Lines() << "structure.wrapMax=bad", origin, &error)
+    );
+    QCOMPARE(layers.value(QLL("structure.wrapMax")), QString(QLL("40")));
+    QVERIFY(layers.popLines(&error));
+    QCOMPARE(layers.value(QLL("structure.wrapMax")), QString(QLL("70")));
+    QVERIFY(layers.popLines(&error));
+    QCOMPARE(layers.value(QLL("structure.wrapMax")), QString(QLL("70")));
+    QVERIFY( ! layers.popLines(&error));
+}
+
+void tst_FormatRules::testLayeredParser_shouldReadIndentedIni()
+{
+    Config::Parser base(FormatFileConfig::schema());
+    Config::LayeredParser layers(base);
+    QString error;
+    const Config::Lines lines = Config::Lines()
+        << " " << "  [Structure]" << "wrapMax = 66";
+    QVERIFY2(layers.addLines(lines, QLL("inline"), &error), qPrintable(error));
+    QCOMPARE(layers.value(QLL("structure.wrapMax")), QString(QLL("66")));
 }
 
 /// Tokenizes `text` the way the formatter does, with comment tokens only
@@ -181,7 +767,11 @@ FormatResult tst_FormatRules::formatWith(
         result.error = error;
         return result;
     }
-    return formatter.format(text, path, QStringList());
+    FormatConfig config;
+    if (rule == QLL("super-typedef")) {
+        config.assignments << QString(QLL("structure.typedefSuper=always"));
+    }
+    return formatter.format(text, path, QStringList(), config);
 }
 
 /// Lists the lines of the issues of `result` that the rule `rule` reported.
@@ -755,13 +1345,10 @@ void tst_FormatRules::testFix_shouldRewrite_data()
                       "}\n")
         << QByteArray("void f()\n"
                       "{\n"
-                      "    process.start(\n"
-                      "        QString(QLL(\"git\")),\n"
-                      "        QStringList()\n"
-                      "            << QString(QLL(\"-c\")) << QString(QLL(\"user.name=format-test\"))\n"
-                      "            << QString(QLL(\"-c\")) << QString(QLL(\"commit.gpgsign=false\"))\n"
-                      "            << arguments\n"
-                      "    );\n"
+                      "    process.start(QString(QLL(\"git\")), QStringList()\n"
+                      "                  << QString(QLL(\"-c\")) << QString(QLL(\"user.name=format-test\"))\n"
+                      "                  << QString(QLL(\"-c\")) << QString(QLL(\"commit.gpgsign=false\"))\n"
+                      "                  << arguments);\n"
                       "}\n");
     QTest::newRow("args-wrap brace list gets an item per line")
         << QString(QLL("args-wrap"))
@@ -877,6 +1464,104 @@ void tst_FormatRules::testFix_shouldRewrite_data()
                       "        g();\n"
                       "    }\n"
                       "}\n");
+    QTest::newRow("args-wrap indents adjacent string fragments")
+        << QString(QLL("args-wrap"))
+        << QByteArray("void f()\n{\n    send(\n        one,\n        two,\n"
+                      "        \"alpha\"\n        \"beta\",\n        four\n    );\n}\n")
+        << QByteArray("void f()\n{\n    send(\n        one,\n        two,\n"
+                      "        \"alpha\"\n            \"beta\",\n        four\n    );\n}\n");
+    QTest::newRow("args-wrap indents prefixed string fragments")
+        << QString(QLL("args-wrap"))
+        << QByteArray("void f()\n{\n    send(\n        one,\n        two,\n"
+                      "        u8\"alpha\"\n        u8\"beta\",\n        four\n    );\n}\n")
+        << QByteArray("void f()\n{\n    send(\n        one,\n        two,\n"
+                      "        u8\"alpha\"\n            u8\"beta\",\n        four\n    );\n}\n");
+    QTest::newRow("operator-wrap keeps a member call head")
+        << QString(QLL("operator-wrap"))
+        << QByteArray("void f()\n{\n    service.dispatchMessage(firstVeryLongArgumentName, secondVeryLongArgumentName, thirdVeryLongArgumentName, fourthVeryLongArgumentName);\n}\n")
+        << QByteArray("void f()\n{\n    service.dispatchMessage(\n"
+                      "        firstVeryLongArgumentName,\n"
+                      "        secondVeryLongArgumentName,\n"
+                      "        thirdVeryLongArgumentName,\n"
+                      "        fourthVeryLongArgumentName\n    );\n}\n");
+    QTest::newRow("operator-wrap keeps a pointer member call head")
+        << QString(QLL("operator-wrap"))
+        << QByteArray("void f()\n{\n    this->broker->publish(firstVeryLongArgumentName, secondVeryLongArgumentName, thirdVeryLongArgumentName, fourthVeryLongArgumentName);\n}\n")
+        << QByteArray("void f()\n{\n    this->broker->publish(\n"
+                      "        firstVeryLongArgumentName,\n"
+                      "        secondVeryLongArgumentName,\n"
+                      "        thirdVeryLongArgumentName,\n"
+                      "        fourthVeryLongArgumentName\n    );\n}\n");
+    QTest::newRow("operator-wrap keeps a pointer call head with one argument")
+        << QString(QLL("operator-wrap"))
+        << QByteArray("void f()\n{\n    this->courier->deliver(widget->readLongIdentifierForQueuedNotificationAndStatus());\n}\n")
+        << QByteArray("void f()\n{\n    this->courier->deliver(\n"
+                      "        widget->readLongIdentifierForQueuedNotificationAndStatus()\n"
+                      "    );\n}\n");
+    QTest::newRow("operator-wrap breaks an oversized member call head")
+        << QString(QLL("operator-wrap"))
+        << QByteArray("void f()\n{\n    registryForSynchronizationAcrossIndependentClientsAndServices.publishMessageForEachObserver(item);\n}\n")
+        << QByteArray("void f()\n{\n    registryForSynchronizationAcrossIndependentClientsAndServices\n"
+                      "        .publishMessageForEachObserver(item);\n}\n");
+    QTest::newRow("operator-first keeps logical operators below closing brackets")
+        << QString(QLL("operator-first"))
+        << QByteArray("void f()\n{\n    if ((check(\n        item\n    ))\n"
+                      "        || ready\n    ) {}\n}\n")
+        << QByteArray("void f()\n{\n    if ((check(\n        item\n    ))\n"
+                      "        || ready\n    ) {}\n}\n");
+    QTest::newRow("operator-first keeps logical operators below other closing brackets")
+        << QString(QLL("operator-first"))
+        << QByteArray("void f()\n{\n    if (items[\n        index\n    ]\n"
+                      "        || ready) {}\n    if (Check{\n        item\n    }\n"
+                      "        && ready) {}\n}\n")
+        << QByteArray("void f()\n{\n    if (items[\n        index\n    ]\n"
+                      "        || ready) {}\n    if (Check{\n        item\n    }\n"
+                      "        && ready) {}\n}\n");
+    QTest::newRow("args-wrap keeps a short call head with one chain argument")
+        << QString(QLL("args-wrap"))
+        << QByteArray("void f()\n{\n    view.show(message\n"
+                      "        + veryLongSuffixForAnExtendedMessageThatKeepsItsOwnLine\n    );\n}\n")
+        << QByteArray("void f()\n{\n    view.show(message\n"
+                      "        + veryLongSuffixForAnExtendedMessageThatKeepsItsOwnLine\n    );\n}\n");
+    QTest::newRow("args-wrap keeps a short call head with two arguments")
+        << QString(QLL("args-wrap"))
+        << QByteArray("void f()\n{\n    view.show(title, message\n"
+                      "        + veryLongSuffixForAnExtendedMessageThatKeepsItsOwnLine\n    );\n}\n")
+        << QByteArray("void f()\n{\n    view.show(title, message\n"
+                      "        + veryLongSuffixForAnExtendedMessageThatKeepsItsOwnLine\n    );\n}\n");
+    QTest::newRow("operator-wrap keeps an assigned member call head")
+        << QString(QLL("operator-wrap"))
+        << QByteArray("void f()\n{\n    const int value = store->measure(firstExtremelyLongArgumentNameForMeasurement, secondExtremelyLongArgumentNameForMeasurement);\n}\n")
+        << QByteArray("void f()\n{\n    const int value = store->measure(\n"
+                      "        firstExtremelyLongArgumentNameForMeasurement,\n"
+                      "        secondExtremelyLongArgumentNameForMeasurement\n    );\n}\n");
+    QTest::newRow("operator-wrap keeps an assigned pointer call head with one argument")
+        << QString(QLL("operator-wrap"))
+        << QByteArray("void f()\n{\n    const int value = store->measure(widget->readLongIdentifierForQueuedNotificationAndStatus());\n}\n")
+        << QByteArray("void f()\n{\n    const int value = store->measure(\n"
+                      "        widget->readLongIdentifierForQueuedNotificationAndStatus()\n"
+                      "    );\n}\n");
+    QTest::newRow("operator-wrap breaks an assigned call head past wrapBegin")
+        << QString(QLL("operator-wrap"))
+        << QByteArray("void f()\n{\n    const int value = registryForSynchronizationAcrossIndependentClients->evaluate(item);\n}\n")
+        << QByteArray("void f()\n{\n    const int value = registryForSynchronizationAcrossIndependentClients\n"
+                      "        ->evaluate(item);\n}\n");
+    QTest::newRow("operator-wrap keeps chained calls as a chain")
+        << QString(QLL("operator-wrap"))
+        << QByteArray("void f()\n{\n    const auto value = store->measure(firstMeasurementRecord, secondMeasurementRecord)->finish();\n}\n")
+        << QByteArray("void f()\n{\n    const auto value = store\n"
+                      "        ->measure(firstMeasurementRecord, secondMeasurementRecord)\n"
+                      "        ->finish();\n}\n");
+    QTest::newRow("condition-wrap prefers arithmetic after an early comparison")
+        << QString(QLL("condition-wrap"))
+        << QByteArray("void f()\n{\n    if (packet.size() > limits.maximumMessageLength + limits.allowedHeaderLength) {\n    }\n}\n")
+        << QByteArray("void f()\n{\n    if (packet.size() > limits.maximumMessageLength\n"
+                      "            + limits.allowedHeaderLength\n    ) {\n    }\n}\n");
+    QTest::newRow("condition-wrap breaks a comparison past wrapBegin")
+        << QString(QLL("condition-wrap"))
+        << QByteArray("void f()\n{\n    if (veryLongCounterNameForTheCurrentNetworkConnectionAndIncomingMessages > limit + extra) {\n    }\n}\n")
+        << QByteArray("void f()\n{\n    if (veryLongCounterNameForTheCurrentNetworkConnectionAndIncomingMessages\n"
+                      "            > limit + extra\n    ) {\n    }\n}\n");
     QTest::newRow("continuation-indent condition across directive")
         << QString(QLL("continuation-indent"))
         << QByteArray("void f()\n{\n    if (\n#ifdef FEATURE\n"
@@ -981,7 +1666,7 @@ void tst_FormatRules::testFix_shouldRewrite_data()
         << QByteArray("void f()\n{\n    const QByteArray input = makeFile(\"firstArgumentText\"\n"
                       "                                      \"more\", i < n, count);\n}\n")
         << QByteArray("void f()\n{\n    const QByteArray input = makeFile(\n"
-                      "        \"firstArgumentText\"\n        \"more\",\n        i < n,\n"
+                      "        \"firstArgumentText\"\n            \"more\",\n        i < n,\n"
                       "        count\n    );\n}\n");
     QTest::newRow("args-wrap fits one line")
         << QString(QLL("args-wrap"))
@@ -1153,6 +1838,24 @@ void tst_FormatRules::testFix_shouldRewrite_data()
         << QString(QLL("super-typedef"))
         << QByteArray("class A\n{\nprivate:\n    class B\n    {\n        int b;\n    };\n};\n")
         << QByteArray("class A\n{\nprivate:\n    class B\n    {\n        int b;\n    };\n};\n");
+    QTest::newRow("super-typedef empty class")
+        << QString(QLL("super-typedef"))
+        << QByteArray("class Petal : public Seed\n{\n};\n")
+        << QByteArray("class Petal : public Seed\n{\n    typedef Seed super;\n};\n");
+    QTest::newRow("super-typedef inline class")
+        << QString(QLL("super-typedef"))
+        << QByteArray("class Petal : public Seed {};\n")
+        << QByteArray("class Petal : public Seed { typedef Seed super; };\n");
+    QTest::newRow("super-typedef multiline base")
+        << QString(QLL("super-typedef"))
+        << QByteArray("class Petal : public Box<\n    Seed\n>\n{\npublic:\n};\n")
+        << QByteArray("class Petal : public Box<\n    Seed\n>\n{\n"
+                      "    typedef Box< Seed > super;\npublic:\n};\n");
+    QTest::newRow("super-typedef base comment")
+        << QString(QLL("super-typedef"))
+        << QByteArray("class Petal : public Box< // A seed.\n    Seed>\n{\npublic:\n};\n")
+        << QByteArray("class Petal : public Box< // A seed.\n    Seed>\n{\n"
+                      "    typedef Box< Seed> super;\npublic:\n};\n");
     QTest::newRow("super-typedef after Q_OBJECT")
         << QString(QLL("super-typedef"))
         << QByteArray("class Foo : public QObject\n{\n    Q_OBJECT\npublic:\n};\n")
@@ -1610,14 +2313,15 @@ void tst_FormatRules::testSettings_shouldReadFromRootDown()
         << QString(QLL("[Types]\nrefSuffix = keep-as-is\n"))
     );
     const QString file = dir.path() + QLL("/sub/a.cpp");
-    FormatSettings settings;
+    FormatFileConfig settings;
     QString error;
-    qExpect(FormatSettings::load(file, FormatConfig(), &settings, &error))->toBeTruthy();
+    qExpect(FormatFileConfig::load(file, FormatConfig(), &settings, &error))
+        ->toBeTruthy();
     qExpect(settings.refSuffix.keepAsIs)->toBeTruthy();
     qExpect(settings.moveSuffix.keepAsIs)->toBeFalsy();
     qExpect(settings.moveSuffix.text)->toEqual(QByteArray(" "));
-    FormatSettings top;
-    qExpect(FormatSettings::load(
+    FormatFileConfig top;
+    qExpect(FormatFileConfig::load(
         dir.path() + QLL("/a.cpp"),
         FormatConfig(),
         &top,
@@ -1879,9 +2583,37 @@ void tst_FormatRules::testSettings_shouldReadWrapColumns()
     writeProject(dir, QStringList() << QString(QLL(".formatrc"))
         << QString(QLL("[Comments]\nwrapBegin = 75|51\nwrapMax = 90\nwrapExtendsForKeywords = 10\n" "wrapEmptyLimit = 4\nwrapComma = HARD\ntarget = ANY\n"))
     );
-    FormatSettings settings;
+    FormatFileConfig settings;
     QString error;
-    qExpect(FormatSettings::load(
+    CountingConditionContext conditionContext;
+    QString choice;
+    QVERIFY(Config::Choice::resolve(
+        FormatFileConfig().typedefSuper, FormatFileConfig::superConditionNames(),
+        FormatFileConfig::superChoices(), &conditionContext, &choice, &error
+    ));
+    QCOMPARE(choice, QString(QLL("never")));
+    QCOMPARE(conditionContext.calls, 0);
+    conditionContext.isNew = true;
+    QVERIFY(Config::Choice::resolve(
+        FormatFileConfig().typedefSuper, FormatFileConfig::superConditionNames(),
+        FormatFileConfig::superChoices(), &conditionContext, &choice, &error
+    ));
+    QCOMPARE(choice, QString(QLL("always")));
+    QCOMPARE(conditionContext.calls, 1);
+    conditionContext.calls = 0;
+    QVERIFY(Config::Choice::resolve(
+        QString(QLL("is_new_class( ) && is_needed() ? if-needed : never")),
+        FormatFileConfig::superConditionNames(), FormatFileConfig::superChoices(),
+        &conditionContext, &choice, &error
+    ));
+    QCOMPARE(choice, QString(QLL("if-needed")));
+    QCOMPARE(conditionContext.calls, 1);
+    Config::Parser choiceParser(FormatFileConfig::schema());
+    QVERIFY(choiceParser.assign(QString(QLL("structure.typedefSuper=(isNewClass() ? "
+                                           "(isNeeded() ? always : if-needed) : never)")), &error));
+    QVERIFY( ! choiceParser.assign(QString(QLL("structure.typedefSuper=isNewClass() "
+                                               "? unrecognized : never")), &error));
+    qExpect(FormatFileConfig::load(
         dir.path() + QLL("/a.cpp"),
         FormatConfig(),
         &settings,
@@ -1894,21 +2626,69 @@ void tst_FormatRules::testSettings_shouldReadWrapColumns()
     qExpect(settings.wrapMax)->toEqual(80);
     qExpect(settings.wrapExtendsForKeywords)->toEqual(10);
     qExpect(settings.wrapEmptyLimit)->toEqual(4);
-    qExpect(int(settings.wrapComma))->toEqual(int(FormatSettings::WrapCommaHard));
-    qExpect(int(settings.commentTarget))->toEqual(int(FormatSettings::CommentTargetAny));
-    const FormatSettings defaults;
+    qExpect(int(settings.wrapComma))
+        ->toEqual(int(FormatFileConfig::WrapCommaHard));
+    qExpect(int(settings.commentTarget))
+        ->toEqual(int(FormatFileConfig::CommentTargetAny));
+    const FormatFileConfig defaults;
+    QVERIFY(defaults.acceptsFile(QString(QLL("widget.h++"))));
+    QVERIFY(defaults.acceptsFile(QString(QLL("widget.c++"))));
+    QVERIFY( ! defaults.acceptsFile(QString(QLL("widget.txt"))));
+    Config::Parser extensionParser(FormatFileConfig::schema());
+    QVERIFY(extensionParser.assign(QString(QLL("general.extensions=[h++, objc]")), &error));
+    FormatFileConfig customExtensions;
+    FormatFileConfig::fromParser(extensionParser, &customExtensions);
+    QVERIFY(customExtensions.acceptsFile(QString(QLL("widget.h++"))));
+    QVERIFY(customExtensions.acceptsFile(QString(QLL("widget.objc"))));
+    QVERIFY( ! customExtensions.acceptsFile(QString(QLL("widget.cpp"))));
+    const QString extensionPath = dir.path() + QLL("/extension-settings.ini");
+    QFile extensionFile(extensionPath);
+    QVERIFY(extensionFile.open(QIODevice::WriteOnly));
+    const QByteArray extensionConfig("[General]\nextensions = [h++, objc]\n");
+    QCOMPARE(extensionFile.write(extensionConfig), qint64(extensionConfig.size()));
+    extensionFile.close();
+    Config::Parser extensionFileParser(FormatFileConfig::schema());
+    QVERIFY2(extensionFileParser.readFile(extensionPath, &error), qPrintable(error));
+    FormatFileConfig::fromParser(extensionFileParser, &customExtensions);
+    QVERIFY(customExtensions.acceptsFile(QString(QLL("widget.objc"))));
+    QVERIFY( ! customExtensions.acceptsFile(QString(QLL("widget.cpp"))));
+    QVERIFY(extensionFile.open(QIODevice::WriteOnly | QIODevice::Truncate));
+    const QByteArray regexConfig("[General]\nextensions = /[.](hpp|cc)$/\n");
+    QCOMPARE(extensionFile.write(regexConfig), qint64(regexConfig.size()));
+    extensionFile.close();
+    Config::Parser regexFileParser(FormatFileConfig::schema());
+    QVERIFY2(regexFileParser.readFile(extensionPath, &error), qPrintable(error));
+    FormatFileConfig::fromParser(regexFileParser, &customExtensions);
+    QVERIFY(customExtensions.acceptsFile(QString(QLL("widget.hpp"))));
+    QVERIFY( ! customExtensions.acceptsFile(QString(QLL("widgetXhpp"))));
+    QVERIFY(extensionParser.assign(QString(QLL("general.extensions=/\\.(hpp|cc)$/")), &error));
+    FormatFileConfig::fromParser(extensionParser, &customExtensions);
+    QVERIFY(customExtensions.acceptsFile(QString(QLL("widget.hpp"))));
+    QVERIFY(customExtensions.acceptsFile(QString(QLL("widget.cc"))));
+    QVERIFY( ! customExtensions.acceptsFile(QString(QLL("widget.cpp"))));
+    QVERIFY(extensionParser.assign(QString(QLL("general.extensions=frag, hh")), &error));
+    FormatFileConfig::fromParser(extensionParser, &customExtensions);
+    QVERIFY(customExtensions.acceptsFile(QString(QLL("widget.frag"))));
+    QVERIFY(customExtensions.acceptsFile(QString(QLL("widget.hh"))));
+    QVERIFY( ! customExtensions.acceptsFile(QString(QLL("widget.cpp"))));
+    QVERIFY(extensionParser.assign(QString(QLL("general.extensions=^(hh|frag)$")), &error));
+    FormatFileConfig::fromParser(extensionParser, &customExtensions);
+    QVERIFY(customExtensions.acceptsFile(QString(QLL("widget.frag"))));
+    QVERIFY( ! customExtensions.acceptsFile(QString(QLL("widget.cpp"))));
     qExpect(defaults.wrapBegin)->toEqual(QList<int >() << 75);
     qExpect(defaults.wrapMax)->toEqual(80);
     qExpect(defaults.commentWrapBegin)->toEqual(QList<int >() << 75);
     qExpect(defaults.commentWrapMax)->toEqual(80);
     qExpect(defaults.wrapExtendsForKeywords)->toEqual(20);
     qExpect(defaults.wrapEmptyLimit)->toEqual(8);
-    qExpect(int(defaults.wrapComma))->toEqual(int(FormatSettings::WrapCommaSoft));
-    qExpect(int(defaults.commentTarget))->toEqual(int(FormatSettings::CommentTargetLong));
+    qExpect(int(defaults.wrapComma))
+        ->toEqual(int(FormatFileConfig::WrapCommaSoft));
+    qExpect(int(defaults.commentTarget))
+        ->toEqual(int(FormatFileConfig::CommentTargetLong));
     writeProject(dir, QStringList() << QString(QLL(".formatrc"))
         << QString(QLL("[Comments]\nwrapMax = 70 | 80\n"))
     );
-    qExpect(FormatSettings::load(
+    qExpect(FormatFileConfig::load(
         dir.path() + QLL("/a.cpp"),
         FormatConfig(),
         &settings,
@@ -1916,6 +2696,335 @@ void tst_FormatRules::testSettings_shouldReadWrapColumns()
     ))
         ->toBeFalsy();
     qExpect(error)->toContain(QString(QLL("[Comments] wrapMax = 70 | 80: use a number from 20 to 200")));
+}
+
+void tst_FormatRules::testSuperTypedef_shouldFollowPairedFiles()
+{
+    QTemporaryDir dir;
+    QVERIFY(dir.isValid());
+    const QString headerPath = dir.path() + QLL("/sapling.h");
+    const QString sourcePath = dir.path() + QLL("/sapling.c++");
+    const QByteArray header("class Sapling : public Rootstock\n{\npublic:\n"
+                            "    void grow();\n};\n");
+    const QByteArray source("void Sapling::grow()\n{\n    Rootstock::grow();\n}\n");
+    QFile headerFile(headerPath);
+    QVERIFY(headerFile.open(QIODevice::WriteOnly));
+    QCOMPARE(headerFile.write(header), qint64(header.size()));
+    headerFile.close();
+    QFile sourceFile(sourcePath);
+    QVERIFY(sourceFile.open(QIODevice::WriteOnly));
+    QCOMPARE(sourceFile.write(source), qint64(source.size()));
+    sourceFile.close();
+
+    Formatter formatter;
+    QString error;
+    QVERIFY(formatter.selectRules(QStringList() << QLL("super-typedef"), &error));
+    const FormatResult existing = formatter.format(header, headerPath, QStringList());
+    QCOMPARE(existing.text, header);
+    FormatConfig config;
+    config.scheduledFiles << headerPath << sourcePath;
+    config.fileLineSpecs.insert(headerPath, QStringList() << QLL("1,5"));
+    config.fileLineSpecs.insert(sourcePath, QStringList() << QLL("1,4"));
+    const FormatResult formattedHeader = formatter.format(
+        header, headerPath, config.fileLineSpecs.value(headerPath), config
+    );
+    QVERIFY2(formattedHeader.error.isEmpty(), qPrintable(formattedHeader.error));
+    QVERIFY(formattedHeader.text.contains("typedef Rootstock super;"));
+    const FormatResult formattedSource = formatter.format(
+        source, sourcePath, config.fileLineSpecs.value(sourcePath), config
+    );
+    QVERIFY2(formattedSource.error.isEmpty(), qPrintable(formattedSource.error));
+    QVERIFY(formattedSource.text.contains("super::grow();"));
+    const FormatResult entireSource = formatter.format(source, sourcePath, QStringList(), config);
+    QVERIFY(entireSource.text.contains("super::grow();"));
+
+    config.scheduledFiles.removeAll(headerPath);
+    const FormatResult withoutHeader = formatter.format(
+        source, sourcePath, config.fileLineSpecs.value(sourcePath), config
+    );
+    QCOMPARE(withoutHeader.text, source);
+    config.scheduledFiles << headerPath;
+    config.assignments << QString(QLL("structure.typedefSuper=never"));
+    const FormatResult disabledHeader = formatter.format(
+        header, headerPath, config.fileLineSpecs.value(headerPath), config
+    );
+    QCOMPARE(disabledHeader.text, header);
+    const FormatResult disabledSource = formatter.format(
+        source, sourcePath, config.fileLineSpecs.value(sourcePath), config
+    );
+    QCOMPARE(disabledSource.text, source);
+    config.assignments.clear();
+    config.assignments << QString(QLL("structure.typedefSuper=if-needed"));
+    const QStringList sourceRanges = config.fileLineSpecs.take(sourcePath);
+    config.lineSpecs << QString(QLL("100,"));
+    const FormatResult neededHeader = formatter.format(header, headerPath, QStringList(), config);
+    QVERIFY(neededHeader.text.contains("typedef Rootstock super;"));
+    config.lineSpecs.clear();
+    config.fileLineSpecs.insert(sourcePath, sourceRanges);
+    config.assignments << QString(QLL("structure.replaceSuperSites=false"));
+    const FormatResult preservedSource = formatter.format(
+        source, sourcePath, config.fileLineSpecs.value(sourcePath), config
+    );
+    QCOMPARE(preservedSource.text, source);
+    config.assignments.clear();
+    config.assignments << QString(QLL("structure.typedefSuper=never"));
+    const QByteArray existingHeader("class Sapling : public Rootstock\n{\n"
+                                    "    typedef Rootstock super;\npublic:\n"
+                                    "    void grow();\n};\n");
+    const FormatResult retainedHeader = formatter.format(existingHeader, headerPath,
+                                                         QStringList(), config);
+    QCOMPARE(retainedHeader.text, existingHeader);
+    QVERIFY(headerFile.open(QIODevice::WriteOnly | QIODevice::Truncate));
+    QCOMPARE(headerFile.write(existingHeader), qint64(existingHeader.size()));
+    headerFile.close();
+    config.fileLineSpecs[headerPath] = QStringList() << QLL("100,");
+    config.assignments.clear();
+    config.assignments << QString(QLL("structure.replaceSuperSites=true"));
+    const FormatResult existingAlias = formatter.format(source, sourcePath, QStringList(), config);
+    QVERIFY(existingAlias.text.contains("super::grow();"));
+    QVERIFY(headerFile.open(QIODevice::WriteOnly | QIODevice::Truncate));
+    const QByteArray otherBase("class Sapling : public Rootstock\n{\n"
+                               "    typedef Flowerpot super;\npublic:\n"
+                               "    void grow();\n};\n");
+    QCOMPARE(headerFile.write(otherBase), qint64(otherBase.size()));
+    headerFile.close();
+    const FormatResult differentAlias = formatter.format(source, sourcePath,
+                                                          QStringList(), config);
+    QCOMPARE(differentAlias.text, source);
+    QVERIFY(headerFile.open(QIODevice::WriteOnly | QIODevice::Truncate));
+    const QByteArray disabledInline("// @formatter: structure.typedefSuper=never\n" + header);
+    QCOMPARE(headerFile.write(disabledInline), qint64(disabledInline.size()));
+    headerFile.close();
+    config.fileLineSpecs[headerPath] = QStringList() << QLL("1,6");
+    config.assignments << QString(QLL("structure.typedefSuper=always"));
+    const FormatResult inlineDisabled = formatter.format(source, sourcePath,
+                                                          QStringList(), config);
+    QCOMPARE(inlineDisabled.text, source);
+    QVERIFY(sourceFile.open(QIODevice::WriteOnly | QIODevice::Truncate));
+    const QByteArray noBaseUse("void Sapling::grow()\n{\n    tend();\n}\n");
+    QCOMPARE(sourceFile.write(noBaseUse), qint64(noBaseUse.size()));
+    sourceFile.close();
+    config.assignments.clear();
+    config.assignments << QString(QLL("structure.typedefSuper=if-needed"));
+    const FormatResult unneededHeader = formatter.format(header, headerPath, QStringList(), config);
+    QCOMPARE(unneededHeader.text, header);
+}
+
+void tst_FormatRules::testSuperTypedef_shouldHandleQualifiedBases()
+{
+    const QByteArray input(
+        "class Orchid : public flora::Plant\n{\n"
+        "    typedef flora::Plant super;\npublic:\n"
+        "    using flora::Plant::Plant;\n"
+        "    void bloom() { flora::Plant::bloom(); Plant::smell(); }\n"
+        "};\n"
+    );
+    const QByteArray expected(
+        "class Orchid : public flora::Plant\n{\n"
+        "    typedef flora::Plant super;\npublic:\n"
+        "    using super::super;\n"
+        "    void bloom() { super::bloom(); super::smell(); }\n"
+        "};\n"
+    );
+    Formatter formatter;
+    QString error;
+    QVERIFY(formatter.selectRules(QStringList() << QLL("super-typedef"), &error));
+    FormatConfig config;
+    config.assignments << QString(QLL("structure.replaceSuperSites=true"));
+    const FormatResult result = formatter.format(input, QString(), QStringList(), config);
+    QVERIFY2(result.error.isEmpty(), qPrintable(result.error));
+    QCOMPARE(result.text, expected);
+    const FormatResult again = formatter.format(result.text, QString(), QStringList(), config);
+    QCOMPARE(again.text, expected);
+    const QByteArray shadowed(
+        "class Elm : public Tree\n{\n    typedef Tree super;\npublic:\n"
+        "    using Tree::water;\n    using Tree::prune;\n"
+        "    void inspect() { using Tree = Other; Tree::inspect(); }\n"
+        "    template<class Tree> void measure() { Tree::measure(); }\n"
+        "    void prune() { Tree::prune(); ::Tree::water(); }\n};\n"
+    );
+    const QByteArray shadowedExpected(
+        "class Elm : public Tree\n{\n    typedef Tree super;\npublic:\n"
+        "    using super::water;\n    using super::prune;\n"
+        "    void inspect() { using Tree = Other; Tree::inspect(); }\n"
+        "    template<class Tree> void measure() { Tree::measure(); }\n"
+        "    void prune() { super::prune(); super::water(); }\n};\n"
+    );
+    const FormatResult guarded = formatter.format(shadowed, QString(), QStringList(), config);
+    QCOMPARE(guarded.text, shadowedExpected);
+    const QByteArray templated(
+        "template<class Item>\nclass Parcel : public Shelf<Item>\n{\n"
+        "    typedef Shelf<Item> super;\npublic:\n"
+        "    void open() { Shelf<Item>::open(); }\n};\n"
+    );
+    const QByteArray templatedExpected(
+        "template<class Item>\nclass Parcel : public Shelf<Item>\n{\n"
+        "    typedef Shelf<Item> super;\npublic:\n"
+        "    void open() { super::open(); }\n};\n"
+    );
+    const FormatResult templateResult = formatter.format(templated, QString(), QStringList(), config);
+    QCOMPARE(templateResult.text, templatedExpected);
+    const QByteArray namespaced(
+        "namespace east {\nclass Leaf : public TreeA\n{\n    typedef TreeA super;\n"
+        "    void grow() { TreeA::grow(); }\n};\n}\n"
+        "namespace west {\nclass Leaf : public TreeB\n{\n    typedef TreeB super;\n"
+        "    void grow() { TreeB::grow(); }\n};\n}\n"
+    );
+    const QByteArray namespacedExpected(
+        "namespace east {\nclass Leaf : public TreeA\n{\n    typedef TreeA super;\n"
+        "    void grow() { super::grow(); }\n};\n}\n"
+        "namespace west {\nclass Leaf : public TreeB\n{\n    typedef TreeB super;\n"
+        "    void grow() { super::grow(); }\n};\n}\n"
+    );
+    const FormatResult namespaceResult = formatter.format(namespaced, QString(), QStringList(), config);
+    QCOMPARE(namespaceResult.text, namespacedExpected);
+    QTemporaryDir dir;
+    QVERIFY(dir.isValid());
+    const QString headerPath = dir.path() + QLL("/foliage.h");
+    const QString sourcePath = dir.path() + QLL("/foliage.cpp");
+    QFile headerFile(headerPath);
+    QVERIFY(headerFile.open(QIODevice::WriteOnly));
+    QCOMPARE(headerFile.write(namespaced), qint64(namespaced.size()));
+    headerFile.close();
+    const QByteArray outline("void west::Leaf::grow()\n{\n    TreeB::grow();\n}\n");
+    const QByteArray outlineExpected("void west::Leaf::grow()\n{\n    super::grow();\n}\n");
+    const FormatResult outlineResult = formatter.format(outline, sourcePath, QStringList(), config);
+    QCOMPARE(outlineResult.text, outlineExpected);
+    const QString reedHeader = dir.path() + QLL("/reed.h");
+    QFile reedFile(reedHeader);
+    QVERIFY(reedFile.open(QIODevice::WriteOnly));
+    const QByteArray reedDeclaration(
+        "class Reed : public Grass\n{\n    typedef Grass super;\npublic:\n"
+        "    Grass::Value count(Grass::Value);\n};\n"
+    );
+    QCOMPARE(reedFile.write(reedDeclaration), qint64(reedDeclaration.size()));
+    reedFile.close();
+    const QByteArray signature(
+        "Grass::Value Reed::count(Grass::Value value)\n{\n"
+        "    return Grass::convert(value);\n}\n"
+    );
+    const QByteArray signatureExpected(
+        "Grass::Value Reed::count(super::Value value)\n{\n"
+        "    return super::convert(value);\n}\n"
+    );
+    const FormatResult signatureResult = formatter.format(
+        signature, dir.path() + QLL("/reed.cpp"), QStringList(), config
+    );
+    QCOMPARE(signatureResult.text, signatureExpected);
+    QVERIFY(reedFile.open(QIODevice::WriteOnly | QIODevice::Truncate));
+    const QByteArray constructorDeclaration(
+        "class Reed : public Grass\n{\n    typedef Grass super;\npublic:\n"
+        "    Reed();\n    int size;\n};\n"
+    );
+    QCOMPARE(reedFile.write(constructorDeclaration), qint64(constructorDeclaration.size()));
+    reedFile.close();
+    const QByteArray constructor(
+        "Reed::Reed() : size(Grass::initial())\n{\n    Grass::grow();\n}\n"
+    );
+    const QByteArray constructorExpected(
+        "Reed::Reed() : size(super::initial())\n{\n    super::grow();\n}\n"
+    );
+    const FormatResult constructorResult = formatter.format(
+        constructor, dir.path() + QLL("/reed.cpp"), QStringList(), config
+    );
+    QCOMPARE(constructorResult.text, constructorExpected);
+    const QByteArray bracedConstructor(
+        "Reed::Reed() : size{Grass::initial()}\n{\n    Grass::grow();\n}\n"
+    );
+    const QByteArray bracedExpected(
+        "Reed::Reed() : size{super::initial()}\n{\n    super::grow();\n}\n"
+    );
+    const FormatResult bracedResult = formatter.format(
+        bracedConstructor, dir.path() + QLL("/reed.cpp"), QStringList(), config
+    );
+    QCOMPARE(bracedResult.text, bracedExpected);
+}
+
+void tst_FormatRules::testSuperTypedef_shouldUseStableRunnerInputs()
+{
+    const QStringList kinds = QStringList() << QString(QLL("serial"))
+#ifndef QT_NO_THREAD
+        << QString(QLL("thread"))
+#endif
+        ;
+    for (int kind = 0; kind < kinds.size(); ++kind) {
+        for (int reverse = 0; reverse < 2; ++reverse) {
+            QTemporaryDir dir;
+            QVERIFY(dir.isValid());
+            const QString headerPath = dir.path() + QLL("/birch.h");
+            const QString sourcePath = dir.path() + QLL("/birch.mm");
+            const QByteArray header("class Birch : public Tree\n{\npublic:\n"
+                                    "    void grow();\n};\n");
+            const QByteArray source("void Birch::grow()\n{\n    Tree::grow();\n}\n");
+            QFile headerFile(headerPath);
+            QVERIFY(headerFile.open(QIODevice::WriteOnly));
+            QCOMPARE(headerFile.write(header), qint64(header.size()));
+            headerFile.close();
+            QFile sourceFile(sourcePath);
+            QVERIFY(sourceFile.open(QIODevice::WriteOnly));
+            QCOMPARE(sourceFile.write(source), qint64(source.size()));
+            sourceFile.close();
+            Formatter formatter;
+            QString error;
+            QVERIFY(formatter.selectRules(QStringList() << QLL("super-typedef"), &error));
+            FormatOptions options;
+            options.lineSpecs << QString(QLL("1,"));
+            options.jobs = 2;
+            QScopedPointer<FormatRunner > runner(FormatRunner::create(kinds.at(kind),
+                                                                       &formatter, options));
+            QVERIFY(runner);
+            const QString earlierPath = dir.path() + QLL("/earlier.cpp");
+            QFile earlierFile(earlierPath);
+            QVERIFY(earlierFile.open(QIODevice::WriteOnly));
+            QVERIFY(earlierFile.write("int sentinel;\n") > 0);
+            earlierFile.close();
+            const QList<FormatFileResult > earlier = runner->run(QStringList() << earlierPath);
+            QCOMPARE(earlier.size(), 1);
+            QVERIFY2(earlier.first().error.isEmpty(), qPrintable(earlier.first().error));
+            QStringList files;
+            if (reverse) {
+                files << sourcePath << headerPath;
+            } else {
+                files << headerPath << sourcePath;
+            }
+            const QList<FormatFileResult > results = runner->run(files);
+            QCOMPARE(results.size(), 2);
+            QVERIFY2(results.at(0).error.isEmpty(), qPrintable(results.at(0).error));
+            QVERIFY2(results.at(1).error.isEmpty(), qPrintable(results.at(1).error));
+            QVERIFY(headerFile.open(QIODevice::ReadOnly));
+            QVERIFY(headerFile.readAll().contains("typedef Tree super;"));
+            QVERIFY(sourceFile.open(QIODevice::ReadOnly));
+            QVERIFY(sourceFile.readAll().contains("super::grow();"));
+        }
+    }
+}
+
+void tst_FormatRules::testSuperTypedef_shouldFindRelatedExtensions()
+{
+    const QStringList extensions = QStringList() << QLL("cpp") << QLL("mm")
+        << QLL("m") << QLL("c") << QLL("cc") << QLL("cxx") << QLL("c++") << QLL("hpp")
+        << QLL("hxx") << QLL("h++") << QLL("h");
+    const QByteArray header("class Fern : public Frond\n{\npublic:\n"
+                            "    void unfold();\n};\n");
+    const QByteArray source("void Fern::unfold()\n{\n    Frond::unfold();\n}\n");
+    Formatter formatter;
+    QString error;
+    QVERIFY(formatter.selectRules(QStringList() << QLL("super-typedef"), &error));
+    FormatConfig config;
+    config.assignments << QString(QLL("structure.typedefSuper=if-needed"));
+    for (int i = 0; i < extensions.size(); ++i) {
+        QTemporaryDir dir;
+        QVERIFY(dir.isValid());
+        const QString headerPath = dir.path() + QLL("/fern.hh");
+        const QString sourcePath = dir.path() + QLL("/fern.") + extensions.at(i);
+        QFile sourceFile(sourcePath);
+        QVERIFY(sourceFile.open(QIODevice::WriteOnly));
+        QCOMPARE(sourceFile.write(source), qint64(source.size()));
+        sourceFile.close();
+        const FormatResult result = formatter.format(header, headerPath, QStringList(), config);
+        QVERIFY2(result.error.isEmpty(), qPrintable(result.error));
+        QVERIFY2(result.text.contains("typedef Frond super;"), qPrintable(extensions.at(i)));
+    }
 }
 
 /// Breaks a long `<<` chain in agent mode, and asks the agent to regroup the
@@ -2076,7 +3185,7 @@ void tst_FormatRules::testAgentGuides_shouldFillTemplate()
     qExpect(file.open(QIODevice::ReadOnly))->toBeTruthy();
     const QString text = QString::fromUtf8(file.readAll());
     file.close();
-    qExpect(text)->toContain(QDir::toNativeSeparators(QString(QLL("`/src/a.cpp`"))));
+    qExpect(text)->toContain(QString(QLL("`/src/a.cpp`")));
     qExpect(text)->toContain(QString(QLL("lines\n3-8")));
     qExpect(text)->toContain(QString(QLL("within 80 columns")));
     qExpect(text)->Not->toContain(QString(QLL("{{")));
@@ -2150,14 +3259,14 @@ void tst_FormatRules::testAgentGuides_shouldWriteUsage()
 {
     FormatAgentGuides guides;
     const QString usage = guides.writeUsage();
-    qExpect(usage)->toStartWith(QDir::toNativeSeparators(guides.folder()));
+    qExpect(usage)->toStartWith(guides.folder());
     QFile file(usage);
     qExpect(file.open(QIODevice::ReadOnly))->toBeTruthy();
     const QString text = QString::fromUtf8(file.readAll());
     file.close();
     qExpect(text)->toStartWith(QString(QLL("# Using the format tool in agent mode")));
     qExpect(text)->Not->toContain(QString(QLL("{{")));
-    qExpect(text)->toContain(QDir::toNativeSeparators(guides.folder()));
+    qExpect(text)->toContain(guides.folder());
     qExpect(text)->toContain(QString(QLL("Run prompt at:")));
     const FormatIssue request(
         3,
@@ -2239,10 +3348,11 @@ void tst_FormatRules::testSettings_shouldInheritStructureInComments()
     writeProject(dir, QStringList() << QString(QLL(".formatrc"))
         << QString(QLL("[Structure]\nwrapBegin = 70\nwrapMax = 100\n"))
     );
-    FormatSettings settings;
+    FormatFileConfig settings;
     QString error;
     const QString path = dir.path() + QLL("/sub/a.cpp");
-    qExpect(FormatSettings::load(path, FormatConfig(), &settings, &error))->toBeTruthy();
+    qExpect(FormatFileConfig::load(path, FormatConfig(), &settings, &error))
+        ->toBeTruthy();
     QCOMPARE(settings.wrapBegin, QList<int >() << 70);
     qExpect(settings.wrapMax)->toEqual(100);
     QCOMPARE(settings.commentWrapBegin, QList<int >() << 70);
@@ -2250,7 +3360,8 @@ void tst_FormatRules::testSettings_shouldInheritStructureInComments()
     writeProject(dir, QStringList() << QString(QLL("sub/.formatrc"))
         << QString(QLL("[Comments]\nwrapMax = 90\n"))
     );
-    qExpect(FormatSettings::load(path, FormatConfig(), &settings, &error))->toBeTruthy();
+    qExpect(FormatFileConfig::load(path, FormatConfig(), &settings, &error))
+        ->toBeTruthy();
     qExpect(settings.wrapMax)->toEqual(100);
     qExpect(settings.commentWrapMax)->toEqual(90);
     QCOMPARE(settings.commentWrapBegin, QList<int >() << 70);
@@ -2301,9 +3412,8 @@ void tst_FormatRules::testRules_shouldRewriteFile_data()
         << QByteArray("if ( ! myFirstCondition\n"
                       "    && (mySecond\n"
                       "        || (myThird\n"
-                      "            && (ov = manager\n"
-                      "                ? manager->override()\n"
-                      "                : QSharedPointer<QHostInfoOverride >()\n"
+                      "            && (ov = manager ? manager->override()\n"
+                      "                             : QSharedPointer<QHostInfoOverride >()\n"
                       "            )\n"
                       "        )\n"
                       "    )\n"
@@ -2330,13 +3440,12 @@ void tst_FormatRules::testRules_shouldRewriteFile_data()
                       "manager->override() : QSharedPointer<QHostInfoOverride >();\n}\n")
         << QByteArray("void f()\n{\n    QSharedPointer<QHostInfoOverride > ov = manager\n"
                       "        ? manager->override() : QSharedPointer<QHostInfoOverride >();\n}\n");
-    QTest::newRow("ternary-wrap breaks before the colon too")
+    QTest::newRow("ternary-wrap keeps both branches within wrapMax")
         << QString(QLL("ternary-wrap")) << QString(QLL("a.cpp"))
         << QByteArray("void f()\n{\n    QSharedPointer<QHostInfoOverride > ov = theManager ? "
                       "theManager->currentOverride() : QSharedPointer<QHostInfoOverride >();\n}\n")
         << QByteArray("void f()\n{\n    QSharedPointer<QHostInfoOverride > ov = theManager\n"
-                      "        ? theManager->currentOverride()\n"
-                      "        : QSharedPointer<QHostInfoOverride >();\n}\n");
+                      "        ? theManager->currentOverride() : QSharedPointer<QHostInfoOverride >();\n}\n");
     QTest::newRow("ternary-wrap leaves a statement that fits")
         << QString(QLL("ternary-wrap")) << QString(QLL("a.cpp"))
         << QByteArray("void f()\n{\n    int a = b ? c : d;\n}\n")
@@ -2463,8 +3572,8 @@ void tst_FormatRules::testThisMode_shouldFollowSettings()
 
 void tst_FormatRules::testThisMode_shouldDefaultToBaseExistingAndHeaderOutline()
 {
-    const QStringList program = FormatSettings().thisMode;
-    qExpect(program)->toEqual(FormatSettings::defaultThisMode());
+    const QStringList program = FormatFileConfig().thisMode;
+    qExpect(program)->toEqual(FormatFileConfig::defaultThisMode());
     const QString outline = QString(QLL("is-outline"));
     QSet<QString > holding;
     holding << QString(QLL("is-base-member"));
@@ -2621,6 +3730,272 @@ void tst_FormatRules::testScopeConditions_shouldFallBackWithoutPercent()
     qExpect(conditions.holds(program, token, 30, fallback))->toBeFalsy();
 }
 
+void tst_FormatRules::testLayoutHelpers_shouldRecognizeClosingBracketCombinations()
+{
+    QVERIFY(isClosingLine(QByteArray("    )] }\t")));
+    QVERIFY(isClosingLine(QByteArray("  ])}")));
+    QVERIFY( ! isClosingLine(QByteArray("  ]).field")));
+    QVERIFY( ! isClosingLine(QByteArray("   ")));
+}
+
+void tst_FormatRules::testLayoutConfig_shouldResolveConditionAndSubchainOptions()
+{
+    Config::Parser parser(FormatFileConfig::schema());
+    FormatFileConfig config;
+    FormatFileConfig::fromParser(parser, &config);
+    QCOMPARE(config.wrapConditionsOver, 1);
+    QVERIFY( ! config.wrapConditionsOverCondition.isEmpty());
+    QCOMPARE(config.wrapSubChain, QString(QLL("always")));
+    QString error;
+    QVERIFY2(parser.readData(
+        "[Structure]\nwrapArgsOver=5\nwrapSubChain=wrap-end\n",
+        QLL("inline"), &error
+    ), qPrintable(error));
+    FormatFileConfig::fromParser(parser, &config);
+    QCOMPARE(config.wrapArgsOver, 5);
+    QVERIFY( ! config.wrapConditionsOverCondition.isEmpty());
+    QCOMPARE(config.wrapSubChain, QString(QLL("wrap-end")));
+    QVERIFY2(parser.readData(
+        "[Structure]\nwrapConditionsOver=4\n", QLL("inline"), &error
+    ), qPrintable(error));
+    QVERIFY(readSettings(parser, &config));
+    QCOMPARE(config.wrapConditionsOver, 4);
+    QVERIFY(config.wrapConditionsOverCondition.isEmpty());
+    QVERIFY2(parser.readData(
+        "[Structure]\nwrapConditionsOver=argCount(0) > 2 && spaceRemaining <= 20%\n",
+        QLL("inline"), &error
+    ), qPrintable(error));
+    FormatFileConfig::fromParser(parser, &config);
+    QVERIFY( ! config.wrapConditionsOverCondition.isEmpty());
+    QVERIFY( ! parser.readData(
+        "[Structure]\nwrapSubChain=unknown\n", QLL("inline"), &error
+    ));
+}
+
+void tst_FormatRules::testScopeConditions_shouldCountConditionOperands()
+{
+    FormatDocument document(
+        "void check() { if (ready() && matches(one, two) || (valid && safe)) {} }\n"
+    );
+    const int open = symbolIndex(document, "if") + 1;
+    const int call = symbolIndex(document, "matches") + 1;
+    const int nested = symbolIndex(document, "valid") - 1;
+    FormatScopeConditions conditions(&document);
+    QCOMPARE(conditions.argumentCount(open, 0), 3);
+    QCOMPARE(conditions.argumentCount(open, 1, 2), 2);
+    QCOMPARE(conditions.argumentCount(call, -1), 3);
+    QCOMPARE(conditions.conditionArgumentCount(nested, 0), 2);
+    QCOMPARE(conditions.conditionArgumentCount(nested, -1), 3);
+    const FormatDocument ternary(
+        "void check() { if (available && ready ? inspect() : retry && safe) {} }\n"
+    );
+    FormatScopeConditions ternaryConditions(&ternary);
+    QCOMPARE(ternaryConditions.conditionArgumentCount(symbolIndex(ternary, "if") + 1, 0), 1);
+    const FormatDocument loop(
+        "void work() { while (available() || retriesRemain()) { advance(); } }\n"
+    );
+    FormatScopeConditions loopConditions(&loop);
+    QCOMPARE(loopConditions.conditionArgumentCount(symbolIndex(loop, "while") + 1, 0), 2);
+    FormatFileConfig config;
+    QString error;
+    QVERIFY(Config::Condition::compile(
+        QString(QLL("argCount(0) > 2 && spaceRemaining <= 20%")),
+        FormatScopeConditions::names(), &config.wrapConditionsOverCondition,
+        &error, true
+    ));
+    document.setConfig(config);
+    QVERIFY(conditions.conditionsOver(open, 3, 20));
+    QVERIFY( ! conditions.conditionsOver(open, 3, 21));
+    QVERIFY( ! conditions.conditionsOver(nested, 2, 20));
+}
+
+/// Asks `wrapConditionsOver` per line: the default gives two operands while a
+/// fifth of `wrapMax` is left, else one; a condition gives 1 or 0.
+void tst_FormatRules::testScopeConditions_shouldCountConditionsPerLine()
+{
+    FormatDocument document(
+        "void check() { if (ready() && valid() && safe()) {} }\n"
+    );
+    const int open = symbolIndex(document, "if") + 1;
+    FormatScopeConditions conditions(&document);
+    QCOMPARE(conditions.conditionsPerLine(open, 3, 20), 2);
+    QCOMPARE(conditions.conditionsPerLine(open, 3, 19), 1);
+    FormatFileConfig config;
+    QString error;
+    const QSharedPointer<Config::Scopes::Scope > scope =
+        FormatConditionContext::pushCountScope();
+    QVERIFY2(Config::Condition::compile(
+        QString(QLL("value > 2")), FormatScopeConditions::names(),
+        &config.wrapConditionsOverCondition, &error, true
+    ), qPrintable(error));
+    document.setConfig(config);
+    QCOMPARE(conditions.conditionsPerLine(open, 3, 50), 1);
+    QCOMPARE(conditions.conditionsPerLine(open, 2, 50), 0);
+    config.wrapConditionsOverCondition.clear();
+    config.wrapConditionsOver = 3;
+    document.setConfig(config);
+    QCOMPARE(conditions.conditionsPerLine(open, 3, 50), 3);
+}
+
+/// Lets only a count setting's condition say `value`: a condition compiles
+/// with it while a count scope lives, and fails to once that scope is gone.
+void tst_FormatRules::testScopeConditions_shouldOfferValueToCountSettingsOnly()
+{
+    QStringList program;
+    QString error;
+    QVERIFY( ! Config::Condition::compile(
+        QString(QLL("value > 1")), FormatScopeConditions::names(),
+        &program, &error, true
+    ));
+    {
+        const QSharedPointer<Config::Scopes::Scope > scope =
+            FormatConditionContext::pushCountScope();
+        QVERIFY2(Config::Condition::compile(
+            QString(QLL("value > 1")), FormatScopeConditions::names(),
+            &program, &error, true
+        ), qPrintable(error));
+    }
+    QVERIFY( ! Config::Condition::compile(
+        QString(QLL("value > 1")), FormatScopeConditions::names(),
+        &program, &error, true
+    ));
+}
+
+void tst_FormatRules::testScopeConditions_shouldEvaluateArgumentExpressions()
+{
+    // Gives the conditions below the `value` of a count setting.
+    const QSharedPointer<Config::Scopes::Scope > countScope =
+        FormatConditionContext::pushCountScope();
+    QStringList lazyProgram;
+    QString lazyError;
+    bool lazyOk = false;
+    QVERIFY(Config::Condition::compile(
+        QString(QLL("false && value > 0")), QStringList(),
+        &lazyProgram, &lazyError
+    ));
+    QVERIFY( ! Config::Condition::evaluate(
+        lazyProgram, QSet<QString >(), Q_NULLPTR,
+        &lazyOk
+    ));
+    QVERIFY(lazyOk);
+    const QStringList predicates = QStringList() << QString(QLL("isAvailable"));
+    QVERIFY(Config::Condition::compile(
+        QString(QLL("false && isAvailable()")), predicates,
+        &lazyProgram, &lazyError
+    ));
+    QVERIFY( ! Config::Condition::evaluate(
+        lazyProgram, QSet<QString >(), Q_NULLPTR,
+        &lazyOk
+    ));
+    QVERIFY(lazyOk);
+    QVERIFY(Config::Condition::compile(
+        QString(QLL("true || value > 0")), QStringList(),
+        &lazyProgram, &lazyError
+    ));
+    QVERIFY(Config::Condition::evaluate(
+        lazyProgram, QSet<QString >(), Q_NULLPTR,
+        &lazyOk
+    ));
+    QVERIFY(lazyOk);
+    FormatDocument document(
+        "void declareThing(int first, int second, int third, int fourth);\n"
+        "void work() { outer(inner(one, nested(x, y)), second(empty(), last(1, 2, 3)), plain, fourth); }\n",
+        QString(QLL("sample.cpp"))
+    );
+    const int outer = symbolIndex(document, "outer") + 1;
+    const int inner = symbolIndex(document, "inner") + 1;
+    const int declaration = symbolIndex(document, "declareThing") + 1;
+    FormatScopeConditions conditions(&document);
+    QCOMPARE(conditions.argumentCount(outer, 0), 4);
+    QCOMPARE(conditions.argumentCount(inner, -1), 4);
+    QCOMPARE(conditions.argumentCount(inner, -2), -1);
+    QCOMPARE(conditions.argumentCount(outer, 1, 1), 2);
+    QCOMPARE(conditions.argumentCount(outer, 1, 2), 2);
+    QCOMPARE(conditions.argumentCount(outer, 1, 0), 4);
+    QCOMPARE(conditions.argumentCount(outer, 2, 0), 5);
+    QCOMPARE(conditions.argumentCount(outer, 3, 0), -1);
+    const FormatDocument deepDocument(
+        "void sample() { root(one, two, third(child(grand(last(1, 2))))); }\n",
+        QString(QLL("deep.cpp"))
+    );
+    FormatScopeConditions deep(&deepDocument);
+    const int root = symbolIndex(deepDocument, "root") + 1;
+    const int last = symbolIndex(deepDocument, "last") + 1;
+    QCOMPARE(deep.argumentCount(root, 1, 3), 1);
+    QCOMPARE(deep.argumentCount(root, 4, 3), 2);
+    QCOMPARE(deep.argumentCount(root, 5, 3), -1);
+    QCOMPARE(deep.argumentCount(last, -4), 3);
+    QCOMPARE(deep.argumentCount(last, -5), -1);
+    QVERIFY(conditions.holding(declaration).contains(QString(QLL("is-signature"))));
+    QVERIFY( ! conditions.holding(outer).contains(QString(QLL("is-signature"))));
+
+    FormatFileConfig settings;
+    QString error;
+    QVERIFY(Config::Condition::compile(
+        QString(QLL("argCount(0) > 3 && (space_remaining <= 18.75% || is_signature)")),
+        FormatScopeConditions::names(),
+        &settings.wrapArgsOverCondition,
+        &error,
+        true
+    ));
+    document.setConfig(settings);
+    QVERIFY(conditions.argsOver(outer, 4, 18.75));
+    QVERIFY(conditions.argsOver(outer, 4, -2));
+    QVERIFY( ! conditions.argsOver(outer, 4, 18.76));
+    QVERIFY( ! conditions.argsOver(inner, 2, 10));
+    QVERIFY(conditions.argsOver(declaration, 4, 90));
+    QVERIFY(Config::Condition::compile(
+        QString(QLL("argCount(-1) == 4 && argCount(1, 2) - 1 == 1")),
+        FormatScopeConditions::names(),
+        &settings.wrapArgsOverCondition,
+        &error,
+        true
+    ));
+    document.setConfig(settings);
+    QVERIFY(conditions.argsOver(inner, 2, 0));
+    QVERIFY(conditions.holds(settings.wrapArgsOverCondition, inner));
+    QCOMPARE(conditions.argumentCount(
+        symbolIndex(document, "empty") + 1,
+        0
+    ), 0);
+    QCOMPARE(conditions.argumentCount(outer, 1, 3), -1);
+    const int definition = symbolIndex(document, "work") + 1;
+    QVERIFY(conditions.holding(definition).contains(QString(QLL("is-signature"))));
+    QVERIFY(Config::Condition::compile(
+        QString(QLL("value - 1 == 3 && isSignature")),
+        FormatScopeConditions::names(),
+        &settings.wrapArgsOverCondition,
+        &error,
+        true
+    ));
+    document.setConfig(settings);
+    QVERIFY(conditions.argsOver(declaration, 4, 70));
+    QVERIFY(Config::Condition::compile(
+        QString(QLL("argCount(0) > 3 && 40%")),
+        FormatScopeConditions::names(),
+        &settings.wrapArgsOverCondition,
+        &error,
+        true
+    ));
+    const QStringList fallback = QStringList() << QString(QLL("never"));
+    QVERIFY( ! conditions.holds(
+        settings.wrapArgsOverCondition,
+        outer,
+        40,
+        fallback
+    ));
+    QVERIFY(conditions.holds(
+        settings.wrapArgsOverCondition,
+        outer,
+        41,
+        fallback
+    ));
+    QVERIFY( ! Config::Condition::compile(
+        QString(QLL("space-remaining < 20%")), FormatScopeConditions::names(),
+        &settings.wrapArgsOverCondition, &error, true
+    ));
+}
+
 /// Builds a function body that calls `run` with two arguments over two
 /// lines, the `(` at the column after `prefix`; on one line, the call would
 /// pass the wrap column.
@@ -2665,6 +4040,12 @@ void tst_FormatRules::testArgsWrap_shouldFollowSettings_data()
         << argsWrapFile(total) << argsWrapFile(total);
     QTest::newRow("every column") << QString(QLL("0%")) << QString(QLL("a.h"))
         << argsWrapFile(near) << argsWrapBroken(near);
+    QTest::newRow("argument query with a passed percent")
+        << QString(QLL("argCount(0) == 2 && 10%")) << QString(QLL("a.cpp"))
+        << argsWrapFile(near) << argsWrapBroken(near);
+    QTest::newRow("argument query with an unpassed percent")
+        << QString(QLL("argCount(0) == 2 && 20%")) << QString(QLL("a.cpp"))
+        << argsWrapFile(near) << argsWrapFile(near);
 }
 
 /// Formats one call with the `args-wrap` rule under each row's
@@ -2683,6 +4064,84 @@ void tst_FormatRules::testArgsWrap_shouldFollowSettings()
     }
     writeProject(dir, files);
     const QString path = dir.path() + QLatin1Char('/') + file;
+    const QString rule = QString(QLL("args-wrap"));
+    const FormatResult result = qMove(this->formatWith(rule, input, path));
+    qExpect(result.error)->toBeEmpty();
+    QCOMPARE(result.text, output);
+    const FormatResult again = qMove(this->formatWith(
+        rule,
+        result.text,
+        path
+    ));
+    QCOMPARE(again.text, output);
+}
+
+/// Builds a function body that calls `computeTheTotalOfAllValues` with five
+/// arguments, each on the lines that @p arguments give; on one line, the
+/// call would pass the wrap column.
+static QByteArray joinArgsFile(const QByteArray & arguments)
+{
+    return "void f()\n{\n    const int total = computeTheTotalOfAllValues("
+        + arguments + ");\n}\n";
+}
+
+void tst_FormatRules::testArgsWrap_shouldJoinArgs_data()
+{
+    const QByteArray oneLine = "alpha(1), beta, gamma, delta, epsilonValue";
+    QTest::addColumn<QString >("joinArgs");
+    QTest::addColumn<QByteArray >("input");
+    QTest::addColumn<QByteArray >("output");
+    QTest::newRow("default, an argument per line") << QString()
+        << joinArgsFile(oneLine)
+        << joinArgsFile("\n        alpha(1),\n        beta,\n        gamma,"
+                        "\n        delta,\n        epsilonValue\n    ");
+    QTest::newRow("math, as a number") << QString(QLL("1 + 7 - 3"))
+        << joinArgsFile(oneLine)
+        << joinArgsFile("\n        alpha(1), beta, gamma, delta, epsilonValue\n    ");
+    QTest::newRow("a number, pairs") << QString(QLL("2"))
+        << joinArgsFile(oneLine)
+        << joinArgsFile("\n        alpha(1), beta,\n        gamma, delta,"
+                        "\n        epsilonValue\n    ");
+    QTest::newRow("arguments without calls, in pairs")
+        << QString(QLL("hasMoreArgs() && isWrapping() && argCount(1) == 0"
+                       " && spaceRemaining >= 40% ? 2 : 1"))
+        << joinArgsFile(oneLine)
+        << joinArgsFile("\n        alpha(1),\n        beta, gamma,"
+                        "\n        delta, epsilonValue\n    ");
+    // The space after `alpha(1),` is 78.75% of 80 columns, after `beta,` on
+    // that line 71.25%, and after `gamma,` 62.5%.
+    QTest::newRow("the space after each comma")
+        << QString(QLL("spaceRemaining >= 70% ? 3 : 1"))
+        << joinArgsFile(oneLine)
+        << joinArgsFile("\n        alpha(1), beta, gamma,"
+                        "\n        delta, epsilonValue\n    ");
+    const QByteArray userLines = "\n        alpha(1), beta,\n        gamma,"
+        "\n        delta,\n        epsilonValue\n    ";
+    QTest::newRow("a number keeps the user's lines") << QString(QLL("2"))
+        << joinArgsFile(userLines) << joinArgsFile(userLines);
+    QTest::newRow("a condition joins the user's lines")
+        << QString(QLL("isWrapping() ? 1 : 2"))
+        << joinArgsFile(userLines)
+        << joinArgsFile("\n        alpha(1), beta,\n        gamma, delta,"
+                        "\n        epsilonValue\n    ");
+}
+
+/// Formats one call with the `args-wrap` rule under each row's
+/// `[Structure] joinArgs` (the default for an empty one), twice, to check
+/// that the second run keeps what the first one wrote.
+void tst_FormatRules::testArgsWrap_shouldJoinArgs()
+{
+    QFETCH(QString, joinArgs);
+    QFETCH(QByteArray, input);
+    QFETCH(QByteArray, output);
+    QTemporaryDir dir;
+    QStringList files;
+    if ( ! joinArgs.isEmpty()) {
+        files << QString(QLL(".formatrc"))
+            << QString(QLL("[Structure]\njoinArgs = %1\n")).arg(joinArgs);
+    }
+    writeProject(dir, files);
+    const QString path = dir.path() + QLL("/a.cpp");
     const QString rule = QString(QLL("args-wrap"));
     const FormatResult result = qMove(this->formatWith(rule, input, path));
     qExpect(result.error)->toBeEmpty();
@@ -2814,72 +4273,122 @@ void tst_FormatRules::testWrapChainAt_shouldKeepLeadingOperators()
     QCOMPARE(result.text, output);
 }
 
-/// Makes a row of each file in `testFixtures/before`, with its rules and lines.
-///
-/// A fixture is a file in `before/` and the file of the same name in
-/// `after/`, which is what formatting the first one gives. Three optional
-/// side files beside the `before/` one choose how: `<name>.rules` names the
-/// rules, joined by commas (every rule without it), `<name>.lines` the lines
-/// to format, one git-blame style range per line (the whole file without
-/// it), and `<name>.config` the settings, one `<section>.<key>=<value>` per
-/// line, just like `-c` (the `.formatrc` files alone without it).
+/// Reads a fenced configuration up to `marker`, without its final newline.
+static bool readFixtureBlock(QFile *file, const QByteArray &marker,
+                             QByteArray *part)
+{
+    part->clear();
+    while ( ! file->atEnd()) {
+        const QByteArray line = file->readLine();
+        if (line == marker) {
+            if (part->endsWith('\n')) {
+                part->chop(1);
+                return true;
+            }
+            return false;
+        }
+        part->append(line);
+    }
+    return false;
+}
+
+/// Reads a case up to the next case or end of file.
+static bool readFixturePart(QFile *file, QByteArray *part)
+{
+    part->clear();
+    while ( ! file->atEnd()) {
+        const qint64 position = file->pos();
+        const QByteArray line = file->readLine();
+        if (line.startsWith("// CASE\t")) {
+            if ( ! file->seek(position)) {
+                return false;
+            }
+            break;
+        }
+        part->append(line);
+    }
+    if ( ! part->endsWith('\n')) {
+        return false;
+    }
+    part->chop(1);
+    return true;
+}
+
+/// Pairs the cases in the input and expected-output fixture files.
 void tst_FormatRules::testFixtures_shouldMatchAfter_data()
 {
     QTest::addColumn<QString >("name");
-    const QString root = QFINDTESTDATA("testFixtures");
-    QVERIFY2( ! root.isEmpty(), "testFixtures is missing");
-    const QDir before(root + QLL("/before"));
-    const QStringList names = before.entryList(QDir::Files, QDir::Name);
-    for (int i = 0; i < names.size(); ++i) {
-        const QString & name = names.at(i);
-        if (name.endsWith(QLL(".rules"))
-            || name.endsWith(QLL(".lines"))
-            || name.endsWith(QLL(".config"))
-        ) {
-            continue;
+    QTest::addColumn<QByteArray >("text");
+    QTest::addColumn<QByteArray >("expected");
+    QTest::addColumn<QString >("rules");
+    QTest::addColumn<QStringList >("lineSpecs");
+    const QString path = QFINDTESTDATA("testFixtures/before.cpp");
+    const QString afterPath = QFINDTESTDATA("testFixtures/after.cpp");
+    QVERIFY2( ! path.isEmpty(), "before.cpp is missing");
+    QVERIFY2( ! afterPath.isEmpty(), "after.cpp is missing");
+    QFile file(path);
+    QFile afterFile(afterPath);
+    QVERIFY2(file.open(QIODevice::ReadOnly), qPrintable(path));
+    QVERIFY2(afterFile.open(QIODevice::ReadOnly), qPrintable(afterPath));
+    const QByteArray header("// Copyright (C) 2015 The XD Company Ltd.\n"
+                            "// SPDX-License-Identifier: Apache-2.0\n\n");
+    QCOMPARE(file.read(header.size()), header);
+    QCOMPARE(afterFile.read(header.size()), header);
+    QByteArray configuration;
+    while ( ! file.atEnd()) {
+        const QList<QByteArray > fields = file.readLine().trimmed().split('\t');
+        QCOMPARE(fields.size(), 5);
+        QCOMPARE(fields.at(0), QByteArray("// CASE"));
+        const qint64 position = file.pos();
+        if (file.readLine() == "// @formatter:\n") {
+            QCOMPARE(file.readLine(), QByteArray("// ```\n"));
+            QByteArray block;
+            QVERIFY(readFixtureBlock(&file, "// ```\n", &block));
+            configuration = "// @formatter:\n// ```\n" + block + "\n// ```";
+        } else {
+            QVERIFY(file.seek(position));
         }
-        QTest::newRow(qPrintable(name)) << name;
+        QCOMPARE(afterFile.readLine(), QByteArray("// CASE\t") + fields.at(1) + '\n');
+        QByteArray input;
+        QByteArray output;
+        QVERIFY(readFixturePart(&file, &input));
+        QVERIFY(readFixturePart(&afterFile, &output));
+        if ( ! configuration.isEmpty()) {
+            input.prepend(configuration + '\n');
+            output.prepend(configuration + '\n');
+        }
+        if (fields.at(4) == "1") {
+            input.prepend(header);
+            output.prepend(header);
+        }
+        const QString name = QString::fromUtf8(fields.at(1));
+        const QString rules = QString::fromUtf8(fields.at(2));
+        const QStringList lineSpecs = QString::fromUtf8(fields.at(3)).split(
+            QLatin1Char(';'), QString::SkipEmptyParts
+        );
+        QTest::newRow(qPrintable(name))
+            << name
+            << input
+            << output
+            << rules
+            << lineSpecs;
     }
+    QVERIFY(afterFile.atEnd());
 }
 
-/// Formats the fixture `name` (see testFixtures_shouldMatchAfter_data()) and
-/// compares the result with its `after/` file.
+/// Formats each consolidated case with its selected rules and lines.
 void tst_FormatRules::testFixtures_shouldMatchAfter()
 {
     QFETCH(QString, name);
-    const QString root = QFINDTESTDATA("testFixtures");
-    const QString path = root + QLL("/before/") + name;
-
-    // Reads the fixture, its side files, and the text it should become.
-    QFile file(path);
-    QVERIFY2(file.open(QIODevice::ReadOnly), qPrintable(path));
-    const QByteArray text = file.readAll();
-    QFile expectedFile(root + QLL("/after/") + name);
-    QVERIFY2(expectedFile.open(QIODevice::ReadOnly), qPrintable(
-        QLL("no after/ file for ") + name
-    ));
-    const QByteArray expected = expectedFile.readAll();
-    QString rules;
-    QFile rulesFile(path + QLL(".rules"));
-    if (rulesFile.open(QIODevice::ReadOnly)) {
-        rules = QString::fromUtf8(rulesFile.readAll()).trimmed();
-    }
-    QStringList lineSpecs;
-    QFile linesFile(path + QLL(".lines"));
-    if (linesFile.open(QIODevice::ReadOnly)) {
-        lineSpecs = QString::fromUtf8(linesFile.readAll()).split(
-            QLatin1Char('\n'),
-            QString::SkipEmptyParts
-        );
-    }
+    QFETCH(QByteArray, text);
+    QFETCH(QByteArray, expected);
+    QFETCH(QString, rules);
+    QFETCH(QStringList, lineSpecs);
+    const QString fixture = QFINDTESTDATA("testFixtures/before.cpp");
+    const QString path = QFileInfo(fixture).absolutePath()
+        + QLatin1Char('/')
+        + name;
     FormatConfig config;
-    QFile configFile(path + QLL(".config"));
-    if (configFile.open(QIODevice::ReadOnly)) {
-        config.assignments = QString::fromUtf8(configFile.readAll()).split(
-            QLatin1Char('\n'),
-            QString::SkipEmptyParts
-        );
-    }
 
     // Formats it with those rules and settings, on those lines.
     Formatter formatter;
@@ -2899,6 +4408,37 @@ void tst_FormatRules::testFixtures_shouldMatchAfter()
     ));
     QVERIFY2(result.error.isEmpty(), qPrintable(result.error));
     QCOMPARE(QString::fromUtf8(result.text), QString::fromUtf8(expected));
+    if (name == QLL("member-chain-arguments.cpp")
+        || name == QLL("member-chain-literals.cpp")
+        || name == QLL("member-chain-ternary.cpp")
+        || name == QLL("short-call-adjacent-literals.cpp")
+        || name == QLL("ternary-priority.cpp")
+        || name == QLL("operator-wrap-first-call.cpp")
+        || name == QLL("operator-wrap-first-call-condition.cpp")
+        || name == QLL("control-braces-joined-else.cpp")
+        || name == QLL("control-braces-nested-inline.cpp")
+        || name == QLL("control-braces-ten-inner.cpp")
+        || name == QLL("operator-wrap-priority.cpp")
+        || name == QLL("operator-wrap-priority-assignment.cpp")
+        || name == QLL("operator-wrap-priority-long-suffix.cpp")
+        || name == QLL("operator-wrap-logical-call.cpp")
+        || name == QLL("args-wrap-logical-priority.cpp")
+        || name.startsWith(QLL("subchain-"))
+        || name.startsWith(QLL("numeric-operator-"))
+        || name.startsWith(QLL("condition-count-"))
+        || name.startsWith(QLL("condition-preserve-"))
+        || name == QLL("member-single-property.cpp")
+        || name == QLL("member-inside-check.cpp")
+        || name == QLL("comparison-operand-call.cpp")
+        || name == QLL("comparison-single-member.cpp")
+        || name == QLL("comparison-continuation-indent.cpp")
+    ) {
+        const FormatResult again = qMove(formatter.format(
+            result.text, path, lineSpecs, config
+        ));
+        QVERIFY2(again.error.isEmpty(), qPrintable(again.error));
+        QCOMPARE(again.text, result.text);
+    }
 }
 
 QTEST_APPLESS_MAIN(tst_FormatRules)

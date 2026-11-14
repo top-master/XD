@@ -4,10 +4,9 @@
 #ifndef FORMAT_RULE_H
 #define FORMAT_RULE_H
 
-#include "./format-document.h"
-
 #include <QtCore/QByteArray>
 #include <QtCore/QString>
+#include <QtCore/QVariant>
 
 class FormatDocument;
 
@@ -19,17 +18,13 @@ public:
     virtual QByteArray name() const = 0;
     virtual QString summary() const = 0;
     virtual void run(FormatDocument *document) const = 0;
+    virtual bool readsOtherFiles() const;
 
 protected:
-    inline QVariant cache(const FormatDocument *document, const QByteArray &key) const
-    {
-        return document->ruleCache(this, key);
-    }
-    inline void setCache(FormatDocument *document, const QByteArray &key,
-                         const QVariant &value) const
-    {
-        document->setRuleCache(this, key, value);
-    }
+    QVariant cache(const FormatDocument *document,
+                   const QByteArray &key) const;
+    void setCache(FormatDocument *document, const QByteArray &key,
+                  const QVariant &value) const;
 };
 
 #endif // FORMAT_RULE_H

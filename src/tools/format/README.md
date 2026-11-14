@@ -165,6 +165,29 @@ refSuffix = keep-as-is
 moveSuffix = " "
 ```
 
+- `extensions` (in `[General]`): the source extensions selected by a
+  directory, project, or `--git` scan. Give a comma-separated list such as
+  `h, cpp, mm`, a bracketed list such as `[h, cpp, mm]`, or a regular
+  expression such as `/[.](h|cpp)$/`. A regular expression is matched against
+  the file name and its extension; double a backslash in a `.formatrc` value
+  for the `.ini` reader. An explicitly named file is still
+  formatted. Without this setting the tool accepts `h`, `hh`, `hpp`, `hxx`,
+  `h++`, `c`, `cc`, `cpp`, `cxx`, `c++`, `m`, and `mm`.
+- `typedefSuper` (in `[Structure]`): when `super-typedef` adds a private
+  `typedef <Base> super;`, select `always`, `never`, `keep-as-is`, or
+  `if-needed`. The last adds the typedef when the class uses a qualified
+  base member in its body or a related file. Existing typedefs stay in place.
+  A condition may select a value; the default is
+  `isNewClass() && isNeeded() ? always : never`. A class is new when all its
+  lines are selected by `-L` or `--git`. `&&`, `||`, and the conditional
+  choice evaluate only the branches they need.
+- `replaceSuperSites` (in `[Structure]`): a condition selecting base-qualified
+  uses to rewrite through `super::`. Its default is
+  `isNewClass() && hasSuperTypedef()`. `hasSuperTypedef()` also holds when a
+  related header is in the current run and its settings will add the matching
+  typedef. The rule reads related files with the same stem and quoted headers,
+  using `extensions` to select them. A different existing `super` alias is
+  left alone.
 - `refSuffix`: the spacing after the `&` of a named reference declaration:
   any run of spaces and/or tabs to write there, such as `" "` (one space,
   `Type & name`; the default), `"  "` (two), `"\t"` (a tab), or `""` or
@@ -278,7 +301,66 @@ moveSuffix = " "
   ```
 - `wrapArgsOver` (in `[Structure]`): how many arguments, or parameters, a
   list holds at most before it may always break, whatever `wrapArgsAt`
-  says; the default is `3`.
+  says; the default is `3`. It can also be a condition evaluated at the
+  opening parenthesis, for example:
+
+  ```ini
+  wrapArgsOver = argCount(0) > 3 && (spaceRemaining <= 18.75% || isSignature)
+  ```
+
+  `value` and `argCount(0)` give the target's argument or parameter count.
+  `spaceRemaining` is the percentage of `wrapMax` after the opening
+  parenthesis, measured only when the condition reaches it; `isSignature`
+  identifies a function declaration or definition.
+  A condition decides whether the target's argument list may be wrapped and
+  preserves an existing list when it is false, including with `target=any`.
+  Names also accept underscores, such as `space_remaining` and
+  `is_signature`. `argCount` is available in conditions on other keys too.
+  A negative depth visits parent calls; a positive depth visits calls in
+  the target's arguments. At positive depths, the optional second argument
+  selects a one-based argument, or zero selects all arguments. Calls at the
+  selected depth contribute their argument counts; no reachable call gives
+  `-1`, and a call without arguments contributes zero.
+- `joinArgs` (in `[Structure]`): how many arguments of a broken list may
+  share a line, where the tool would else give each argument a line of its
+  own. Even when `wrapArgsAt` or `wrapArgsOver` breaks a list, the tool then
+  puts up to that many arguments on one line, while the line fits `wrapMax`;
+  the default, `1`, keeps an argument per line. A number, or math that gives
+  one (such as `1 + 7 - 3`), applies only to the arguments the tool breaks; the lines the user broke stay as they are. A
+  condition, with a choice `<condition> ? <then> : <else>` as in C, decides
+  at every argument that ends a line instead, and its number counts the
+  arguments that line may hold, the next one included:
+
+  ```ini
+  joinArgs = hasMoreArgs() && isWrapping() && argCount(1) == 0 && spaceRemaining >= 40% ? 2 : 1
+  ```
+
+  There, `hasMoreArgs()` holds when another argument follows, and
+  `isWrapping()` when the tool breaks the list, hence the argument would
+  else get a line of its own (a line the user broke does not count).
+  `argCount(1)` counts the arguments of the calls in this argument (`0` for
+  an argument without a call), and `spaceRemaining` is the share of
+  `wrapMax` left after this argument's `,`. `value` gives the list's
+  argument count, and the other names of `wrapArgsOver` hold too.
+- `wrapConditionsOver` (in `[Structure]`): how many operands of an `if` or
+  `while`, separated by `&&` and `||`, a line holds once the condition
+  breaks. The tool asks it at each operand that may end a line, hence it
+  may give another number for each line:
+
+  ```ini
+  wrapConditionsOver = spaceRemaining < 20% ? 1 : 2
+  ```
+
+  That is the default: two operands per line, and one once less than a
+  fifth of `wrapMax` is left after the operand. `spaceRemaining` is that
+  share, while `value` and `argCount(0)` count the condition's operands. A
+  condition that holds counts as `1`, and one that does not as `0`, which
+  lets a line take as many operands as fit. A `0` for the whole condition
+  keeps the line breaks it already has, as `never` does.
+- `wrapSubChain` (in `[Structure]`): whether another member follows a member
+  joined to a line of closing brackets. `always` (the default) puts it on a
+  new line; `wrap-begin` keeps it while it fits `wrapBegin`, `wrap-end` while
+  it fits `wrapMax`, and `never` keeps it on that line.
 
 The command line then overrides the `.formatrc` files, in this order:
 
@@ -451,7 +533,9 @@ The code rules lay out a few constructs on their own:
 
   A condition without a `&&` or `||` of its own breaks before its loosest
   operator instead (such as `==`), two steps past the keyword's line, and
-  only once its line passes `wrapMax`, not at the wrap column. A
+  only once its line passes `wrapMax`, not at the wrap column. When the
+  comparison starts before `wrapBegin`, a later arithmetic operator is used
+  instead if its resulting lines fit `wrapMax`. A
   continuation line whose operator binds tighter than that of an earlier
   line of its group (a `!=` below a `||`) continues that line's operand, one
   step past it (the rule `continuation-indent`).
@@ -466,7 +550,11 @@ The code rules lay out a few constructs on their own:
   further in. A chain of one operator whose right operand is a
   parenthesized group stays on its line up to the group's `(`, the group's
   chain breaking inside it; a group that follows the `)` of another one
-  joins that line:
+  joins that line. A member can follow a line of closing brackets; subsequent
+  members follow `wrapSubChain`. Logical operators keep their own lines after
+  a line of closing brackets. A single member call breaks its
+  arguments before its member access when the call head fits `wrapMax` at
+  the start of a statement, or `wrapBegin` after an assignment:
 
   ```
   QTest::newRow("process runner") << (QStringList()
@@ -480,17 +568,21 @@ The code rules lay out a few constructs on their own:
           << QString(QLL("--config"))
       );
   ```
-- `args-wrap` lays out a call of 2 arguments or more, or a brace
-  initializer list, when its one-line form would pass the wrap column and
+- `args-wrap` lays out a call's arguments or a brace initializer list when
+  its one-line form would pass the wrap column and
   it may break: it takes more than `[Structure] wrapArgsOver` arguments,
   `[Structure] wrapArgsAt`
-  holds at its `(`, its last argument is an operator chain, or it is a
-  brace list. On the same terms, it lays out a list the user broke over
+  holds at its `(`, its last argument is an operator chain in a one-line list
+  or a list opened onto its own argument lines, or it is a brace list. On
+  the same terms, it lays out a list the user broke over
   lines whose lines are not one step past the line of its opening. A call
+  with one argument is considered when its list already spans lines and the
+  argument holds an operator chain. A call
   that breaks moves every argument below its opening, one step in, and its
   closing bracket goes back to that line's indent. A list already broken
   after its opening keeps the arguments that share a line together when
-  they fit. In the head of an `if` or `while`, the
+  they fit. Continued adjacent string literals are indented one extra step.
+  In the head of an `if` or `while`, the
   list steps from the condition's operand level:
 
   ```

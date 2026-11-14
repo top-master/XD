@@ -43,7 +43,9 @@ void FormatMarkBannerRule::runGroup(
     ) {
         return;
     }
-    const QString text = QString::fromUtf8(commentLines(document, index).first().text);
+    const QString text = QString::fromUtf8(
+        commentLines(document, index).first().text
+    );
     if (text.contains(QLL("-*-"))) {
         return;
     }
@@ -62,7 +64,10 @@ void FormatMarkBannerRule::runGroup(
     ) {
         label.chop(1);
     }
-    document->replace(comment.offset, comment.length, "// MARK: "
+    document->replace(
+        comment.offset,
+        comment.length,
+        "// MARK: "
         + label.toUtf8()
         + '.'
     );

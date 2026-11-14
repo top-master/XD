@@ -83,8 +83,14 @@ bool FormatTemplateCloseRule::spaceArguments(
             i = document->match(i);
             continue;
         }
-        if (token != IDENTIFIER && token != SCOPE && token != STAR && token != AND
-            && token != CONST && token != VOLATILE && token != COMMA && token != INTEGER_LITERAL
+        if (token != IDENTIFIER
+            && token != SCOPE
+            && token != STAR
+            && token != AND
+            && token != CONST
+            && token != VOLATILE
+            && token != COMMA
+            && token != INTEGER_LITERAL
             && ! isBuiltinType(token)
         ) {
             return false;
@@ -96,9 +102,20 @@ bool FormatTemplateCloseRule::spaceArguments(
 
     // Leaves a comparison such as `a < b > c` alone.
     const Token after = document->token(i + 1);
-    if (after != IDENTIFIER && after != SCOPE && after != LPAREN && after != RPAREN
-        && after != COMMA && after != SEMIC && after != AND && after != STAR && after != ANDAND
-        && after != LBRACE && after != RANGLE && after != GTGT && after != COLON && after != EQ
+    if (after != IDENTIFIER
+        && after != SCOPE
+        && after != LPAREN
+        && after != RPAREN
+        && after != COMMA
+        && after != SEMIC
+        && after != AND
+        && after != STAR
+        && after != ANDAND
+        && after != LBRACE
+        && after != RANGLE
+        && after != GTGT
+        && after != COLON
+        && after != EQ
     ) {
         return false;
     }

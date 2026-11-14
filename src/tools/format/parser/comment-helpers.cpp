@@ -26,7 +26,7 @@ QList<FormatCommentLine > commentLines(
     if (comment.isLine()) {
         int start = 2;
         while (start < text.size() && (text.at(start) == '/' || text.at(start) == '!'
-            || text.at(start) == '<')
+                || text.at(start) == '<')
             && start < 4
         ) {
             ++start;
@@ -216,7 +216,8 @@ QString mapProse(
     doc-comment marker, form one group, and every other
     comment forms a group of its own.
 */
-QList<QList<int > > commentGroups(const FormatDocument *document)
+QList<QList<int > > commentGroups(
+        const FormatDocument *document, bool splitProtected)
 {
     QList<QList<int > > groups;
     for (int i = 0; i < document->comments().size(); ++i) {
@@ -229,6 +230,8 @@ QList<QList<int > > commentGroups(const FormatDocument *document)
             const FormatComment & before = document->comments().at(previous);
             const int line = document->commentLine(i);
             if (before.isLine() && ! before.trailing && before.kind == comment.kind
+                && ( ! splitProtected || ( ! document->isInlineConfigComment(i)
+                    && ! document->isInlineConfigComment(previous)))
                 && document->commentLine(previous) == line - 1
                 && comment.offset - document->lineStart(line)
                     == before.offset - document->lineStart(line - 1)
@@ -240,6 +243,142 @@ QList<QList<int > > commentGroups(const FormatDocument *document)
         groups.append(QList<int >() << i);
     }
     return groups;
+}
+
+/*!
+    Finds configuration directives in the comments of @a document.
+*/
+QList<FormatConfigDirective > configDirectives(const FormatDocument *document)
+{
+    QList<FormatConfigDirective > directives;
+    const QList<QList<int > > groups = commentGroups(document, false);
+    for (int groupIndex = 0; groupIndex < groups.size(); ++groupIndex) {
+        const QList<int > &group = groups.at(groupIndex);
+        const QList<FormatCommentLine > lines = groupLines(document, group);
+        const bool lineComments =
+            document->comments().at(group.first()).isLine();
+        for (int lineIndex = 0; lineIndex < lines.size(); ++lineIndex) {
+            if ( ! lineComments && lineIndex > 0
+                && ! lines.at(lineIndex - 1).text.trimmed().isEmpty()
+            ) {
+                break;
+            }
+            const QByteArray text = QString::fromUtf8(lines.at(lineIndex).text)
+                .trimmed()
+                .toUtf8();
+            FormatConfigDirective directive;
+            directive.offset = lines.at(lineIndex).offset;
+            directive.endOffset =
+                directive.offset + lines.at(lineIndex).text.size();
+            int prefix = 0;
+            bool formatterAlias = false;
+            if (text.startsWith("Format rule begin:")) {
+                directive.kind = FormatConfigDirective::Begin;
+                prefix = sizeof("Format rule begin:") - 1;
+            } else if (text.startsWith("Format rule:")) {
+                directive.kind = FormatConfigDirective::Add;
+                prefix = sizeof("Format rule:") - 1;
+            } else if (text == "Format rule end.") {
+                directive.kind = FormatConfigDirective::End;
+                directives.append(directive);
+                continue;
+            } else if (text.startsWith('@')) {
+                const int colon = text.indexOf(':');
+                QByteArray name = colon >= 0 ? text.left(colon) : text;
+                Config::Lines compactName;
+                compactName.appendCompact(name);
+                name = compactName.text();
+                if (name.endsWith('.')) {
+                    name.chop(1);
+                }
+                if (name.startsWith("@formater")) {
+                    name.replace(0, sizeof("@formater") - 1, "@formatter");
+                }
+                if (colon < 0
+                    && (name == "@formatter.pop"
+                        || name == "@formatter.end")
+                ) {
+                    directive.kind = FormatConfigDirective::End;
+                    directives.append(directive);
+                    continue;
+                }
+                if (colon < 0) {
+                    continue;
+                }
+                if (name == "@formatter") {
+                    directive.kind = FormatConfigDirective::Add;
+                } else if (name == "@formatter.push"
+                    || name == "@formatter.begin"
+                ) {
+                    directive.kind = FormatConfigDirective::Begin;
+                } else {
+                    continue;
+                }
+                prefix = colon + 1;
+                formatterAlias = true;
+            } else {
+                continue;
+            }
+            QByteArray body = QString::fromUtf8(text.mid(prefix))
+                .trimmed()
+                .toUtf8();
+            if (body.isEmpty()
+                && lineIndex + 1 < lines.size()
+                && QString::fromUtf8(lines.at(lineIndex + 1).text).trimmed()
+                    == QLL("```")
+            ) {
+                int end = lineIndex + 2;
+                while (end < lines.size()
+                    && QString::fromUtf8(lines.at(end).text).trimmed()
+                        != QLL("```")
+                ) {
+                    if (formatterAlias) {
+                        directive.lines.appendCompact(lines.at(end).text);
+                    } else {
+                        directive.lines.append(lines.at(end).text);
+                    }
+                    ++end;
+                }
+                if (end < lines.size()) {
+                    directive.endOffset =
+                        lines.at(end).offset + lines.at(end).text.size();
+                    lineIndex = end;
+                } else {
+                    directive.lines.clear();
+                }
+            } else if ( ! body.isEmpty()) {
+                if (body.startsWith('`') && body.endsWith("`.")) {
+                    body.chop(2);
+                    body.remove(0, 1);
+                } else if (body.startsWith('`') && body.endsWith('`')) {
+                    body.chop(1);
+                    body.remove(0, 1);
+                }
+                Config::Lines normalized;
+                if (formatterAlias) {
+                    normalized.appendCompact(body);
+                }
+                const QByteArray command = formatterAlias ? normalized.text()
+                                                          : QByteArray();
+                if (formatterAlias
+                    && directive.kind == FormatConfigDirective::Add
+                    && (command == "off" || command == "on")
+                ) {
+                    directive.kind = command == "off"
+                        ? FormatConfigDirective::Off : FormatConfigDirective::On;
+                } else if (formatterAlias && ! command.contains('=')) {
+                    directive.kind = FormatConfigDirective::Invalid;
+                    directive.lines = normalized;
+                } else if (formatterAlias) {
+                    directive.lines = normalized;
+                } else {
+                    directive.lines.append(body);
+                }
+            }
+            directives.append(directive);
+        }
+    }
+    return directives;
 }
 
 /*!

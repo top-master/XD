@@ -21,7 +21,7 @@
 */
 
 /*!
-    Calls runGroup() for each comment group of @a document that a rule is
+    Calls runGroup() for each comment group of \a document that a rule is
     allowed to change.
 */
 void FormatCommentRule::run(FormatDocument *document) const

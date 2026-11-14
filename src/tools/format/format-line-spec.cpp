@@ -116,7 +116,9 @@ bool FormatLineSpec::resolve(
         return false;
     }
     if (start < 1 || start > count) {
-        *error = QString(QLL("-L %1: file has only %2 lines")).arg(spec).arg(count);
+        *error = QString(QLL("-L %1: file has only %2 lines"))
+            .arg(spec)
+            .arg(count);
         return false;
     }
 

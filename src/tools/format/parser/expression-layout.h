@@ -18,8 +18,9 @@ public:
             const FormatDocument *document, FormatScopeConditions *conditions,
             int indent);
 
-    QByteArray layout(int first, int last, int column, int trailing);
-    QByteArray layoutList(int first, int open, int close);
+    QByteArray layout(int first, int last, int column, int trailing,
+                      bool forceMath = false);
+    QByteArray layoutList(int first, int open, int close, int column);
     QByteArray oneLine(int first, int last) const;
     bool hasChain(int first, int last) const;
     bool hasOuterChain(int first, int last) const;
@@ -29,31 +30,34 @@ private:
     QList<int > chainOperators(int first, int last) const;
     QByteArray layoutChain(
             int first, int last, const QList<int > & operators, int column,
-            int trailing);
+            int trailing, bool forceMath);
     QByteArray layoutChainRest(
             int first, int last, const QList<int > & operators,
             int column, int trailing, bool keepsLeading,
-            bool stepsIn, bool byLine, const QByteArray & head);
+            bool stepsIn, bool byLine, const QByteArray & head,
+            bool forceMath = false);
     bool chainStepsIn(int headFirst, int headLast,
                       const QByteArray & head) const;
     QByteArray layoutGroup(int open, int close, int column, int trailing);
     QByteArray listLines(
             int open, int close, const QList<QPair<int, int > > & items,
-            bool keepsGroups);
+            bool keepsGroups, int firstItem);
     QByteArray itemText(int first, int last, int column, int trailing);
     bool breaksOnlyBetweenLiterals(int first, int last) const;
     bool mayBreakList(int open, int itemCount) const;
     bool isListOpen(int open) const;
     QList<QList<int > > lineGroups(const QList<int > & starts) const;
     QByteArray pad() const;
-    bool fits(int column, const QByteArray & text, int trailing) const;
+    bool fits(
+            int column,
+            const QByteArray & text,
+            int trailing,
+            int token) const;
 
     const FormatDocument *m_document;
     FormatScopeConditions *m_conditions;
     int m_indent;
     int m_paddingLevel;
-    int m_wrap;
-    int m_wrapMax;
     bool m_brokeUngrouped;
 };
 

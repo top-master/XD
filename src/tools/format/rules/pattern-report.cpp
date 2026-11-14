@@ -40,7 +40,8 @@ void FormatPatternReportRule::runGroup(
         const QString prose = proseOnly(QString::fromUtf8(lines.at(i).text));
         const QRegularExpressionMatch found = this->m_pattern.match(prose);
         if (found.hasMatch()) {
-            document->report(lines.at(i).offset, this->name().constData(), this->m_message);
+            document
+                ->report(lines.at(i).offset, this->name().constData(), this->m_message);
         }
     }
 }

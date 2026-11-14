@@ -33,6 +33,10 @@ FormatProcessRunner::FormatProcessRunner(const Formatter *formatter, const Forma
 */
 QList<FormatFileResult > FormatProcessRunner::run(const QStringList & files)
 {
+    QString error;
+    if ( ! this->prepareRun(files, &error)) {
+        return this->runFailure(files, error);
+    }
     // Starts no child for no files, since a child given none fails as a
     // command line without paths.
     if (files.isEmpty()) {
@@ -162,7 +166,7 @@ QStringList FormatProcessRunner::workerArguments() const
     for (int i = 0; i < this->m_options.lineSpecs.size(); ++i) {
         arguments << QString(QLL("-L")) << this->m_options.lineSpecs.at(i);
     }
-    if ( ! this->m_options.git.isEmpty()) {
+    if ( ! this->m_options.git.isEmpty() && this->m_options.config.snapshotManifest.isEmpty()) {
         arguments << QString(QLL("--git")) << this->m_options.git;
     }
     if ( ! this->m_options.rules.isEmpty()) {
@@ -175,7 +179,13 @@ QStringList FormatProcessRunner::workerArguments() const
     if (this->m_options.agent) {
         arguments << QString(QLL("--ai"));
     }
+    if (this->m_options.config.verbose) {
+        arguments << QString(QLL("--verbose"));
+    }
     const FormatConfig & config = this->m_options.config;
+    if ( ! config.snapshotManifest.isEmpty()) {
+        arguments << QString(QLL("--snapshot-manifest")) << config.snapshotManifest;
+    }
     if ( ! config.file.isEmpty()) {
         arguments << QString(QLL("--config-file")) << config.file;
     }
@@ -217,6 +227,13 @@ QByteArray FormatProcessRunner::encode(const FormatFileResult & result)
             result.requests.at(i)
         );
     }
+    for (int i = 0; i < result.warnings.size(); ++i) {
+        text += FormatProcessRunner::encodeIssue(
+            "warning",
+            path,
+            result.warnings.at(i)
+        );
+    }
     text += "end\t" + path + '\n';
     return text;
 }
@@ -247,9 +264,13 @@ bool FormatProcessRunner::decode(
     const QList<QByteArray > fields = line.split('\t');
     if (fields.size() == 4 && fields.at(0) == "file") {
         FormatFileResult result;
-        result.path = QString::fromUtf8(QByteArray::fromPercentEncoding(fields.at(1)));
+        result.path = QString::fromUtf8(
+            QByteArray::fromPercentEncoding(fields.at(1))
+        );
         result.changed = fields.at(2) == "1";
-        result.error = QString::fromUtf8(QByteArray::fromPercentEncoding(fields.at(3)));
+        result.error = QString::fromUtf8(
+            QByteArray::fromPercentEncoding(fields.at(3))
+        );
         results->append(result);
         return true;
     }
@@ -257,7 +278,9 @@ bool FormatProcessRunner::decode(
         && (fields.at(0) == "issue" || fields.at(0) == "request"
             || fields.at(0) == "warning")
     ) {
-        const QString path = QString::fromUtf8(QByteArray::fromPercentEncoding(fields.at(1)));
+        const QString path = QString::fromUtf8(
+            QByteArray::fromPercentEncoding(fields.at(1))
+        );
         for (int i = results->size() - 1; i >= 0; --i) {
             if (results->at(i).path != path) {
                 continue;
@@ -265,7 +288,9 @@ bool FormatProcessRunner::decode(
             const FormatIssue issue(
                 fields.at(2).toInt(),
                 QByteArray::fromPercentEncoding(fields.at(4)),
-                QString::fromUtf8(QByteArray::fromPercentEncoding(fields.at(5))),
+                QString::fromUtf8(
+                    QByteArray::fromPercentEncoding(fields.at(5))
+                ),
                 fields.at(3).toInt(),
                 fields.size() == 7 ? fields.at(6).toInt() : 0
             );
@@ -273,6 +298,8 @@ bool FormatProcessRunner::decode(
                 (*results)[i].issues.append(issue);
             } else if (fields.at(0) == "request") {
                 (*results)[i].requests.append(issue);
+            } else {
+                (*results)[i].warnings.append(issue);
             }
             return true;
         }

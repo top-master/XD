@@ -57,7 +57,8 @@ void FormatInlineKeywordRule::run(FormatDocument *document) const
             continue;
         }
         for (int i = 0; i < lacking.size(); ++i) {
-            document->replace(document->symbols().at(lacking.at(i)).from, 0, "inline ");
+            document
+                ->replace(document->symbols().at(lacking.at(i)).from, 0, "inline ");
         }
     }
 }
@@ -128,8 +129,10 @@ int FormatInlineKeywordRule::declarationStart(
             const QByteArray name = document->lexem(start);
             if (document->token(start + 1) == LPAREN) {
                 const int close = document->match(start + 1);
-                if (close < 0 || close + 1 >= body
-                    || document->symbolLine(close + 1) == document->symbolLine(close)
+                if (close < 0
+                    || close + 1 >= body
+                    || document->symbolLine(close + 1)
+                        == document->symbolLine(close)
                 ) {
                     break;
                 }

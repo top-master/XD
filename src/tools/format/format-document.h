@@ -6,7 +6,7 @@
 
 #include "./format-comment.h"
 #include "./format-issue.h"
-#include "./format-settings.h"
+#include "./format-file-config.h"
 
 #include "symbols.h"
 
@@ -44,13 +44,26 @@ public:
     inline const QList<FormatComment > &comments() const { return m_comments; }
     inline const QList<FormatIssue > &issues() const { return m_issues; }
     inline int lineCount() const { return m_lineStarts.size(); }
-    inline const FormatSettings &settings() const { return m_settings; }
-    inline void setSettings(const FormatSettings & settings)
+    inline const FormatFileConfig &config() const { return m_fileConfig; }
+    const FormatFileConfig &configAt(int offset) const;
+    int joinArgsAt(int open, int argument, int column, bool isWrapping) const;
+    bool setInlineConfiguration(const FormatConfig &config, QString *error);
+    inline bool hasInlineConfiguration() const { return m_inlineConfigured; }
+    inline bool hasDisabledFormatting() const { return ! m_disabledRanges.isEmpty(); }
+    inline QString inlineConfigurationError() const { return m_inlineError; }
+    QList<FormatIssue > inlineWarnings(bool verbose) const;
+    inline void setConfig(const FormatFileConfig & fileConfig)
     {
-        m_settings = settings;
+        m_fileConfig = fileConfig;
+        m_fileConfigRegions.clear();
+        m_inlineRanges.clear();
+        m_disabledRanges.clear();
+        m_inlineConfigured = false;
+        m_inlineError.clear();
         m_ruleCaches.clear();
     }
-    inline QVariant ruleCache(const FormatRule *rule, const QByteArray &key) const
+    inline QVariant ruleCache(const FormatRule *rule,
+                              const QByteArray &key) const
     {
         return m_ruleCaches.value(rule).value(key);
     }
@@ -62,6 +75,9 @@ public:
     inline int pass() const { return m_pass; }
     inline bool agentMode() const { return m_agentMode; }
     inline const QStringList &includePaths() const { return m_includePaths; }
+    inline const FormatConfig &formatConfig() const { return m_config; }
+    inline void setFormatConfig(const FormatConfig &config) { m_config = config; }
+    inline bool hasSelectedRanges() const { return ! m_ranges.isEmpty(); }
     inline void setIncludePaths(const QStringList & paths) { m_includePaths = paths; }
     QString findInclude(const QString & name) const;
     bool isHeader() const;
@@ -93,6 +109,8 @@ public:
     int commentLine(int index) const;
     int commentEndLine(int index) const;
     bool isProtectedComment(int index) const;
+    bool isInlineConfigComment(int index) const;
+    bool isFormattingDisabled(int offset) const;
     bool hasCommentBetween(int from, int to) const;
     bool isOnlyWhitespace(int from, int to) const;
 
@@ -100,6 +118,7 @@ public:
     bool isLineSelected(int line) const;
 
     bool replace(int offset, int length, const QByteArray & text);
+    inline bool canInsert(int offset) const { return this->canReplace(offset, 0); }
     bool replace(
             int offset, int length, const QByteArray & text,
             int otherOffset, int otherLength, const QByteArray & otherText);
@@ -131,6 +150,8 @@ private:
         QByteArray text;
     };
 
+    void moveInlineConfiguration(const QList<Edit > & edits);
+    static int movedOffset(int offset, bool isStart, const QList<Edit > & edits);
     void analyze();
     void appendComment(const Symbol & symbol, int previousCodeLine);
     void analyzeBrackets();
@@ -139,11 +160,17 @@ private:
 
     QByteArray m_text;
     QString m_path;
-    FormatSettings m_settings;
+    FormatFileConfig m_fileConfig;
+    QVector<QPair<int, FormatFileConfig > > m_fileConfigRegions;
+    QVector<QPair<int, int > > m_inlineRanges;
+    QVector<QPair<int, int > > m_disabledRanges;
+    bool m_inlineConfigured;
+    QString m_inlineError;
     QHash<const FormatRule *, QHash<QByteArray, QVariant > > m_ruleCaches;
     int m_pass;
     bool m_agentMode;
     QStringList m_includePaths;
+    FormatConfig m_config;
     QList<FormatIssue > m_requests;
     QSet<int > m_replacedLines;
     Symbols m_symbols;
