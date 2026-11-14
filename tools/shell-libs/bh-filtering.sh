@@ -100,7 +100,7 @@ bh_build_in_order() {
     case "$_bio_status" in
         0) ;;
         10)
-            bh_filter_has_projects || bh_error \
+            [ "$_bw_total" -gt 0 ] || bh_error \
                 "--filter: no project of the build under '$BH_ROOT' matches $(bh_regexp_text "$BH_FILTER")"
             ;;
         *) exit "$_bio_status" ;;
@@ -660,6 +660,7 @@ bh_build_order_extend() {
             bh_order_reach "$_boe_pro"
             [ "$BH_REACH" = qmake ] || continue
             _boe_parent_rel=${BH_REACH_PRO#"$BH_ROOT"/}
+            echo "Recording build order of $_boe_parent_rel via qmake..."
             _boe_makefile=$(bh_order_makefile "$BH_REACH_PRO")
             # In a subshell, since a failed step exits its shell.
             ( mkdir -p "$(dirname "$_boe_makefile")" \
@@ -670,10 +671,6 @@ bh_build_order_extend() {
                     "Its projects that the filters name are left out."
         done 3<&0 0<&4
     } 4<&0
-}
-
-bh_filter_has_projects() {
-    bh_pro_files | bh_filter_paths --relax | awk 'NR { found = 1 } END { exit !found }'
 }
 
 # bh_save_space_has_line <awk-test>
