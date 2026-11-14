@@ -58,8 +58,9 @@ const FormatSettings &FormatDocument::settingsAt(int offset) const
     Resolves the comment configuration over @a config, reporting errors in
     @a error.
 */
-bool FormatDocument::setInlineConfiguration(const FormatConfig &config,
-                                             QString *error)
+bool FormatDocument::setInlineConfiguration(
+        const FormatConfig &config,
+        QString *error)
 {
     const QList<FormatConfigDirective > directives = configDirectives(this);
     if (directives.isEmpty()) {
@@ -81,9 +82,13 @@ bool FormatDocument::setInlineConfiguration(const FormatConfig &config,
                 disabledStart = directive.offset;
                 disabledActive = true;
             }
-        } else if (directive.kind == FormatConfigDirective::On && disabledActive) {
+        } else if (directive.kind == FormatConfigDirective::On
+            && disabledActive
+        ) {
             disabledActive = false;
-            disabledRanges.append(qMakePair(disabledStart, directive.endOffset));
+            disabledRanges.append(
+                qMakePair(disabledStart, directive.endOffset)
+            );
         }
     }
     if (disabledActive) {
@@ -95,7 +100,8 @@ bool FormatDocument::setInlineConfiguration(const FormatConfig &config,
         if (directives.at(i).kind == FormatConfigDirective::Begin) {
             openings.append(i);
         } else if (directives.at(i).kind == FormatConfigDirective::End
-                   && ! openings.isEmpty()) {
+            && ! openings.isEmpty()
+        ) {
             matched[openings.takeLast()] = true;
             matched[i] = true;
         }
@@ -124,7 +130,9 @@ bool FormatDocument::setInlineConfiguration(const FormatConfig &config,
             if (comment.offset <= directive.endOffset
                 && comment.offset + comment.length > directive.offset
             ) {
-                protectedRanges.append(qMakePair(comment.offset, comment.offset + comment.length));
+                protectedRanges.append(
+                    qMakePair(comment.offset, comment.offset + comment.length)
+                );
             }
         }
     }
@@ -134,7 +142,8 @@ bool FormatDocument::setInlineConfiguration(const FormatConfig &config,
         if ( ! mergedRanges.isEmpty()
             && protectedRanges.at(i).first <= mergedRanges.last().second
         ) {
-            mergedRanges.last().second = qMax(mergedRanges.last().second, protectedRanges.at(i).second);
+            mergedRanges.last().second =
+                qMax(mergedRanges.last().second, protectedRanges.at(i).second);
         } else {
             mergedRanges.append(protectedRanges.at(i));
         }
@@ -151,7 +160,12 @@ bool FormatDocument::setInlineConfiguration(const FormatConfig &config,
             if ( ! matched.at(i)) {
                 continue;
             }
-            if ( ! layers.pushLines(directive.lines, QString(QLL("Format rule")), error)) {
+            if ( ! layers.pushLines(
+                    directive.lines,
+                    QString(QLL("Format rule")),
+                    error
+                )
+            ) {
                 return false;
             }
         } else if (directive.kind == FormatConfigDirective::End) {
@@ -162,7 +176,12 @@ bool FormatDocument::setInlineConfiguration(const FormatConfig &config,
                 return false;
             }
         } else {
-            if ( ! layers.addLines(directive.lines, QString(QLL("Format rule")), error)) {
+            if ( ! layers.addLines(
+                    directive.lines,
+                    QString(QLL("Format rule")),
+                    error
+                )
+            ) {
                 return false;
             }
         }
@@ -196,23 +215,33 @@ QList<FormatIssue > FormatDocument::inlineWarnings(bool verbose) const
                 || directive.kind == FormatConfigDirective::Begin
             ) {
                 const int line = this->lineOf(directive.offset);
-                warnings.append(FormatIssue(line, "format-warning",
+                warnings.append(FormatIssue(
+                    line,
+                    "format-warning",
                     QString(QLL("#: format warning: configuration applied inside an off region at line %1."))
-                    .arg(line)));
+                        .arg(line)
+                ));
             }
         }
         if (directive.kind == FormatConfigDirective::Invalid) {
             const int line = this->lineOf(directive.offset);
-            warnings.append(FormatIssue(line, "format-warning",
+            warnings.append(FormatIssue(
+                line,
+                "format-warning",
                 QString(QLL("#: format warning: invalid config detected at line %1. "
-                    "Maybe `@formatter: off` was meant.")).arg(line)));
+                    "Maybe `@formatter: off` was meant.")).arg(line)
+            ));
         } else if (directive.kind == FormatConfigDirective::Begin) {
             openings.append(i);
         } else if (directive.kind == FormatConfigDirective::End) {
             if (openings.isEmpty()) {
                 const int line = this->lineOf(directive.offset);
-                warnings.append(FormatIssue(line, "format-warning",
-                    QString(QLL("#: format warning: unmatched \"Format rule end.\" at line %1")).arg(line)));
+                warnings.append(FormatIssue(
+                    line,
+                    "format-warning",
+                    QString(QLL("#: format warning: unmatched \"Format rule end.\" at line %1"))
+                        .arg(line)
+                ));
             } else {
                 openings.removeLast();
             }
@@ -221,10 +250,13 @@ QList<FormatIssue > FormatDocument::inlineWarnings(bool verbose) const
     if (verbose) {
         for (int i = 0; i < openings.size(); ++i) {
             const int line = this->lineOf(directives.at(openings.at(i)).offset);
-            warnings.append(FormatIssue(line, "format-warning",
+            warnings.append(FormatIssue(
+                line,
+                "format-warning",
                 QString(QLL("#: format warning: consider replacing \"Format rule begin:\" with "
                     "\"Format rule:\" at line %1 (since it has no \"Format rule end.\" comment)."))
-                .arg(line)));
+                .arg(line)
+            ));
         }
     }
     return warnings;
@@ -927,7 +959,9 @@ bool FormatDocument::canReplace(int offset, int length) const
     if (low < m_inlineRanges.size()) {
         const QPair<int, int > &range = m_inlineRanges.at(low);
         if ((length == 0 && offset > range.first && offset < range.second)
-            || (length > 0 && offset < range.second && offset + length > range.first)
+            || (length > 0
+                && offset < range.second
+                && offset + length > range.first)
         ) {
             return false;
         }
@@ -953,7 +987,9 @@ void FormatDocument::report(int offset, const char *rule,
                             const QString & message)
 {
     const int line = this->lineOf(offset);
-    if (this->isFormattingDisabled(offset) || ! this->isLineSelected(line)) {
+    if (this->isFormattingDisabled(offset)
+        || ! this->isLineSelected(line)
+    ) {
         return;
     }
     this->m_issues.append(FormatIssue(line, QByteArray(rule), message));
@@ -976,7 +1012,8 @@ void FormatDocument::request(
 {
     const int line = this->lineOf(offset);
     if ( ! this->m_agentMode || this->isFormattingDisabled(offset)
-        || ! this->isLineSelected(line)) {
+        || ! this->isLineSelected(line)
+    ) {
         return;
     }
     const FormatIssue asked(

@@ -453,8 +453,12 @@ bool reachesWrapArgsAt(const FormatDocument *document,
         lineStart,
         document->symbolEnd(token) - lineStart
     );
-    const FormatSettings &settings = document->settingsAt(document->symbols().at(token).from);
-    const qreal percent = textWidth(head) * 100.0 / qMax(1, settings.wrapMax);
+    const FormatSettings &settings =
+        document->settingsAt(document->symbols().at(token).from);
+    const qreal percent = textWidth(head) * 100.0 / qMax(
+        1,
+        settings.wrapMax
+    );
     return conditions->holds(
         settings.wrapArgsAt, token, percent,
         FormatSettings::defaultWrapChainAt()
@@ -497,7 +501,8 @@ QList<QByteArray > comparisonLines(
     const QList<int > operators = loosestOperators(
         document, first, last, &comparisonRank, 0, Q_NULLPTR
     );
-    if (column + textWidth(text) <= document->settingsAt(document->symbols().at(first).from).wrapMax
+    if (column + textWidth(text)
+        <= document->settingsAt(document->symbols().at(first).from).wrapMax
         || operators.isEmpty()
     ) {
         return QList<QByteArray >() << text;

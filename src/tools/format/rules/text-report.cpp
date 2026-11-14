@@ -24,17 +24,26 @@ void FormatTextReportRule::run(FormatDocument *document) const
         const QString text = QString::fromUtf8(document->lineText(line));
         if ( ! document->hasDisabledFormatting()) {
             if (this->m_pattern.match(text).hasMatch()) {
-                document->report(document->lineStart(line), this->name().constData(), this->m_message);
+                document->report(
+                    document->lineStart(line),
+                    this->name().constData(),
+                    this->m_message
+                );
             }
             continue;
         }
-        QRegularExpressionMatchIterator matches = this->m_pattern.globalMatch(text);
+        QRegularExpressionMatchIterator matches =
+            this->m_pattern.globalMatch(text);
         while (matches.hasNext()) {
             const QRegularExpressionMatch match = matches.next();
             const int offset = document->lineStart(line)
                 + text.left(match.capturedStart()).toUtf8().size();
             if ( ! document->isFormattingDisabled(offset)) {
-                document->report(offset, this->name().constData(), this->m_message);
+                document->report(
+                    offset,
+                    this->name().constData(),
+                    this->m_message
+                );
                 break;
             }
         }

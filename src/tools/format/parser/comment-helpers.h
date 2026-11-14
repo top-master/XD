@@ -35,8 +35,9 @@ QVector<bool > fencedLines(const QList<FormatCommentLine > & lines);
 QString mapProse(
         const QString & text, QString (*map)(const QString &, const void *),
         const void *context);
-QList<QList<int > > commentGroups(const FormatDocument *document,
-                                  bool splitProtected = true);
+QList<QList<int > > commentGroups(
+        const FormatDocument *document,
+        bool splitProtected = true);
 bool isClosingLabel(const FormatDocument *document, int index);
 bool isInlineLabel(const FormatDocument *document, int index);
 QList<QPair<int, int > > tableRanges(const FormatDocument *document);

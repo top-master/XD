@@ -100,7 +100,9 @@ void FormatOperatorWrapRule::run(FormatDocument *document) const
 {
     FormatScopeConditions conditions(document);
     for (int line = 1; line <= document->lineCount(); ++line) {
-        const int limit = document->settingsAt(document->lineStart(line)).wrapMax;
+        const int limit = document
+            ->settingsAt(document->lineStart(line))
+            .wrapMax;
         const QByteArray text = document->lineText(line);
         int first = -1;
         int last = -1;

@@ -61,7 +61,8 @@ public:
         m_inlineError.clear();
         m_ruleCaches.clear();
     }
-    inline QVariant ruleCache(const FormatRule *rule, const QByteArray &key) const
+    inline QVariant ruleCache(const FormatRule *rule,
+                              const QByteArray &key) const
     {
         return m_ruleCaches.value(rule).value(key);
     }

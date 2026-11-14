@@ -218,7 +218,11 @@ QByteArray FormatProcessRunner::encode(const FormatFileResult & result)
         );
     }
     for (int i = 0; i < result.warnings.size(); ++i) {
-        text += FormatProcessRunner::encodeIssue("warning", path, result.warnings.at(i));
+        text += FormatProcessRunner::encodeIssue(
+            "warning",
+            path,
+            result.warnings.at(i)
+        );
     }
     text += "end\t" + path + '\n';
     return text;

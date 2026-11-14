@@ -70,7 +70,9 @@ void FormatBodyBracesRule::run(FormatDocument *document) const
         if (document->token(close) != RBRACE || open < 0
             || ! closesChain(document, close)
             || ! conditions.holds(
-                document->settingsAt(document->symbols().at(open).from).bodyBraces, open
+                document->settingsAt(document->symbols().at(open).from)
+                    .bodyBraces,
+                open
             )
         ) {
             continue;

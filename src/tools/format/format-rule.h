@@ -21,7 +21,8 @@ public:
     virtual void run(FormatDocument *document) const = 0;
 
 protected:
-    inline QVariant cache(const FormatDocument *document, const QByteArray &key) const
+    inline QVariant cache(const FormatDocument *document,
+                          const QByteArray &key) const
     {
         return document->ruleCache(this, key);
     }

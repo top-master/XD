@@ -247,7 +247,10 @@ bool Config::Parser::readData(const QByteArray &data, const QString &origin,
                               QString *error)
 {
     QTemporaryFile file(QDir::tempPath() + QLL("/format-settings-XXXXXX.ini"));
-    if ( ! file.open() || file.write(data) != data.size() || ! file.flush()) {
+    if ( ! file.open()
+        || file.write(data) != data.size()
+        || ! file.flush()
+    ) {
         *error = origin + QLL(": cannot read the settings");
         return false;
     }
@@ -327,8 +330,9 @@ Config::LayeredParser::LayeredParser(const Parser &base)
 }
 
 /*! Applies @a layer to @a parser, reporting errors in @a error. */
-bool Config::LayeredParser::apply(Parser *parser, const Layer &layer,
-                                  QString *error)
+bool Config::LayeredParser::apply(
+        Parser *parser, const Layer &layer,
+        QString *error)
 {
     for (int i = 0; i < layer.lines.m_lines.size(); ++i) {
         const QByteArray line = layer.lines.m_lines.at(i).trimmed();
@@ -336,7 +340,11 @@ bool Config::LayeredParser::apply(Parser *parser, const Layer &layer,
             continue;
         }
         if (line.startsWith('[')) {
-            return parser->readData(layer.lines.text(), layer.origin, error);
+            return parser->readData(
+                layer.lines.text(),
+                layer.origin,
+                error
+            );
         }
         break;
     }
@@ -366,13 +374,14 @@ bool Config::LayeredParser::rebuild(QString *error)
             return false;
         }
     }
-    static_cast<Parser &>(*this) = result;
+    static_cast<Parser & >(*this) = result;
     return true;
 }
 
 /*! Adds permanent @a lines from @a origin, reporting errors in @a error. */
-bool Config::LayeredParser::addLines(const Lines &lines,
-                                     const QString &origin, QString *error)
+bool Config::LayeredParser::addLines(
+        const Lines &lines,
+        const QString &origin, QString *error)
 {
     Layer layer;
     layer.lines = lines;
@@ -386,8 +395,9 @@ bool Config::LayeredParser::addLines(const Lines &lines,
 }
 
 /*! Adds scoped @a lines from @a origin, reporting errors in @a error. */
-bool Config::LayeredParser::pushLines(const Lines &lines,
-                                      const QString &origin, QString *error)
+bool Config::LayeredParser::pushLines(
+        const Lines &lines,
+        const QString &origin, QString *error)
 {
     Layer layer;
     layer.lines = lines;

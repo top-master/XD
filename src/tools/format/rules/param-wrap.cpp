@@ -40,7 +40,8 @@ void FormatParamWrapRule::run(FormatDocument *document) const
 {
     FormatScopeConditions conditions(document);
     for (int line = 1; line <= document->lineCount(); ++line) {
-        const FormatSettings &settings = document->settingsAt(document->lineStart(line));
+        const FormatSettings &settings =
+            document->settingsAt(document->lineStart(line));
         const int limit = settings.wrapMax;
         const int first = document->firstSymbolOfLine(line);
         if (first < 0 || document->isDirectiveLine(line)
@@ -170,7 +171,8 @@ void FormatParamWrapRule::regroup(
         FormatScopeConditions *conditions) const
 {
     for (int i = 1; i < document->symbols().size(); ++i) {
-        const FormatSettings &settings = document->settingsAt(document->symbols().at(i).from);
+        const FormatSettings &settings =
+            document->settingsAt(document->symbols().at(i).from);
         const int limit = settings.wrapMax;
         const int close = document->match(i);
         if (document->token(i) != LPAREN || close <= i + 1

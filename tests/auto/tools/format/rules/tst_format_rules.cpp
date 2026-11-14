@@ -164,7 +164,8 @@ void tst_FormatRules::testConfigDirectives_shouldReadCommentForms()
         "// Format rule end.\n"
     );
     FormatDocument document(text);
-    const QList<FormatConfigDirective > directives = configDirectives(&document);
+    const QList<FormatConfigDirective > directives =
+        configDirectives(&document);
     QCOMPARE(directives.size(), 6);
     QCOMPARE(int(directives.at(0).kind), int(FormatConfigDirective::Add));
     QCOMPARE(directives.at(0).lines.text(), QByteArray("structure.wrapMax=70"));
@@ -211,7 +212,10 @@ void tst_FormatRules::testInlineSettings_shouldApplyAtRuleLocation()
 {
     Formatter formatter;
     QString error;
-    QVERIFY(formatter.selectRules(QStringList() << QLL("line-join"), &error));
+    QVERIFY(formatter.selectRules(
+        QStringList() << QLL("line-join"),
+        &error
+    ));
     const QByteArray text(
         "int first = (one\n    + two);\n"
         "// Format rule: structure.target=any\n"
@@ -223,7 +227,11 @@ void tst_FormatRules::testInlineSettings_shouldApplyAtRuleLocation()
     QVERIFY(document.applyEdits());
     QVERIFY(document.text().contains("int first = (one\n    + two);"));
     QVERIFY(document.text().contains("int second = (three + four);"));
-    const FormatResult result = formatter.format(text, QString(), QStringList());
+    const FormatResult result = formatter.format(
+        text,
+        QString(),
+        QStringList()
+    );
     QVERIFY2(result.error.isEmpty(), qPrintable(result.error));
     QCOMPARE(result.text, document.text());
 }
@@ -232,19 +240,28 @@ void tst_FormatRules::testInlineSettings_shouldWarnAboutUnmatchedMarkers()
 {
     Formatter formatter;
     QString error;
-    QVERIFY(formatter.selectRules(QStringList() << QLL("line-join"), &error));
+    QVERIFY(formatter.selectRules(
+        QStringList() << QLL("line-join"),
+        &error
+    ));
     const QByteArray text(
         "// Format rule end.\n"
         "// Format rule begin: structure.wrapMax=40\n"
         "int example;\n"
     );
     FormatConfig config;
-    const FormatResult ordinary = formatter.format(text, QString(), QStringList(), config);
+    const FormatResult ordinary =
+        formatter.format(text, QString(), QStringList(), config);
     QVERIFY(ordinary.error.isEmpty());
     QCOMPARE(ordinary.warnings.size(), 1);
     QVERIFY(ordinary.warnings.first().message.contains(QLL("Format rule end.")));
     config.verbose = true;
-    const FormatResult verbose = formatter.format(text, QString(), QStringList(), config);
+    const FormatResult verbose = formatter.format(
+        text,
+        QString(),
+        QStringList(),
+        config
+    );
     QVERIFY(verbose.error.isEmpty());
     QCOMPARE(verbose.warnings.size(), 2);
     QCOMPARE(verbose.warnings.last().message,
@@ -256,16 +273,28 @@ void tst_FormatRules::testInlineSettings_shouldWrapOnlyInConfiguredRegion()
 {
     Formatter formatter;
     QString error;
-    QVERIFY(formatter.selectRules(QStringList() << QLL("args-wrap"), &error));
-    const QByteArray call("    sendValues(firstName, secondName, thirdName, fourthName);\n");
+    QVERIFY(formatter.selectRules(
+        QStringList() << QLL("args-wrap"),
+        &error
+    ));
+    const QByteArray call(
+            "    sendValues(firstName, secondName, thirdName, fourthName);\n");
     const QByteArray text = "void run()\n{\n" + call
         + "// Format rule: structure.wrapMax=40\n"
         + call + "}\n";
-    const FormatResult result = formatter.format(text, QString(), QStringList());
+    const FormatResult result = formatter.format(
+        text,
+        QString(),
+        QStringList()
+    );
     QVERIFY2(result.error.isEmpty(), qPrintable(result.error));
     QCOMPARE(result.text.count(call), 1);
     QVERIFY(result.text.contains("    sendValues(\n"));
-    const FormatResult again = formatter.format(result.text, QString(), QStringList());
+    const FormatResult again = formatter.format(
+        result.text,
+        QString(),
+        QStringList()
+    );
     QVERIFY2(again.error.isEmpty(), qPrintable(again.error));
     QCOMPARE(again.text, result.text);
 }
@@ -300,13 +329,18 @@ void tst_FormatRules::testInlineSettings_shouldIsolateConcurrentFiles()
     second.close();
     Formatter formatter;
     QString error;
-    QVERIFY(formatter.selectRules(QStringList() << QLL("line-join"), &error));
+    QVERIFY(formatter.selectRules(
+        QStringList() << QLL("line-join"),
+        &error
+    ));
     FormatOptions options;
     options.check = true;
     options.jobs = 2;
-    QScopedPointer<FormatRunner > runner(FormatRunner::create(QLL("thread"), &formatter, options));
+    QScopedPointer<FormatRunner > runner(
+            FormatRunner::create(QLL("thread"), &formatter, options));
     QVERIFY( ! runner.isNull());
-    const QList<FormatFileResult > results = runner->run(QStringList() << firstPath << secondPath);
+    const QList<FormatFileResult > results =
+        runner->run(QStringList() << firstPath << secondPath);
     QCOMPARE(results.size(), 2);
     QVERIFY(results.at(0).error.isEmpty());
     QVERIFY(results.at(1).error.isEmpty());
@@ -322,8 +356,13 @@ void tst_FormatRules::testInlineWarnings_shouldRoundTripThroughWorker()
 #else
     FormatFileResult source;
     source.path = QString(QLL("sample.cpp"));
-    source.warnings << FormatIssue(3, "format-warning", QString(QLL("warning text")));
-    const QList<QByteArray > lines = FormatProcessRunner::encode(source).split('\n');
+    source.warnings << FormatIssue(
+        3,
+        "format-warning",
+        QString(QLL("warning text"))
+    );
+    const QList<QByteArray > lines = FormatProcessRunner::encode(source)
+        .split('\n');
     QList<FormatFileResult > decoded;
     for (int i = 0; i < lines.size(); ++i) {
         FormatProcessRunner::decode(lines.at(i), &decoded);
@@ -339,14 +378,20 @@ void tst_FormatRules::testInlineSettings_shouldPreserveAdjacentCommentFormatting
 {
     Formatter formatter;
     QString error;
-    QVERIFY(formatter.selectRules(QStringList() << QLL("comment-case"), &error));
+    QVERIFY(
+        formatter.selectRules(QStringList() << QLL("comment-case"), &error)
+    );
     const QByteArray text(
         "// ordinary sentence.\n"
         "// Format rule: structure.wrapMax=70\n"
         "// another sentence.\n"
         "int value;\n"
     );
-    const FormatResult result = formatter.format(text, QString(), QStringList());
+    const FormatResult result = formatter.format(
+        text,
+        QString(),
+        QStringList()
+    );
     QVERIFY2(result.error.isEmpty(), qPrintable(result.error));
     QVERIFY(result.text.contains("// Ordinary sentence.\n"));
     QVERIFY(result.text.contains("// Format rule: structure.wrapMax=70\n"));
@@ -357,8 +402,12 @@ void tst_FormatRules::testInlineSettings_shouldRespectSelectedLines()
 {
     Formatter formatter;
     QString error;
-    QVERIFY(formatter.selectRules(QStringList() << QLL("args-wrap"), &error));
-    const QByteArray call("    sendValues(firstName, secondName, thirdName, fourthName);\n");
+    QVERIFY(formatter.selectRules(
+        QStringList() << QLL("args-wrap"),
+        &error
+    ));
+    const QByteArray call(
+            "    sendValues(firstName, secondName, thirdName, fourthName);\n");
     const QByteArray text = "void run()\n{\n// Format rule: structure.wrapMax=40\n"
         + call + call + "}\n";
     const FormatResult result = formatter.format(
@@ -410,7 +459,10 @@ void tst_FormatRules::testFormatterAliases_shouldProtectDisabledText()
 {
     Formatter formatter;
     QString error;
-    QVERIFY(formatter.selectRules(QStringList() << QLL("line-join") << QLL("comment-case"), &error));
+    QVERIFY(
+        formatter
+            .selectRules(QStringList() << QLL("line-join") << QLL("comment-case"), &error)
+    );
     const QByteArray text(
         "void run()\n{\n"
         "// @formater: off\n"
@@ -427,12 +479,21 @@ void tst_FormatRules::testFormatterAliases_shouldProtectDisabledText()
         "int after;\n"
         "}\n"
     );
-    const FormatResult result = formatter.format(text, QString(), QStringList());
+    const FormatResult result = formatter.format(
+        text,
+        QString(),
+        QStringList()
+    );
     QVERIFY2(result.error.isEmpty(), qPrintable(result.error));
     QVERIFY(result.warnings.isEmpty());
     FormatConfig verboseConfig;
     verboseConfig.verbose = true;
-    const FormatResult verbose = formatter.format(text, QString(), QStringList(), verboseConfig);
+    const FormatResult verbose = formatter.format(
+        text,
+        QString(),
+        QStringList(),
+        verboseConfig
+    );
     QVERIFY2(verbose.error.isEmpty(), qPrintable(verbose.error));
     QCOMPARE(verbose.text, result.text);
     QCOMPARE(verbose.warnings.size(), 3);
@@ -452,7 +513,11 @@ void tst_FormatRules::testFormatterAliases_shouldProtectDisabledText()
     QCOMPARE(document.settingsAt(text.indexOf("int second")).wrapMax, 50);
     QCOMPARE(document.settingsAt(text.indexOf("int after")).wrapMax, 80);
     QCOMPARE(document.settingsAt(text.indexOf("int after")).wrapBegin.first(), 35);
-    const FormatResult again = formatter.format(result.text, QString(), QStringList());
+    const FormatResult again = formatter.format(
+        result.text,
+        QString(),
+        QStringList()
+    );
     QVERIFY2(again.error.isEmpty(), qPrintable(again.error));
     QCOMPARE(again.text, result.text);
 }
@@ -461,9 +526,15 @@ void tst_FormatRules::testFormatterAliases_shouldDisableThroughEndOfFile()
 {
     Formatter formatter;
     QString error;
-    QVERIFY(formatter.selectRules(QStringList() << QLL("comment-case"), &error));
+    QVERIFY(
+        formatter.selectRules(QStringList() << QLL("comment-case"), &error)
+    );
     const QByteArray text("// @formatter: off\n// keep lowercase.\n");
-    const FormatResult result = formatter.format(text, QString(), QStringList());
+    const FormatResult result = formatter.format(
+        text,
+        QString(),
+        QStringList()
+    );
     QVERIFY2(result.error.isEmpty(), qPrintable(result.error));
     QCOMPARE(result.text, text);
 }
@@ -479,7 +550,11 @@ void tst_FormatRules::testFormatterAliases_shouldSuppressReportsWhileOff()
         "// @formatter: on\n"
         "// reported \xe2\x80\x94 text.\n"
     );
-    const FormatResult result = formatter.format(text, QString(), QStringList());
+    const FormatResult result = formatter.format(
+        text,
+        QString(),
+        QStringList()
+    );
     QVERIFY2(result.error.isEmpty(), qPrintable(result.error));
     QCOMPARE(result.issues.size(), 1);
     QCOMPARE(result.issues.first().line, 4);
@@ -489,9 +564,16 @@ void tst_FormatRules::testFormatterAliases_shouldWarnForInvalidCommand()
 {
     Formatter formatter;
     QString error;
-    QVERIFY(formatter.selectRules(QStringList() << QLL("line-join"), &error));
+    QVERIFY(formatter.selectRules(
+        QStringList() << QLL("line-join"),
+        &error
+    ));
     const QByteArray text("// @formatter: disable\nint value;\n");
-    const FormatResult result = formatter.format(text, QString(), QStringList());
+    const FormatResult result = formatter.format(
+        text,
+        QString(),
+        QStringList()
+    );
     QVERIFY2(result.error.isEmpty(), qPrintable(result.error));
     QCOMPARE(result.text, text);
     QCOMPARE(result.warnings.size(), 1);
@@ -510,7 +592,11 @@ void tst_FormatRules::testFormatterAliases_shouldReportAfterInlineEnable()
         "const char *first = \"\xe2\x80\x94\"; /* @formatter: on */ "
         "const char *second = \"\xe2\x80\x94\";\n"
     );
-    const FormatResult result = formatter.format(text, QString(), QStringList());
+    const FormatResult result = formatter.format(
+        text,
+        QString(),
+        QStringList()
+    );
     QVERIFY2(result.error.isEmpty(), qPrintable(result.error));
     QCOMPARE(result.issues.size(), 1);
     QCOMPARE(result.issues.first().line, 2);
@@ -520,13 +606,20 @@ void tst_FormatRules::testFormatterAliases_shouldFormatAfterInlineEnable()
 {
     Formatter formatter;
     QString error;
-    QVERIFY(formatter.selectRules(QStringList() << QLL("line-join"), &error));
+    QVERIFY(formatter.selectRules(
+        QStringList() << QLL("line-join"),
+        &error
+    ));
     const QByteArray text(
         "// @formatter: off\n"
         "// @formatter: structure.target=any\n"
         "/* @formatter: on */ int value = (first\n    + second);\n"
     );
-    const FormatResult result = formatter.format(text, QString(), QStringList());
+    const FormatResult result = formatter.format(
+        text,
+        QString(),
+        QStringList()
+    );
     QVERIFY2(result.error.isEmpty(), qPrintable(result.error));
     QVERIFY(result.text.contains("/* @formatter: on */ int value = (first + second);"));
 }
@@ -542,10 +635,17 @@ void tst_FormatRules::testSettings_shouldReadInlineIni()
     QVERIFY(error.startsWith(QLL("inline:")));
     Config::Parser defaults(FormatSettings::schema());
     Config::LayeredParser inlineParser(defaults);
-    QVERIFY(inlineParser.addLines(Config::Lines() << "[Structure]" << "target = any"
-                                 << "wrapMax = 90", QLL("inline"), &error));
-    QVERIFY(inlineParser.addLines(Config::Lines() << "structure.wrapMax=60",
-                                 QLL("inline"), &error));
+    QVERIFY(inlineParser.addLines(
+        Config::Lines() << "[Structure]" << "target = any"
+        << "wrapMax = 90",
+        QLL("inline"),
+        &error
+    ));
+    QVERIFY(inlineParser.addLines(
+        Config::Lines() << "structure.wrapMax=60",
+        QLL("inline"),
+        &error
+    ));
     FormatSettings settings;
     FormatSettings::fromParser(inlineParser, &settings);
     QCOMPARE(settings.codeTarget, FormatSettings::CodeTargetAny);
@@ -554,14 +654,26 @@ void tst_FormatRules::testSettings_shouldReadInlineIni()
     Config::Parser base(FormatSettings::schema());
     Config::LayeredParser layers(base);
     const QString origin(QLL("inline"));
-    QVERIFY(layers.addLines(Config::Lines() << "structure.wrapMax=90", origin, &error));
+    QVERIFY(
+        layers
+            .addLines(Config::Lines() << "structure.wrapMax=90", origin, &error)
+    );
     QVERIFY(layers.pushLines(Config::Lines() << "[Structure]" << "wrapMax = 50",
                              origin, &error));
-    QVERIFY(layers.addLines(Config::Lines() << "structure.wrapMax=70", origin, &error));
+    QVERIFY(
+        layers
+            .addLines(Config::Lines() << "structure.wrapMax=70", origin, &error)
+    );
     QCOMPARE(layers.value(QLL("structure.wrapMax")), QString(QLL("50")));
-    QVERIFY(layers.pushLines(Config::Lines() << "structure.wrapMax=40", origin, &error));
+    QVERIFY(
+        layers
+            .pushLines(Config::Lines() << "structure.wrapMax=40", origin, &error)
+    );
     QCOMPARE(layers.value(QLL("structure.wrapMax")), QString(QLL("40")));
-    QVERIFY( ! layers.pushLines(Config::Lines() << "structure.wrapMax=bad", origin, &error));
+    QVERIFY(
+        ! layers
+            .pushLines(Config::Lines() << "structure.wrapMax=bad", origin, &error)
+    );
     QCOMPARE(layers.value(QLL("structure.wrapMax")), QString(QLL("40")));
     QVERIFY(layers.popLines(&error));
     QCOMPARE(layers.value(QLL("structure.wrapMax")), QString(QLL("50")));
@@ -3394,7 +3506,8 @@ void tst_FormatRules::testWrapChainAt_shouldKeepLeadingOperators()
 }
 
 /// Reads one case section up to `marker`, retaining its original last newline.
-static bool readFixturePart(QFile *file, const QByteArray &marker, QByteArray *part)
+static bool readFixturePart(QFile *file, const QByteArray &marker,
+                            QByteArray *part)
 {
     part->clear();
     while ( ! file->atEnd()) {
@@ -3444,7 +3557,12 @@ void tst_FormatRules::testFixtures_shouldMatchAfter_data()
         const QStringList lineSpecs = QString::fromUtf8(fields.at(3)).split(
             QLatin1Char(';'), QString::SkipEmptyParts
         );
-        QTest::newRow(qPrintable(name)) << name << input << output << rules << lineSpecs;
+        QTest::newRow(qPrintable(name))
+            << name
+            << input
+            << output
+            << rules
+            << lineSpecs;
     }
 }
 
@@ -3457,7 +3575,9 @@ void tst_FormatRules::testFixtures_shouldMatchAfter()
     QFETCH(QString, rules);
     QFETCH(QStringList, lineSpecs);
     const QString fixture = QFINDTESTDATA("testFixtures/fixtures.cpp");
-    const QString path = QFileInfo(fixture).absolutePath() + QLatin1Char('/') + name;
+    const QString path = QFileInfo(fixture).absolutePath()
+        + QLatin1Char('/')
+        + name;
     FormatConfig config;
 
     // Formats it with those rules and settings, on those lines.

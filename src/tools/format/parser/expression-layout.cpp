@@ -784,12 +784,16 @@ QByteArray FormatExpressionLayout::layoutChainRest(
                 ? operators.at(end) - 1 : last;
             const QByteArray more = space
                 + this->oneLine(operators.first(), lastOfLine);
-            if (this->fits(column, this->oneLine(
-                    first,
-                    operators.first()
-                        - 1
-                ) + more,
-                           end < operators.size() ? 0 : trailing, first)
+            if (this->fits(
+                    column,
+                    this->oneLine(
+                        first,
+                        operators.first()
+                            - 1
+                    ) + more,
+                    end < operators.size() ? 0 : trailing,
+                    first
+                )
             ) {
                 text += more;
                 at = end;
@@ -1165,7 +1169,8 @@ bool FormatExpressionLayout::breaksOnlyBetweenLiterals(
 */
 bool FormatExpressionLayout::mayBreakList(int open, int itemCount) const
 {
-    const FormatSettings &settings = m_document->settingsAt(m_document->symbols().at(open).from);
+    const FormatSettings &settings =
+        m_document->settingsAt(m_document->symbols().at(open).from);
     if ( ! settings.wrapArgsOverCondition.isEmpty()) {
         return m_conditions->argsOver(open, itemCount);
     }
@@ -1184,7 +1189,10 @@ bool FormatExpressionLayout::mayBreakList(int open, int itemCount) const
         lineStart,
         m_document->symbols().at(open).from + 1 - lineStart
     );
-    const qreal percent = textWidth(head) * 100.0 / qMax(1, settings.wrapMax);
+    const qreal percent = textWidth(head) * 100.0 / qMax(
+        1,
+        settings.wrapMax
+    );
     return m_conditions->holds(
         settings.wrapArgsAt, open, percent,
         FormatSettings::defaultWrapChainAt()

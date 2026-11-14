@@ -35,7 +35,10 @@ public:
     explicit Parser(const Schema & schema);
 
     bool readFile(const QString & file, QString *error);
-    bool readData(const QByteArray &data, const QString &origin, QString *error);
+    bool readData(
+            const QByteArray &data,
+            const QString &origin,
+            QString *error);
     bool readLevels(const QString & path, const QString & fileName,
                     QString *error);
     bool assign(const QString & assignment, QString *error);
@@ -54,6 +57,7 @@ private:
 
 class LayeredParser : public Parser
 {
+    typedef Parser super;
 public:
     explicit LayeredParser(const Parser &base);
 

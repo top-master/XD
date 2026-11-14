@@ -46,7 +46,11 @@ private:
     bool isListOpen(int open) const;
     QList<QList<int > > lineGroups(const QList<int > & starts) const;
     QByteArray pad() const;
-    bool fits(int column, const QByteArray & text, int trailing, int token) const;
+    bool fits(
+            int column,
+            const QByteArray & text,
+            int trailing,
+            int token) const;
 
     const FormatDocument *m_document;
     FormatScopeConditions *m_conditions;

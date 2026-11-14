@@ -44,7 +44,10 @@ void FormatTernaryWrapRule::run(FormatDocument *document) const
             || last <= first
             || document->token(last) != SEMIC
             || document->isDirectiveLine(line)
-            || textWidth(document->lineText(line)) <= wrapColumn(document, document->lineStart(line))
+            || textWidth(document->lineText(line)) <= wrapColumn(
+                document,
+                document->lineStart(line)
+            )
         ) {
             continue;
         }

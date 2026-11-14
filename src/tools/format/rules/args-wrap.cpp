@@ -130,7 +130,8 @@ void FormatArgsWrapRule::run(FormatDocument *document) const
             ? isBrace || (endsInChain && ( ! isSplit || argumentsBelow))
                 || over || reachesWrapArgsAt(document, &conditions, i)
             : over;
-        const bool needsBreak = mayBreak && column + textWidth(oneLine) > wrapColumn(document, from);
+        const bool needsBreak = mayBreak
+            && column + textWidth(oneLine) > wrapColumn(document, from);
         const int closeLine = document->symbolLine(close);
         const bool isMisplaced = hasMisplacedLines(
             document,

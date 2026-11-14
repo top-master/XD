@@ -320,7 +320,8 @@ bool FormatSettings::readParser(const QString &path, const FormatConfig &config,
 /*!
     Converts the validated values in @a parser to @a settings.
 */
-void FormatSettings::fromParser(const Config::Parser &parser, FormatSettings *settings)
+void FormatSettings::fromParser(const Config::Parser &parser,
+                                FormatSettings *settings)
 {
     const Config::Schema &schema = parser.schema();
     const QString refSuffix = QString(QLL("types.refSuffix"));
