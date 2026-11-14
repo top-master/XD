@@ -5,6 +5,7 @@
 # root, checked against a tool's schema) for `STATIC_PLUGINS`.
 PLUGIN_HEADERS = \
     config-any-space.h \
+    config-choice.h \
     config-condition.h \
     config-escape.h \
     config-key.h \
@@ -19,6 +20,7 @@ PLUGIN_HEADERS = \
     config-word.h
 PLUGIN_SOURCES = \
     config-any-space.cpp \
+    config-choice.cpp \
     config-condition.cpp \
     config-escape.cpp \
     config-numbers.cpp \

@@ -125,6 +125,10 @@ QList<FormatFileResult > FormatThreadRunner::run(const QStringList & files)
     if (jobs <= 1) {
         return super::run(files);
     }
+    QString error;
+    if ( ! this->prepareRun(files, &error)) {
+        return this->runFailure(files, error);
+    }
 
     FormatThreadQueue queue(files);
     QList<FormatThread * > threads;

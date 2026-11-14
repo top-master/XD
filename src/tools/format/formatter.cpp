@@ -104,6 +104,11 @@ FormatResult Formatter::format(const QByteArray & text, const QString & path,
 {
     FormatResult result;
     FormatDocument document(text, path);
+    FormatConfig activeConfig = config;
+    if (activeConfig.scheduledFiles.isEmpty() && ! path.isEmpty()) {
+        activeConfig.scheduledFiles << path;
+    }
+    document.setFormatConfig(activeConfig);
     document.setAgentMode(agentMode);
     document.setIncludePaths(config.includePaths);
 

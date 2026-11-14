@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: Apache-2.0
 
 #include "config-condition.h"
+#include "config-choice.h"
 #include "format-agent-guides.h"
 #include "format-document.h"
 #include "format-line-spec.h"
@@ -24,6 +25,28 @@ typedef QVector<QPair<int, int > > LineRanges;
 Q_DECLARE_METATYPE(LineRanges)
 typedef QList<int > IssueLines;
 Q_DECLARE_METATYPE(IssueLines)
+
+class CountingConditionContext : public Config::Condition::Context
+{
+public:
+    inline CountingConditionContext() : isNew(false), calls(0) {}
+    qreal argumentCount(int, int) const Q_DECL_OVERRIDE { return 0; }
+    bool predicate(const QString &name, bool *value) const Q_DECL_OVERRIDE
+    {
+        if (name == QLL("isnewclass")) {
+            *value = isNew;
+            return true;
+        }
+        if (name == QLL("isneeded")) {
+            ++calls;
+            *value = true;
+            return true;
+        }
+        return false;
+    }
+    bool isNew;
+    mutable int calls;
+};
 
 /// Tests the formatter's logic, linked in directly: moc's comment tokens,
 /// the document under formatting, the git-blame style line ranges, the
@@ -84,6 +107,10 @@ private slots:
     void testAllRules_shouldKeepCleanCode();
     void testSettings_shouldReadFromRootDown();
     void testSettings_shouldReadWrapColumns();
+    void testSuperTypedef_shouldFollowPairedFiles();
+    void testSuperTypedef_shouldHandleQualifiedBases();
+    void testSuperTypedef_shouldUseStableRunnerInputs();
+    void testSuperTypedef_shouldFindRelatedExtensions();
     void testSettings_shouldReadInlineIni();
     void testLayeredParser_shouldReadIndentedIni();
     void testProjectFiles_shouldHandEachFileOnce();
@@ -726,7 +753,11 @@ FormatResult tst_FormatRules::formatWith(
         result.error = error;
         return result;
     }
-    return formatter.format(text, path, QStringList());
+    FormatConfig config;
+    if (rule == QLL("super-typedef")) {
+        config.assignments << QString(QLL("structure.typedefSuper=always"));
+    }
+    return formatter.format(text, path, QStringList(), config);
 }
 
 /// Lists the lines of the issues of `result` that the rule `rule` reported.
@@ -1777,6 +1808,24 @@ void tst_FormatRules::testFix_shouldRewrite_data()
         << QString(QLL("super-typedef"))
         << QByteArray("class A\n{\nprivate:\n    class B\n    {\n        int b;\n    };\n};\n")
         << QByteArray("class A\n{\nprivate:\n    class B\n    {\n        int b;\n    };\n};\n");
+    QTest::newRow("super-typedef empty class")
+        << QString(QLL("super-typedef"))
+        << QByteArray("class Petal : public Seed\n{\n};\n")
+        << QByteArray("class Petal : public Seed\n{\n    typedef Seed super;\n};\n");
+    QTest::newRow("super-typedef inline class")
+        << QString(QLL("super-typedef"))
+        << QByteArray("class Petal : public Seed {};\n")
+        << QByteArray("class Petal : public Seed { typedef Seed super; };\n");
+    QTest::newRow("super-typedef multiline base")
+        << QString(QLL("super-typedef"))
+        << QByteArray("class Petal : public Box<\n    Seed\n>\n{\npublic:\n};\n")
+        << QByteArray("class Petal : public Box<\n    Seed\n>\n{\n"
+                      "    typedef Box< Seed > super;\npublic:\n};\n");
+    QTest::newRow("super-typedef base comment")
+        << QString(QLL("super-typedef"))
+        << QByteArray("class Petal : public Box< // A seed.\n    Seed>\n{\npublic:\n};\n")
+        << QByteArray("class Petal : public Box< // A seed.\n    Seed>\n{\n"
+                      "    typedef Box< Seed> super;\npublic:\n};\n");
     QTest::newRow("super-typedef after Q_OBJECT")
         << QString(QLL("super-typedef"))
         << QByteArray("class Foo : public QObject\n{\n    Q_OBJECT\npublic:\n};\n")
@@ -2502,6 +2551,34 @@ void tst_FormatRules::testSettings_shouldReadWrapColumns()
     );
     FormatSettings settings;
     QString error;
+    CountingConditionContext conditionContext;
+    QString choice;
+    QVERIFY(Config::Choice::resolve(
+        FormatSettings().typedefSuper, FormatSettings::superConditionNames(),
+        FormatSettings::superChoices(), &conditionContext, &choice, &error
+    ));
+    QCOMPARE(choice, QString(QLL("never")));
+    QCOMPARE(conditionContext.calls, 0);
+    conditionContext.isNew = true;
+    QVERIFY(Config::Choice::resolve(
+        FormatSettings().typedefSuper, FormatSettings::superConditionNames(),
+        FormatSettings::superChoices(), &conditionContext, &choice, &error
+    ));
+    QCOMPARE(choice, QString(QLL("always")));
+    QCOMPARE(conditionContext.calls, 1);
+    conditionContext.calls = 0;
+    QVERIFY(Config::Choice::resolve(
+        QString(QLL("is_new_class( ) && is_needed() ? if-needed : never")),
+        FormatSettings::superConditionNames(), FormatSettings::superChoices(),
+        &conditionContext, &choice, &error
+    ));
+    QCOMPARE(choice, QString(QLL("if-needed")));
+    QCOMPARE(conditionContext.calls, 1);
+    Config::Parser choiceParser(FormatSettings::schema());
+    QVERIFY(choiceParser.assign(QString(QLL("structure.typedefSuper=(isNewClass() ? "
+                                           "(isNeeded() ? always : if-needed) : never)")), &error));
+    QVERIFY( ! choiceParser.assign(QString(QLL("structure.typedefSuper=isNewClass() "
+                                               "? unrecognized : never")), &error));
     qExpect(FormatSettings::load(
         dir.path() + QLL("/a.cpp"),
         FormatConfig(),
@@ -2518,6 +2595,50 @@ void tst_FormatRules::testSettings_shouldReadWrapColumns()
     qExpect(int(settings.wrapComma))->toEqual(int(FormatSettings::WrapCommaHard));
     qExpect(int(settings.commentTarget))->toEqual(int(FormatSettings::CommentTargetAny));
     const FormatSettings defaults;
+    QVERIFY(defaults.acceptsFile(QString(QLL("widget.h++"))));
+    QVERIFY(defaults.acceptsFile(QString(QLL("widget.c++"))));
+    QVERIFY( ! defaults.acceptsFile(QString(QLL("widget.txt"))));
+    Config::Parser extensionParser(FormatSettings::schema());
+    QVERIFY(extensionParser.assign(QString(QLL("general.extensions=[h++, objc]")), &error));
+    FormatSettings customExtensions;
+    FormatSettings::fromParser(extensionParser, &customExtensions);
+    QVERIFY(customExtensions.acceptsFile(QString(QLL("widget.h++"))));
+    QVERIFY(customExtensions.acceptsFile(QString(QLL("widget.objc"))));
+    QVERIFY( ! customExtensions.acceptsFile(QString(QLL("widget.cpp"))));
+    const QString extensionPath = dir.path() + QLL("/extension-settings.ini");
+    QFile extensionFile(extensionPath);
+    QVERIFY(extensionFile.open(QIODevice::WriteOnly));
+    const QByteArray extensionConfig("[General]\nextensions = [h++, objc]\n");
+    QCOMPARE(extensionFile.write(extensionConfig), qint64(extensionConfig.size()));
+    extensionFile.close();
+    Config::Parser extensionFileParser(FormatSettings::schema());
+    QVERIFY2(extensionFileParser.readFile(extensionPath, &error), qPrintable(error));
+    FormatSettings::fromParser(extensionFileParser, &customExtensions);
+    QVERIFY(customExtensions.acceptsFile(QString(QLL("widget.objc"))));
+    QVERIFY( ! customExtensions.acceptsFile(QString(QLL("widget.cpp"))));
+    QVERIFY(extensionFile.open(QIODevice::WriteOnly | QIODevice::Truncate));
+    const QByteArray regexConfig("[General]\nextensions = /[.](hpp|cc)$/\n");
+    QCOMPARE(extensionFile.write(regexConfig), qint64(regexConfig.size()));
+    extensionFile.close();
+    Config::Parser regexFileParser(FormatSettings::schema());
+    QVERIFY2(regexFileParser.readFile(extensionPath, &error), qPrintable(error));
+    FormatSettings::fromParser(regexFileParser, &customExtensions);
+    QVERIFY(customExtensions.acceptsFile(QString(QLL("widget.hpp"))));
+    QVERIFY( ! customExtensions.acceptsFile(QString(QLL("widgetXhpp"))));
+    QVERIFY(extensionParser.assign(QString(QLL("general.extensions=/\\.(hpp|cc)$/")), &error));
+    FormatSettings::fromParser(extensionParser, &customExtensions);
+    QVERIFY(customExtensions.acceptsFile(QString(QLL("widget.hpp"))));
+    QVERIFY(customExtensions.acceptsFile(QString(QLL("widget.cc"))));
+    QVERIFY( ! customExtensions.acceptsFile(QString(QLL("widget.cpp"))));
+    QVERIFY(extensionParser.assign(QString(QLL("general.extensions=frag, hh")), &error));
+    FormatSettings::fromParser(extensionParser, &customExtensions);
+    QVERIFY(customExtensions.acceptsFile(QString(QLL("widget.frag"))));
+    QVERIFY(customExtensions.acceptsFile(QString(QLL("widget.hh"))));
+    QVERIFY( ! customExtensions.acceptsFile(QString(QLL("widget.cpp"))));
+    QVERIFY(extensionParser.assign(QString(QLL("general.extensions=^(hh|frag)$")), &error));
+    FormatSettings::fromParser(extensionParser, &customExtensions);
+    QVERIFY(customExtensions.acceptsFile(QString(QLL("widget.frag"))));
+    QVERIFY( ! customExtensions.acceptsFile(QString(QLL("widget.cpp"))));
     qExpect(defaults.wrapBegin)->toEqual(QList<int >() << 75);
     qExpect(defaults.wrapMax)->toEqual(80);
     qExpect(defaults.commentWrapBegin)->toEqual(QList<int >() << 75);
@@ -2537,6 +2658,335 @@ void tst_FormatRules::testSettings_shouldReadWrapColumns()
     ))
         ->toBeFalsy();
     qExpect(error)->toContain(QString(QLL("[Comments] wrapMax = 70 | 80: use a number from 20 to 200")));
+}
+
+void tst_FormatRules::testSuperTypedef_shouldFollowPairedFiles()
+{
+    QTemporaryDir dir;
+    QVERIFY(dir.isValid());
+    const QString headerPath = dir.path() + QLL("/sapling.h");
+    const QString sourcePath = dir.path() + QLL("/sapling.c++");
+    const QByteArray header("class Sapling : public Rootstock\n{\npublic:\n"
+                            "    void grow();\n};\n");
+    const QByteArray source("void Sapling::grow()\n{\n    Rootstock::grow();\n}\n");
+    QFile headerFile(headerPath);
+    QVERIFY(headerFile.open(QIODevice::WriteOnly));
+    QCOMPARE(headerFile.write(header), qint64(header.size()));
+    headerFile.close();
+    QFile sourceFile(sourcePath);
+    QVERIFY(sourceFile.open(QIODevice::WriteOnly));
+    QCOMPARE(sourceFile.write(source), qint64(source.size()));
+    sourceFile.close();
+
+    Formatter formatter;
+    QString error;
+    QVERIFY(formatter.selectRules(QStringList() << QLL("super-typedef"), &error));
+    const FormatResult existing = formatter.format(header, headerPath, QStringList());
+    QCOMPARE(existing.text, header);
+    FormatConfig config;
+    config.scheduledFiles << headerPath << sourcePath;
+    config.fileLineSpecs.insert(headerPath, QStringList() << QLL("1,5"));
+    config.fileLineSpecs.insert(sourcePath, QStringList() << QLL("1,4"));
+    const FormatResult formattedHeader = formatter.format(
+        header, headerPath, config.fileLineSpecs.value(headerPath), config
+    );
+    QVERIFY2(formattedHeader.error.isEmpty(), qPrintable(formattedHeader.error));
+    QVERIFY(formattedHeader.text.contains("typedef Rootstock super;"));
+    const FormatResult formattedSource = formatter.format(
+        source, sourcePath, config.fileLineSpecs.value(sourcePath), config
+    );
+    QVERIFY2(formattedSource.error.isEmpty(), qPrintable(formattedSource.error));
+    QVERIFY(formattedSource.text.contains("super::grow();"));
+    const FormatResult entireSource = formatter.format(source, sourcePath, QStringList(), config);
+    QVERIFY(entireSource.text.contains("super::grow();"));
+
+    config.scheduledFiles.removeAll(headerPath);
+    const FormatResult withoutHeader = formatter.format(
+        source, sourcePath, config.fileLineSpecs.value(sourcePath), config
+    );
+    QCOMPARE(withoutHeader.text, source);
+    config.scheduledFiles << headerPath;
+    config.assignments << QString(QLL("structure.typedefSuper=never"));
+    const FormatResult disabledHeader = formatter.format(
+        header, headerPath, config.fileLineSpecs.value(headerPath), config
+    );
+    QCOMPARE(disabledHeader.text, header);
+    const FormatResult disabledSource = formatter.format(
+        source, sourcePath, config.fileLineSpecs.value(sourcePath), config
+    );
+    QCOMPARE(disabledSource.text, source);
+    config.assignments.clear();
+    config.assignments << QString(QLL("structure.typedefSuper=if-needed"));
+    const QStringList sourceRanges = config.fileLineSpecs.take(sourcePath);
+    config.lineSpecs << QString(QLL("100,"));
+    const FormatResult neededHeader = formatter.format(header, headerPath, QStringList(), config);
+    QVERIFY(neededHeader.text.contains("typedef Rootstock super;"));
+    config.lineSpecs.clear();
+    config.fileLineSpecs.insert(sourcePath, sourceRanges);
+    config.assignments << QString(QLL("structure.replaceSuperSites=false"));
+    const FormatResult preservedSource = formatter.format(
+        source, sourcePath, config.fileLineSpecs.value(sourcePath), config
+    );
+    QCOMPARE(preservedSource.text, source);
+    config.assignments.clear();
+    config.assignments << QString(QLL("structure.typedefSuper=never"));
+    const QByteArray existingHeader("class Sapling : public Rootstock\n{\n"
+                                    "    typedef Rootstock super;\npublic:\n"
+                                    "    void grow();\n};\n");
+    const FormatResult retainedHeader = formatter.format(existingHeader, headerPath,
+                                                         QStringList(), config);
+    QCOMPARE(retainedHeader.text, existingHeader);
+    QVERIFY(headerFile.open(QIODevice::WriteOnly | QIODevice::Truncate));
+    QCOMPARE(headerFile.write(existingHeader), qint64(existingHeader.size()));
+    headerFile.close();
+    config.fileLineSpecs[headerPath] = QStringList() << QLL("100,");
+    config.assignments.clear();
+    config.assignments << QString(QLL("structure.replaceSuperSites=true"));
+    const FormatResult existingAlias = formatter.format(source, sourcePath, QStringList(), config);
+    QVERIFY(existingAlias.text.contains("super::grow();"));
+    QVERIFY(headerFile.open(QIODevice::WriteOnly | QIODevice::Truncate));
+    const QByteArray otherBase("class Sapling : public Rootstock\n{\n"
+                               "    typedef Flowerpot super;\npublic:\n"
+                               "    void grow();\n};\n");
+    QCOMPARE(headerFile.write(otherBase), qint64(otherBase.size()));
+    headerFile.close();
+    const FormatResult differentAlias = formatter.format(source, sourcePath,
+                                                          QStringList(), config);
+    QCOMPARE(differentAlias.text, source);
+    QVERIFY(headerFile.open(QIODevice::WriteOnly | QIODevice::Truncate));
+    const QByteArray disabledInline("// @formatter: structure.typedefSuper=never\n" + header);
+    QCOMPARE(headerFile.write(disabledInline), qint64(disabledInline.size()));
+    headerFile.close();
+    config.fileLineSpecs[headerPath] = QStringList() << QLL("1,6");
+    config.assignments << QString(QLL("structure.typedefSuper=always"));
+    const FormatResult inlineDisabled = formatter.format(source, sourcePath,
+                                                          QStringList(), config);
+    QCOMPARE(inlineDisabled.text, source);
+    QVERIFY(sourceFile.open(QIODevice::WriteOnly | QIODevice::Truncate));
+    const QByteArray noBaseUse("void Sapling::grow()\n{\n    tend();\n}\n");
+    QCOMPARE(sourceFile.write(noBaseUse), qint64(noBaseUse.size()));
+    sourceFile.close();
+    config.assignments.clear();
+    config.assignments << QString(QLL("structure.typedefSuper=if-needed"));
+    const FormatResult unneededHeader = formatter.format(header, headerPath, QStringList(), config);
+    QCOMPARE(unneededHeader.text, header);
+}
+
+void tst_FormatRules::testSuperTypedef_shouldHandleQualifiedBases()
+{
+    const QByteArray input(
+        "class Orchid : public flora::Plant\n{\n"
+        "    typedef flora::Plant super;\npublic:\n"
+        "    using flora::Plant::Plant;\n"
+        "    void bloom() { flora::Plant::bloom(); Plant::smell(); }\n"
+        "};\n"
+    );
+    const QByteArray expected(
+        "class Orchid : public flora::Plant\n{\n"
+        "    typedef flora::Plant super;\npublic:\n"
+        "    using super::super;\n"
+        "    void bloom() { super::bloom(); super::smell(); }\n"
+        "};\n"
+    );
+    Formatter formatter;
+    QString error;
+    QVERIFY(formatter.selectRules(QStringList() << QLL("super-typedef"), &error));
+    FormatConfig config;
+    config.assignments << QString(QLL("structure.replaceSuperSites=true"));
+    const FormatResult result = formatter.format(input, QString(), QStringList(), config);
+    QVERIFY2(result.error.isEmpty(), qPrintable(result.error));
+    QCOMPARE(result.text, expected);
+    const FormatResult again = formatter.format(result.text, QString(), QStringList(), config);
+    QCOMPARE(again.text, expected);
+    const QByteArray shadowed(
+        "class Elm : public Tree\n{\n    typedef Tree super;\npublic:\n"
+        "    using Tree::water;\n    using Tree::prune;\n"
+        "    void inspect() { using Tree = Other; Tree::inspect(); }\n"
+        "    template<class Tree> void measure() { Tree::measure(); }\n"
+        "    void prune() { Tree::prune(); ::Tree::water(); }\n};\n"
+    );
+    const QByteArray shadowedExpected(
+        "class Elm : public Tree\n{\n    typedef Tree super;\npublic:\n"
+        "    using super::water;\n    using super::prune;\n"
+        "    void inspect() { using Tree = Other; Tree::inspect(); }\n"
+        "    template<class Tree> void measure() { Tree::measure(); }\n"
+        "    void prune() { super::prune(); super::water(); }\n};\n"
+    );
+    const FormatResult guarded = formatter.format(shadowed, QString(), QStringList(), config);
+    QCOMPARE(guarded.text, shadowedExpected);
+    const QByteArray templated(
+        "template<class Item>\nclass Parcel : public Shelf<Item>\n{\n"
+        "    typedef Shelf<Item> super;\npublic:\n"
+        "    void open() { Shelf<Item>::open(); }\n};\n"
+    );
+    const QByteArray templatedExpected(
+        "template<class Item>\nclass Parcel : public Shelf<Item>\n{\n"
+        "    typedef Shelf<Item> super;\npublic:\n"
+        "    void open() { super::open(); }\n};\n"
+    );
+    const FormatResult templateResult = formatter.format(templated, QString(), QStringList(), config);
+    QCOMPARE(templateResult.text, templatedExpected);
+    const QByteArray namespaced(
+        "namespace east {\nclass Leaf : public TreeA\n{\n    typedef TreeA super;\n"
+        "    void grow() { TreeA::grow(); }\n};\n}\n"
+        "namespace west {\nclass Leaf : public TreeB\n{\n    typedef TreeB super;\n"
+        "    void grow() { TreeB::grow(); }\n};\n}\n"
+    );
+    const QByteArray namespacedExpected(
+        "namespace east {\nclass Leaf : public TreeA\n{\n    typedef TreeA super;\n"
+        "    void grow() { super::grow(); }\n};\n}\n"
+        "namespace west {\nclass Leaf : public TreeB\n{\n    typedef TreeB super;\n"
+        "    void grow() { super::grow(); }\n};\n}\n"
+    );
+    const FormatResult namespaceResult = formatter.format(namespaced, QString(), QStringList(), config);
+    QCOMPARE(namespaceResult.text, namespacedExpected);
+    QTemporaryDir dir;
+    QVERIFY(dir.isValid());
+    const QString headerPath = dir.path() + QLL("/foliage.h");
+    const QString sourcePath = dir.path() + QLL("/foliage.cpp");
+    QFile headerFile(headerPath);
+    QVERIFY(headerFile.open(QIODevice::WriteOnly));
+    QCOMPARE(headerFile.write(namespaced), qint64(namespaced.size()));
+    headerFile.close();
+    const QByteArray outline("void west::Leaf::grow()\n{\n    TreeB::grow();\n}\n");
+    const QByteArray outlineExpected("void west::Leaf::grow()\n{\n    super::grow();\n}\n");
+    const FormatResult outlineResult = formatter.format(outline, sourcePath, QStringList(), config);
+    QCOMPARE(outlineResult.text, outlineExpected);
+    const QString reedHeader = dir.path() + QLL("/reed.h");
+    QFile reedFile(reedHeader);
+    QVERIFY(reedFile.open(QIODevice::WriteOnly));
+    const QByteArray reedDeclaration(
+        "class Reed : public Grass\n{\n    typedef Grass super;\npublic:\n"
+        "    Grass::Value count(Grass::Value);\n};\n"
+    );
+    QCOMPARE(reedFile.write(reedDeclaration), qint64(reedDeclaration.size()));
+    reedFile.close();
+    const QByteArray signature(
+        "Grass::Value Reed::count(Grass::Value value)\n{\n"
+        "    return Grass::convert(value);\n}\n"
+    );
+    const QByteArray signatureExpected(
+        "Grass::Value Reed::count(super::Value value)\n{\n"
+        "    return super::convert(value);\n}\n"
+    );
+    const FormatResult signatureResult = formatter.format(
+        signature, dir.path() + QLL("/reed.cpp"), QStringList(), config
+    );
+    QCOMPARE(signatureResult.text, signatureExpected);
+    QVERIFY(reedFile.open(QIODevice::WriteOnly | QIODevice::Truncate));
+    const QByteArray constructorDeclaration(
+        "class Reed : public Grass\n{\n    typedef Grass super;\npublic:\n"
+        "    Reed();\n    int size;\n};\n"
+    );
+    QCOMPARE(reedFile.write(constructorDeclaration), qint64(constructorDeclaration.size()));
+    reedFile.close();
+    const QByteArray constructor(
+        "Reed::Reed() : size(Grass::initial())\n{\n    Grass::grow();\n}\n"
+    );
+    const QByteArray constructorExpected(
+        "Reed::Reed() : size(super::initial())\n{\n    super::grow();\n}\n"
+    );
+    const FormatResult constructorResult = formatter.format(
+        constructor, dir.path() + QLL("/reed.cpp"), QStringList(), config
+    );
+    QCOMPARE(constructorResult.text, constructorExpected);
+    const QByteArray bracedConstructor(
+        "Reed::Reed() : size{Grass::initial()}\n{\n    Grass::grow();\n}\n"
+    );
+    const QByteArray bracedExpected(
+        "Reed::Reed() : size{super::initial()}\n{\n    super::grow();\n}\n"
+    );
+    const FormatResult bracedResult = formatter.format(
+        bracedConstructor, dir.path() + QLL("/reed.cpp"), QStringList(), config
+    );
+    QCOMPARE(bracedResult.text, bracedExpected);
+}
+
+void tst_FormatRules::testSuperTypedef_shouldUseStableRunnerInputs()
+{
+    const QStringList kinds = QStringList() << QString(QLL("serial"))
+#ifndef QT_NO_THREAD
+        << QString(QLL("thread"))
+#endif
+        ;
+    for (int kind = 0; kind < kinds.size(); ++kind) {
+        for (int reverse = 0; reverse < 2; ++reverse) {
+            QTemporaryDir dir;
+            QVERIFY(dir.isValid());
+            const QString headerPath = dir.path() + QLL("/birch.h");
+            const QString sourcePath = dir.path() + QLL("/birch.mm");
+            const QByteArray header("class Birch : public Tree\n{\npublic:\n"
+                                    "    void grow();\n};\n");
+            const QByteArray source("void Birch::grow()\n{\n    Tree::grow();\n}\n");
+            QFile headerFile(headerPath);
+            QVERIFY(headerFile.open(QIODevice::WriteOnly));
+            QCOMPARE(headerFile.write(header), qint64(header.size()));
+            headerFile.close();
+            QFile sourceFile(sourcePath);
+            QVERIFY(sourceFile.open(QIODevice::WriteOnly));
+            QCOMPARE(sourceFile.write(source), qint64(source.size()));
+            sourceFile.close();
+            Formatter formatter;
+            QString error;
+            QVERIFY(formatter.selectRules(QStringList() << QLL("super-typedef"), &error));
+            FormatOptions options;
+            options.lineSpecs << QString(QLL("1,"));
+            options.jobs = 2;
+            QScopedPointer<FormatRunner > runner(FormatRunner::create(kinds.at(kind),
+                                                                       &formatter, options));
+            QVERIFY(runner);
+            const QString earlierPath = dir.path() + QLL("/earlier.cpp");
+            QFile earlierFile(earlierPath);
+            QVERIFY(earlierFile.open(QIODevice::WriteOnly));
+            QVERIFY(earlierFile.write("int sentinel;\n") > 0);
+            earlierFile.close();
+            const QList<FormatFileResult > earlier = runner->run(QStringList() << earlierPath);
+            QCOMPARE(earlier.size(), 1);
+            QVERIFY2(earlier.first().error.isEmpty(), qPrintable(earlier.first().error));
+            QStringList files;
+            if (reverse) {
+                files << sourcePath << headerPath;
+            } else {
+                files << headerPath << sourcePath;
+            }
+            const QList<FormatFileResult > results = runner->run(files);
+            QCOMPARE(results.size(), 2);
+            QVERIFY2(results.at(0).error.isEmpty(), qPrintable(results.at(0).error));
+            QVERIFY2(results.at(1).error.isEmpty(), qPrintable(results.at(1).error));
+            QVERIFY(headerFile.open(QIODevice::ReadOnly));
+            QVERIFY(headerFile.readAll().contains("typedef Tree super;"));
+            QVERIFY(sourceFile.open(QIODevice::ReadOnly));
+            QVERIFY(sourceFile.readAll().contains("super::grow();"));
+        }
+    }
+}
+
+void tst_FormatRules::testSuperTypedef_shouldFindRelatedExtensions()
+{
+    const QStringList extensions = QStringList() << QLL("cpp") << QLL("mm")
+        << QLL("m") << QLL("c") << QLL("cc") << QLL("cxx") << QLL("c++") << QLL("hpp")
+        << QLL("hxx") << QLL("h++") << QLL("h");
+    const QByteArray header("class Fern : public Frond\n{\npublic:\n"
+                            "    void unfold();\n};\n");
+    const QByteArray source("void Fern::unfold()\n{\n    Frond::unfold();\n}\n");
+    Formatter formatter;
+    QString error;
+    QVERIFY(formatter.selectRules(QStringList() << QLL("super-typedef"), &error));
+    FormatConfig config;
+    config.assignments << QString(QLL("structure.typedefSuper=if-needed"));
+    for (int i = 0; i < extensions.size(); ++i) {
+        QTemporaryDir dir;
+        QVERIFY(dir.isValid());
+        const QString headerPath = dir.path() + QLL("/fern.hh");
+        const QString sourcePath = dir.path() + QLL("/fern.") + extensions.at(i);
+        QFile sourceFile(sourcePath);
+        QVERIFY(sourceFile.open(QIODevice::WriteOnly));
+        QCOMPARE(sourceFile.write(source), qint64(source.size()));
+        sourceFile.close();
+        const FormatResult result = formatter.format(header, headerPath, QStringList(), config);
+        QVERIFY2(result.error.isEmpty(), qPrintable(result.error));
+        QVERIFY2(result.text.contains("typedef Frond super;"), qPrintable(extensions.at(i)));
+    }
 }
 
 /// Breaks a long `<<` chain in agent mode, and asks the agent to regroup the
@@ -3207,6 +3657,37 @@ void tst_FormatRules::testScopeConditions_shouldFallBackWithoutPercent()
 
 void tst_FormatRules::testScopeConditions_shouldEvaluateArgumentExpressions()
 {
+    QStringList lazyProgram;
+    QString lazyError;
+    bool lazyOk = false;
+    QVERIFY(Config::Condition::compile(
+        QString(QLL("false && value > 0")), QStringList(),
+        &lazyProgram, &lazyError
+    ));
+    QVERIFY( ! Config::Condition::evaluate(
+        lazyProgram, QSet<QString >(), QHash<QString, qreal >(), Q_NULLPTR,
+        &lazyOk
+    ));
+    QVERIFY(lazyOk);
+    const QStringList predicates = QStringList() << QString(QLL("isAvailable"));
+    QVERIFY(Config::Condition::compile(
+        QString(QLL("false && isAvailable()")), predicates,
+        &lazyProgram, &lazyError
+    ));
+    QVERIFY( ! Config::Condition::evaluate(
+        lazyProgram, QSet<QString >(), QHash<QString, qreal >(), Q_NULLPTR,
+        &lazyOk
+    ));
+    QVERIFY(lazyOk);
+    QVERIFY(Config::Condition::compile(
+        QString(QLL("true || value > 0")), QStringList(),
+        &lazyProgram, &lazyError
+    ));
+    QVERIFY(Config::Condition::evaluate(
+        lazyProgram, QSet<QString >(), QHash<QString, qreal >(), Q_NULLPTR,
+        &lazyOk
+    ));
+    QVERIFY(lazyOk);
     FormatDocument document(
         "void declareThing(int first, int second, int third, int fourth);\n"
         "void work() { outer(inner(one, nested(x, y)), second(empty(), last(1, 2, 3)), plain, fourth); }\n",

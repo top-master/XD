@@ -165,6 +165,29 @@ refSuffix = keep-as-is
 moveSuffix = " "
 ```
 
+- `extensions` (in `[General]`): the source extensions selected by a
+  directory, project, or `--git` scan. Give a comma-separated list such as
+  `h, cpp, mm`, a bracketed list such as `[h, cpp, mm]`, or a regular
+  expression such as `/[.](h|cpp)$/`. A regular expression is matched against
+  the file name and its extension; double a backslash in a `.formatrc` value
+  for the `.ini` reader. An explicitly named file is still
+  formatted. Without this setting the tool accepts `h`, `hh`, `hpp`, `hxx`,
+  `h++`, `c`, `cc`, `cpp`, `cxx`, `c++`, `m`, and `mm`.
+- `typedefSuper` (in `[Structure]`): when `super-typedef` adds a private
+  `typedef <Base> super;`, select `always`, `never`, `keep-as-is`, or
+  `if-needed`. The last adds the typedef when the class uses a qualified
+  base member in its body or a related file. Existing typedefs stay in place.
+  A condition may select a value; the default is
+  `isNewClass() && isNeeded() ? always : never`. A class is new when all its
+  lines are selected by `-L` or `--git`. `&&`, `||`, and the conditional
+  choice evaluate only the branches they need.
+- `replaceSuperSites` (in `[Structure]`): a condition selecting base-qualified
+  uses to rewrite through `super::`. Its default is
+  `isNewClass() && hasSuperTypedef()`. `hasSuperTypedef()` also holds when a
+  related header is in the current run and its settings will add the matching
+  typedef. The rule reads related files with the same stem and quoted headers,
+  using `extensions` to select them. A different existing `super` alias is
+  left alone.
 - `refSuffix`: the spacing after the `&` of a named reference declaration:
   any run of spaces and/or tabs to write there, such as `" "` (one space,
   `Type & name`; the default), `"  "` (two), `"\t"` (a tab), or `""` or

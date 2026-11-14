@@ -282,9 +282,16 @@ int enclosingClassBody(const FormatDocument *document, int index)
 */
 QByteArray classNameOf(const FormatDocument *document, int brace)
 {
+    int templateDepth = 0;
     for (int k = document->headStart(brace); k + 1 < brace; ++k) {
         const Token token = document->token(k);
-        if ((token == CLASS
+        if (token == LANGLE) {
+            ++templateDepth;
+        } else if (token == RANGLE) {
+            --templateDepth;
+        } else if (token == GTGT) {
+            templateDepth -= 2;
+        } else if (templateDepth == 0 && (token == CLASS
                 || token == STRUCT)
             && document->token(k + 1) == IDENTIFIER
         ) {

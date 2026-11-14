@@ -74,6 +74,9 @@ public:
     inline int pass() const { return m_pass; }
     inline bool agentMode() const { return m_agentMode; }
     inline const QStringList &includePaths() const { return m_includePaths; }
+    inline const FormatConfig &formatConfig() const { return m_config; }
+    inline void setFormatConfig(const FormatConfig &config) { m_config = config; }
+    inline bool hasSelectedRanges() const { return ! m_ranges.isEmpty(); }
     inline void setIncludePaths(const QStringList & paths) { m_includePaths = paths; }
     QString findInclude(const QString & name) const;
     bool isHeader() const;
@@ -114,6 +117,7 @@ public:
     bool isLineSelected(int line) const;
 
     bool replace(int offset, int length, const QByteArray & text);
+    inline bool canInsert(int offset) const { return this->canReplace(offset, 0); }
     bool replace(
             int offset, int length, const QByteArray & text,
             int otherOffset, int otherLength, const QByteArray & otherText);
@@ -164,6 +168,7 @@ private:
     int m_pass;
     bool m_agentMode;
     QStringList m_includePaths;
+    FormatConfig m_config;
     QList<FormatIssue > m_requests;
     QSet<int > m_replacedLines;
     Symbols m_symbols;

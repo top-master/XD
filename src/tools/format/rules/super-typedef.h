@@ -11,10 +11,11 @@
 class FormatSuperTypedefRule : public FormatNamedRule
 {
     typedef FormatNamedRule super;
+    friend class FormatSuperContext;
 public:
     inline FormatSuperTypedefRule()
         : super("super-typedef",
-                "Gives each class with a base a private typedef <Base> super;.")
+                "Adds a configured super typedef and uses it for base qualifiers.")
     {
     }
 
@@ -24,6 +25,16 @@ private:
     QByteArray baseName(const FormatDocument *document, int brace,
                         bool *isStruct) const;
     bool hasSuper(const FormatDocument *document, int brace) const;
+    bool superIsBase(const FormatDocument *document, int brace,
+                     const QByteArray &base) const;
+    bool isNewClass(const FormatDocument *document, int brace) const;
+    bool isNeeded(const FormatDocument *document, int brace,
+                  const QByteArray &base) const;
+    bool wantsTypedef(const FormatDocument *document, int brace,
+                      const QByteArray &base) const;
+    bool willHaveSuper(const FormatDocument *document, int brace,
+                       const QByteArray &base, const FormatConfig &config) const;
+    void replaceSites(FormatDocument *document) const;
 };
 
 #endif // RULES_SUPER_TYPEDEF_H

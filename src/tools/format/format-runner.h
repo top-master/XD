@@ -11,6 +11,9 @@
 #include <QtCore/QList>
 #include <QtCore/QString>
 #include <QtCore/QStringList>
+#include <QtCore/QScopedPointer>
+
+class QTemporaryDir;
 
 class FormatFileListener
 {
@@ -38,10 +41,15 @@ public:
 
 protected:
     int jobCount(int fileCount) const;
+    bool prepareRun(const QStringList &files, QString *error);
+    QList<FormatFileResult > runFailure(const QStringList &files,
+                                        const QString &error) const;
 
     const Formatter *m_formatter;
     FormatOptions m_options;
     FormatFileListener *m_listener;
+    QScopedPointer<QTemporaryDir > m_snapshotDirectory;
+    bool m_prepared;
 };
 
 #endif // FORMAT_RUNNER_H

@@ -241,6 +241,10 @@ FormatMemberScope FormatScopeConditions::functionScope(int brace)
             const Token token = document->token(k);
             scope.isTemplate = scope.isTemplate || token == TEMPLATE;
             scope.isStatic = scope.isStatic || token == STATIC;
+            if (token == LPAREN && document->match(k) > k) {
+                k = document->match(k);
+                continue;
+            }
             if ( ! scope.isOutline) {
                 if (scope.params < 0
                     && token == IDENTIFIER
@@ -279,7 +283,7 @@ FormatMemberScope FormatScopeConditions::functionScope(int brace)
             if (document->token(member) == TILDE) {
                 ++member;
             }
-            if (document->token(member) == IDENTIFIER
+            if (scope.params < 0 && document->token(member) == IDENTIFIER
                 && document->token(member + 1) == LPAREN
                 && document->token(member + 2) != STAR
             ) {

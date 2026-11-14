@@ -31,9 +31,16 @@ public:
         wrapChainAt = FormatSettings::defaultWrapChainAt();
         wrapArgsAt = FormatSettings::defaultWrapChainAt();
         bodyBraces << QString::fromLatin1("always");
+        extensions = FormatSettings::defaultExtensions();
+        typedefSuper = QString::fromLatin1("isNewClass() && isNeeded() ? always : never");
+        replaceSuperSites = QString::fromLatin1("isNewClass() && hasSuperTypedef()");
     }
 
     static QString fileName();
+    static QString defaultExtensions();
+    static QStringList superConditionNames();
+    static QStringList superChoices();
+    bool acceptsFile(const QString &path) const;
     static Config::Schema schema();
     static QStringList defaultThisMode();
     static QStringList defaultWrapChainAt();
@@ -65,6 +72,9 @@ public:
     QStringList thisMode;
     QStringList wrapChainAt;
     QStringList wrapArgsAt;
+    QString extensions;
+    QString typedefSuper;
+    QString replaceSuperSites;
 
 private:
     static FormatSpacing toSpacing(

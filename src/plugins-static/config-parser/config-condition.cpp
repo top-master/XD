@@ -202,6 +202,11 @@ private:
                         return false;
                     }
                     m_program << QString(QLL("f:argcount:%1")).arg(count);
+                } else if (m_names.contains(name) && take(QString(QLL("(")))) {
+                    if ( ! take(QString(QLL(")")))) {
+                        return false;
+                    }
+                    m_program << (QString(QLL("f:")) + name);
                 } else if (name == QLL("true") || name == QLL("false")
                     || m_names.contains(name)
                 ) {
@@ -218,10 +223,20 @@ private:
                 break;
             }
             take(op);
+            int jump = -1;
+            if (op == QLL("&&") || op == QLL("||")) {
+                jump = m_program.size();
+                m_program << QString();
+            }
             if ( ! expression(rank)) {
                 return false;
             }
             m_program << (QString(QLL("op:")) + op);
+            if (jump >= 0) {
+                m_program[jump] = QString(op == QLL("&&")
+                    ? QLL("jfalse:") : QLL("jtrue:"))
+                    + QString::number(m_program.size());
+            }
         }
         return true;
     }
@@ -234,6 +249,11 @@ private:
 };
 
 } // namespace
+
+bool Config::Condition::Context::predicate(const QString &, bool *) const
+{
+    return false;
+}
 
 /*!
     @class Config::Condition
@@ -351,7 +371,14 @@ bool Config::Condition::compile(
             );
         }
     }
-    if (input.contains(QLL("argcount"), Qt::CaseInsensitive)
+    QString functionCheck = input;
+    for (int i = functionCheck.size() - 1; i >= 0; --i) {
+        if (functionCheck.at(i).isSpace()) {
+            functionCheck.remove(i, 1);
+        }
+    }
+    if (functionCheck.contains(QLL("()"))
+        || input.contains(QLL("argcount"), Qt::CaseInsensitive)
         || input.contains(QLL("value"), Qt::CaseInsensitive)
         || input.contains(QLL("spaceremaining"), Qt::CaseInsensitive)
         || input.contains(QLL("space_remaining"), Qt::CaseInsensitive)
@@ -420,11 +447,15 @@ bool Config::Condition::compile(
                         .arg(name);
                     return false;
                 }
-            } else if (name != QLL("true") && name != QLL("false")
-                && ! names.contains(name)
-            ) {
-                *error = QString(QLL("unknown name %1")).arg(name);
-                return false;
+            } else if (name != QLL("true") && name != QLL("false")) {
+                bool known = false;
+                for (int n = 0; n < names.size(); ++n) {
+                    known = known || canonicalName(name) == canonicalName(names.at(n));
+                }
+                if ( ! known) {
+                    *error = QString(QLL("unknown name %1")).arg(name);
+                    return false;
+                }
             }
             *program << name;
             expectOperand = false;
@@ -655,6 +686,36 @@ bool Config::Condition::evaluate(
             const int argument = count == 2 ? int(stack.takeLast().number) : 0;
             const int depth = int(stack.takeLast().number);
             stack << Operand(context->argumentCount(depth, argument));
+        } else if (item.startsWith(QLL("f:"))) {
+            bool value = false;
+            if ( ! context || ! context->predicate(item.mid(2), &value)) {
+                if (ok) {
+                    *ok = false;
+                }
+                return false;
+            }
+            stack << Operand(value);
+        } else if (item.startsWith(QLL("jfalse:"))
+            || item.startsWith(QLL("jtrue:"))
+        ) {
+            if (stack.isEmpty()
+                || (stack.last().percent
+                    && ! normalized.contains(QString(QLL("percent"))))
+            ) {
+                if (ok) {
+                    *ok = false;
+                }
+                return false;
+            }
+            const Operand left = stack.last();
+            const bool value = left.percent
+                ? normalized.value(QString(QLL("percent"))) > left.number
+                : left.number != 0;
+            const bool jumpWhenTrue = item.startsWith(QLL("jtrue:"));
+            if (value == jumpWhenTrue) {
+                stack.last() = Operand(value);
+                i = item.mid(jumpWhenTrue ? 6 : 7).toInt() - 1;
+            }
         } else if (item.startsWith(QLL("op:"))) {
             const QString op = item.mid(3);
             if (stack.isEmpty()) {

@@ -6,10 +6,14 @@
 #include "./parser/scope-conditions.h"
 
 #include "config-any-space.h"
+#include "config-choice.h"
 #include "config-condition.h"
 #include "config-numbers.h"
 #include "config-regexp.h"
 #include "config-word.h"
+
+#include <QtCore/QFileInfo>
+#include <QtCore/QRegularExpression>
 
 /*!
     @class FormatSettings
@@ -112,6 +116,116 @@ QString FormatSettings::fileName()
     return QString(QLL(".formatrc"));
 }
 
+QString FormatSettings::defaultExtensions()
+{
+    return QString(QLL("h,hh,hpp,hxx,h++,c,cc,cpp,cxx,c++,m,mm"));
+}
+
+QStringList FormatSettings::superConditionNames()
+{
+    return QStringList() << QString(QLL("isNewClass")) << QString(QLL("isNeeded"))
+        << QString(QLL("hasSuperTypedef"));
+}
+
+QStringList FormatSettings::superChoices()
+{
+    return QStringList() << QString(QLL("always")) << QString(QLL("never"))
+        << QString(QLL("keep-as-is")) << QString(QLL("if-needed"));
+}
+
+static bool extensionPattern(const QString &text, QRegularExpression *pattern)
+{
+    QString value = text.trimmed();
+    if (value.startsWith(QLL("regexp/")) && value.endsWith(QLatin1Char('/'))) {
+        value = value.mid(7, value.size() - 8);
+    } else if (value.startsWith(QLatin1Char('/')) && value.endsWith(QLatin1Char('/'))
+               && value.size() >= 2) {
+        value = value.mid(1, value.size() - 2);
+    } else if (value.startsWith(QLL("regexp:"))) {
+        value.remove(0, 7);
+    } else if (value.contains(QLatin1Char('^')) || value.contains(QLatin1Char('$'))
+               || value.contains(QLatin1Char('|')) || value.contains(QLatin1Char('('))
+               || value.contains(QLatin1Char('\\')) || value.contains(QLatin1Char('?'))
+               || value.contains(QLatin1Char('{')) || value.contains(QLL(".*"))
+               || value.contains(QLL(".+"))) {
+    } else {
+        return false;
+    }
+    *pattern = QRegularExpression(value, QRegularExpression::CaseInsensitiveOption);
+    return true;
+}
+
+static QStringList extensionList(const QString &text)
+{
+    QString value = text.trimmed();
+    if (value.startsWith(QLatin1Char('[')) && value.endsWith(QLatin1Char(']'))) {
+        value = value.mid(1, value.size() - 2);
+    }
+    QStringList extensions = value.split(QLatin1Char(','), QString::SkipEmptyParts);
+    for (int i = 0; i < extensions.size(); ++i) {
+        QString extension = extensions.at(i).trimmed();
+        if (extension.size() >= 2
+            && ((extension.startsWith(QLatin1Char('"')) && extension.endsWith(QLatin1Char('"')))
+                || (extension.startsWith(QLatin1Char('\'')) && extension.endsWith(QLatin1Char('\''))))
+        ) {
+            extension = extension.mid(1, extension.size() - 2);
+        }
+        if (extension.startsWith(QLL("*."))) {
+            extension.remove(0, 2);
+        } else if (extension.startsWith(QLatin1Char('.'))) {
+            extension.remove(0, 1);
+        }
+        extensions[i] = extension.toLower();
+    }
+    return extensions;
+}
+
+class FormatExtensionsMatcher : public Config::ValueMatcher
+{
+public:
+    bool match(const QString &value, QString *matched) const Q_DECL_OVERRIDE
+    {
+        QRegularExpression pattern;
+        if (extensionPattern(value, &pattern)) {
+            if ( ! pattern.isValid()) {
+                return false;
+            }
+        } else {
+            const QStringList extensions = extensionList(value);
+            if (extensions.isEmpty() && value.trimmed() != QLL("[]")) {
+                return false;
+            }
+            for (int i = 0; i < extensions.size(); ++i) {
+                if (extensions.at(i).isEmpty()
+                    || extensions.at(i).contains(QLatin1Char('/'))
+                    || extensions.at(i).contains(QLatin1Char('['))
+                    || extensions.at(i).contains(QLatin1Char(']'))
+                ) {
+                    return false;
+                }
+            }
+        }
+        *matched = value;
+        return true;
+    }
+
+    QString describe() const Q_DECL_OVERRIDE
+    {
+        return QString(QLL("a list of extensions or a /regular expression/"));
+    }
+};
+
+bool FormatSettings::acceptsFile(const QString &path) const
+{
+    const QFileInfo info(path);
+    QRegularExpression pattern;
+    if (extensionPattern(this->extensions, &pattern)) {
+        return pattern.match(info.fileName()).hasMatch()
+            || pattern.match(info.suffix()).hasMatch();
+    }
+    return extensionList(this->extensions).contains(info.suffix().toLower());
+}
+
 /*!
     Builds the schema of the settings the tool takes, each at its default.
 */
@@ -136,8 +250,23 @@ Config::Schema FormatSettings::schema()
         aliases
     );
     Config::Schema schema;
+    Config::Section general(QString(QLL("General")));
+    general.addKey(QString(QLL("extensions")),
+                   Config::Matchers() << QSharedPointer<const Config::ValueMatcher >(
+                       new FormatExtensionsMatcher),
+                   FormatSettings::defaultExtensions());
+    schema.addSection(general);
     schema.addSection(types);
     Config::Section structure(QString(QLL("Structure")));
+    structure.addKey(QString(QLL("typedefSuper")),
+                     Config::Matchers() << QSharedPointer<const Config::ValueMatcher >(
+                         new Config::Choice(FormatSettings::superConditionNames(),
+                                            FormatSettings::superChoices())),
+                     QString(QLL("isNewClass() && isNeeded() ? always : never")));
+    structure.addKey(QString(QLL("replaceSuperSites")),
+                     Config::Matchers() << Config::Condition::create(
+                         FormatSettings::superConditionNames()),
+                     QString(QLL("isNewClass() && hasSuperTypedef()")));
     structure.addKey(QString(QLL("wrapBegin")),
                      Config::Matchers() << Config::Numbers::create(20, 200), QString(QLL("75")));
     structure.addKey(QString(QLL("wrapMax")),
@@ -323,6 +452,9 @@ bool FormatSettings::readParser(const QString &path, const FormatConfig &config,
 void FormatSettings::fromParser(const Config::Parser &parser,
                                 FormatSettings *settings)
 {
+    settings->extensions = parser.value(QString(QLL("general.extensions")));
+    settings->typedefSuper = parser.value(QString(QLL("structure.typedefSuper")));
+    settings->replaceSuperSites = parser.value(QString(QLL("structure.replaceSuperSites")));
     const Config::Schema &schema = parser.schema();
     const QString refSuffix = QString(QLL("types.refSuffix"));
     const QString moveSuffix = QString(QLL("types.moveSuffix"));

@@ -33,6 +33,10 @@ FormatProcessRunner::FormatProcessRunner(const Formatter *formatter, const Forma
 */
 QList<FormatFileResult > FormatProcessRunner::run(const QStringList & files)
 {
+    QString error;
+    if ( ! this->prepareRun(files, &error)) {
+        return this->runFailure(files, error);
+    }
     // Starts no child for no files, since a child given none fails as a
     // command line without paths.
     if (files.isEmpty()) {
@@ -159,7 +163,7 @@ QStringList FormatProcessRunner::workerArguments() const
     for (int i = 0; i < this->m_options.lineSpecs.size(); ++i) {
         arguments << QString(QLL("-L")) << this->m_options.lineSpecs.at(i);
     }
-    if ( ! this->m_options.git.isEmpty()) {
+    if ( ! this->m_options.git.isEmpty() && this->m_options.config.snapshotManifest.isEmpty()) {
         arguments << QString(QLL("--git")) << this->m_options.git;
     }
     if ( ! this->m_options.rules.isEmpty()) {
@@ -176,6 +180,9 @@ QStringList FormatProcessRunner::workerArguments() const
         arguments << QString(QLL("--verbose"));
     }
     const FormatConfig & config = this->m_options.config;
+    if ( ! config.snapshotManifest.isEmpty()) {
+        arguments << QString(QLL("--snapshot-manifest")) << config.snapshotManifest;
+    }
     if ( ! config.file.isEmpty()) {
         arguments << QString(QLL("--config-file")) << config.file;
     }

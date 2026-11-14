@@ -434,6 +434,13 @@ int FormatDocument::headStart(int index) const
     int start = index;
     while (start > 0) {
         const Token before = this->token(start - 1);
+        if (before == RBRACE) {
+            const int opener = this->match(start - 1);
+            if (opener >= 0 && this->braceScope(opener) == InitScope) {
+                start = opener;
+                continue;
+            }
+        }
         if (before == SEMIC || before == LBRACE || before == RBRACE
             || this->isDirectiveLine(this->symbolLine(start - 1))
         ) {
@@ -469,6 +476,7 @@ FormatDocument::Scope FormatDocument::classifyBrace(
     bool hasEnum = false;
     bool hasNamespace = false;
     bool hasExtern = false;
+    bool hasColon = false;
     for (int i = start; i < index; ++i) {
         const Token token = this->token(i);
         if (token == LPAREN) {
@@ -493,6 +501,8 @@ FormatDocument::Scope FormatDocument::classifyBrace(
             hasNamespace = true;
         } else if (token == EQ) {
             hasAssign = true;
+        } else if (token == COLON) {
+            hasColon = true;
         } else if (token == EXTERN
             && this->token(i + 1) == STRING_LITERAL
         ) {
@@ -533,6 +543,9 @@ FormatDocument::Scope FormatDocument::classifyBrace(
     }
     if (hasClassKey) {
         return ClassScope;
+    }
+    if (last == IDENTIFIER && hasParen && hasColon) {
+        return InitScope;
     }
     if (hasParen) {
         return FunctionScope;

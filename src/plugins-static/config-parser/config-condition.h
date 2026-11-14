@@ -21,6 +21,7 @@ public:
     public:
         virtual ~Context() {}
         virtual qreal argumentCount(int depth, int argument) const = 0;
+        virtual bool predicate(const QString &name, bool *value) const;
     };
     explicit Condition(const QStringList & names, bool takesPercents = false);
     static QSharedPointer<const ValueMatcher > create(

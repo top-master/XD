@@ -18,6 +18,7 @@
 #include <QtCore/QCommandLineParser>
 #include <QtCore/QCoreApplication>
 #include <QtCore/QDir>
+#include <QtCore/QDataStream>
 #include <QtCore/QFile>
 #include <QtCore/QFileInfo>
 #include <QtCore/QProcess>
@@ -106,18 +107,20 @@ static QStringList logicalPaths(const QStringList & paths)
     return resolved;
 }
 
-/*!
-    Builds the name filters of the C, C++, Objective-C and Objective-C++
-    files a folder scan formats.
-*/
-static QStringList sourceFilters()
+static bool matchesSource(const QString &path, const FormatConfig &config,
+                          QHash<QString, FormatSettings > *cache,
+                          bool *matches, QString *error)
 {
-    QStringList filters;
-    filters << QString(QLL("*.h")) << QString(QLL("*.hh")) << QString(QLL("*.hpp"))
-        << QString(QLL("*.hxx")) << QString(QLL("*.c")) << QString(QLL("*.cc"))
-        << QString(QLL("*.cpp")) << QString(QLL("*.cxx")) << QString(QLL("*.m"))
-        << QString(QLL("*.mm"));
-    return filters;
+    const QString directory = QFileInfo(path).absolutePath();
+    if ( ! cache->contains(directory)) {
+        FormatSettings settings;
+        if ( ! FormatSettings::load(path, config, &settings, error)) {
+            return false;
+        }
+        cache->insert(directory, settings);
+    }
+    *matches = cache->value(directory).acceptsFile(path);
+    return true;
 }
 
 /*!
@@ -736,6 +739,12 @@ int main(int argc, char *argv[])
         QString(QLL("Prints the results for a parent format process (internal)."))
     );
     parser.addOption(workerOption);
+    QCommandLineOption snapshotOption(
+        QStringList() << QString(QLL("snapshot-manifest")),
+        QString(QLL("Reads the parent formatting run's file snapshots (internal).")),
+        QString(QLL("file"))
+    );
+    parser.addOption(snapshotOption);
     parser.addPositionalArgument(
         QString(QLL("paths")),
         QString(QLL("The files, and the directories (ending with / or \\), to format.")),
@@ -782,6 +791,20 @@ int main(int argc, char *argv[])
     // Reads the settings over the `.formatrc` files; a short `-c=<setting>`
     // hands its `=` on as the first character of the value.
     FormatConfig config;
+    if (parser.isSet(snapshotOption)) {
+        QFile manifest(parser.value(snapshotOption));
+        if ( ! parser.isSet(workerOption) || ! manifest.open(QIODevice::ReadOnly)) {
+            logger.logError(QString(QLL("cannot read the formatting snapshot manifest")));
+            return ExitError;
+        }
+        QDataStream input(&manifest);
+        input >> config.scheduledFiles >> config.snapshots >> config.fileLineSpecs >> config.lineSpecs;
+        if (input.status() != QDataStream::Ok) {
+            logger.logError(QString(QLL("invalid formatting snapshot manifest")));
+            return ExitError;
+        }
+        config.snapshotManifest = parser.value(snapshotOption);
+    }
     config.file = logicalPath(parser.value(configFileOption));
     config.adds = logicalPaths(parser.values(configAddOption));
     const QStringList includes = logicalPaths(parser.values(includeOption));
@@ -790,9 +813,7 @@ int main(int argc, char *argv[])
             << QDir::cleanPath(QFileInfo(includes.at(i)).absoluteFilePath());
     }
 
-    // Learns the files and the include folders of each project from qmake,
-    // for the first spec now; a thread reads the other specs once the
-    // formatting starts.
+    // Learns the files and include folders of each project from qmake.
     const QStringList projects = logicalPaths(parser.values(projectOption));
     const QString qmake = parser.isSet(qmakeOption)
         ? logicalPath(parser.value(qmakeOption)) : defaultQmake();
@@ -821,6 +842,12 @@ int main(int argc, char *argv[])
     }
     if (projects.isEmpty() || specs.size() == 1) {
         projectFiles.finish();
+    } else {
+        reader.readFrom(1);
+        if ( ! reader.error().isEmpty()) {
+            logger.logError(reader.error());
+            return ExitError;
+        }
     }
     const QStringList projectFolders = projectFiles.includePaths();
     for (int i = 0; i < projectFolders.size(); ++i) {
@@ -892,6 +919,7 @@ int main(int argc, char *argv[])
         files.append(path);
         ignores.addExplicitPath(path);
     }
+    QHash<QString, FormatSettings > sourceSettings;
     for (int i = 0; i < folders.size(); ++i) {
         ignores.addExplicitPath(folders.at(i));
     }
@@ -968,20 +996,38 @@ int main(int argc, char *argv[])
     }
     for (int i = 0; i < folders.size(); ++i) {
         const QString root = QDir::cleanPath(folders.at(i));
-        const QStringList found = ignores.findFiles(root, sourceFilters());
+        const QStringList found = ignores.findFiles(root, QStringList() << QString(QLL("*")));
 
         // Names the files the way the folder was named on the command line.
         const QString absolute = QDir::cleanPath(
             QFileInfo(root).absoluteFilePath()
         );
         for (int f = 0; f < found.size(); ++f) {
-            files.append(root + found.at(f).mid(absolute.size()));
+            bool matches = false;
+            if ( ! matchesSource(found.at(f), config, &sourceSettings, &matches, &error)) {
+                logger.logError(error);
+                return ExitError;
+            }
+            if (matches) {
+                files.append(root + found.at(f).mid(absolute.size()));
+            }
         }
     }
 
     // Adds the projects' files that the ignore files keep.
-    files
-        << keptProjectFiles(projectFiles.takeUnparsed(false), &ignores, files);
+    const QStringList projectSources = keptProjectFiles(
+        projectFiles.takeUnparsed(false), &ignores, files
+    );
+    for (int i = 0; i < projectSources.size(); ++i) {
+        bool matches = false;
+        if ( ! matchesSource(projectSources.at(i), config, &sourceSettings, &matches, &error)) {
+            logger.logError(error);
+            return ExitError;
+        }
+        if (matches) {
+            files << projectSources.at(i);
+        }
+    }
 
     // Adds each source file that the `--git` range changed and the ignore
     // files keep; a worker formats only the files its parent hands it.
@@ -990,7 +1036,12 @@ int main(int argc, char *argv[])
         changed.sort();
         QStringList sources;
         for (int i = 0; i < changed.size(); ++i) {
-            if (QDir::match(sourceFilters(), QFileInfo(changed.at(i)).fileName())) {
+            bool matches = false;
+            if ( ! matchesSource(changed.at(i), config, &sourceSettings, &matches, &error)) {
+                logger.logError(error);
+                return ExitError;
+            }
+            if (matches) {
                 sources << changed.at(i);
             }
         }
@@ -1015,9 +1066,9 @@ int main(int argc, char *argv[])
 
     // Reads the run's options.
     FormatOptions options;
-    options.lineSpecs = parser.values(lineOption);
+    options.lineSpecs = parser.isSet(snapshotOption) ? config.lineSpecs : parser.values(lineOption);
     options.git = parser.value(gitOption);
-    options.fileLineSpecs = gitLineSpecs;
+    options.fileLineSpecs = parser.isSet(snapshotOption) ? config.fileLineSpecs : gitLineSpecs;
     options.rules = rules;
     options.config = config;
     options.config.verbose = parser.isSet(verboseOption);
@@ -1054,57 +1105,13 @@ int main(int argc, char *argv[])
         return ExitError;
     }
 
-    // Formats the files while the thread reads the projects for the others
-    // of the specs, if any.
-#ifndef QT_NO_THREAD
-    if ( ! projectFiles.isFinished()) {
-        reader.start();
-    }
-#else
-    if ( ! projectFiles.isFinished()) {
-        reader.readFrom(1);
-    }
-#endif
+    // Formats the files after every project spec has supplied its files.
     runner->setListener(&listener);
     QList<FormatFileResult > results = qMove(runner->run(files));
     if (parser.isSet(workerOption)) {
         return ExitClean;
     }
 
-    // Formats the files that the other specs add, batch by batch, each with
-    // the include folders found so far.
-    QStringList formatted = files;
-    for (;;) {
-        const QStringList taken = projectFiles.takeUnparsed(true);
-        if (taken.isEmpty()) {
-            break;
-        }
-        const QStringList batch = keptProjectFiles(
-            taken,
-            &ignores,
-            formatted
-        );
-        if (batch.isEmpty()) {
-            continue;
-        }
-        const QStringList found = projectFiles.includePaths();
-        for (int i = 0; i < found.size(); ++i) {
-            if ( ! options.config.includePaths.contains(found.at(i))) {
-                options.config.includePaths << found.at(i);
-            }
-        }
-        runner.reset(FormatRunner::create(
-            parser.value(runnerOption),
-            &formatter,
-            options
-        ));
-        runner->setListener(&listener);
-        results << runner->run(batch);
-        formatted << batch;
-    }
-#ifndef QT_NO_THREAD
-    reader.wait();
-#endif
     int code = listener.code;
     if ( ! reader.error().isEmpty()) {
         logger.logError(reader.error());
