@@ -113,7 +113,7 @@ FormatResult Formatter::format(const QByteArray & text, const QString & path,
         return result;
     }
     document.setSettings(settings);
-    if (text.contains("Format rule")
+    if ((text.contains("Format rule") || text.contains('@'))
         && ! document.setInlineConfiguration(config, &result.error)
     ) {
         return result;
@@ -167,7 +167,7 @@ FormatResult Formatter::format(const QByteArray & text, const QString & path,
     result.changed = result.text != text;
     result.issues = document.issues();
     result.requests = document.requests();
-    if (text.contains("Format rule")) {
+    if (document.hasInlineConfiguration()) {
         result.warnings = document.inlineWarnings(config.verbose);
     }
     return result;

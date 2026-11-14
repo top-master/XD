@@ -47,6 +47,8 @@ public:
     inline const FormatSettings &settings() const { return m_settings; }
     const FormatSettings &settingsAt(int offset) const;
     bool setInlineConfiguration(const FormatConfig &config, QString *error);
+    inline bool hasInlineConfiguration() const { return m_inlineConfigured; }
+    inline bool hasDisabledFormatting() const { return ! m_disabledRanges.isEmpty(); }
     inline QString inlineConfigurationError() const { return m_inlineError; }
     QList<FormatIssue > inlineWarnings(bool verbose) const;
     inline void setSettings(const FormatSettings & settings)
@@ -54,6 +56,7 @@ public:
         m_settings = settings;
         m_settingsRegions.clear();
         m_inlineRanges.clear();
+        m_disabledRanges.clear();
         m_inlineConfigured = false;
         m_inlineError.clear();
         m_ruleCaches.clear();
@@ -102,6 +105,7 @@ public:
     int commentEndLine(int index) const;
     bool isProtectedComment(int index) const;
     bool isInlineConfigComment(int index) const;
+    bool isFormattingDisabled(int offset) const;
     bool hasCommentBetween(int from, int to) const;
     bool isOnlyWhitespace(int from, int to) const;
 
@@ -151,6 +155,7 @@ private:
     FormatSettings m_settings;
     QVector<QPair<int, FormatSettings > > m_settingsRegions;
     QVector<QPair<int, int > > m_inlineRanges;
+    QVector<QPair<int, int > > m_disabledRanges;
     FormatConfig m_inlineConfig;
     bool m_inlineConfigured;
     QString m_inlineError;

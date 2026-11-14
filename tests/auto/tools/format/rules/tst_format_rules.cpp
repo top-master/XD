@@ -55,6 +55,13 @@ private slots:
     void testInlineWarnings_shouldRoundTripThroughWorker();
     void testInlineSettings_shouldPreserveAdjacentCommentFormatting();
     void testInlineSettings_shouldRespectSelectedLines();
+    void testFormatterAliases_shouldApplyScopesAndWhitespace();
+    void testFormatterAliases_shouldProtectDisabledText();
+    void testFormatterAliases_shouldDisableThroughEndOfFile();
+    void testFormatterAliases_shouldSuppressReportsWhileOff();
+    void testFormatterAliases_shouldWarnForInvalidCommand();
+    void testFormatterAliases_shouldReportAfterInlineEnable();
+    void testFormatterAliases_shouldFormatAfterInlineEnable();
     void testApplyEdits_shouldMoveRangesAndIssues();
 
     /// Line ranges.
@@ -361,6 +368,167 @@ void tst_FormatRules::testInlineSettings_shouldRespectSelectedLines()
     QCOMPARE(result.text.count(call), 1);
     QVERIFY(result.text.contains("    sendValues(\n"));
     QVERIFY(result.text.contains("// Format rule: structure.wrapMax=40\n"));
+}
+
+void tst_FormatRules::testFormatterAliases_shouldApplyScopesAndWhitespace()
+{
+    Formatter formatter;
+    const QByteArray text(
+        "int before;\n"
+        "// @ \xc2\xa0" "formatter : structure.wrapMax \t =  66\n"
+        "int permanent;\n"
+        "// @formatter.push: `structure.wrapMax = 50`\n"
+        "int pushed;\n"
+        "// @formatter.pop.\n"
+        "int popped;\n"
+        "// @formatter.begin: structure.wrapMax = 40\n"
+        "int begun;\n"
+        "// @formatter.end\n"
+        "int ended;\n"
+        "// @formatter: types.refSuffix = \"  \"\n"
+        "int quoted;\n"
+        "// @formatter:\n// ```\n// [Structure]\n// wrapBegin = \t 41\n// ```\n"
+        "int fenced;\n"
+    );
+    FormatDocument document(text);
+    QString error;
+    QVERIFY2(document.setInlineConfiguration(FormatConfig(), &error), qPrintable(error));
+    QCOMPARE(document.settingsAt(text.indexOf("int before")).wrapMax, 80);
+    QCOMPARE(document.settingsAt(text.indexOf("int permanent")).wrapMax, 66);
+    QCOMPARE(document.settingsAt(text.indexOf("int pushed")).wrapMax, 50);
+    QCOMPARE(document.settingsAt(text.indexOf("int popped")).wrapMax, 66);
+    QCOMPARE(document.settingsAt(text.indexOf("int begun")).wrapMax, 40);
+    QCOMPARE(document.settingsAt(text.indexOf("int ended")).wrapMax, 66);
+    QCOMPARE(document.settingsAt(text.indexOf("int quoted")).refSuffix.text, QByteArray("  "));
+    QCOMPARE(document.settingsAt(text.indexOf("int fenced")).wrapBegin.first(), 41);
+    Config::Lines quoted;
+    quoted.appendCompact("sample.name = \"left  \\\"  right\"");
+    QCOMPARE(quoted.text(), QByteArray("sample.name=\"left  \\\"  right\""));
+}
+
+void tst_FormatRules::testFormatterAliases_shouldProtectDisabledText()
+{
+    Formatter formatter;
+    QString error;
+    QVERIFY(formatter.selectRules(QStringList() << QLL("line-join") << QLL("comment-case"), &error));
+    const QByteArray text(
+        "void run()\n{\n"
+        "// @formater: off\n"
+        "// stays lowercase.\n"
+        "int first = (one\n    + two);\n"
+        "// @formatter: off\n"
+        "// @formatter: structure.target=any\n"
+        "// @formatter.push: structure.wrapMax=50\n"
+        "// Format rule: structure.wrapBegin=35\n"
+        "// @formatter: on\n"
+        "// changes lowercase.\n"
+        "int second = (three\n    + four);\n"
+        "// @formatter.end\n"
+        "int after;\n"
+        "}\n"
+    );
+    const FormatResult result = formatter.format(text, QString(), QStringList());
+    QVERIFY2(result.error.isEmpty(), qPrintable(result.error));
+    QVERIFY(result.warnings.isEmpty());
+    FormatConfig verboseConfig;
+    verboseConfig.verbose = true;
+    const FormatResult verbose = formatter.format(text, QString(), QStringList(), verboseConfig);
+    QVERIFY2(verbose.error.isEmpty(), qPrintable(verbose.error));
+    QCOMPARE(verbose.text, result.text);
+    QCOMPARE(verbose.warnings.size(), 3);
+    QCOMPARE(verbose.warnings.at(0).line, 8);
+    QCOMPARE(verbose.warnings.at(1).line, 9);
+    QCOMPARE(verbose.warnings.at(2).line, 10);
+    QVERIFY(verbose.warnings.at(0).message.contains(QLL("applied")));
+    QVERIFY(verbose.warnings.at(1).message.contains(QLL("applied")));
+    QVERIFY(verbose.warnings.at(2).message.contains(QLL("applied")));
+    QVERIFY(result.text.contains("// stays lowercase.\n"));
+    QVERIFY(result.text.contains("int first = (one\n    + two);"));
+    QVERIFY(result.text.contains("// @formatter: structure.target=any\n"));
+    QVERIFY(result.text.contains("// Changes lowercase.\n"));
+    QVERIFY(result.text.contains("int second = (three + four);"));
+    FormatDocument document(text);
+    QVERIFY2(document.setInlineConfiguration(FormatConfig(), &error), qPrintable(error));
+    QCOMPARE(document.settingsAt(text.indexOf("int second")).wrapMax, 50);
+    QCOMPARE(document.settingsAt(text.indexOf("int after")).wrapMax, 80);
+    QCOMPARE(document.settingsAt(text.indexOf("int after")).wrapBegin.first(), 35);
+    const FormatResult again = formatter.format(result.text, QString(), QStringList());
+    QVERIFY2(again.error.isEmpty(), qPrintable(again.error));
+    QCOMPARE(again.text, result.text);
+}
+
+void tst_FormatRules::testFormatterAliases_shouldDisableThroughEndOfFile()
+{
+    Formatter formatter;
+    QString error;
+    QVERIFY(formatter.selectRules(QStringList() << QLL("comment-case"), &error));
+    const QByteArray text("// @formatter: off\n// keep lowercase.\n");
+    const FormatResult result = formatter.format(text, QString(), QStringList());
+    QVERIFY2(result.error.isEmpty(), qPrintable(result.error));
+    QCOMPARE(result.text, text);
+}
+
+void tst_FormatRules::testFormatterAliases_shouldSuppressReportsWhileOff()
+{
+    Formatter formatter;
+    QString error;
+    QVERIFY(formatter.selectRules(QStringList() << QLL("em-dash"), &error));
+    const QByteArray text(
+        "// @formatter: off\n"
+        "// ignored \xe2\x80\x94 text.\n"
+        "// @formatter: on\n"
+        "// reported \xe2\x80\x94 text.\n"
+    );
+    const FormatResult result = formatter.format(text, QString(), QStringList());
+    QVERIFY2(result.error.isEmpty(), qPrintable(result.error));
+    QCOMPARE(result.issues.size(), 1);
+    QCOMPARE(result.issues.first().line, 4);
+}
+
+void tst_FormatRules::testFormatterAliases_shouldWarnForInvalidCommand()
+{
+    Formatter formatter;
+    QString error;
+    QVERIFY(formatter.selectRules(QStringList() << QLL("line-join"), &error));
+    const QByteArray text("// @formatter: disable\nint value;\n");
+    const FormatResult result = formatter.format(text, QString(), QStringList());
+    QVERIFY2(result.error.isEmpty(), qPrintable(result.error));
+    QCOMPARE(result.text, text);
+    QCOMPARE(result.warnings.size(), 1);
+    QCOMPARE(result.warnings.first().line, 1);
+    QVERIFY(result.warnings.first().message.contains(QLL("invalid config")));
+    QVERIFY(result.warnings.first().message.contains(QLL("@formatter: off")));
+}
+
+void tst_FormatRules::testFormatterAliases_shouldReportAfterInlineEnable()
+{
+    Formatter formatter;
+    QString error;
+    QVERIFY(formatter.selectRules(QStringList() << QLL("em-dash"), &error));
+    const QByteArray text(
+        "// @formatter: off\n"
+        "const char *first = \"\xe2\x80\x94\"; /* @formatter: on */ "
+        "const char *second = \"\xe2\x80\x94\";\n"
+    );
+    const FormatResult result = formatter.format(text, QString(), QStringList());
+    QVERIFY2(result.error.isEmpty(), qPrintable(result.error));
+    QCOMPARE(result.issues.size(), 1);
+    QCOMPARE(result.issues.first().line, 2);
+}
+
+void tst_FormatRules::testFormatterAliases_shouldFormatAfterInlineEnable()
+{
+    Formatter formatter;
+    QString error;
+    QVERIFY(formatter.selectRules(QStringList() << QLL("line-join"), &error));
+    const QByteArray text(
+        "// @formatter: off\n"
+        "// @formatter: structure.target=any\n"
+        "/* @formatter: on */ int value = (first\n    + second);\n"
+    );
+    const FormatResult result = formatter.format(text, QString(), QStringList());
+    QVERIFY2(result.error.isEmpty(), qPrintable(result.error));
+    QVERIFY(result.text.contains("/* @formatter: on */ int value = (first + second);"));
 }
 
 void tst_FormatRules::testSettings_shouldReadInlineIni()

@@ -9,6 +9,7 @@
 #include <QtCore/QDir>
 #include <QtCore/QFileInfo>
 #include <QtCore/QRegularExpression>
+#include <algorithm>
 
 /*!
     @class FormatDocument
@@ -61,6 +62,33 @@ bool FormatDocument::setInlineConfiguration(const FormatConfig &config,
                                              QString *error)
 {
     const QList<FormatConfigDirective > directives = configDirectives(this);
+    if (directives.isEmpty()) {
+        m_settingsRegions.clear();
+        m_inlineRanges.clear();
+        m_disabledRanges.clear();
+        m_inlineConfigured = false;
+        m_inlineError.clear();
+        m_ruleCaches.clear();
+        return true;
+    }
+    QVector<QPair<int, int > > disabledRanges;
+    bool disabledActive = false;
+    int disabledStart = -1;
+    for (int i = 0; i < directives.size(); ++i) {
+        const FormatConfigDirective &directive = directives.at(i);
+        if (directive.kind == FormatConfigDirective::Off) {
+            if ( ! disabledActive) {
+                disabledStart = directive.offset;
+                disabledActive = true;
+            }
+        } else if (directive.kind == FormatConfigDirective::On && disabledActive) {
+            disabledActive = false;
+            disabledRanges.append(qMakePair(disabledStart, directive.endOffset));
+        }
+    }
+    if (disabledActive) {
+        disabledRanges.append(qMakePair(disabledStart, m_text.size() + 1));
+    }
     QVector<bool > matched(directives.size(), false);
     QList<int > openings;
     for (int i = 0; i < directives.size(); ++i) {
@@ -78,7 +106,7 @@ bool FormatDocument::setInlineConfiguration(const FormatConfig &config,
     }
     Config::LayeredParser layers(base);
     QVector<QPair<int, FormatSettings > > regions;
-    QVector<QPair<int, int > > protectedRanges;
+    QVector<QPair<int, int > > protectedRanges = disabledRanges;
     int firstComment = 0;
     for (int i = 0; i < directives.size(); ++i) {
         const FormatConfigDirective &directive = directives.at(i);
@@ -100,8 +128,25 @@ bool FormatDocument::setInlineConfiguration(const FormatConfig &config,
             }
         }
     }
+    std::sort(protectedRanges.begin(), protectedRanges.end());
+    QVector<QPair<int, int > > mergedRanges;
+    for (int i = 0; i < protectedRanges.size(); ++i) {
+        if ( ! mergedRanges.isEmpty()
+            && protectedRanges.at(i).first <= mergedRanges.last().second
+        ) {
+            mergedRanges.last().second = qMax(mergedRanges.last().second, protectedRanges.at(i).second);
+        } else {
+            mergedRanges.append(protectedRanges.at(i));
+        }
+    }
     for (int i = 0; i < directives.size(); ++i) {
         const FormatConfigDirective &directive = directives.at(i);
+        if (directive.kind == FormatConfigDirective::Off
+            || directive.kind == FormatConfigDirective::On
+            || directive.kind == FormatConfigDirective::Invalid
+        ) {
+            continue;
+        }
         if (directive.kind == FormatConfigDirective::Begin) {
             if ( ! matched.at(i)) {
                 continue;
@@ -126,7 +171,8 @@ bool FormatDocument::setInlineConfiguration(const FormatConfig &config,
         regions.append(qMakePair(directive.endOffset, resolved));
     }
     m_settingsRegions = regions;
-    m_inlineRanges = protectedRanges;
+    m_inlineRanges = mergedRanges;
+    m_disabledRanges = disabledRanges;
     m_inlineConfig = config;
     m_inlineConfigured = ! directives.isEmpty();
     m_inlineError.clear();
@@ -145,7 +191,22 @@ QList<FormatIssue > FormatDocument::inlineWarnings(bool verbose) const
     QList<FormatIssue > warnings;
     for (int i = 0; i < directives.size(); ++i) {
         const FormatConfigDirective &directive = directives.at(i);
-        if (directive.kind == FormatConfigDirective::Begin) {
+        if (verbose && this->isFormattingDisabled(directive.offset)) {
+            if (directive.kind == FormatConfigDirective::Add
+                || directive.kind == FormatConfigDirective::Begin
+            ) {
+                const int line = this->lineOf(directive.offset);
+                warnings.append(FormatIssue(line, "format-warning",
+                    QString(QLL("#: format warning: configuration applied inside an off region at line %1."))
+                    .arg(line)));
+            }
+        }
+        if (directive.kind == FormatConfigDirective::Invalid) {
+            const int line = this->lineOf(directive.offset);
+            warnings.append(FormatIssue(line, "format-warning",
+                QString(QLL("#: format warning: invalid config detected at line %1. "
+                    "Maybe `@formatter: off` was meant.")).arg(line)));
+        } else if (directive.kind == FormatConfigDirective::Begin) {
             openings.append(i);
         } else if (directive.kind == FormatConfigDirective::End) {
             if (openings.isEmpty()) {
@@ -767,6 +828,12 @@ void FormatDocument::setLineRanges(const QVector<QPair<int, int > > & ranges)
 */
 bool FormatDocument::isLineSelected(int line) const
 {
+    if ( ! m_disabledRanges.isEmpty()
+        && this->isFormattingDisabled(this->lineStart(line))
+        && this->isFormattingDisabled(this->lineEnd(line))
+    ) {
+        return false;
+    }
     if (this->m_ranges.isEmpty()) {
         return true;
     }
@@ -778,6 +845,24 @@ bool FormatDocument::isLineSelected(int line) const
         }
     }
     return false;
+}
+
+/*!
+    Tells whether @a offset is inside a disabled formatting range.
+*/
+bool FormatDocument::isFormattingDisabled(int offset) const
+{
+    int low = 0;
+    int high = m_disabledRanges.size();
+    while (low < high) {
+        const int middle = low + (high - low) / 2;
+        if (m_disabledRanges.at(middle).first <= offset) {
+            low = middle + 1;
+        } else {
+            high = middle;
+        }
+    }
+    return low > 0 && offset < m_disabledRanges.at(low - 1).second;
 }
 
 /*!
@@ -868,7 +953,7 @@ void FormatDocument::report(int offset, const char *rule,
                             const QString & message)
 {
     const int line = this->lineOf(offset);
-    if ( ! this->isLineSelected(line)) {
+    if (this->isFormattingDisabled(offset) || ! this->isLineSelected(line)) {
         return;
     }
     this->m_issues.append(FormatIssue(line, QByteArray(rule), message));
@@ -890,7 +975,8 @@ void FormatDocument::request(
         int lineCount, int columnLimit)
 {
     const int line = this->lineOf(offset);
-    if ( ! this->m_agentMode || ! this->isLineSelected(line)) {
+    if ( ! this->m_agentMode || this->isFormattingDisabled(offset)
+        || ! this->isLineSelected(line)) {
         return;
     }
     const FormatIssue asked(

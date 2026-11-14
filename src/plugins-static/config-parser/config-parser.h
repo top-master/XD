@@ -19,6 +19,7 @@ class Lines
 public:
     inline Lines() {}
     inline void append(const QByteArray &line) { m_lines.append(line); }
+    void appendCompact(const QByteArray &line);
     inline Lines &operator<<(const QByteArray &line) { this->append(line); return *this; }
     inline void clear() { m_lines.clear(); }
     QByteArray text() const;

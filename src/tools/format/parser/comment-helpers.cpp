@@ -261,11 +261,12 @@ QList<FormatConfigDirective > configDirectives(const FormatDocument *document)
             ) {
                 break;
             }
-            const QByteArray text = lines.at(lineIndex).text.trimmed();
+            const QByteArray text = QString::fromUtf8(lines.at(lineIndex).text).trimmed().toUtf8();
             FormatConfigDirective directive;
             directive.offset = lines.at(lineIndex).offset;
             directive.endOffset = directive.offset + lines.at(lineIndex).text.size();
             int prefix = 0;
+            bool formatterAlias = false;
             if (text.startsWith("Format rule begin:")) {
                 directive.kind = FormatConfigDirective::Begin;
                 prefix = sizeof("Format rule begin:") - 1;
@@ -276,16 +277,50 @@ QList<FormatConfigDirective > configDirectives(const FormatDocument *document)
                 directive.kind = FormatConfigDirective::End;
                 directives.append(directive);
                 continue;
+            } else if (text.startsWith('@')) {
+                const int colon = text.indexOf(':');
+                QByteArray name = colon >= 0 ? text.left(colon) : text;
+                Config::Lines compactName;
+                compactName.appendCompact(name);
+                name = compactName.text();
+                if (name.endsWith('.')) {
+                    name.chop(1);
+                }
+                if (name.startsWith("@formater")) {
+                    name.replace(0, sizeof("@formater") - 1, "@formatter");
+                }
+                if (colon < 0 && (name == "@formatter.pop" || name == "@formatter.end")) {
+                    directive.kind = FormatConfigDirective::End;
+                    directives.append(directive);
+                    continue;
+                }
+                if (colon < 0) {
+                    continue;
+                }
+                if (name == "@formatter") {
+                    directive.kind = FormatConfigDirective::Add;
+                } else if (name == "@formatter.push" || name == "@formatter.begin") {
+                    directive.kind = FormatConfigDirective::Begin;
+                } else {
+                    continue;
+                }
+                prefix = colon + 1;
+                formatterAlias = true;
             } else {
                 continue;
             }
-            QByteArray body = text.mid(prefix).trimmed();
+            QByteArray body = QString::fromUtf8(text.mid(prefix)).trimmed().toUtf8();
             if (body.isEmpty() && lineIndex + 1 < lines.size()
-                && lines.at(lineIndex + 1).text.trimmed() == "```"
+                && QString::fromUtf8(lines.at(lineIndex + 1).text).trimmed() == QLL("```")
             ) {
                 int end = lineIndex + 2;
-                while (end < lines.size() && lines.at(end).text.trimmed() != "```") {
-                    directive.lines.append(lines.at(end).text);
+                while (end < lines.size()
+                    && QString::fromUtf8(lines.at(end).text).trimmed() != QLL("```")) {
+                    if (formatterAlias) {
+                        directive.lines.appendCompact(lines.at(end).text);
+                    } else {
+                        directive.lines.append(lines.at(end).text);
+                    }
                     ++end;
                 }
                 if (end < lines.size()) {
@@ -302,7 +337,24 @@ QList<FormatConfigDirective > configDirectives(const FormatDocument *document)
                     body.chop(1);
                     body.remove(0, 1);
                 }
-                directive.lines.append(body);
+                Config::Lines normalized;
+                if (formatterAlias) {
+                    normalized.appendCompact(body);
+                }
+                const QByteArray command = formatterAlias ? normalized.text() : QByteArray();
+                if (formatterAlias && directive.kind == FormatConfigDirective::Add
+                    && (command == "off" || command == "on")
+                ) {
+                    directive.kind = command == "off"
+                        ? FormatConfigDirective::Off : FormatConfigDirective::On;
+                } else if (formatterAlias && ! command.contains('=')) {
+                    directive.kind = FormatConfigDirective::Invalid;
+                    directive.lines = normalized;
+                } else if (formatterAlias) {
+                    directive.lines = normalized;
+                } else {
+                    directive.lines.append(body);
+                }
             }
             directives.append(directive);
         }

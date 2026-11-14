@@ -290,6 +290,36 @@ QByteArray Config::Lines::text() const
     return result;
 }
 
+/*!
+    Adds @a line without whitespace outside quoted values.
+*/
+void Config::Lines::appendCompact(const QByteArray &line)
+{
+    const QString input = QString::fromUtf8(line);
+    QString compact;
+    bool quoted = false;
+    bool escaped = false;
+    for (int i = 0; i < input.size(); ++i) {
+        const QChar value = input.at(i);
+        if (quoted) {
+            compact += value;
+            if (escaped) {
+                escaped = false;
+            } else if (value == QLatin1Char('\\')) {
+                escaped = true;
+            } else if (value == QLatin1Char('"')) {
+                quoted = false;
+            }
+        } else if (value == QLatin1Char('"')) {
+            quoted = true;
+            compact += value;
+        } else if ( ! value.isSpace()) {
+            compact += value;
+        }
+    }
+    this->append(compact.toUtf8());
+}
+
 /*! Builds the layers over the settings in @a base. */
 Config::LayeredParser::LayeredParser(const Parser &base)
     : Parser(base), m_base(base)

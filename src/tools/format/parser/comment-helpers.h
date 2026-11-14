@@ -14,7 +14,7 @@
 
 struct FormatConfigDirective
 {
-    enum Kind { Add, Begin, End };
+    enum Kind { Add, Begin, End, Off, On, Invalid };
     Kind kind;
     int offset;
     int endOffset;

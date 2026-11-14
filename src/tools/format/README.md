@@ -330,6 +330,19 @@ an unmatched begin is ignored and produces a suggestion with `--verbose`.
 These comments override the directory and command-line settings for their
 locations, and the formatter preserves them.
 
+`@formatter:` is an alias for `Format rule:`. It accepts optional backticks
+around a same-line assignment and ignores whitespace outside quoted values.
+`@formatter.push:` and `@formatter.begin:` start a nested override;
+`@formatter.pop.` and `@formatter.end` end it. A fenced block may follow
+the alias in the same way as a `Format rule:` comment.
+
+`@formatter: off` leaves the text through the next `@formatter: on`
+untouched. Configuration directives between the two comments still apply;
+`--verbose` reports them. An `off` without a later `on` leaves the rest of
+the file untouched. An unrecognized bare command produces a warning with an
+`off` suggestion.
+The spelling `@formater:` is accepted too.
+
 ### Replacements by regular expression
 
 A spacing key also takes `regexp/<pattern>/<replacement>/`. On each line where
