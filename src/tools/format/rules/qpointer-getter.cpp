@@ -57,9 +57,12 @@ void FormatQPointerGetterRule::run(FormatDocument *document) const
         ) {
             k += 2;
         }
-        if (document->token(k) == IDENTIFIER && guarded.contains(document->lexem(k))
-            && document->token(k + 1) == DOT && document->token(k + 2) == IDENTIFIER
-            && document->lexem(k + 2) == "data" && document->token(k + 3) == LPAREN
+        if (document->token(k) == IDENTIFIER
+            && guarded.contains(document->lexem(k))
+            && document->token(k + 1) == DOT
+            && document->token(k + 2) == IDENTIFIER
+            && document->lexem(k + 2) == "data"
+            && document->token(k + 3) == LPAREN
             && document->token(k + 4) == RPAREN
         ) {
             document->report(document->symbols().at(i).from, "qpointer-getter",

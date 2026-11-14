@@ -4,10 +4,49 @@
 #include "./line-join.h"
 
 #include "../format-document.h"
-#include "../format-settings.h"
+#include "../format-file-config.h"
 #include "../parser/code-helpers.h"
+#include "../parser/layout-helpers.h"
+#include "../parser/scope-conditions.h"
 
 #include <QtCore/QByteArray>
+
+/*!
+    Tells whether the member chain ending at @a close starts with a
+    parenthesized binary expression. Its member lines can be joined so the
+    shared expression layout can reconsider the whole statement together.
+*/
+static bool followsBinaryGroup(const FormatDocument *document, int close)
+{
+    while (document->token(close) == RPAREN) {
+        const int open = document->match(close);
+        if (open < 0) {
+            return false;
+        }
+        if (document->token(open - 1) != IDENTIFIER) {
+            for (int i = open + 1; i < close; ++i) {
+                const Token token = document->token(i);
+                if ((token == LPAREN || token == LBRACK || token == LBRACE)
+                    && document->match(i) > i
+                ) {
+                    i = document->match(i);
+                } else if (operatorPrecedence(token) > 0
+                    && isOperandEnd(document->token(i - 1))
+                ) {
+                    return true;
+                }
+            }
+        }
+        if (document->token(open - 1) != IDENTIFIER
+            || (document->token(open - 2) != DOT
+                && document->token(open - 2) != ARROW)
+        ) {
+            return false;
+        }
+        close = open - 3;
+    }
+    return false;
+}
 
 /*!
     @class FormatLineJoinRule
@@ -22,12 +61,14 @@
 
     It joins a line break inside a `(`, a `[`, or the `{` of an initializer
     list, and, at the level of a statement, one before a line that a binary
-    operator leads (see isLeadingOperator()), one after an `=`, and one
+    operator leads (see isLeadingOperator()), one in a member chain whose
+    head is a parenthesized binary expression, one after an `=`, and one
     before the `:` of a conditional expression. The break turns into one
     space, or into none right after a `(` or a `[` and right before a `)`, a
     `]`, a `,`, or a `;`. It keeps a break next to a comment or a directive,
-    one between two string literals (which people split on purpose), and
-    each break between the statements of a body.
+    one between two string literals (which people split on purpose), the
+    closing-only line before `&&` or `||`, and each break between the
+    statements of a body.
 
     The rules run one after the other, each one up to 8 passes; hence this
     rule joins once, before the layout rules, and the line breaks that those
@@ -40,6 +81,7 @@
 void FormatLineJoinRule::run(FormatDocument *document) const
 {
     QList<int > brackets;
+    FormatScopeConditions conditions(document);
     int questions = 0;
     for (int i = 0; i + 1 < document->symbols().size(); ++i) {
         // Tracks the brackets still open, and the `?` of the statement
@@ -61,15 +103,52 @@ void FormatLineJoinRule::run(FormatDocument *document) const
         }
 
         // Joins the line break after the token, when there is one.
-        if (document->symbolEndLine(i) >= document->symbolLine(i + 1)
+        const FormatFileConfig &fileConfig = document->configAt(
+            document->symbols().at(i).from
+        );
+        if (fileConfig.codeTarget != FormatFileConfig::CodeTargetAny
+            || document->symbolEndLine(i) >= document->symbolLine(i + 1)
             || ! this->mayJoin(document, i, brackets, questions)
         ) {
             continue;
         }
+        // A conditional argument policy can retain an existing list rather
+        // than having this rule flatten it before the wrapping rules run.
+        if ( ! fileConfig.wrapArgsOverCondition.isEmpty()
+            && ! brackets.isEmpty()
+        ) {
+            const int open = brackets.last();
+            const int close = document->match(open);
+            const Token beforeOpen = document->token(open - 1);
+            if (document->token(open) == LPAREN && close > open
+                && (beforeOpen == IDENTIFIER || beforeOpen == RPAREN
+                    || beforeOpen == RANGLE || beforeOpen == GTGT)
+                && ! conditions.argsOver(
+                    open, splitArguments(document, open, close).size()
+                )
+            ) {
+                continue;
+            }
+        }
+        if ( ! fileConfig.wrapConditionsOverCondition.isEmpty()
+            && ! brackets.isEmpty()
+        ) {
+            const int open = brackets.last();
+            const Token beforeOpen = document->token(open - 1);
+            if (document->token(open) == LPAREN
+                && (beforeOpen == IF || beforeOpen == WHILE)
+                && ! conditions.conditionsOver(
+                    open, conditions.conditionArgumentCount(open, 0)
+                )
+            ) {
+                continue;
+            }
+        }
         const Token after = document->token(i + 1);
         const bool isTight = token == LPAREN || token == LBRACK
             || after == RPAREN || after == RBRACK || after == COMMA
-            || after == SEMIC;
+            || after == SEMIC || token == DOT || token == ARROW
+            || after == DOT || after == ARROW;
         const int from = document->symbolEnd(i);
         document->replace(
             from,
@@ -106,6 +185,21 @@ bool FormatLineJoinRule::mayJoin(
     ) {
         return false;
     }
+    const Token next = document->token(after);
+    if ((next == ANDAND || next == OROR)
+        && isClosingLine(document->lineText(document->symbolEndLine(before)))
+    ) {
+        return false;
+    }
+    const int nextLine = document->symbolLine(after);
+    const int lineEnd = document->lastSymbolOfLine(nextLine);
+    if (isClosingLine(document->lineText(nextLine)) && lineEnd >= after
+        && (document->token(lineEnd + 1) == ANDAND
+            || document->token(lineEnd + 1) == OROR)
+        && document->symbolLine(lineEnd + 1) > nextLine
+    ) {
+        return false;
+    }
 
     // Joins any break inside a `(`, a `[`, or an initializer list.
     if ( ! brackets.isEmpty()) {
@@ -120,7 +214,11 @@ bool FormatLineJoinRule::mayJoin(
 
     // Joins a statement's operator line, the value after its `=`, and the
     // `:` of its conditional expression.
-    const Token next = document->token(after);
-    return isLeadingOperator(next) || document->token(before) == EQ
+    return isLeadingOperator(next)
+        || ((next == DOT || next == ARROW) && (followsBinaryGroup(
+            document,
+            before
+        ) || ! document->configAt(document->symbols().at(before).from).wrapSubChain.isEmpty()))
+        || document->token(before) == EQ
         || (next == COLON && questions > 0);
 }

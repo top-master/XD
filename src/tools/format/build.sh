@@ -9,6 +9,7 @@
 # XD's build that the template runs first builds only the parts of XD the tool
 # needs (BH_XD_BUILD_FILTER): QtCore, the tools that build it (`bootstrap`,
 # `moc`, and `rcc`), and the static plugins the tool compiles in.
+# `--test` also builds QtTest for the formatter's test projects.
 # `--no-xd-build` leaves XD as it is.
 
 # Gets the absolute path of this script's directory.
@@ -22,11 +23,17 @@ BH_SCRIPT_NAME=build.sh
 
 BH_STATIC='^.*$'
 BH_XD_BUILD_FILTER='^src/(3rdparty/pcre/pcre|tools/(bootstrap/bootstrap|moc/moc|rcc/rcc)|corelib/corelib|plugins-static/[a-z-]+/[a-z-]+)\.pro$'
+BH_TEST_ROOT="$XD_DIR/tests/auto/tools/format/cli/cli.pro
+$XD_DIR/tests/auto/tools/format/rules/rules.pro"
+BH_TEST_STATIC=1
 
 # Builds in XD's own build folder, where XD's builds put the tool (see
 # bh_xd_module_build_dir), and shows XD's folder as the build folder.
 bh_hook args-parsed <<'}'
     BUILD_DIR=$(bh_xd_module_build_dir) || exit 1
+    if [ "$BH_RUN_TESTS" -gt 0 ]; then
+        BH_XD_BUILD_FILTER='^src/(3rdparty/pcre/pcre|tools/(bootstrap/bootstrap|moc/moc|rcc/rcc)|corelib/corelib|testlib/testlib|plugins-static/[a-z-]+/[a-z-]+)\.pro$'
+    fi
 }
 bh_hook_add display-build-dir bh_xd_build_dir
 

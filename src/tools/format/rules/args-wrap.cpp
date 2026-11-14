@@ -16,7 +16,7 @@
     @class FormatArgsWrapRule
     @internal
 
-    Lays out a call of 2 arguments or more, or a brace initializer list, as
+    Lays out call arguments or a brace initializer list as
     FormatExpressionLayout does: every item moves below the opening, one
     step (4 spaces) in, and the closing bracket goes back to that line's
     indent:
@@ -27,14 +27,17 @@
         );
 
     A list already broken after its opening keeps the items that share a
-    line together when they fit; any other list gets an item per line.
+    line together when they fit; any other list gets an item per line. A
+    call with one argument is considered when its list already spans lines
+    and that argument holds an operator chain.
 
     It lays out a list that does not fit one line (the list's `)` passes
     the wrap column, see wrapColumn()) when the call takes more than
     `[Structure] wrapArgsOver` arguments (3 by default), when
     `[Structure] wrapArgsAt` holds at the `(` (whose percents compare the
-    column after the `(` with `[Structure] wrapMax`),
-    when its last argument is an operator chain, or when it is a brace list;
+    column after the `(` with `[Structure] wrapMax`), when a list ending in
+    an operator chain starts its arguments below the opening or has not yet
+    broken, or when it is a brace list;
     and, on the same terms but whether or not it fits, it lays out a list
     the user broke over lines whose lines are not one step past the line of
     the opening. A list in the head of a control
@@ -47,13 +50,83 @@
 */
 
 /*!
+    Finds a logical operator before the call at @a open whose break keeps
+    both resulting lines within wrapMax. Gives its token and the indentation
+    of its continuation line; leaves comments, directives and already split
+    calls to their own layouts.
+*/
+static bool logicalBreakBeforeCall(
+        const FormatDocument *document, int open,
+        int *operatorIndex, QByteArray *indent)
+{
+    const int close = document->match(open);
+    const int line = document->symbolLine(open);
+    if (close <= open || document->symbolEndLine(close) != line
+        || document->isDirectiveLine(line)
+    ) {
+        return false;
+    }
+    const int lineFirst = document->firstSymbolOfLine(line);
+    int op = open - 1;
+    while (op > lineFirst) {
+        const Token token = document->token(op);
+        if (token == ANDAND || token == OROR) {
+            break;
+        }
+        if (token == RPAREN || token == RBRACK) {
+            const int match = document->match(op);
+            if (match < lineFirst) {
+                return false;
+            }
+            op = match - 1;
+            continue;
+        }
+        if (token == COMMA || token == SEMIC || token == QUESTION
+            || token == COLON || token == EQ || token == LBRACE
+            || token == RBRACE || operatorPrecedence(token) > 0
+        ) {
+            return false;
+        }
+        --op;
+    }
+    if (op <= lineFirst || (document->token(op) != ANDAND
+            && document->token(op) != OROR)
+    ) {
+        return false;
+    }
+    const int from = document->symbolEnd(op - 1);
+    const int at = document->symbols().at(op).from;
+    const int end = contentEnd(document, line);
+    if (document->hasCommentBetween(from, end)
+        || document->spansDirective(from, end)
+    ) {
+        return false;
+    }
+    const QByteArray prefix = document->text().mid(
+        document->lineStart(line), from - document->lineStart(line)
+    );
+    const QByteArray tail = document->text().mid(at, end - at);
+    const QByteArray padding = continuationPad(
+        textWidth(document->indentOf(line))
+    );
+    const int limit = wrapMaxAt(document, at);
+    if (textWidth(prefix) > limit
+        || textWidth(padding) + textWidth(tail) > limit
+    ) {
+        return false;
+    }
+    *operatorIndex = op;
+    *indent = padding;
+    return true;
+}
+
+/*!
     Lays out each list of @a document that asks for it; a list inside a list
     it lays out waits for the next pass.
 */
 void FormatArgsWrapRule::run(FormatDocument *document) const
 {
     FormatScopeConditions conditions(document);
-    const int wrap = wrapColumn(document);
     for (int i = 1; i < document->symbols().size(); ++i) {
         const int close = document->match(i);
         const bool isCall = document->token(i) == LPAREN
@@ -66,6 +139,7 @@ void FormatArgsWrapRule::run(FormatDocument *document) const
         const int line = document->symbolLine(i);
         const int lineStart = document->lineStart(line);
         const int from = document->symbols().at(i).from;
+        const FormatFileConfig &fileConfig = document->configAt(from);
         const int closeFrom = document->symbols().at(close).from;
         const int closeEnd = document->symbolEnd(close);
 
@@ -105,9 +179,9 @@ void FormatArgsWrapRule::run(FormatDocument *document) const
             indent += 4;
         }
         FormatExpressionLayout layout(document, &conditions, indent);
-        const int column = textWidth(document->text().mid(lineStart, from
-            - lineStart
-        ));
+        const int column = textWidth(
+            document->text().mid(lineStart, from - lineStart)
+        );
 
         // Tells whether the list asks for a layout: it does not fit, and may
         // break, or its lines sit at other indents than its brackets give
@@ -120,10 +194,15 @@ void FormatArgsWrapRule::run(FormatDocument *document) const
         if (arguments.size() < 2 && ! endsInChain) {
             continue;
         }
-        const bool mayBreak = isBrace || endsInChain
-            || arguments.size() > document->settings().wrapArgsOver
-            || reachesWrapArgsAt(document, &conditions, i);
-        const bool needsBreak = mayBreak && column + textWidth(oneLine) > wrap;
+        const bool argumentsBelow =
+            document->symbolLine(arguments.first().first) > line;
+        const bool over = conditions.argsOver(i, arguments.size());
+        const bool mayBreak = fileConfig.wrapArgsOverCondition.isEmpty()
+            ? isBrace || (endsInChain && ( ! isSplit || argumentsBelow))
+                || over || reachesWrapArgsAt(document, &conditions, i)
+            : over;
+        const bool needsBreak = mayBreak
+            && column + textWidth(oneLine) > wrapColumn(document, from);
         const int closeLine = document->symbolLine(close);
         const bool isMisplaced = hasMisplacedLines(
             document,
@@ -135,8 +214,24 @@ void FormatArgsWrapRule::run(FormatDocument *document) const
             continue;
         }
 
+        int logicalOperator = -1;
+        QByteArray logicalIndent;
+        if (isCall && needsBreak && logicalBreakBeforeCall(
+                document, i, &logicalOperator, &logicalIndent
+            )
+        ) {
+            const int start = document->symbolEnd(logicalOperator - 1);
+            if (document->replace(
+                    start, document->symbols().at(logicalOperator).from - start,
+                    "\n" + logicalIndent
+                )
+            ) {
+                continue;
+            }
+        }
+
         // Writes the list as the layout breaks it.
-        const QByteArray text = layout.layoutList(i, i, close);
+        const QByteArray text = layout.layoutList(i, i, close, column);
         const int length = closeEnd - from;
         if (document->text().mid(from, length) != text
             && document->replace(from, length, text)
@@ -144,7 +239,7 @@ void FormatArgsWrapRule::run(FormatDocument *document) const
         ) {
             // Asks the agent to put the arguments that belong together on one
             // line (see FormatAgentGuides for the prompt it gets).
-            const int wrapMax = qMax(1, document->settings().wrapMax);
+            const int wrapMax = qMax(1, fileConfig.wrapMax);
             document->request(
                 from,
                 "args-wrap",

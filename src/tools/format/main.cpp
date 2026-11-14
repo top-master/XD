@@ -6,7 +6,7 @@
 #include "./format-project-files.h"
 #include "./format-project-reader.h"
 #include "./format-runner.h"
-#include "./format-settings.h"
+#include "./format-file-config.h"
 #include "./formatter.h"
 
 #include "config-scanner.h"
@@ -18,6 +18,7 @@
 #include <QtCore/QCommandLineParser>
 #include <QtCore/QCoreApplication>
 #include <QtCore/QDir>
+#include <QtCore/QDataStream>
 #include <QtCore/QFile>
 #include <QtCore/QFileInfo>
 #include <QtCore/QProcess>
@@ -76,8 +77,10 @@ static QString logicalPath(const QString & path)
     ) {
         return path;
     }
-    QString logical = QDir::cleanPath(shellFolder + QLatin1Char('/')
-                                      + QDir::fromNativeSeparators(path));
+    QString logical = QDir::cleanPath(
+        shellFolder + QLatin1Char('/')
+            + QDir::fromNativeSeparators(path)
+    );
     const QFileInfo logicalInfo(logical);
     const QFileInfo workingInfo(path);
     if ( ! logicalInfo.exists()
@@ -104,18 +107,25 @@ static QStringList logicalPaths(const QStringList & paths)
     return resolved;
 }
 
-/*!
-    Builds the name filters of the C, C++, Objective-C and Objective-C++
-    files a folder scan formats.
-*/
-static QStringList sourceFilters()
+static bool matchesSource(const QString &path, const FormatConfig &config,
+                          QHash<QString, FormatFileConfig > *cache,
+                          bool *matches, QString *error)
 {
-    QStringList filters;
-    filters << QString(QLL("*.h")) << QString(QLL("*.hh")) << QString(QLL("*.hpp"))
-        << QString(QLL("*.hxx")) << QString(QLL("*.c")) << QString(QLL("*.cc"))
-        << QString(QLL("*.cpp")) << QString(QLL("*.cxx")) << QString(QLL("*.m"))
-        << QString(QLL("*.mm"));
-    return filters;
+    const QString directory = QFileInfo(path).absolutePath();
+    if ( ! cache->contains(directory)) {
+        // Reads the settings, and takes only the extensions out of them.
+        Config::Parser parser(FormatFileConfig::schema());
+        if ( ! FormatFileConfig::readParser(path, config, &parser, error)) {
+            return false;
+        }
+        FormatFileConfig fileConfig;
+        fileConfig.extensions = parser.value(
+            QString(QLL("general.extensions"))
+        );
+        cache->insert(directory, fileConfig);
+    }
+    *matches = cache->value(directory).acceptsFile(path);
+    return true;
 }
 
 /*!
@@ -245,7 +255,8 @@ static bool runGit(const QStringList & arguments, QByteArray *output,
     if (process.exitStatus() != QProcess::NormalExit
         || process.exitCode() != 0
     ) {
-        const QString diagnostics = QString::fromLocal8Bit(process.readAllStandardError());
+        const QString diagnostics =
+            QString::fromLocal8Bit(process.readAllStandardError());
         *error = QString(QLL("--git: git %1 failed: %2"))
             .arg(arguments.join(QLatin1Char(' ')), diagnostics.trimmed());
         return false;
@@ -328,7 +339,9 @@ static bool readGitChanges(const QStringList & arguments,
     ) {
         return false;
     }
-    const QString root = QDir::fromNativeSeparators(QString::fromLocal8Bit(topLevel).trimmed());
+    const QString root = QDir::fromNativeSeparators(
+        QString::fromLocal8Bit(topLevel).trimmed()
+    );
     QByteArray diff;
     if ( ! runGit(arguments, &diff, error)) {
         return false;
@@ -336,7 +349,8 @@ static bool readGitChanges(const QStringList & arguments,
 
     // Walks each file's header, which names the file after the change,
     // then its hunks; a line of content never counts as a header line.
-    const QRegularExpression hunk(QString(QLL("^@@ -\\d+(?:,\\d+)? \\+(\\d+)(?:,(\\d+))? @@")));
+    const QRegularExpression hunk(
+            QString(QLL("^@@ -\\d+(?:,\\d+)? \\+(\\d+)(?:,(\\d+))? @@")));
     const QList<QByteArray > lines = diff.split('\n');
     QString file;
     bool inHeader = false;
@@ -365,7 +379,8 @@ static bool readGitChanges(const QStringList & arguments,
             continue;
         }
         inHeader = false;
-        const QRegularExpressionMatch found = hunk.match(QString::fromLatin1(line));
+        const QRegularExpressionMatch found =
+            hunk.match(QString::fromLatin1(line));
         if (file.isEmpty() || ! found.hasMatch()) {
             continue;
         }
@@ -518,8 +533,9 @@ static int logResults(Logger *logger, const QList<FormatFileResult > & results,
             continue;
         }
         if (result.changed) {
-            logger->logLine(path
-                + (check ? QLL(": needs formatting") : QLL(": formatted"))
+            logger->logLine(
+                path
+                    + (check ? QLL(": needs formatting") : QLL(": formatted"))
             );
             code = qMax(code, int(ExitDirty));
         }
@@ -531,6 +547,9 @@ static int logResults(Logger *logger, const QList<FormatFileResult > & results,
                                 issue.message
                             ));
             code = qMax(code, int(ExitDirty));
+        }
+        for (int k = 0; k < result.warnings.size(); ++k) {
+            logger->logDiagnostic(result.warnings.at(k).message);
         }
     }
     return code;
@@ -573,7 +592,8 @@ int main(int argc, char *argv[])
     parser.addVersionOption();
     QCommandLineOption lineOption(
         QStringList() << QString(QLL("L")) << QString(QLL("range")),
-        QString(QLL("Formats only the lines of <range>, in any form git blame's -L " "takes; may be given more than once.")),
+        QString(QLL("Formats only the lines of <range>, in any form git blame's -L "
+            "takes; may be given more than once.")),
         QString(QLL("range"))
     );
     parser.addOption(lineOption);
@@ -590,7 +610,8 @@ int main(int argc, char *argv[])
     parser.addOption(gitOption);
     QCommandLineOption dirOption(
         QStringList() << QString(QLL("dir")),
-        QString(QLL("Formats the source files under <path>, a directory with or " "without a trailing slash; may be given more than once.")),
+        QString(QLL("Formats the source files under <path>, a directory with or "
+            "without a trailing slash; may be given more than once.")),
         QString(QLL("path"))
     );
     parser.addOption(dirOption);
@@ -607,7 +628,8 @@ int main(int argc, char *argv[])
     parser.addOption(rulesOption);
     QCommandLineOption configOption(
         QStringList() << QString(QLL("c")) << QString(QLL("config")),
-        QString(QLL("Sets <setting> (<section>.<key>=<value>, the name in any case) over " "the .formatrc files; may be given more than once.")),
+        QString(QLL("Sets <setting> (<section>.<key>=<value>, the name in any case) over "
+            "the .formatrc files; may be given more than once.")),
         QString(QLL("setting"))
     );
     parser.addOption(configOption);
@@ -619,23 +641,27 @@ int main(int argc, char *argv[])
     parser.addOption(configFileOption);
     QCommandLineOption configAddOption(
         QStringList() << QString(QLL("config-add")),
-        QString(QLL("Reads the settings of <file> over the .formatrc files, overriding " "only the keys it sets; may be given more than once.")),
+        QString(QLL("Reads the settings of <file> over the .formatrc files, overriding "
+            "only the keys it sets; may be given more than once.")),
         QString(QLL("file"))
     );
     parser.addOption(configAddOption);
     QCommandLineOption anyCommentOption(
         QStringList() << QString(QLL("any-comment")),
-        QString(QLL("Rewraps every comment that leaves room unused, not only the " "ones past the limit; the same as -c comments.target=any."))
+        QString(QLL("Rewraps every comment that leaves room unused, not only the "
+            "ones past the limit; the same as -c comments.target=any."))
     );
     parser.addOption(anyCommentOption);
     QCommandLineOption anyCodeOption(
         QStringList() << QString(QLL("any-code")),
-        QString(QLL("Lays the code out anew, not keeping the line breaks it already " "has; the same as -c structure.target=any."))
+        QString(QLL("Lays the code out anew, not keeping the line breaks it already "
+            "has; the same as -c structure.target=any."))
     );
     parser.addOption(anyCodeOption);
     QCommandLineOption rewriteOption(
         QStringList() << QString(QLL("rewrite")) << QString(QLL("anything")),
-        QString(QLL("Lays out the code and wraps the comments anew; the same as " "--any-comment and --any-code together."))
+        QString(QLL("Lays out the code and wraps the comments anew; the same as "
+            "--any-comment and --any-code together."))
     );
     parser.addOption(rewriteOption);
     QCommandLineOption listRulesOption(
@@ -651,54 +677,79 @@ int main(int argc, char *argv[])
     parser.addOption(jobsOption);
     QCommandLineOption runnerOption(
         QStringList() << QString(QLL("runner")),
-        QString(QLL("Spreads the files with <kind>: %1; %2 by default.")) .arg(FormatRunner::kinds().join(QString(QLL(", ")))) .arg(FormatRunner::defaultKind()),
+        QString(QLL("Spreads the files with <kind>: %1; %2 by default."))
+            .arg(FormatRunner::kinds().join(QString(QLL(", "))))
+            .arg(FormatRunner::defaultKind()),
         QString(QLL("kind"))
     );
     parser.addOption(runnerOption);
     QCommandLineOption includeOption(
         QStringList() << QString(QLL("I")) << QString(QLL("i")),
-        QString(QLL("Looks for the headers that quoted includes name in <dir> too, after " "the file's own folder; may be given more than once.")),
+        QString(QLL("Looks for the headers that quoted includes name in <dir> too, after "
+            "the file's own folder; may be given more than once.")),
         QString(QLL("dir"))
     );
     parser.addOption(includeOption);
     QCommandLineOption projectOption(
         QStringList() << QString(QLL("p")) << QString(QLL("project")),
-        QString(QLL("Formats the sources and headers that the qmake project <file> " "lists, and those of the projects it holds, with its include folders, " "and skips the ones the ignore files leave out; may be given more " "than once.")),
+        QString(QLL("Formats the sources and headers that the qmake project <file> "
+            "lists, and those of the projects it holds, with its include folders, "
+            "and skips the ones the ignore files leave out; may be given more "
+            "than once.")),
         QString(QLL("file"))
     );
     parser.addOption(projectOption);
     QCommandLineOption specsOption(
         QStringList() << QString(QLL("specs")),
-        QString(QLL("Reads each --project for each qmake spec of the comma-separated " "<names>, which pick the platform scopes, and formats a file that " "several of them list once; may be given more than once. The spec " "of the platform the tool runs on by default.")),
+        QString(QLL("Reads each --project for each qmake spec of the comma-separated "
+            "<names>, which pick the platform scopes, and formats a file that "
+            "several of them list once; may be given more than once. The spec "
+            "of the platform the tool runs on by default.")),
         QString(QLL("names"))
     );
     parser.addOption(specsOption);
     QCommandLineOption qmakeOption(
         QStringList() << QString(QLL("qmake")),
-        QString(QLL("Reads each --project with the qmake at <path>; the one beside the " "tool by default, else the one on the PATH.")),
+        QString(QLL("Reads each --project with the qmake at <path>; the one beside the "
+            "tool by default, else the one on the PATH.")),
         QString(QLL("path"))
     );
     parser.addOption(qmakeOption);
     QCommandLineOption skipIgnoredOption(
         QStringList() << QString(QLL("skip-ignored")),
-        QString(QLL("Skips each named path that the ignore files leave out, without a " "word, instead of formatting it."))
+        QString(QLL("Skips each named path that the ignore files leave out, without a "
+            "word, instead of formatting it."))
     );
     parser.addOption(skipIgnoredOption);
     QCommandLineOption agentOption(
         QStringList() << QString(QLL("ai")),
-        QString(QLL("Asks the agent that runs the tool for the changes only it can " "make, as #: lines on the standard error, waits for q on the " "standard input, then formats each file it changed again."))
+        QString(QLL("Asks the agent that runs the tool for the changes only it can "
+            "make, as #: lines on the standard error, waits for q on the "
+            "standard input, then formats each file it changed again."))
     );
     parser.addOption(agentOption);
     QCommandLineOption headlessOption(
         QStringList() << QString(QLL("headless")),
-        QString(QLL("Asks nothing: formats a named path that the ignore files leave " "out without a warning."))
+        QString(QLL("Asks nothing: formats a named path that the ignore files leave "
+            "out without a warning."))
     );
     parser.addOption(headlessOption);
+    QCommandLineOption verboseOption(
+        QStringList() << QString(QLL("verbose")),
+        QString(QLL("Report additional formatting warnings."))
+    );
+    parser.addOption(verboseOption);
     QCommandLineOption workerOption(
         QStringList() << QString(QLL("worker")),
         QString(QLL("Prints the results for a parent format process (internal)."))
     );
     parser.addOption(workerOption);
+    QCommandLineOption snapshotOption(
+        QStringList() << QString(QLL("snapshot-manifest")),
+        QString(QLL("Reads the parent formatting run's file snapshots (internal).")),
+        QString(QLL("file"))
+    );
+    parser.addOption(snapshotOption);
     parser.addPositionalArgument(
         QString(QLL("paths")),
         QString(QLL("The files, and the directories (ending with / or \\), to format.")),
@@ -734,8 +785,10 @@ int main(int argc, char *argv[])
     if (parser.isSet(listRulesOption)) {
         const QList<const FormatRule * > all = formatter.rules();
         for (int i = 0; i < all.size(); ++i) {
-            logger.logLine(QString::fromLatin1(all.at(i)->name()) + QLatin1Char('\t')
-                           + all.at(i)->summary());
+            logger.logLine(
+                QString::fromLatin1(all.at(i)->name()) + QLatin1Char('\t')
+                    + all.at(i)->summary()
+            );
         }
         return ExitClean;
     }
@@ -743,6 +796,20 @@ int main(int argc, char *argv[])
     // Reads the settings over the `.formatrc` files; a short `-c=<setting>`
     // hands its `=` on as the first character of the value.
     FormatConfig config;
+    if (parser.isSet(snapshotOption)) {
+        QFile manifest(parser.value(snapshotOption));
+        if ( ! parser.isSet(workerOption) || ! manifest.open(QIODevice::ReadOnly)) {
+            logger.logError(QString(QLL("cannot read the formatting snapshot manifest")));
+            return ExitError;
+        }
+        QDataStream input(&manifest);
+        input >> config.scheduledFiles >> config.snapshots >> config.fileLineSpecs >> config.lineSpecs;
+        if (input.status() != QDataStream::Ok) {
+            logger.logError(QString(QLL("invalid formatting snapshot manifest")));
+            return ExitError;
+        }
+        config.snapshotManifest = parser.value(snapshotOption);
+    }
     config.file = logicalPath(parser.value(configFileOption));
     config.adds = logicalPaths(parser.values(configAddOption));
     const QStringList includes = logicalPaths(parser.values(includeOption));
@@ -751,9 +818,7 @@ int main(int argc, char *argv[])
             << QDir::cleanPath(QFileInfo(includes.at(i)).absoluteFilePath());
     }
 
-    // Learns the files and the include folders of each project from qmake,
-    // for the first spec now; a thread reads the other specs once the
-    // formatting starts.
+    // Learns the files and include folders of each project from qmake.
     const QStringList projects = logicalPaths(parser.values(projectOption));
     const QString qmake = parser.isSet(qmakeOption)
         ? logicalPath(parser.value(qmakeOption)) : defaultQmake();
@@ -782,6 +847,12 @@ int main(int argc, char *argv[])
     }
     if (projects.isEmpty() || specs.size() == 1) {
         projectFiles.finish();
+    } else {
+        reader.readFrom(1);
+        if ( ! reader.error().isEmpty()) {
+            logger.logError(reader.error());
+            return ExitError;
+        }
     }
     const QStringList projectFolders = projectFiles.includePaths();
     for (int i = 0; i < projectFolders.size(); ++i) {
@@ -805,12 +876,11 @@ int main(int argc, char *argv[])
     }
 
     // Checks the settings once, before any file is read.
-    Config::Parser configCheck(FormatSettings::schema());
+    Config::Parser configCheck(FormatFileConfig::schema());
     if (( ! config.file.isEmpty() && ! configCheck.readFile(
             config.file,
             &error
-        ))
-        || ! FormatSettings::readConfig(&configCheck, config, &error)
+        )) || ! FormatFileConfig::readConfig(&configCheck, config, &error)
     ) {
         logger.logError(error);
         return ExitError;
@@ -854,6 +924,7 @@ int main(int argc, char *argv[])
         files.append(path);
         ignores.addExplicitPath(path);
     }
+    QHash<QString, FormatFileConfig > sourceSettings;
     for (int i = 0; i < folders.size(); ++i) {
         ignores.addExplicitPath(folders.at(i));
     }
@@ -930,18 +1001,38 @@ int main(int argc, char *argv[])
     }
     for (int i = 0; i < folders.size(); ++i) {
         const QString root = QDir::cleanPath(folders.at(i));
-        const QStringList found = ignores.findFiles(root, sourceFilters());
+        const QStringList found = ignores.findFiles(root, QStringList() << QString(QLL("*")));
 
         // Names the files the way the folder was named on the command line.
-        const QString absolute = QDir::cleanPath(QFileInfo(root).absoluteFilePath());
+        const QString absolute = QDir::cleanPath(
+            QFileInfo(root).absoluteFilePath()
+        );
         for (int f = 0; f < found.size(); ++f) {
-            files.append(root + found.at(f).mid(absolute.size()));
+            bool matches = false;
+            if ( ! matchesSource(found.at(f), config, &sourceSettings, &matches, &error)) {
+                logger.logError(error);
+                return ExitError;
+            }
+            if (matches) {
+                files.append(root + found.at(f).mid(absolute.size()));
+            }
         }
     }
 
     // Adds the projects' files that the ignore files keep.
-    files
-        << keptProjectFiles(projectFiles.takeUnparsed(false), &ignores, files);
+    const QStringList projectSources = keptProjectFiles(
+        projectFiles.takeUnparsed(false), &ignores, files
+    );
+    for (int i = 0; i < projectSources.size(); ++i) {
+        bool matches = false;
+        if ( ! matchesSource(projectSources.at(i), config, &sourceSettings, &matches, &error)) {
+            logger.logError(error);
+            return ExitError;
+        }
+        if (matches) {
+            files << projectSources.at(i);
+        }
+    }
 
     // Adds each source file that the `--git` range changed and the ignore
     // files keep; a worker formats only the files its parent hands it.
@@ -950,7 +1041,12 @@ int main(int argc, char *argv[])
         changed.sort();
         QStringList sources;
         for (int i = 0; i < changed.size(); ++i) {
-            if (QDir::match(sourceFilters(), QFileInfo(changed.at(i)).fileName())) {
+            bool matches = false;
+            if ( ! matchesSource(changed.at(i), config, &sourceSettings, &matches, &error)) {
+                logger.logError(error);
+                return ExitError;
+            }
+            if (matches) {
                 sources << changed.at(i);
             }
         }
@@ -975,11 +1071,12 @@ int main(int argc, char *argv[])
 
     // Reads the run's options.
     FormatOptions options;
-    options.lineSpecs = parser.values(lineOption);
+    options.lineSpecs = parser.isSet(snapshotOption) ? config.lineSpecs : parser.values(lineOption);
     options.git = parser.value(gitOption);
-    options.fileLineSpecs = gitLineSpecs;
+    options.fileLineSpecs = parser.isSet(snapshotOption) ? config.fileLineSpecs : gitLineSpecs;
     options.rules = rules;
     options.config = config;
+    options.config.verbose = parser.isSet(verboseOption);
     options.check = parser.isSet(checkOption);
     options.agent = parser.isSet(agentOption);
     if (options.agent && options.check) {
@@ -991,7 +1088,8 @@ int main(int argc, char *argv[])
         bool ok = false;
         options.jobs = parser.value(jobsOption).toInt(&ok);
         if ( ! ok || options.jobs < 1) {
-            logger.logError(QString(QLL("not a job count: %1")).arg(parser.value(jobsOption)));
+            logger
+                .logError(QString(QLL("not a job count: %1")).arg(parser.value(jobsOption)));
             return ExitError;
         }
     }
@@ -1012,57 +1110,13 @@ int main(int argc, char *argv[])
         return ExitError;
     }
 
-    // Formats the files while the thread reads the projects for the others
-    // of the specs, if any.
-#ifndef QT_NO_THREAD
-    if ( ! projectFiles.isFinished()) {
-        reader.start();
-    }
-#else
-    if ( ! projectFiles.isFinished()) {
-        reader.readFrom(1);
-    }
-#endif
+    // Formats the files after every project spec has supplied its files.
     runner->setListener(&listener);
     QList<FormatFileResult > results = qMove(runner->run(files));
     if (parser.isSet(workerOption)) {
         return ExitClean;
     }
 
-    // Formats the files that the other specs add, batch by batch, each with
-    // the include folders found so far.
-    QStringList formatted = files;
-    for (;;) {
-        const QStringList taken = projectFiles.takeUnparsed(true);
-        if (taken.isEmpty()) {
-            break;
-        }
-        const QStringList batch = keptProjectFiles(
-            taken,
-            &ignores,
-            formatted
-        );
-        if (batch.isEmpty()) {
-            continue;
-        }
-        const QStringList found = projectFiles.includePaths();
-        for (int i = 0; i < found.size(); ++i) {
-            if ( ! options.config.includePaths.contains(found.at(i))) {
-                options.config.includePaths << found.at(i);
-            }
-        }
-        runner.reset(FormatRunner::create(
-            parser.value(runnerOption),
-            &formatter,
-            options
-        ));
-        runner->setListener(&listener);
-        results << runner->run(batch);
-        formatted << batch;
-    }
-#ifndef QT_NO_THREAD
-    reader.wait();
-#endif
     int code = listener.code;
     if ( ! reader.error().isEmpty()) {
         logger.logError(reader.error());
@@ -1085,8 +1139,9 @@ int main(int argc, char *argv[])
             before << readFile(asked.at(i));
         }
         output.flush();
-        console.page(requests
-            + QLL("#: Handle every request above, then type q.\n")
+        console.page(
+            requests
+                + QLL("#: Handle every request above, then type q.\n")
         );
         answered = true;
         QStringList changed;

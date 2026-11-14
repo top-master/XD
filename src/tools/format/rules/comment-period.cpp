@@ -48,7 +48,11 @@ void FormatCommentPeriodRule::runGroup(
         return;
     }
     const char end = text.at(text.size() - 1);
-    if (end == '.' || end == '!' || end == '?' || end == ':' || text.startsWith('\\')
+    if (end == '.'
+        || end == '!'
+        || end == '?'
+        || end == ':'
+        || text.startsWith('\\')
         || text.startsWith('@')
     ) {
         return;

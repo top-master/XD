@@ -107,14 +107,14 @@ static int nextSpace(const QString & text, int from)
 /*!
     Builds the lines of @a text wrapped at @a column, the first line after a
     prefix of @a firstWidth columns and every other line after one of
-    @a nextWidth columns, within the limits of @a settings (see
+    @a nextWidth columns, within the limits of @a fileConfig (see
     FormatCommentWidthRule).
 */
 QStringList FormatCommentWidthRule::wrap(
         const QString & text, int firstWidth, int nextWidth,
-        int column, const FormatSettings & settings)
+        int column, const FormatFileConfig & fileConfig)
 {
-    const int limit = settings.commentWrapMax;
+    const int limit = fileConfig.commentWrapMax;
     QStringList lines;
     QString rest = text;
     int width = firstWidth;
@@ -146,10 +146,12 @@ QStringList FormatCommentWidthRule::wrap(
                 && rest.at(i + 1) == QLatin1Char('(');
             const bool wordComma = before == QLatin1Char(',')
                 && (i < 2 || rest.at(i - 2) != QLatin1Char(')'))
-                && settings.wrapComma == FormatSettings::WrapCommaSoft;
-            const int window = wordComma ? settings.wrapEmptyLimit : 25;
-            if ((afterPunctuation || beforeParenthesis) && end >= column - window
-                && (punctuation < 0 || qAbs(end - column) < qAbs(width + punctuation - column))
+                && fileConfig.wrapComma == FormatFileConfig::WrapCommaSoft;
+            const int window = wordComma ? fileConfig.wrapEmptyLimit : 25;
+            if ((afterPunctuation || beforeParenthesis)
+                && end >= column - window
+                && (punctuation < 0
+                    || qAbs(end - column) < qAbs(width + punctuation - column))
             ) {
                 punctuation = i;
             }
@@ -158,7 +160,7 @@ QStringList FormatCommentWidthRule::wrap(
             } else if (plainAfter < 0) {
                 plainAfter = i;
             }
-            if (end <= column && end >= column - settings.wrapEmptyLimit
+            if (end <= column && end >= column - fileConfig.wrapEmptyLimit
                 && pointsAhead(rest.mid(wordStart, i - wordStart))
             ) {
                 pointing = i;
@@ -177,8 +179,9 @@ QStringList FormatCommentWidthRule::wrap(
         // Keeps a code keyword that the break would push to the next line,
         // when the break leaves enough room unused.
         const int after = nextSpace(rest, at);
-        if (column - (width + at) >= settings.wrapEmptyLimit && width + after > column
-            && width + after <= limit + settings.wrapExtendsForKeywords
+        if (column - (width + at) >= fileConfig.wrapEmptyLimit
+            && width + after > column
+            && width + after <= limit + fileConfig.wrapExtendsForKeywords
             && isCodeWord(rest.mid(at + 1, after - at - 1))
         ) {
             at = after;
@@ -190,7 +193,7 @@ QStringList FormatCommentWidthRule::wrap(
             const int next = nextSpace(rest, at);
             const QString word = rest.mid(at + 1, next - at - 1);
             const int room = limit
-                + (isCodeWord(word) ? settings.wrapExtendsForKeywords : 0);
+                + (isCodeWord(word) ? fileConfig.wrapExtendsForKeywords : 0);
             if (width + next <= room) {
                 at = next;
             }
@@ -239,17 +242,19 @@ QStringList FormatCommentWidthRule::wrap(
 
 /*!
     Tells whether @a line, a whole line of the document, fits the limits of
-    @a settings: within `wrapMax` columns, or, when it ends on a code keyword
+    @a fileConfig: within `wrapMax` columns, or, when it ends on a code keyword
     (see isCodeWord()), within `wrapMax` and `wrapExtendsForKeywords` columns.
 */
 bool FormatCommentWidthRule::fits(
         const QString & line,
-        const FormatSettings & settings)
+        const FormatFileConfig & fileConfig)
 {
-    if (line.size() <= settings.commentWrapMax) {
+    if (line.size() <= fileConfig.commentWrapMax) {
         return true;
     }
-    if (line.size() > settings.commentWrapMax + settings.wrapExtendsForKeywords) {
+    if (line.size()
+            > fileConfig.commentWrapMax + fileConfig.wrapExtendsForKeywords
+    ) {
         return false;
     }
     const QString trimmed = line.trimmed();
@@ -276,24 +281,31 @@ void FormatCommentWidthRule::runGroup(
     int i = trailing ? lines.size() : 0;
     while (i < lines.size()) {
         const QByteArray & text = lines.at(i).text;
-        const int start = document->lineStart(document->lineOf(lines.at(i).offset));
-        const QByteArray prefix = document->text().mid(start, lines.at(i).offset
-            - start
+        const int start = document
+            ->lineStart(document->lineOf(lines.at(i).offset));
+        const QByteArray prefix = document->text().mid(
+            start,
+            lines.at(i).offset
+                - start
         );
         if (fenced.at(i) || isParagraphBreak(text)) {
             ++i;
             continue;
         }
-        const QRegularExpressionMatch item = itemPattern()->match(QString::fromUtf8(text));
+        const QRegularExpressionMatch item =
+            itemPattern()->match(QString::fromUtf8(text));
         const QByteArray nextPrefix = item.hasMatch()
             ? prefix + QByteArray(item.capturedLength(), ' ') : prefix;
         int count = 1;
         while (i + count < lines.size()) {
             const FormatCommentLine & next = lines.at(i + count);
-            const int nextStart = document->lineStart(document->lineOf(next.offset));
-            if (fenced.at(i + count) || isParagraphBreak(next.text)
+            const int nextStart =
+                document->lineStart(document->lineOf(next.offset));
+            if (fenced.at(i + count)
+                || isParagraphBreak(next.text)
                 || itemPattern()->match(QString::fromUtf8(next.text)).hasMatch()
-                || document->text().mid(nextStart, next.offset - nextStart) != nextPrefix
+                || document->text().mid(nextStart, next.offset - nextStart)
+                    != nextPrefix
             ) {
                 break;
             }
@@ -313,11 +325,15 @@ void FormatCommentWidthRule::runGroup(
         const int last = document->commentEndLine(group.at(g));
         for (int line = first; line <= last; ++line) {
             const QString text = QString::fromUtf8(document->lineText(line));
-            if ( ! FormatCommentWidthRule::fits(text, document->settings())) {
+            const FormatFileConfig &fileConfig =
+                document->configAt(document->lineStart(line));
+            if ( ! FormatCommentWidthRule::fits(text, fileConfig)) {
                 document->report(
                     document->lineStart(line),
                     "comment-width",
-                    QString(QLL("wrap the comment at %1 columns (it has %2)")) .arg(document->settings().commentWrapMax).arg(text.size())
+                    QString(QLL("wrap the comment at %1 columns (it has %2)"))
+                        .arg(fileConfig.commentWrapMax)
+                        .arg(text.size())
                 );
             }
         }
@@ -338,14 +354,15 @@ bool FormatCommentWidthRule::rewrap(
         int first, int count, const QByteArray & nextPrefix) const
 {
     // Checks for a line past the column limit.
-    const FormatSettings & settings = document->settings();
+    const FormatFileConfig & fileConfig =
+        document->configAt(lines.at(first).offset);
     const int firstLine = document->lineOf(lines.at(first).offset);
     bool tooLong = false;
     for (int k = 0; k < count && ! tooLong; ++k) {
         const int line = document->lineOf(lines.at(first + k).offset);
         tooLong = ! FormatCommentWidthRule::fits(
             QString::fromUtf8(document->lineText(line)),
-            settings
+            fileConfig
         );
     }
 
@@ -353,14 +370,13 @@ bool FormatCommentWidthRule::rewrap(
     // of the wrap column while the first word of the next line would still
     // fit on it, where the wrap would place it: up to the wrap column, or
     // past the limit as far as a code keyword may go.
-    const int column = qMin(settings.commentWrapBegin.first(), settings.commentWrapMax);
+    const int column = qMin(fileConfig.commentWrapBegin.first(), fileConfig.commentWrapMax);
     const int lineStart = document->lineStart(firstLine);
-    const int firstPrefix = QString::fromUtf8(document->text().mid(
-        lineStart,
-        lines.at(first).offset - lineStart
-    )).size();
-    const bool anyTarget = settings.commentTarget
-        == FormatSettings::CommentTargetAny;
+    const int firstPrefix = QString::fromUtf8(
+        document->text().mid(lineStart, lines.at(first).offset - lineStart)
+    ).size();
+    const bool anyTarget = fileConfig.commentTarget
+        == FormatFileConfig::CommentTargetAny;
     bool underfilled = false;
     for (int k = 0; anyTarget && k + 1 < count && ! tooLong && ! underfilled; ++k) {
         const QString text = QString::fromUtf8(lines.at(first + k).text);
@@ -369,8 +385,8 @@ bool FormatCommentWidthRule::rewrap(
             + text.size();
         const QString word = next.left(nextSpace(next, -1));
         const int room = isCodeWord(word)
-            ? settings.commentWrapMax + settings.wrapExtendsForKeywords : column;
-        underfilled = column - width >= settings.wrapEmptyLimit
+            ? fileConfig.commentWrapMax + fileConfig.wrapExtendsForKeywords : column;
+        underfilled = column - width >= fileConfig.wrapEmptyLimit
             && width + 1 + word.size() <= room;
     }
     if ( ! tooLong && ! underfilled) {
@@ -390,26 +406,24 @@ bool FormatCommentWidthRule::rewrap(
         text += part;
     }
     const int start = document->lineStart(firstLine);
-    const int firstWidth = QString::fromUtf8(document->text().mid(
-        start,
-        lines.at(first).offset - start
-    ))
-        .size();
+    const int firstWidth = QString::fromUtf8(
+        document->text().mid(start, lines.at(first).offset - start)
+    ).size();
     const int nextWidth = QString::fromUtf8(nextPrefix).size();
 
     // Wraps it at each column in turn, until the last line of a run fills
     // half of its width.
-    const QList<int > & columns = settings.commentWrapBegin;
+    const QList<int > & columns = fileConfig.commentWrapBegin;
     QStringList best;
     double bestFill = -1;
     for (int c = 0; c < columns.size(); ++c) {
-        const int column = qMin(columns.at(c), settings.commentWrapMax);
+        const int column = qMin(columns.at(c), fileConfig.commentWrapMax);
         const QStringList wrapped = FormatCommentWidthRule::wrap(
             text,
             firstWidth,
             nextWidth,
             column,
-            settings
+            fileConfig
         );
         const int room = column
             - (wrapped.size() == 1 ? firstWidth : nextWidth);
@@ -428,8 +442,7 @@ bool FormatCommentWidthRule::rewrap(
     const QByteArray newline = document->text().mid(
         document->lineEnd(firstLine) - 1,
         2
-    )
-        .startsWith('\r') ? QByteArray("\r\n") : QByteArray("\n");
+    ).startsWith('\r') ? QByteArray("\r\n") : QByteArray("\n");
     QByteArray replacement;
     for (int k = 0; k < best.size(); ++k) {
         if (k > 0) {

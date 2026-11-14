@@ -25,16 +25,32 @@ public:
     bool holds(const QStringList & program, int token);
     bool holds(const QStringList & program, int token, qreal percent,
                const QStringList & fallback);
+    bool argsOver(int token, int count);
+    bool argsOver(int token, int count, qreal spaceRemaining);
+    bool conditionsOver(int token, int count);
+    bool conditionsOver(int token, int count, qreal spaceRemaining);
+    int argumentCount(int token, int depth, int argument = 0) const;
+    int conditionArgumentCount(int token, int depth, int argument = 0) const;
+    void reserve(int token, int column);
+    qreal spaceRemaining(int token) const;
+    bool nameHolds(int token, const QString & name, bool *value);
     QSet<QString > holding(int token);
     FormatMemberScope scopeOf(int token);
     FormatMemberScope functionScope(int brace);
 
 private:
+    bool countOver(int token, int count, const qreal *spaceRemaining,
+                   bool condition);
+    int countTargets(int target, int depth, int argument, bool condition) const;
+    int argumentTarget(int token) const;
+    qreal remainingSpace(int token, bool direct = false) const;
     int enclosingFunctionBody(int token) const;
     FormatClassMembers membersOf(const QByteArray & className);
     QSet<QByteArray > baseMembersOf(const FormatClassMembers & members);
 
     const FormatDocument *m_document;
+    int m_reservedLine;
+    int m_reservedColumn;
     QHash<QByteArray, FormatClassMembers > m_classes;
     QHash<int, FormatMemberScope > m_scopes;
 };

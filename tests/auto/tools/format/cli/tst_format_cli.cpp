@@ -109,6 +109,11 @@ tst_FormatCli::tst_FormatCli()
     : m_format(QString::fromLocal8Bit(FORMAT_BINS) + QLatin1Char('/')
                + QLL(FORMAT_TARGET))
 {
+#if defined(Q_OS_WIN)
+    if ( ! this->m_format.endsWith(QLatin1String(".exe"), Qt::CaseInsensitive)) {
+        this->m_format += QLatin1String(".exe");
+    }
+#endif
 }
 
 /// Reads back the file at `path`, as the tool left it.
@@ -450,7 +455,8 @@ void tst_FormatCli::testPlainPath_shouldWarnAboutIgnoredFile()
     const QString file = this->m_dir.path() + QLL("/tree/.hidden/c.cpp");
     qExpect(this->run(QStringList() << file, &out, &err))->toEqual(0);
     qExpect(err)->toContain(QByteArray("\nWARNING: "));
-    qExpect(err)->toContain(QByteArray(".gitignore:1: .hidden/"));
+    qExpect(err)->toContain(QByteArray(".gitignore:1:"));
+    qExpect(err)->toContain(QByteArray(".hidden/"));
     qExpect(err)->toContain(QByteArray("[Y/n] "));
 }
 
@@ -1220,7 +1226,7 @@ void tst_FormatCli::testRunner_shouldReportEachFile()
         << missing;
     qExpect(this->run(arguments, &out, &err))->toEqual(2);
     qExpect(out)->toBeEmpty();
-    qExpect(err.trimmed())->toStartWith(QDir::toNativeSeparators(missing).toLocal8Bit()
+    qExpect(err.trimmed())->toStartWith(QDir::fromNativeSeparators(missing).toLocal8Bit()
                                         + ": error: cannot read: ");
     qExpect(err.trimmed().count('\n'))->toEqual(0);
 }

@@ -56,7 +56,6 @@ static void replaceCondition(FormatDocument *document, int open, int close,
 */
 void FormatConditionWrapRule::run(FormatDocument *document) const
 {
-    const int wrap = wrapColumn(document);
     FormatScopeConditions conditions(document);
     const FormatConditionLayout layout(document, &conditions);
     for (int i = 0; i + 1 < document->symbols().size(); ++i) {
@@ -70,6 +69,8 @@ void FormatConditionWrapRule::run(FormatDocument *document) const
         const int open = i + 1;
         const int close = document->match(open);
         const int line = document->symbolLine(i);
+        const FormatFileConfig &fileConfig =
+            document->configAt(document->symbols().at(i).from);
         if (close < 0 || document->isDirectiveLine(line)
             || document->hasCommentBetween(
                 document->symbols().at(open).from,
@@ -83,9 +84,10 @@ void FormatConditionWrapRule::run(FormatDocument *document) const
         // before its loosest operator (see `layoutPlain()`), only
         // once its line passes `wrapMax`: such a break splits a single
         // comparison, hence it waits for the hard limit.
-        if (layout.operators(open, close).isEmpty()) {
+        const QList<int > operators = layout.operators(open, close);
+        if (operators.isEmpty()) {
             const bool isLong = document->symbolEndLine(close) == line
-                && textWidth(document->lineText(line)) > document->settings().wrapMax;
+                && textWidth(document->lineText(line)) > fileConfig.wrapMax;
             const QByteArray text = isLong
                 ? layout.layoutPlain(open, close) : QByteArray();
             if ( ! text.isEmpty()) {
@@ -94,25 +96,33 @@ void FormatConditionWrapRule::run(FormatDocument *document) const
             i = qMax(i, close);
             continue;
         }
+        if ( ! fileConfig.wrapConditionsOverCondition.isEmpty()
+            && ! conditions.conditionsOver(open, operators.size() + 1)
+        ) {
+            i = close;
+            continue;
+        }
 
         // Takes a one-line condition past the wrap column, or a split one
         // with a line past `wrapMax`.
         const int endLine = document->symbolEndLine(close);
         if (endLine == line) {
-            if (textWidth(document->lineText(line)) <= wrap) {
+            if (textWidth(document->lineText(line))
+                    <= wrapColumn(document, document->symbols().at(i).from)
+            ) {
                 continue;
             }
         } else if ( ! this->isSplitTooLong(document, layout, open, close)) {
             continue;
         } else if (document->agentMode()) {
-            const int limit = document->settings().wrapMax;
+            const int limit = fileConfig.wrapMax;
             document->request(
                 document->symbols().at(i).from,
                 "condition-wrap",
                 QString(QLL("this condition has a line past %1 columns; "
-                "regroup its lines so that the operands that "
-                "belong together share one, each line within %1 "
-                "columns and led by its && or ||")).arg(limit),
+                    "regroup its lines so that the operands that "
+                    "belong together share one, each line within %1 "
+                    "columns and led by its && or ||")).arg(limit),
                 endLine - line + 1,
                 limit
             );
@@ -151,7 +161,8 @@ bool FormatConditionWrapRule::isSplitTooLong(
         const FormatDocument *document, const FormatConditionLayout & layout,
         int open, int close) const
 {
-    const int max = document->settings().wrapMax;
+    const int max = document->configAt(document->symbols().at(open).from)
+        .wrapMax;
     bool tooLong = false;
     for (int l = document->symbolLine(open); l <= document->symbolEndLine(close); ++l) {
         tooLong = tooLong || textWidth(document->lineText(l)) > max;

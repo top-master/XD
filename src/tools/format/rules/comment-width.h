@@ -4,7 +4,7 @@
 #ifndef RULES_COMMENT_WIDTH_H
 #define RULES_COMMENT_WIDTH_H
 
-#include "../format-settings.h"
+#include "../format-file-config.h"
 #include "../lang/comment-line.h"
 #include "./comment.h"
 
@@ -25,8 +25,8 @@ public:
 
     static QStringList wrap(
             const QString & text, int firstWidth, int nextWidth, int column,
-            const FormatSettings & settings);
-    static bool fits(const QString & line, const FormatSettings & settings);
+            const FormatFileConfig & fileConfig);
+    static bool fits(const QString & line, const FormatFileConfig & fileConfig);
 
 protected:
     void runGroup(FormatDocument *document,

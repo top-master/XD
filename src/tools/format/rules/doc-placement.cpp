@@ -58,6 +58,7 @@ QString FormatDocPlacementRule::headerSource(const QString & path) const
         && suffix != QLL("hh")
         && suffix != QLL("hpp")
         && suffix != QLL("hxx")
+        && suffix != QLL("h++")
     ) {
         return QString();
     }
@@ -65,10 +66,12 @@ QString FormatDocPlacementRule::headerSource(const QString & path) const
     if (stem.endsWith(QLL("_p"))) {
         stem.chop(2);
     }
-    const char *const sources[] = { "cpp", "cc", "cxx", "c", "mm" };
+    const char *const sources[] = { "cpp", "cc", "cxx", "c++", "c", "mm", "m" };
     for (size_t i = 0; i < sizeof(sources) / sizeof(sources[0]); ++i) {
-        const QString candidate = info.dir().filePath(stem + QLatin1Char('.')
-                                                      + QString::fromLatin1(sources[i]));
+        const QString candidate = info.dir().filePath(
+            stem + QLatin1Char('.')
+                + QString::fromLatin1(sources[i])
+        );
         if (QFileInfo(candidate).isFile()) {
             return candidate;
         }
@@ -138,9 +141,17 @@ void FormatDocPlacementRule::runGroup(
     }
 
     // Reports a comment on a header declaration that its source defines.
-    if (atDeclarationScope && isMember && attached && isDeclaration && ! isField
-        && token != CLASS && token != STRUCT && token != TYPEDEF && token != USING
-        && token != FRIEND && token != ENUM
+    if (atDeclarationScope
+        && isMember
+        && attached
+        && isDeclaration
+        && ! isField
+        && token != CLASS
+        && token != STRUCT
+        && token != TYPEDEF
+        && token != USING
+        && token != FRIEND
+        && token != ENUM
     ) {
         const QString source = this->headerSource(document->path());
         if ( ! source.isEmpty()) {

@@ -16,7 +16,7 @@
     Spaces a `&` that declares a named reference on both sides
     (`const QString & name`), and a `&&` of an rvalue reference the same way;
     a project's `.formatrc` may set the spacing after each (see
-    FormatSettings). A `&` with no name after it (a return type, a cast) and
+    FormatFileConfig). A `&` with no name after it (a return type, a cast) and
     an address or a bitwise and are left as they are.
 */
 
@@ -27,14 +27,19 @@ void FormatReferenceSpaceRule::run(FormatDocument *document) const
 {
     for (int i = 1; i + 2 < document->symbols().size(); ++i) {
         const Token token = document->token(i);
-        if ((token != AND && token != ANDAND) || document->token(i + 1) != IDENTIFIER
+        if ((token != AND && token != ANDAND)
+            || document->token(i + 1) != IDENTIFIER
             || ! isTypeEnd(document->token(i - 1))
             || document->isDirectiveLine(document->symbolLine(i))
         ) {
             continue;
         }
         const Token after = document->token(i + 2);
-        if (after != COMMA && after != RPAREN && after != EQ && after != SEMIC && after != LBRACK
+        if (after != COMMA
+            && after != RPAREN
+            && after != EQ
+            && after != SEMIC
+            && after != LBRACK
             && after != COLON
         ) {
             continue;
@@ -52,8 +57,10 @@ void FormatReferenceSpaceRule::run(FormatDocument *document) const
         // Puts one space before the operator, and after it what the
         // project's setting asks for; a setting by regular expression whose
         // pattern matches the line replaces it instead.
+        const FormatFileConfig &fileConfig =
+            document->configAt(document->symbols().at(i).from);
         const FormatSpacing & setting = token == AND
-            ? document->settings().refSuffix : document->settings().moveSuffix;
+            ? fileConfig.refSuffix : fileConfig.moveSuffix;
         const FormatSpacing spacing = document->onSetting(setting, i);
         if (spacing.isNull()) {
             continue;
@@ -85,7 +92,10 @@ bool FormatReferenceSpaceRule::isDeclaration(
     bool hasQualifier = false;
     while (start >= 0) {
         const Token token = document->token(start);
-        if (token == CONST || token == VOLATILE || token == RANGLE || token == GTGT
+        if (token == CONST
+            || token == VOLATILE
+            || token == RANGLE
+            || token == GTGT
             || isBuiltinType(token)
         ) {
             hasQualifier = true;
@@ -104,8 +114,12 @@ bool FormatReferenceSpaceRule::isDeclaration(
             --start;
             continue;
         }
-        if (token == IDENTIFIER || token == SCOPE || token == CONST || token == VOLATILE
-            || token == STAR || isBuiltinType(token)
+        if (token == IDENTIFIER
+            || token == SCOPE
+            || token == CONST
+            || token == VOLATILE
+            || token == STAR
+            || isBuiltinType(token)
         ) {
             --start;
             continue;

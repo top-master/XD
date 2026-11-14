@@ -69,7 +69,11 @@ void FormatBodyBracesRule::run(FormatDocument *document) const
         const int open = document->match(close);
         if (document->token(close) != RBRACE || open < 0
             || ! closesChain(document, close)
-            || ! conditions.holds(document->settings().bodyBraces, open)
+            || ! conditions.holds(
+                document->configAt(document->symbols().at(open).from)
+                    .bodyBraces,
+                open
+            )
         ) {
             continue;
         }
@@ -112,7 +116,8 @@ void FormatBodyBracesRule::run(FormatDocument *document) const
             }
         }
 
-        // Moves the later lines in until the shallowest stands at the body's indent.
+        // Moves the later lines in until the shallowest stands at
+        // the body's indent.
         int shallowest = -1;
         for (int l = 0; l < lines.size(); ++l) {
             const QByteArray & line = lines.at(l);

@@ -5,6 +5,7 @@
 
 #include "../format-document.h"
 #include "./code-helpers.h"
+#include "./expression-layout.h"
 #include "./layout-helpers.h"
 #include "./scope-conditions.h"
 
@@ -61,31 +62,38 @@ QByteArray FormatConditionLayout::layoutCondition(
 */
 static int conditionRank(Token token)
 {
-    static const Token ranks[][4] = {
-        { OR, OR, OR, OR },
-        { HAT, HAT, HAT, HAT },
-        { AND, AND, AND, AND },
-        { EQEQ, NE, NE, NE },
-        { LANGLE, RANGLE, LE, GE },
-        { LTLT, GTGT, GTGT, GTGT },
-        { PLUS, MINUS, MINUS, MINUS },
-        { STAR, SLASH, PERCENT, PERCENT },
-    };
-    for (size_t r = 0; r < sizeof(ranks) / sizeof(ranks[0]); ++r) {
-        for (int t = 0; t < 4; ++t) {
-            if (ranks[r][t] == token) {
-                return int(r);
-            }
-        }
+    switch (token) {
+    case OR:
+        return 0;
+    case HAT:
+        return 1;
+    case AND:
+        return 2;
+    case LTLT:
+    case GTGT:
+        return 5;
+    case PLUS:
+    case MINUS:
+        return 6;
+    case STAR:
+    case SLASH:
+    case PERCENT:
+        return 7;
+    default: {
+        // Ranks the comparisons right after `&`.
+        const int comparison = comparisonRank(token);
+        return comparison < 0 ? -1 : 3 + comparison;
     }
-    return -1;
+    }
 }
 
 /*!
     Builds the layout of the one-line condition from the `(` at @a open to
     the `)` at @a close, which holds no `&&` or `||` of its own: broken
     before each of its loosest operators outside of its nested brackets
-    (see conditionRank()), each such line two steps (8 spaces) past the
+    (see conditionRank()). An early comparison keeps its right operand's
+    tighter operators as the break when those lines fit. Each such line sits
+    two steps (8 spaces) past the
     keyword's line, one for the condition's parentheses and one as the
     operand of an operator that does not chain conditions, and the `)` on a
     line of its own, at the keyword's indent. Builds an empty text for a
@@ -93,7 +101,7 @@ static int conditionRank(Token token)
 */
 QByteArray FormatConditionLayout::layoutPlain(int open, int close) const
 {
-    const QList<int > found = loosestOperators(
+    QList<int > found = loosestOperators(
         m_document,
         open + 1,
         close - 1,
@@ -105,7 +113,49 @@ QByteArray FormatConditionLayout::layoutPlain(int open, int close) const
         return QByteArray();
     }
     const int line = m_document->symbolLine(open);
+    const int offset = m_document->symbols().at(open).from;
+    const FormatFileConfig &fileConfig = m_document->configAt(offset);
     const int indent = m_document->indentOf(line).size();
+    const int rank = conditionRank(m_document->token(found.first()));
+    const int start = m_document->lineStart(line);
+    const int comparisonColumn = textWidth(
+        m_document->text().mid(
+            start, m_document->symbols().at(found.first()).from - start
+        )
+    );
+    if (found.size() == 1 && (rank == 3 || rank == 4)
+        && comparisonColumn < wrapColumn(m_document, offset)
+    ) {
+        const QList<int > tighter = loosestOperators(
+            m_document,
+            found.first() + 1,
+            close - 1,
+            &conditionRank,
+            5,
+            Q_NULLPTR
+        );
+        if ( ! tighter.isEmpty()) {
+            const int firstWidth = textWidth(
+                m_document->text().mid(
+                    start,
+                    m_document->symbols().at(tighter.first()).from - start
+                )
+            );
+            bool fits = firstWidth <= fileConfig.wrapMax;
+            for (int k = 0; k < tighter.size() && fits; ++k) {
+                const int end = k + 1 < tighter.size()
+                    ? tighter.at(k + 1) - 1 : close - 1;
+                fits = indent + 8 + textWidth(sourceText(
+                    m_document,
+                    tighter.at(k),
+                    end
+                )) <= fileConfig.wrapMax;
+            }
+            if (fits) {
+                found = tighter;
+            }
+        }
+    }
     const QByteArray pad(indent + 8, ' ');
     QByteArray text = "("
         + sourceText(m_document, open + 1, found.first() - 1);
@@ -127,7 +177,7 @@ QList<QByteArray > FormatConditionLayout::layoutHead(
         int first, int last,
         int indent) const
 {
-    const int wrap = wrapColumn(m_document);
+    const int wrap = wrapColumn(m_document, m_document->symbols().at(first).from);
     return this->headLines(first, last, indent, indent, wrap, 0, true);
 }
 
@@ -175,15 +225,31 @@ QByteArray FormatConditionLayout::group(
     );
     int lineStart = -column;
     bool isComplex = false;
+    const FormatFileConfig &fileConfig = m_document->configAt(
+        m_document->symbols().at(open).from
+    );
+    const bool separates = ( ! fileConfig.wrapConditionsOverSet
+                            && fileConfig.wrapConditionsOver == 3
+                            && fileConfig.wrapConditionsOverCondition.isEmpty())
+        || m_conditions->conditionsOver(open, ops.size() + 1);
     for (int k = 0; k <= ops.size(); ++k) {
         const int first = k == 0 ? open + 1 : ops.at(k - 1) + 1;
         const int last = k == ops.size() ? close - 1 : ops.at(k) - 1;
-        int operandIndent = indent;
+        int operandIndent = continuationIndent(indent);
         if (k > 0) {
-            text += '\n' + continuationPad(indent)
-                + m_document->lexem(ops.at(k - 1)) + ' ';
-            lineStart = text.lastIndexOf('\n') + 1;
-            operandIndent = continuationIndent(indent);
+            const QByteArray op = m_document->lexem(ops.at(k - 1));
+            const int currentWidth = text.size() - lineStart;
+            const bool joins = ! separates
+                && ! isClosingLine(text.mid(text.lastIndexOf('\n') + 1))
+                && currentWidth + op.size() + 2
+                    + textWidth(sourceText(m_document, first, last))
+                    <= wrapColumn(m_document, m_document->symbols().at(open).from);
+            if (joins) {
+                text += ' ' + op + ' ';
+            } else {
+                text += '\n' + continuationPad(indent) + op + ' ';
+                lineStart = text.lastIndexOf('\n') + 1;
+            }
         }
         const int operandColumn = text.size() - lineStart;
 
@@ -201,7 +267,7 @@ QByteArray FormatConditionLayout::group(
             && ! this->operators(start, last).isEmpty();
         const bool fits = operandColumn
             + textWidth(sourceText(m_document, first, last)) + 1
-            <= wrapColumn(m_document);
+            <= wrapColumn(m_document, m_document->symbols().at(first).from);
         if (isNested && ! fits) {
             const QByteArray signs = start > first
                 ? m_document->text().mid(
@@ -259,7 +325,8 @@ QByteArray FormatConditionLayout::atom(
     const int innerLast = isParenthesized ? last - 1 : last;
     int question = -1;
     int colon = -1;
-    if (column + textWidth(text) <= wrapColumn(m_document)) {
+    const int offset = m_document->symbols().at(first).from;
+    if (column + textWidth(text) <= wrapColumn(m_document, offset)) {
         return text;
     }
 
@@ -268,6 +335,30 @@ QByteArray FormatConditionLayout::atom(
     if ( ! findTernary(m_document, inner, innerLast, &question, &colon)) {
         if (isParenthesized) {
             return text;
+        }
+        const QList<int > comparisons = loosestOperators(
+            m_document, first, last, &conditionRank, 3, Q_NULLPTR
+        );
+        if (comparisons.size() == 1
+            && conditionRank(m_document->token(comparisons.first())) <= 4
+            && continuationIndent(indent) + textWidth(sourceText(
+                m_document, comparisons.first(), last
+            )) > m_document->configAt(offset).wrapMax
+        ) {
+            const int comparison = comparisons.first();
+            const QByteArray head = sourceText(m_document, first, comparison) + ' ';
+            FormatExpressionLayout value(m_document, m_conditions, indent);
+            const QByteArray right = value.layout(
+                comparison + 1, last, column + textWidth(head), 0
+            );
+            const int split = right.indexOf('\n');
+            if (split >= 0
+                && column + textWidth(head) + textWidth(right.left(split))
+                    <= m_document->configAt(offset).wrapMax
+            ) {
+                *isComplex = true;
+                return head + right;
+            }
         }
         const QList<QByteArray > lines = comparisonLines(
             m_document,
@@ -287,8 +378,8 @@ QByteArray FormatConditionLayout::atom(
         return result;
     }
 
-    // Breaks before the `?`, and before the `:` when that still does not
-    // fit; a parenthesized operand then closes on a line of its own.
+    // Tries the conditional's breaks in their shared order; a parenthesized
+    // operand then closes on a line of its own.
     const QByteArray head = sourceText(m_document, first, question - 1);
     const QByteArray middle = sourceText(m_document, question, colon - 1);
     const QByteArray tail = sourceText(m_document, colon, innerLast);
@@ -299,7 +390,7 @@ QByteArray FormatConditionLayout::atom(
         indent,
         column,
         isParenthesized ? 1 : 0,
-        wrapColumn(m_document)
+        wrapMaxAt(m_document, offset)
     );
     QByteArray result;
     for (int l = 0; l < lines.size(); ++l) {
@@ -323,19 +414,16 @@ QByteArray FormatConditionLayout::atom(
 */
 static int headRank(Token token)
 {
-    static const Token ranks[][4] = {
-        { OROR, OROR, OROR, OROR },
-        { ANDAND, ANDAND, ANDAND, ANDAND },
-        { EQ, EQ, EQ, EQ },
-    };
-    for (size_t r = 0; r < sizeof(ranks) / sizeof(ranks[0]); ++r) {
-        for (int t = 0; t < 4; ++t) {
-            if (ranks[r][t] == token) {
-                return int(r);
-            }
-        }
+    switch (token) {
+    case OROR:
+        return 0;
+    case ANDAND:
+        return 1;
+    case EQ:
+        return 2;
+    default:
+        return -1;
     }
-    return -1;
 }
 
 /*!
@@ -361,14 +449,7 @@ QList<QByteArray > FormatConditionLayout::headLines(
         return QList<QByteArray >() << text;
     }
     const int step = continuationIndent(0);
-    const QList<QByteArray > compared = comparisonLines(
-        m_document,
-        first,
-        last,
-        column,
-        indent,
-        startsStatement ? 2 * step : step
-    );
+    const int comparisonStep = startsStatement ? 2 * step : step;
 
     // Finds the operators to break at; an `=` counts only when it is the
     // head's single one, and stands at or past `wrapArgsAt`, or when the
@@ -385,7 +466,16 @@ QList<QByteArray > FormatConditionLayout::headLines(
             m_conditions,
             operators.first()
         );
-        if (operators.size() == 1 && (reaches || compared.size() < 2)) {
+        if (operators.size() == 1
+            && (reaches || comparisonLines(
+                m_document,
+                first,
+                last,
+                column,
+                indent,
+                comparisonStep
+            ).size() < 2)
+        ) {
             break;
         }
         operators = loosestOperators(
@@ -393,7 +483,14 @@ QList<QByteArray > FormatConditionLayout::headLines(
         );
     }
     if (operators.isEmpty()) {
-        return compared;
+        return comparisonLines(
+            m_document,
+            first,
+            last,
+            column,
+            indent,
+            comparisonStep
+        );
     }
 
     // Splits the head after its `=`, or before each of its operators.

@@ -27,6 +27,29 @@
 /*!
     Destroys the rule.
 */
+#include "./format-document.h"
+
 FormatRule::~FormatRule()
 {
+}
+
+QVariant FormatRule::cache(const FormatDocument *document, const QByteArray &key) const
+{
+    return document->ruleCache(this, key);
+}
+
+void FormatRule::setCache(FormatDocument *document, const QByteArray &key,
+                          const QVariant &value) const
+{
+    document->setRuleCache(this, key, value);
+}
+
+/*!
+    Tells whether the rule reads files other than the one it formats, such
+    as the related files of a class; a run then hands each file of the run
+    to the rule as the run found it, before any rule changed it.
+*/
+bool FormatRule::readsOtherFiles() const
+{
+    return false;
 }

@@ -49,7 +49,9 @@ void FormatTrailingCommentRule::runGroup(
 
     // Turns a trailing doc marker into a leading one.
     QByteArray text = document->commentText(index);
-    if (text.startsWith("///<") || text.startsWith("//!<") || text.startsWith("/**<")
+    if (text.startsWith("///<")
+        || text.startsWith("//!<")
+        || text.startsWith("/**<")
         || text.startsWith("/*!<")
     ) {
         text.remove(3, 1);
@@ -58,7 +60,8 @@ void FormatTrailingCommentRule::runGroup(
     // Removes the comment with the spaces before it, and puts it above.
     int from = comment.offset;
     while (from > document->lineStart(line)
-        && (document->text().at(from - 1) == ' ' || document->text().at(from - 1) == '\t')
+        && (document->text().at(from - 1) == ' '
+            || document->text().at(from - 1) == '\t')
     ) {
         --from;
     }

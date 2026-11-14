@@ -104,15 +104,25 @@ FormatResult Formatter::format(const QByteArray & text, const QString & path,
 {
     FormatResult result;
     FormatDocument document(text, path);
+    FormatConfig activeConfig = config;
+    if (activeConfig.scheduledFiles.isEmpty() && ! path.isEmpty()) {
+        activeConfig.scheduledFiles << path;
+    }
+    document.setFormatConfig(activeConfig);
     document.setAgentMode(agentMode);
     document.setIncludePaths(config.includePaths);
 
     // Reads the project's choices for the file.
-    FormatSettings settings;
-    if ( ! FormatSettings::load(path, config, &settings, &result.error)) {
+    FormatFileConfig fileConfig;
+    if ( ! FormatFileConfig::load(path, config, &fileConfig, &result.error)) {
         return result;
     }
-    document.setSettings(settings);
+    document.setConfig(fileConfig);
+    if ((text.contains("Format rule") || text.contains('@'))
+        && ! document.setInlineConfiguration(config, &result.error)
+    ) {
+        return result;
+    }
 
     // Resolves the lines to format.
     if ( ! lineSpecs.isEmpty()) {
@@ -145,6 +155,10 @@ FormatResult Formatter::format(const QByteArray & text, const QString & path,
             if ( ! document.applyEdits()) {
                 break;
             }
+            if ( ! document.inlineConfigurationError().isEmpty()) {
+                result.error = document.inlineConfigurationError();
+                return result;
+            }
 
             // Drops this pass's issues while another pass follows, since
             // that pass reports again whatever the fixes left.
@@ -158,5 +172,8 @@ FormatResult Formatter::format(const QByteArray & text, const QString & path,
     result.changed = result.text != text;
     result.issues = document.issues();
     result.requests = document.requests();
+    if (document.hasInlineConfiguration()) {
+        result.warnings = document.inlineWarnings(config.verbose);
+    }
     return result;
 }

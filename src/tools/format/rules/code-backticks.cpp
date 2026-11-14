@@ -138,14 +138,20 @@ void FormatCodeBackticksRule::runGroup(
         // reaches, which only the meaning tells.
         if (isDoc && document->agentMode()) {
             const QString prose = proseOnly(text);
-            QRegularExpressionMatchIterator chains = codeNamePattern()->globalMatch(prose);
+            QRegularExpressionMatchIterator chains =
+                codeNamePattern()->globalMatch(prose);
             while (chains.hasNext()) {
                 const QString chain = chains.next().captured(1);
                 if (chain.contains(QLL("->"))) {
                     document->request(
                         lines.at(i).offset,
                         "code-backticks",
-                        QString(QLL("name the member that `%1` reaches by its " "class (such as `Class::member()`), which " "Doxygen links; keep the chain, in " "backticks, only when it shows an " "expression as an example")).arg(chain)
+                        QString(QLL("name the member that `%1` reaches by its "
+                            "class (such as `Class::member()`), which "
+                            "Doxygen links; keep the chain, in "
+                            "backticks, only when it shows an "
+                            "expression as an example"))
+                        .arg(chain)
                     );
                 }
             }
@@ -157,7 +163,8 @@ void FormatCodeBackticksRule::runGroup(
             &names
         );
         if (mapped != text) {
-            document->replace(lines.at(i).offset, lines.at(i).text.size(), mapped.toUtf8());
+            document
+                ->replace(lines.at(i).offset, lines.at(i).text.size(), mapped.toUtf8());
         }
     }
 }

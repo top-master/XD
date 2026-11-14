@@ -9,10 +9,11 @@ TARGET = tst_format_cli
 # Names the folder of the built tool: the Qt install's binaries folder, which
 # the built Qt itself resolves next to the test instead (its prefix is
 # relative to the running app).
-DEFINES += FORMAT_BINS=\\\"$$[QT_INSTALL_BINS]\\\"
+isEmpty(FORMAT_BINS): FORMAT_BINS = $$[QT_INSTALL_BINS]
+DEFINES += FORMAT_BINS=\\\"$$FORMAT_BINS\\\"
 
 # Names the built tool's binary in that folder (see format-target.pri).
-include($$PWD/../../../../../src/tools/format/format-target.pri)
+isEmpty(FORMAT_TARGET): include($$PWD/../../../../../src/tools/format/format-target.pri)
 DEFINES += FORMAT_TARGET=\\\"$$FORMAT_TARGET\\\"
 
 # Names the source tree, whose real headers and sources some tests format a

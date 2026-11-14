@@ -27,6 +27,7 @@ HEADERS += \
     $$PWD/format-rule.h \
     $$PWD/format-rules.h \
     $$PWD/format-runner.h \
+    $$PWD/format-file-config.h \
     $$PWD/format-spacing.h \
     $$PWD/format-thread-runner.h \
     $$PWD/formatter.h \
@@ -35,6 +36,9 @@ HEADERS += \
     $$PWD/lang/member-scope.h \
     $$PWD/parser/class-helpers.h \
     $$PWD/parser/code-helpers.h \
+    $$PWD/parser/condition-context.h \
+    $$PWD/parser/condition-object.h \
+    $$PWD/parser/count-object.h \
     $$PWD/parser/condition-layout.h \
     $$PWD/parser/comment-helpers.h \
     $$PWD/parser/expression-layout.h \
@@ -99,11 +103,14 @@ SOURCES += \
     $$PWD/format-rule.cpp \
     $$PWD/format-rules.cpp \
     $$PWD/format-runner.cpp \
-    $$PWD/format-settings.cpp \
+    $$PWD/format-file-config.cpp \
     $$PWD/format-thread-runner.cpp \
     $$PWD/formatter.cpp \
     $$PWD/parser/class-helpers.cpp \
     $$PWD/parser/code-helpers.cpp \
+    $$PWD/parser/condition-context.cpp \
+    $$PWD/parser/condition-object.cpp \
+    $$PWD/parser/count-object.cpp \
     $$PWD/parser/condition-layout.cpp \
     $$PWD/parser/comment-helpers.cpp \
     $$PWD/parser/expression-layout.cpp \

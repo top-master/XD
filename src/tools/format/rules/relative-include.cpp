@@ -31,18 +31,22 @@ void FormatRelativeIncludeRule::run(FormatDocument *document) const
         return;
     }
     const QDir dir = QFileInfo(document->path()).absoluteDir();
-    const QRegularExpression include(QString(QLL("^\\s*#\\s*include\\s*\"([^\"]+)\"")));
+    const QRegularExpression include(
+            QString(QLL("^\\s*#\\s*include\\s*\"([^\"]+)\"")));
     for (int line = 1; line <= document->lineCount(); ++line) {
         if ( ! document->isDirectiveLine(line)) {
             continue;
         }
         const QByteArray text = document->lineText(line);
-        const QRegularExpressionMatch found = include.match(QString::fromUtf8(text));
+        const QRegularExpressionMatch found =
+            include.match(QString::fromUtf8(text));
         if ( ! found.hasMatch()) {
             continue;
         }
         const QString name = found.captured(1);
-        if (name.startsWith(QLL("./")) || name.startsWith(QLL("../")) || QDir::isAbsolutePath(name)
+        if (name.startsWith(QLL("./"))
+            || name.startsWith(QLL("../"))
+            || QDir::isAbsolutePath(name)
             || ! QFileInfo(dir.filePath(name)).isFile()
         ) {
             continue;

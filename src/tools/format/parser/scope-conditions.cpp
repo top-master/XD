@@ -5,6 +5,9 @@
 
 #include "../format-document.h"
 #include "./class-helpers.h"
+#include "./code-helpers.h"
+#include "./condition-context.h"
+#include "./layout-helpers.h"
 
 #include "config-condition.h"
 
@@ -31,7 +34,7 @@
     the conditions are in use.
 */
 FormatScopeConditions::FormatScopeConditions(const FormatDocument *document)
-    : m_document(document)
+    : m_document(document), m_reservedLine(-1), m_reservedColumn(0)
 {
 }
 
@@ -53,8 +56,99 @@ QStringList FormatScopeConditions::names()
     return QStringList() << QString(QLL("always")) << QString(QLL("never"))
         << QString(QLL("already-existing")) << QString(QLL("is-base-member"))
         << QString(QLL("is-template")) << QString(QLL("is-outline"))
-        << QString(QLL("is-header")) << QString(QLL("is-non-header"));
+        << QString(QLL("is-header")) << QString(QLL("is-non-header"))
+        << QString(QLL("is-signature"));
 }
+
+namespace {
+
+/*!
+    Answers what a condition asks for (see FormatConditionContext) at the
+    argument list that holds a token, or at the `(` of an `if` or a `while`
+    for a condition's operands, each answer only when a term asks for it:
+    the names (see FormatScopeConditions::nameHolds()), `value`, the
+    argument counts, `spaceRemaining`, and the percent value of the percent
+    terms, which is 100 less `spaceRemaining`.
+
+    A caller that already knows `value` or `spaceRemaining` passes it in
+    @a count or @a spaceRemaining, else null; @a hasPercent unset leaves the
+    percent terms without a value.
+*/
+class ArgumentContext : public FormatConditionContext
+{
+    typedef FormatConditionContext super;
+public:
+    inline ArgumentContext(FormatScopeConditions *scope, int token,
+                           int target, bool condition, const int *count,
+                           const qreal *spaceRemaining, bool hasPercent)
+        : m_scope(scope), m_token(token), m_target(target)
+        , m_condition(condition), m_count(count)
+        , m_spaceRemaining(spaceRemaining), m_hasPercent(hasPercent)
+    {
+    }
+
+    bool predicate(const QString &name, bool *value) const Q_DECL_OVERRIDE;
+    bool percent(qreal *value) const Q_DECL_OVERRIDE;
+    bool value(qreal *value) const Q_DECL_OVERRIDE;
+    bool argumentCount(int depth, int argument,
+                       qreal *count) const Q_DECL_OVERRIDE;
+    bool spaceRemaining(qreal *percent) const Q_DECL_OVERRIDE;
+
+private:
+    FormatScopeConditions *m_scope;
+    int m_token;
+    int m_target;
+    bool m_condition;
+    const int *m_count;
+    const qreal *m_spaceRemaining;
+    bool m_hasPercent;
+};
+
+bool ArgumentContext::predicate(const QString &name, bool *value) const
+{
+    return this->m_scope->nameHolds(this->m_token, name, value);
+}
+
+bool ArgumentContext::percent(qreal *value) const
+{
+    qreal space = 0;
+    if ( ! this->m_hasPercent || ! this->spaceRemaining(&space)) {
+        return false;
+    }
+    *value = 100 - space;
+    return true;
+}
+
+bool ArgumentContext::value(qreal *value) const
+{
+    *value = this->m_count ? *this->m_count
+                           : this->m_scope->argumentCount(this->m_token, 0);
+    return true;
+}
+
+bool ArgumentContext::argumentCount(
+        int depth, int argument,
+        qreal *count) const
+{
+    *count = this->m_condition
+        ? this->m_scope->conditionArgumentCount(
+            this->m_token,
+            depth,
+            argument
+        )
+        : this->m_scope->argumentCount(this->m_token, depth, argument);
+    return true;
+}
+
+bool ArgumentContext::spaceRemaining(qreal *percent) const
+{
+    *percent = this->m_spaceRemaining
+        ? *this->m_spaceRemaining
+        : this->m_scope->spaceRemaining(this->m_target);
+    return true;
+}
+
+} // namespace
 
 /*!
     Tells whether the condition that Config::Condition::compile() made
@@ -62,7 +156,11 @@ QStringList FormatScopeConditions::names()
 */
 bool FormatScopeConditions::holds(const QStringList & program, int token)
 {
-    return Config::Condition::evaluate(program, this->holding(token));
+    const ArgumentContext context(
+        this, token, this->argumentTarget(token),
+        false, Q_NULLPTR, Q_NULLPTR, true
+    );
+    return Config::Condition::evaluate(program, QSet<QString >(), &context);
 }
 
 /*!
@@ -76,58 +174,94 @@ bool FormatScopeConditions::holds(
         const QStringList & program, int token, qreal percent,
         const QStringList & fallback)
 {
-    const QSet<QString > names = this->holding(token);
+    const qreal space = 100 - percent;
+    const ArgumentContext context(
+        this, token, this->argumentTarget(token),
+        false, Q_NULLPTR,
+        percent >= 0 ? &space : Q_NULLPTR,
+        percent >= 0
+    );
     bool ok = true;
-    bool result = false;
-    if (percent < 0) {
-        result = Config::Condition::evaluate(program, names, &ok);
-    } else {
-        result = Config::Condition::evaluate(program, names, percent, &ok);
-    }
+    const bool result = Config::Condition::evaluate(
+        program, QSet<QString >(), &context, &ok
+    );
     if (ok) {
         return result;
     }
-    if (percent < 0) {
-        return Config::Condition::evaluate(fallback, names);
-    }
-    return Config::Condition::evaluate(fallback, names, percent);
+    return Config::Condition::evaluate(
+        fallback,
+        QSet<QString >(),
+        &context
+    );
 }
 
 /*!
-    Builds the names that hold at the token @a token (see names()).
+    Tells in @a value whether the name @a name of names() holds at the token
+    @a token, in the form without case, `_` and `-` that
+    Config::Condition::compile() gives it; returns false for a name that is
+    not one of names(). It finds only what that one name needs, hence a
+    condition costs only the names it reaches.
 */
-QSet<QString > FormatScopeConditions::holding(int token)
+bool FormatScopeConditions::nameHolds(
+        int token, const QString & name,
+        bool *value)
 {
-    QSet<QString > names;
-    names << QString(QLL("always"));
-    if (this->m_document->isHeader()) {
-        names << QString(QLL("is-header"));
-    } else {
-        names << QString(QLL("is-non-header"));
+    if (name == QLL("always") || name == QLL("never")) {
+        *value = name == QLL("always");
+        return true;
     }
-    const FormatMemberScope scope = this->scopeOf(token);
-    if (scope.isOutline) {
-        names << QString(QLL("is-outline"));
+    if (name == QLL("isHeader") || name == QLL("isNonHeader")) {
+        *value = this->m_document->isHeader() == (name == QLL("isHeader"));
+        return true;
     }
-    if (scope.isTemplate) {
-        names << QString(QLL("is-template"));
+    if (name == QLL("isSignature")) {
+        const int target = this->argumentTarget(token);
+        *value = target >= 0 && isDeclarationParen(m_document, target);
+        return true;
     }
-    if (this->m_document->token(token) != IDENTIFIER) {
-        return names;
+    if (name == QLL("isOutline") || name == QLL("isTemplate")) {
+        const FormatMemberScope scope = this->scopeOf(token);
+        *value = name == QLL("isOutline") ? scope.isOutline : scope.isTemplate;
+        return true;
+    }
+    if (name != QLL("isBaseMember") && name != QLL("alreadyExisting")) {
+        return false;
     }
 
     // Names what holds for a member name.
-    const QByteArray name = this->m_document->lexem(token);
-    if (scope.baseMembers.contains(name)) {
-        names << QString(QLL("is-base-member"));
+    *value = false;
+    if (this->m_document->token(token) != IDENTIFIER) {
+        return true;
     }
-    if ((scope.members.names.contains(name) || scope.baseMembers.contains(name))
+    const FormatMemberScope scope = this->scopeOf(token);
+    const QByteArray member = this->m_document->lexem(token);
+    if (name == QLL("isBaseMember")) {
+        *value = scope.baseMembers.contains(member);
+        return true;
+    }
+    *value = (scope.members.names.contains(member)
+        || scope.baseMembers.contains(member))
         && token >= 2 && this->m_document->token(token - 1) == ARROW
-        && this->m_document->token(token - 2) == THIS
-    ) {
-        names << QString(QLL("already-existing"));
+        && this->m_document->token(token - 2) == THIS;
+    return true;
+}
+
+/*!
+    Builds the names of names() that hold at the token @a token, for a
+    caller that wants all of them at once.
+*/
+QSet<QString > FormatScopeConditions::holding(int token)
+{
+    QSet<QString > holding;
+    const QStringList all = FormatScopeConditions::names();
+    for (int i = 0; i < all.size(); ++i) {
+        const QString name = Config::Condition::canonicalName(all.at(i));
+        bool value = false;
+        if (this->nameHolds(token, name, &value) && value) {
+            holding << all.at(i);
+        }
     }
-    return names;
+    return holding;
 }
 
 /*!
@@ -184,8 +318,14 @@ FormatMemberScope FormatScopeConditions::functionScope(int brace)
             const Token token = document->token(k);
             scope.isTemplate = scope.isTemplate || token == TEMPLATE;
             scope.isStatic = scope.isStatic || token == STATIC;
+            if (token == LPAREN && document->match(k) > k) {
+                k = document->match(k);
+                continue;
+            }
             if ( ! scope.isOutline) {
-                if (scope.params < 0 && token == IDENTIFIER && document->token(k + 1) == LPAREN
+                if (scope.params < 0
+                    && token == IDENTIFIER
+                    && document->token(k + 1) == LPAREN
                     && ! isMacroName(document->lexem(k))
                 ) {
                     scope.memberToken = k;
@@ -220,7 +360,8 @@ FormatMemberScope FormatScopeConditions::functionScope(int brace)
             if (document->token(member) == TILDE) {
                 ++member;
             }
-            if (document->token(member) == IDENTIFIER && document->token(member + 1) == LPAREN
+            if (scope.params < 0 && document->token(member) == IDENTIFIER
+                && document->token(member + 1) == LPAREN
                 && document->token(member + 2) != STAR
             ) {
                 className = document->lexem(k);
@@ -359,4 +500,284 @@ QSet<QByteArray > FormatScopeConditions::baseMembersOf(
     }
     names.subtract(members.names);
     return names;
+}
+
+namespace {
+static bool isArgumentTarget(const FormatDocument *document, int open)
+{
+    if (open < 1
+        || document->token(open) != LPAREN
+        || document->match(open) <= open
+    ) {
+        return false;
+    }
+    const Token before = document->token(open - 1);
+    return before == IDENTIFIER || before == RPAREN || before == RBRACK
+        || before == RANGLE || before == GTGT || before == IF || before == WHILE;
+}
+
+static QList<QPair<int, int > > targetItems(const FormatDocument *document,
+                                             int open)
+{
+    const int close = document->match(open);
+    const Token before = document->token(open - 1);
+    if (before != IF && before != WHILE && isArgumentTarget(document, open)) {
+        return splitArguments(document, open, close);
+    }
+    QList<QPair<int, int > > items;
+    int first = open + 1;
+    for (int i = first; i < close; ++i) {
+        const Token token = document->token(i);
+        if ((token == LPAREN || token == LBRACK || token == LBRACE)
+            && document->match(i) > i
+        ) {
+            i = document->match(i);
+        } else if (token == QUESTION) {
+            return QList<QPair<int, int > >() << qMakePair(open + 1, close - 1);
+        } else if (token == ANDAND || token == OROR) {
+            items << qMakePair(first, i - 1);
+            first = i + 1;
+        }
+    }
+    if (first < close) {
+        items << qMakePair(first, close - 1);
+    }
+    return items;
+}
+
+static int enclosingArgumentTarget(const FormatDocument *document, int token)
+{
+    for (int i = token - 1; i >= 1; --i) {
+        if (isArgumentTarget(document, i) && document->match(i) >= token) {
+            return i;
+        }
+    }
+    return -1;
+}
+
+static int enclosingConditionTarget(const FormatDocument *document, int token)
+{
+    for (int i = token - 1; i >= 1; --i) {
+        if (document->token(i) != LPAREN || document->match(i) < token) {
+            continue;
+        }
+        if (isArgumentTarget(document, i) || targetItems(document, i).size() > 1) {
+            return i;
+        }
+    }
+    return -1;
+}
+
+static void directCalls(const FormatDocument *document, int first, int last,
+                        QList<int > *calls)
+{
+    for (int i = first; i <= last; ++i) {
+        if (isArgumentTarget(document, i)) {
+            calls->append(i);
+            i = document->match(i);
+        }
+    }
+}
+}
+
+/*!
+    Counts arguments of calls reached from the target: zero selects the
+    target, negative depths select parents, and positive depths select calls
+    within its arguments. A positive argument selects that one-based item;
+    zero selects all items. Returns -1 when no target exists at that depth.
+*/
+int FormatScopeConditions::argumentTarget(int token) const
+{
+    if (isArgumentTarget(m_document, token)) {
+        return token;
+    }
+    if (isArgumentTarget(m_document, token + 1)) {
+        return token + 1;
+    }
+    return enclosingArgumentTarget(m_document, token);
+}
+
+qreal FormatScopeConditions::remainingSpace(int token, bool direct) const
+{
+    const int open = direct ? token : this->argumentTarget(token);
+    if (open < 0) {
+        return 0;
+    }
+    const int line = m_document->symbolLine(open);
+    const QByteArray head = m_document->text().mid(
+        m_document->lineStart(line),
+        m_document->symbolEnd(open) - m_document->lineStart(line)
+    );
+    const int maximum = qMax(1, m_document->configAt(
+        m_document->symbols().at(open).from
+    ).wrapMax);
+    return 100.0 * (maximum - textWidth(head)) / maximum;
+}
+
+/*!
+    Marks the line that holds the token @a token as used up to the column
+    @a column, for a rule that lays the line out anew: spaceRemaining() at a
+    token of that line then counts from that column. A later reserve() moves
+    the mark to its own line.
+*/
+void FormatScopeConditions::reserve(int token, int column)
+{
+    m_reservedLine = m_document->symbolLine(token);
+    m_reservedColumn = column;
+}
+
+/*!
+    Builds the share of `[Structure] wrapMax`, in percents, that is left on
+    the line of the token @a token: past the column that reserve() marked on
+    that line, else past the token's end. A token past `wrapMax` leaves a
+    negative share, and a token of no line leaves none.
+*/
+qreal FormatScopeConditions::spaceRemaining(int token) const
+{
+    if (token < 0) {
+        return 0;
+    }
+    if (m_reservedLine >= 0
+        && m_document->symbolLine(token) == m_reservedLine
+    ) {
+        const int maximum = qMax(
+            1,
+            m_document->configAt(
+                m_document->symbols().at(token).from
+            ).wrapMax
+        );
+        return 100.0 * (maximum - m_reservedColumn) / maximum;
+    }
+    return this->remainingSpace(token, true);
+}
+
+int FormatScopeConditions::argumentCount(
+        int token, int depth, int argument) const
+{
+    return this->countTargets(this->argumentTarget(token), depth, argument, false);
+}
+
+int FormatScopeConditions::conditionArgumentCount(
+        int token, int depth, int argument) const
+{
+    if (token < 0 || token >= m_document->symbols().size()
+        || m_document->token(token) != LPAREN || m_document->match(token) <= token
+    ) {
+        return -1;
+    }
+    return this->countTargets(token, depth, argument, true);
+}
+
+int FormatScopeConditions::countTargets(
+        int target, int depth, int argument, bool condition) const
+{
+    if (target < 0 || argument < 0) {
+        return -1;
+    }
+    while (depth < 0) {
+        target = condition ? enclosingConditionTarget(m_document, target)
+                           : enclosingArgumentTarget(m_document, target);
+        if (target < 0) {
+            return -1;
+        }
+        ++depth;
+    }
+    QList<int > targets;
+    targets << target;
+    for (int level = 0; level < depth; ++level) {
+        QList<int > next;
+        for (int k = 0; k < targets.size(); ++k) {
+            const int open = targets.at(k);
+            const QList<QPair<int, int > > items =
+                targetItems(m_document, open);
+            for (int i = 0; i < items.size(); ++i) {
+                if (level == 0 && argument > 0 && i + 1 != argument) {
+                    continue;
+                }
+                directCalls(
+                    m_document,
+                    items.at(i).first,
+                    items.at(i).second,
+                    &next
+                );
+            }
+        }
+        if (next.isEmpty()) {
+            return -1;
+        }
+        targets = next;
+    }
+    int count = 0;
+    for (int i = 0; i < targets.size(); ++i) {
+        const int open = targets.at(i);
+        const QList<QPair<int, int > > items =
+            targetItems(m_document, open);
+        if (items.size() == 1 && m_document->token(items.first().first) == VOID
+            && items.first().first == items.first().second
+            && isDeclarationParen(m_document, open)
+        ) {
+            continue;
+        }
+        count += items.size();
+    }
+    return count;
+}
+
+/*!
+    Evaluates the argument-count setting at @a token, for a list of
+    @a count arguments; `spaceRemaining` is measured from the target's
+    column, only when the setting reaches it.
+*/
+bool FormatScopeConditions::argsOver(int token, int count)
+{
+    return this->countOver(token, count, Q_NULLPTR, false);
+}
+
+/*!
+    Evaluates the argument-count setting at @a token, as the argsOver()
+    above does, with @a spaceRemaining as `spaceRemaining`.
+*/
+bool FormatScopeConditions::argsOver(
+        int token, int count,
+        qreal spaceRemaining)
+{
+    return this->countOver(token, count, &spaceRemaining, false);
+}
+
+bool FormatScopeConditions::conditionsOver(int token, int count)
+{
+    return this->countOver(token, count, Q_NULLPTR, true);
+}
+
+bool FormatScopeConditions::conditionsOver(int token, int count,
+                                           qreal spaceRemaining)
+{
+    return this->countOver(token, count, &spaceRemaining, true);
+}
+
+bool FormatScopeConditions::countOver(int token, int count,
+                                      const qreal *spaceRemaining,
+                                      bool condition)
+{
+    const FormatFileConfig &fileConfig = m_document->configAt(
+        m_document->symbols().at(token).from
+    );
+    const QStringList &program = condition ? fileConfig.wrapConditionsOverCondition
+                                           : fileConfig.wrapArgsOverCondition;
+    const int limit = condition ? fileConfig.wrapConditionsOver : fileConfig.wrapArgsOver;
+    if (program.isEmpty()) {
+        return count > limit;
+    }
+    const int target = condition ? token : this->argumentTarget(token);
+    const ArgumentContext context(
+        this, token, target, condition, &count,
+        spaceRemaining, true
+    );
+    const QSharedPointer<Config::Scopes::Scope > scope =
+        FormatConditionContext::pushCountScope();
+    bool ok = true;
+    const bool result = Config::Condition::evaluate(
+        program, QSet<QString >(), &context, &ok
+    );
+    return ok ? result : count > limit;
 }

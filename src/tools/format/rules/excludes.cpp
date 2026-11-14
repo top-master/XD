@@ -28,7 +28,8 @@ void FormatExcludesRule::run(FormatDocument *document) const
         }
         int k = i + 1;
         while (document->token(k) == IDENTIFIER
-            && (document->token(k + 1) == DOT || document->token(k + 1) == ARROW)
+            && (document->token(k + 1) == DOT
+                || document->token(k + 1) == ARROW)
         ) {
             k += 2;
         }
@@ -43,7 +44,9 @@ void FormatExcludesRule::run(FormatDocument *document) const
             document->report(
                 document->symbols().at(i).from,
                 "excludes",
-                QString(QLL("check a cleared flag with %1(), not !%2()")) .arg(name == "includes" ? QLL("excludes") : QLL("excludesLax")) .arg(QString::fromLatin1(name))
+                QString(QLL("check a cleared flag with %1(), not !%2()"))
+                    .arg(name == "includes" ? QLL("excludes") : QLL("excludesLax"))
+                    .arg(QString::fromLatin1(name))
             );
         }
     }
