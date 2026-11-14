@@ -2580,6 +2580,29 @@ expect_returns 'bh_strict_mode aborts subshell on first failure' 1 sh -c '
 
 # ---- specs: build modes, end to end ------------------------------------
 
+test_section 'save_order -- Windows drive paths'
+
+_bh_spec_qmake=$_spec_dir/../bin/qmake
+if [ ! -x "$_bh_spec_qmake" ]; then
+    test_skip 'Windows drive path conversion' 'needs XD qmake'
+else
+    _bh_spec_sandbox=$(mktemp -d)
+    _bh_spec_qmake=$(cd "$_spec_dir/../bin" && pwd)/qmake
+    cat > "$_bh_spec_sandbox/path.pro" <<'EOF'
+TEMPLATE = aux
+CONFIG -= qt
+QMAKE_HOST.os = Windows
+include($$[QT_HOST_DATA]/mkspecs/xd/save_order.prf)
+message(converted=$$saveOrderShellPath(R:/workspace/output/module))
+EOF
+    _bh_spec_path_out=$(cd "$_bh_spec_sandbox" \
+        && "$_bh_spec_qmake" path.pro 2>&1)
+    expect 'Windows drive paths use the shell spelling' 1 \
+        "$(printf '%s\n' "$_bh_spec_path_out" \
+            | grep -q 'converted=/r/workspace/output/module' && echo 1 || echo 0)"
+    rm -rf "$_bh_spec_sandbox"
+fi
+
 test_section 'build modes -- --filter / --save-space / --rebuild / --clean, end to end'
 
 # Drives bh_template_subdirs on a small project in a sandbox: a static lib,
