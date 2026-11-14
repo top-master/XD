@@ -18,7 +18,7 @@ struct FormatConfigDirective
     Kind kind;
     int offset;
     int endOffset;
-    QList<QByteArray > lines;
+    Config::Lines lines;
 };
 
 QList<FormatConfigDirective > configDirectives(const FormatDocument *document);

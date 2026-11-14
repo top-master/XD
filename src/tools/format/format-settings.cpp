@@ -314,18 +314,6 @@ bool FormatSettings::readParser(const QString &path, const FormatConfig &config,
     if ( ! FormatSettings::readConfig(parser, config, error)) {
         return false;
     }
-    if ( ! config.inlineLayers.isEmpty()) {
-        Config::LayeredParser layered(*parser);
-        for (int i = 0; i < config.inlineLayers.size(); ++i) {
-            if ( ! layered.addLines(
-                    config.inlineLayers.at(i), QString(QLL("Format rule")), error
-                )
-            ) {
-                return false;
-            }
-        }
-        *parser = layered;
-    }
     return true;
 }
 

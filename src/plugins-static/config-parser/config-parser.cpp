@@ -270,6 +270,26 @@ bool Config::Parser::readData(const QByteArray &data, const QString &origin,
     Scoped groups override permanent groups and are removed in reverse order.
 */
 
+/*!
+    @class Config::Lines
+    @internal
+
+    Stores the lines of one configuration layer.
+*/
+
+/*! Joins the setting lines with newlines for the `.ini` parser. */
+QByteArray Config::Lines::text() const
+{
+    QByteArray result;
+    for (int i = 0; i < m_lines.size(); ++i) {
+        if (i > 0) {
+            result += '\n';
+        }
+        result += m_lines.at(i);
+    }
+    return result;
+}
+
 /*! Builds the layers over the settings in @a base. */
 Config::LayeredParser::LayeredParser(const Parser &base)
     : Parser(base), m_base(base)
@@ -280,18 +300,18 @@ Config::LayeredParser::LayeredParser(const Parser &base)
 bool Config::LayeredParser::apply(Parser *parser, const Layer &layer,
                                   QString *error)
 {
-    QByteArray text;
-    for (int i = 0; i < layer.lines.size(); ++i) {
-        if (i > 0) {
-            text += '\n';
+    for (int i = 0; i < layer.lines.m_lines.size(); ++i) {
+        const QByteArray line = layer.lines.m_lines.at(i).trimmed();
+        if (line.isEmpty()) {
+            continue;
         }
-        text += layer.lines.at(i);
+        if (line.startsWith('[')) {
+            return parser->readData(layer.lines.text(), layer.origin, error);
+        }
+        break;
     }
-    if (text.trimmed().startsWith('[')) {
-        return parser->readData(text, layer.origin, error);
-    }
-    for (int i = 0; i < layer.lines.size(); ++i) {
-        const QByteArray line = layer.lines.at(i).trimmed();
+    for (int i = 0; i < layer.lines.m_lines.size(); ++i) {
+        const QByteArray line = layer.lines.m_lines.at(i).trimmed();
         if ( ! line.isEmpty()
             && ! parser->assign(QString::fromUtf8(line), error)
         ) {
@@ -321,7 +341,7 @@ bool Config::LayeredParser::rebuild(QString *error)
 }
 
 /*! Adds permanent @a lines from @a origin, reporting errors in @a error. */
-bool Config::LayeredParser::addLines(const QList<QByteArray > &lines,
+bool Config::LayeredParser::addLines(const Lines &lines,
                                      const QString &origin, QString *error)
 {
     Layer layer;
@@ -336,7 +356,7 @@ bool Config::LayeredParser::addLines(const QList<QByteArray > &lines,
 }
 
 /*! Adds scoped @a lines from @a origin, reporting errors in @a error. */
-bool Config::LayeredParser::pushLines(const QList<QByteArray > &lines,
+bool Config::LayeredParser::pushLines(const Lines &lines,
                                       const QString &origin, QString *error)
 {
     Layer layer;

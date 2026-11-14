@@ -78,6 +78,7 @@ private slots:
     void testSettings_shouldReadFromRootDown();
     void testSettings_shouldReadWrapColumns();
     void testSettings_shouldReadInlineIni();
+    void testLayeredParser_shouldReadIndentedIni();
     void testProjectFiles_shouldHandEachFileOnce();
     void testCommentWidth_shouldWrap_data();
     void testAgentMode_shouldAskForOperatorGroups();
@@ -159,13 +160,12 @@ void tst_FormatRules::testConfigDirectives_shouldReadCommentForms()
     const QList<FormatConfigDirective > directives = configDirectives(&document);
     QCOMPARE(directives.size(), 6);
     QCOMPARE(int(directives.at(0).kind), int(FormatConfigDirective::Add));
-    QCOMPARE(directives.at(0).lines, QList<QByteArray >() << "structure.wrapMax=70");
+    QCOMPARE(directives.at(0).lines.text(), QByteArray("structure.wrapMax=70"));
     QCOMPARE(int(directives.at(1).kind), int(FormatConfigDirective::Begin));
-    QCOMPARE(directives.at(1).lines,
-             QList<QByteArray >() << "[Structure]" << "wrapMax = 50");
-    QCOMPARE(directives.at(2).lines, QList<QByteArray >() << "structure.target=any");
-    QCOMPARE(directives.at(3).lines, QList<QByteArray >() << "structure.wrapBegin=45");
-    QCOMPARE(directives.at(4).lines, QList<QByteArray >() << "[Structure]" << "wrapMax = 55");
+    QCOMPARE(directives.at(1).lines.text(), QByteArray("[Structure]\nwrapMax = 50"));
+    QCOMPARE(directives.at(2).lines.text(), QByteArray("structure.target=any"));
+    QCOMPARE(directives.at(3).lines.text(), QByteArray("structure.wrapBegin=45"));
+    QCOMPARE(directives.at(4).lines.text(), QByteArray("[Structure]\nwrapMax = 55"));
     QCOMPARE(int(directives.at(5).kind), int(FormatConfigDirective::End));
 }
 
@@ -372,33 +372,45 @@ void tst_FormatRules::testSettings_shouldReadInlineIni()
     QCOMPARE(parser.value(QLL("structure.target")), QString(QLL("any")));
     QVERIFY( ! parser.readData("[Structure]\ntarget = invalid\n", QLL("inline"), &error));
     QVERIFY(error.startsWith(QLL("inline:")));
-    FormatConfig config;
-    config.inlineLayers << (QList<QByteArray >() << "[Structure]" << "target = any"
-                            << "wrapMax = 90")
-                        << (QList<QByteArray >() << "structure.wrapMax=60");
+    Config::Parser defaults(FormatSettings::schema());
+    Config::LayeredParser inlineParser(defaults);
+    QVERIFY(inlineParser.addLines(Config::Lines() << "[Structure]" << "target = any"
+                                 << "wrapMax = 90", QLL("inline"), &error));
+    QVERIFY(inlineParser.addLines(Config::Lines() << "structure.wrapMax=60",
+                                 QLL("inline"), &error));
     FormatSettings settings;
-    QVERIFY2(FormatSettings::load(QString(), config, &settings, &error),
-             qPrintable(error));
+    FormatSettings::fromParser(inlineParser, &settings);
     QCOMPARE(settings.codeTarget, FormatSettings::CodeTargetAny);
     QCOMPARE(settings.wrapMax, 60);
 
     Config::Parser base(FormatSettings::schema());
     Config::LayeredParser layers(base);
     const QString origin(QLL("inline"));
-    QVERIFY(layers.addLines(QList<QByteArray >() << "structure.wrapMax=90", origin, &error));
-    QVERIFY(layers.pushLines(QList<QByteArray >() << "[Structure]" << "wrapMax = 50",
+    QVERIFY(layers.addLines(Config::Lines() << "structure.wrapMax=90", origin, &error));
+    QVERIFY(layers.pushLines(Config::Lines() << "[Structure]" << "wrapMax = 50",
                              origin, &error));
-    QVERIFY(layers.addLines(QList<QByteArray >() << "structure.wrapMax=70", origin, &error));
+    QVERIFY(layers.addLines(Config::Lines() << "structure.wrapMax=70", origin, &error));
     QCOMPARE(layers.value(QLL("structure.wrapMax")), QString(QLL("50")));
-    QVERIFY(layers.pushLines(QList<QByteArray >() << "structure.wrapMax=40", origin, &error));
+    QVERIFY(layers.pushLines(Config::Lines() << "structure.wrapMax=40", origin, &error));
     QCOMPARE(layers.value(QLL("structure.wrapMax")), QString(QLL("40")));
-    QVERIFY( ! layers.pushLines(QList<QByteArray >() << "structure.wrapMax=bad", origin, &error));
+    QVERIFY( ! layers.pushLines(Config::Lines() << "structure.wrapMax=bad", origin, &error));
     QCOMPARE(layers.value(QLL("structure.wrapMax")), QString(QLL("40")));
     QVERIFY(layers.popLines(&error));
     QCOMPARE(layers.value(QLL("structure.wrapMax")), QString(QLL("50")));
     QVERIFY(layers.popLines(&error));
     QCOMPARE(layers.value(QLL("structure.wrapMax")), QString(QLL("70")));
     QVERIFY( ! layers.popLines(&error));
+}
+
+void tst_FormatRules::testLayeredParser_shouldReadIndentedIni()
+{
+    Config::Parser base(FormatSettings::schema());
+    Config::LayeredParser layers(base);
+    QString error;
+    const Config::Lines lines = Config::Lines()
+        << " " << "  [Structure]" << "wrapMax = 66";
+    QVERIFY2(layers.addLines(lines, QLL("inline"), &error), qPrintable(error));
+    QCOMPARE(layers.value(QLL("structure.wrapMax")), QString(QLL("66")));
 }
 
 /// Tokenizes `text` the way the formatter does, with comment tokens only

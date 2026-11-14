@@ -14,6 +14,20 @@
 
 namespace Config {
 
+class Lines
+{
+public:
+    inline Lines() {}
+    inline void append(const QByteArray &line) { m_lines.append(line); }
+    inline Lines &operator<<(const QByteArray &line) { this->append(line); return *this; }
+    inline void clear() { m_lines.clear(); }
+    QByteArray text() const;
+
+private:
+    friend class LayeredParser;
+    QList<QByteArray > m_lines;
+};
+
 class Parser
 {
 public:
@@ -42,16 +56,16 @@ class LayeredParser : public Parser
 public:
     explicit LayeredParser(const Parser &base);
 
-    bool addLines(const QList<QByteArray > &lines, const QString &origin,
+    bool addLines(const Lines &lines, const QString &origin,
                   QString *error);
-    bool pushLines(const QList<QByteArray > &lines, const QString &origin,
+    bool pushLines(const Lines &lines, const QString &origin,
                    QString *error);
     bool popLines(QString *error);
 
 private:
     struct Layer
     {
-        QList<QByteArray > lines;
+        Lines lines;
         QString origin;
     };
     bool rebuild(QString *error);
