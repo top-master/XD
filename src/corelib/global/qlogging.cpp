@@ -35,6 +35,7 @@
 ****************************************************************************/
 
 #include "qlogging.h"
+#include "qmemorysafety_backtrace_p.h"
 #include "qlist.h"
 #include "qbytearray.h"
 #include "qstring.h"
@@ -1357,6 +1358,14 @@ QString qFormatLogMessage(QtMsgType type, const QMessageLogContext &context, con
             QString backtraceSeparator = backtraceParams.backtraceSeparator;
             int backtraceDepth = backtraceParams.backtraceDepth;
             backtraceArgsIdx++;
+#ifdef QT_PTR_TRACKING
+            // Under Fil-C, `backtrace()` finds no frame, hence Fil-C's own
+            // stack walk lists them, with the name of each function.
+            QFilcBacktrace trace;
+            trace.depth = backtraceDepth;
+            qFilcBacktraceScan(&trace);
+            message += trace.functions.join(backtraceSeparator);
+#else
             QVarLengthArray<void*, 32> buffer(7 + backtraceDepth);
             int n = backtrace(buffer.data(), buffer.size());
             if (n > 0) {
@@ -1410,6 +1419,7 @@ QString qFormatLogMessage(QtMsgType type, const QMessageLogContext &context, con
                     numberPrinted++;
                 }
             }
+#endif // QT_PTR_TRACKING
 #endif
         } else if (token == timeTokenC) {
             QString timeFormat = pattern->timeArgs.at(timeArgsIdx);

@@ -1539,10 +1539,17 @@ void tst_QMap::iteratorFetchPastEndAsserts()
             const int k = m.constEnd().key(); Q_UNUSED(k);
         } else if (scenario == "past-end") {
             QMap<int, QString>::const_iterator e = m.constEnd();
-            ++e;                               // advancing to a past-the-end (null) iterator is allowed
-            const QString &v = e.value(); Q_UNUSED(v); // ... fetching from it is not
+            // Advancing past `end()` already asserts, before any fetch.
+            ++e;
+            const QString &v = e.value();
+            Q_UNUSED(v);
         } else if (scenario == "mm-deref-end") {
             const int v = *mm.constEnd(); Q_UNUSED(v);
+        } else if (scenario == "null-value") {
+            // A default-built iterator holds no node, as one past `end()` does.
+            QMap<int, QString >::const_iterator e;
+            const QString &v = e.value();
+            Q_UNUSED(v);
         }
         std::fprintf(stderr, "NO-ABORT\n");
         std::fflush(stderr);
@@ -1555,7 +1562,7 @@ void tst_QMap::iteratorFetchPastEndAsserts()
     QVERIFY(n > 0);
     exe[n] = '\0';
     const QList<QByteArray> scenarios = QList<QByteArray>()
-        << "deref-end" << "key-end" << "past-end" << "mm-deref-end";
+        << "deref-end" << "key-end" << "past-end" << "mm-deref-end" << "null-value";
     for (int i = 0; i < scenarios.size(); ++i) {
         const QByteArray cmd = "QMAP_DEATH_SCENARIO=" + scenarios.at(i) + " '" + QByteArray(exe)
                              + "' iteratorFetchPastEndAsserts -nocrashhandler 2>&1";
@@ -1567,8 +1574,12 @@ void tst_QMap::iteratorFetchPastEndAsserts()
         while ((r = fread(buf, 1, sizeof(buf), p)) > 0)
             out.append(buf, int(r));
         pclose(p);
-        QVERIFY2(out.contains("iterator is end() or past it"),
-                 (scenarios.at(i) + ": expected the past-end guard assert; got: " + out.left(400)).constData());
+        const char *expected = scenarios.at(i) == "past-end"
+            ? "Reached past end." : "iterator is end() or past it";
+        QVERIFY2(
+            out.contains(expected),
+            (scenarios.at(i) + ": expected the past-end guard assert; got: " + out.left(400)).constData()
+        );
         QVERIFY2(!out.contains("NO-ABORT"),
                  (scenarios.at(i) + ": fetching past end() did not abort").constData());
     }

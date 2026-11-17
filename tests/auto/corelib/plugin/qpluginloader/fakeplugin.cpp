@@ -33,9 +33,14 @@
 
 #include <QtCore/qplugin.h>
 
+QT_PLUGIN_METADATA_SECTION const struct {
+    quintptr pluginSection;
+    char message[11];
+} fakeMetadata = {
 #if QT_POINTER_SIZE == 8
-QT_PLUGIN_METADATA_SECTION void *const pluginSection = (void*)(0xc0ffeec0ffeeL);
+    Q_UINT64_C(0xc0ffeec0ffee),
 #else
-QT_PLUGIN_METADATA_SECTION void *const pluginSection = (void*)0xc0ffee;
+    0xc0ffee,
 #endif
-QT_PLUGIN_METADATA_SECTION const char message[] = "QTMETADATA";
+    "QTMETADATA"
+};

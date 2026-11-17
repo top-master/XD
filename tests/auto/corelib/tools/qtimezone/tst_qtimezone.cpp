@@ -840,7 +840,8 @@ void tst_QTimeZone::tzTest()
     QCOMPARE(datatz1.offsetFromUtc, datautc1.offsetFromUtc);
 
     // Test TZ timezone vs UTC timezone for fractionary positive offset
-    QTzTimeZonePrivate  tztz2("Asia/Calcutta");
+    // `Asia/Calcutta` is only a legacy alias, which newer systems ship apart.
+    QTzTimeZonePrivate  tztz2("Asia/Kolkata");
     QUtcTimeZonePrivate tzutc2("UTC+05:30");
     QVERIFY(tztz2.isValid());
     QVERIFY(tzutc2.isValid());

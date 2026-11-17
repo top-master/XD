@@ -39,6 +39,7 @@
 ****************************************************************************/
 
 #include <QtCore/QThread>
+#include <QtCore/qmemorysafety.h>
 #include <QtTest/QtTest>
 
 #if defined(Q_OS_UNIX)
@@ -62,7 +63,37 @@ private Q_SLOTS:
     void afterDestruction();
     void call_shouldReturnNullDuringDestruction();
     void call_shouldKeepContentsAliveAfterDestruction();
+    void pointerSafetySurvivesShutdown();
 };
+
+#ifdef QT_PTR_TRACKING
+namespace {
+bool pointerSafetyCheckEnabled = false;
+struct PointerSafetyShutdownCheck
+{
+    ~PointerSafetyShutdownCheck()
+    {
+        if (pointerSafetyCheckEnabled
+            && ( ! QPtrSafetyTable::forTypedData() || ! QPtrSafetyTable::forPtr(this))
+        ) {
+            qFatal("Pointer safety tables are unavailable during shutdown");
+        }
+    }
+};
+PointerSafetyShutdownCheck pointerSafetyShutdownCheck;
+}
+#endif
+
+void tst_QGlobalStatic::pointerSafetySurvivesShutdown()
+{
+#ifdef QT_PTR_TRACKING
+    QVERIFY(QPtrSafetyTable::forTypedData());
+    QVERIFY(QPtrSafetyTable::forPtr(this));
+    pointerSafetyCheckEnabled = true;
+#else
+    QSKIP("Pointer tracking is not enabled");
+#endif
+}
 
 void tst_QGlobalStatic::initTestCase()
 {

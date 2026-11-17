@@ -42,7 +42,7 @@
 
 #if (defined(Q_CC_MSVC) && Q_CC_MSVC < 1900)
 #  ifndef PRId64
-#    define PRId64 "%I64d"
+#    define PRId64 "I64d"
 #  endif
 #else
 #  include <inttypes.h>

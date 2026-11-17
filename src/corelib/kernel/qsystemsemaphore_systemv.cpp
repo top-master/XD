@@ -65,7 +65,9 @@ QT_BEGIN_NAMESPACE
  */
 key_t QSystemSemaphorePrivate::handle(QSystemSemaphore::AccessMode mode)
 {
-    if (key.isEmpty()){
+    // Checks the file name, as the POSIX and Windows backends do, since a
+    // native key (`QSystemSemaphore::setNativeKey()`) sets no `key`.
+    if (fileName.isEmpty()){
         errorString = QCoreApplication::tr("%1: key is empty", "QSystemSemaphore").arg(QLatin1String("QSystemSemaphore::handle:"));
         error = QSystemSemaphore::KeyError;
         return -1;

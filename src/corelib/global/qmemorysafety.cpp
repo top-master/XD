@@ -24,6 +24,7 @@
 
 #include <QtCore/qmemorysafety.h>
 #include <QtCore/qglobal.h>
+#include "qmemorysafety_backtrace_p.h"
 
 #ifdef QT_PTR_TRACKING
 
@@ -52,10 +53,43 @@ struct QPtrSafetyPool
     }
 };
 
-} // unnamed namespace
+Q_GLOBAL_STATIC(QPtrSafetyTypedTable, typedTable)
+Q_GLOBAL_STATIC(QPtrSafetyPool, tablePool)
 
-Q_GLOBAL_STATIC(QPtrSafetyTypedTable, qPtrSafetyTypedTable)
-Q_GLOBAL_STATIC(QPtrSafetyPool, qPtrSafetyPool)
+QBasicAtomicPointer<QSharedPointer<QPtrSafetyTypedTable > > retainedTypedTable
+    = Q_BASIC_ATOMIC_INITIALIZER(Q_NULLPTR);
+QBasicAtomicPointer<QSharedPointer<QPtrSafetyPool > > retainedTablePool
+    = Q_BASIC_ATOMIC_INITIALIZER(Q_NULLPTR);
+
+/*!
+    Keeps a shared reference to @a global through process shutdown and returns
+    its object. @a retained publishes that reference to every caller.
+*/
+template <typename T, typename Global>
+T *retainForProcess(Global & global, QBasicAtomicPointer<QSharedPointer<T > > & retained)
+{
+    QSharedPointer<T > *owner = retained.loadAcquire();
+    if ( ! owner) {
+        QSharedPointer<T > *candidate = new QSharedPointer<T >(global());
+        if ( ! retained.testAndSetOrdered(Q_NULLPTR, candidate)) {
+            delete candidate;
+        }
+        owner = retained.loadAcquire();
+    }
+    return owner->data();
+}
+
+QPtrSafetyTypedTable *qPtrSafetyTypedTable()
+{
+    return retainForProcess(typedTable, retainedTypedTable);
+}
+
+QPtrSafetyPool *qPtrSafetyPool()
+{
+    return retainForProcess(tablePool, retainedTablePool);
+}
+
+} // unnamed namespace
 
 /*!
     Returns the one weak table shared by every QArrayData raw-data alias; QString
@@ -74,7 +108,7 @@ zexact_ptrtable *QPtrSafetyTable::forPtr(const void *ptr)
 {
     // Pick a table by hashing the object pointer into the pool, the same way
     // QObjectPrivate::sharedMutex picks a mutex from its pool.
-    QRef<QPtrSafetyPool > pool = qPtrSafetyPool();
+    QPtrSafetyPool *pool = qPtrSafetyPool();
     return pool->tables[
         quint32(quintptr(ptr)) % sizeof(pool->tables) / sizeof(pool->tables[0])];
 }
@@ -120,3 +154,44 @@ __PTRDIFF_TYPE__ QPtrSafetyTable::encodeTypedData(void *ptr)
 }
 
 #endif // QT_PTR_TRACKING
+
+#if defined(QT_PTR_TRACKING) && !defined(QT_BOOTSTRAPPED)
+QT_BEGIN_NAMESPACE
+
+QByteArray qCleanupFuncinfo(QByteArray info);
+
+/*!
+    @internal
+
+    Adds the function of @a frame to the QFilcBacktrace that @a arg points to,
+    and tells whether the walk goes on. The frames before the first one kept
+    are those of the logging itself, as in the `backtrace()` form.
+*/
+static filc_bool qFilcBacktraceFrame(
+        const zstack_frame_description *frame, void *arg)
+{
+    QFilcBacktrace *trace = static_cast<QFilcBacktrace * >(arg);
+    const QString function = frame->function_name
+        ? QString::fromUtf8(qCleanupFuncinfo(frame->function_name)) : QString();
+    if (trace->functions.isEmpty()
+        && (function.isEmpty()
+            || function.contains(
+                QLL("Message"),
+                Qt::CaseInsensitive
+            )
+            || function.contains(QLL("QDebug")))
+    ) {
+        return true;
+    }
+    trace->functions
+        .append(function.isEmpty() ? QStringLiteral("???") : function);
+    return trace->functions.size() < trace->depth;
+}
+
+void qFilcBacktraceScan(QFilcBacktrace *trace)
+{
+    zstack_scan(qFilcBacktraceFrame, trace);
+}
+
+QT_END_NAMESPACE
+#endif

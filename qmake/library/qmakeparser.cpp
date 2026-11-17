@@ -1124,8 +1124,13 @@ void QMakeParser::finalizeCond(ushort *&tokPtr, ushort *uc, ushort *ptr, int wor
         if (uce == ptr) {
             m_tmp.setRawData((QChar *)uc + 4, nlen);
             if (!m_tmp.compare(statics.strelse, Qt::CaseInsensitive)) {
-                if (failOperator("in front of else"))
+                // TRACE/qmake/parser braces: warn of a brace that starts a line #2,
+                // since a failed `else` is a bogus test like any other,
+                // hence a brace after it on the same line binds to it.
+                if (failOperator("in front of else")) {
+                    bogusTest(tokPtr, QString());
                     return;
+                }
                 BlockScope &top = m_blockstack.top();
                 if (m_canElse && (!top.special || top.braceLevel)) {
                     // A list of tests (the last one likely with side effects),
