@@ -93,6 +93,7 @@ public:
     bool argumentCount(int depth, int argument,
                        qreal *count) const Q_DECL_OVERRIDE;
     bool spaceRemaining(qreal *percent) const Q_DECL_OVERRIDE;
+    const FormatFileConfig *fileConfig() const Q_DECL_OVERRIDE;
 
 private:
     FormatScopeConditions *m_scope;
@@ -146,6 +147,12 @@ bool ArgumentContext::spaceRemaining(qreal *percent) const
         ? *this->m_spaceRemaining
         : this->m_scope->spaceRemaining(this->m_target);
     return true;
+}
+
+const FormatFileConfig *ArgumentContext::fileConfig() const
+{
+    const FormatDocument *document = this->m_scope->document();
+    return &document->configAt(document->symbols().at(this->m_token).from);
 }
 
 } // namespace

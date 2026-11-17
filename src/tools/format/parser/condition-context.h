@@ -8,6 +8,7 @@
 
 #include <QtCore/QSharedPointer>
 
+class FormatFileConfig;
 class FormatConditionContext : public Config::Evaluator::Context
 {
     typedef Config::Evaluator::Context super;
@@ -17,6 +18,7 @@ public:
     virtual bool spaceRemaining(qreal *percent) const;
     virtual bool hasMoreArgs(bool *value) const;
     virtual bool isWrapping(bool *value) const;
+    virtual const FormatFileConfig *fileConfig() const;
     static void registerFunctions();
     static void setCountFunctions(Config::Functions::Scope *scope);
     static QSharedPointer<Config::Functions::Scope > pushCountScope();

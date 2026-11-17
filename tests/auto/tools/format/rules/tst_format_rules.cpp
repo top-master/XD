@@ -146,6 +146,7 @@ private slots:
     void testScopeConditions_shouldOfferValueToCountSettingsOnly();
     void testScopeConditions_shouldCountConditionOperands();
     void testScopeConditions_shouldCountConditionsPerLine();
+    void testScopeConditions_shouldReadSettingsThroughCfg();
     void testLayoutConfig_shouldResolveConditionAndSubchainOptions();
     void testLayoutHelpers_shouldRecognizeClosingBracketCombinations();
     void testArgsWrap_shouldFollowSettings_data();
@@ -3835,6 +3836,60 @@ void tst_FormatRules::testScopeConditions_shouldCountConditionsPerLine()
     config.wrapConditionsOver = 3;
     document.setConfig(config);
     QCOMPARE(conditions.conditionsPerLine(open, 3, 50), 3);
+}
+
+/// Reads another `[Structure]` setting through `cfg`: a setting follows
+/// the number that one gives at the place, and one that reaches itself,
+/// directly or through another, misses the value; a key `cfg` lacks fails.
+void tst_FormatRules::testScopeConditions_shouldReadSettingsThroughCfg()
+{
+    FormatDocument document(
+        "void check() { if (ready() && valid() && safe()) {} }\n"
+    );
+    const int open = symbolIndex(document, "if") + 1;
+    FormatScopeConditions conditions(&document);
+    Config::Parser parser(FormatFileConfig::schema());
+    FormatFileConfig config;
+    QString error;
+
+    // Follows `wrapArgsOver`, then a share of `wrapMax`.
+    QVERIFY2(parser.readData(
+        "[Structure]\nwrapArgsOver=4\nwrapConditionsOver=cfg.wrapArgsOver\n",
+        QLL("inline"), &error
+    ), qPrintable(error));
+    QVERIFY(readSettings(parser, &config));
+    document.setConfig(config);
+    QCOMPARE(conditions.conditionsPerLine(open, 3, 50), 4);
+    QVERIFY2(parser.readData(
+        "[Structure]\nwrapMax=100\nwrapConditionsOver=cfg.wrapMax / 50\n",
+        QLL("inline"), &error
+    ), qPrintable(error));
+    QVERIFY(readSettings(parser, &config));
+    document.setConfig(config);
+    QCOMPARE(conditions.conditionsPerLine(open, 3, 50), 2);
+
+    // A setting that reaches itself gets the setting's number, 1.
+    QVERIFY2(parser.readData(
+        "[Structure]\nwrapConditionsOver=cfg.wrapConditionsOver + 1\n",
+        QLL("inline"), &error
+    ), qPrintable(error));
+    QVERIFY(readSettings(parser, &config));
+    document.setConfig(config);
+    QCOMPARE(conditions.conditionsPerLine(open, 3, 50), 1);
+    QVERIFY2(parser.readData(
+        "[Structure]\nwrapArgsOver=cfg.wrapConditionsOver\n"
+        "wrapConditionsOver=cfg.wrapArgsOver\n",
+        QLL("inline"), &error
+    ), qPrintable(error));
+    QVERIFY(readSettings(parser, &config));
+    document.setConfig(config);
+    QCOMPARE(conditions.conditionsPerLine(open, 3, 50), 1);
+
+    // A key that `cfg` lacks is no condition.
+    QVERIFY( ! parser.readData(
+        "[Structure]\nwrapConditionsOver=cfg.missing\n", QLL("inline"),
+        &error
+    ));
 }
 
 /// Lets only a count setting's condition say `value`: a condition compiles

@@ -130,6 +130,12 @@ public:
         return true;
     }
 
+    inline const FormatFileConfig *fileConfig() const Q_DECL_OVERRIDE
+    {
+        const FormatDocument *document = m_conditions->document();
+        return &document->configAt(document->symbols().at(m_open).from);
+    }
+
 private:
     FormatScopeConditions *m_conditions;
     int m_open;

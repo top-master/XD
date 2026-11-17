@@ -69,6 +69,15 @@ bool FormatConditionContext::isWrapping(bool *) const
 }
 
 /*!
+    Builds the settings that hold at the place, which `cfg` answers from
+    (see FormatSettingsObject), or null when the place names none.
+*/
+const FormatFileConfig *FormatConditionContext::fileConfig() const
+{
+    return Q_NULLPTR;
+}
+
+/*!
     Calls FormatConditionContext::hasMoreArgs() for `hasMoreArgs()`.
 */
 static bool callHasMoreArgs(const Config::Evaluator::Context *context,

@@ -357,6 +357,13 @@ moveSuffix = " "
   condition that holds counts as `1`, and one that does not as `0`, which
   lets a line take as many operands as fit. A `0` for the whole condition
   keeps the line breaks it already has, as `never` does.
+
+  Any condition of the tool may read another `[Structure]` setting as
+  `cfg.<key>`: the number that `wrapMax`, `wrapArgsOver`,
+  `wrapConditionsOver`, or `joinArgs` gives at that place. Hence
+  `wrapConditionsOver = cfg.wrapArgsOver` follows `wrapArgsOver`. A setting
+  that reaches itself through `cfg` misses that value, just like a name
+  that has no answer at the place.
 - `wrapSubChain` (in `[Structure]`): whether another member follows a member
   joined to a line of closing brackets. `always` (the default) puts it on a
   new line; `wrap-begin` keeps it while it fits `wrapBegin`, `wrap-end` while

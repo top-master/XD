@@ -22,6 +22,8 @@ public:
 
     static QStringList names();
 
+    inline const FormatDocument *document() const { return m_document; }
+
     bool holds(const QStringList & program, int token);
     bool holds(const QStringList & program, int token, qreal percent,
                const QStringList & fallback);

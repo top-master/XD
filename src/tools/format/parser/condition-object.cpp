@@ -4,6 +4,7 @@
 #include "./condition-object.h"
 
 #include "./condition-context.h"
+#include "./settings-object.h"
 
 /*!
     @class FormatConditionObject
@@ -27,6 +28,24 @@
     Config::Scopes once, as the tool starts. A name the place cannot answer
     makes the condition miss a value; hence its setting's default decides.
 */
+
+/*!
+    Builds the object of the expressions of settings, with the settings
+    object that `cfg` answers as its child.
+*/
+FormatConditionObject::FormatConditionObject()
+    : m_settings(new FormatSettingsObject(this))
+{
+}
+
+/*!
+    Builds the settings of the place, whose keys a condition reads as
+    `cfg.<key>` (see FormatSettingsObject).
+*/
+QObject *FormatConditionObject::cfg() const
+{
+    return this->m_settings;
+}
 
 /*!
     Builds the share of `[Structure] wrapMax`, from 0 to 100, that is left on

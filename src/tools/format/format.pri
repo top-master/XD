@@ -39,6 +39,7 @@ HEADERS += \
     $$PWD/parser/condition-context.h \
     $$PWD/parser/condition-object.h \
     $$PWD/parser/count-object.h \
+    $$PWD/parser/settings-object.h \
     $$PWD/parser/condition-layout.h \
     $$PWD/parser/comment-helpers.h \
     $$PWD/parser/expression-layout.h \
@@ -111,6 +112,7 @@ SOURCES += \
     $$PWD/parser/condition-context.cpp \
     $$PWD/parser/condition-object.cpp \
     $$PWD/parser/count-object.cpp \
+    $$PWD/parser/settings-object.cpp \
     $$PWD/parser/condition-layout.cpp \
     $$PWD/parser/comment-helpers.cpp \
     $$PWD/parser/expression-layout.cpp \
