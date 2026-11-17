@@ -28,6 +28,7 @@ public:
 
 public slots:
     QVariant argCount(int depth, int argument = 0);
+    QVariant hasStd(const QString & standard);
 
 private:
     FormatSettingsObject *m_settings;

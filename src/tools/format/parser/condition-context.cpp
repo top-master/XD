@@ -70,6 +70,16 @@ bool FormatConditionContext::isWrapping(bool *) const
 }
 
 /*!
+    Tells in @a value whether the project targets the C++ standard
+    @a standard, such as `C++11` (see `[Lint] standards`); returns false
+    when the place does not know the project's standards.
+*/
+bool FormatConditionContext::hasStandard(const QString &, bool *) const
+{
+    return false;
+}
+
+/*!
     Builds the settings that hold at the place, which `cfg` answers from
     (see FormatSettingsObject), or null when the place names none.
 */

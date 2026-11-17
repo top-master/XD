@@ -21,6 +21,7 @@ public:
     virtual bool hasMoreArgs(bool *value) const;
     virtual bool isWrapping(bool *value) const;
     virtual FormatArgsArray *callArguments() const;
+    virtual bool hasStandard(const QString & standard, bool *value) const;
     virtual const FormatFileConfig *fileConfig() const;
     static void registerObjects();
     static void setGlobalObjects(Config::Scopes::Scope *scope);

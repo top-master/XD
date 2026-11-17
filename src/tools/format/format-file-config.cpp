@@ -157,6 +157,13 @@ static const char defaultWrapConditionsOverText[] =
     "spaceRemaining < 20% ? 1 : 2";
 
 /*!
+    Spells the default `[Lint] byRefVariable` (see FormatFileConfig): a
+    warning while the project targets C++11, where some compilers mishandle
+    a non-const reference local, and nothing otherwise.
+*/
+static const char defaultByRefVariableText[] = "hasStd(\"C++11\") ? warn : ignore";
+
+/*!
     Builds the name of the settings files the tool reads in each folder.
 */
 QString FormatFileConfig::fileName()
@@ -190,6 +197,16 @@ QStringList FormatFileConfig::superChoices()
         << QString(QLL("keep-as-is")) << QString(QLL("if-needed"));
 }
 
+/*!
+    Builds the levels a `[Lint]` key picks from: `ignore`, `warn`, and
+    `error`.
+*/
+QStringList FormatFileConfig::lintLevels()
+{
+    return QStringList() << QString(QLL("ignore")) << QString(QLL("warn"))
+        << QString(QLL("error"));
+}
+
 static bool extensionPattern(const QString &text, QRegularExpression *pattern)
 {
     QString value = text.trimmed();
@@ -212,21 +229,36 @@ static bool extensionPattern(const QString &text, QRegularExpression *pattern)
     return true;
 }
 
-static QStringList extensionList(const QString &text)
+/*!
+    Builds the items of the list @a text: separated by commas, with or
+    without brackets around them (`[a, b]`), each trimmed, and without the
+    double or single quotes around it.
+*/
+static QStringList listItems(const QString &text)
 {
     QString value = text.trimmed();
     if (value.startsWith(QLatin1Char('[')) && value.endsWith(QLatin1Char(']'))) {
         value = value.mid(1, value.size() - 2);
     }
-    QStringList extensions = value.split(QLatin1Char(','), QString::SkipEmptyParts);
-    for (int i = 0; i < extensions.size(); ++i) {
-        QString extension = extensions.at(i).trimmed();
-        if (extension.size() >= 2
-            && ((extension.startsWith(QLatin1Char('"')) && extension.endsWith(QLatin1Char('"')))
-                || (extension.startsWith(QLatin1Char('\'')) && extension.endsWith(QLatin1Char('\''))))
+    QStringList items = value.split(QLatin1Char(','), QString::SkipEmptyParts);
+    for (int i = 0; i < items.size(); ++i) {
+        QString item = items.at(i).trimmed();
+        if (item.size() >= 2
+            && ((item.startsWith(QLatin1Char('"')) && item.endsWith(QLatin1Char('"')))
+                || (item.startsWith(QLatin1Char('\'')) && item.endsWith(QLatin1Char('\''))))
         ) {
-            extension = extension.mid(1, extension.size() - 2);
+            item = item.mid(1, item.size() - 2);
         }
+        items[i] = item;
+    }
+    return items;
+}
+
+static QStringList extensionList(const QString &text)
+{
+    QStringList extensions = listItems(text);
+    for (int i = 0; i < extensions.size(); ++i) {
+        QString extension = extensions.at(i);
         if (extension.startsWith(QLL("*."))) {
             extension.remove(0, 2);
         } else if (extension.startsWith(QLatin1Char('.'))) {
@@ -269,6 +301,36 @@ public:
     QString describe() const Q_DECL_OVERRIDE
     {
         return QString(QLL("a list of extensions or a /regular expression/"));
+    }
+};
+
+/*!
+    Matches a list of the C++ standards a project may target (see
+    listItems()), such as `c++11` or `[c++11, c++17]`, each made of letters,
+    digits and `+` signs.
+*/
+class FormatStandardsMatcher : public Config::ValueMatcher
+{
+public:
+    bool match(const QString &value, QString *matched) const Q_DECL_OVERRIDE
+    {
+        const QStringList standards = listItems(value);
+        const QRegularExpression pattern(QString(QLL("^[A-Za-z0-9+]+$")));
+        if (standards.isEmpty()) {
+            return false;
+        }
+        for (int i = 0; i < standards.size(); ++i) {
+            if ( ! pattern.match(standards.at(i)).hasMatch()) {
+                return false;
+            }
+        }
+        *matched = value;
+        return true;
+    }
+
+    QString describe() const Q_DECL_OVERRIDE
+    {
+        return QString(QLL("a list of C++ standards, such as c++11 or [c++11, c++17]"));
     }
 };
 
@@ -447,10 +509,14 @@ Config::Schema FormatFileConfig::schema()
                 QString(QLL("warn")));
     schema.addSection(code);
     Config::Section lint(QString(QLL("Lint")));
+    lint.addKey(QString(QLL("standards")),
+                Config::Matchers() << QSharedPointer<const Config::ValueMatcher >(
+                    new FormatStandardsMatcher),
+                QString(QLL("c++11")));
     lint.addKey(QString(QLL("byRefVariable")),
-                QStringList() << QString(QLL("ignore")) << QString(QLL("warn"))
-                    << QString(QLL("error")),
-                QString(QLL("warn")));
+                Config::Matchers() << QSharedPointer<const Config::ValueMatcher >(
+                    new Config::Choice(QStringList(), FormatFileConfig::lintLevels())),
+                QString::fromLatin1(defaultByRefVariableText));
     schema.addSection(lint);
     return schema;
 }
@@ -777,9 +843,11 @@ bool FormatFileConfig::fromParser(
     const Config::Condition::NameMismatch mismatch =
         Config::Condition::nameMismatch(parser.value(QString(QLL("code.nameMismatch"))));
     fileConfig->nameMismatch = mismatch;
-    const QString byRefVariable = parser.value(QString(QLL("lint.byRefVariable")));
-    fileConfig->byRefVariable = byRefVariable == QLL("ignore")
-        ? LintIgnore : (byRefVariable == QLL("error") ? LintError : LintWarn);
+    fileConfig->standards = listItems(parser.value(QString(QLL("lint.standards"))));
+    fileConfig->byRefVariable = FormatFileConfig::lintLevel(
+        parser.value(QString(QLL("lint.byRefVariable"))),
+        fileConfig->standards
+    );
     fileConfig->extensions = parser.value(QString(QLL("general.extensions")));
     fileConfig->typedefSuper = parser.value(QString(QLL("structure.typedefSuper")));
     fileConfig->replaceSuperSites = parser.value(QString(QLL("structure.replaceSuperSites")));
@@ -917,6 +985,55 @@ bool FormatFileConfig::fromParser(
             mismatch,
             error
         );
+}
+
+namespace {
+
+/*!
+    Answers `hasStd()` of a `[Lint]` key's choice from the C++ standards the
+    project targets, `[Lint] standards`, in any case.
+*/
+class FormatLintContext : public FormatConditionContext
+{
+    typedef FormatConditionContext super;
+public:
+    inline explicit FormatLintContext(const QStringList & standards)
+        : m_standards(standards) {}
+
+    inline bool hasStandard(const QString & standard,
+                            bool *value) const Q_DECL_OVERRIDE
+    {
+        *value = m_standards.contains(standard, Qt::CaseInsensitive);
+        return true;
+    }
+
+private:
+    QStringList m_standards;
+};
+
+} // namespace
+
+/*!
+    Builds the level that the `[Lint]` choice @a value picks (see
+    lintLevels()), where `hasStd()` answers from @a standards; a choice that
+    cannot pick one is logged, and gives `warn`.
+*/
+FormatFileConfig::LintLevel FormatFileConfig::lintLevel(
+        const QString & value, const QStringList & standards)
+{
+    const FormatLintContext context(standards);
+    QString level;
+    QString error;
+    if ( ! Config::Choice::resolve(value, QStringList(), FormatFileConfig::lintLevels(),
+                                   &context, &level, &error)
+    ) {
+        qWarning("Invalid [Lint] level: %s", qPrintable(error));
+        return LintWarn;
+    }
+    if (level == QLL("ignore")) {
+        return LintIgnore;
+    }
+    return level == QLL("error") ? LintError : LintWarn;
 }
 
 /*!

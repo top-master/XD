@@ -842,8 +842,9 @@ void tst_FormatRules::testNameMismatch_shouldFollowCodeSetting()
 }
 
 /// Reports a local that a non-const reference names as `[Lint]
-/// byRefVariable` says: `warn` (the default) as a plain issue, `error` as
-/// one for the error output, and `ignore` not at all.
+/// byRefVariable` says: `warn` as a plain issue, `error` as one for the
+/// error output, and `ignore` not at all; its default warns while `[Lint]
+/// standards` holds C++11, and a condition may ask `hasStd()` itself.
 void tst_FormatRules::testByRefVariable_shouldFollowLintSetting()
 {
     const QByteArray text("void f()\n{\n    int & first = list[0];\n}\n");
@@ -852,20 +853,37 @@ void tst_FormatRules::testByRefVariable_shouldFollowLintSetting()
     QVERIFY2(formatter.selectRules(
         QStringList() << QString(QLL("reference-local")), &error
     ), qPrintable(error));
-    FormatConfig config;
-    FormatResult result = qMove(formatter.format(text, QString(), QStringList(), config));
+    FormatResult result = qMove(formatter.format(text, QString(), QStringList()));
     qExpect(result.issues.size())->toEqual(1);
     qExpect(result.issues.at(0).isError)->toBeFalsy();
 
-    config.assignments << QString(QLL("lint.byRefVariable=error"));
-    result = qMove(formatter.format(text, QString(), QStringList(), config));
+    FormatConfig errors;
+    errors.assignments << QString(QLL("lint.byRefVariable=error"));
+    result = qMove(formatter.format(text, QString(), QStringList(), errors));
     qExpect(result.error)->toBeEmpty();
     qExpect(result.issues.size())->toEqual(1);
     qExpect(result.issues.at(0).isError)->toBeTruthy();
 
-    config.assignments << QString(QLL("lint.byRefVariable=ignore"));
-    result = qMove(formatter.format(text, QString(), QStringList(), config));
+    FormatConfig ignored;
+    ignored.assignments << QString(QLL("lint.byRefVariable=ignore"));
+    result = qMove(formatter.format(text, QString(), QStringList(), ignored));
     qExpect(result.issues.size())->toEqual(0);
+
+    // Without C++11, the default reports nothing.
+    FormatConfig later;
+    later.assignments << QString(QLL("lint.standards=c++17"));
+    result = qMove(formatter.format(text, QString(), QStringList(), later));
+    qExpect(result.error)->toBeEmpty();
+    qExpect(result.issues.size())->toEqual(0);
+
+    // A condition picks the level by the standards, in any case.
+    FormatConfig chosen;
+    chosen.assignments << QString(QLL("lint.standards=[c++11, C++17]"))
+        << QString(QLL("lint.byRefVariable=hasStd(\"c++17\") ? error : ignore"));
+    result = qMove(formatter.format(text, QString(), QStringList(), chosen));
+    qExpect(result.error)->toBeEmpty();
+    qExpect(result.issues.size())->toEqual(1);
+    qExpect(result.issues.at(0).isError)->toBeTruthy();
 }
 
 /// Lists the lines of the issues of `result` that the rule `rule` reported.
