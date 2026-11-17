@@ -22,6 +22,7 @@ public:
 
 public slots:
     QVariant argCount(int depth, int argument = 0);
+    QVariant hasStd(const QString & standard);
 };
 
 #endif // PARSER_CONDITION_OBJECT_H

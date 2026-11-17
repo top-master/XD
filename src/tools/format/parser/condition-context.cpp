@@ -70,6 +70,16 @@ bool FormatConditionContext::isWrapping(bool *) const
 }
 
 /*!
+    Tells in @a value whether the project targets the C++ standard
+    @a standard, such as `C++11` (see `[Lint] standards`); returns false
+    when the place does not know the project's standards.
+*/
+bool FormatConditionContext::hasStandard(const QString &, bool *) const
+{
+    return false;
+}
+
+/*!
     Builds the arguments of the call that a call template turns, as written
     (see FormatTemplateObject), or null when the place is no such call.
 */

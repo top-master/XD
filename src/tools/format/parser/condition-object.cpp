@@ -21,7 +21,9 @@
       the line;
     * `hasMoreArgs`: another argument follows the one in question;
     * `isWrapping`: the argument in question gets a line of its own, since
-      the tool breaks its list.
+      the tool breaks its list;
+    * `hasStd("<standard>")`: the project targets that C++ standard, such
+      as `hasStd("C++11")` (see `[Lint] standards`).
 
     FormatConditionContext::registerObjects() adds it to the global scope of
     Config::Scopes once, as the tool starts. A name the place cannot answer
@@ -87,4 +89,20 @@ QVariant FormatConditionObject::argCount(int depth, int argument)
         return QVariant();
     }
     return count;
+}
+
+/*!
+    Builds whether the project targets the C++ standard @a standard, such as
+    `C++11`, in any case, or an invalid value where the place does not know
+    the project's standards.
+*/
+QVariant FormatConditionObject::hasStd(const QString & standard)
+{
+    const FormatConditionContext *format =
+        static_cast<const FormatConditionContext * >(this->context());
+    bool value = false;
+    if ( ! format || ! format->hasStandard(standard, &value)) {
+        return QVariant();
+    }
+    return value;
 }

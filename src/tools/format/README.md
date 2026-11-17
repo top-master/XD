@@ -362,12 +362,16 @@ moveSuffix = " "
   warning and uses the name meant; `error` logs it as an error, and the key
   keeps its default; `critical` does the same, then stops before it changes
   the files the setting applies to.
+- `standards` (in `[Lint]`): the C++ standards the project may target, as a
+  list such as `c++11` (the default) or `[c++11, c++17]`; a `[Lint]` key's
+  condition asks about one with `hasStd("<standard>")`, in any case.
 - `byRefVariable` (in `[Lint]`): what `reference-local` does with a local
   that a non-const reference names, such as `int & offset = list[i];`,
   which a pointer should name instead (`int *offset = &(list[i]);`): `warn`
-  (the default) reports it, `error` reports it to the error output in place
-  of the standard one, without stopping the tool, and `ignore` reports
-  nothing.
+  reports it, `error` reports it to the error output in place of the
+  standard one, without stopping the tool, and `ignore` reports nothing. A
+  condition may pick one; the default is `hasStd("C++11") ? warn : ignore`,
+  since some compilers of that standard mishandle such a local.
 
 The command line then overrides the `.formatrc` files, in this order:
 

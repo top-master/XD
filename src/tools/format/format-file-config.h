@@ -41,12 +41,15 @@ public:
         wrapSubChain = QString::fromLatin1("always");
         replaceTypesTarget = QString::fromLatin1("isNew");
         replaceTypesAction = QString::fromLatin1("replace");
+        standards << QString::fromLatin1("c++11");
     }
 
     static QString fileName();
     static QString defaultExtensions();
     static QStringList superConditionNames();
     static QStringList superChoices();
+    static QStringList lintLevels();
+    static LintLevel lintLevel(const QString & value, const QStringList & standards);
     static QStringList replaceTargetNames();
     bool acceptsFile(const QString &path) const;
     static Config::Schema schema();
@@ -98,6 +101,7 @@ public:
     QString replaceTypesAction;
     Config::Condition::NameMismatch nameMismatch;
     LintLevel byRefVariable;
+    QStringList standards;
 
 private:
     static FormatSpacing toSpacing(
