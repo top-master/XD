@@ -97,6 +97,12 @@ QDBusServer::QDBusServer(QObject *parent)
 */
 QDBusServer::~QDBusServer()
 {
+    // The constructors leave `d` null for an empty address, or when libdbus
+    // could not be loaded.
+    if ( ! d) {
+        return;
+    }
+
     QWriteLocker locker(&d->lock);
     if (QDBusConnectionManager::instance()) {
         QMutexLocker locker(&QDBusConnectionManager::instance()->mutex);
@@ -157,7 +163,9 @@ QString QDBusServer::address() const
 */
 void QDBusServer::setAnonymousAuthenticationAllowed(bool value)
 {
-    d->anonymousAuthenticationAllowed = value;
+    if (d) {
+        d->anonymousAuthenticationAllowed = value;
+    }
 }
 
 /*!
@@ -169,7 +177,7 @@ void QDBusServer::setAnonymousAuthenticationAllowed(bool value)
 */
 bool QDBusServer::isAnonymousAuthenticationAllowed() const
 {
-    return d->anonymousAuthenticationAllowed;
+    return d && d->anonymousAuthenticationAllowed;
 }
 
 /*!

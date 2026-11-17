@@ -36,10 +36,12 @@
 QT_BEGIN_NAMESPACE
 
 // Only add to the end, and bump version if you do.
-quintptr Q_CORE_EXPORT qtHookData[] = {
-    2, // hook data version
-    QHooks::LastHookIndex, // size of qtHookData
-    QT_VERSION,
+QHooks::HookData Q_CORE_EXPORT qtHookData[] = {
+    // Hook data version.
+    QHooks::HookData(2),
+    // Size of `qtHookData`.
+    QHooks::HookData(QHooks::LastHookIndex),
+    QHooks::HookData(QT_VERSION),
 
     // AddQObject, void(*)(QObject*), called for every constructed QObject
     // Note: this is called from the QObject constructor, ie. the sub-class

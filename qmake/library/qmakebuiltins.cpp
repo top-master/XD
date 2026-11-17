@@ -1431,8 +1431,9 @@ ProStringList QMakeEvaluator::evaluateBuiltinExpand(
                 // only valid for the root-project.
                 //
                 result = m_outputDir;
+#ifdef QT_BUILD_QMAKE
                 if (Option::qmake_mode == Option::QMAKE_GENERATE_PROJECT) {
-#if defined(QT_BUILD_QMAKE) && defined(QT_DEBUG)
+#ifdef QT_DEBUG
                     Q_ASSERT_X(m_outputDir.isEmpty(),
                                "props", "Output folder should never be set when generating .pro file.");
 #endif
@@ -1441,11 +1442,12 @@ ProStringList QMakeEvaluator::evaluateBuiltinExpand(
                         // Fallback; see above notes.
                         result = Option::output_dir;
                     }
-#if defined(QT_BUILD_QMAKE) && defined(QT_DEBUG)
+#ifdef QT_DEBUG
                     Q_ASSERT_X(result.startsWith(Option::output_dir, qFileCaseSensitivity),
                                "props", "Project's path is never set.");
 #endif
                 }
+#endif // QT_BUILD_QMAKE
             } else if (key.compare("is_fake_pass", Qt::CaseInsensitive) == 0) {
                 // TRACE/qmake improve: fake-loads set `fake_pass` in `CONFIG` #3,
                 // hence supported by `$$props(is_fake_run)` script here.

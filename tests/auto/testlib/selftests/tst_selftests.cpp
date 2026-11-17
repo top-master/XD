@@ -533,7 +533,13 @@ static QProcessEnvironment processEnvironment()
                 || key == QLatin1String("GRAPHICS_ROOT") || key == QLatin1String("TZ")
 #elif defined(Q_OS_UNIX)
                 || key == QLatin1String("HOME") || key == QLatin1String("USER") // Required for X11 on openSUSE
-#  if !defined(Q_OS_MAC)
+                // The subtests find the libraries they link where this test
+                // finds its own, since they carry no rpath to them.
+#  if defined(Q_OS_MAC)
+                || key == QLL("DYLD_LIBRARY_PATH")
+                || key == QLL("DYLD_FRAMEWORK_PATH")
+#  else
+                || key == QLL("LD_LIBRARY_PATH")
                 || key == QLatin1String("DISPLAY") || key == QLatin1String("XAUTHLOCALHOSTNAME")
                 || key.startsWith(QLatin1String("XDG_"))
 #  endif // !Q_OS_MAC
@@ -605,6 +611,13 @@ void tst_Selftests::doRunSubTest(QString const& subdir, QStringList const& logge
     }
 
     const QByteArray err(proc.readAllStandardError());
+#ifdef QT_PTR_TRACKING
+    // A subtest that ends in `qFatal()` while its log goes to an XML file
+    // names that on stderr, before Fil-C reports the abort.
+    const QByteArray fatalLine("qFatal: exiting.\n");
+    const QByteArray filcErr = err.startsWith(fatalLine)
+        ? err.mid(fatalLine.size()) : err;
+#endif
 
     // Some tests may output unpredictable strings to stderr, which we'll ignore.
     //
@@ -616,7 +629,14 @@ void tst_Selftests::doRunSubTest(QString const& subdir, QStringList const& logge
     // Also, tests which use valgrind may generate warnings if the toolchain is
     // newer than the valgrind version, such that valgrind can't understand the
     // debug information on the binary.
-    if (subdir != QLatin1String("exceptionthrow")
+    if (
+#ifdef QT_PTR_TRACKING
+        ! (crashes && (filcErr.startsWith("filc user error: abort(3) called.")
+            || (subdir == QLatin1String("crashes")
+                && filcErr.startsWith("filc safety error:"))))
+        &&
+#endif
+        subdir != QLatin1String("exceptionthrow")
         && subdir != QLatin1String("cmptest") // QImage comparison requires QGuiApplication
         && subdir != QLatin1String("fetchbogus")
         && subdir != QLatin1String("xunit")

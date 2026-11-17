@@ -5,6 +5,7 @@ HEADERS +=  \
         global/qsystemdetection.h \
         global/qcompilerdetection.h \
         global/qmemorysafety.h \
+        global/qmemorysafety_backtrace_p.h \
         global/qprocessordetection.h \
 	global/qnamespace.h \
         global/qendian.h \

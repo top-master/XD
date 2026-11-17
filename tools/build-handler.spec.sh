@@ -2578,6 +2578,23 @@ expect_returns 'bh_strict_mode aborts subshell on first failure' 1 sh -c '
 
 
 
+test_section 'bh_pro_is_aux -- a project that links nothing'
+
+_bh_spec_sandbox=$(mktemp -d)
+printf 'TEMPLATE = aux\n' > "$_bh_spec_sandbox/aux.pro"
+printf 'TARGET = QtZlib\nload(qt_module)\n' > "$_bh_spec_sandbox/module.pro"
+printf '# Project:  module.pro\n# Template: aux\n' > "$_bh_spec_sandbox/Makefile.aux"
+printf '# Project:  module.pro\n# Template: lib\n' > "$_bh_spec_sandbox/Makefile.lib"
+expect 'a project that sets TEMPLATE = aux' 0 \
+    "$(bh_pro_is_aux "$_bh_spec_sandbox/aux.pro"; echo $?)"
+expect 'a header-only module whose Makefile names the aux template' 0 \
+    "$(bh_pro_is_aux "$_bh_spec_sandbox/module.pro" "$_bh_spec_sandbox/Makefile.aux"; echo $?)"
+expect 'but not one whose Makefile names another template' 1 \
+    "$(bh_pro_is_aux "$_bh_spec_sandbox/module.pro" "$_bh_spec_sandbox/Makefile.lib"; echo $?)"
+expect 'nor one without a Makefile to read' 1 \
+    "$(bh_pro_is_aux "$_bh_spec_sandbox/module.pro"; echo $?)"
+rm -rf "$_bh_spec_sandbox"
+
 # ---- specs: build modes, end to end ------------------------------------
 
 test_section 'save_order -- Windows drive paths'

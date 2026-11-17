@@ -383,12 +383,17 @@ bh_pro_is_subdirs() {
     grep -Eq '^[[:space:]]*TEMPLATE[[:space:]]*=[[:space:]]*subdirs[[:space:]]*$' "$1" 2>/dev/null
 }
 
-# bh_pro_is_aux <pro>
+# bh_pro_is_aux <pro> [<makefile>]
 #
-# Tells whether <pro> sets `TEMPLATE = aux`: its qmake run does its work
-# (such as writing a descriptor), and it links nothing to mark finished.
+# Tells whether <pro> builds as an aux project: its qmake run does its work
+# (such as writing a descriptor), and it links nothing to mark finished. It
+# sets `TEMPLATE = aux`, or <makefile>, the one qmake wrote for it, names that
+# template (a header-only module turns aux through its features).
 bh_pro_is_aux() {
-    grep -Eq '^[[:space:]]*TEMPLATE[[:space:]]*=[[:space:]]*aux[[:space:]]*$' "$1" 2>/dev/null
+    if grep -Eq '^[[:space:]]*TEMPLATE[[:space:]]*=[[:space:]]*aux[[:space:]]*$' "$1" 2>/dev/null; then
+        return 0
+    fi
+    [ -n "${2:-}" ] && grep -q '^# Template: aux$' "$2" 2>/dev/null
 }
 
 # bh_build_alone <pro> <path> [<counter>]
@@ -746,7 +751,7 @@ bh_save_space_unfinish() {
 bh_save_space_mark_finished() {
     # Leaves an aux project unmarked: it has no target, and each build runs its
     # qmake again, which redoes its work.
-    if bh_pro_is_aux "$1"; then
+    if bh_pro_is_aux "$1" "$2"; then
         return 0
     fi
 

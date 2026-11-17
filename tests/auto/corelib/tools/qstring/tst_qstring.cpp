@@ -567,6 +567,7 @@ private slots:
     void QCharRefMutableUnicode() const;
     void QCharRefDetaching() const;
     void sprintfZU() const;
+    void sprintfWindowsLengths() const;
     void repeatedSignature() const;
     void repeated() const;
     void repeated_data() const;
@@ -6319,6 +6320,39 @@ void tst_QString::sprintfZU() const
         QCOMPARE(string, QString::fromLatin1("6 foo\n"));
     }
 #endif // !Q_CC_MINGW
+}
+
+/*!
+    Formats @p format with the arguments after it, through a call that the
+    compiler checks no format of; hence a length modifier that the C
+    standard lacks, such as `I64`, compiles without a warning.
+*/
+static QString formatUnchecked(const char *format, ...)
+{
+    va_list arguments;
+    va_start(arguments, format);
+    const QString text = QString::vasprintf(format, arguments);
+    va_end(arguments);
+    return text;
+}
+
+/*!
+    Checks the `I64`, `I32` and `I` length modifiers of the Windows
+    runtime: each takes its argument at its own size, and the argument
+    after it still lines up.
+*/
+void tst_QString::sprintfWindowsLengths() const
+{
+    QCOMPARE(formatUnchecked("%I64d %s", Q_INT64_C(-8589934592), "next"),
+             QString::fromLatin1("-8589934592 next"));
+    QCOMPARE(formatUnchecked("%I64u %s", Q_UINT64_C(8589934592), "next"),
+             QString::fromLatin1("8589934592 next"));
+    QCOMPARE(formatUnchecked("%I64x %s", Q_UINT64_C(0x1ffffffff), "next"),
+             QString::fromLatin1("1ffffffff next"));
+    QCOMPARE(formatUnchecked("%I32d %s", qint32(-42), "next"),
+             QString::fromLatin1("-42 next"));
+    QCOMPARE(formatUnchecked("%Id %s", qintptr(-7), "next"),
+             QString::fromLatin1("-7 next"));
 }
 
 void tst_QString::repeatedSignature() const

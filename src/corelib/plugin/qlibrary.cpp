@@ -256,19 +256,24 @@ static bool findPatternUnloaded(const QString &library, QLibraryPrivate *lib)
     char pattern[] = "qTMETADATA  ";
     pattern[0] = 'Q'; // Ensure the pattern "QTMETADATA" is not found in this library should QPluginLoader ever encounter it.
     const ulong plen = qstrlen(pattern);
-#if defined (Q_OF_ELF) && defined(Q_CC_GNU) && !defined(QT_PTR_TRACKING)
+#if defined (Q_OF_ELF) && defined(Q_CC_GNU)
     int r = QElfParser().parse(filedata, fdlen, library, lib, &pos, &fdlen);
     if (r == QElfParser::Corrupt || r == QElfParser::NotElf) {
             if (lib && qt_debug_component()) {
                 qWarning("QElfParser: %s",qPrintable(lib->errorString));
             }
             return false;
-    } else if (r == QElfParser::QtMetaDataSection) {
+    } else if (r == QElfParser::QtMetaDataSection
+        || (r == QElfParser::NoQtSection && pos > 0)
+    ) {
+        // A library without a `.qtmetadata` section may still hold the
+        // metadata in its `.rodata` section, which `parse()` leaves at `pos`.
         long rel = qt_find_pattern(filedata + pos, fdlen, pattern, plen);
-        if (rel < 0)
+        if (rel < 0) {
             pos = -1;
-        else
+        } else {
             pos += rel;
+        }
         hasMetaData = true;
     }
 #elif defined (Q_OF_MACH_O)

@@ -38,6 +38,7 @@
 
 #include "qlibrary_p.h"
 #include <qdebug.h>
+#include <string.h>
 
 QT_BEGIN_NAMESPACE
 
@@ -124,7 +125,13 @@ int QElfParser::parse(const char *dataStart, ulong fdlen, const QString &library
 
     qelfhalf_t e_shentsize = read<qelfhalf_t> (data);
 
-    if (e_shentsize % 4){
+    // `parseSectionHeader()` reads up to `sh_size`, hence a shorter entry
+    // would read into the next one, or past the end of the file.
+    const qelfhalf_t sectionHeaderSize = qelfhalf_t(
+        2 * sizeof(qelfword_t)
+            + 2 * sizeof(qelfaddr_t) + 2 * sizeof(qelfoff_t)
+    );
+    if (e_shentsize % 4 || e_shentsize < sectionHeaderSize) {
         if (lib)
             lib->errorString = QLibrary::tr("'%1' is an invalid ELF object (%2)").arg(library).arg(QLatin1String("unexpected e_shentsize"));
         return Corrupt;
@@ -135,7 +142,9 @@ int QElfParser::parse(const char *dataStart, ulong fdlen, const QString &library
     qelfhalf_t e_shtrndx   = read<qelfhalf_t> (data);
     data += sizeof(qelfhalf_t); // e_shtrndx
 
-    if ((quint32)(e_shnum * e_shentsize) > fdlen) {
+    if ((quint32)(e_shnum * e_shentsize) > fdlen
+        || e_shoff > fdlen - (quint32)(e_shnum * e_shentsize)
+    ) {
         if (lib)
             lib->errorString = QLibrary::tr("'%1' is an invalid ELF object (%2)").arg(library)
                                .arg(QLatin1String("announced %2 sections, each %3 bytes, exceed file size"))
@@ -183,7 +192,15 @@ int QElfParser::parse(const char *dataStart, ulong fdlen, const QString &library
         }
         const char *shnam = dataStart + m_stringTableFileOffset + sh.name;
 
-        if (m_stringTableFileOffset + sh.name > fdlen) {
+        // The name is compared up to its terminator, hence the name and
+        // its terminator must end inside the file.
+        if (m_stringTableFileOffset + sh.name >= fdlen
+            || ! memchr(
+                shnam,
+                0,
+                fdlen - (m_stringTableFileOffset + sh.name)
+            )
+        ) {
             if (lib)
                 lib->errorString = QLibrary::tr("'%1' is an invalid ELF object (%2)").arg(library)
                                   .arg(QLatin1String("section name %2 of %3 behind end of file"))
@@ -195,7 +212,9 @@ int QElfParser::parse(const char *dataStart, ulong fdlen, const QString &library
         qDebug() << "++++" << i << shnam;
 #endif
 
-        if (qstrcmp(shnam, ".qtmetadata") == 0 || qstrcmp(shnam, ".rodata") == 0) {
+        if (qstrcmp(shnam, ".qtmetadata") == 0 || qstrcmp(shnam, ".rodata") == 0
+            || qstrcmp(shnam, ".data.rel.ro") == 0
+        ) {
             if (!(sh.type & 0x1)) {
                 if (shnam[1] == 'r') {
                     if (lib)
@@ -210,15 +229,32 @@ int QElfParser::parse(const char *dataStart, ulong fdlen, const QString &library
                 continue;
             }
 
-            if (sh.offset == 0 || (sh.offset + sh.size) > fdlen || sh.size < 1) {
+            if (sh.offset == 0 || sh.size < 1 || sh.offset > fdlen
+                || sh.size > fdlen - sh.offset
+            ) {
                 if (lib)
                     lib->errorString = QLibrary::tr("'%1' is an invalid ELF object (%2)").arg(library)
                                       .arg(QLatin1String("missing section data. This is not a library."));
                 return Corrupt;
             }
+            if (shnam[1] == 'd') {
+                char pattern[] = "qTMETADATA  ";
+                pattern[0] = 'Q';
+                bool found = false;
+                for (ulong offset = 0; offset + sizeof(pattern) - 1 <= sh.size; ++offset) {
+                    if (memcmp(dataStart + sh.offset + offset, pattern, sizeof(pattern) - 1) == 0) {
+                        found = true;
+                        break;
+                    }
+                }
+                if ( ! found) {
+                    s += e_shentsize;
+                    continue;
+                }
+            }
             *pos = sh.offset;
             *sectionlen = sh.size - 1;
-            if (shnam[1] == 'q')
+            if (shnam[1] == 'q' || shnam[1] == 'd')
                 return QtMetaDataSection;
         }
         s += e_shentsize;

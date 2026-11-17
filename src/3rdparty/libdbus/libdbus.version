@@ -1,0 +1,12 @@
+LIBDBUS_1_3 {
+  global:
+    dbus_*;
+    pizlonated_dbus_*;
+  local:
+    *;
+};
+LIBDBUS_PRIVATE_1.16.2 {
+  global:
+    _dbus_*;
+    pizlonated__dbus_*;
+};
