@@ -1148,10 +1148,11 @@ bool FormatDocument::canReplace(int offset, int length) const
 
 /*!
     Records an issue of @a rule at @a offset that the rule cannot fix on its
-    own, with @a message; an issue on a line that is not selected is dropped.
+    own, with @a message, which prints to the error output when @a isError
+    is set; an issue on a line that is not selected is dropped.
 */
 void FormatDocument::report(int offset, const char *rule,
-                            const QString & message)
+                            const QString & message, bool isError)
 {
     const int line = this->lineOf(offset);
     if (this->isFormattingDisabled(offset)
@@ -1159,7 +1160,9 @@ void FormatDocument::report(int offset, const char *rule,
     ) {
         return;
     }
-    this->m_issues.append(FormatIssue(line, QByteArray(rule), message));
+    FormatIssue issue(line, QByteArray(rule), message);
+    issue.isError = isError;
+    this->m_issues.append(issue);
 }
 
 /*!

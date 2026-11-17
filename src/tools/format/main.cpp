@@ -541,11 +541,13 @@ static int logResults(Logger *logger, const QList<FormatFileResult > & results,
         }
         for (int k = 0; k < result.issues.size(); ++k) {
             const FormatIssue & issue = result.issues.at(k);
-            logger->logLine(QString(QLL("%1:%2: %3: %4")).arg(path).arg(issue.line)
-                            .arg(
-                                QString::fromLatin1(issue.rule),
-                                issue.message
-                            ));
+            const QString line = QString(QLL("%1:%2: %3: %4")).arg(path).arg(issue.line)
+                .arg(QString::fromLatin1(issue.rule), issue.message);
+            if (issue.isError) {
+                logger->logDiagnostic(line);
+            } else {
+                logger->logLine(line);
+            }
             code = qMax(code, int(ExitDirty));
         }
         for (int k = 0; k < result.warnings.size(); ++k) {

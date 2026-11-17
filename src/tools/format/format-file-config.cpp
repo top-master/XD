@@ -410,6 +410,12 @@ Config::Schema FormatFileConfig::schema()
                     << QString(QLL("critical")),
                 QString(QLL("warn")));
     schema.addSection(code);
+    Config::Section lint(QString(QLL("Lint")));
+    lint.addKey(QString(QLL("byRefVariable")),
+                QStringList() << QString(QLL("ignore")) << QString(QLL("warn"))
+                    << QString(QLL("error")),
+                QString(QLL("warn")));
+    schema.addSection(lint);
     return schema;
 }
 
@@ -720,6 +726,9 @@ bool FormatFileConfig::fromParser(
     const Config::Condition::NameMismatch mismatch =
         Config::Condition::nameMismatch(parser.value(QString(QLL("code.nameMismatch"))));
     fileConfig->nameMismatch = mismatch;
+    const QString byRefVariable = parser.value(QString(QLL("lint.byRefVariable")));
+    fileConfig->byRefVariable = byRefVariable == QLL("ignore")
+        ? LintIgnore : (byRefVariable == QLL("error") ? LintError : LintWarn);
     fileConfig->extensions = parser.value(QString(QLL("general.extensions")));
     fileConfig->typedefSuper = parser.value(QString(QLL("structure.typedefSuper")));
     fileConfig->replaceSuperSites = parser.value(QString(QLL("structure.replaceSuperSites")));

@@ -83,6 +83,7 @@ HEADERS += \
     $$PWD/rules/prose.h \
     $$PWD/rules/replace-types.h \
     $$PWD/rules/qpointer-getter.h \
+    $$PWD/rules/reference-local.h \
     $$PWD/rules/reference-space.h \
     $$PWD/rules/relative-include.h \
     $$PWD/rules/stub-line.h \
@@ -157,6 +158,7 @@ SOURCES += \
     $$PWD/rules/prose.cpp \
     $$PWD/rules/replace-types.cpp \
     $$PWD/rules/qpointer-getter.cpp \
+    $$PWD/rules/reference-local.cpp \
     $$PWD/rules/reference-space.cpp \
     $$PWD/rules/relative-include.cpp \
     $$PWD/rules/stub-line.cpp \

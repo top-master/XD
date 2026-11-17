@@ -39,6 +39,7 @@
 #include "./rules/private-access.h"
 #include "./rules/replace-types.h"
 #include "./rules/qpointer-getter.h"
+#include "./rules/reference-local.h"
 #include "./rules/reference-space.h"
 #include "./rules/relative-include.h"
 #include "./rules/stub-line.h"
@@ -76,7 +77,8 @@ static QList<FormatRule * > formatCreateCodeRules()
         << new FormatOneStatementRule;
     rules << new FormatSuperTypedefRule;
     rules << new FormatNoLambdaRule << new FormatMemberInitRule << new FormatGlobalStaticRule
-        << new FormatPrivateAccessRule << new FormatExcludesRule << new FormatCodeShapeRule;
+        << new FormatPrivateAccessRule << new FormatExcludesRule << new FormatCodeShapeRule
+        << new FormatReferenceLocalRule;
     return rules;
 }
 

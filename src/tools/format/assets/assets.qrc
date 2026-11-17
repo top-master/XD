@@ -5,6 +5,7 @@
 
 <qresource prefix="/assets">
     <file>global-static.md</file>
+    <file>reference-local.md</file>
     <file>wrap.md</file>
 </qresource>
 </RCC>

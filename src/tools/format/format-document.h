@@ -122,7 +122,8 @@ public:
     bool replace(
             int offset, int length, const QByteArray & text,
             int otherOffset, int otherLength, const QByteArray & otherText);
-    void report(int offset, const char *rule, const QString & message);
+    void report(int offset, const char *rule, const QString & message,
+                bool isError = false);
     void request(int offset,
                  const char *rule,
                  const QString & message,
