@@ -419,6 +419,24 @@ void poll(bool hasData, bool isBuffered, int socketType, Engine *engine)
     }
 }
 
+// CASE	continuation-indent-branches.cpp
+bool keep(const QString & key)
+{
+    const bool useVariable = key == QLL("PATH") || key == QLL("QT_QPA_PLATFORM")
+#if defined(Q_OS_UNIX)
+        || key == QLL("HOME") || key == QLL("USER")
+#  if defined(Q_OS_MAC)
+        || key == QLL("DYLD_LIBRARY_PATH")
+        || key == QLL("DYLD_FRAMEWORK_PATH")
+#  else
+        || key == QLL("LD_LIBRARY_PATH")
+        || key == QLL("DISPLAY")
+#  endif
+#endif
+        ;
+    return useVariable;
+}
+
 // CASE	continuation-indent-directives.h
 class Commands
 {

@@ -37,7 +37,7 @@
 #include "./rules/param-wrap.h"
 #include "./rules/pattern-report.h"
 #include "./rules/private-access.h"
-#include "./rules/qll.h"
+#include "./rules/replace-types.h"
 #include "./rules/qpointer-getter.h"
 #include "./rules/reference-space.h"
 #include "./rules/relative-include.h"
@@ -64,7 +64,7 @@
 static QList<FormatRule * > formatCreateCodeRules()
 {
     QList<FormatRule * > rules;
-    rules << new FormatMocRunRule << new FormatQllRule << new FormatRelativeIncludeRule
+    rules << new FormatMocRunRule << new FormatReplaceTypesRule << new FormatRelativeIncludeRule
         << new FormatNotSpaceRule << new FormatLineJoinRule
         << new FormatControlBracesRule << new FormatNamespaceBracesRule
         << new FormatOperatorWrapRule

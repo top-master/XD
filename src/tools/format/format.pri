@@ -46,6 +46,7 @@ HEADERS += \
     $$PWD/parser/layout-helpers.h \
     $$PWD/parser/scope-conditions.h \
     $$PWD/rules/args-wrap.h \
+    $$PWD/rules/args-array.h \
     $$PWD/rules/body-braces.h \
     $$PWD/rules/as-with.h \
     $$PWD/rules/code-backticks.h \
@@ -81,13 +82,14 @@ HEADERS += \
     $$PWD/rules/pattern-report.h \
     $$PWD/rules/private-access.h \
     $$PWD/rules/prose.h \
-    $$PWD/rules/qll.h \
+    $$PWD/rules/replace-types.h \
     $$PWD/rules/qpointer-getter.h \
     $$PWD/rules/reference-space.h \
     $$PWD/rules/relative-include.h \
     $$PWD/rules/stub-line.h \
     $$PWD/rules/super-typedef.h \
     $$PWD/rules/template-close.h \
+    $$PWD/rules/template-object.h \
     $$PWD/rules/ternary-wrap.h \
     $$PWD/rules/text-report.h \
     $$PWD/rules/trailing-comment.h \
@@ -119,6 +121,7 @@ SOURCES += \
     $$PWD/parser/layout-helpers.cpp \
     $$PWD/parser/scope-conditions.cpp \
     $$PWD/rules/args-wrap.cpp \
+    $$PWD/rules/args-array.cpp \
     $$PWD/rules/body-braces.cpp \
     $$PWD/rules/as-with.cpp \
     $$PWD/rules/code-backticks.cpp \
@@ -154,13 +157,14 @@ SOURCES += \
     $$PWD/rules/pattern-report.cpp \
     $$PWD/rules/private-access.cpp \
     $$PWD/rules/prose.cpp \
-    $$PWD/rules/qll.cpp \
+    $$PWD/rules/replace-types.cpp \
     $$PWD/rules/qpointer-getter.cpp \
     $$PWD/rules/reference-space.cpp \
     $$PWD/rules/relative-include.cpp \
     $$PWD/rules/stub-line.cpp \
     $$PWD/rules/super-typedef.cpp \
     $$PWD/rules/template-close.cpp \
+    $$PWD/rules/template-object.cpp \
     $$PWD/rules/ternary-wrap.cpp \
     $$PWD/rules/text-report.cpp \
     $$PWD/rules/trailing-comment.cpp \

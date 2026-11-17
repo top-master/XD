@@ -10,6 +10,7 @@
 #include "config-choice.h"
 #include "config-condition.h"
 #include "config-scopes.h"
+#include "config-name.h"
 #include "config-numbers.h"
 #include "config-regexp.h"
 #include "config-word.h"
@@ -172,6 +173,15 @@ QStringList FormatFileConfig::superConditionNames()
 {
     return QStringList() << QString(QLL("isNewClass")) << QString(QLL("isNeeded"))
         << QString(QLL("hasSuperTypedef"));
+}
+
+/*!
+    Builds the names that `[Replace.types] target` may use: `isNew`, which
+    holds on a line `-L` or `--git` selects (every line, without them).
+*/
+QStringList FormatFileConfig::replaceTargetNames()
+{
+    return QStringList() << QString(QLL("isNew"));
 }
 
 QStringList FormatFileConfig::superChoices()
@@ -419,26 +429,77 @@ Config::Schema FormatFileConfig::schema()
                      QString::fromLatin1(defaultThisModeText));
     schema.addSection(relations);
     schema.addSection(structure);
+    Config::Section replaceTypes(QString(QLL("Replace.types")));
+    replaceTypes.addKey(QString(QLL("target")),
+                        Config::Matchers() << Config::Condition::create(
+                            FormatFileConfig::replaceTargetNames()),
+                        QString(QLL("isNew")));
+    replaceTypes.addKey(QString(QLL("action")),
+                        QStringList() << QString(QLL("replace")) << QString(QLL("report")),
+                        QString(QLL("replace")));
+    replaceTypes.setOpen(Config::Matchers() << Config::Name::create(true)
+                             << Config::Word::create(QString(QLL("keep-as-is"))));
+    schema.addSection(replaceTypes);
+    Config::Section code(QString(QLL("Code")));
+    code.addKey(QString(QLL("nameMismatch")),
+                QStringList() << QString(QLL("warn")) << QString(QLL("error"))
+                    << QString(QLL("critical")),
+                QString(QLL("warn")));
+    schema.addSection(code);
     return schema;
 }
 
-static void compileCondition(const QString & text, QStringList *program,
-                             bool takesPercents = false)
+/*!
+    Logs @a error, a condition that did not compile; @a mismatched tells a
+    name mismatch, which `[Code] nameMismatch = error` logs as an error.
+*/
+static void reportCondition(const QString & error, bool mismatched)
 {
-    QString error;
+    if (mismatched) {
+        qCritical("Invalid format condition: %s", qPrintable(error));
+        return;
+    }
+    qWarning("Invalid format condition: %s", qPrintable(error));
+}
+
+/*!
+    Compiles the condition @a text into @a program, over the names of
+    FormatScopeConditions, and over percents when @a takesPercents is set;
+    a condition that does not compile leaves @a program at its default, and
+    is logged. A name that differs from a known one in case alone is
+    handled as @a mismatch says; for `critical`, returns false with
+    @a error, and the file keeps its text.
+*/
+static bool compileCondition(const QString & text, QStringList *program,
+                             bool takesPercents = false,
+                             Config::Condition::NameMismatch mismatch
+                                 = Config::Condition::NameMismatchWarn,
+                             QString *error = Q_NULLPTR)
+{
+    QString reason;
     QStringList compiled;
+    bool mismatched = false;
     if ( ! Config::Condition::compile(
             text,
             FormatScopeConditions::names(),
             &compiled,
-            &error,
-            takesPercents
+            &reason,
+            takesPercents,
+            mismatch,
+            &mismatched
         )
     ) {
-        qWarning("Invalid format condition: %s", qPrintable(error));
-        return;
+        if (mismatched
+            && mismatch == Config::Condition::NameMismatchCritical
+        ) {
+            *error = reason;
+            return false;
+        }
+        reportCondition(reason, mismatched);
+        return true;
     }
     *program = compiled;
+    return true;
 }
 
 /*!
@@ -535,7 +596,12 @@ bool FormatFileConfig::load(const QString & path, const FormatConfig & config,
     if ( ! FormatFileConfig::readParser(path, config, &parser, error)) {
         return false;
     }
-    FormatFileConfig::fromParser(parser, fileConfig);
+    QString reason;
+    if ( ! FormatFileConfig::fromParser(parser, fileConfig, &reason)) {
+        *error = QString(QLL("%1: [Code] nameMismatch = critical: %2"))
+            .arg(path, reason);
+        return false;
+    }
     return true;
 }
 
@@ -588,22 +654,26 @@ static bool isConstant(const QStringList & program)
     Reads @a value, a setting that takes a count or a condition: a count,
     or math that gives one (such as `1 + 7 - 3`), goes to @a count and
     clears @a program; any other condition is compiled into @a program,
-    which then decides in place of the count.
+    which then decides in place of the count. Returns false, with @a error,
+    when a name mismatch fails it under @a mismatch `critical`.
 */
-static void readCountOrCondition(
+static bool readCountOrCondition(
         const QString & value, int *count,
-        QStringList *program)
+        QStringList *program,
+        Config::Condition::NameMismatch mismatch, QString *error)
 {
     bool isNumber = false;
     const int number = value.toInt(&isNumber);
     if (isNumber) {
         *count = number;
         program->clear();
-        return;
+        return true;
     }
     const QSharedPointer<Config::Scopes::Scope > scope =
         FormatConditionContext::pushCountScope();
-    compileCondition(value, program, true);
+    if ( ! compileCondition(value, program, true, mismatch, error)) {
+        return false;
+    }
     qreal constant = 0;
     if (isConstant(*program)
         && Config::Condition::value(
@@ -616,17 +686,142 @@ static void readCountOrCondition(
         *count = int(constant);
         program->clear();
     }
+    return true;
 }
 
 /*!
-    Converts the validated values in @a parser to @a fileConfig.
+    Builds @a entries, the lines of `[Replace.types]` in their order, with
+    each `&` of a key expanded: a key that starts with `&` takes the key of
+    the latest line that does not, in place of that `&`. A second `&` in a
+    key sets what a later `&` stands for to the expanded text before it, and
+    drops out; hence `&::Inner&::make*` under `::A` is `::A::Inner::make*`,
+    and a later `&` stands for `::A::Inner`.
 */
-void FormatFileConfig::fromParser(const Config::Parser &parser,
-                                FormatFileConfig *fileConfig)
+QList<QPair<QString, QString > > FormatFileConfig::expandPrevious(
+        const QList<QPair<QString, QString > > & entries)
 {
+    QList<QPair<QString, QString > > expanded;
+    QString previous;
+    for (int i = 0; i < entries.size(); ++i) {
+        QString key = entries.at(i).first;
+        if ( ! key.startsWith(QLatin1Char('&'))) {
+            previous = key;
+        } else {
+            key = previous + key.mid(1);
+            const int second = key.indexOf(
+                QLatin1Char('&'),
+                previous.size()
+            );
+            if (second >= 0) {
+                previous = key.left(second);
+                key.remove(second, 1);
+            }
+        }
+        expanded.append(qMakePair(key, entries.at(i).second));
+    }
+    return expanded;
+}
+
+/*!
+    Checks the condition @a text over @a names, as @a mismatch says (see
+    compileCondition()), for a setting that a rule compiles later: on a
+    name mismatch, `error` puts @a defaultValue in @a text, and `critical`
+    returns false with @a error.
+*/
+static bool checkCondition(QString *text, const QStringList & names,
+                           const QString & defaultValue,
+                           Config::Condition::NameMismatch mismatch,
+                           QString *error)
+{
+    QStringList program;
+    QString reason;
+    bool mismatched = false;
+    if (Config::Condition::compile(
+            *text,
+            names,
+            &program,
+            &reason,
+            false,
+            mismatch,
+            &mismatched
+        )
+        || ! mismatched
+    ) {
+        return true;
+    }
+    if (mismatch == Config::Condition::NameMismatchCritical) {
+        *error = reason;
+        return false;
+    }
+    reportCondition(reason, true);
+    *text = defaultValue;
+    return true;
+}
+
+/*!
+    Converts the validated values in @a parser to @a fileConfig. The
+    conditions handle a name that differs from a known one in case alone as
+    `[Code] nameMismatch` says (see Config::Condition::NameMismatch);
+    returns false, with @a error, for such a name under `critical`.
+*/
+bool FormatFileConfig::fromParser(
+        const Config::Parser &parser,
+        FormatFileConfig *fileConfig, QString *error)
+{
+    const Config::Condition::NameMismatch mismatch =
+        Config::Condition::nameMismatch(parser.value(QString(QLL("code.nameMismatch"))));
+    fileConfig->nameMismatch = mismatch;
     fileConfig->extensions = parser.value(QString(QLL("general.extensions")));
     fileConfig->typedefSuper = parser.value(QString(QLL("structure.typedefSuper")));
     fileConfig->replaceSuperSites = parser.value(QString(QLL("structure.replaceSuperSites")));
+    fileConfig->replaceTypesTarget = parser.value(
+        QString(QLL("replace.types.target"))
+    );
+
+    // Reports the mismatches of the conditions that rules compile later;
+    // those rules then use the names meant.
+    bool mismatched = false;
+    QString reason;
+    if ( ! Config::Choice::check(
+            fileConfig->typedefSuper,
+            FormatFileConfig::superConditionNames(),
+            FormatFileConfig::superChoices(),
+            mismatch,
+            &reason,
+            &mismatched
+        )
+        && mismatched
+    ) {
+        if (mismatch == Config::Condition::NameMismatchCritical) {
+            *error = reason;
+            return false;
+        }
+        reportCondition(reason, true);
+        fileConfig->typedefSuper = FormatFileConfig::defaultTypedefSuper();
+    }
+    if ( ! checkCondition(
+            &fileConfig->replaceSuperSites,
+            FormatFileConfig::superConditionNames(),
+            FormatFileConfig::defaultReplaceSuperSites(),
+            mismatch,
+            error
+        )
+        || ! checkCondition(
+            &fileConfig->replaceTypesTarget,
+            FormatFileConfig::replaceTargetNames(),
+            parser.schema().key(QString(QLL("replace.types.target")))
+                .defaultValue,
+            mismatch,
+            error
+        )
+    ) {
+        return false;
+    }
+    fileConfig->replaceTypesAction = parser.value(
+        QString(QLL("replace.types.action"))
+    );
+    fileConfig->replaceTypes = FormatFileConfig::expandPrevious(
+        parser.openEntries(QString(QLL("replace.types"))));
     const Config::Schema &schema = parser.schema();
     const QString refSuffix = QString(QLL("types.refSuffix"));
     const QString moveSuffix = QString(QLL("types.moveSuffix"));
@@ -642,18 +837,27 @@ void FormatFileConfig::fromParser(const Config::Parser &parser,
         = Config::Numbers::parse(parser.value(QString(QLL("structure.wrapBegin"))));
     fileConfig->wrapMax = parser.value(QString(QLL("structure.wrapMax"))).toInt();
     const int scopes = Config::Scopes::count();
-    readCountOrCondition(parser.value(QString(QLL("structure.wrapArgsOver"))),
-                         &fileConfig->wrapArgsOver,
-                         &fileConfig->wrapArgsOverCondition);
     // Lays out one operand per line where a condition misses a value.
     fileConfig->wrapConditionsOver = 1;
-    readCountOrCondition(
-        parser.value(QString(QLL("structure.wrapConditionsOver"))),
-        &fileConfig->wrapConditionsOver,
-        &fileConfig->wrapConditionsOverCondition);
-    readCountOrCondition(parser.value(QString(QLL("structure.joinArgs"))),
-                         &fileConfig->joinArgs, &fileConfig->joinArgsCondition);
+    const bool counted = readCountOrCondition(
+        parser.value(QString(QLL("structure.wrapArgsOver"))),
+        &fileConfig->wrapArgsOver,
+        &fileConfig->wrapArgsOverCondition, mismatch, error
+    )
+        && readCountOrCondition(
+            parser.value(QString(QLL("structure.wrapConditionsOver"))),
+            &fileConfig->wrapConditionsOver,
+            &fileConfig->wrapConditionsOverCondition, mismatch, error
+        )
+        && readCountOrCondition(
+            parser.value(QString(QLL("structure.joinArgs"))),
+            &fileConfig->joinArgs, &fileConfig->joinArgsCondition, mismatch,
+            error
+        );
     Config::Scopes::popUntil(scopes);
+    if ( ! counted) {
+        return false;
+    }
     fileConfig->wrapSubChain = parser.value(QString(QLL("structure.wrapSubChain")));
     fileConfig->wrapConditionsPer = parser.value(
         QString(QLL("structure.wrapConditionsPer"))
@@ -674,16 +878,36 @@ void FormatFileConfig::fromParser(const Config::Parser &parser,
         ? CommentTargetAny : CommentTargetLong;
     fileConfig->codeTarget = parser.value(QString(QLL("structure.target"))) == QLL("any")
         ? CodeTargetAny : CodeTargetLong;
-    compileCondition(parser.value(QString(QLL("structure.bodyBraces"))),
-                     &fileConfig->bodyBraces);
     fileConfig->docTagSign = parser.value(QString(QLL("comments.docTagSign"))) == QLL("\\")
         ? '\\' : '@';
-    compileCondition(parser.value(QString(QLL("relations.thisMode"))),
-                     &fileConfig->thisMode);
-    compileCondition(parser.value(QString(QLL("structure.wrapChainAt"))),
-                     &fileConfig->wrapChainAt, true);
-    compileCondition(parser.value(QString(QLL("structure.wrapArgsAt"))),
-                     &fileConfig->wrapArgsAt, true);
+    return compileCondition(
+        parser.value(QString(QLL("structure.bodyBraces"))),
+        &fileConfig->bodyBraces,
+        false,
+        mismatch,
+        error
+    )
+        && compileCondition(
+            parser.value(QString(QLL("relations.thisMode"))),
+            &fileConfig->thisMode,
+            false,
+            mismatch,
+            error
+        )
+        && compileCondition(
+            parser.value(QString(QLL("structure.wrapChainAt"))),
+            &fileConfig->wrapChainAt,
+            true,
+            mismatch,
+            error
+        )
+        && compileCondition(
+            parser.value(QString(QLL("structure.wrapArgsAt"))),
+            &fileConfig->wrapArgsAt,
+            true,
+            mismatch,
+            error
+        );
 }
 
 /*!

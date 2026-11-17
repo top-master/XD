@@ -904,7 +904,9 @@ void FormatSuperTypedefRule::replaceSites(FormatDocument *document) const
             const FormatSuperContext context(this, owner, brace, base, &document->formatConfig());
             if (Config::Condition::compile(fileConfig.replaceSuperSites,
                                            FormatFileConfig::superConditionNames(),
-                                           &program, &error)) {
+                                           &program, &error, false,
+                                           Config::Condition::NameMismatchIgnore)
+            ) {
                 replace = Config::Condition::evaluate(program, QSet<QString >(),
                     &context, &ok);
             }
