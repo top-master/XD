@@ -396,6 +396,12 @@ moveSuffix = " "
   warning and uses the name meant; `error` logs it as an error, and the key
   keeps its default; `critical` does the same, then stops before it changes
   the files the setting applies to.
+- `byRefVariable` (in `[Lint]`): what `reference-local` does with a local
+  that a non-const reference names, such as `int & offset = list[i];`,
+  which a pointer should name instead (`int *offset = &(list[i]);`): `warn`
+  (the default) reports it, `error` reports it to the error output in place
+  of the standard one, without stopping the tool, and `ignore` reports
+  nothing.
 
 The command line then overrides the `.formatrc` files, in this order:
 

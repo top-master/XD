@@ -20,12 +20,14 @@ public:
     enum WrapComma { WrapCommaSoft, WrapCommaHard };
     enum CommentTarget { CommentTargetLong, CommentTargetAny };
     enum CodeTarget { CodeTargetLong, CodeTargetAny };
+    enum LintLevel { LintIgnore, LintWarn, LintError };
 
     inline FormatFileConfig()
         : refSuffix(" "), moveSuffix(FormatSpacing::keep())
         , wrapMax(80), wrapArgsOver(3), wrapConditionsOver(1), joinArgs(1), commentWrapMax(80), wrapExtendsForKeywords(20), wrapEmptyLimit(8)
         , wrapComma(WrapCommaSoft), commentTarget(CommentTargetLong), codeTarget(CodeTargetLong)
         , docTagSign('@'), nameMismatch(Config::Condition::NameMismatchWarn)
+        , byRefVariable(LintWarn)
     {
         wrapBegin << 75;
         commentWrapBegin << 75;
@@ -99,6 +101,7 @@ public:
     QString replaceTypesTarget;
     QString replaceTypesAction;
     Config::Condition::NameMismatch nameMismatch;
+    LintLevel byRefVariable;
 
 private:
     static FormatSpacing toSpacing(

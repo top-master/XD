@@ -30,6 +30,7 @@ private slots:
     void testJobs_shouldRejectNonPositiveCount_data();
     void testJobs_shouldRejectNonPositiveCount();
     void testRunner_shouldRejectUnknownKind();
+    void testByRefVariable_shouldReportErrorsToErrorOutput();
 
     /// Paths.
     void testTrailingSlash_shouldFormatDirectory_data();
@@ -534,6 +535,30 @@ void tst_FormatCli::testConfig_shouldOverrideFormatrc()
     QByteArray err;
     qExpect(this->run(arguments << QString(QLL("--headless")) << file, &out, &err))->toEqual(1);
     qExpect(this->readFile(file))->toEqual(QByteArray("void f(const int &a);\n"));
+}
+
+/// Prints the `reference-local` issue to the standard output by default,
+/// and to the error output under `[Lint] byRefVariable = error`, with the
+/// same exit code (an issue to fix, not a failure).
+void tst_FormatCli::testByRefVariable_shouldReportErrorsToErrorOutput()
+{
+    const QString file = this->writeFile(
+        QString(QLL("lint/a.cpp")),
+        "void f()\n{\n    int & first = list[0];\n}\n"
+    );
+    QStringList arguments = QStringList() << QString(QLL("--headless"))
+        << QString(QLL("--check")) << QString(QLL("--rules"))
+        << QString(QLL("reference-local"));
+    QByteArray out;
+    QByteArray err;
+    qExpect(this->run(arguments + (QStringList() << file), &out, &err))->toEqual(1);
+    qExpect(out)->toContain(QByteArray("a.cpp:3: reference-local: "));
+    qExpect(err)->Not->toContain(QByteArray("reference-local"));
+
+    arguments << QString(QLL("-c")) << QString(QLL("lint.byRefVariable=error"));
+    qExpect(this->run(arguments + (QStringList() << file), &out, &err))->toEqual(1);
+    qExpect(out)->Not->toContain(QByteArray("reference-local"));
+    qExpect(err)->toContain(QByteArray("a.cpp:3: reference-local: "));
 }
 
 void tst_FormatCli::testConfig_shouldRejectUnknownSetting()

@@ -17,22 +17,24 @@
 
     A request may also name the column its lines must keep within
     (`columnLimit`, 0 for none), which the agent's prompt file states (see
-    FormatAgentGuides).
+    FormatAgentGuides). An issue that `isError` marks prints to the error
+    output, as a setting such as `[Lint] byRefVariable = error` asks.
 */
 class FormatIssue
 {
 public:
-    inline FormatIssue() : line(0), endLine(0), columnLimit(0) {}
+    inline FormatIssue() : line(0), endLine(0), columnLimit(0), isError(false) {}
     inline FormatIssue(int line, const QByteArray & rule, const QString & message,
                        int endLine = 0, int columnLimit = 0)
         : line(line), endLine(endLine > line ? endLine : line), columnLimit(columnLimit)
-        , rule(rule), message(message)
+        , isError(false), rule(rule), message(message)
     {
     }
 
     int line;
     int endLine;
     int columnLimit;
+    bool isError;
     QByteArray rule;
     QString message;
 };

@@ -204,7 +204,8 @@ QStringList FormatProcessRunner::workerArguments() const
 
 /*!
     Writes @a result as lines a parent's decode() reads back: a `file` line,
-    then one `issue` line per issue and one `request` line per request, and
+    then one `issue` line per issue (`error` for one that `isError` marks)
+    and one `request` line per request, and
     last an `end` line that tells the result is complete (see decodeEnd());
     each field is separated by a tab, and each text is in percent-encoding.
 */
@@ -215,7 +216,7 @@ QByteArray FormatProcessRunner::encode(const FormatFileResult & result)
         + result.error.toUtf8().toPercentEncoding() + '\n';
     for (int i = 0; i < result.issues.size(); ++i) {
         text += FormatProcessRunner::encodeIssue(
-            "issue",
+            result.issues.at(i).isError ? "error" : "issue",
             path,
             result.issues.at(i)
         );
@@ -254,8 +255,8 @@ bool FormatProcessRunner::decodeEnd(const QByteArray & line, QString *path)
 
 /*!
     Reads one @a line that encode() wrote into @a results: a `file` line
-    appends a result, and an `issue` line adds to the last result of its
-    file; returns false for a line of neither kind.
+    appends a result, and an `issue` (or `error`) line adds to the last
+    result of its file; returns false for a line of neither kind.
 */
 bool FormatProcessRunner::decode(
         const QByteArray & line,
@@ -275,8 +276,8 @@ bool FormatProcessRunner::decode(
         return true;
     }
     if ((fields.size() == 6 || fields.size() == 7)
-        && (fields.at(0) == "issue" || fields.at(0) == "request"
-            || fields.at(0) == "warning")
+        && (fields.at(0) == "issue" || fields.at(0) == "error"
+            || fields.at(0) == "request" || fields.at(0) == "warning")
     ) {
         const QString path = QString::fromUtf8(
             QByteArray::fromPercentEncoding(fields.at(1))
@@ -285,7 +286,7 @@ bool FormatProcessRunner::decode(
             if (results->at(i).path != path) {
                 continue;
             }
-            const FormatIssue issue(
+            FormatIssue issue(
                 fields.at(2).toInt(),
                 QByteArray::fromPercentEncoding(fields.at(4)),
                 QString::fromUtf8(
@@ -294,7 +295,8 @@ bool FormatProcessRunner::decode(
                 fields.at(3).toInt(),
                 fields.size() == 7 ? fields.at(6).toInt() : 0
             );
-            if (fields.at(0) == "issue") {
+            if (fields.at(0) == "issue" || fields.at(0) == "error") {
+                issue.isError = fields.at(0) == "error";
                 (*results)[i].issues.append(issue);
             } else if (fields.at(0) == "request") {
                 (*results)[i].requests.append(issue);

@@ -112,6 +112,7 @@ private slots:
     void testFix_shouldRewrite_data();
     void testFix_shouldRewrite();
     void testNameMismatch_shouldFollowCodeSetting();
+    void testByRefVariable_shouldFollowLintSetting();
     void testReport_shouldFlagLines_data();
     void testReport_shouldFlagLines();
     void testRelativeInclude_shouldPinSiblingHeader();
@@ -134,6 +135,7 @@ private slots:
     void testAgentMode_shouldAskNothingWhenOff();
     void testAgentMode_shouldAskForArgumentGroups();
     void testAgentGuides_shouldFillTemplate();
+    void testReferenceLocal_shouldAskAgentWithAsset();
     void testGlobalStatic_shouldAskAgentWithAsset();
     void testAgentGuides_shouldWriteUsage();
     void testAgentGuides_shouldRemoveLeftoversOfEndedRuns();
@@ -839,6 +841,33 @@ void tst_FormatRules::testNameMismatch_shouldFollowCodeSetting()
     );
 }
 
+/// Reports a local that a non-const reference names as `[Lint]
+/// byRefVariable` says: `warn` (the default) as a plain issue, `error` as
+/// one for the error output, and `ignore` not at all.
+void tst_FormatRules::testByRefVariable_shouldFollowLintSetting()
+{
+    const QByteArray text("void f()\n{\n    int & first = list[0];\n}\n");
+    Formatter formatter;
+    QString error;
+    QVERIFY2(formatter.selectRules(
+        QStringList() << QString(QLL("reference-local")), &error
+    ), qPrintable(error));
+    FormatConfig config;
+    FormatResult result = qMove(formatter.format(text, QString(), QStringList(), config));
+    qExpect(result.issues.size())->toEqual(1);
+    qExpect(result.issues.at(0).isError)->toBeFalsy();
+
+    config.assignments << QString(QLL("lint.byRefVariable=error"));
+    result = qMove(formatter.format(text, QString(), QStringList(), config));
+    qExpect(result.error)->toBeEmpty();
+    qExpect(result.issues.size())->toEqual(1);
+    qExpect(result.issues.at(0).isError)->toBeTruthy();
+
+    config.assignments << QString(QLL("lint.byRefVariable=ignore"));
+    result = qMove(formatter.format(text, QString(), QStringList(), config));
+    qExpect(result.issues.size())->toEqual(0);
+}
+
 /// Lists the lines of the issues of `result` that the rule `rule` reported.
 IssueLines tst_FormatRules::issueLines(
         const FormatResult & result,
@@ -1079,6 +1108,7 @@ void tst_FormatRules::testEncode_shouldRoundTripThroughDecode()
     result.issues
         << FormatIssue(3, "some-rule", QString(QLL("two\nlines\tand tab")));
     result.issues << FormatIssue(9, "other-rule", QString(QLL("plain")));
+    result.issues.last().isError = true;
     result.requests
         << FormatIssue(4, "ask-rule", QString(QLL("regroup")), 6, 70);
     const QList<QByteArray > lines = FormatProcessRunner::encode(result)
@@ -1095,6 +1125,8 @@ void tst_FormatRules::testEncode_shouldRoundTripThroughDecode()
     qExpect(decoded.at(0).issues.at(0).rule)->toEqual(QByteArray("some-rule"));
     qExpect(decoded.at(0).issues.at(0).message)
         ->toEqual(result.issues.at(0).message);
+    qExpect(decoded.at(0).issues.at(0).isError)->toBeFalsy();
+    qExpect(decoded.at(0).issues.at(1).isError)->toBeTruthy();
     qExpect(decoded.at(0).requests.size())->toEqual(1);
     qExpect(decoded.at(0).requests.at(0).line)->toEqual(4);
     qExpect(decoded.at(0).requests.at(0).endLine)->toEqual(6);
@@ -2173,6 +2205,18 @@ void tst_FormatRules::testReport_shouldFlagLines_data()
         << QByteArray("class A\n{\n    T &value(int i);\n    const T &value(int i) const;\n"
                           "    const T &at(int i) const;\n    T &at(int i);\n};\n")
         << (IssueLines() << 3);
+    QTest::newRow("reference-local")
+        << QString(QLL("reference-local"))
+        << QByteArray("void f(QList<int > & list, int & out = g())\n{\n"
+                      "    int & first = list[0];\n"
+                      "    const QString & name = text();\n"
+                      "    QPair<int, int > &range = ranges[1];\n"
+                      "    for (int & item : list) {\n"
+                      "        item = 0;\n"
+                      "    }\n"
+                      "    int both = a & b;\n"
+                      "}\n")
+        << (IssueLines() << 3 << 5);
     QTest::newRow("qpointer-getter")
         << QString(QLL("qpointer-getter"))
         << QByteArray("class A\n{\n    QPointer<QObject > m_o;\npublic:\n"
@@ -3336,6 +3380,40 @@ void tst_FormatRules::testAgentGuides_shouldFillTemplate()
     guides.remove();
     qExpect(QFile::exists(prompt))->toBeFalsy();
     qExpect(QDir(guides.folder()).exists())->toBeFalsy();
+}
+
+/// Asks the agent, in agent mode alone, to name a local through a pointer,
+/// with the `reference-local.md` asset as the prompt, which names the file
+/// and the line; outside agent mode the rule reports an issue instead.
+void tst_FormatRules::testReferenceLocal_shouldAskAgentWithAsset()
+{
+    Formatter formatter;
+    QString error;
+    QVERIFY2(formatter.selectRules(
+        QStringList() << QString(QLL("reference-local")), &error
+    ), qPrintable(error));
+    const QByteArray text("void f()\n{\n    int & first = list[0];\n}\n");
+    const FormatResult agent = qMove(formatter.format(
+        text, QString(QLL("/src/a.cpp")), QStringList(), FormatConfig(), true
+    ));
+    qExpect(agent.requests.size())->toEqual(1);
+    qExpect(this->issueLines(agent, QString(QLL("reference-local"))))->toBeEmpty();
+    FormatAgentGuides guides;
+    QFile prompt(guides.write(QString(QLL("/src/a.cpp")), agent.requests.at(0)));
+    qExpect(prompt.open(QIODevice::ReadOnly))->toBeTruthy();
+    const QString promptText = QString::fromUtf8(prompt.readAll());
+    prompt.close();
+    qExpect(promptText)->toContain(QString(QLL("`/src/a.cpp`, at line 3")));
+    qExpect(promptText)->toContain(QString(QLL("int *offset = &(regions[i].first);")));
+    qExpect(promptText)->Not->toContain(QString(QLL("{{")));
+    guides.remove();
+
+    const FormatResult plain = qMove(formatter.format(
+        text, QString(QLL("/src/a.cpp")), QStringList()
+    ));
+    qExpect(plain.requests.size())->toEqual(0);
+    qExpect(this->issueLines(plain, QString(QLL("reference-local"))))
+        ->toEqual(IssueLines() << 3);
 }
 
 /// Asks the agent, in agent mode alone, to move a function's static mapping
