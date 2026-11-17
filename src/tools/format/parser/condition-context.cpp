@@ -3,8 +3,9 @@
 
 #include "./condition-context.h"
 
-#include "config-functions.h"
-#include "config-variables.h"
+#include "./condition-object.h"
+#include "./count-object.h"
+#include "../rules/template-object.h"
 
 /*!
     @class FormatConditionContext
@@ -69,10 +70,10 @@ bool FormatConditionContext::isWrapping(bool *) const
 }
 
 /*!
-    Calls FormatConditionContext::hasMoreArgs() for `hasMoreArgs()`.
+    Builds the arguments of the call that a call template turns, as written
+    (see FormatTemplateObject), or null when the place is no such call.
 */
-static bool callHasMoreArgs(const Config::Evaluator::Context *context,
-                            const QList<qreal > &, qreal *result)
+FormatArgsArray *FormatConditionContext::callArguments() const
 {
     return Q_NULLPTR;
 }
@@ -95,11 +96,8 @@ void FormatConditionContext::registerObjects()
 */
 void FormatConditionContext::setGlobalObjects(Config::Scopes::Scope *scope)
 {
-    Config::Functions::Scope *scope = Config::Functions::global();
-    scope->setFunction("argCount", callArgumentCount, 1, 2);
-    Config::Variables::set(scope, "spaceRemaining", callSpaceRemaining);
-    Config::Variables::set(scope, "hasMoreArgs", callHasMoreArgs);
-    Config::Variables::set(scope, "isWrapping", callIsWrapping);
+    scope->add(new FormatConditionObject);
+    scope->add(new FormatTemplateObject);
 }
 
 /*!

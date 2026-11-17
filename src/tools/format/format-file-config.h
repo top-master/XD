@@ -7,9 +7,11 @@
 #include "./format-config.h"
 #include "./format-spacing.h"
 
+#include "config-condition.h"
 #include "config-parser.h"
 
 #include <QtCore/QList>
+#include <QtCore/QPair>
 #include <QtCore/QString>
 
 class FormatFileConfig
@@ -23,7 +25,7 @@ public:
         : refSuffix(" "), moveSuffix(FormatSpacing::keep())
         , wrapMax(80), wrapArgsOver(3), wrapConditionsOver(3), wrapConditionsOverSet(false), joinArgs(1), commentWrapMax(80), wrapExtendsForKeywords(20), wrapEmptyLimit(8)
         , wrapComma(WrapCommaSoft), commentTarget(CommentTargetLong), codeTarget(CodeTargetLong)
-        , docTagSign('@')
+        , docTagSign('@'), nameMismatch(Config::Condition::NameMismatchWarn)
     {
         wrapBegin << 75;
         commentWrapBegin << 75;
@@ -35,12 +37,15 @@ public:
         typedefSuper = FormatFileConfig::defaultTypedefSuper();
         replaceSuperSites = FormatFileConfig::defaultReplaceSuperSites();
         wrapSubChain = QString::fromLatin1("always");
+        replaceTypesTarget = QString::fromLatin1("isNew");
+        replaceTypesAction = QString::fromLatin1("replace");
     }
 
     static QString fileName();
     static QString defaultExtensions();
     static QStringList superConditionNames();
     static QStringList superChoices();
+    static QStringList replaceTargetNames();
     bool acceptsFile(const QString &path) const;
     static Config::Schema schema();
     static QString defaultTypedefSuper();
@@ -53,9 +58,11 @@ public:
                      FormatFileConfig *fileConfig, QString *error);
     static bool readParser(const QString &path, const FormatConfig &config,
                            Config::Parser *parser, QString *error);
-    static void fromParser(
+    static bool fromParser(
             const Config::Parser &parser,
-            FormatFileConfig *fileConfig);
+            FormatFileConfig *fileConfig, QString *error);
+    static QList<QPair<QString, QString > > expandPrevious(
+            const QList<QPair<QString, QString > > & entries);
 
     FormatSpacing refSuffix;
     FormatSpacing moveSuffix;
@@ -84,6 +91,10 @@ public:
     QString extensions;
     QString typedefSuper;
     QString replaceSuperSites;
+    QList<QPair<QString, QString > > replaceTypes;
+    QString replaceTypesTarget;
+    QString replaceTypesAction;
+    Config::Condition::NameMismatch nameMismatch;
 
 private:
     static FormatSpacing toSpacing(

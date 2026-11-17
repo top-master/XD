@@ -4,3 +4,7 @@
 [Types]
 refSuffix = keep-as-is
 moveSuffix = keep-as-is
+
+[Replace.types]
+::QLatin1String = ::QLL
+::QLatin1Literal = ::QLL

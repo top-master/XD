@@ -8,6 +8,8 @@
 
 #include <QtCore/QSharedPointer>
 
+class FormatArgsArray;
+
 class FormatConditionContext : public Config::Evaluator::Context
 {
     typedef Config::Evaluator::Context super;
@@ -17,9 +19,11 @@ public:
     virtual bool spaceRemaining(qreal *percent) const;
     virtual bool hasMoreArgs(bool *value) const;
     virtual bool isWrapping(bool *value) const;
-    static void registerFunctions();
-    static void setCountFunctions(Config::Functions::Scope *scope);
-    static QSharedPointer<Config::Functions::Scope > pushCountScope();
+    virtual FormatArgsArray *callArguments() const;
+    static void registerObjects();
+    static void setGlobalObjects(Config::Scopes::Scope *scope);
+    static void setCountObjects(Config::Scopes::Scope *scope);
+    static QSharedPointer<Config::Scopes::Scope > pushCountScope();
 };
 
 #endif // PARSER_CONDITION_CONTEXT_H

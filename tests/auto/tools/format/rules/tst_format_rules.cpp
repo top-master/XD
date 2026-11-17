@@ -24,6 +24,15 @@
 #include <QtCore/QTemporaryDir>
 #include <QtTest/QtTest>
 
+/// Converts the settings of `parser` into `config`, the way the tool loads
+/// a file's settings, and tells whether that succeeded.
+static bool readSettings(const Config::Parser & parser,
+                         FormatFileConfig *config)
+{
+    QString error;
+    return FormatFileConfig::fromParser(parser, config, &error);
+}
+
 typedef QVector<QPair<int, int > > LineRanges;
 Q_DECLARE_METATYPE(LineRanges)
 typedef QList<int > IssueLines;
@@ -102,6 +111,7 @@ private slots:
     /// Rules.
     void testFix_shouldRewrite_data();
     void testFix_shouldRewrite();
+    void testNameMismatch_shouldFollowCodeSetting();
     void testReport_shouldFlagLines_data();
     void testReport_shouldFlagLines();
     void testRelativeInclude_shouldPinSiblingHeader();
@@ -684,7 +694,7 @@ void tst_FormatRules::testSettings_shouldReadInlineIni()
         &error
     ));
     FormatFileConfig settings;
-    FormatFileConfig::fromParser(inlineParser, &settings);
+    QVERIFY(readSettings(inlineParser, &settings));
     QCOMPARE(settings.codeTarget, FormatFileConfig::CodeTargetAny);
     QCOMPARE(settings.wrapMax, 60);
 
@@ -770,7 +780,61 @@ FormatResult tst_FormatRules::formatWith(
     if (rule == QLL("super-typedef")) {
         config.assignments << QString(QLL("structure.typedefSuper=always"));
     }
+    if (rule == QLL("replace-types")) {
+        config.assignments << QString(QLL("replace.types.::QLatin1String=::QLL"))
+            << QString(QLL("replace.types.::QLatin1Literal=::QLL"))
+            << QString(QLL("replace.types.::std::x::y::z::Old=::std::x::y::z::New"))
+            << QString(QLL("replace.types.::OldClass=::MyClass::create($1)"))
+            << QString(QLL("replace.types.::Legacy=::OldClass($2, $1)"))
+            << QString(QLL("replace.types.::Wide=::Narrow::make(args.join(\", \"))"))
+            << QString(QLL("replace.types.::Tall=::Short::from(args[1], $1)"))
+            << QString(QLL("replace.types.::Echo=::Out::print(\"$* $@ $1\", $@)"))
+            << QString(QLL("replace.types.::Long=::Many::of($*)"))
+            << QString(QLL("replace.types.::Sized=::Count::of(args.size, args.at(0))"))
+            << QString(QLL("replace.types.::std::x::y::Gadget=::NewClass::create(args.join(\", \"))"))
+            << QString(QLL("replace.types.&::destroy*=::NewClass::dispose*"));
+    }
     return formatter.format(text, path, QStringList(), config);
+}
+
+/// Handles a condition's name of another case as `[Code] nameMismatch`
+/// says: `warn` logs a warning and formats, `error` logs an error and
+/// formats with the key's default, and `critical` fails the file, which then
+/// keeps its text as it was.
+void tst_FormatRules::testNameMismatch_shouldFollowCodeSetting()
+{
+    const QByteArray message(
+        "failed to find the name is-basE-member (maybe is-base-member was meant).");
+    const QByteArray text("int a;\n");
+    Formatter formatter;
+    QString error;
+    QVERIFY2(formatter.selectRules(
+        QStringList() << QString(QLL("moc-run-macro")), &error
+    ), qPrintable(error));
+    FormatConfig config;
+    config.assignments << QString(QLL("relations.thisMode=is-basE-member"));
+
+    QTest::ignoreMessage(QtWarningMsg, message.constData());
+    FormatResult result = qMove(formatter.format(
+        text,
+        QString(),
+        QStringList(),
+        config
+    ));
+    qExpect(result.error)->toBeEmpty();
+
+    config.assignments << QString(QLL("code.nameMismatch=error"));
+    QTest::ignoreMessage(QtCriticalMsg,
+        QByteArray("Invalid format condition: " + message).constData());
+    result = qMove(formatter.format(text, QString(), QStringList(), config));
+    qExpect(result.error)->toBeEmpty();
+
+    config.assignments << QString(QLL("code.nameMismatch=critical"));
+    result = qMove(formatter.format(text, QString(), QStringList(), config));
+    qExpect(result.error)->toEqual(
+        QString(QLL(": [Code] nameMismatch = critical: "))
+            + QString::fromLatin1(message)
+    );
 }
 
 /// Lists the lines of the issues of `result` that the rule `rule` reported.
@@ -1015,7 +1079,8 @@ void tst_FormatRules::testEncode_shouldRoundTripThroughDecode()
     result.issues << FormatIssue(9, "other-rule", QString(QLL("plain")));
     result.requests
         << FormatIssue(4, "ask-rule", QString(QLL("regroup")), 6, 70);
-    const QList<QByteArray > lines = FormatProcessRunner::encode(result).split('\n');
+    const QList<QByteArray > lines = FormatProcessRunner::encode(result)
+        .split('\n');
     QList<FormatFileResult > decoded;
     for (int i = 0; i < lines.size(); ++i) {
         FormatProcessRunner::decode(lines.at(i), &decoded);
@@ -1026,7 +1091,8 @@ void tst_FormatRules::testEncode_shouldRoundTripThroughDecode()
     qExpect(decoded.at(0).issues.size())->toEqual(2);
     qExpect(decoded.at(0).issues.at(0).line)->toEqual(3);
     qExpect(decoded.at(0).issues.at(0).rule)->toEqual(QByteArray("some-rule"));
-    qExpect(decoded.at(0).issues.at(0).message)->toEqual(result.issues.at(0).message);
+    qExpect(decoded.at(0).issues.at(0).message)
+        ->toEqual(result.issues.at(0).message);
     qExpect(decoded.at(0).requests.size())->toEqual(1);
     qExpect(decoded.at(0).requests.at(0).line)->toEqual(4);
     qExpect(decoded.at(0).requests.at(0).endLine)->toEqual(6);
@@ -1047,6 +1113,60 @@ void tst_FormatRules::testFix_shouldRewrite_data()
     QTest::addColumn<QString >("rule");
     QTest::addColumn<QByteArray >("input");
     QTest::addColumn<QByteArray >("output");
+
+    // Types that `[Replace.types]` maps.
+    QTest::newRow("replace-types")
+        << QString(QLL("replace-types"))
+        << QByteArray("QString s = QLatin1String(\"a\") + QLatin1Literal(\"b\") + QLatin1String(p);\n"
+                      "bool k = key == QLatin1String(\"c\") || key.startsWith(QLatin1String(\"d\"));\n"
+                      "QString t = c ? QLatin1String(\"x\") : QLatin1String(\"y\");\n")
+        << QByteArray("QString s = QLL(\"a\") + QLL(\"b\") + QLL(p);\n"
+                      "bool k = key == QLL(\"c\") || key.startsWith(QLL(\"d\"));\n"
+                      "QString t = c ? QLL(\"x\") : QLL(\"y\");\n");
+    QTest::newRow("replace-types templates")
+        << QString(QLL("replace-types"))
+        << QByteArray("Foo *f = OldClass(x + 1);\n"
+                      "Foo *g = Legacy(p, q);\n"
+                      "auto w = Wide(1, f(2, 3));\n"
+                      "auto t = Tall(a, b);\n"
+                      "auto e = Echo(a, b) + Long(c, d);\n"
+                      "auto n = Sized(a, b);\n"
+                      "class OldClass { OldClass(int a); };\n")
+        << QByteArray("Foo *f = MyClass::create(x + 1);\n"
+                      "Foo *g = MyClass::create(q);\n"
+                      "auto w = Narrow::make(1, f(2, 3));\n"
+                      "auto t = Short::from(b, a);\n"
+                      "auto e = Out::print(\"$* $@ a\", a, b) + Many::of(c, d);\n"
+                      "auto n = Count::of(2, a);\n"
+                      "class OldClass { OldClass(int a); };\n");
+    QTest::newRow("replace-types chained lines")
+        << QString(QLL("replace-types"))
+        << QByteArray("using namespace std::x::y;\n"
+                      "void f()\n{\n"
+                      "    Foo *o = Gadget(1, 2);\n"
+                      "    Gadget::destroyAll(o);\n"
+                      "    other::Gadget::destroyAll(o);\n"
+                      "}\n")
+        << QByteArray("using namespace std::x::y;\n"
+                      "void f()\n{\n"
+                      "    Foo *o = NewClass::create(1, 2);\n"
+                      "    NewClass::disposeAll(o);\n"
+                      "    other::Gadget::destroyAll(o);\n"
+                      "}\n");
+    QTest::newRow("replace-types scopes")
+        << QString(QLL("replace-types"))
+        << QByteArray("using namespace std::x::y;\n"
+                      "QString a = z::Old(\"a\") + ::std::x::y::z::Old(\"b\");\n"
+                      "namespace std { namespace x { namespace y { namespace z {\n"
+                      "QString b = Old(\"c\");\n"
+                      "} } } }\n"
+                      "QString c = other::Old(\"d\");\n")
+        << QByteArray("using namespace std::x::y;\n"
+                      "QString a = z::New(\"a\") + z::New(\"b\");\n"
+                      "namespace std { namespace x { namespace y { namespace z {\n"
+                      "QString b = New(\"c\");\n"
+                      "} } } }\n"
+                      "QString c = other::Old(\"d\");\n");
 
     // Macro spelling.
     QTest::newRow("moc-run-macro")
@@ -2044,10 +2164,10 @@ void tst_FormatRules::testReport_shouldFlagLines_data()
         << QString(QLL("mark-banner"))
         << QByteArray("/**/\nint a; /**/\nint t[] = {\n    /**/ 0, 1,\n};\n/* */\n")
         << IssueLines();
-    QTest::newRow("qll")
-        << QString(QLL("qll"))
-        << QByteArray("QString s = QLatin1String(\"a\") + QLatin1Literal(\"b\") + QLatin1String(p);\n")
-        << (IssueLines() << 1 << 1);
+    QTest::newRow("replace-types missing argument")
+        << QString(QLL("replace-types"))
+        << QByteArray("Foo *h = OldClass();\n")
+        << (IssueLines() << 1);
     QTest::newRow("mark-banner bare rule")
         << QString(QLL("mark-banner"))
         << QByteArray("// ----------\nint a;\n")
@@ -2620,7 +2740,7 @@ void tst_FormatRules::testSettings_shouldReadWrapColumns()
     Config::Parser extensionParser(FormatFileConfig::schema());
     QVERIFY(extensionParser.assign(QString(QLL("general.extensions=[h++, objc]")), &error));
     FormatFileConfig customExtensions;
-    FormatFileConfig::fromParser(extensionParser, &customExtensions);
+    QVERIFY(readSettings(extensionParser, &customExtensions));
     QVERIFY(customExtensions.acceptsFile(QString(QLL("widget.h++"))));
     QVERIFY(customExtensions.acceptsFile(QString(QLL("widget.objc"))));
     QVERIFY( ! customExtensions.acceptsFile(QString(QLL("widget.cpp"))));
@@ -2632,7 +2752,7 @@ void tst_FormatRules::testSettings_shouldReadWrapColumns()
     extensionFile.close();
     Config::Parser extensionFileParser(FormatFileConfig::schema());
     QVERIFY2(extensionFileParser.readFile(extensionPath, &error), qPrintable(error));
-    FormatFileConfig::fromParser(extensionFileParser, &customExtensions);
+    QVERIFY(readSettings(extensionFileParser, &customExtensions));
     QVERIFY(customExtensions.acceptsFile(QString(QLL("widget.objc"))));
     QVERIFY( ! customExtensions.acceptsFile(QString(QLL("widget.cpp"))));
     QVERIFY(extensionFile.open(QIODevice::WriteOnly | QIODevice::Truncate));
@@ -2641,21 +2761,21 @@ void tst_FormatRules::testSettings_shouldReadWrapColumns()
     extensionFile.close();
     Config::Parser regexFileParser(FormatFileConfig::schema());
     QVERIFY2(regexFileParser.readFile(extensionPath, &error), qPrintable(error));
-    FormatFileConfig::fromParser(regexFileParser, &customExtensions);
+    QVERIFY(readSettings(regexFileParser, &customExtensions));
     QVERIFY(customExtensions.acceptsFile(QString(QLL("widget.hpp"))));
     QVERIFY( ! customExtensions.acceptsFile(QString(QLL("widgetXhpp"))));
     QVERIFY(extensionParser.assign(QString(QLL("general.extensions=/\\.(hpp|cc)$/")), &error));
-    FormatFileConfig::fromParser(extensionParser, &customExtensions);
+    QVERIFY(readSettings(extensionParser, &customExtensions));
     QVERIFY(customExtensions.acceptsFile(QString(QLL("widget.hpp"))));
     QVERIFY(customExtensions.acceptsFile(QString(QLL("widget.cc"))));
     QVERIFY( ! customExtensions.acceptsFile(QString(QLL("widget.cpp"))));
     QVERIFY(extensionParser.assign(QString(QLL("general.extensions=frag, hh")), &error));
-    FormatFileConfig::fromParser(extensionParser, &customExtensions);
+    QVERIFY(readSettings(extensionParser, &customExtensions));
     QVERIFY(customExtensions.acceptsFile(QString(QLL("widget.frag"))));
     QVERIFY(customExtensions.acceptsFile(QString(QLL("widget.hh"))));
     QVERIFY( ! customExtensions.acceptsFile(QString(QLL("widget.cpp"))));
     QVERIFY(extensionParser.assign(QString(QLL("general.extensions=^(hh|frag)$")), &error));
-    FormatFileConfig::fromParser(extensionParser, &customExtensions);
+    QVERIFY(readSettings(extensionParser, &customExtensions));
     QVERIFY(customExtensions.acceptsFile(QString(QLL("widget.frag"))));
     QVERIFY( ! customExtensions.acceptsFile(QString(QLL("widget.cpp"))));
     qExpect(defaults.wrapBegin)->toEqual(QList<int >() << 75);
@@ -3725,7 +3845,7 @@ void tst_FormatRules::testLayoutConfig_shouldResolveConditionAndSubchainOptions(
 {
     Config::Parser parser(FormatFileConfig::schema());
     FormatFileConfig config;
-    FormatFileConfig::fromParser(parser, &config);
+    QVERIFY(readSettings(parser, &config));
     QCOMPARE(config.wrapConditionsOver, 3);
     QVERIFY( ! config.wrapConditionsOverSet);
     QCOMPARE(config.wrapSubChain, QString(QLL("always")));
@@ -3734,14 +3854,14 @@ void tst_FormatRules::testLayoutConfig_shouldResolveConditionAndSubchainOptions(
         "[Structure]\nwrapArgsOver=5\nwrapSubChain=wrap-end\n",
         QLL("inline"), &error
     ), qPrintable(error));
-    FormatFileConfig::fromParser(parser, &config);
+    QVERIFY(readSettings(parser, &config));
     QCOMPARE(config.wrapConditionsOver, 5);
     QCOMPARE(config.wrapSubChain, QString(QLL("wrap-end")));
     QVERIFY2(parser.readData(
         "[Structure]\nwrapConditionsOver=argCount(0) > 2 && spaceRemaining <= 20%\n",
         QLL("inline"), &error
     ), qPrintable(error));
-    FormatFileConfig::fromParser(parser, &config);
+    QVERIFY(readSettings(parser, &config));
     QVERIFY( ! config.wrapConditionsOverCondition.isEmpty());
     QVERIFY(config.wrapConditionsOverSet);
     QVERIFY( ! parser.readData(

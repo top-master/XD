@@ -314,8 +314,11 @@ moveSuffix = " "
   identifies a function declaration or definition.
   A condition decides whether the target's argument list may be wrapped and
   preserves an existing list when it is false, including with `target=any`.
-  Names also accept underscores, such as `space_remaining` and
-  `is_signature`. `argCount` is available in conditions on other keys too.
+  A name is case-sensitive; a `-` or `_` sign in it drops out and
+  upper-cases the letter after it, hence `space-remaining`,
+  `space_remaining` and `spaceRemaining` name the same thing (see
+  `nameMismatch` for a name of another case). `argCount` is available in
+  conditions on other keys too.
   A negative depth visits parent calls; a positive depth visits calls in
   the target's arguments. At positive depths, the optional second argument
   selects a one-based argument, or zero selects all arguments. Calls at the
@@ -351,6 +354,14 @@ moveSuffix = " "
   joined to a line of closing brackets. `always` (the default) puts it on a
   new line; `wrap-begin` keeps it while it fits `wrapBegin`, `wrap-end` while
   it fits `wrapMax`, and `never` keeps it on that line.
+- `nameMismatch` (in `[Code]`): what a condition does with a name that
+  differs from a known one in case alone, such as `is-heaDer`. Each mode
+  reports `failed to find the name is-heaDer (maybe is-header was meant).`
+  (`function` for a name such as `argCount`), with the suggestion spelled
+  the way the condition spells the name: `warn` (the default) logs it as a
+  warning and uses the name meant; `error` logs it as an error, and the key
+  keeps its default; `critical` does the same, then stops before it changes
+  the files the setting applies to.
 
 The command line then overrides the `.formatrc` files, in this order:
 
@@ -396,6 +407,56 @@ untouched. Configuration directives between the two comments still apply;
 the file untouched. An unrecognized bare command produces a warning with an
 `off` suggestion.
 The spelling `@formater:` is accepted too.
+
+### Renaming types
+
+`[Replace.types]` turns calls of the names its keys match (constructions
+included) where new logic writes them; the `replace-types` rule applies it.
+Each key is a full name from the global scope, and its value says what a
+call of it turns into, such as XD's own:
+
+```
+[Replace.types]
+::QLatin1String = ::QLL
+::QLatin1Literal = ::QLL
+```
+
+- A value that is a name renames the call and keeps its arguments.
+- A value that is a call template turns the call into that call:
+  `args[0]`, `args[1]`, and so on stand for one argument as written, and
+  `args.join(", ")` for all of them joined by the given separator; `$1`, `$2`,
+  and so on are short for `args[0]`, `args[1]`, and so on; `$*` and `$@`,
+  outside double quotes, for `args.join(", ")`; and `$$` stands for a `$`. A
+  call that lacks an argument the template takes is reported.
+- A `*` in a key matches any part of a name, and a `*` in its value stands for
+  what it matched.
+- A key that starts with `&` continues the latest key that does not: the `&`
+  stands for that key. A second `&` in a key sets what a later `&` stands for
+  to the text before it, and drops out.
+- A result that calls a name another key matches turns again; hence lines
+  chain:
+
+  ```
+  [Replace.types]
+  std::x::y::OldClass = NewClass::create(args.join(", "))
+  &::destroy* = NewClass::dispose*
+  ```
+
+  turns `OldClass(a, b)` into `NewClass::create(a, b)`, and
+  `OldClass::destroyAll(p)` into `NewClass::disposeAll(p)`.
+- A name is matched, and written, as the location sees it: the namespaces it
+  sits in, and the ones a `using namespace` before it brings in, need no
+  qualifier. Under `using namespace std::x::y;`, the key
+  `::std::x::y::z::Old = ::std::x::y::z::New` writes `z::Old("a")` as
+  `z::New("a")`.
+- A call counts in an expression, or as a statement of a function's body; a
+  constructor's declaration and a `new` stay as they are. The type of the
+  result may differ from the old one; check that the code still builds.
+- `target` (a condition) picks the locations; its default, `isNew`, holds on a
+  line `-L` or `--git` selects, and on every line without them.
+- `action` is `replace` (the default) or `report`, which reports each call
+  instead of turning it.
+- A value of `keep-as-is` turns a key a shallower `.formatrc` set off again.
 
 ### Replacements by regular expression
 

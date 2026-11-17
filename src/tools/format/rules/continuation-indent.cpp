@@ -47,13 +47,47 @@ static bool groupKeepsIndent(const FormatDocument *document, int group)
 }
 
 /*!
+    Builds the line that starts the statement holding the token at @a from
+    of @a document: the first line after the `;`, `{` or `}` before it that
+    is no preprocessor line. Directive lines and matched brackets on the way
+    are passed over, since a directive ends no statement.
+*/
+static int statementLine(const FormatDocument *document, int from)
+{
+    int k = from;
+    for (; k >= 0; --k) {
+        if (document->isDirectiveLine(document->symbolLine(k))) {
+            continue;
+        }
+        const Token token = document->token(k);
+        if ((token == RPAREN || token == RBRACK)
+            && document->match(k) >= 0
+        ) {
+            k = document->match(k);
+            continue;
+        }
+        if (token == SEMIC || token == LBRACE || token == RBRACE) {
+            break;
+        }
+    }
+    int start = k + 1;
+    while (start + 1 < document->symbols().size()
+        && document->isDirectiveLine(document->symbolLine(start))
+    ) {
+        ++start;
+    }
+    return document->symbolLine(start);
+}
+
+/*!
     Finds the group that the token at @a index of @a document belongs to:
     the innermost `(` or `[` still open before it, or a braced initializer,
-    else the start of its statement. A preprocessor line ends the search
-    unless a matching open bracket spans it. Returns that bracket's index,
-    or -1 for the statement, and gives the line that opened the group to
-    @a base; sets @a keepsIndent for a group whose lines align under its
-    first item.
+    else the start of its statement. Past a preprocessor line, only a
+    matching open bracket that spans it makes a group; otherwise the
+    statement's start is found past the directive lines (see
+    statementLine()). Returns that bracket's index, or -1 for the statement,
+    and gives the line that opened the group to @a base; sets
+    @a keepsIndent for a group whose lines align under its first item.
 */
 static int groupOf(const FormatDocument *document, int index, int *base,
                    bool *keepsIndent)
@@ -81,7 +115,7 @@ static int groupOf(const FormatDocument *document, int index, int *base,
                     }
                 }
             }
-            *base = document->symbolLine(k + 1);
+            *base = statementLine(document, k);
             return -1;
         }
         if ((token == RPAREN

@@ -354,7 +354,12 @@ bool FormatDocument::setInlineConfiguration(
             }
         }
         FormatFileConfig resolved;
-        FormatFileConfig::fromParser(layers, &resolved);
+        QString reason;
+        if ( ! FormatFileConfig::fromParser(layers, &resolved, &reason)) {
+            *error = QString(QLL("Format rule: [Code] nameMismatch = critical: %1"))
+                .arg(reason);
+            return false;
+        }
         regions.append(qMakePair(directive.endOffset, resolved));
     }
     m_fileConfigRegions = regions;
