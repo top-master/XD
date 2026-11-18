@@ -1650,6 +1650,38 @@ void dispatch()
     );
 }
 
+// CASE	args-wrap-user-lines.cpp
+QString markerOf(const QString & text, Context *context)
+{
+    QString marker;
+    QString error;
+    if ( ! Config::Choice::resolve(
+        text, QStringList(), QStringList(),
+        context, &marker, &error
+    )) {
+        return QString();
+    }
+    if (isReady && Config::Choice::resolve(
+        text, QStringList(), QStringList(),
+        context, &marker, &error
+    )) {
+        return marker;
+    }
+    if ( ! Config::Choice::resolve(
+            text, QStringList(), QStringList(),
+            context, &marker, &error
+        )
+        && isReady
+    ) {
+        return QString();
+    }
+    reportEveryValue(
+        firstArgumentValue, secondArgumentValue, thirdValue,
+        fourthArgumentValue, fifthArgumentValue
+    );
+    return marker;
+}
+
 // CASE	operator-wrap-binary-head.cpp
 void record()
 {

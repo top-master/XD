@@ -8,17 +8,18 @@
     @internal
 
     Answers what a condition asks for at the place its caller evaluates it
-    (see Config::Condition::evaluate()): the names the caller's set of names
-    leaves out, and the percent value; the objects a tool adds to a scope of
-    Config::Scopes reach it as well, and answer from it (see
+    (see Config::Condition::evaluate()): its names, before the caller's set
+    of names does, and the percent value; the objects a tool adds to a scope
+    of Config::Scopes reach it as well, and answer from it (see
     Config::Object::context()).
 */
 
 /*!
-    Tells in @a value whether the name @a name (in the form without case,
-    `_` and `-` that compile() gives it) holds where the condition is
-    evaluated, for a name the caller has no set entry for, and for a call
-    `name()`; returns false when the context does not know the name.
+    Tells in @a value whether the name @a name (in the form without `_` and
+    `-` that Config::Condition::canonicalName() gives it) holds where the
+    condition is evaluated, before the caller's set of names is asked, and
+    for a call `name()`; returns false when the context does not know the
+    name, which leaves it to that set.
 */
 bool Config::Evaluator::Context::predicate(const QString &, bool *) const
 {

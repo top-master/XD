@@ -52,10 +52,7 @@ public:
                     QString *error);
     bool assign(const QString & assignment, QString *error);
     QString value(const QString & name) const;
-    inline bool hasValue(const QString &name) const
-    { return m_settings.values.contains(name.toLower()); }
     inline const Schema &schema() const { return m_schema; }
-    inline const Settings &settings() const { return m_settings; }
     QList<QPair<QString, QString > > openEntries(const QString & section) const;
 
 protected:

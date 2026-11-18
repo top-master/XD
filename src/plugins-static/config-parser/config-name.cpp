@@ -12,11 +12,10 @@
     Matches a C++ name, such as `QLatin1String` or `::Qt::CaseSensitive`: one
     identifier or more joined by `::`, which may start with `::` to name the
     global scope; a `*` in it stands for any part of a name, such as
-    `dispose*`. It keeps the name as written.
+    `dispose*`. It keeps the name as written, without the spaces around it.
 
     One that takes a call matches a call of such a name as well, with any
-    arguments in its parentheses, such as `QLL($1)` (see the template of
-    `[Replace.types]` in the format tool's README).
+    arguments in its parentheses, such as `QLL($1)`.
 */
 
 /*!

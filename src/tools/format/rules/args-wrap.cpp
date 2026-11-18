@@ -27,7 +27,9 @@
         );
 
     A list already broken after its opening keeps the items that share a
-    line together when they fit; any other list gets an item per line. A
+    line together when they fit, and so does, while `[Structure] target` is
+    `long`, any list the user broke between its items; any other list gets
+    an item per line. A
     call with one argument is considered when its list already spans lines
     and that argument holds an operator chain.
 
@@ -42,12 +44,40 @@
     the user broke over lines whose lines are not one step past the line of
     the opening. A list in the head of a control
     statement takes the condition's operand level, one step past the
-    keyword's line, as its base. The rule leaves alone a list with a brace
+    keyword's line, as its base; a call that ends the condition of an `if`
+    or a `while`, its `(` on the keyword's line, takes the keyword's line
+    instead, and the condition's `)` hugs the call's, as `)) {`. The rule leaves alone a list with a brace
     (other than a nested brace list), a `;` or a comment in it, a
     `connect()` or `disconnect()` (see FormatConnectLayoutRule), and one at
     file, namespace or class scope, where a `(` mostly opens a declaration's
     parameters (see FormatParamWrapRule).
 */
+
+/*!
+    Tells whether the user already broke the list from the token @a open of
+    @a document to its closing token @a close, whose items are
+    @a arguments, over lines between its items: the list spans lines, and
+    each item sits whole on one line.
+*/
+static bool isBrokenBetweenItems(
+        const FormatDocument *document,
+        int open,
+        int close,
+        const QList<QPair<int, int > > & arguments)
+{
+    if (document->symbolLine(open) == document->symbolLine(close)) {
+        return false;
+    }
+    for (int i = 0; i < arguments.size(); ++i) {
+        const QPair<int, int > & item = arguments.at(i);
+        if (document->symbolLine(item.first)
+            != document->symbolEndLine(item.second)
+        ) {
+            return false;
+        }
+    }
+    return true;
+}
 
 /*!
     Finds a logical operator before the call at @a open whose break keeps
@@ -175,7 +205,25 @@ void FormatArgsWrapRule::run(FormatDocument *document) const
         // operand level in the head of a control statement.
         int indent = textWidth(document->indentOf(line));
         const int keyword = this->controlKeyword(document, i);
-        if (keyword >= 0 && document->symbolLine(keyword) == line) {
+        const bool isHeadLine = keyword >= 0
+            && document->symbolLine(keyword) == line;
+
+        // Lets a call that ends the condition of an `if` or a `while`, its
+        // `(` on the keyword's line, hug the condition's `)`: its lines then
+        // step from the keyword's line, and the condition closes right after
+        // it, as `)) {` (see FormatConditionCloseRule).
+        const int headClose = keyword >= 0
+            ? document->match(keyword + 1) : -1;
+        const bool hugsHead = isCall
+            && isHeadLine
+            && (document->token(keyword) == IF
+                || document->token(keyword) == WHILE)
+            && close + 1 == headClose
+            && ! document->hasCommentBetween(
+                closeEnd,
+                document->symbols().at(headClose).from
+            );
+        if (isHeadLine && ! hugsHead) {
             indent += 4;
         }
         FormatExpressionLayout layout(document, &conditions, indent);
@@ -247,9 +295,22 @@ void FormatArgsWrapRule::run(FormatDocument *document) const
             }
         }
 
-        // Writes the list as the layout breaks it.
-        const QByteArray text = layout.layoutList(i, i, close, column);
-        const int length = closeEnd - from;
+        // Writes the list as the layout breaks it, keeping the items the
+        // user put on one line together, unless `[Structure] target` asks
+        // to lay the code out anew.
+        const bool keepsLines =
+            fileConfig.codeTarget == FormatFileConfig::CodeTargetLong
+            && isBrokenBetweenItems(document, i, close, arguments);
+        const QByteArray text = layout.layoutList(
+            i,
+            i,
+            close,
+            column,
+            keepsLines
+        );
+        const int length = (hugsHead
+            ? document->symbols().at(headClose).from
+            : closeEnd) - from;
         if (document->text().mid(from, length) != text
             && document->replace(from, length, text)
             && layout.brokeUngrouped()

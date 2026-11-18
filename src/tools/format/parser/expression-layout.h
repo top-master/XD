@@ -20,7 +20,8 @@ public:
 
     QByteArray layout(int first, int last, int column, int trailing,
                       bool forceMath = false);
-    QByteArray layoutList(int first, int open, int close, int column);
+    QByteArray layoutList(int first, int open, int close, int column,
+                          bool keepsLines = false);
     QByteArray oneLine(int first, int last) const;
     bool hasChain(int first, int last) const;
     bool hasOuterChain(int first, int last) const;

@@ -28,22 +28,30 @@ Config::Choice::Choice(const QStringList &names, const QStringList &values)
 
 /*!
     Tells whether @a text is a bare name that nothing defines: neither a
-    function of Config::Scopes, nor one of @a names, `true`, or `false`.
+    function of Config::Scopes, nor one of @a names, `true`, or `false`, in
+    any case.
 */
 static bool isUndefinedName(const QString &text, const QStringList &names)
 {
-    const QRegExp name(QString(QLL("[A-Za-z_][A-Za-z0-9_]*(::[A-Za-z_][A-Za-z0-9_]*)*")));
+    const QRegExp name(QString(QLL("(::)?[A-Za-z_][A-Za-z0-9_]*(::[A-Za-z_][A-Za-z0-9_]*)*")));
     if ( ! name.exactMatch(text)) {
         return false;
     }
+    // Takes a name of another case as the name it differs from, just like
+    // the condition's compile does.
     const QString canonical = Config::Condition::canonicalName(text);
-    for (int i = 0; i < names.size(); ++i) {
-        if (Config::Condition::canonicalName(names.at(i)) == canonical) {
+    const QStringList known = QStringList(names)
+        << QString(QLL("true")) << QString(QLL("false"));
+    for (int i = 0; i < known.size(); ++i) {
+        if (Config::Condition::canonicalName(known.at(i)).compare(
+                canonical,
+                Qt::CaseInsensitive
+            ) == 0
+        ) {
             return false;
         }
     }
-    return canonical != QLL("true") && canonical != QLL("false")
-        && Config::Scopes::find(canonical).isNull();
+    return Config::Scopes::find(canonical).isNull();
 }
 
 /*!
@@ -156,6 +164,13 @@ static bool splitChoice(const QString &text, QString *condition,
             if (c == QLatin1Char('\\')) {
                 ++i;
             }
+            continue;
+        }
+        // Skips a `::` of a name, such as `Foo::bar`, which no choice splits.
+        if (c == QLatin1Char(':') && i + 1 < text.size()
+            && text.at(i + 1) == QLatin1Char(':')
+        ) {
+            ++i;
             continue;
         }
         if (c == QLatin1Char('(')) {
@@ -314,17 +329,26 @@ bool Config::Choice::resolve(const QString &expression, const QStringList &names
     QString yes;
     QString no;
     QStringList program;
-    if ( ! splitChoice(text, &condition, &yes, &no)
+    QString reason;
+    const bool isChoice = splitChoice(text, &condition, &yes, &no);
+    if ( ! isChoice && values.isEmpty()) {
+        explainSigns(text, names, &reason);
+    }
+    if ( ! isChoice
         || ! Condition::compile(
             condition,
             names,
             &program,
-            error,
+            &reason,
             false,
             Condition::NameMismatchIgnore
         )
     ) {
+        // Keeps what the condition's compile found, after the choice.
         *error = QString(QLL("invalid conditional choice: %1")).arg(text);
+        if ( ! reason.isEmpty()) {
+            *error += QLL(": ") + reason;
+        }
         return false;
     }
     bool ok = false;

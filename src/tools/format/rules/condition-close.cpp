@@ -14,6 +14,11 @@
 
     Closes a condition that spans lines with its `)` on a line of its own, at
     the column of its keyword, followed by the body's `{` on that line.
+
+    A condition whose last operand is a bracket group opened on the
+    keyword's line, and closed at the start of a line at the keyword's
+    column, closes right after that group instead, as `)) {` (see
+    FormatArgsWrapRule).
 */
 
 /*!
@@ -42,10 +47,28 @@ void FormatConditionCloseRule::run(FormatDocument *document) const
         }
         const QByteArray indent = document->indentOf(document->symbolLine(i));
 
-        // Puts the `)` on a line of its own.
+        // Puts the `)` on a line of its own, unless it hugs a group that
+        // closes at the keyword's column.
         const int last = close - 1;
         const int closeLine = document->symbolLine(close);
-        if (document->symbolEndLine(last) == closeLine) {
+        const Token lastToken = document->token(last);
+        const bool hugsGroup = (lastToken == RPAREN || lastToken == RBRACK)
+            && document->match(last) >= 0
+            && document->symbolLine(document->match(last))
+                == document->symbolLine(i)
+            && document->firstSymbolOfLine(closeLine) == last
+            && document->indentOf(closeLine) == indent
+            && isSameLineGap(document, last, close);
+        if (hugsGroup) {
+            const int from = document->symbolEnd(last);
+            if (document->symbols().at(close).from != from) {
+                document->replace(
+                    from,
+                    document->symbols().at(close).from - from,
+                    QByteArray()
+                );
+            }
+        } else if (document->symbolEndLine(last) == closeLine) {
             if ( ! isSameLineGap(document, last, close)) {
                 continue;
             }

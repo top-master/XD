@@ -57,6 +57,11 @@ public:
     static NameMismatch nameMismatch(const QString & value);
 
 private:
+    static bool parse(const QString & text, const QStringList & names,
+                      QStringList *program, QString *error,
+                      NameMismatch mismatch, bool *mismatched);
+    static bool checkPercents(const QStringList & program,
+                              bool takesPercents, QString *error);
     static bool run(const QStringList & program, const QSet<QString > & holding,
                     const qreal *percent, const Evaluator::Context *context, bool *ok);
 

@@ -7,6 +7,7 @@
 #include "config-condition.h"
 #include "config-escape.h"
 #include "config-name.h"
+#include "config-numbers.h"
 #include "config-parser.h"
 #include "config-regexp.h"
 #include "config-replacement.h"
@@ -100,6 +101,26 @@ private slots:
     void testChoice_shouldTakeUndefinedNamesAsText();
     void testCondition_shouldDoMathOnMemberAnswers_data();
     void testCondition_shouldDoMathOnMemberAnswers();
+    void testCondition_shouldSkipRightTermOfAndOr();
+    void testChoice_shouldKeepScopedNamesWhole();
+    void testReadData_shouldHandleCommentsAndBadLines();
+    void testLayeredParser_shouldSkipLeadingComments();
+    void testReadData_shouldTakeEveryLineEnding();
+    void testReadData_shouldExplainBadRegExp();
+    void testEscape_shouldNameBadDigits();
+    void testReadData_shouldDecodeEscapesPastFfff();
+    void testLevelFolders_shouldTakeSlashRootsAndFolders();
+    void testReadData_shouldReadKeysAsUtf8();
+    void testCondition_shouldCheckMathLikePlainOnes();
+    void testCondition_shouldParsePercentsBeforeKeyChecks();
+    void testCondition_shouldReadWordsAsNames();
+    void testChoice_shouldTakeNamesAlikeEverywhere();
+    void testMessages_shouldKeepPercentSignsOfText();
+    void testReadData_shouldReadEdgeLines();
+    void testReadData_shouldExplainRegExpFallback();
+    void testLayeredParser_shouldCutAssignmentComments();
+    void testCondition_shouldMatchCaseAloneAsMismatch();
+    void testMatchers_shouldNameTheirLimits();
     void testScopes_shouldRunGlobalSetups();
     void testCondition_shouldHandleNameMismatch();
     void testCondition_shouldPassStrings();
@@ -291,6 +312,26 @@ static Config::Schema openSchema()
     schema.addSection(replace);
     return schema;
 }
+
+/*!
+    Takes any text as written, for a test that reads which text a value
+    line leaves.
+*/
+class TextMatcher : public Config::ValueMatcher
+{
+    typedef Config::ValueMatcher super;
+public:
+    inline bool match(const QString & value,
+                      QString *matched) const Q_DECL_OVERRIDE_IL
+    {
+        *matched = value;
+        return true;
+    }
+    inline QString describe() const Q_DECL_OVERRIDE_IL
+    {
+        return QString(QLL("any text"));
+    }
+};
 
 /// Reads the keys of an open section in their own spelling and in the order
 /// of their lines, a key given twice included, beside a key it lists.
@@ -1737,6 +1778,402 @@ void tst_ConfigParser::testChoice_shouldTakeUndefinedNamesAsText()
     QVERIFY2(error.endsWith(QString(QLL(
         "; can't subtract `1` since `win32` is undefined."
     ))), qPrintable(error));
+}
+
+/// Skips the right term once the left one decides, for `&` and `|` as for
+/// `&&` and `||`; hence a right term without an answer (`value` has none
+/// while TestArgumentContext::count is unset) leaves the result alone.
+void tst_ConfigParser::testCondition_shouldSkipRightTermOfAndOr()
+{
+    const QSharedPointer<Config::Scopes::Scope > scope =
+        Config::Scopes::push();
+    scope->add(new TestArgumentObject);
+    TestArgumentContext context;
+    const QStringList texts = QStringList()
+        << QString(QLL("false & value == 1")) << QString(QLL("false && value == 1"))
+        << QString(QLL("true | value == 1")) << QString(QLL("true || value == 1"));
+    for (int i = 0; i < texts.size(); ++i) {
+        QStringList program;
+        QString error;
+        QVERIFY2(Config::Condition::compile(
+            texts.at(i), QStringList(), &program, &error, true
+        ), qPrintable(error));
+        qreal result = -1;
+        QVERIFY2(Config::Condition::value(
+            program, QSet<QString >(), &context, &result
+        ), qPrintable(texts.at(i)));
+        QCOMPARE(result, qreal(i < 2 ? 0 : 1));
+    }
+}
+
+/// Keeps a `::` name whole in either branch of a choice.
+void tst_ConfigParser::testChoice_shouldKeepScopedNamesWhole()
+{
+    const QStringList noNames;
+    const Config::Choice choice(noNames, noNames);
+    QString matched;
+    QVERIFY(choice.match(QString(QLL("true ? Foo::bar : other")), &matched));
+    QString result;
+    QString error;
+    QVERIFY2(Config::Choice::resolve(
+        QString(QLL("true ? Foo::bar : other")), QStringList(),
+        QStringList(), Q_NULLPTR, &result, &error
+    ), qPrintable(error));
+    QCOMPARE(result, QString(QLL("Foo::bar")));
+    QVERIFY2(Config::Choice::resolve(
+        QString(QLL("false ? other : ::Foo::bar")), QStringList(),
+        QStringList(), Q_NULLPTR, &result, &error
+    ), qPrintable(error));
+    QCOMPARE(result, QString(QLL("::Foo::bar")));
+}
+
+/// Reads comments and the lines around them as `.ini` files take them: a
+/// `#` comment that ends in `\` leaves the next line alone, a `;` after the
+/// value of an open key starts a comment, and a line without a `=` fails.
+void tst_ConfigParser::testReadData_shouldHandleCommentsAndBadLines()
+{
+    QString error;
+    Config::Parser parser(tst_ConfigParser::schema());
+    QVERIFY2(parser.readData(
+        "[Types]\n# a path such as C:\\\nrefSuffix = keep-as-is\n",
+        QLL("inline"), &error
+    ), qPrintable(error));
+    QCOMPARE(parser.value(QString(QLL("types.refSuffix"))),
+             QString(QLL("keep-as-is")));
+    QVERIFY( ! parser.readData("[Layout]\nwidth 100\n", QLL("inline"), &error));
+    QCOMPARE(error, QString(QLL("inline: not a <key> = <value> line: width 100")));
+    QVERIFY( ! parser.readData("[Layout]\n= 100\n", QLL("inline"), &error));
+
+    Config::Parser open(openSchema());
+    QVERIFY2(open.readData(
+        "[Replace.types]\nQFoo = ::QBar ; renamed\n", QLL("inline"), &error
+    ), qPrintable(error));
+    QCOMPARE(open.openEntries(QString(QLL("replace.types"))).last().second,
+             QString(QLL("::QBar")));
+}
+
+/// Reads a group of lines that opens with a comment the way its first other
+/// line asks: as `.ini` text, or as one assignment per line.
+void tst_ConfigParser::testLayeredParser_shouldSkipLeadingComments()
+{
+    QString error;
+    const Config::Parser base(tst_ConfigParser::schema());
+    Config::LayeredParser ini(base);
+    QVERIFY2(ini.addLines(
+        Config::Lines() << "; widens the lines" << "[Layout]" << "width = 100",
+        QLL("inline"), &error
+    ), qPrintable(error));
+    QCOMPARE(ini.value(QString(QLL("layout.width"))), QString(QLL("100")));
+    Config::LayeredParser assignments(base);
+    QVERIFY2(assignments.addLines(
+        Config::Lines() << "# widens the lines" << "layout.width=100",
+        QLL("inline"), &error
+    ), qPrintable(error));
+    QCOMPARE(assignments.value(QString(QLL("layout.width"))), QString(QLL("100")));
+}
+
+/// Reads lines that end in a lone carriage return, or in a carriage return
+/// and a line feed, as it reads lines that end in a line feed.
+void tst_ConfigParser::testReadData_shouldTakeEveryLineEnding()
+{
+    QString error;
+    Config::Parser lone(tst_ConfigParser::schema());
+    QVERIFY2(lone.readData("[Layout]\rwidth = 100\r", QLL("inline"), &error),
+             qPrintable(error));
+    QCOMPARE(lone.value(QString(QLL("layout.width"))), QString(QLL("100")));
+    Config::Parser pair(tst_ConfigParser::schema());
+    QVERIFY2(pair.readData("[Layout]\r\nwidth = 100\r\n", QLL("inline"), &error),
+             qPrintable(error));
+    QCOMPARE(pair.value(QString(QLL("layout.width"))), QString(QLL("100")));
+}
+
+/// Says why a replacement by regular expression fails: what is wrong with
+/// its pattern, or which group its replacement names.
+void tst_ConfigParser::testReadData_shouldExplainBadRegExp()
+{
+    QString error;
+    Config::Parser parser(tst_ConfigParser::schema());
+    QVERIFY( ! parser.readData("[Types]\nrefSuffix = regexp/(/x/\n", QLL("inline"), &error));
+    QVERIFY2(error.contains(QLL("the pattern `(` is no valid regular expression: ")),
+             qPrintable(error));
+    QVERIFY( ! parser.readData("[Types]\nrefSuffix = regexp/a/\\\\2/\n", QLL("inline"), &error));
+    QVERIFY2(error.endsWith(QLL("the replacement `\\2` names a group that the pattern "
+                                "does not have (it has 0).")), qPrintable(error));
+}
+
+/// Rejects a hexadecimal escape past U+10FFFF, however many digits it has,
+/// and names what an escape with missing digits needs.
+void tst_ConfigParser::testEscape_shouldNameBadDigits()
+{
+    QString decoded;
+    QString error;
+    QVERIFY( ! Config::Escape::decode(QString(QLL("\\x100000041")), &decoded, &error));
+    QCOMPARE(error, QString(QLL("\\x100000041: \\x100000041 is past U+10FFFF")));
+    QVERIFY( ! Config::Escape::decode(QString(QLL("\\x")), &decoded, &error));
+    QCOMPARE(error, QString(QLL("\\x: \\x needs hexadecimal digits")));
+    QVERIFY( ! Config::Escape::decode(QString(QLL("\\u12")), &decoded, &error));
+    QCOMPARE(error, QString(QLL("\\u12: \\u needs 4 hexadecimal digits")));
+}
+
+/// Decodes an `.ini` escape past U+FFFF into its surrogate pair.
+void tst_ConfigParser::testReadData_shouldDecodeEscapesPastFfff()
+{
+    QString error;
+    Config::Parser parser(tst_ConfigParser::schema());
+    QVERIFY2(parser.readData("[Types]\nrefSuffix = regexp/\\x1F600/x/\n",
+                             QLL("inline"), &error), qPrintable(error));
+    const uint grin = 0x1F600;
+    QCOMPARE(parser.value(QString(QLL("types.refSuffix"))),
+             QString(QLL("regexp/")) + QString::fromUcs4(&grin, 1)
+                 + QString(QLL("/x/")));
+}
+
+/// Lists the levels below a root that ends in `/`, and a folder path's own
+/// level.
+void tst_ConfigParser::testLevelFolders_shouldTakeSlashRootsAndFolders()
+{
+    QCOMPARE(Config::Scanner::levelFolders(QString(QLL("/")), QString(QLL("/a/b/f.cpp"))),
+             QStringList() << QString(QLL("/")) << QString(QLL("/a"))
+                 << QString(QLL("/a/b")));
+    QDir().mkpath(this->path(QString(QLL("a/b"))));
+    const QString root = this->m_dir->path();
+    QCOMPARE(Config::Scanner::levelFolders(root, this->path(QString(QLL("a/b")))),
+             QStringList() << root << this->path(QString(QLL("a")))
+                 << this->path(QString(QLL("a/b"))));
+}
+
+/// Reads a key in UTF-8, and a `%` code only when each of its characters is
+/// a hexadecimal digit.
+void tst_ConfigParser::testReadData_shouldReadKeysAsUtf8()
+{
+    QString error;
+    Config::Parser parser(openSchema());
+    QVERIFY2(parser.readData(
+        "[Replace.types]\nQ\xc3\xa4 = keep-as-is\nQ%-1 = keep-as-is\nQ%41 = keep-as-is\n",
+        QLL("inline"), &error
+    ), qPrintable(error));
+    const QList<QPair<QString, QString > > entries =
+        parser.openEntries(QString(QLL("replace.types")));
+    QCOMPARE(entries.size(), 3);
+    QCOMPARE(entries.at(0).first, QString::fromUtf8("Q\xc3\xa4"));
+    QCOMPARE(entries.at(1).first, QString(QLL("Q%-1")));
+    QCOMPARE(entries.at(2).first, QString(QLL("QA")));
+}
+
+/// Holds a condition with math to the rules of one without: its percents,
+/// and an unknown name, which the error names.
+void tst_ConfigParser::testCondition_shouldCheckMathLikePlainOnes()
+{
+    QStringList program;
+    QString error;
+    QVERIFY( ! Config::Condition::compile(QString(QLL("150% | b == 1")),
+                                          conditionNames(), &program, &error, true));
+    QCOMPARE(error, QString(QLL("150% is not from 0% to 100%")));
+    QVERIFY( ! Config::Condition::compile(QString(QLL("40% | b == 1")),
+                                          conditionNames(), &program, &error));
+    QCOMPARE(error, QString(QLL("the key takes no percent, as in 40%")));
+    QVERIFY( ! Config::Condition::compile(QString(QLL("nope < 2")),
+                                          conditionNames(), &program, &error));
+    QCOMPARE(error, QString(QLL("unknown name nope")));
+
+    // Takes a function's name inside another name as no call.
+    const QSharedPointer<Config::Scopes::Scope > scope =
+        Config::Scopes::push();
+    scope->add(new Config::ArrayObj(QStringList() << QString(QLL("x"))));
+    QVERIFY( ! Config::Condition::compile(
+        QString(QLL("is-static & 140%")),
+        QStringList() << QString(QLL("is-static")), &program, &error, true
+    ));
+    QCOMPARE(error, QString(QLL("140% is not from 0% to 100%")));
+}
+
+/// Parses a percent term in every condition, then lets the key take it or
+/// not: a text that is no condition names that error first, whatever its
+/// percents, and a key that takes no percent rejects one with or without
+/// math, in or out of range.
+void tst_ConfigParser::testCondition_shouldParsePercentsBeforeKeyChecks()
+{
+    QStringList program;
+    QString error;
+    QVERIFY( ! Config::Condition::compile(QString(QLL("40% |")),
+                                          conditionNames(), &program, &error));
+    QCOMPARE(error, QString(QLL("a name is missing at the end")));
+    QVERIFY( ! Config::Condition::compile(QString(QLL("40% + 1 <")),
+                                          conditionNames(), &program, &error));
+    QCOMPARE(error, QString(QLL("invalid condition near ''")));
+    QVERIFY( ! Config::Condition::compile(QString(QLL("101% | a")),
+                                          conditionNames(), &program, &error));
+    QCOMPARE(error, QString(QLL("the key takes no percent, as in 101%")));
+    QVERIFY( ! Config::Condition::compile(QString(QLL("a | 2 * 10% < 1")),
+                                          conditionNames(), &program, &error));
+    QCOMPARE(error, QString(QLL("the key takes no percent, as in 10%")));
+    QVERIFY(Config::Condition::compile(QString(QLL("a | 2 * 10% < 1")),
+                                       conditionNames(), &program, &error,
+                                       true));
+}
+
+/// Reads only digits as a number, hence a word that `QString::toDouble()`
+/// takes too, such as `inf` or `nan`, is a name, which must be known.
+void tst_ConfigParser::testCondition_shouldReadWordsAsNames()
+{
+    QStringList program;
+    QString error;
+    QVERIFY( ! Config::Condition::compile(QString(QLL("inf > 1")),
+                                          conditionNames(), &program, &error));
+    QCOMPARE(error, QString(QLL("unknown name inf")));
+    QVERIFY( ! Config::Condition::compile(QString(QLL("a | nan == 1")),
+                                          conditionNames(), &program, &error));
+    QCOMPARE(error, QString(QLL("unknown name nan")));
+}
+
+/// Takes a name of another case as that name in a choice's branch, as the
+/// condition does, and explains a sign after an undefined name when it
+/// resolves a choice, as when it checks one.
+void tst_ConfigParser::testChoice_shouldTakeNamesAlikeEverywhere()
+{
+    const QStringList names = QStringList() << QString(QLL("ready"));
+    const Config::Choice choice(names, QStringList());
+    QString matched;
+    QVERIFY( ! choice.match(QString(QLL("true ? READY : other")), &matched));
+    QVERIFY( ! choice.match(QString(QLL("true ? TRUE : other")), &matched));
+    QString result;
+    QString error;
+    QVERIFY( ! Config::Choice::resolve(
+        QString(QLL("win32-1")), names, QStringList(), Q_NULLPTR, &result,
+        &error
+    ));
+    QCOMPARE(error, QString(QLL("invalid conditional choice: win32-1: "
+                                "can't subtract `1` since `win32` is undefined.")));
+}
+
+/// Keeps a `%` sign of the text an error quotes as written, rather than
+/// filling it with a later part of the message.
+void tst_ConfigParser::testMessages_shouldKeepPercentSignsOfText()
+{
+    QString decoded;
+    QString error;
+    QVERIFY( ! Config::Escape::decode(QString(QLL("%1\\u12")), &decoded, &error));
+    QCOMPARE(error, QString(QLL("%1\\u12: \\u needs 4 hexadecimal digits")));
+    Config::Parser parser(tst_ConfigParser::schema());
+    QVERIFY( ! parser.readData("[Types]\nrefSuffix = regexp/(%1/x/\n", QLL("inline"), &error));
+    QVERIFY2(error.contains(QLL("the pattern `(%1` is no valid regular expression: ")),
+             qPrintable(error));
+    QVERIFY2(error.endsWith(QLL(" at offset 3.")), qPrintable(error));
+    QVERIFY( ! parser.readData("[Types]\nrefSuffix = regexp/a/\\\\5%1/\n", QLL("inline"), &error));
+    QVERIFY2(error.endsWith(QLL("the replacement `\\5%1` names a group that the pattern "
+                                "does not have (it has 0).")), qPrintable(error));
+}
+
+/// Reads a file that starts with a byte order mark, keeps two quoted parts
+/// of a value as written, drops the whole character after a `\`, and
+/// rejects a section line with text after its `]`, or without one.
+void tst_ConfigParser::testReadData_shouldReadEdgeLines()
+{
+    QString error;
+    Config::Parser parser(tst_ConfigParser::schema());
+    QVERIFY2(parser.readData(
+        "\xEF\xBB\xBF[Types]\nrefSuffix = keep-as-is\n", QLL("inline"), &error
+    ), qPrintable(error));
+    QCOMPARE(parser.value(QString(QLL("types.refSuffix"))),
+             QString(QLL("keep-as-is")));
+    QVERIFY( ! parser.readData("[Types] refSuffix = keep-as-is\n", QLL("inline"), &error));
+    QCOMPARE(error, QString(QLL("inline: not a [<section>] line: "
+                                "[Types] refSuffix = keep-as-is")));
+    QVERIFY( ! parser.readData("[Types\n", QLL("inline"), &error));
+    QCOMPARE(error, QString(QLL("inline: not a [<section>] line: [Types")));
+    QVERIFY2(parser.readData("[Types] ; spacing\n", QLL("inline"), &error),
+             qPrintable(error));
+
+    Config::Schema texts;
+    Config::Section text(QString(QLL("Test")));
+    text.addKey(
+        QString(QLL("text")),
+        Config::Matchers() << QSharedPointer<const Config::ValueMatcher >(
+            new TextMatcher),
+        QString()
+    );
+    texts.addSection(text);
+    Config::Parser quoted(texts);
+    QVERIFY2(quoted.readData(
+        "[Test]\ntext = \"a\" \"b\"\n", QLL("inline"), &error
+    ), qPrintable(error));
+    QCOMPARE(quoted.value(QString(QLL("test.text"))), QString(QLL("\"a\" \"b\"")));
+
+    const QStringList noNames;
+    Config::Schema schema;
+    Config::Section section(QString(QLL("Test")));
+    section.addKey(
+        QString(QLL("pick")),
+        Config::Matchers() << QSharedPointer<const Config::ValueMatcher >(
+            new Config::Choice(noNames, noNames)),
+        QString()
+    );
+    schema.addSection(section);
+    Config::Parser choices(schema);
+    QVERIFY2(choices.readData(
+        "[Test]\npick = ab\\\xc3\xa9" "cd\n", QLL("inline"), &error
+    ), qPrintable(error));
+    QCOMPARE(choices.value(QString(QLL("test.pick"))), QString(QLL("abcd")));
+}
+
+/// Names why a replacement by regular expression has a bad fallback: a
+/// fallback may not be one more such replacement.
+void tst_ConfigParser::testReadData_shouldExplainRegExpFallback()
+{
+    QString error;
+    Config::Parser parser(tst_ConfigParser::schema());
+    QVERIFY( ! parser.readData(
+        "[Types]\nrefSuffix = regexp/a/b/ | regexp/c/d/\n", QLL("inline"), &error
+    ));
+    QVERIFY2(error.endsWith(QLL("the fallback `regexp/c/d/` is a regexp, which no "
+                                "fallback may be.")), qPrintable(error));
+}
+
+/// Cuts an assignment line at its `;` comment, as an `.ini` line is cut.
+void tst_ConfigParser::testLayeredParser_shouldCutAssignmentComments()
+{
+    QString error;
+    const Config::Parser base(tst_ConfigParser::schema());
+    Config::LayeredParser assignments(base);
+    QVERIFY2(assignments.addLines(
+        Config::Lines() << "layout.width=100 ; widens the lines",
+        QLL("inline"), &error
+    ), qPrintable(error));
+    QCOMPARE(assignments.value(QString(QLL("layout.width"))), QString(QLL("100")));
+}
+
+/// Takes a name that differs from a known one in case alone, and refuses one
+/// whose `-` or `_` signs stand elsewhere.
+void tst_ConfigParser::testCondition_shouldMatchCaseAloneAsMismatch()
+{
+    const QStringList names = QStringList() << QString(QLL("is-header"));
+    QStringList program;
+    QString error;
+    QVERIFY2(Config::Condition::compile(
+        QString(QLL("is-heaDer")), names, &program, &error, false,
+        Config::Condition::NameMismatchIgnore
+    ), qPrintable(error));
+    QVERIFY( ! Config::Condition::compile(
+        QString(QLL("ish_eader")), names, &program, &error, false,
+        Config::Condition::NameMismatchIgnore
+    ));
+    QCOMPARE(error, QString(QLL("unknown name ish_eader")));
+}
+
+/// Names the count limit of numbers that take more than one, and keeps the
+/// reason a choice's condition fails.
+void tst_ConfigParser::testMatchers_shouldNameTheirLimits()
+{
+    QCOMPARE(Config::Numbers(1, 9, 2).describe(),
+             QString(QLL("up to 2 numbers from 1 to 9, joined by |")));
+    QString result;
+    QString error;
+    QVERIFY( ! Config::Choice::resolve(
+        QString(QLL("nope < 2 ? a : b")), conditionNames(),
+        QStringList() << QString(QLL("a")) << QString(QLL("b")),
+        Q_NULLPTR, &result, &error
+    ));
+    QVERIFY2(error.endsWith(QLL(": unknown name nope")), qPrintable(error));
 }
 
 /// Adds the objects of a setup function to the global scope, at once when

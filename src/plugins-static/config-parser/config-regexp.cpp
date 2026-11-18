@@ -6,6 +6,11 @@
 #include <QtCore/QStringList>
 
 /*!
+    The text a replacement by regular expression starts with.
+*/
+static const char regExpPrefix[] = "regexp/";
+
+/*!
     @class Config::RegExp
     @internal
 
@@ -42,7 +47,7 @@ bool Config::RegExp::split(
         const QString & value, QString *head, QString *fallback,
         bool *hasFallback)
 {
-    const QString prefix = QString(QLL("regexp/"));
+    const QString prefix = QString::fromLatin1(regExpPrefix);
     if ( ! value.startsWith(prefix)) {
         return false;
     }
@@ -82,10 +87,26 @@ bool Config::RegExp::split(
 bool Config::RegExp::parse(const QString & value, QRegularExpression *pattern,
                            Config::Replacement *replacement)
 {
+    QString reason;
+    return Config::RegExp::read(value, pattern, replacement, &reason);
+}
+
+/*!
+    Parses @a value as parse() does, and gives why it fails to @a reason:
+    a missing closing `/`, text after the value other than a fallback, an
+    empty pattern, a pattern that is no valid regular expression (with what
+    is wrong, and where), or a replacement that names a group the pattern
+    does not have.
+*/
+bool Config::RegExp::read(const QString & value, QRegularExpression *pattern,
+                          Config::Replacement *replacement, QString *reason)
+{
     QString head;
     QString fallback;
     bool hasFallback = false;
     if ( ! Config::RegExp::split(value, &head, &fallback, &hasFallback)) {
+        *reason = QString(QLL("the regexp needs a closing `/`, and only a "
+                              "`| <value>` after it."));
         return false;
     }
 
@@ -94,7 +115,7 @@ bool Config::RegExp::parse(const QString & value, QRegularExpression *pattern,
     // backslash pair stays, for the pattern or the replacement to read.
     QStringList parts;
     QString part;
-    for (int i = int(qstrlen("regexp/")); i < head.size() - 1; ++i) {
+    for (int i = int(sizeof(regExpPrefix) - 1); i < head.size() - 1; ++i) {
         const QChar c = head.at(i);
         if (c == QLatin1Char('\\') && i + 1 < head.size() - 1) {
             const QChar next = head.at(++i);
@@ -111,17 +132,29 @@ bool Config::RegExp::parse(const QString & value, QRegularExpression *pattern,
     }
     parts << part;
     if (parts.size() != 2 || parts.at(0).isEmpty()) {
+        *reason = QString(QLL("the regexp needs a pattern and a replacement."));
         return false;
     }
     *pattern = QRegularExpression(parts.at(0));
     if ( ! pattern->isValid()) {
+        *reason = QString(QLL("the pattern `%1` is no valid regular expression: "
+                              "%2 at offset %3."))
+            .arg(parts.at(0), pattern->errorString(),
+                 QString::number(pattern->patternErrorOffset()));
         return false;
     }
-    return Config::Replacement::parse(
-        parts.at(1),
-        pattern->captureCount(),
-        replacement
-    );
+    if ( ! Config::Replacement::parse(
+            parts.at(1),
+            pattern->captureCount(),
+            replacement
+        )
+    ) {
+        *reason = QString(QLL("the replacement `%1` names a group that the "
+                              "pattern does not have (it has %2)."))
+            .arg(parts.at(1), QString::number(pattern->captureCount()));
+        return false;
+    }
+    return true;
 }
 
 /*!
@@ -144,6 +177,36 @@ bool Config::RegExp::match(const QString & value, QString *matched) const
     }
     *matched = value;
     return true;
+}
+
+/*!
+    Builds why @a value, which starts with `regexp/`, is no replacement by
+    regular expression (see read()), or why its fallback is none, being one
+    more such replacement; empty for any other value, which the other
+    matchers of the key describe.
+*/
+QString Config::RegExp::explain(const QString & value) const
+{
+    QString head;
+    QString fallback;
+    bool hasFallback = false;
+    const QString text = value.trimmed();
+    if ( ! text.startsWith(QLatin1String(regExpPrefix))) {
+        return QString();
+    }
+    const QString pattern = Config::RegExp::split(text, &head, &fallback, &hasFallback)
+        ? head : text;
+    QRegularExpression parsed;
+    Config::Replacement replacement;
+    QString reason;
+    if ( ! Config::RegExp::read(pattern, &parsed, &replacement, &reason)) {
+        return reason;
+    }
+    if (hasFallback && fallback.startsWith(QLatin1String(regExpPrefix))) {
+        return QString(QLL("the fallback `%1` is a regexp, which no fallback "
+                           "may be.")).arg(fallback);
+    }
+    return QString();
 }
 
 /*!

@@ -7,7 +7,6 @@
 #include "./config-regexp.h"
 #include "./config-scanner.h"
 
-#include <QtCore/QBuffer>
 #include <QtCore/QDir>
 #include <QtCore/QFile>
 #include <QtCore/QFileInfo>
@@ -62,81 +61,119 @@ Config::Parser::~Parser()
 namespace {
 
 /*!
-    Tells whether the `.ini` line @a line goes on in the next one, as `.ini`
-    files take it: a value in double quotes goes on past a line break, and
-    so does a line that ends in a `\` (an escaped line break). A `;` outside
-    double quotes starts a comment, which ends the line.
+    Tells whether the trimmed line @a line holds nothing to read: it is empty,
+    or a comment, which starts with `;` or `#`.
 */
-static bool continuesOnNextLine(const QByteArray & line)
+static bool isBlankOrComment(const QByteArray & line)
 {
-    bool inQuotes = false;
+    return line.isEmpty() || line.startsWith(';') || line.startsWith('#');
+}
+
+/*!
+    Describes what one scan of an `.ini` line finds outside of double quotes,
+    where a `\` takes the character after it along (see scanLine()).
+*/
+struct LineScan
+{
+    /// Places the line's first `=`, or -1 for a line without one.
+    int equals;
+    /// Places the `;` that starts the line's comment, else the line's size.
+    int comment;
+    /// Tells that a value in double quotes is still open at the line's end.
+    bool inQuotes;
+    /// Tells that the line ends in a `\`, alone or before its line feed.
+    bool escapedEnd;
+};
+
+/*!
+    Scans the `.ini` line @a line for its `=`, its comment, an open value in
+    double quotes, and an escaped line break; hence each reader of a line
+    takes them the same way.
+*/
+static LineScan scanLine(const QByteArray & line)
+{
+    LineScan scan = { -1, int(line.size()), false, false };
     for (int i = 0; i < line.size(); ++i) {
         const char c = line.at(i);
         if (c == '\\') {
-            if (i + 1 >= line.size()) {
-                return true;
+            if (i + 1 >= line.size()
+                || (line.at(i + 1) == '\n' && i + 2 >= line.size())
+            ) {
+                scan.escapedEnd = true;
+                break;
             }
-            const char escaped = line.at(++i);
-            if ((escaped == '\n' || escaped == '\r') && i + 1 >= line.size()) {
-                return true;
-            }
-            if (escaped == '\r' && line.at(i + 1) == '\n' && i + 2 >= line.size()) {
-                return true;
-            }
-            continue;
-        }
-        if (c == '"') {
-            inQuotes = ! inQuotes;
-        } else if (c == ';' && ! inQuotes) {
-            return false;
+            ++i;
+        } else if (c == '"') {
+            scan.inQuotes = ! scan.inQuotes;
+        } else if (c == '=' && ! scan.inQuotes && scan.equals < 0) {
+            scan.equals = i;
+        } else if (c == ';' && ! scan.inQuotes) {
+            scan.comment = i;
+            break;
         }
     }
-    return inQuotes;
+    return scan;
+}
+
+/*!
+    Tells whether the `.ini` line @a line goes on in the next one, as `.ini`
+    files take it: a value in double quotes goes on past a line break, and
+    so does a line that ends in a `\` (an escaped line break). A `;` outside
+    double quotes starts a comment, which ends the line, and a line that
+    starts with `;` or `#` is a comment as a whole, which never goes on.
+*/
+static bool continuesOnNextLine(const QByteArray & line)
+{
+    if (isBlankOrComment(line.trimmed())) {
+        return false;
+    }
+    const LineScan scan = scanLine(line);
+    return scan.escapedEnd
+        || (scan.comment == line.size() && scan.inQuotes);
 }
 
 /*!
     Builds the key or section name @a text of an `.ini` line, as `.ini`
-    files spell one: a `\` stands for a `/`, and `%<hex><hex>` or
+    files spell one, in UTF-8: a `\` stands for a `/`, and `%<hex><hex>` or
     `%U<hex><hex><hex><hex>` for the character of that code.
 */
 static QString iniKey(const QByteArray & text)
 {
     QString key;
+    QByteArray run;
     for (int i = 0; i < text.size(); ++i) {
         const char c = text.at(i);
         if (c == '\\') {
-            key += QLatin1Char('/');
+            run += '/';
             continue;
         }
         if (c != '%' || i + 1 >= text.size()) {
-            key += QLatin1Char(c);
+            run += c;
             continue;
         }
+
+        // Takes a `%` code only when each of its characters is a hexadecimal
+        // digit, with no sign, prefix, or space; else the `%` stays as it is.
         const bool wide = text.at(i + 1) == 'U';
         const int digits = wide ? 4 : 2;
         const int first = i + (wide ? 2 : 1);
-        bool ok = false;
-        const int code = first + digits <= text.size()
-            ? text.mid(first, digits).toInt(&ok, 16) : 0;
+        bool ok = first + digits <= text.size();
+        for (int d = first; ok && d < first + digits; ++d) {
+            const char h = text.at(d);
+            ok = (h >= '0' && h <= '9') || (h >= 'a' && h <= 'f')
+                || (h >= 'A' && h <= 'F');
+        }
         if ( ! ok) {
-            key += QLatin1Char('%');
+            run += '%';
             continue;
         }
-        key += QChar(code);
+        key += QString::fromUtf8(run);
+        run.clear();
+        key += QChar(text.mid(first, digits).toInt(Q_NULLPTR, 16));
         i = first + digits - 1;
     }
-    return key;
+    return key + QString::fromUtf8(run);
 }
-
-/*!
-    Pairs each character that may follow a `\` in an `.ini` value with the
-    character that escape stands for (see iniValue()).
-*/
-static const char iniEscapes[][2] = {
-    { 'a', '\a' }, { 'b', '\b' }, { 'f', '\f' }, { 'n', '\n' },
-    { 'r', '\r' }, { 't', '\t' }, { 'v', '\v' }, { '"', '"' },
-    { '?', '?' }, { '\'', '\'' }, { '\\', '\\' }
-};
 
 /*!
     Builds the value @a text of an `.ini` line (the bytes after its `=`),
@@ -181,20 +218,26 @@ static QString iniValue(const QByteArray & text)
             break;
         }
         const char escaped = text.at(i++);
-        int code = -1;
-        for (int k = 0; k < int(sizeof(iniEscapes) / sizeof(iniEscapes[0])); ++k) {
-            if (iniEscapes[k][0] == escaped) {
-                code = k;
-                break;
+
+        // Drops the whole character that a `\` stands before, all of its
+        // UTF-8 bytes.
+        if (uchar(escaped) >= 0x80) {
+            while (i < text.size() && (uchar(text.at(i)) & 0xC0) == 0x80) {
+                ++i;
             }
+            chopLimit = value.size();
+            continue;
         }
-        if (code >= 0) {
-            value += QLatin1Char(iniEscapes[code][1]);
+        char simple = 0;
+        if (Config::Escape::simple(escaped, &simple)) {
+            value += QLatin1Char(simple);
             chopLimit = value.size();
             continue;
         }
         if (escaped == 'x' || (escaped >= '0' && escaped <= '7')) {
-            const int base = escaped == 'x' ? 16 : 8;
+            // Reads every digit; a code point past U+10FFFF, which names
+            // no character, stands as U+FFFD.
+            const uint base = escaped == 'x' ? 16 : 8;
             uint codePoint = escaped == 'x' ? 0 : uint(escaped - '0');
             bool digits = escaped != 'x';
             while (i < text.size()) {
@@ -203,17 +246,16 @@ static QString iniValue(const QByteArray & text)
                 if ( ! ok) {
                     break;
                 }
-                codePoint = codePoint * base + digit;
+                codePoint = qMin(codePoint * base + digit, uint(0x110000));
                 digits = true;
                 ++i;
             }
             if (digits) {
-                value += QChar(codePoint);
+                Config::Escape::appendCodePoint(
+                    &value,
+                    codePoint > 0x10FFFF ? 0xFFFD : codePoint
+                );
             }
-        } else if ((escaped == '\r' || escaped == '\n') && i < text.size()
-            && (text.at(i) == '\n' || text.at(i) == '\r') && text.at(i) != escaped
-        ) {
-            ++i;
         }
         chopLimit = value.size();
     }
@@ -256,41 +298,67 @@ bool Config::Parser::readFile(const QString & file, QString *error)
 }
 
 /*!
-    Reads the `.ini` text @a data over the settings so far, naming @a origin
-    in an error (see the readData() that reads a device).
+    Tells whether @a value is one text in double quotes, whose closing quote
+    ends it; a value of two quoted parts, such as `"a" "b"`, is not.
+*/
+static bool isAllQuoted(const QString & value)
+{
+    if (value.size() < 2 || ! value.startsWith(QLatin1Char('"'))) {
+        return false;
+    }
+    int i = 1;
+    while (i < value.size() && value.at(i) != QLatin1Char('"')) {
+        i += value.at(i) == QLatin1Char('\\') ? 2 : 1;
+    }
+    return i == value.size() - 1;
+}
+
+/*!
+    Reads the `.ini` text @a data over the settings so far, line by line,
+    naming @a origin in an error; returns false for a key or a value that
+    the schema does not take.
+
+    A line ends in a line feed, a carriage return and a line feed, or a lone
+    carriage return alike. A line goes on in the next one only where `.ini`
+    files take it so (see continuesOnNextLine()). A value keeps its commas
+    as plain characters, with the spaces after them, whether or not it
+    stands in double quotes.
 */
 bool Config::Parser::readData(const QByteArray &data, const QString &origin,
                               QString *error)
 {
-    QByteArray text = data;
-    QBuffer buffer(&text);
-    buffer.open(QIODevice::ReadOnly);
-    return this->readData(&buffer, origin, error);
-}
-
-/*!
-    Reads the `.ini` text of @a device over the settings so far, line by
-    line, naming @a origin in an error; returns false for a key or a value
-    that the schema does not take.
-
-    A line goes on in the next one only where `.ini` files take it so (see
-    continuesOnNextLine()). A value keeps its commas as plain characters,
-    with the spaces after them, whether or not it stands in double quotes.
-*/
-bool Config::Parser::readData(QIODevice *device, const QString &origin,
-                              QString *error)
-{
+    // Leaves out the byte order mark that some editors write first.
+    QByteArray text = data.startsWith("\xEF\xBB\xBF") ? data.mid(3) : data;
+    text.replace("\r\n", "\n");
+    text.replace('\r', '\n');
     QString section;
-    while ( ! device->atEnd()) {
-        QByteArray line = device->readLine();
-        while (continuesOnNextLine(line) && ! device->atEnd()) {
-            line += device->readLine();
+    int from = 0;
+    while (from < text.size()) {
+        int next = text.indexOf('\n', from);
+        next = next < 0 ? text.size() : next + 1;
+        QByteArray line = text.mid(from, next - from);
+        while (continuesOnNextLine(line) && next < text.size()) {
+            from = next;
+            next = text.indexOf('\n', from);
+            next = next < 0 ? text.size() : next + 1;
+            line += text.mid(from, next - from);
         }
+        from = next;
         if ( ! this->readLine(line, &section, origin, error)) {
             return false;
         }
     }
     return true;
+}
+
+/*!
+    Reads the `.ini` text of @a device over the settings so far, as the
+    readData() that reads a text does.
+*/
+bool Config::Parser::readData(QIODevice *device, const QString &origin,
+                              QString *error)
+{
+    return this->readData(device->readAll(), origin, error);
 }
 
 /*!
@@ -302,45 +370,45 @@ bool Config::Parser::readData(QIODevice *device, const QString &origin,
     spelling and each line it is given on, in order; any other key takes
     its value the way `.ini` files spell one (see iniValue()), and the
     latest line of a key wins. A value all in double quotes takes the
-    escapes of a C++ string literal, as an assignment's does. A line that starts with
-    `;` or `#` is a comment, and a `;` outside double quotes starts one.
+    escapes of a C++ string literal, as an assignment's does.
+
+    A line that starts with `;` or `#` is a comment, and a `;` outside
+    double quotes starts one, for every key. Any other line that is no
+    section line and has no `<key> = <value>` is an error.
 */
 bool Config::Parser::readLine(const QByteArray & line, QString *section,
                               const QString & origin, QString *error)
 {
     // Finds the line's `=` and its comment, outside double quotes.
     const QByteArray text = line.trimmed();
-    if (text.isEmpty() || text.startsWith(';') || text.startsWith('#')) {
+    if (isBlankOrComment(text)) {
         return true;
     }
-    int equals = -1;
-    int end = text.size();
-    bool inQuotes = false;
-    for (int i = 0; i < text.size(); ++i) {
-        const char c = text.at(i);
-        if (c == '\\') {
-            ++i;
-        } else if (c == '"') {
-            inQuotes = ! inQuotes;
-        } else if (c == '=' && ! inQuotes && equals < 0) {
-            equals = i;
-        } else if (c == ';' && ! inQuotes) {
-            end = i;
-            break;
-        }
-    }
+    const LineScan scan = scanLine(text);
+    const int equals = scan.equals;
+    const int end = scan.comment;
 
     // Starts a section.
     if (text.startsWith('[')) {
         const int close = text.indexOf(']');
-        *section = iniKey(text.mid(1, (close < 0 ? end : close) - 1).trimmed());
+        if (close < 0
+            || close > end
+            || ! text.mid(close + 1, end - close - 1).trimmed().isEmpty()
+        ) {
+            *error = origin + QLL(": not a [<section>] line: ")
+                + QString::fromUtf8(text.left(end).trimmed());
+            return false;
+        }
+        *section = iniKey(text.mid(1, close - 1).trimmed());
         if (section->compare(QLL("General"), Qt::CaseInsensitive) == 0) {
             section->clear();
         }
         return true;
     }
-    if (equals <= 0 || equals > end) {
-        return true;
+    if (equals <= 0) {
+        *error = origin + QLL(": not a <key> = <value> line: ")
+            + QString::fromUtf8(text.left(end).trimmed());
+        return false;
     }
 
     // Splits the key from its section, as a `/` in the key names a deeper one.
@@ -351,14 +419,14 @@ bool Config::Parser::readLine(const QByteArray & line, QString *section,
     const QString key = path.mid(slash + 1);
     const QString name = sectionName + QLatin1Char('.') + key;
     const QString shown = QString(QLL("[%1] %2")).arg(sectionName, key);
+    const QByteArray valueText = text.mid(equals + 1, end - equals - 1);
     QString value = this->m_schema.key(name).open
-        ? QString::fromUtf8(text.mid(equals + 1)).trimmed()
-        : iniValue(text.mid(equals + 1, end - equals - 1));
+        ? QString::fromUtf8(valueText).trimmed()
+        : iniValue(valueText);
 
     // Decodes a value all in double quotes.
     QString reason;
-    if (value.size() >= 2 && value.startsWith(QLatin1Char('"'))
-        && value.endsWith(QLatin1Char('"'))
+    if (isAllQuoted(value)
         && ! Config::Escape::decode(
             value.mid(1, value.size() - 2),
             &value,
@@ -458,15 +526,15 @@ void Config::LayeredParser::store(const QString & name, const QString & section,
 /*!
     Reads @a lines from @a origin into the layers that m_layerBegin and
     m_layerEnd name, reporting errors in @a error: an `.ini` text when its
-    first line starts a section, else one `<section>.<key>=<value>`
-    assignment per line.
+    first line that is no comment starts a section, else one
+    `<section>.<key>=<value>` assignment per line, past its comments.
 */
 bool Config::LayeredParser::apply(const Lines &lines, const QString &origin,
                                   QString *error)
 {
     for (int i = 0; i < lines.m_lines.size(); ++i) {
         const QByteArray line = lines.m_lines.at(i).trimmed();
-        if (line.isEmpty()) {
+        if (isBlankOrComment(line)) {
             continue;
         }
         if (line.startsWith('[')) {
@@ -475,8 +543,10 @@ bool Config::LayeredParser::apply(const Lines &lines, const QString &origin,
         break;
     }
     for (int i = 0; i < lines.m_lines.size(); ++i) {
-        const QByteArray line = lines.m_lines.at(i).trimmed();
-        if ( ! line.isEmpty()
+        // Cuts the line at its comment, as `.ini` mode does.
+        QByteArray line = lines.m_lines.at(i).trimmed();
+        line = line.left(scanLine(line).comment).trimmed();
+        if ( ! isBlankOrComment(line)
             && ! this->assign(QString::fromUtf8(line), error)
         ) {
             *error = origin + QLL(": ") + *error;
@@ -586,9 +656,7 @@ bool Config::Parser::assign(const QString & assignment, QString *error)
 
     // Reads a value in double quotes as a C++ string literal, and leaves any
     // other value as it is.
-    if (value.size() >= 2 && value.startsWith(QLatin1Char('"'))
-        && value.endsWith(QLatin1Char('"'))
-    ) {
+    if (isAllQuoted(value)) {
         QString reason;
         if ( ! Config::Escape::decode(
                 value.mid(1, value.size() - 2),

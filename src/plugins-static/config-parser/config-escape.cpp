@@ -36,10 +36,17 @@ static int hexDigit(QChar c)
 }
 
 /*!
+    The code point past the last one Unicode has, U+10FFFF; a value that
+    reaches it names no character.
+*/
+static const uint pastLastCodePoint = 0x110000;
+
+/*!
     Builds the hexadecimal value of the @a count digits of @a text at
     @a from (all of the hexadecimal digits there, when @a count is 0) into
     @a value, and the number of digits it read into @a read; returns false
-    when a digit is missing.
+    when a digit is missing. A value past U+10FFFF stays at
+    pastLastCodePoint, however many digits follow, rather than wrap.
 */
 static bool readHex(const QString & text, int from, int count, uint *value,
                     int *read)
@@ -51,10 +58,43 @@ static bool readHex(const QString & text, int from, int count, uint *value,
         if (digit < 0) {
             break;
         }
-        *value = *value * 16 + uint(digit);
+        *value = qMin(*value * 16 + uint(digit), pastLastCodePoint);
         ++*read;
     }
     return *read > 0 && (count == 0 || *read == count);
+}
+
+/*!
+    Builds into @a value the character the one-character escape `\<name>`
+    stands for, which both a C++ string literal and an `.ini` value take:
+    `\'`, `\"`, `\?`, `\\`, `\a`, `\b`, `\f`, `\n`, `\r`, `\t`, and
+    `\v`; returns false for any other @a name.
+*/
+bool Config::Escape::simple(char name, char *value)
+{
+    static const char names[] = "'\"?\\abfnrtv";
+    static const char values[] = "'\"?\\\a\b\f\n\r\t\v";
+    const int place = name != 0
+        ? QByteArray::fromRawData(names, sizeof(names) - 1).indexOf(name) : -1;
+    if (place < 0) {
+        return false;
+    }
+    *value = values[place];
+    return true;
+}
+
+/*!
+    Appends the character of @a codePoint to @a text, as a surrogate pair
+    past U+FFFF.
+*/
+void Config::Escape::appendCodePoint(QString *text, uint codePoint)
+{
+    if (QChar::requiresSurrogates(codePoint)) {
+        *text += QChar(QChar::highSurrogate(codePoint));
+        *text += QChar(QChar::lowSurrogate(codePoint));
+    } else {
+        *text += QChar(ushort(codePoint));
+    }
 }
 
 /*!
@@ -76,15 +116,12 @@ bool Config::Escape::decode(const QString & text, QString *decoded,
             return false;
         }
         const QChar next = text.at(++i);
-        const char simple = next.toLatin1();
+        const char name = next.toLatin1();
 
-        // Decodes a one-character escape, by its place in `names`.
-        static const char names[] = "'\"?\\abfnrtv";
-        static const char values[] = "'\"?\\\a\b\f\n\r\t\v";
-        const int place = simple != 0
-            ? QByteArray::fromRawData(names, sizeof(names) - 1).indexOf(simple) : -1;
-        if (place >= 0) {
-            out += QLatin1Char(values[place]);
+        // Decodes a one-character escape.
+        char simple = 0;
+        if (Config::Escape::simple(name, &simple)) {
+            out += QLatin1Char(simple);
             continue;
         }
 
@@ -106,25 +143,32 @@ bool Config::Escape::decode(const QString & text, QString *decoded,
         }
 
         // Decodes a hexadecimal escape, or a code point.
-        const int count = simple == 'x' ? 0 : simple == 'u' ? 4 : simple == 'U' ? 8 : -1;
-        uint value = 0;
-        int read = 0;
-        if (count < 0
-            || ! readHex(text, i + 1, count, &value, &read)
-            || value > 0x10FFFF
-        ) {
+        const int count = name == 'x' ? 0 : name == 'u' ? 4 : name == 'U' ? 8 : -1;
+        if (count < 0) {
             *error = QString(QLL("%1: \\%2 is not a C++ escape")).arg(
                 text,
                 QString(next)
             );
             return false;
         }
-        if (QChar::requiresSurrogates(value)) {
-            out += QChar(QChar::highSurrogate(value));
-            out += QChar(QChar::lowSurrogate(value));
-        } else {
-            out += QChar(ushort(value));
+        uint value = 0;
+        int read = 0;
+        if ( ! readHex(text, i + 1, count, &value, &read)) {
+            *error = count == 0
+                ? QString(QLL("%1: \\x needs hexadecimal digits")).arg(text)
+                : QString(QLL("%1: \\%2 needs %3 hexadecimal digits"))
+                    .arg(text, QString(next), QString::number(count));
+            return false;
         }
+        if (value >= pastLastCodePoint) {
+            *error = QString(QLL("%1: \\%2%3 is past U+10FFFF")).arg(
+                text,
+                QString(next),
+                text.mid(i + 1, read)
+            );
+            return false;
+        }
+        appendCodePoint(&out, value);
         i += read;
     }
     *decoded = out;

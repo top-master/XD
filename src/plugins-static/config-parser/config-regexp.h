@@ -24,6 +24,11 @@ public:
 
     bool match(const QString & value, QString *matched) const Q_DECL_OVERRIDE;
     QString describe() const Q_DECL_OVERRIDE;
+    QString explain(const QString & value) const Q_DECL_OVERRIDE;
+
+private:
+    static bool read(const QString & value, QRegularExpression *pattern,
+                     Replacement *replacement, QString *reason);
 };
 
 } // Namespace `Config`.

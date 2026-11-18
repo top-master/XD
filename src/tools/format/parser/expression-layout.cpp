@@ -554,13 +554,16 @@ QByteArray FormatExpressionLayout::layout(
 /*!
     Builds the text of a list, broken as the class describes even when it
     fits one line: its head runs from the token @p first up to its opening
-    bracket at @p open, and its closing bracket is at @p close.
+    bracket at @p open, and its closing bracket is at @p close. With
+    @p keepsLines set, the items that share a line keep sharing one where
+    they fit, wherever the first item starts.
 */
 QByteArray FormatExpressionLayout::layoutList(
         int first,
         int open,
         int close,
-        int column)
+        int column,
+        bool keepsLines)
 {
     const int wrap = wrapColumn(m_document, m_document->symbols().at(first).from);
     const QList<QPair<int, int > > items =
@@ -627,8 +630,9 @@ QByteArray FormatExpressionLayout::layoutList(
         }
     }
 
-    // Breaks after the opening, keeping the user's line groups when every
-    // item sits on one line, and the first item starts below the opening.
+    // Breaks after the opening, keeping the user's line groups when the
+    // caller asks to, or when every item sits on one line, and the first
+    // item starts below the opening.
     const bool isBroken = m_document->symbolLine(items.first().first)
         != m_document->symbolLine(open);
     bool isWhole = true;
@@ -643,7 +647,7 @@ QByteArray FormatExpressionLayout::layoutList(
         open,
         close,
         items,
-        isBroken && isWhole,
+        keepsLines || (isBroken && isWhole),
         0
     )
         + "\n"

@@ -38,9 +38,9 @@ QString Config::Scanner::findRoot(const QString & path)
 }
 
 /*!
-    Lists the folders from @a root down to the folder that holds @a path, in
-    that order, both of them included; @a path outside of @a root has only
-    @a root.
+    Lists the folders from @a root down to the folder that holds @a path, or
+    down to @a path itself when it is a folder, in that order, both ends
+    included; @a path outside of @a root has only @a root.
 */
 QStringList Config::Scanner::levelFolders(
         const QString & root, const QString & path)
@@ -50,16 +50,25 @@ QStringList Config::Scanner::levelFolders(
     const QString absolute = QDir::cleanPath(
         QFileInfo(path).absoluteFilePath()
     );
-    if ( ! absolute.startsWith(root + QLatin1Char('/'))) {
+
+    // Takes a root that already ends in `/`, such as `/` or `C:/`, as it is.
+    const QString base = root.endsWith(QLatin1Char('/'))
+        ? root : root + QLatin1Char('/');
+    if ( ! absolute.startsWith(base)) {
         return folders;
     }
     const QStringList parts = absolute
-        .mid(root.size() + 1)
-        .split(QLatin1Char('/'));
-    QString current = root;
-    for (int i = 0; i + 1 < parts.size(); ++i) {
-        current += QLatin1Char('/') + parts.at(i);
+        .mid(base.size())
+        .split(QLatin1Char('/'), QString::SkipEmptyParts);
+
+    // Ends at a folder path itself, and at the folder that holds a file.
+    const int count = QFileInfo(absolute).isDir() ? parts.size()
+                                                  : parts.size() - 1;
+    QString current = base;
+    for (int i = 0; i < count; ++i) {
+        current += parts.at(i);
         folders << current;
+        current += QLatin1Char('/');
     }
     return folders;
 }

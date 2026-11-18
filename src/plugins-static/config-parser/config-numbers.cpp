@@ -90,6 +90,12 @@ QString Config::Numbers::describe() const
             .arg(this->m_minimum)
             .arg(this->m_maximum);
     }
+    if (this->m_maximumCount > 1) {
+        return QString(QLL("up to %1 numbers from %2 to %3, joined by |"))
+            .arg(this->m_maximumCount)
+            .arg(this->m_minimum)
+            .arg(this->m_maximum);
+    }
     return QString(QLL("numbers from %1 to %2, joined by |")).arg(this->m_minimum)
         .arg(this->m_maximum);
 }

@@ -135,8 +135,8 @@ void Config::Section::addKey(const QString & name, const QStringList & words,
 /*!
     Opens the section to keys it does not list: each such key takes the
     values @a matchers match, and keeps its own spelling (see
-    Config::Parser::openKeys()). Hence a section can map names a tool cannot
-    know in advance, such as the types a project renames.
+    Config::Parser::openEntries()). Hence a section can map names a tool
+    cannot know in advance, such as the types a project renames.
 */
 void Config::Section::setOpen(const Config::Matchers & matchers)
 {

@@ -53,67 +53,99 @@
 namespace {
 
 /*!
-    Builds the member @a name (in the form Config::Condition::canonicalName()
-    gives) that @a object offers, else a null member: a property, or a
-    public slot, that Config::Object or a subclass declares, or a dynamic
-    property (see Config::Object::dynamicValue()); nothing of QObject
-    itself, and no signal.
+    Names one member of a Config::Object that an expression may call (see
+    membersOf()): its kind, its index (into the object's meta-object, or
+    into its dynamic property names), and its name in the form
+    Config::Condition::canonicalName() gives.
 */
-static Config::Scopes::Member memberOf(
-        Config::Object *object, const QString & name)
+struct ObjectMember
 {
-    Config::Scopes::Member member;
+    enum Kind { Property, DynamicProperty, Slot };
+
+    Kind kind;
+    int index;
+    QString name;
+};
+
+/*!
+    Lists the members of @a object that an expression may call, in the order
+    a name finds them: each property that Config::Object or a subclass
+    declares, then each dynamic property (see
+    Config::Object::dynamicValue()), then each public slot; nothing of
+    QObject itself, and no signal.
+*/
+static QList<ObjectMember > membersOf(const Config::Object *object)
+{
+    QList<ObjectMember > members;
     const QMetaObject *meta = object->metaObject();
     for (int i = Config::Object::staticMetaObject.propertyOffset();
          i < meta->propertyCount();
          ++i
     ) {
-        if (Config::Condition::canonicalName(QString::fromLatin1(meta->property(i).name()))
-                == name
-        ) {
-            member.object = object;
-            member.name = name;
-            member.isProperty = true;
-            return member;
-        }
+        const ObjectMember member = { ObjectMember::Property, i,
+            Config::Condition::canonicalName(
+                QString::fromLatin1(meta->property(i).name())
+            ) };
+        members << member;
     }
     const QList<QByteArray > dynamicNames = object->dynamicPropertyNames();
     for (int i = 0; i < dynamicNames.size(); ++i) {
-        if (Config::Condition::canonicalName(QString::fromLatin1(dynamicNames.at(i)))
-                == name
-        ) {
-            member.object = object;
-            member.name = name;
-            member.isProperty = true;
-            return member;
-        }
+        const ObjectMember member = { ObjectMember::DynamicProperty, i,
+            Config::Condition::canonicalName(
+                QString::fromLatin1(dynamicNames.at(i))
+            ) };
+        members << member;
     }
-    bool found = false;
     for (int i = Config::Object::staticMetaObject.methodOffset();
          i < meta->methodCount();
          ++i
     ) {
         const QMetaMethod method = meta->method(i);
-        if (method.methodType() != QMetaMethod::Slot
-            || method.access() != QMetaMethod::Public
-            || Config::Condition::canonicalName(QString::fromLatin1(method.name()))
-                != name
+        if (method.methodType() == QMetaMethod::Slot
+            && method.access() == QMetaMethod::Public
         ) {
+            const ObjectMember member = { ObjectMember::Slot, i,
+                Config::Condition::canonicalName(
+                    QString::fromLatin1(method.name())
+                ) };
+            members << member;
+        }
+    }
+    return members;
+}
+
+/*!
+    Builds the member @a name (in the form Config::Condition::canonicalName()
+    gives) that @a object offers, else a null member (see membersOf()); a
+    property wins over a slot of the same name, and the slots of one name
+    give the range of argument counts they take.
+*/
+static Config::Scopes::Member memberOf(
+        Config::Object *object, const QString & name)
+{
+    Config::Scopes::Member member;
+    const QList<ObjectMember > members = membersOf(object);
+    const QMetaObject *meta = object->metaObject();
+    bool found = false;
+    for (int i = 0; i < members.size(); ++i) {
+        const ObjectMember & item = members.at(i);
+        if (item.name != name) {
             continue;
         }
-        const int count = method.parameterCount();
-        if (found) {
-            member.minimumArguments = qMin(member.minimumArguments, count);
-            member.maximumArguments = qMax(member.maximumArguments, count);
-        } else {
-            member.minimumArguments = count;
-            member.maximumArguments = count;
-        }
-        found = true;
-    }
-    if (found) {
         member.object = object;
         member.name = name;
+        if (item.kind != ObjectMember::Slot) {
+            member.isProperty = true;
+            member.minimumArguments = 0;
+            member.maximumArguments = 0;
+            return member;
+        }
+        const int count = meta->method(item.index).parameterCount();
+        member.minimumArguments = found ? qMin(member.minimumArguments, count)
+                                        : count;
+        member.maximumArguments = found ? qMax(member.maximumArguments, count)
+                                        : count;
+        found = true;
     }
     return member;
 }
@@ -320,31 +352,9 @@ QStringList Config::Scopes::Scope::names() const
 {
     QStringList names;
     for (int o = 0; o < this->m_objects.size(); ++o) {
-        const QMetaObject *meta = this->m_objects.at(o)->metaObject();
-        for (int i = Config::Object::staticMetaObject.propertyOffset();
-             i < meta->propertyCount();
-             ++i
-        ) {
-            names << Config::Condition::canonicalName(
-                QString::fromLatin1(meta->property(i).name()));
-        }
-        const QList<QByteArray > dynamicNames =
-            this->m_objects.at(o)->dynamicPropertyNames();
-        for (int i = 0; i < dynamicNames.size(); ++i) {
-            names << Config::Condition::canonicalName(
-                QString::fromLatin1(dynamicNames.at(i)));
-        }
-        for (int i = Config::Object::staticMetaObject.methodOffset();
-             i < meta->methodCount();
-             ++i
-        ) {
-            const QMetaMethod method = meta->method(i);
-            if (method.methodType() == QMetaMethod::Slot
-                && method.access() == QMetaMethod::Public
-            ) {
-                names << Config::Condition::canonicalName(
-                    QString::fromLatin1(method.name()));
-            }
+        const QList<ObjectMember > members = membersOf(this->m_objects.at(o).data());
+        for (int i = 0; i < members.size(); ++i) {
+            names << members.at(i).name;
         }
     }
     return names;
@@ -541,8 +551,9 @@ bool Config::Scopes::call(
 }
 
 /*!
-    Calls the slot or reads the property @a name (in any case, without the
-    `_` and `-` signs) of @a object with @a arguments, and gives what it
+    Calls the slot or reads the property @a name (in any spelling of its `_`
+    and `-` signs that Config::Condition::canonicalName() makes equal) of
+    @a object with @a arguments, and gives what it
     answers to @a result; returns false when @a object offers no such member
     (see Config::Object for which count) that takes that many arguments.
 */
@@ -552,41 +563,28 @@ bool Config::Scopes::invoke(
 {
     const QString canonical = Config::Condition::canonicalName(name);
     const QMetaObject *meta = object->metaObject();
-    if (arguments.isEmpty()) {
-        for (int i = Config::Object::staticMetaObject.propertyOffset();
-             i < meta->propertyCount();
-             ++i
-        ) {
-            const QMetaProperty property = meta->property(i);
-            if (Config::Condition::canonicalName(QString::fromLatin1(property.name()))
-                    == canonical
-            ) {
-                *result = liveAnswer(property.read(object));
-                return true;
-            }
+    const QList<ObjectMember > members = membersOf(object);
+    for (int i = 0; i < members.size(); ++i) {
+        const ObjectMember & item = members.at(i);
+        if (item.name != canonical) {
+            continue;
         }
-        const QList<QByteArray > dynamicNames = object->dynamicPropertyNames();
-        for (int i = 0; i < dynamicNames.size(); ++i) {
-            if (Config::Condition::canonicalName(QString::fromLatin1(dynamicNames.at(i)))
-                    == canonical
-            ) {
-                *result = liveAnswer(object->dynamicValue(dynamicNames.at(i)));
-                return true;
-            }
+
+        // Reads a property for a call without arguments only.
+        if (item.kind == ObjectMember::Property && arguments.isEmpty()) {
+            *result = liveAnswer(meta->property(item.index).read(object));
+            return true;
         }
-    }
-    for (int i = Config::Object::staticMetaObject.methodOffset();
-         i < meta->methodCount();
-         ++i
-    ) {
-        const QMetaMethod method = meta->method(i);
-        if (method.methodType() == QMetaMethod::Slot
-            && method.access() == QMetaMethod::Public
-            && method.parameterCount() == arguments.size()
-            && Config::Condition::canonicalName(QString::fromLatin1(method.name()))
-                == canonical
+        if (item.kind == ObjectMember::DynamicProperty && arguments.isEmpty()) {
+            *result = liveAnswer(object->dynamicValue(
+                object->dynamicPropertyNames().at(item.index)
+            ));
+            return true;
+        }
+        if (item.kind == ObjectMember::Slot
+            && meta->method(item.index).parameterCount() == arguments.size()
         ) {
-            return invokeSlot(object, method, arguments, result);
+            return invokeSlot(object, meta->method(item.index), arguments, result);
         }
     }
     return false;
