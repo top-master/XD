@@ -140,11 +140,9 @@ static const char iniEscapes[][2] = {
 
 /*!
     Builds the value @a text of an `.ini` line (the bytes after its `=`),
-    as `.ini` files spell one: the spaces around it drop out, a value all in
-    double quotes keeps its spaces and loses its quotes, and a part in double
-    quotes inside a value keeps its quotes and its text as written, for the
-    reader of the value to decode, such as the `"C++11"` of
-    `hasStd("C++11") ? warn : ignore`. Outside of quotes, a `\` starts an
+    as `.ini` files spell one: the spaces around it drop out, a part in
+    double quotes keeps its quotes and its text as written (see readLine(),
+    which decodes a value all in quotes), and elsewhere a `\` starts an
     escape: `\a`, `\b`, `\f`, `\n`, `\r`, `\t`, `\v`, `\"`, `\?`, `\'`,
     `\\`, `\x<hex>...`, `\<octal>...`, an escaped line break (which drops
     out), or any other character (which drops out with it). A comma stays a
@@ -154,29 +152,17 @@ static QString iniValue(const QByteArray & text)
 {
     QString value;
     QByteArray run;
-    bool quoted = false;
     bool inQuotes = false;
     int chopLimit = 0;
     int i = 0;
     while (i < text.size() && (text.at(i) == ' ' || text.at(i) == '\t')) {
         ++i;
     }
-
-    // Tells whether the whole value is one part in double quotes.
-    bool isAllQuoted = false;
-    if (i < text.size() && text.at(i) == '"') {
-        int close = i + 1;
-        while (close < text.size() && text.at(close) != '"') {
-            close += text.at(close) == '\\' ? 2 : 1;
-        }
-        isAllQuoted = close < text.size()
-            && text.mid(close + 1).trimmed().isEmpty();
-    }
     while (i < text.size()) {
         const char c = text.at(i++);
 
-        // Keeps a quoted part inside a value as written, quotes included.
-        if ( ! isAllQuoted && (inQuotes || c == '"')) {
+        // Keeps a quoted part as written, quotes and escapes included.
+        if (inQuotes || c == '"') {
             run += c;
             if (c == '"') {
                 inQuotes = ! inQuotes;
@@ -185,25 +171,12 @@ static QString iniValue(const QByteArray & text)
             }
             continue;
         }
-        if (c != '\\' && c != '"') {
+        if (c != '\\') {
             run += c;
             continue;
         }
         value += QString::fromUtf8(run);
         run.clear();
-        if (c == '"') {
-            quoted = true;
-            inQuotes = ! inQuotes;
-
-            // Skips the spaces after a closing quote, as `.ini` files do.
-            if ( ! inQuotes) {
-                while (i < text.size() && (text.at(i) == ' ' || text.at(i) == '\t')) {
-                    ++i;
-                }
-                chopLimit = value.size();
-            }
-            continue;
-        }
         if (i >= text.size()) {
             break;
         }
@@ -246,16 +219,14 @@ static QString iniValue(const QByteArray & text)
     }
     value += QString::fromUtf8(run);
 
-    // Drops the spaces at the end of a value without quotes.
-    if ( ! quoted) {
-        int end = value.size();
-        while (end > chopLimit
-            && (value.at(end - 1) == QLatin1Char(' ') || value.at(end - 1) == QLatin1Char('\t'))
-        ) {
-            --end;
-        }
-        value.truncate(end);
+    // Drops the spaces at the end of the value.
+    int end = value.size();
+    while (end > chopLimit
+        && (value.at(end - 1) == QLatin1Char(' ') || value.at(end - 1) == QLatin1Char('\t'))
+    ) {
+        --end;
     }
+    value.truncate(end);
     if (value.startsWith(QLL("@@"))) {
         value.remove(0, 1);
     }
@@ -328,10 +299,10 @@ bool Config::Parser::readData(QIODevice *device, const QString &origin,
     @a origin in an error.
 
     A key of an open section (see Config::Section::setOpen()) keeps its own
-    spelling and each line it is given on, in order; its value in double
-    quotes takes the escapes of a C++ string literal, as an assignment's
-    does. Any other key takes its value the way `.ini` files spell one (see
-    iniValue()), and the latest line of a key wins. A line that starts with
+    spelling and each line it is given on, in order; any other key takes
+    its value the way `.ini` files spell one (see iniValue()), and the
+    latest line of a key wins. A value all in double quotes takes the
+    escapes of a C++ string literal, as an assignment's does. A line that starts with
     `;` or `#` is a comment, and a `;` outside double quotes starts one.
 */
 bool Config::Parser::readLine(const QByteArray & line, QString *section,
@@ -380,27 +351,23 @@ bool Config::Parser::readLine(const QByteArray & line, QString *section,
     const QString key = path.mid(slash + 1);
     const QString name = sectionName + QLatin1Char('.') + key;
     const QString shown = QString(QLL("[%1] %2")).arg(sectionName, key);
-    QString value;
-    if (this->m_schema.key(name).open) {
-        value = QString::fromUtf8(text.mid(equals + 1)).trimmed();
-        if (value.size() >= 2 && value.startsWith(QLatin1Char('"'))
-            && value.endsWith(QLatin1Char('"'))
-        ) {
-            QString reason;
-            if ( ! Config::Escape::decode(
-                    value.mid(1, value.size() - 2),
-                    &value,
-                    &reason
-                )
-            ) {
-                *error = origin + QLL(": ") + shown + QLL(": ") + reason;
-                return false;
-            }
-        }
-    } else {
-        value = iniValue(text.mid(equals + 1, end - equals - 1));
-    }
+    QString value = this->m_schema.key(name).open
+        ? QString::fromUtf8(text.mid(equals + 1)).trimmed()
+        : iniValue(text.mid(equals + 1, end - equals - 1));
+
+    // Decodes a value all in double quotes.
     QString reason;
+    if (value.size() >= 2 && value.startsWith(QLatin1Char('"'))
+        && value.endsWith(QLatin1Char('"'))
+        && ! Config::Escape::decode(
+            value.mid(1, value.size() - 2),
+            &value,
+            &reason
+        )
+    ) {
+        *error = origin + QLL(": ") + shown + QLL(": ") + reason;
+        return false;
+    }
     if ( ! this->set(name, shown, value, &reason)) {
         *error = origin + QLL(": ") + reason;
         return false;
