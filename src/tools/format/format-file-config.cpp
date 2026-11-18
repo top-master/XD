@@ -1090,17 +1090,19 @@ private:
     quotes, and any undefined name, when it is empty; see Config::Choice)
     into @a word, where `hasStd()` and `hasCompiler()` answer from @a config;
     logs a choice that cannot pick one, naming the key @a key, and returns
-    false for it.
+    false for such a choice.
 */
-static bool resolveLintChoice(const QString & value, const QStringList & values,
-                              const FormatFileConfig & config, const char *key,
-                              QString *word)
+static bool resolveLintChoice(
+        const QString & value, const QStringList & values,
+        const FormatFileConfig & config, const char *key,
+        QString *word)
 {
     const FormatLintContext context(&config);
     QString error;
-    if (Config::Choice::resolve(value, QStringList(), values, &context, word,
-                                &error)
-    ) {
+    if (Config::Choice::resolve(
+        value, QStringList(), values, &context, word,
+        &error
+    )) {
         return true;
     }
     qWarning("Invalid [Lint] %s: %s", key, qPrintable(error));
@@ -1125,9 +1127,10 @@ QString FormatFileConfig::inlineMarker(
         return text;
     }
     QString marker;
-    if ( ! resolveLintChoice(text, QStringList(), config, "inlineOverride",
-                             &marker)
-    ) {
+    if ( ! resolveLintChoice(
+        text, QStringList(), config, "inlineOverride",
+        &marker
+    )) {
         return QString(QLL("override"));
     }
     return marker.trimmed();
@@ -1142,9 +1145,10 @@ FormatFileConfig::LintLevel FormatFileConfig::lintLevel(
         const QString & value, const FormatFileConfig & config)
 {
     QString level;
-    if ( ! resolveLintChoice(value, FormatFileConfig::lintLevels(), config,
-                             "level", &level)
-    ) {
+    if ( ! resolveLintChoice(
+        value, FormatFileConfig::lintLevels(), config,
+        "level", &level
+    )) {
         return LintWarn;
     }
     if (level == QLL("ignore")) {

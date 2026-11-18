@@ -91,7 +91,8 @@ static bool listsName(const FormatFileConfig *config,
     the settings of the place (see fileConfig()); returns false when the
     place names no settings.
 */
-bool FormatConditionContext::hasStandard(const QString & standard, bool *value) const
+bool FormatConditionContext::hasStandard(
+        const QString & standard, bool *value) const
 {
     return listsName(
         this->fileConfig(),

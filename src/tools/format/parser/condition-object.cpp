@@ -140,8 +140,9 @@ QVariant FormatConditionObject::hasCompiler(const QString & compiler)
     @a name, or an invalid value where the place has no such context, or
     the context does not know the answer.
 */
-QVariant FormatConditionObject::ask(Question question,
-                                    const QString & name) const
+QVariant FormatConditionObject::ask(
+        Question question,
+        const QString & name) const
 {
     const FormatConditionContext *format =
         static_cast<const FormatConditionContext * >(this->context());

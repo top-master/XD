@@ -555,9 +555,9 @@ QByteArray FormatExpressionLayout::layout(
     Builds the text of a list, broken as the class describes even when it
     fits one line: its head runs from the token @p first up to its opening
     bracket at @p open, and its closing bracket is at @p close. With
-    @p keepsLines set, a list that spans lines, each item whole on one, keeps
-    the items that share a line together where they fit, wherever the first
-    item starts.
+    @p keepsLines set, a list that spans lines, each item whole on one line,
+    keeps the items that share a line together where they fit, wherever its
+    first item starts.
 */
 QByteArray FormatExpressionLayout::layoutList(
         int first,

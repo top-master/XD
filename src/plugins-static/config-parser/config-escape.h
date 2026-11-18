@@ -22,6 +22,17 @@ public:
     static void appendCodePoint(QString *text, uint codePoint);
 };
 
+#ifndef Q_MOC_RUN
+Q_ALWAYS_INLINE int Escape::digitOf(QChar c, int base)
+{
+    const ushort code = c.unicode();
+    const ushort lower = code | 0x20;
+    const int digit = code >= '0' && code <= '9' ? code - '0'
+        : lower >= 'a' && lower <= 'f' ? lower - 'a' + 10 : -1;
+    return digit < base ? digit : -1;
+}
+#endif // Q_MOC_RUN
+
 } // Namespace `Config`.
 
 #endif // CONFIG_ESCAPE_H

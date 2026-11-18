@@ -224,7 +224,15 @@ static bool choiceValid(const QString &text, const QStringList &names,
     QString yes;
     QString no;
     QStringList program;
-    if ( ! readChoice(expression, names, values, &condition, &yes, &no, error)) {
+    if ( ! readChoice(
+        expression,
+        names,
+        values,
+        &condition,
+        &yes,
+        &no,
+        error
+    )) {
         return false;
     }
     return Config::Condition::compile(

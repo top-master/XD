@@ -233,22 +233,22 @@ static QString iniValue(const QByteArray & text)
             continue;
         }
         const bool isHex = escaped == 'x';
-        if (isHex || Config::Escape::digitOf(QLatin1Char(escaped), 8) >= 0) {
-            // Reads every digit, an octal escape's first one included; a
-            // code point past U+10FFFF, which names no character, stands as
-            // U+FFFD.
+        if (isHex
+            || Config::Escape::digitOf(QLatin1Char(escaped), 8) >= 0
+        ) {
+            // Reads every digit, an octal escape's first one included. A value
+            // past U+10FFFF, which names no character, becomes U+FFFD.
             const int from = isHex ? i : i - 1;
             uint codePoint = 0;
             int read = 0;
             if (Config::Escape::readDigits(
-                    QString::fromLatin1(text),
-                    from,
-                    isHex ? 16 : 8,
-                    0,
-                    &codePoint,
-                    &read
-                )
-            ) {
+                QString::fromLatin1(text),
+                from,
+                isHex ? 16 : 8,
+                0,
+                &codePoint,
+                &read
+            )) {
                 Config::Escape::appendCodePoint(
                     &value,
                     Config::Escape::isCodePoint(codePoint) ? codePoint : 0xFFFD
@@ -383,7 +383,8 @@ bool Config::Parser::readLine(const QByteArray & line, QString *section,
     if (isBad) {
         *error = QString(QLL("%1: not a %2 line: ")).arg(
             origin,
-            QLatin1String(isSection ? "[<section>]" : "<key> = <value>")
+            isSection ? QString(QLL("[<section>]"))
+                      : QString(QLL("<key> = <value>"))
         ) + QString::fromUtf8(text.left(end).trimmed());
         return false;
     }

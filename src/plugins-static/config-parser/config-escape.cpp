@@ -23,22 +23,12 @@
 static const uint pastLastCodePoint = uint(QChar::LastValidCodePoint) + 1;
 
 /*!
+    @fn int Config::Escape::digitOf(QChar c, int base)
+
     Builds the value of @a c as a digit of @a base (8 or 16), or -1 for a
-    character that is no such digit.
+    character that is no such digit; a letter digit counts in either case,
+    as `code | 0x20` turns `A` to `F` into `a` to `f`.
 */
-int Config::Escape::digitOf(QChar c, int base)
-{
-    const ushort code = c.unicode();
-    int digit = -1;
-    if (code >= '0' && code <= '9') {
-        digit = code - '0';
-    } else if (code >= 'a' && code <= 'f') {
-        digit = code - 'a' + 10;
-    } else if (code >= 'A' && code <= 'F') {
-        digit = code - 'A' + 10;
-    }
-    return digit < base ? digit : -1;
-}
 
 /*!
     Builds the value of the @a count digits of @a base (8 or 16) of @a text
@@ -47,13 +37,17 @@ int Config::Escape::digitOf(QChar c, int base)
     digit is missing. A value past U+10FFFF stays right past it, however
     many digits follow, rather than wrap (see isCodePoint()).
 */
-bool Config::Escape::readDigits(const QString & text, int from, int base,
-                                int count, uint *value, int *read)
+bool Config::Escape::readDigits(
+        const QString & text, int from, int base,
+        int count, uint *value, int *read)
 {
     *value = 0;
     *read = 0;
     while (from + *read < text.size() && (count == 0 || *read < count)) {
-        const int digit = Config::Escape::digitOf(text.at(from + *read), base);
+        const int digit = Config::Escape::digitOf(
+            text.at(from + *read),
+            base
+        );
         if (digit < 0) {
             break;
         }
@@ -93,14 +87,19 @@ bool Config::Escape::isQuoted(const QString & text)
     escapes decoded (see decode()), or @a text as it is when it is no such
     text (see isQuoted()); returns false, with @a error, for a bad escape.
 */
-bool Config::Escape::unquote(const QString & text, QString *value,
-                             QString *error)
+bool Config::Escape::unquote(
+        const QString & text, QString *value,
+        QString *error)
 {
     if ( ! Config::Escape::isQuoted(text)) {
         *value = text;
         return true;
     }
-    return Config::Escape::decode(text.mid(1, text.size() - 2), value, error);
+    return Config::Escape::decode(
+        text.mid(1, text.size() - 2),
+        value,
+        error
+    );
 }
 
 /*!
@@ -168,7 +167,14 @@ bool Config::Escape::decode(const QString & text, QString *decoded,
         if (Config::Escape::digitOf(next, 8) >= 0) {
             uint value = 0;
             int read = 0;
-            Config::Escape::readDigits(text.mid(i, 3), 0, 8, 0, &value, &read);
+            Config::Escape::readDigits(
+                text.mid(i, 3),
+                0,
+                8,
+                0,
+                &value,
+                &read
+            );
             out += QChar(ushort(value));
             i += read - 1;
             continue;
@@ -185,7 +191,14 @@ bool Config::Escape::decode(const QString & text, QString *decoded,
         }
         uint value = 0;
         int read = 0;
-        if ( ! Config::Escape::readDigits(text, i + 1, 16, count, &value, &read)) {
+        if ( ! Config::Escape::readDigits(
+            text,
+            i + 1,
+            16,
+            count,
+            &value,
+            &read
+        )) {
             *error = count == 0
                 ? QString(QLL("%1: \\x needs hexadecimal digits")).arg(text)
                 : QString(QLL("%1: \\%2 needs %3 hexadecimal digits"))
