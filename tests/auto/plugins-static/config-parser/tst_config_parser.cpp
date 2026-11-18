@@ -96,6 +96,7 @@ private slots:
     void testArrayObj_shouldOfferItems();
     void testTypes_shouldReachReturnedObjects();
     void testScopes_shouldOfferDynamicPropertiesAndPaths();
+    void testParser_shouldKeepQuotesOfConditions();
     void testScopes_shouldRunGlobalSetups();
     void testCondition_shouldHandleNameMismatch();
     void testCondition_shouldPassStrings();
@@ -1632,6 +1633,33 @@ void tst_ConfigParser::testScopes_shouldOfferDynamicPropertiesAndPaths()
         QString(QLL("settings.missing > 1")), QStringList(), &program,
         &error, true
     ))->toBeFalsy();
+}
+
+/// Keeps the double quotes of a value whose matcher reads conditions, as
+/// their texts need them, while the `;` after it still starts a comment.
+void tst_ConfigParser::testParser_shouldKeepQuotesOfConditions()
+{
+    Config::Schema schema;
+    Config::Section section(QString(QLL("Test")));
+    section.addKey(
+        QString(QLL("pick")),
+        Config::Matchers() << QSharedPointer<const Config::ValueMatcher >(
+            new Config::Choice(QStringList() << QString(QLL("ready")),
+                               QStringList(), true)),
+        QString()
+    );
+    section.addKey(QString(QLL("word")), QStringList() << QString(QLL("x y")),
+                   QString());
+    schema.addSection(section);
+    Config::Parser parser(schema);
+    QString error;
+    QVERIFY2(parser.readData(
+        "[Test]\npick = ready ? \"yes\" : \"no\" ; a note\nword = \"x y\"\n",
+        QLL("inline"), &error
+    ), qPrintable(error));
+    QCOMPARE(parser.value(QString(QLL("test.pick"))),
+             QString(QLL("ready ? \"yes\" : \"no\"")));
+    QCOMPARE(parser.value(QString(QLL("test.word"))), QString(QLL("x y")));
 }
 
 /// Adds the objects of a setup function to the global scope, at once when

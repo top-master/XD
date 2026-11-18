@@ -26,6 +26,8 @@ public:
         error of a value no matcher of the key takes.
     */
     virtual QString describe() const = 0;
+
+    virtual bool keepsText() const;
 };
 
 typedef QList<QSharedPointer<const ValueMatcher > > Matchers;

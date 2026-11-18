@@ -166,6 +166,15 @@ bool Config::Choice::match(const QString &value, QString *matched) const
 }
 
 /*!
+    Tells that a choice keeps its double quotes, as its condition and its
+    texts need them.
+*/
+bool Config::Choice::keepsText() const
+{
+    return true;
+}
+
+/*!
     Describes the accepted words and conditional choices.
 */
 QString Config::Choice::describe() const

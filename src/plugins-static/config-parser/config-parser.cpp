@@ -305,8 +305,10 @@ bool Config::Parser::readData(QIODevice *device, const QString &origin,
     A key of an open section (see Config::Section::setOpen()) keeps its own
     spelling and each line it is given on, in order; its value in double
     quotes takes the escapes of a C++ string literal, as an assignment's
-    does. Any other key takes its value the way `.ini` files spell one (see
-    iniValue()), and the latest line of a key wins. A line that starts with
+    does. So does the value of a key whose matcher keeps its text (see
+    Config::ValueMatcher::keepsText()), such as a condition that passes
+    texts in double quotes. Any other key takes its value the way `.ini`
+    files spell one (see iniValue()), and the latest line of a key wins. A line that starts with
     `;` or `#` is a comment, and a `;` outside double quotes starts one.
 */
 bool Config::Parser::readLine(const QByteArray & line, QString *section,
@@ -356,8 +358,15 @@ bool Config::Parser::readLine(const QByteArray & line, QString *section,
     const QString name = sectionName + QLatin1Char('.') + key;
     const QString shown = QString(QLL("[%1] %2")).arg(sectionName, key);
     QString value;
-    if (this->m_schema.key(name).open) {
-        value = QString::fromUtf8(text.mid(equals + 1)).trimmed();
+    const Config::Key key = this->m_schema.key(name);
+    bool keepsText = false;
+    for (int m = 0; m < key.matchers.size() && ! keepsText; ++m) {
+        keepsText = key.matchers.at(m)->keepsText();
+    }
+    if (key.open || keepsText) {
+        value = QString::fromUtf8(key.open ? text.mid(equals + 1)
+                                           : text.mid(equals + 1, end - equals - 1))
+            .trimmed();
         if (value.size() >= 2 && value.startsWith(QLatin1Char('"'))
             && value.endsWith(QLatin1Char('"'))
         ) {
