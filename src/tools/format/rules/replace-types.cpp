@@ -54,7 +54,7 @@ public:
         : m_document(document), m_line(line) {}
 
     inline bool predicate(const QString &name,
-                          bool *value) const Q_DECL_OVERRIDE
+                          bool *value) const Q_DECL_OVERRIDE_IL
     {
         if (name.compare(QLL("isNew"), Qt::CaseInsensitive) != 0) {
             return false;
@@ -79,7 +79,7 @@ public:
     inline explicit FormatCallTemplateContext(FormatArgsArray *arguments)
         : m_arguments(arguments) {}
 
-    inline FormatArgsArray *callArguments() const Q_DECL_OVERRIDE
+    inline FormatArgsArray *callArguments() const Q_DECL_OVERRIDE_IL
     {
         return m_arguments;
     }

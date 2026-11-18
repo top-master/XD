@@ -1801,3 +1801,35 @@ static bool isNumberMathChain(
 {
     return first < last;
 }
+// CASE	inline-keyword-override-il.cpp
+class Probe : public Base
+{
+public:
+    inline int size() const { return 0; }
+    inline bool isReady() const Q_DECL_OVERRIDE_IL { return true; }
+    inline void reset() Q_DECL_OVERRIDE_IL { }
+};
+// CASE	inline-keyword-override-empty.cpp
+class Probe : public Base
+{
+public:
+    inline int size() const { return 0; }
+    inline bool isReady() const { return true; }
+    void reset() override { }
+};
+// CASE	inline-keyword-override-choice-msvc.cpp
+class Probe : public Base
+{
+public:
+    inline int size() const { return 0; }
+    inline bool isReady() const Q_DECL_OVERRIDE_IL { return true; }
+    inline void reset() Q_DECL_OVERRIDE_IL { }
+};
+// CASE	inline-keyword-override-choice-gcc.cpp
+class Probe : public Base
+{
+public:
+    inline int size() const { return 0; }
+    inline bool isReady() const Q_DECL_OVERRIDE { return true; }
+    inline void reset() override { }
+};

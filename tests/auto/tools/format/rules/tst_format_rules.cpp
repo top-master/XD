@@ -1998,6 +1998,14 @@ void tst_FormatRules::testFix_shouldRewrite_data()
         << QString(QLL("inline-keyword"))
         << QByteArray("class P : public QObjectPrivate\n{\n    Q_DECLARE_PUBLIC(Model)\n\npublic:\n    P() : x(0) {}\n    inline int y() const { return 1; }\n    int x;\n};\n")
         << QByteArray("class P : public QObjectPrivate\n{\n    Q_DECLARE_PUBLIC(Model)\n\npublic:\n    inline P() : x(0) {}\n    inline int y() const { return 1; }\n    int x;\n};\n");
+    QTest::newRow("inline-keyword treats an override like any function by default")
+        << QString(QLL("inline-keyword"))
+        << QByteArray("class A\n{\n    inline int a() const { return 1; }\n    inline bool b() const Q_DECL_OVERRIDE { return true; }\n    void c() override { }\n};\n")
+        << QByteArray("class A\n{\n    inline int a() const { return 1; }\n    inline bool b() const Q_DECL_OVERRIDE { return true; }\n    inline void c() override { }\n};\n");
+    QTest::newRow("inline-keyword keeps the parameters lined up as it adds inline")
+        << QString(QLL("inline-keyword"))
+        << QByteArray("class D\n{\n    inline int a() const { return 1; }\n    bool check(const QString &name,\n               bool *value) const\n    {\n        return true;\n    }\n};\n")
+        << QByteArray("class D\n{\n    inline int a() const { return 1; }\n    inline bool check(const QString &name,\n                      bool *value) const\n    {\n        return true;\n    }\n};\n");
     QTest::newRow("one-statement")
         << QString(QLL("one-statement"))
         << QByteArray("void f()\n{\n    a(); b();\n    for (i = 0; i < n; ++i) {\n    }\n}\n")
@@ -3969,6 +3977,8 @@ void tst_FormatRules::testLayoutConfig_shouldResolveConditionAndSubchainOptions(
     QVERIFY( ! config.wrapConditionsOverCondition.isEmpty());
     QCOMPARE(config.wrapConditionsPer, QString(QLL("pair-bundle")));
     QVERIFY( ! config.wrapSignatureAt.isEmpty());
+    QVERIFY(config.compilers.isEmpty());
+    QCOMPARE(config.inlineOverride, QString(QLL("override")));
     QCOMPARE(config.wrapSubChain, QString(QLL("always")));
     QString error;
     QVERIFY2(parser.readData(
@@ -3999,6 +4009,27 @@ void tst_FormatRules::testLayoutConfig_shouldResolveConditionAndSubchainOptions(
     QVERIFY( ! parser.readData(
         "[Structure]\nwrapConditionsPer=pairs\n", QLL("inline"), &error
     ));
+    QVERIFY2(parser.readData(
+        "[Code]\ncompilers = [win32-msvc2010, linux-g++]\n"
+        "[Lint]\nbyRefVariable = hasCompiler(\"WIN32-MSVC2010\") ? error : ignore\n",
+        QLL("inline"), &error
+    ), qPrintable(error));
+    QVERIFY(readSettings(parser, &config));
+    QCOMPARE(config.compilers, QStringList() << QString(QLL("win32-msvc2010"))
+             << QString(QLL("linux-g++")));
+    QCOMPARE(config.byRefVariable, FormatFileConfig::LintError);
+    QVERIFY2(parser.readData(
+        "[Lint]\ninlineOverride = hasCompiler(\"win32-msvc2010\")"
+        " ? \"Q_DECL_OVERRIDE_IL\" : \"override\"\n",
+        QLL("inline"), &error
+    ), qPrintable(error));
+    QVERIFY(readSettings(parser, &config));
+    QCOMPARE(config.inlineOverride, QString(QLL("Q_DECL_OVERRIDE_IL")));
+    QVERIFY2(parser.readData(
+        "[Lint]\ninlineOverride =\n", QLL("inline"), &error
+    ), qPrintable(error));
+    QVERIFY(readSettings(parser, &config));
+    QVERIFY(config.inlineOverride.isEmpty());
     QVERIFY( ! parser.readData(
         "[Structure]\nwrapSubChain=unknown\n", QLL("inline"), &error
     ));

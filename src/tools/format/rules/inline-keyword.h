@@ -19,9 +19,12 @@ public:
     void run(FormatDocument *document) const Q_DECL_OVERRIDE;
 
 private:
+    void addInline(FormatDocument *document, int start) const;
+    void respell(FormatDocument *document, int overrideToken,
+                 const QString & marker) const;
     int declarationStart(
             const FormatDocument *document, int body, bool *hasInline,
-            bool *exempt) const;
+            bool *exempt, int *overrideToken) const;
 };
 
 #endif // RULES_INLINE_KEYWORD_H

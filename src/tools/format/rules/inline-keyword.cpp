@@ -5,9 +5,11 @@
 
 #include "../format-document.h"
 #include "../parser/class-helpers.h"
+#include "../parser/code-helpers.h"
 
 #include <QtCore/QByteArray>
 #include <QtCore/QList>
+#include <QtCore/QPair>
 
 /*!
     @class FormatInlineKeywordRule
@@ -16,11 +18,24 @@
     Spells out `inline` on each function a class body defines, when another
     function defined in that body already does; a class whose in-body
     functions all leave it out keeps them that way.
+
+    A function marked `override` or `Q_DECL_OVERRIDE` follows `[Lint]
+    inlineOverride`, which a condition may pick, such as
+    `hasCompiler("win32-msvc2010") ? "Q_DECL_OVERRIDE_IL" : "override"`:
+
+    * `override` (the default) or `Q_DECL_OVERRIDE`: the marker stays, and
+      the function counts like any other;
+    * another name, such as `Q_DECL_OVERRIDE_IL`, which XD gives MSVC 2010
+      (it rejects `override` together with `inline`, error C2216): the name
+      takes the place of the marker on an inline function, which counts like
+      any other;
+    * empty: an inline function loses its marker; another one keeps it.
 */
 
 /*!
     Adds `inline` to each in-class definition that lacks it, in each class
-    body of @a document that has an inline one.
+    body of @a document that has an inline one, and gives an inline
+    override the marker `[Lint] inlineOverride` names.
 */
 void FormatInlineKeywordRule::run(FormatDocument *document) const
 {
@@ -32,6 +47,13 @@ void FormatInlineKeywordRule::run(FormatDocument *document) const
         }
         QList<int > lacking;
         bool anyInline = false;
+        const QString marker = document->configAt(
+            document->symbols().at(brace).from
+        ).inlineOverride;
+        const bool keepsMarker = marker == QLL("override")
+            || marker == QLL("Q_DECL_OVERRIDE");
+        // Lists the overrides that lack `inline`, with their markers.
+        QList<QPair<int, int > > lackingOverrides;
         const QList<int > tokens = classBodyTokens(document, brace);
         for (int t = 0; t < tokens.size(); ++t) {
             const int body = tokens.at(t);
@@ -42,12 +64,27 @@ void FormatInlineKeywordRule::run(FormatDocument *document) const
             }
             bool hasInline = false;
             bool exempt = false;
+            int overrideToken = -1;
             const int start = this->declarationStart(
                 document,
                 body,
                 &hasInline,
-                &exempt
+                &exempt,
+                &overrideToken
             );
+
+            // Gives an inline override the marker of `[Lint] inlineOverride`.
+            if (overrideToken >= 0 && ! keepsMarker) {
+                if (hasInline) {
+                    this->respell(document, overrideToken, marker);
+                    anyInline = true;
+                } else if (marker.isEmpty() || exempt || start < 0) {
+                    continue;
+                } else {
+                    lackingOverrides.append(qMakePair(start, overrideToken));
+                }
+                continue;
+            }
             anyInline = anyInline || hasInline;
             if ( ! hasInline && ! exempt && start >= 0) {
                 lacking.append(start);
@@ -57,10 +94,65 @@ void FormatInlineKeywordRule::run(FormatDocument *document) const
             continue;
         }
         for (int i = 0; i < lacking.size(); ++i) {
-            document
-                ->replace(document->symbols().at(lacking.at(i)).from, 0, "inline ");
+            this->addInline(document, lacking.at(i));
+        }
+        for (int i = 0; i < lackingOverrides.size(); ++i) {
+            const QPair<int, int > item = lackingOverrides.at(i);
+            this->addInline(document, item.first);
+            this->respell(document, item.second, marker);
         }
     }
+}
+
+/*!
+    Adds `inline` in front of the declaration that starts at the token
+    @a start of @a document, and moves its head's later lines right as far,
+    up to the line that closes its parameters; hence the parameters stay
+    lined up under the `(`.
+*/
+void FormatInlineKeywordRule::addInline(
+        FormatDocument *document,
+        int start) const
+{
+    const QByteArray keyword("inline ");
+    document->replace(document->symbols().at(start).from, 0, keyword);
+    const int line = document->symbolLine(start);
+    int open = start;
+    while (open < document->symbols().size()
+        && document->token(open) != LPAREN
+    ) {
+        ++open;
+    }
+    const int close = open < document->symbols().size()
+        ? document->match(open) : -1;
+    const int last = close >= 0 ? document->symbolLine(close) : line;
+    const int indent = textWidth(document->indentOf(line));
+    for (int l = line + 1; l <= last; ++l) {
+        if (textWidth(document->indentOf(l)) > indent) {
+            document->replace(document->lineStart(l), 0, QByteArray(
+                keyword.size(), ' '
+            ));
+        }
+    }
+}
+
+/*!
+    Puts @a marker in place of the `override` or `Q_DECL_OVERRIDE` at
+    @a overrideToken of @a document; an empty @a marker removes that marker
+    together with the space before it.
+*/
+void FormatInlineKeywordRule::respell(
+        FormatDocument *document,
+        int overrideToken, const QString & marker) const
+{
+    const int end = document->symbolEnd(overrideToken);
+    if (marker.isEmpty()) {
+        const int from = document->symbolEnd(overrideToken - 1);
+        document->replace(from, end - from, QByteArray());
+        return;
+    }
+    const int from = document->symbols().at(overrideToken).from;
+    document->replace(from, end - from, marker.toLatin1());
 }
 
 /*!
@@ -68,11 +160,13 @@ void FormatInlineKeywordRule::run(FormatDocument *document) const
     at @a body of @a document (after an access specifier and a template
     head, and the macros that lead it), and sets @a hasInline when it says
     `inline` or names a macro with `INLINE` in it (such as `Q_ALWAYS_INLINE`),
-    and @a exempt for a `friend` or `constexpr` one, which needs no keyword.
+    @a exempt for a `friend` or `constexpr` one, which needs no keyword, and
+    @a overrideToken to the index of an `override` or `Q_DECL_OVERRIDE`
+    after its parameters.
 */
 int FormatInlineKeywordRule::declarationStart(
         const FormatDocument *document, int body,
-        bool *hasInline, bool *exempt) const
+        bool *hasInline, bool *exempt, int *overrideToken) const
 {
     int start = document->headStart(body);
 
@@ -148,9 +242,11 @@ int FormatInlineKeywordRule::declarationStart(
             break;
         }
     }
+    int parameters = -1;
     for (int i = start; i < body; ++i) {
         const Token token = document->token(i);
         if (token == LPAREN) {
+            parameters = i;
             break;
         }
         const QByteArray name = token == IDENTIFIER
@@ -162,6 +258,15 @@ int FormatInlineKeywordRule::declarationStart(
             || name == "Q_DECL_RELAXED_CONSTEXPR"
         ) {
             *exempt = true;
+        }
+    }
+
+    // Looks for `override` between the parameters and the body.
+    const int close = parameters >= 0 ? document->match(parameters) : -1;
+    for (int i = close + 1; close > 0 && i < body; ++i) {
+        const QByteArray name = document->lexem(i);
+        if (name == "override" || name == "Q_DECL_OVERRIDE") {
+            *overrideToken = i;
         }
     }
     return start < body ? start : -1;

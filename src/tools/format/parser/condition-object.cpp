@@ -25,6 +25,9 @@
       the tool breaks its list;
     * `hasStd("<standard>")`: the project targets that C++ standard, such
       as `hasStd("C++11")` (see `[Lint] standards`);
+    * `hasCompiler("<spec>")`: the project builds with that compiler, named
+      by its qmake spec, such as `hasCompiler("win32-msvc2010")` (see
+      `[Code] compilers`);
     * `cfg.<key>`: the number that the `[Structure]` setting `<key>` gives
       at the place, such as `cfg.wrapArgsOver` (see FormatSettingsObject).
 
@@ -123,6 +126,22 @@ QVariant FormatConditionObject::hasStd(const QString & standard)
         static_cast<const FormatConditionContext * >(this->context());
     bool value = false;
     if ( ! format || ! format->hasStandard(standard, &value)) {
+        return QVariant();
+    }
+    return value;
+}
+
+/*!
+    Builds whether the project builds with the compiler @a compiler, named by
+    its qmake spec, such as `win32-msvc2010`, in any case, or an invalid
+    value where the place does not know the project's compilers.
+*/
+QVariant FormatConditionObject::hasCompiler(const QString & compiler)
+{
+    const FormatConditionContext *format =
+        static_cast<const FormatConditionContext * >(this->context());
+    bool value = false;
+    if ( ! format || ! format->hasCompiler(compiler, &value)) {
         return QVariant();
     }
     return value;

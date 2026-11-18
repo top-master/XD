@@ -46,6 +46,7 @@ public:
         replaceTypesTarget = QString::fromLatin1("isNew");
         replaceTypesAction = QString::fromLatin1("replace");
         standards << QString::fromLatin1("c++11");
+        inlineOverride = QString::fromLatin1("override");
     }
 
     static QString fileName();
@@ -53,7 +54,11 @@ public:
     static QStringList superConditionNames();
     static QStringList superChoices();
     static QStringList lintLevels();
-    static LintLevel lintLevel(const QString & value, const QStringList & standards);
+    static LintLevel lintLevel(const QString & value, const QStringList & standards,
+                               const QStringList & compilers);
+    static QString inlineMarker(const QString & value,
+                                const QStringList & standards,
+                                const QStringList & compilers);
     static QStringList replaceTargetNames();
     bool acceptsFile(const QString &path) const;
     static Config::Schema schema();
@@ -109,6 +114,8 @@ public:
     Config::Condition::NameMismatch nameMismatch;
     LintLevel byRefVariable;
     QStringList standards;
+    QStringList compilers;
+    QString inlineOverride;
 
 private:
     static FormatSpacing toSpacing(

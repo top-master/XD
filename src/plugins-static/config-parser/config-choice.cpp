@@ -3,16 +3,39 @@
 
 #include "./config-choice.h"
 
+#include "./config-escape.h"
+
 /*!
     @class Config::Choice
     @internal
 
     Validates a choice between words selected by conditional expressions.
-    Resolution evaluates only the condition and the branch it selects.
+    Resolution evaluates only the condition and the branch it selects. A
+    choice that takes text also takes a string in double quotes as a
+    branch, with the escapes of a C++ string literal (see Config::Escape),
+    such as `hasCompiler("win32-msvc2010") ? "Q_DECL_OVERRIDE_IL" : ""`.
 */
-Config::Choice::Choice(const QStringList &names, const QStringList &values)
-    : m_names(names), m_values(values)
+Config::Choice::Choice(const QStringList &names, const QStringList &values,
+                       bool takesText)
+    : m_names(names), m_values(values), m_takesText(takesText)
 {
+}
+
+/*!
+    Builds in @a text the string that @a expression spells in double quotes,
+    with its escapes resolved; returns false for anything else.
+*/
+static bool quotedText(const QString &expression, QString *text)
+{
+    QString reason;
+    return expression.size() >= 2
+        && expression.startsWith(QLatin1Char('"'))
+        && expression.endsWith(QLatin1Char('"'))
+        && Config::Escape::decode(
+            expression.mid(1, expression.size() - 2),
+            text,
+            &reason
+        );
 }
 
 static QString stripChoiceParens(const QString &expression)
@@ -90,10 +113,13 @@ static bool splitChoice(const QString &text, QString *condition,
 static bool choiceValid(const QString &text, const QStringList &names,
                         const QStringList &values,
                         Config::Condition::NameMismatch mismatch,
-                        QString *error, bool *mismatched)
+                        QString *error, bool *mismatched, bool takesText)
 {
     const QString expression = stripChoiceParens(text);
-    if (values.contains(expression, Qt::CaseInsensitive)) {
+    QString decoded;
+    if (values.contains(expression, Qt::CaseInsensitive)
+        || (takesText && quotedText(expression, &decoded))
+    ) {
         return true;
     }
     QString condition;
@@ -110,8 +136,10 @@ static bool choiceValid(const QString &text, const QStringList &names,
             mismatch,
             mismatched
         )
-        && choiceValid(yes, names, values, mismatch, error, mismatched)
-        && choiceValid(no, names, values, mismatch, error, mismatched);
+        && choiceValid(yes, names, values, mismatch, error, mismatched,
+                       takesText)
+        && choiceValid(no, names, values, mismatch, error, mismatched,
+                       takesText);
 }
 
 /*!
@@ -127,7 +155,8 @@ bool Config::Choice::match(const QString &value, QString *matched) const
             this->m_values,
             Condition::NameMismatchIgnore,
             &error,
-            &mismatched
+            &mismatched,
+            this->m_takesText
         )
     ) {
         return false;
@@ -141,6 +170,10 @@ bool Config::Choice::match(const QString &value, QString *matched) const
 */
 QString Config::Choice::describe() const
 {
+    if (this->m_values.isEmpty()) {
+        return QString(QLL("a text in double quotes, optionally selected by a "
+            "condition"));
+    }
     return QString(QLL("a choice of %1, optionally selected by a condition"))
         .arg(this->m_values.join(QString(QLL(", "))));
 }
@@ -150,12 +183,13 @@ QString Config::Choice::describe() const
     @a values, and handles a name that differs from a known one in case
     alone as @a mismatch says (see Condition::NameMismatch); returns false,
     with @a error, for a choice that does not compile, and sets
-    @a mismatched when a name mismatch failed it.
+    @a mismatched when a name mismatch failed it. With @a takesText, a
+    string in double quotes is a branch too.
 */
 bool Config::Choice::check(const QString &expression, const QStringList &names,
                            const QStringList &values,
                            Condition::NameMismatch mismatch, QString *error,
-                           bool *mismatched)
+                           bool *mismatched, bool takesText)
 {
     *mismatched = false;
     return choiceValid(
@@ -164,17 +198,19 @@ bool Config::Choice::check(const QString &expression, const QStringList &names,
         values,
         mismatch,
         error,
-        mismatched
+        mismatched,
+        takesText
     );
 }
 
 /*!
     Resolves @a expression with @a context and stores its selected word in
-    @a result. Reports an invalid expression in @a error.
+    @a result, or the text of a string in double quotes with @a takesText.
+    Reports an invalid expression in @a error.
 */
 bool Config::Choice::resolve(const QString &expression, const QStringList &names,
                              const QStringList &values, const Evaluator::Context *context,
-                             QString *result, QString *error)
+                             QString *result, QString *error, bool takesText)
 {
     const QString text = stripChoiceParens(expression);
     for (int i = 0; i < values.size(); ++i) {
@@ -182,6 +218,9 @@ bool Config::Choice::resolve(const QString &expression, const QStringList &names
             *result = values.at(i);
             return true;
         }
+    }
+    if (takesText && quotedText(text, result)) {
+        return true;
     }
     QString condition;
     QString yes;
@@ -207,5 +246,6 @@ bool Config::Choice::resolve(const QString &expression, const QStringList &names
         *error = QString(QLL("cannot evaluate condition: %1")).arg(condition);
         return false;
     }
-    return resolve(selected ? yes : no, names, values, context, result, error);
+    return resolve(selected ? yes : no, names, values, context, result, error,
+                   takesText);
 }

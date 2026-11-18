@@ -95,42 +95,42 @@ public:
                        qreal *count) const Q_DECL_OVERRIDE;
 
     inline bool predicate(const QString &name,
-                          bool *value) const Q_DECL_OVERRIDE
+                          bool *value) const Q_DECL_OVERRIDE_IL
     {
         return m_conditions->nameHolds(m_open, name, value);
     }
 
-    inline bool value(qreal *value) const Q_DECL_OVERRIDE
+    inline bool value(qreal *value) const Q_DECL_OVERRIDE_IL
     {
         *value = m_count;
         return true;
     }
 
-    inline bool percent(qreal *value) const Q_DECL_OVERRIDE
+    inline bool percent(qreal *value) const Q_DECL_OVERRIDE_IL
     {
         *value = 100 - m_conditions->spaceRemaining(m_last);
         return true;
     }
 
-    inline bool spaceRemaining(qreal *percent) const Q_DECL_OVERRIDE
+    inline bool spaceRemaining(qreal *percent) const Q_DECL_OVERRIDE_IL
     {
         *percent = m_conditions->spaceRemaining(m_last);
         return true;
     }
 
-    inline bool hasMoreArgs(bool *value) const Q_DECL_OVERRIDE
+    inline bool hasMoreArgs(bool *value) const Q_DECL_OVERRIDE_IL
     {
         *value = m_argument + 1 < m_count;
         return true;
     }
 
-    inline bool isWrapping(bool *value) const Q_DECL_OVERRIDE
+    inline bool isWrapping(bool *value) const Q_DECL_OVERRIDE_IL
     {
         *value = m_isWrapping;
         return true;
     }
 
-    inline const FormatFileConfig *fileConfig() const Q_DECL_OVERRIDE
+    inline const FormatFileConfig *fileConfig() const Q_DECL_OVERRIDE_IL
     {
         const FormatDocument *document = m_conditions->document();
         return &document->configAt(document->symbols().at(m_open).from);

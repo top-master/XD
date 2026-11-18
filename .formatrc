@@ -8,3 +8,13 @@ moveSuffix = keep-as-is
 [Replace.types]
 ::QLatin1String = ::QLL
 ::QLatin1Literal = ::QLL
+
+[Code]
+# The compilers XD builds with, which conditions ask about through
+# hasCompiler("<spec>").
+compilers = win32-msvc2010
+
+[Lint]
+# MSVC 2010 rejects `override` next to `inline`; hence an inline override
+# takes XD's Q_DECL_OVERRIDE_IL, which expands to nothing on that compiler.
+inlineOverride = hasCompiler("win32-msvc2010") ? "Q_DECL_OVERRIDE_IL" : "override"

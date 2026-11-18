@@ -52,29 +52,35 @@ public:
     }
 
     inline bool predicate(const QString &name,
-                          bool *value) const Q_DECL_OVERRIDE
+                          bool *value) const Q_DECL_OVERRIDE_IL
     {
         return m_place->predicate(name, value);
     }
 
-    inline bool percent(qreal *value) const Q_DECL_OVERRIDE
+    inline bool percent(qreal *value) const Q_DECL_OVERRIDE_IL
     {
         *value = m_percent;
         return true;
     }
 
-    inline bool spaceRemaining(qreal *percent) const Q_DECL_OVERRIDE
+    inline bool spaceRemaining(qreal *percent) const Q_DECL_OVERRIDE_IL
     {
         return m_place->spaceRemaining(percent);
     }
 
     inline bool hasStandard(const QString & standard,
-                            bool *value) const Q_DECL_OVERRIDE
+                            bool *value) const Q_DECL_OVERRIDE_IL
     {
         return m_place->hasStandard(standard, value);
     }
 
-    inline const FormatFileConfig *fileConfig() const Q_DECL_OVERRIDE
+    inline bool hasCompiler(const QString & compiler,
+                            bool *value) const Q_DECL_OVERRIDE_IL
+    {
+        return m_place->hasCompiler(compiler, value);
+    }
+
+    inline const FormatFileConfig *fileConfig() const Q_DECL_OVERRIDE_IL
     {
         return m_place->fileConfig();
     }

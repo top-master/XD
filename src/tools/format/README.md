@@ -407,6 +407,11 @@ moveSuffix = " "
   warning and uses the name meant; `error` logs it as an error, and the key
   keeps its default; `critical` does the same, then stops before it changes
   the files the setting applies to.
+- `compilers` (in `[Code]`): the compilers the project builds with, named
+  by their qmake spec, as a list such as `win32-msvc2010` or
+  `[win32-msvc2010, linux-g++]`; empty by default. A condition asks about
+  one with `hasCompiler("<spec>")`, in any case, for the limits of a
+  compiler rather than of a standard.
 - `standards` (in `[Lint]`): the C++ standards the project may target, as a
   list such as `c++11` (the default) or `[c++11, c++17]`; a `[Lint]` key's
   condition asks about one with `hasStd("<standard>")`, in any case.
@@ -417,6 +422,19 @@ moveSuffix = " "
   standard one, without stopping the tool, and `ignore` reports nothing. A
   condition may pick one; the default is `hasStd("C++11") ? warn : ignore`,
   since some compilers of that standard mishandle such a local.
+- `inlineOverride` (in `[Lint]`): the marker that `inline-keyword` gives an
+  inline function a class body defines with `override` or
+  `Q_DECL_OVERRIDE`. With `override` (the default) or `Q_DECL_OVERRIDE`,
+  the marker stays. Another name takes its place, such as XD's
+  `Q_DECL_OVERRIDE_IL`, which expands to nothing on MSVC 2010, as that
+  compiler rejects `override` together with `inline`. Such a function gets
+  `inline` like any other. An empty value (`inlineOverride =`) drops the
+  marker of a function that is already inline. A condition may pick the
+  marker, each one in double quotes:
+
+  ```ini
+  inlineOverride = hasCompiler("win32-msvc2010") ? "Q_DECL_OVERRIDE_IL" : "override"
+  ```
 
 The command line then overrides the `.formatrc` files, in this order:
 

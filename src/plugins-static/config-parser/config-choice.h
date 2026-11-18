@@ -12,20 +12,22 @@ class Choice : public ValueMatcher
 {
     typedef ValueMatcher super;
 public:
-    Choice(const QStringList &names, const QStringList &values);
+    Choice(const QStringList &names, const QStringList &values,
+           bool takesText = false);
     bool match(const QString &value, QString *matched) const Q_DECL_OVERRIDE;
     QString describe() const Q_DECL_OVERRIDE;
     static bool resolve(const QString &expression, const QStringList &names,
                         const QStringList &values, const Evaluator::Context *context,
-                        QString *result, QString *error);
+                        QString *result, QString *error, bool takesText = false);
     static bool check(const QString &expression, const QStringList &names,
                       const QStringList &values,
                       Condition::NameMismatch mismatch, QString *error,
-                      bool *mismatched);
+                      bool *mismatched, bool takesText = false);
 
 private:
     QStringList m_names;
     QStringList m_values;
+    bool m_takesText;
 };
 
 } // Namespace `Config`.

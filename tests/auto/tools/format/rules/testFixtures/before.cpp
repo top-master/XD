@@ -1655,3 +1655,59 @@ static bool isNumberMathChain(const FormatDocument *document, int first, int las
 {
     return first < last;
 }
+// CASE	inline-keyword-override-il.cpp	inline-keyword		1
+// @formatter:
+// ```
+// [Lint]
+// inlineOverride = Q_DECL_OVERRIDE_IL
+// ```
+class Probe : public Base
+{
+public:
+    inline int size() const { return 0; }
+    inline bool isReady() const Q_DECL_OVERRIDE { return true; }
+    void reset() override { }
+};
+// CASE	inline-keyword-override-empty.cpp	inline-keyword		1
+// @formatter:
+// ```
+// [Lint]
+// inlineOverride =
+// ```
+class Probe : public Base
+{
+public:
+    inline int size() const { return 0; }
+    inline bool isReady() const Q_DECL_OVERRIDE { return true; }
+    void reset() override { }
+};
+// CASE	inline-keyword-override-choice-msvc.cpp	inline-keyword		1
+// @formatter:
+// ```
+// [Code]
+// compilers = win32-msvc2010
+// [Lint]
+// inlineOverride = hasCompiler("win32-msvc2010") ? "Q_DECL_OVERRIDE_IL" : "override"
+// ```
+class Probe : public Base
+{
+public:
+    inline int size() const { return 0; }
+    inline bool isReady() const Q_DECL_OVERRIDE { return true; }
+    void reset() override { }
+};
+// CASE	inline-keyword-override-choice-gcc.cpp	inline-keyword		1
+// @formatter:
+// ```
+// [Code]
+// compilers = linux-g++
+// [Lint]
+// inlineOverride = hasCompiler("win32-msvc2010") ? "Q_DECL_OVERRIDE_IL" : "override"
+// ```
+class Probe : public Base
+{
+public:
+    inline int size() const { return 0; }
+    inline bool isReady() const Q_DECL_OVERRIDE { return true; }
+    void reset() override { }
+};

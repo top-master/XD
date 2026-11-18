@@ -3,6 +3,7 @@
 
 #include "./condition-context.h"
 
+#include "../format-file-config.h"
 #include "./condition-object.h"
 #include "./count-object.h"
 #include "../rules/template-object.h"
@@ -77,6 +78,22 @@ bool FormatConditionContext::isWrapping(bool *) const
 bool FormatConditionContext::hasStandard(const QString &, bool *) const
 {
     return false;
+}
+
+/*!
+    Tells in @a value whether the project builds with the compiler
+    @a compiler, such as `win32-msvc2010`, in any case (see `[Code]
+    compilers`), from the settings of the place (see fileConfig()); returns
+    false when the place names no settings.
+*/
+bool FormatConditionContext::hasCompiler(const QString & compiler, bool *value) const
+{
+    const FormatFileConfig *config = this->fileConfig();
+    if ( ! config) {
+        return false;
+    }
+    *value = config->compilers.contains(compiler, Qt::CaseInsensitive);
+    return true;
 }
 
 /*!

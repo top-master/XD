@@ -1020,7 +1020,7 @@ public:
     inline qreal argumentCount(int depth, int argument) const
     { return depth == -2 && argument == 3 ? 7 : -1; }
 
-    inline bool percent(qreal *value) const Q_DECL_OVERRIDE
+    inline bool percent(qreal *value) const Q_DECL_OVERRIDE_IL
     {
         ++percentCalls;
         *value = 100 - space;
@@ -1122,7 +1122,8 @@ public:
         this->setProperty("share", QString(QLL("40%")));
     }
 
-    inline QVariant dynamicValue(const QByteArray & name) const Q_DECL_OVERRIDE
+    inline QVariant dynamicValue(
+            const QByteArray & name) const Q_DECL_OVERRIDE_IL
     {
         return name == "placed" ? QVariant(9) : super::dynamicValue(name);
     }

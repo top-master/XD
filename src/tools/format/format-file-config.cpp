@@ -315,22 +315,30 @@ public:
 };
 
 /*!
-    Matches a list of the C++ standards a project may target (see
-    listItems()), such as `c++11` or `[c++11, c++17]`, each made of letters,
-    digits and `+` signs.
+    Matches a list of names (see listItems()), such as the C++ standards a
+    project may target, `c++11` or `[c++11, c++17]`, each name matching a
+    pattern; an empty list matches only where it is allowed.
 */
-class FormatStandardsMatcher : public Config::ValueMatcher
+class FormatNameListMatcher : public Config::ValueMatcher
 {
 public:
+    inline FormatNameListMatcher(const QString & pattern,
+                                 const QString & description,
+                                 bool allowsEmpty)
+        : m_pattern(pattern), m_description(description)
+        , m_allowsEmpty(allowsEmpty)
+    {
+    }
+
     bool match(const QString &value, QString *matched) const Q_DECL_OVERRIDE
     {
-        const QStringList standards = listItems(value);
-        const QRegularExpression pattern(QString(QLL("^[A-Za-z0-9+]+$")));
-        if (standards.isEmpty()) {
+        const QStringList names = listItems(value);
+        const QRegularExpression pattern(m_pattern);
+        if (names.isEmpty() && ! m_allowsEmpty) {
             return false;
         }
-        for (int i = 0; i < standards.size(); ++i) {
-            if ( ! pattern.match(standards.at(i)).hasMatch()) {
+        for (int i = 0; i < names.size(); ++i) {
+            if ( ! pattern.match(names.at(i)).hasMatch()) {
                 return false;
             }
         }
@@ -340,8 +348,13 @@ public:
 
     QString describe() const Q_DECL_OVERRIDE
     {
-        return QString(QLL("a list of C++ standards, such as c++11 or [c++11, c++17]"));
+        return m_description;
     }
+
+private:
+    QString m_pattern;
+    QString m_description;
+    bool m_allowsEmpty;
 };
 
 bool FormatFileConfig::acceptsFile(const QString &path) const
@@ -524,16 +537,34 @@ Config::Schema FormatFileConfig::schema()
                 QStringList() << QString(QLL("warn")) << QString(QLL("error"))
                     << QString(QLL("critical")),
                 QString(QLL("warn")));
+    code.addKey(QString(QLL("compilers")),
+                Config::Matchers() << QSharedPointer<const Config::ValueMatcher >(
+                    new FormatNameListMatcher(
+                        QString(QLL("^[A-Za-z0-9+._-]+$")),
+                        QString(QLL("a list of qmake specs, such as win32-msvc2010, or nothing")),
+                        true
+                    )),
+                QString());
     schema.addSection(code);
     Config::Section lint(QString(QLL("Lint")));
     lint.addKey(QString(QLL("standards")),
                 Config::Matchers() << QSharedPointer<const Config::ValueMatcher >(
-                    new FormatStandardsMatcher),
+                    new FormatNameListMatcher(
+                        QString(QLL("^[A-Za-z0-9+]+$")),
+                        QString(QLL("a list of C++ standards, such as c++11 or [c++11, c++17]")),
+                        false
+                    )),
                 QString(QLL("c++11")));
     lint.addKey(QString(QLL("byRefVariable")),
                 Config::Matchers() << QSharedPointer<const Config::ValueMatcher >(
                     new Config::Choice(QStringList(), FormatFileConfig::lintLevels())),
                 QString::fromLatin1(defaultByRefVariableText));
+    lint.addKey(QString(QLL("inlineOverride")),
+                Config::Matchers() << Config::Name::create()
+                    << Config::Word::create(QString())
+                    << QSharedPointer<const Config::ValueMatcher >(
+                        new Config::Choice(QStringList(), QStringList(), true)),
+                QString(QLL("override")));
     schema.addSection(lint);
     return schema;
 }
@@ -876,9 +907,16 @@ bool FormatFileConfig::fromParser(
         Config::Condition::nameMismatch(parser.value(QString(QLL("code.nameMismatch"))));
     fileConfig->nameMismatch = mismatch;
     fileConfig->standards = listItems(parser.value(QString(QLL("lint.standards"))));
+    fileConfig->compilers = listItems(parser.value(QString(QLL("code.compilers"))));
+    fileConfig->inlineOverride = FormatFileConfig::inlineMarker(
+        parser.value(QString(QLL("lint.inlineOverride"))),
+        fileConfig->standards,
+        fileConfig->compilers
+    );
     fileConfig->byRefVariable = FormatFileConfig::lintLevel(
         parser.value(QString(QLL("lint.byRefVariable"))),
-        fileConfig->standards
+        fileConfig->standards,
+        fileConfig->compilers
     );
     fileConfig->extensions = parser.value(QString(QLL("general.extensions")));
     fileConfig->typedefSuper = parser.value(QString(QLL("structure.typedefSuper")));
@@ -1030,37 +1068,77 @@ namespace {
 
 /*!
     Answers `hasStd()` of a `[Lint]` key's choice from the C++ standards the
-    project targets, `[Lint] standards`, in any case.
+    project targets, `[Lint] standards`, and `hasCompiler()` from the
+    compilers it builds with, `[Code] compilers`, both in any case.
 */
 class FormatLintContext : public FormatConditionContext
 {
     typedef FormatConditionContext super;
 public:
-    inline explicit FormatLintContext(const QStringList & standards)
-        : m_standards(standards) {}
+    inline FormatLintContext(const QStringList & standards,
+                             const QStringList & compilers)
+        : m_standards(standards), m_compilers(compilers) {}
 
     inline bool hasStandard(const QString & standard,
-                            bool *value) const Q_DECL_OVERRIDE
+                            bool *value) const Q_DECL_OVERRIDE_IL
     {
         *value = m_standards.contains(standard, Qt::CaseInsensitive);
         return true;
     }
 
+    inline bool hasCompiler(const QString & compiler,
+                            bool *value) const Q_DECL_OVERRIDE_IL
+    {
+        *value = m_compilers.contains(compiler, Qt::CaseInsensitive);
+        return true;
+    }
+
 private:
     QStringList m_standards;
+    QStringList m_compilers;
 };
 
 } // namespace
 
 /*!
+    Builds the marker that the `[Lint] inlineOverride` value @a value names:
+    a name, nothing, or a choice of texts in double quotes, where `hasStd()`
+    answers from @a standards and `hasCompiler()` from @a compilers, such as
+    `hasCompiler("win32-msvc2010") ? "Q_DECL_OVERRIDE_IL" : "override"`. A
+    choice that cannot pick one is logged, and gives `override`.
+*/
+QString FormatFileConfig::inlineMarker(
+        const QString & value, const QStringList & standards,
+        const QStringList & compilers)
+{
+    const QString text = value.trimmed();
+    QString matched;
+    if (text.isEmpty() || Config::Name(false).match(text, &matched)) {
+        return text;
+    }
+    const FormatLintContext context(standards, compilers);
+    QString marker;
+    QString error;
+    if ( ! Config::Choice::resolve(text, QStringList(), QStringList(),
+                                   &context, &marker, &error, true)
+    ) {
+        qWarning("Invalid [Lint] inlineOverride: %s", qPrintable(error));
+        return QString(QLL("override"));
+    }
+    return marker.trimmed();
+}
+
+/*!
     Builds the level that the `[Lint]` choice @a value picks (see
-    lintLevels()), where `hasStd()` answers from @a standards; a choice that
-    cannot pick one is logged, and gives `warn`.
+    lintLevels()), where `hasStd()` answers from @a standards and
+    `hasCompiler()` from @a compilers; a choice that cannot pick one is
+    logged, and gives `warn`.
 */
 FormatFileConfig::LintLevel FormatFileConfig::lintLevel(
-        const QString & value, const QStringList & standards)
+        const QString & value, const QStringList & standards,
+        const QStringList & compilers)
 {
-    const FormatLintContext context(standards);
+    const FormatLintContext context(standards, compilers);
     QString level;
     QString error;
     if ( ! Config::Choice::resolve(value, QStringList(), FormatFileConfig::lintLevels(),
