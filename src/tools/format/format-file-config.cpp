@@ -910,13 +910,11 @@ bool FormatFileConfig::fromParser(
     fileConfig->compilers = listItems(parser.value(QString(QLL("code.compilers"))));
     fileConfig->inlineOverride = FormatFileConfig::inlineMarker(
         parser.value(QString(QLL("lint.inlineOverride"))),
-        fileConfig->standards,
-        fileConfig->compilers
+        *fileConfig
     );
     fileConfig->byRefVariable = FormatFileConfig::lintLevel(
         parser.value(QString(QLL("lint.byRefVariable"))),
-        fileConfig->standards,
-        fileConfig->compilers
+        *fileConfig
     );
     fileConfig->extensions = parser.value(QString(QLL("general.extensions")));
     fileConfig->typedefSuper = parser.value(QString(QLL("structure.typedefSuper")));
@@ -1067,62 +1065,69 @@ bool FormatFileConfig::fromParser(
 namespace {
 
 /*!
-    Answers `hasStd()` of a `[Lint]` key's choice from the C++ standards the
-    project targets, `[Lint] standards`, and `hasCompiler()` from the
-    compilers it builds with, `[Code] compilers`, both in any case.
+    Answers a `[Lint]` key's choice from the settings it is given, as far as
+    they are read: `hasStd()` from `[Lint] standards`, and `hasCompiler()`
+    from `[Code] compilers` (see FormatConditionContext).
 */
 class FormatLintContext : public FormatConditionContext
 {
     typedef FormatConditionContext super;
 public:
-    inline FormatLintContext(const QStringList & standards,
-                             const QStringList & compilers)
-        : m_standards(standards), m_compilers(compilers) {}
+    inline explicit FormatLintContext(const FormatFileConfig *config)
+        : m_config(config) {}
 
-    inline bool hasStandard(const QString & standard,
-                            bool *value) const Q_DECL_OVERRIDE_IL
+    inline const FormatFileConfig *fileConfig() const Q_DECL_OVERRIDE_IL
     {
-        *value = m_standards.contains(standard, Qt::CaseInsensitive);
-        return true;
-    }
-
-    inline bool hasCompiler(const QString & compiler,
-                            bool *value) const Q_DECL_OVERRIDE_IL
-    {
-        *value = m_compilers.contains(compiler, Qt::CaseInsensitive);
-        return true;
+        return m_config;
     }
 
 private:
-    QStringList m_standards;
-    QStringList m_compilers;
+    const FormatFileConfig *m_config;
 };
+
+/*!
+    Resolves the `[Lint]` choice @a value among @a values (any text in double
+    quotes, and any undefined name, when it is empty; see Config::Choice)
+    into @a word, where `hasStd()` and `hasCompiler()` answer from @a config;
+    logs a choice that cannot pick one, naming the key @a key, and returns
+    false for it.
+*/
+static bool resolveLintChoice(const QString & value, const QStringList & values,
+                              const FormatFileConfig & config, const char *key,
+                              QString *word)
+{
+    const FormatLintContext context(&config);
+    QString error;
+    if (Config::Choice::resolve(value, QStringList(), values, &context, word,
+                                &error)
+    ) {
+        return true;
+    }
+    qWarning("Invalid [Lint] %s: %s", key, qPrintable(error));
+    return false;
+}
 
 } // namespace
 
 /*!
     Builds the marker that the `[Lint] inlineOverride` value @a value names:
     a name, nothing, or a choice of texts in double quotes, where `hasStd()`
-    answers from @a standards and `hasCompiler()` from @a compilers, such as
+    and `hasCompiler()` answer from @a config, such as
     `hasCompiler("win32-msvc2010") ? "Q_DECL_OVERRIDE_IL" : "override"`. A
     choice that cannot pick one is logged, and gives `override`.
 */
 QString FormatFileConfig::inlineMarker(
-        const QString & value, const QStringList & standards,
-        const QStringList & compilers)
+        const QString & value, const FormatFileConfig & config)
 {
     const QString text = value.trimmed();
     QString matched;
     if (text.isEmpty() || Config::Name(false).match(text, &matched)) {
         return text;
     }
-    const FormatLintContext context(standards, compilers);
     QString marker;
-    QString error;
-    if ( ! Config::Choice::resolve(text, QStringList(), QStringList(),
-                                   &context, &marker, &error)
+    if ( ! resolveLintChoice(text, QStringList(), config, "inlineOverride",
+                             &marker)
     ) {
-        qWarning("Invalid [Lint] inlineOverride: %s", qPrintable(error));
         return QString(QLL("override"));
     }
     return marker.trimmed();
@@ -1130,21 +1135,16 @@ QString FormatFileConfig::inlineMarker(
 
 /*!
     Builds the level that the `[Lint]` choice @a value picks (see
-    lintLevels()), where `hasStd()` answers from @a standards and
-    `hasCompiler()` from @a compilers; a choice that cannot pick one is
-    logged, and gives `warn`.
+    lintLevels()), where `hasStd()` and `hasCompiler()` answer from
+    @a config; a choice that cannot pick one is logged, and gives `warn`.
 */
 FormatFileConfig::LintLevel FormatFileConfig::lintLevel(
-        const QString & value, const QStringList & standards,
-        const QStringList & compilers)
+        const QString & value, const FormatFileConfig & config)
 {
-    const FormatLintContext context(standards, compilers);
     QString level;
-    QString error;
-    if ( ! Config::Choice::resolve(value, QStringList(), FormatFileConfig::lintLevels(),
-                                   &context, &level, &error)
+    if ( ! resolveLintChoice(value, FormatFileConfig::lintLevels(), config,
+                             "level", &level)
     ) {
-        qWarning("Invalid [Lint] level: %s", qPrintable(error));
         return LintWarn;
     }
     if (level == QLL("ignore")) {

@@ -57,27 +57,17 @@ void FormatConditionCloseRule::run(FormatDocument *document) const
             && document->symbolLine(document->match(last))
                 == document->symbolLine(i)
             && document->firstSymbolOfLine(closeLine) == last
-            && document->indentOf(closeLine) == indent
-            && isSameLineGap(document, last, close);
-        if (hugsGroup) {
-            const int from = document->symbolEnd(last);
-            if (document->symbols().at(close).from != from) {
-                document->replace(
-                    from,
-                    document->symbols().at(close).from - from,
-                    QByteArray()
-                );
-            }
-        } else if (document->symbolEndLine(last) == closeLine) {
+            && document->indentOf(closeLine) == indent;
+        if (hugsGroup || document->symbolEndLine(last) == closeLine) {
             if ( ! isSameLineGap(document, last, close)) {
                 continue;
             }
             const int from = document->symbolEnd(last);
-            document->replace(
-                from,
-                document->symbols().at(close).from - from,
-                "\n" + indent
-            );
+            const int length = document->symbols().at(close).from - from;
+            const QByteArray gap = hugsGroup ? QByteArray() : "\n" + indent;
+            if (document->text().mid(from, length) != gap) {
+                document->replace(from, length, gap);
+            }
         } else if (document->indentOf(closeLine) != indent) {
             const int start = document->lineStart(closeLine);
             document

@@ -93,20 +93,12 @@ static void explainSigns(const QString &expression, const QStringList &names,
 static bool branchWord(const QString &expression, const QStringList &values,
                        const QStringList &names, QString *word)
 {
-    QString text = expression;
-    const bool isQuoted = expression.size() >= 2
-        && expression.startsWith(QLatin1Char('"'))
-        && expression.endsWith(QLatin1Char('"'));
+    QString text;
     QString reason;
-    if (isQuoted
-        && ! Config::Escape::decode(
-            expression.mid(1, expression.size() - 2),
-            &text,
-            &reason
-        )
-    ) {
+    if ( ! Config::Escape::unquote(expression, &text, &reason)) {
         return false;
     }
+    const bool isQuoted = Config::Escape::isQuoted(expression);
     for (int i = 0; i < values.size(); ++i) {
         if (values.at(i).compare(text, Qt::CaseInsensitive) == 0) {
             *word = values.at(i);
@@ -199,6 +191,25 @@ static bool splitChoice(const QString &text, QString *condition,
     return false;
 }
 
+/*!
+    Splits the choice @a expression, which picks no word itself (see
+    branchWord()), into @a condition, @a yes and @a no (see splitChoice());
+    returns false for no such choice, with why in @a error for a bare
+    branch that signs follow (see explainSigns()) when @a values is empty.
+*/
+static bool readChoice(const QString &expression, const QStringList &names,
+                       const QStringList &values, QString *condition,
+                       QString *yes, QString *no, QString *error)
+{
+    if (splitChoice(expression, condition, yes, no)) {
+        return true;
+    }
+    if (values.isEmpty()) {
+        explainSigns(expression, names, error);
+    }
+    return false;
+}
+
 static bool choiceValid(const QString &text, const QStringList &names,
                         const QStringList &values,
                         Config::Condition::NameMismatch mismatch,
@@ -213,10 +224,7 @@ static bool choiceValid(const QString &text, const QStringList &names,
     QString yes;
     QString no;
     QStringList program;
-    if ( ! splitChoice(expression, &condition, &yes, &no)) {
-        if (values.isEmpty()) {
-            explainSigns(expression, names, error);
-        }
+    if ( ! readChoice(expression, names, values, &condition, &yes, &no, error)) {
         return false;
     }
     return Config::Condition::compile(
@@ -330,11 +338,7 @@ bool Config::Choice::resolve(const QString &expression, const QStringList &names
     QString no;
     QStringList program;
     QString reason;
-    const bool isChoice = splitChoice(text, &condition, &yes, &no);
-    if ( ! isChoice && values.isEmpty()) {
-        explainSigns(text, names, &reason);
-    }
-    if ( ! isChoice
+    if ( ! readChoice(text, names, values, &condition, &yes, &no, &reason)
         || ! Condition::compile(
             condition,
             names,

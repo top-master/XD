@@ -17,51 +17,90 @@
 */
 
 /*!
-    Builds the value of the hexadecimal digit @a c, or -1 for a character
-    that is no such digit.
-*/
-static int hexDigit(QChar c)
-{
-    const ushort code = c.unicode();
-    if (code >= '0' && code <= '9') {
-        return code - '0';
-    }
-    if (code >= 'a' && code <= 'f') {
-        return code - 'a' + 10;
-    }
-    if (code >= 'A' && code <= 'F') {
-        return code - 'A' + 10;
-    }
-    return -1;
-}
-
-/*!
     The code point past the last one Unicode has, U+10FFFF; a value that
     reaches it names no character.
 */
-static const uint pastLastCodePoint = 0x110000;
+static const uint pastLastCodePoint = uint(QChar::LastValidCodePoint) + 1;
 
 /*!
-    Builds the hexadecimal value of the @a count digits of @a text at
-    @a from (all of the hexadecimal digits there, when @a count is 0) into
-    @a value, and the number of digits it read into @a read; returns false
-    when a digit is missing. A value past U+10FFFF stays at
-    pastLastCodePoint, however many digits follow, rather than wrap.
+    Builds the value of @a c as a digit of @a base (8 or 16), or -1 for a
+    character that is no such digit.
 */
-static bool readHex(const QString & text, int from, int count, uint *value,
-                    int *read)
+int Config::Escape::digitOf(QChar c, int base)
+{
+    const ushort code = c.unicode();
+    int digit = -1;
+    if (code >= '0' && code <= '9') {
+        digit = code - '0';
+    } else if (code >= 'a' && code <= 'f') {
+        digit = code - 'a' + 10;
+    } else if (code >= 'A' && code <= 'F') {
+        digit = code - 'A' + 10;
+    }
+    return digit < base ? digit : -1;
+}
+
+/*!
+    Builds the value of the @a count digits of @a base (8 or 16) of @a text
+    at @a from (all of its digits there, when @a count is 0) into @a value,
+    and the number of digits it read into @a read; returns false when a
+    digit is missing. A value past U+10FFFF stays right past it, however
+    many digits follow, rather than wrap (see isCodePoint()).
+*/
+bool Config::Escape::readDigits(const QString & text, int from, int base,
+                                int count, uint *value, int *read)
 {
     *value = 0;
     *read = 0;
     while (from + *read < text.size() && (count == 0 || *read < count)) {
-        const int digit = hexDigit(text.at(from + *read));
+        const int digit = Config::Escape::digitOf(text.at(from + *read), base);
         if (digit < 0) {
             break;
         }
-        *value = qMin(*value * 16 + uint(digit), pastLastCodePoint);
+        *value = qMin(*value * uint(base) + uint(digit), pastLastCodePoint);
         ++*read;
     }
     return *read > 0 && (count == 0 || *read == count);
+}
+
+/*!
+    Tells whether @a value names a character of Unicode, U+10FFFF at most.
+*/
+bool Config::Escape::isCodePoint(uint value)
+{
+    return value < pastLastCodePoint;
+}
+
+/*!
+    Tells whether @a text is one text in double quotes, whose closing quote
+    ends it (a `\` taking the character after it along); a text of two
+    quoted parts, such as `"a" "b"`, is not.
+*/
+bool Config::Escape::isQuoted(const QString & text)
+{
+    if (text.size() < 2 || ! text.startsWith(QLatin1Char('"'))) {
+        return false;
+    }
+    int i = 1;
+    while (i < text.size() && text.at(i) != QLatin1Char('"')) {
+        i += text.at(i) == QLatin1Char('\\') ? 2 : 1;
+    }
+    return i == text.size() - 1;
+}
+
+/*!
+    Builds into @a value the text in double quotes @a text stands for, its
+    escapes decoded (see decode()), or @a text as it is when it is no such
+    text (see isQuoted()); returns false, with @a error, for a bad escape.
+*/
+bool Config::Escape::unquote(const QString & text, QString *value,
+                             QString *error)
+{
+    if ( ! Config::Escape::isQuoted(text)) {
+        *value = text;
+        return true;
+    }
+    return Config::Escape::decode(text.mid(1, text.size() - 2), value, error);
 }
 
 /*!
@@ -126,17 +165,10 @@ bool Config::Escape::decode(const QString & text, QString *decoded,
         }
 
         // Decodes an octal escape of one to three digits.
-        if (next >= QLatin1Char('0') && next <= QLatin1Char('7')) {
+        if (Config::Escape::digitOf(next, 8) >= 0) {
             uint value = 0;
             int read = 0;
-            while (read < 3
-                && i + read < text.size()
-                && text.at(i + read) >= QLatin1Char('0')
-                && text.at(i + read) <= QLatin1Char('7')
-            ) {
-                value = value * 8 + uint(text.at(i + read).unicode() - '0');
-                ++read;
-            }
+            Config::Escape::readDigits(text.mid(i, 3), 0, 8, 0, &value, &read);
             out += QChar(ushort(value));
             i += read - 1;
             continue;
@@ -153,14 +185,14 @@ bool Config::Escape::decode(const QString & text, QString *decoded,
         }
         uint value = 0;
         int read = 0;
-        if ( ! readHex(text, i + 1, count, &value, &read)) {
+        if ( ! Config::Escape::readDigits(text, i + 1, 16, count, &value, &read)) {
             *error = count == 0
                 ? QString(QLL("%1: \\x needs hexadecimal digits")).arg(text)
                 : QString(QLL("%1: \\%2 needs %3 hexadecimal digits"))
                     .arg(text, QString(next), QString::number(count));
             return false;
         }
-        if (value >= pastLastCodePoint) {
+        if ( ! Config::Escape::isCodePoint(value)) {
             *error = QString(QLL("%1: \\%2%3 is past U+10FFFF")).arg(
                 text,
                 QString(next),

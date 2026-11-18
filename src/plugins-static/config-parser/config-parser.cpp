@@ -159,9 +159,7 @@ static QString iniKey(const QByteArray & text)
         const int first = i + (wide ? 2 : 1);
         bool ok = first + digits <= text.size();
         for (int d = first; ok && d < first + digits; ++d) {
-            const char h = text.at(d);
-            ok = (h >= '0' && h <= '9') || (h >= 'a' && h <= 'f')
-                || (h >= 'A' && h <= 'F');
+            ok = Config::Escape::digitOf(QLatin1Char(text.at(d)), 16) >= 0;
         }
         if ( ! ok) {
             run += '%';
@@ -234,28 +232,29 @@ static QString iniValue(const QByteArray & text)
             chopLimit = value.size();
             continue;
         }
-        if (escaped == 'x' || (escaped >= '0' && escaped <= '7')) {
-            // Reads every digit; a code point past U+10FFFF, which names
-            // no character, stands as U+FFFD.
-            const uint base = escaped == 'x' ? 16 : 8;
-            uint codePoint = escaped == 'x' ? 0 : uint(escaped - '0');
-            bool digits = escaped != 'x';
-            while (i < text.size()) {
-                bool ok = false;
-                const uint digit = QByteArray(1, text.at(i)).toUInt(&ok, base);
-                if ( ! ok) {
-                    break;
-                }
-                codePoint = qMin(codePoint * base + digit, uint(0x110000));
-                digits = true;
-                ++i;
-            }
-            if (digits) {
+        const bool isHex = escaped == 'x';
+        if (isHex || Config::Escape::digitOf(QLatin1Char(escaped), 8) >= 0) {
+            // Reads every digit, an octal escape's first one included; a
+            // code point past U+10FFFF, which names no character, stands as
+            // U+FFFD.
+            const int from = isHex ? i : i - 1;
+            uint codePoint = 0;
+            int read = 0;
+            if (Config::Escape::readDigits(
+                    QString::fromLatin1(text),
+                    from,
+                    isHex ? 16 : 8,
+                    0,
+                    &codePoint,
+                    &read
+                )
+            ) {
                 Config::Escape::appendCodePoint(
                     &value,
-                    codePoint > 0x10FFFF ? 0xFFFD : codePoint
+                    Config::Escape::isCodePoint(codePoint) ? codePoint : 0xFFFD
                 );
             }
+            i = from + read;
         }
         chopLimit = value.size();
     }
@@ -298,22 +297,6 @@ bool Config::Parser::readFile(const QString & file, QString *error)
 }
 
 /*!
-    Tells whether @a value is one text in double quotes, whose closing quote
-    ends it; a value of two quoted parts, such as `"a" "b"`, is not.
-*/
-static bool isAllQuoted(const QString & value)
-{
-    if (value.size() < 2 || ! value.startsWith(QLatin1Char('"'))) {
-        return false;
-    }
-    int i = 1;
-    while (i < value.size() && value.at(i) != QLatin1Char('"')) {
-        i += value.at(i) == QLatin1Char('\\') ? 2 : 1;
-    }
-    return i == value.size() - 1;
-}
-
-/*!
     Reads the `.ini` text @a data over the settings so far, line by line,
     naming @a origin in an error; returns false for a key or a value that
     the schema does not take.
@@ -332,21 +315,21 @@ bool Config::Parser::readData(const QByteArray &data, const QString &origin,
     text.replace("\r\n", "\n");
     text.replace('\r', '\n');
     QString section;
+    QByteArray line;
     int from = 0;
     while (from < text.size()) {
+        // Takes the next line onto the ones the line before goes on in.
         int next = text.indexOf('\n', from);
         next = next < 0 ? text.size() : next + 1;
-        QByteArray line = text.mid(from, next - from);
-        while (continuesOnNextLine(line) && next < text.size()) {
-            from = next;
-            next = text.indexOf('\n', from);
-            next = next < 0 ? text.size() : next + 1;
-            line += text.mid(from, next - from);
-        }
+        line += text.mid(from, next - from);
         from = next;
+        if (continuesOnNextLine(line) && from < text.size()) {
+            continue;
+        }
         if ( ! this->readLine(line, &section, origin, error)) {
             return false;
         }
+        line.clear();
     }
     return true;
 }
@@ -388,27 +371,30 @@ bool Config::Parser::readLine(const QByteArray & line, QString *section,
     const int equals = scan.equals;
     const int end = scan.comment;
 
-    // Starts a section.
-    if (text.startsWith('[')) {
-        const int close = text.indexOf(']');
-        if (close < 0
+    // Rejects a line that is neither a whole section line nor a
+    // `<key> = <value>` one.
+    const bool isSection = text.startsWith('[');
+    const int close = isSection ? text.indexOf(']') : -1;
+    const bool isBad = isSection
+        ? close < 0
             || close > end
             || ! text.mid(close + 1, end - close - 1).trimmed().isEmpty()
-        ) {
-            *error = origin + QLL(": not a [<section>] line: ")
-                + QString::fromUtf8(text.left(end).trimmed());
-            return false;
-        }
+        : equals <= 0;
+    if (isBad) {
+        *error = QString(QLL("%1: not a %2 line: ")).arg(
+            origin,
+            QLatin1String(isSection ? "[<section>]" : "<key> = <value>")
+        ) + QString::fromUtf8(text.left(end).trimmed());
+        return false;
+    }
+
+    // Starts a section.
+    if (isSection) {
         *section = iniKey(text.mid(1, close - 1).trimmed());
         if (section->compare(QLL("General"), Qt::CaseInsensitive) == 0) {
             section->clear();
         }
         return true;
-    }
-    if (equals <= 0) {
-        *error = origin + QLL(": not a <key> = <value> line: ")
-            + QString::fromUtf8(text.left(end).trimmed());
-        return false;
     }
 
     // Splits the key from its section, as a `/` in the key names a deeper one.
@@ -426,13 +412,7 @@ bool Config::Parser::readLine(const QByteArray & line, QString *section,
 
     // Decodes a value all in double quotes.
     QString reason;
-    if (isAllQuoted(value)
-        && ! Config::Escape::decode(
-            value.mid(1, value.size() - 2),
-            &value,
-            &reason
-        )
-    ) {
+    if ( ! Config::Escape::unquote(value, &value, &reason)) {
         *error = origin + QLL(": ") + shown + QLL(": ") + reason;
         return false;
     }
@@ -656,17 +636,10 @@ bool Config::Parser::assign(const QString & assignment, QString *error)
 
     // Reads a value in double quotes as a C++ string literal, and leaves any
     // other value as it is.
-    if (isAllQuoted(value)) {
-        QString reason;
-        if ( ! Config::Escape::decode(
-                value.mid(1, value.size() - 2),
-                &value,
-                &reason
-            )
-        ) {
-            *error = name + QLL(": ") + reason;
-            return false;
-        }
+    QString reason;
+    if ( ! Config::Escape::unquote(value, &value, &reason)) {
+        *error = name + QLL(": ") + reason;
+        return false;
     }
     return this->set(name, name, value, error);
 }

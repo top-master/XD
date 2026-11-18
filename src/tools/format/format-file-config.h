@@ -54,11 +54,10 @@ public:
     static QStringList superConditionNames();
     static QStringList superChoices();
     static QStringList lintLevels();
-    static LintLevel lintLevel(const QString & value, const QStringList & standards,
-                               const QStringList & compilers);
+    static LintLevel lintLevel(const QString & value,
+                               const FormatFileConfig & config);
     static QString inlineMarker(const QString & value,
-                                const QStringList & standards,
-                                const QStringList & compilers);
+                                const FormatFileConfig & config);
     static QStringList replaceTargetNames();
     bool acceptsFile(const QString &path) const;
     static Config::Schema schema();

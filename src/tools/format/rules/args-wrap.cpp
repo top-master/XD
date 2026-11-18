@@ -54,32 +54,6 @@
 */
 
 /*!
-    Tells whether the user already broke the list from the token @a open of
-    @a document to its closing token @a close, whose items are
-    @a arguments, over lines between its items: the list spans lines, and
-    each item sits whole on one line.
-*/
-static bool isBrokenBetweenItems(
-        const FormatDocument *document,
-        int open,
-        int close,
-        const QList<QPair<int, int > > & arguments)
-{
-    if (document->symbolLine(open) == document->symbolLine(close)) {
-        return false;
-    }
-    for (int i = 0; i < arguments.size(); ++i) {
-        const QPair<int, int > & item = arguments.at(i);
-        if (document->symbolLine(item.first)
-            != document->symbolEndLine(item.second)
-        ) {
-            return false;
-        }
-    }
-    return true;
-}
-
-/*!
     Finds a logical operator before the call at @a open whose break keeps
     both resulting lines within wrapMax. Gives its token and the indentation
     of its continuation line; leaves comments, directives and already split
@@ -298,15 +272,12 @@ void FormatArgsWrapRule::run(FormatDocument *document) const
         // Writes the list as the layout breaks it, keeping the items the
         // user put on one line together, unless `[Structure] target` asks
         // to lay the code out anew.
-        const bool keepsLines =
-            fileConfig.codeTarget == FormatFileConfig::CodeTargetLong
-            && isBrokenBetweenItems(document, i, close, arguments);
         const QByteArray text = layout.layoutList(
             i,
             i,
             close,
             column,
-            keepsLines
+            fileConfig.codeTarget == FormatFileConfig::CodeTargetLong
         );
         const int length = (hugsHead
             ? document->symbols().at(headClose).from

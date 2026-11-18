@@ -122,13 +122,7 @@ QVariant FormatConditionObject::argCount(int depth, int argument)
 */
 QVariant FormatConditionObject::hasStd(const QString & standard)
 {
-    const FormatConditionContext *format =
-        static_cast<const FormatConditionContext * >(this->context());
-    bool value = false;
-    if ( ! format || ! format->hasStandard(standard, &value)) {
-        return QVariant();
-    }
-    return value;
+    return this->ask(&FormatConditionContext::hasStandard, standard);
 }
 
 /*!
@@ -138,10 +132,21 @@ QVariant FormatConditionObject::hasStd(const QString & standard)
 */
 QVariant FormatConditionObject::hasCompiler(const QString & compiler)
 {
+    return this->ask(&FormatConditionContext::hasCompiler, compiler);
+}
+
+/*!
+    Builds the answer of the context at the place to @a question about
+    @a name, or an invalid value where the place has no such context, or
+    the context does not know the answer.
+*/
+QVariant FormatConditionObject::ask(Question question,
+                                    const QString & name) const
+{
     const FormatConditionContext *format =
         static_cast<const FormatConditionContext * >(this->context());
     bool value = false;
-    if ( ! format || ! format->hasCompiler(compiler, &value)) {
+    if ( ! format || ! (format->*question)(name, &value)) {
         return QVariant();
     }
     return value;

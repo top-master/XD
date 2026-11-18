@@ -1469,6 +1469,11 @@ void dispatch()
 }
 
 // CASE	args-wrap-user-lines.cpp	args-wrap,condition-close		1
+// @formatter:
+// ```
+// [Structure]
+// wrapArgsOver = 3
+// ```
 QString markerOf(const QString & text, Context *context)
 {
     QString marker;

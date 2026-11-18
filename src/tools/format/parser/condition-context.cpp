@@ -71,13 +71,34 @@ bool FormatConditionContext::isWrapping(bool *) const
 }
 
 /*!
-    Tells in @a value whether the project targets the C++ standard
-    @a standard, such as `C++11` (see `[Lint] standards`); returns false
-    when the place does not know the project's standards.
+    Tells in @a value whether the list @a list of @a config holds @a name,
+    in any case; returns false without @a config.
 */
-bool FormatConditionContext::hasStandard(const QString &, bool *) const
+static bool listsName(const FormatFileConfig *config,
+                      QStringList FormatFileConfig::*list,
+                      const QString & name, bool *value)
 {
-    return false;
+    if ( ! config) {
+        return false;
+    }
+    *value = (config->*list).contains(name, Qt::CaseInsensitive);
+    return true;
+}
+
+/*!
+    Tells in @a value whether the project targets the C++ standard
+    @a standard, such as `C++11`, in any case (see `[Lint] standards`), from
+    the settings of the place (see fileConfig()); returns false when the
+    place names no settings.
+*/
+bool FormatConditionContext::hasStandard(const QString & standard, bool *value) const
+{
+    return listsName(
+        this->fileConfig(),
+        &FormatFileConfig::standards,
+        standard,
+        value
+    );
 }
 
 /*!
@@ -88,12 +109,12 @@ bool FormatConditionContext::hasStandard(const QString &, bool *) const
 */
 bool FormatConditionContext::hasCompiler(const QString & compiler, bool *value) const
 {
-    const FormatFileConfig *config = this->fileConfig();
-    if ( ! config) {
-        return false;
-    }
-    *value = config->compilers.contains(compiler, Qt::CaseInsensitive);
-    return true;
+    return listsName(
+        this->fileConfig(),
+        &FormatFileConfig::compilers,
+        compiler,
+        value
+    );
 }
 
 /*!

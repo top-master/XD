@@ -8,6 +8,7 @@
 
 #include <QtCore/QVariant>
 
+class FormatConditionContext;
 class FormatSettingsObject;
 
 class FormatConditionObject : public Config::Object
@@ -32,6 +33,11 @@ public slots:
     QVariant hasCompiler(const QString & compiler);
 
 private:
+    typedef bool (FormatConditionContext::*Question)(
+            const QString & name, bool *value) const;
+
+    QVariant ask(Question question, const QString & name) const;
+
     FormatSettingsObject *m_settings;
 };
 
