@@ -4011,7 +4011,7 @@ void tst_FormatRules::testLayoutConfig_shouldResolveConditionAndSubchainOptions(
     ));
     QVERIFY2(parser.readData(
         "[Code]\ncompilers = [win32-msvc2010, linux-g++]\n"
-        "[Lint]\nbyRefVariable = hasCompiler(\"WIN32-MSVC2010\") ? error : ignore\n",
+        "[Lint]\nbyRefVariable = hasCompiler(\"WIN32-MSVC2010\") ? \"error\" : ignore\n",
         QLL("inline"), &error
     ), qPrintable(error));
     QVERIFY(readSettings(parser, &config));

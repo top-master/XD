@@ -358,15 +358,16 @@ bool Config::Parser::readLine(const QByteArray & line, QString *section,
     const QString name = sectionName + QLatin1Char('.') + key;
     const QString shown = QString(QLL("[%1] %2")).arg(sectionName, key);
     QString value;
-    const Config::Key key = this->m_schema.key(name);
+    const Config::Key schemaKey = this->m_schema.key(name);
     bool keepsText = false;
-    for (int m = 0; m < key.matchers.size() && ! keepsText; ++m) {
-        keepsText = key.matchers.at(m)->keepsText();
+    for (int m = 0; m < schemaKey.matchers.size() && ! keepsText; ++m) {
+        keepsText = schemaKey.matchers.at(m)->keepsText();
     }
-    if (key.open || keepsText) {
-        value = QString::fromUtf8(key.open ? text.mid(equals + 1)
-                                           : text.mid(equals + 1, end - equals - 1))
-            .trimmed();
+    if (schemaKey.open || keepsText) {
+        value = QString::fromUtf8(
+            schemaKey.open ? text.mid(equals + 1)
+                           : text.mid(equals + 1, end - equals - 1)
+        ).trimmed();
         if (value.size() >= 2 && value.startsWith(QLatin1Char('"'))
             && value.endsWith(QLatin1Char('"'))
         ) {
@@ -705,13 +706,18 @@ bool Config::Parser::set(
         return true;
     }
     QStringList choices;
+    QString reason;
     for (int i = 0; i < key.matchers.size(); ++i) {
         choices << key.matchers.at(i)->describe();
+        if (reason.isEmpty()) {
+            reason = key.matchers.at(i)->explain(value);
+        }
     }
-    *error = QString(QLL("%1 = %2: use %3")).arg(
+    *error = QString(QLL("%1 = %2: use %3%4")).arg(
         shown,
         value,
-        choices.join(QString(QLL(" or ")))
+        choices.join(QString(QLL(" or "))),
+        reason.isEmpty() ? QString() : QString(QLL("; ")) + reason
     );
     return false;
 }

@@ -30,3 +30,14 @@ bool Config::ValueMatcher::keepsText() const
 {
     return false;
 }
+
+/*!
+    Builds why this matcher does not take @a value, for the error of a value
+    no matcher of the key takes, such as an undefined name a sign follows;
+    empty when the description of the values it takes says enough (see
+    describe()).
+*/
+QString Config::ValueMatcher::explain(const QString &) const
+{
+    return QString();
+}

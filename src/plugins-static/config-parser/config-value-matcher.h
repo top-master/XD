@@ -28,6 +28,7 @@ public:
     virtual QString describe() const = 0;
 
     virtual bool keepsText() const;
+    virtual QString explain(const QString & value) const;
 };
 
 typedef QList<QSharedPointer<const ValueMatcher > > Matchers;

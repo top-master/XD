@@ -97,6 +97,9 @@ private slots:
     void testTypes_shouldReachReturnedObjects();
     void testScopes_shouldOfferDynamicPropertiesAndPaths();
     void testParser_shouldKeepQuotesOfConditions();
+    void testChoice_shouldTakeUndefinedNamesAsText();
+    void testCondition_shouldDoMathOnMemberAnswers_data();
+    void testCondition_shouldDoMathOnMemberAnswers();
     void testScopes_shouldRunGlobalSetups();
     void testCondition_shouldHandleNameMismatch();
     void testCondition_shouldPassStrings();
@@ -1645,7 +1648,7 @@ void tst_ConfigParser::testParser_shouldKeepQuotesOfConditions()
         QString(QLL("pick")),
         Config::Matchers() << QSharedPointer<const Config::ValueMatcher >(
             new Config::Choice(QStringList() << QString(QLL("ready")),
-                               QStringList(), true)),
+                               QStringList())),
         QString()
     );
     section.addKey(QString(QLL("word")), QStringList() << QString(QLL("x y")),
@@ -1660,6 +1663,79 @@ void tst_ConfigParser::testParser_shouldKeepQuotesOfConditions()
     QCOMPARE(parser.value(QString(QLL("test.pick"))),
              QString(QLL("ready ? \"yes\" : \"no\"")));
     QCOMPARE(parser.value(QString(QLL("test.word"))), QString(QLL("x y")));
+}
+
+/// Lists math on the answers of members: a sum and a difference of two
+/// properties, a difference with a number, and a quotient.
+void tst_ConfigParser::testCondition_shouldDoMathOnMemberAnswers_data()
+{
+    QTest::addColumn<QString >("text");
+    QTest::addColumn<qreal >("expected");
+    QTest::newRow("subtracts from a property") << QString(QLL("stored - 1")) << qreal(3);
+    QTest::newRow("subtracts a property") << QString(QLL("placed - stored")) << qreal(5);
+    QTest::newRow("divides a property") << QString(QLL("stored / 2")) << qreal(2);
+    QTest::newRow("divides by a property") << QString(QLL("placed / stored")) << qreal(2.25);
+}
+
+/// Computes each row's math on the answers of a TestDynamicObject's
+/// properties (`stored` is 4, `placed` is 9).
+void tst_ConfigParser::testCondition_shouldDoMathOnMemberAnswers()
+{
+    QFETCH(QString, text);
+    QFETCH(qreal, expected);
+    const QSharedPointer<Config::Scopes::Scope > scope =
+        Config::Scopes::push();
+    scope->add(new TestDynamicObject);
+    QStringList program;
+    QString error;
+    QVERIFY2(Config::Condition::compile(
+        text, QStringList(), &program, &error, true
+    ), qPrintable(error));
+    TestArgumentContext context;
+    qreal result = 0;
+    QVERIFY(Config::Condition::value(
+        program, QSet<QString >(), &context, &result
+    ));
+    QCOMPARE(result, expected);
+}
+
+/// Takes a bare name that nothing defines as the text of a choice without
+/// words, and explains a sign after such a name, which needs quotes.
+void tst_ConfigParser::testChoice_shouldTakeUndefinedNamesAsText()
+{
+    const QStringList names = QStringList() << QString(QLL("ready"));
+    const Config::Choice choice(names, QStringList());
+    QString result;
+    QString error;
+    QVERIFY2(Config::Choice::resolve(
+        QString(QLL("true ? Q_DECL_OVERRIDE_IL : override")), names,
+        QStringList(), Q_NULLPTR, &result, &error
+    ), qPrintable(error));
+    QCOMPARE(result, QString(QLL("Q_DECL_OVERRIDE_IL")));
+    QString matched;
+    QVERIFY( ! choice.match(QString(QLL("true ? ready : other")), &matched));
+    QVERIFY(choice.match(QString(QLL("true ? \"win32-1\" : other")), &matched));
+    QVERIFY( ! choice.match(QString(QLL("true ? win32-1 : other")), &matched));
+    QCOMPARE(choice.explain(QString(QLL("true ? win32-1 : other"))),
+             QString(QLL("can't subtract `1` since `win32` is undefined.")));
+
+    // Reports the same reason as the setting's error.
+    Config::Schema schema;
+    Config::Section section(QString(QLL("Test")));
+    section.addKey(
+        QString(QLL("pick")),
+        Config::Matchers() << QSharedPointer<const Config::ValueMatcher >(
+            new Config::Choice(names, QStringList())),
+        QString()
+    );
+    schema.addSection(section);
+    Config::Parser parser(schema);
+    QVERIFY( ! parser.readData(
+        "[Test]\npick = true ? win32-1 : other\n", QLL("inline"), &error
+    ));
+    QVERIFY2(error.endsWith(QString(QLL(
+        "; can't subtract `1` since `win32` is undefined."
+    ))), qPrintable(error));
 }
 
 /// Adds the objects of a setup function to the global scope, at once when

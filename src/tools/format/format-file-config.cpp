@@ -563,7 +563,7 @@ Config::Schema FormatFileConfig::schema()
                 Config::Matchers() << Config::Name::create()
                     << Config::Word::create(QString())
                     << QSharedPointer<const Config::ValueMatcher >(
-                        new Config::Choice(QStringList(), QStringList(), true)),
+                        new Config::Choice(QStringList(), QStringList())),
                 QString(QLL("override")));
     schema.addSection(lint);
     return schema;
@@ -1120,7 +1120,7 @@ QString FormatFileConfig::inlineMarker(
     QString marker;
     QString error;
     if ( ! Config::Choice::resolve(text, QStringList(), QStringList(),
-                                   &context, &marker, &error, true)
+                                   &context, &marker, &error)
     ) {
         qWarning("Invalid [Lint] inlineOverride: %s", qPrintable(error));
         return QString(QLL("override"));
