@@ -1650,3 +1650,8 @@ void Runner::prepare(const Config &config, int i)
         const QString original = QDir::cleanPath(QFileInfo(config.scheduledFiles.at(i)).absoluteFilePath());
     }
 }
+// CASE	param-wrap-signature-at.cpp	param-wrap		1
+static bool isNumberMathChain(const FormatDocument *document, int first, int last)
+{
+    return first < last;
+}

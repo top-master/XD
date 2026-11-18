@@ -1795,3 +1795,9 @@ void Runner::prepare(const Config &config, int i)
         );
     }
 }
+// CASE	param-wrap-signature-at.cpp
+static bool isNumberMathChain(
+        const FormatDocument *document, int first, int last)
+{
+    return first < last;
+}

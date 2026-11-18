@@ -69,12 +69,16 @@
       `40%` without a `.formatrc`;
     * `wrapArgsAt` (`[Structure]`): where a call whose arguments do not fit
       one line breaks after its `(`, one argument per line (see
-      FormatArgsWrapRule), and where a declaration's parameter list past
-      `wrapMax` starts on the next line (see FormatParamWrapRule): a
-      condition like `wrapChainAt`, where a percent holds when the column of
-      the `(` is past that share of `wrapMax`. It follows `wrapChainAt`
-      until a `.formatrc` sets it, since an argument list is a chain of
-      commas;
+      FormatArgsWrapRule): a condition like `wrapChainAt`, where a percent
+      holds when the column of the `(` is past that share of `wrapMax`. It
+      follows `wrapChainAt` until a `.formatrc` sets it, since an argument
+      list is a chain of commas;
+    * `wrapSignatureAt` (`[Structure]`): `wrapArgsAt` for the parameter
+      list of a declaration or definition (a function, a method, or a
+      constructor), which past `wrapMax` starts on the next line where it
+      holds (see FormatParamWrapRule); the other `wrapArgs` keys still
+      apply there. `cfg.wrapArgsAt * 0.875` without a `.formatrc`, which
+      holds past 87.5% of the percent `wrapArgsAt` gives at the place;
     * `wrapArgsOver` (`[Structure]`): how many arguments, or parameters, a
       list holds at most before it may always break, whatever
       `wrapArgsAt` says (see FormatArgsWrapRule and FormatParamWrapRule).
@@ -147,6 +151,12 @@ static const char defaultReplaceSuperSitesText[] =
     wrapArgsAt` follows (see FormatFileConfig).
 */
 static const char defaultWrapChainAtText[] = "40%";
+
+/*!
+    Spells the default `[Structure] wrapSignatureAt` (see FormatFileConfig):
+    87.5% of the percent `[Structure] wrapArgsAt` gives at the place.
+*/
+static const char defaultWrapSignatureAtText[] = "cfg.wrapArgsAt * 0.875";
 
 /*!
     Spells the default `[Structure] wrapConditionsOver` (see
@@ -403,6 +413,13 @@ Config::Schema FormatFileConfig::schema()
                      QString::fromLatin1(defaultWrapChainAtText));
     structure
         .addFollower(QString(QLL("wrapArgsAt")), QString(QLL("wrapChainAt")));
+    structure.addKey(QString(QLL("wrapSignatureAt")),
+                     Config::Matchers()
+                         << Config::Condition::create(
+                             FormatScopeConditions::names(),
+                             true
+                         ),
+                     QString::fromLatin1(defaultWrapSignatureAtText));
     structure.addKey(QString(QLL("wrapArgsOver")),
                      Config::Matchers() << Config::Numbers::create(
                          1,
@@ -612,6 +629,21 @@ QStringList FormatFileConfig::defaultWrapChainAt()
 {
     QStringList program;
     compileCondition(QString::fromLatin1(defaultWrapChainAtText), &program, true);
+    return program;
+}
+
+/*!
+    Builds the program of the default `[Structure] wrapSignatureAt`, for
+    settings that no `.formatrc` set, and where a condition misses a value.
+*/
+QStringList FormatFileConfig::defaultWrapSignatureAt()
+{
+    QStringList program;
+    compileCondition(
+        QString::fromLatin1(defaultWrapSignatureAtText),
+        &program,
+        true
+    );
     return program;
 }
 
@@ -981,6 +1013,13 @@ bool FormatFileConfig::fromParser(
         && compileCondition(
             parser.value(QString(QLL("structure.wrapArgsAt"))),
             &fileConfig->wrapArgsAt,
+            true,
+            mismatch,
+            error
+        )
+        && compileCondition(
+            parser.value(QString(QLL("structure.wrapSignatureAt"))),
+            &fileConfig->wrapSignatureAt,
             true,
             mismatch,
             error

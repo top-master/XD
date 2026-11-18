@@ -283,9 +283,8 @@ moveSuffix = " "
   past it gets a line of its own. The default is `40%`; `0%` breaks before
   every operator, and `100%` only where the line would not fit.
 - `wrapArgsAt` (in `[Structure]`): where a call whose arguments do not fit
-  one line breaks after its `(`, and where the parameters of a declaration
-  that passes `wrapMax` start on the next line (see `args-wrap` and
-  `param-wrap` under "Laying out code" below): a condition like
+  one line breaks after its `(` (see `args-wrap` under "Laying out code"
+  below): a condition like
   `wrapChainAt`, whose percent holds when the column right after the `(` is
   past that share of `wrapMax`; with `wrapMax = 80`, `40%` holds from
   column 33 on. Until a `.formatrc` sets it, it follows `wrapChainAt` (an
@@ -299,6 +298,16 @@ moveSuffix = " "
   ; Breaks every wrapped call of a source file.
   wrapArgsAt = is-non-header
   ```
+- `wrapSignatureAt` (in `[Structure]`): `wrapArgsAt` for the parameters of
+  a declaration or definition (a function, a method, or a constructor),
+  which start on the next line where it holds once the line passes
+  `wrapMax` (see `param-wrap` under "Laying out code" below). The other
+  `wrapArgs` keys, such as `wrapArgsOver`, apply there as for a call. The
+  default is `cfg.wrapArgsAt * 0.875`: 87.5% of the percent `wrapArgsAt`
+  gives at that place, hence `35%` (column 29 on) while `wrapArgsAt` is
+  `40%`. A condition may read `cfg.wrapChainAt`, `cfg.wrapArgsAt`, and
+  `cfg.wrapSignatureAt` as such a percent, the one past which the key
+  holds at the place.
 - `wrapArgsOver` (in `[Structure]`): how many arguments, or parameters, a
   list holds at most before it may always break, whatever `wrapArgsAt`
   says; the default is `3`. It can also be a condition evaluated at the
@@ -380,7 +389,9 @@ moveSuffix = " "
 
   Any condition of the tool may read another `[Structure]` setting as
   `cfg.<key>`: the number that `wrapMax`, `wrapArgsOver`,
-  `wrapConditionsOver`, or `joinArgs` gives at that place. Hence
+  `wrapConditionsOver`, or `joinArgs` gives at that place, or the percent
+  past which `wrapChainAt`, `wrapArgsAt`, or `wrapSignatureAt` holds there.
+  Hence
   `wrapConditionsOver = cfg.wrapArgsOver` follows `wrapArgsOver`. A setting
   that reaches itself through `cfg` misses that value, just like a name
   that has no answer at the place.
@@ -709,8 +720,8 @@ The code rules lay out a few constructs on their own:
   steps (8 spaces) past the line it starts on, one parameter per line. A shorter one
   wraps after a comma, each line under the first parameter, as many per
   line as fit; it starts on the next line instead when the first parameter
-  does not fit under the `(`, or when `[Structure] wrapArgsAt` holds at the
-  `(`:
+  does not fit under the `(`, or when `[Structure] wrapSignatureAt` holds
+  at the `(`:
 
   ```
   void Widget::reloadEverythingNow(

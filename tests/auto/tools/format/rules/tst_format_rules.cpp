@@ -159,6 +159,7 @@ private slots:
     void testScopeConditions_shouldCountConditionOperands();
     void testScopeConditions_shouldLimitConditionRanges();
     void testScopeConditions_shouldReadSettingsThroughCfg();
+    void testScopeConditions_shouldPlaceSignaturesByWrapArgsAt();
     void testLayoutConfig_shouldResolveConditionAndSubchainOptions();
     void testLayoutHelpers_shouldRecognizeClosingBracketCombinations();
     void testArgsWrap_shouldFollowSettings_data();
@@ -3967,6 +3968,7 @@ void tst_FormatRules::testLayoutConfig_shouldResolveConditionAndSubchainOptions(
     QCOMPARE(config.wrapConditionsOver, 1);
     QVERIFY( ! config.wrapConditionsOverCondition.isEmpty());
     QCOMPARE(config.wrapConditionsPer, QString(QLL("pair-bundle")));
+    QVERIFY( ! config.wrapSignatureAt.isEmpty());
     QCOMPARE(config.wrapSubChain, QString(QLL("always")));
     QString error;
     QVERIFY2(parser.readData(
@@ -4066,6 +4068,33 @@ void tst_FormatRules::testScopeConditions_shouldLimitConditionRanges()
     config.wrapConditionsOver = 3;
     document.setConfig(config);
     QCOMPARE(conditions.conditionsLimit(open, 3, 50), 3);
+}
+
+/// Breaks a signature past 87.5% of the percent `wrapArgsAt` gives at its
+/// `(` by default (35% for the default 40%), and follows `wrapArgsAt` when a
+/// `.formatrc` changes it.
+void tst_FormatRules::testScopeConditions_shouldPlaceSignaturesByWrapArgsAt()
+{
+    FormatDocument document(
+        "static bool isReady(const Item *item, int first, int last);\n"
+    );
+    const int open = symbolIndex(document, "isReady") + 1;
+    FormatScopeConditions conditions(&document);
+    const QStringList fallback = FormatFileConfig::defaultWrapSignatureAt();
+    Config::Parser parser(FormatFileConfig::schema());
+    FormatFileConfig config;
+    QVERIFY(readSettings(parser, &config));
+    document.setConfig(config);
+    QVERIFY(conditions.holds(config.wrapSignatureAt, open, 36, fallback));
+    QVERIFY( ! conditions.holds(config.wrapSignatureAt, open, 34, fallback));
+    QString error;
+    QVERIFY2(parser.readData(
+        "[Structure]\nwrapArgsAt=80%\n", QLL("inline"), &error
+    ), qPrintable(error));
+    QVERIFY(readSettings(parser, &config));
+    document.setConfig(config);
+    QVERIFY(conditions.holds(config.wrapSignatureAt, open, 71, fallback));
+    QVERIFY( ! conditions.holds(config.wrapSignatureAt, open, 69, fallback));
 }
 
 /// Reads another `[Structure]` setting through `cfg`: a setting follows

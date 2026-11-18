@@ -9,6 +9,8 @@
 #include <QtCore/QStringList>
 #include <QtCore/QVariant>
 
+class FormatConditionContext;
+
 class FormatSettingsObject : public Config::Object
 {
     Q_OBJECT
@@ -18,6 +20,12 @@ public:
 
     static QStringList keys();
     QVariant dynamicValue(const QByteArray & name) const Q_DECL_OVERRIDE;
+
+private:
+    static QVariant threshold(
+            const QByteArray & name,
+            const QStringList & program,
+            const FormatConditionContext *place);
 };
 
 #endif // PARSER_SETTINGS_OBJECT_H

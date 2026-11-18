@@ -34,6 +34,7 @@ public:
         thisMode = FormatFileConfig::defaultThisMode();
         wrapChainAt = FormatFileConfig::defaultWrapChainAt();
         wrapArgsAt = FormatFileConfig::defaultWrapChainAt();
+        wrapSignatureAt = FormatFileConfig::defaultWrapSignatureAt();
         wrapConditionsOverCondition =
             FormatFileConfig::defaultWrapConditionsOver();
         bodyBraces << QString::fromLatin1("always");
@@ -60,6 +61,7 @@ public:
     static QString defaultReplaceSuperSites();
     static QStringList defaultThisMode();
     static QStringList defaultWrapChainAt();
+    static QStringList defaultWrapSignatureAt();
     static QStringList defaultWrapConditionsOver();
     static bool readConfig(Config::Parser *parser, const FormatConfig & config,
                            QString *error);
@@ -97,6 +99,7 @@ public:
     QStringList thisMode;
     QStringList wrapChainAt;
     QStringList wrapArgsAt;
+    QStringList wrapSignatureAt;
     QString extensions;
     QString typedefSuper;
     QString replaceSuperSites;

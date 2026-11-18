@@ -24,9 +24,10 @@
     parameter per line. A shorter list wraps after
     a comma, each line under the first parameter, as many parameters per
     line as fit; it starts on the next line instead when even the first
-    parameter does not fit under the `(`, or when `[Structure] wrapArgsAt`
-    holds at the `(` (whose percents compare the column after the `(` with
-    `wrapMax`, as for a call, see FormatArgsWrapRule). A function, a
+    parameter does not fit under the `(`, or when `[Structure]
+    wrapSignatureAt` holds at the `(` (whose percents compare the column
+    after the `(` with `wrapMax`, as `wrapArgsAt` does for a call, see
+    FormatArgsWrapRule). A function, a
     constructor, a destructor, and an operator count alike, at file,
     namespace, or class scope. A list the user already broke over lines
     keeps its line groups (see regroup()).
@@ -96,7 +97,7 @@ void FormatParamWrapRule::run(FormatDocument *document) const
 
             // Gives each of more than 3 parameters a line of its own, from
             // the next line; fills fewer under the first parameter, or else
-            // from the next line, which `wrapArgsAt` may ask for too.
+            // from the next line, which `wrapSignatureAt` may ask for too.
             QList<QByteArray > lines;
             const QByteArray head = prefix + items.first()
                 + (items.size() == 1 ? suffix : ",");
@@ -105,10 +106,10 @@ void FormatParamWrapRule::run(FormatDocument *document) const
                 limit
             );
             const bool breaksAfterOpen = conditions.holds(
-                fileConfig.wrapArgsAt,
+                fileConfig.wrapSignatureAt,
                 i,
                 percent,
-                FormatFileConfig::defaultWrapChainAt()
+                FormatFileConfig::defaultWrapSignatureAt()
             );
             if (conditions.argsOver(i, items.size())) {
                 const QByteArray pad = document->indentOf(line) + "        ";
@@ -160,8 +161,8 @@ void FormatParamWrapRule::run(FormatDocument *document) const
     its own two steps past the declaration's line, when every group fits
     that way; when one does not, the groups stay under the first parameter,
     and the last parameters of a group that does not fit go on to further
-    lines. Where `[Structure] wrapArgsAt` holds at the `(` (as @a conditions
-    evaluates it), the list breaks at its `(` in every case.
+    lines. Where `[Structure] wrapSignatureAt` holds at the `(` (as
+    @a conditions evaluates it), the list breaks at its `(` in every case.
 
     It leaves alone a declaration with fewer than 2 parameters, a parameter
     that spans lines, a comment, or a constructor's initializer list.
@@ -230,16 +231,16 @@ void FormatParamWrapRule::regroup(
         );
         const qreal percent = textWidth(prefix) * 100.0 / qMax(1, limit);
         const bool mustBreak = conditions->holds(
-            fileConfig.wrapArgsAt, i,
+            fileConfig.wrapSignatureAt, i,
             percent,
-            FormatFileConfig::defaultWrapChainAt()
+            FormatFileConfig::defaultWrapSignatureAt()
         );
 
         // Keeps the groups under the first parameter when they fit there and
         // stand right; else breaks at the `(` when the groups fit that way;
         // else moves the last parameters of a group that does not fit to a
-        // line of their own, under the first parameter (or, where `wrapArgsAt`
-        // holds, from the next line).
+        // line of their own, under the first parameter (or, where
+        // `wrapSignatureAt` holds, from the next line).
         const QByteArray breakPad = document->indentOf(line) + "        ";
         bool fitsUnder = false;
         bool fitsBroken = false;

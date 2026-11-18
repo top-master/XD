@@ -23,8 +23,9 @@
 
     A key answers the number its setting gives at the place (see
     dynamicValue()), from the settings that the place's
-    FormatConditionContext names, else nothing; the property's stored value
-    is the key's default, as the schema spells it.
+    FormatConditionContext names, else nothing; a key of percents, such as
+    `wrapArgsAt`, answers the percent past which it holds there (`40%`, for
+    one). Each property stores the default the schema spells for its key.
 */
 
 namespace {
@@ -35,6 +36,53 @@ namespace {
     through another key, answers nothing instead of looping.
 */
 Q_GLOBAL_STATIC(QThreadStorage<QSet<QByteArray > >, busyKeys)
+
+/*!
+    Answers a condition of percents at a place as @a place does, with
+    @a percent as the value of its percent terms; hence the condition can be
+    asked at every percent of the place.
+*/
+class PercentContext : public FormatConditionContext
+{
+    typedef FormatConditionContext super;
+public:
+    inline PercentContext(const FormatConditionContext *place, qreal percent)
+        : m_place(place), m_percent(percent)
+    {
+    }
+
+    inline bool predicate(const QString &name,
+                          bool *value) const Q_DECL_OVERRIDE
+    {
+        return m_place->predicate(name, value);
+    }
+
+    inline bool percent(qreal *value) const Q_DECL_OVERRIDE
+    {
+        *value = m_percent;
+        return true;
+    }
+
+    inline bool spaceRemaining(qreal *percent) const Q_DECL_OVERRIDE
+    {
+        return m_place->spaceRemaining(percent);
+    }
+
+    inline bool hasStandard(const QString & standard,
+                            bool *value) const Q_DECL_OVERRIDE
+    {
+        return m_place->hasStandard(standard, value);
+    }
+
+    inline const FormatFileConfig *fileConfig() const Q_DECL_OVERRIDE
+    {
+        return m_place->fileConfig();
+    }
+
+private:
+    const FormatConditionContext *m_place;
+    qreal m_percent;
+};
 
 } // namespace
 
@@ -58,13 +106,14 @@ FormatSettingsObject::FormatSettingsObject(QObject *parent)
 
 /*!
     Builds the `[Structure]` keys that `cfg` offers: each of them names a
-    setting that gives a number.
+    setting that gives a number, or a percent.
 */
 QStringList FormatSettingsObject::keys()
 {
     return QStringList() << QString(QLL("wrapMax"))
         << QString(QLL("wrapArgsOver")) << QString(QLL("wrapConditionsOver"))
-        << QString(QLL("joinArgs"));
+        << QString(QLL("joinArgs")) << QString(QLL("wrapChainAt"))
+        << QString(QLL("wrapArgsAt")) << QString(QLL("wrapSignatureAt"));
 }
 
 /*!
@@ -85,6 +134,21 @@ QVariant FormatSettingsObject::dynamicValue(const QByteArray & name) const
     }
     if (name == "wrapMax") {
         return fileConfig->wrapMax;
+    }
+    if (name == "wrapChainAt") {
+        return FormatSettingsObject::threshold(
+            name, fileConfig->wrapChainAt, format
+        );
+    }
+    if (name == "wrapArgsAt") {
+        return FormatSettingsObject::threshold(
+            name, fileConfig->wrapArgsAt, format
+        );
+    }
+    if (name == "wrapSignatureAt") {
+        return FormatSettingsObject::threshold(
+            name, fileConfig->wrapSignatureAt, format
+        );
     }
 
     // Picks the number and the condition of a count setting.
@@ -123,4 +187,44 @@ QVariant FormatSettingsObject::dynamicValue(const QByteArray & name) const
     );
     busy->remove(name);
     return ok ? QVariant(value) : QVariant();
+}
+
+/*!
+    Builds the percent past which the condition @a program of the key
+    @a name holds at the place that @a place answers, such as `40%`: one
+    less than the smallest whole percent, from 0 to 100, at which it holds,
+    else `100%`. Builds an invalid value where the condition misses a
+    value, or the key is already being evaluated (see dynamicValue()).
+*/
+QVariant FormatSettingsObject::threshold(
+        const QByteArray & name, const QStringList & program,
+        const FormatConditionContext *place)
+{
+    QSet<QByteArray > *busy = &(busyKeys()->localData());
+    if (busy->contains(name)) {
+        return QVariant();
+    }
+    busy->insert(name);
+    int holdsFrom = 101;
+    bool ok = true;
+    for (int percent = 0; percent <= 100 && ok; ++percent) {
+        const PercentContext context(place, percent);
+        if (Config::Condition::evaluate(
+                program,
+                QSet<QString >(),
+                &context,
+                &ok
+            )
+        ) {
+            holdsFrom = percent;
+            break;
+        }
+    }
+    busy->remove(name);
+    if ( ! ok) {
+        return QVariant();
+    }
+    return QString(
+        QString::number(qMin(holdsFrom - 1, 100)) + QLatin1Char('%')
+    );
 }
