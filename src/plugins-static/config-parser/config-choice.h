@@ -15,7 +15,6 @@ public:
     Choice(const QStringList &names, const QStringList &values);
     bool match(const QString &value, QString *matched) const Q_DECL_OVERRIDE;
     QString describe() const Q_DECL_OVERRIDE;
-    bool keepsText() const Q_DECL_OVERRIDE;
     QString explain(const QString & value) const Q_DECL_OVERRIDE;
     static bool resolve(const QString &expression, const QStringList &names,
                         const QStringList &values, const Evaluator::Context *context,

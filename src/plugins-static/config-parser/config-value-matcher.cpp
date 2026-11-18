@@ -21,17 +21,6 @@ Config::ValueMatcher::~ValueMatcher()
 }
 
 /*!
-    Tells whether this matcher reads a value as the file writes it, with its
-    double quotes, such as a condition that passes a text to a function
-    (`hasStd("C++11")`); an `.ini` line then keeps the value's quotes and
-    escapes for it. Most matchers read a value as `.ini` files spell one.
-*/
-bool Config::ValueMatcher::keepsText() const
-{
-    return false;
-}
-
-/*!
     Builds why this matcher does not take @a value, for the error of a value
     no matcher of the key takes, such as an undefined name a sign follows;
     empty when the description of the values it takes says enough (see

@@ -96,7 +96,7 @@ private slots:
     void testArrayObj_shouldOfferItems();
     void testTypes_shouldReachReturnedObjects();
     void testScopes_shouldOfferDynamicPropertiesAndPaths();
-    void testParser_shouldKeepQuotesOfConditions();
+    void testParser_shouldKeepQuotedPartsOfValues();
     void testChoice_shouldTakeUndefinedNamesAsText();
     void testCondition_shouldDoMathOnMemberAnswers_data();
     void testCondition_shouldDoMathOnMemberAnswers();
@@ -1638,9 +1638,10 @@ void tst_ConfigParser::testScopes_shouldOfferDynamicPropertiesAndPaths()
     ))->toBeFalsy();
 }
 
-/// Keeps the double quotes of a value whose matcher reads conditions, as
-/// their texts need them, while the `;` after it still starts a comment.
-void tst_ConfigParser::testParser_shouldKeepQuotesOfConditions()
+/// Keeps a part in double quotes inside a value as written, quotes included,
+/// as the reader of the value decodes it, while a value all in quotes loses
+/// them, and the `;` after a value still starts a comment.
+void tst_ConfigParser::testParser_shouldKeepQuotedPartsOfValues()
 {
     Config::Schema schema;
     Config::Section section(QString(QLL("Test")));

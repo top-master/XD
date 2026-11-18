@@ -33,7 +33,6 @@ public:
             Scopes::Setup setup = Q_NULLPTR);
     bool match(const QString & value, QString *matched) const Q_DECL_OVERRIDE;
     QString describe() const Q_DECL_OVERRIDE;
-    bool keepsText() const Q_DECL_OVERRIDE;
 
     static bool compile(const QString & text,
                         const QStringList & names,

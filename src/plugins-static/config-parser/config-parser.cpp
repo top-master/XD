@@ -140,8 +140,11 @@ static const char iniEscapes[][2] = {
 
 /*!
     Builds the value @a text of an `.ini` line (the bytes after its `=`),
-    as `.ini` files spell one: the spaces around it drop out, a part in
-    double quotes keeps its spaces and loses its quotes, and a `\` starts an
+    as `.ini` files spell one: the spaces around it drop out, a value all in
+    double quotes keeps its spaces and loses its quotes, and a part in double
+    quotes inside a value keeps its quotes and its text as written, for the
+    reader of the value to decode, such as the `"C++11"` of
+    `hasStd("C++11") ? warn : ignore`. Outside of quotes, a `\` starts an
     escape: `\a`, `\b`, `\f`, `\n`, `\r`, `\t`, `\v`, `\"`, `\?`, `\'`,
     `\\`, `\x<hex>...`, `\<octal>...`, an escaped line break (which drops
     out), or any other character (which drops out with it). A comma stays a
@@ -158,8 +161,30 @@ static QString iniValue(const QByteArray & text)
     while (i < text.size() && (text.at(i) == ' ' || text.at(i) == '\t')) {
         ++i;
     }
+
+    // Tells whether the whole value is one part in double quotes.
+    bool isAllQuoted = false;
+    if (i < text.size() && text.at(i) == '"') {
+        int close = i + 1;
+        while (close < text.size() && text.at(close) != '"') {
+            close += text.at(close) == '\\' ? 2 : 1;
+        }
+        isAllQuoted = close < text.size()
+            && text.mid(close + 1).trimmed().isEmpty();
+    }
     while (i < text.size()) {
         const char c = text.at(i++);
+
+        // Keeps a quoted part inside a value as written, quotes included.
+        if ( ! isAllQuoted && (inQuotes || c == '"')) {
+            run += c;
+            if (c == '"') {
+                inQuotes = ! inQuotes;
+            } else if (c == '\\' && i < text.size()) {
+                run += text.at(i++);
+            }
+            continue;
+        }
         if (c != '\\' && c != '"') {
             run += c;
             continue;
@@ -305,10 +330,8 @@ bool Config::Parser::readData(QIODevice *device, const QString &origin,
     A key of an open section (see Config::Section::setOpen()) keeps its own
     spelling and each line it is given on, in order; its value in double
     quotes takes the escapes of a C++ string literal, as an assignment's
-    does. So does the value of a key whose matcher keeps its text (see
-    Config::ValueMatcher::keepsText()), such as a condition that passes
-    texts in double quotes. Any other key takes its value the way `.ini`
-    files spell one (see iniValue()), and the latest line of a key wins. A line that starts with
+    does. Any other key takes its value the way `.ini` files spell one (see
+    iniValue()), and the latest line of a key wins. A line that starts with
     `;` or `#` is a comment, and a `;` outside double quotes starts one.
 */
 bool Config::Parser::readLine(const QByteArray & line, QString *section,
@@ -358,16 +381,8 @@ bool Config::Parser::readLine(const QByteArray & line, QString *section,
     const QString name = sectionName + QLatin1Char('.') + key;
     const QString shown = QString(QLL("[%1] %2")).arg(sectionName, key);
     QString value;
-    const Config::Key schemaKey = this->m_schema.key(name);
-    bool keepsText = false;
-    for (int m = 0; m < schemaKey.matchers.size() && ! keepsText; ++m) {
-        keepsText = schemaKey.matchers.at(m)->keepsText();
-    }
-    if (schemaKey.open || keepsText) {
-        value = QString::fromUtf8(
-            schemaKey.open ? text.mid(equals + 1)
-                           : text.mid(equals + 1, end - equals - 1)
-        ).trimmed();
+    if (this->m_schema.key(name).open) {
+        value = QString::fromUtf8(text.mid(equals + 1)).trimmed();
         if (value.size() >= 2 && value.startsWith(QLatin1Char('"'))
             && value.endsWith(QLatin1Char('"'))
         ) {

@@ -545,15 +545,6 @@ bool ExpressionCompiler::call(const QString &name)
 */
 
 /*!
-    Tells that a condition keeps its double quotes, as its texts are the
-    arguments of its calls.
-*/
-bool Config::Condition::keepsText() const
-{
-    return true;
-}
-
-/*!
     Builds the matcher of a condition over the names @a names; when given,
     @a setup adds the objects whose names only this key's conditions may call
     to a scope the matcher pushes while it matches (see Scopes::push()).

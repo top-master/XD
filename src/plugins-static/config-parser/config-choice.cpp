@@ -240,15 +240,6 @@ bool Config::Choice::match(const QString &value, QString *matched) const
 }
 
 /*!
-    Tells that a choice keeps its double quotes, as its condition and its
-    texts need them.
-*/
-bool Config::Choice::keepsText() const
-{
-    return true;
-}
-
-/*!
     Builds why the choice does not take @a value, such as a bare branch
     with signs after a name nothing defines, or a condition that does not
     compile; empty when it takes it, or no reason is known.
