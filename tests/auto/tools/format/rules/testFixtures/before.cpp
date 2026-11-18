@@ -1505,3 +1505,130 @@ void dispatch()
         send();
     }
 }
+// CASE	condition-per-line.cpp	line-join,condition-wrap,condition-close		1
+// @formatter:
+// ```
+// [Structure]
+// target = any
+// wrapBegin = 50
+// wrapConditionsPer = line
+// ```
+void dispatch()
+{
+    if (ready && (kind == CLASS || kind == STRUCT) && parcelIsAvailable()) {
+        send();
+    }
+}
+// CASE	condition-per-pair.cpp	line-join,condition-wrap,condition-close		1
+// @formatter:
+// ```
+// [Structure]
+// target = any
+// wrapBegin = 50
+// wrapConditionsPer = pair
+// ```
+void dispatch()
+{
+    if (ready && (kind == CLASS || kind == STRUCT) && parcelIsAvailable()) {
+        send();
+    }
+}
+// CASE	condition-per-bundle.cpp	line-join,condition-wrap,condition-close		1
+// @formatter:
+// ```
+// [Structure]
+// target = any
+// wrapBegin = 50
+// wrapConditionsPer = pair-bundle
+// ```
+void dispatch()
+{
+    if (ready && (kind == CLASS || kind == STRUCT) && parcelIsAvailable()) {
+        send();
+    }
+}
+// CASE	condition-per-bundle-call.cpp	line-join,condition-wrap,condition-close		1
+// @formatter:
+// ```
+// [Structure]
+// target = any
+// wrapBegin = 50
+// wrapConditionsOver = 3
+// wrapConditionsPer = pair-bundle
+// ```
+void dispatch()
+{
+    if (ready && valid && checkAll(alpha || beta || gamma)) {
+        send();
+    }
+}
+// CASE	condition-per-root.cpp	line-join,condition-wrap,condition-close		1
+// @formatter:
+// ```
+// [Structure]
+// target = any
+// wrapBegin = 50
+// wrapConditionsOver = 3
+// wrapConditionsPer = pair-root
+// ```
+void dispatch()
+{
+    if (ready && valid && checkAll(alpha || beta || gamma)) {
+        send();
+    }
+}
+// CASE	condition-closers-line.cpp	line-join,condition-wrap,condition-close		1
+// @formatter:
+// ```
+// [Structure]
+// wrapConditionsPer = line
+// ```
+void move(const Edit &edit, int end, int offset, bool isStart)
+{
+    for (;;) {
+        if (end < offset || (end == offset && (edit.length > 0 || isStart))) {
+            moved();
+        }
+    }
+}
+// CASE	condition-closers-bundle.cpp	line-join,condition-wrap,condition-close		1
+// @formatter:
+// ```
+// [Structure]
+// wrapConditionsPer = pair-bundle
+// ```
+void move(const Edit &edit, int end, int offset, bool isStart)
+{
+    for (;;) {
+        if (end < offset || (end == offset && (edit.length > 0 || isStart))) {
+            moved();
+        }
+    }
+}
+// CASE	operator-first-access-label.cpp	operator-first		1
+class Matcher : public Base
+{
+public:
+    bool match(const QString &value, QString *matched) const Q_DECL_OVERRIDE
+    {
+        if (value.isEmpty()) {
+            return false;
+        } else {
+            check(value);
+        }
+        *matched = value;
+        return true;
+    }
+};
+// CASE	operator-wrap-before-call.cpp	operator-wrap		1
+void Runner::prepare(Config &config)
+{
+    config.snapshotManifest = this->m_snapshotDirectory->path() + QLL("/manifest");
+}
+// CASE	operator-wrap-member-call.cpp	operator-wrap		1
+void Runner::prepare(const Config &config, int i)
+{
+    for (;;) {
+        const QString original = QDir::cleanPath(QFileInfo(config.scheduledFiles.at(i)).absoluteFilePath());
+    }
+}

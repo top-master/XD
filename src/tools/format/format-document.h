@@ -99,6 +99,7 @@ public:
     int match(int index) const;
     int symbolAfter(int offset) const;
     int headStart(int index) const;
+    bool isAccessLabel(int colon) const;
     Scope scopeOf(int index) const;
     Scope braceScope(int index) const;
     int firstSymbolOfLine(int line) const;

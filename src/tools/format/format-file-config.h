@@ -37,6 +37,7 @@ public:
         typedefSuper = FormatFileConfig::defaultTypedefSuper();
         replaceSuperSites = FormatFileConfig::defaultReplaceSuperSites();
         wrapSubChain = QString::fromLatin1("always");
+        wrapConditionsPer = QString::fromLatin1("pair-bundle");
     }
 
     static QString fileName();
@@ -68,6 +69,7 @@ public:
     QStringList wrapArgsOverCondition;
     int wrapConditionsOver;
     QStringList wrapConditionsOverCondition;
+    QString wrapConditionsPer;
     int joinArgs;
     QStringList joinArgsCondition;
     QString wrapSubChain;

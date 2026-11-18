@@ -151,11 +151,7 @@ FormatClassMembers collectMembers(
         const int i = tokens.at(t);
         const Token token = document->token(i);
         if (token == SEMIC || token == RBRACE || (token == LBRACE && document->match(i) > i)
-            || (token == COLON && (document->token(i - 1) == PUBLIC
-                || document->token(i - 1) == PRIVATE
-                || document->token(i - 1) == PROTECTED
-                || document->token(i - 1) == SLOTS
-                || document->token(i - 1) == SIGNALS))
+            || document->isAccessLabel(i)
         ) {
             isStatic = false;
             skip = false;

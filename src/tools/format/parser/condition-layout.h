@@ -6,6 +6,7 @@
 
 #include <QtCore/QByteArray>
 #include <QtCore/QList>
+#include <QtCore/QSet>
 
 class FormatDocument;
 class FormatScopeConditions;
@@ -26,8 +27,10 @@ public:
     QList<int > operators(int open, int close) const;
 
 private:
+    QSet<int > forcedOperators(int open, int close) const;
     QByteArray group(int open, int close, int indent, int column,
-                     bool isCondition) const;
+                     bool isCondition, const QSet<int > & forced,
+                     int trailing) const;
     QByteArray atom(int first, int last, int indent, int column,
                     bool *isComplex) const;
     QList<QByteArray > headLines(

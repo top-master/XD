@@ -9,6 +9,7 @@
 #include "./layout-helpers.h"
 #include "./scope-conditions.h"
 
+#include <QtCore/QHash>
 #include <QtCore/QPair>
 
 /*!
@@ -53,7 +54,139 @@ QByteArray FormatConditionLayout::layoutCondition(
         int open, int close,
         int indent, int column) const
 {
-    return this->group(open, close, indent, column, true);
+    return this->group(
+        open,
+        close,
+        indent,
+        column,
+        true,
+        this->forcedOperators(open, close),
+        0
+    );
+}
+
+namespace {
+
+/*!
+    Names a range of a condition's operands (see `[Structure]
+    wrapConditionsPer`): the `(` or `[` that opens it, and the argument of
+    that bracket's call it covers, or -1 for all of the bracket.
+*/
+typedef QPair<int, int > ConditionRange;
+
+/*!
+    Tells whether the `(` or `[` at @a open of @a document holds the
+    arguments of a call, or an index, rather than a group of operands: a `[`
+    always does, and so does a `(` right after a name, a `>`, or a `)`.
+*/
+static bool opensCall(const FormatDocument *document, int open)
+{
+    if (document->token(open) == LBRACK) {
+        return true;
+    }
+    switch (document->token(open - 1)) {
+    case IDENTIFIER:
+    case RPAREN:
+    case RBRACK:
+    case RANGLE:
+    case GTGT:
+        return true;
+    default:
+        return false;
+    }
+}
+
+} // namespace
+
+/*!
+    Builds the `&&` and `||` tokens of the condition from the `(` at
+    @a open to the `)` at @a close that break whatever the width, since
+    their range holds more operands than `[Structure] wrapConditionsOver`
+    allows (see FormatScopeConditions::conditionsLimit()). The range of an
+    operator is, by `[Structure] wrapConditionsPer`:
+
+    * `pair`: the closest brackets around it, or its argument of them when
+      they are a call's;
+    * `pair-bundle`: the closest brackets of a call around it, else the
+      condition's own, hence the groups between count along;
+    * `pair-root`: the condition's own parentheses.
+
+    Builds none for `line`, which group() asks at each line instead.
+*/
+QSet<int > FormatConditionLayout::forcedOperators(int open, int close) const
+{
+    QSet<int > forced;
+    const QString per = m_document->configAt(
+        m_document->symbols().at(open).from
+    ).wrapConditionsPer;
+    if (per == QLL("line")) {
+        return forced;
+    }
+
+    // Finds the range of each operator, and counts the operands of each.
+    QList<QPair<int, ConditionRange > > found;
+    QHash<ConditionRange, int > counts;
+    QList<int > brackets;
+    QList<int > arguments;
+    for (int k = open + 1; k < close; ++k) {
+        const Token token = m_document->token(k);
+        if (token == LBRACE && m_document->match(k) > k) {
+            k = m_document->match(k);
+        } else if ((token == LPAREN || token == LBRACK)
+            && m_document->match(k) > k
+        ) {
+            brackets << k;
+            arguments << 0;
+        } else if ((token == RPAREN || token == RBRACK)
+            && ! brackets.isEmpty()
+            && m_document->match(k) == brackets.last()
+        ) {
+            brackets.removeLast();
+            arguments.removeLast();
+        } else if (token == COMMA && ! brackets.isEmpty()) {
+            ++arguments.last();
+        } else if (token == ANDAND || token == OROR) {
+            ConditionRange range(open, -1);
+            if (per == QLL("pair") && ! brackets.isEmpty()) {
+                const int inner = brackets.last();
+                range = ConditionRange(
+                    inner,
+                    opensCall(m_document, inner) ? arguments.last() : -1
+                );
+            } else if (per == QLL("pair-bundle")) {
+                for (int b = brackets.size() - 1; b >= 0; --b) {
+                    if (opensCall(m_document, brackets.at(b))) {
+                        range = ConditionRange(brackets.at(b), -1);
+                        break;
+                    }
+                }
+            }
+            found << qMakePair(k, range);
+            counts.insert(range, counts.value(range, 1) + 1);
+        }
+    }
+
+    // Marks the operators of each range that holds more than its limit.
+    QSet<ConditionRange > over;
+    for (QHash<ConditionRange, int >::const_iterator i = counts.constBegin();
+         i != counts.constEnd();
+         ++i
+    ) {
+        const int limit = m_conditions->conditionsLimit(
+            i.key().first,
+            i.value(),
+            m_conditions->spaceRemaining(i.key().first)
+        );
+        if (limit > 0 && i.value() > limit) {
+            over.insert(i.key());
+        }
+    }
+    for (int i = 0; i < found.size(); ++i) {
+        if (over.contains(found.at(i).second)) {
+            forced.insert(found.at(i).first);
+        }
+    }
+    return forced;
 }
 
 /*!
@@ -209,14 +342,19 @@ QList<int > FormatConditionLayout::operators(
     Builds the layout of the group from the `(` at @a open to
     the `)` at @a close, whose `(` stands at @a column of a line indented by
     @a indent; @a isCondition tells that the group is a whole condition,
-    whose `)` closes on a line of its own. Each line takes the operands that
-    `[Structure] wrapConditionsOver` lets share it, asked at the line's last
-    operand (see FormatScopeConditions::conditionsPerLine()), while the line
-    fits the wrap column.
+    whose `)` closes on a line of its own; @a trailing counts the columns
+    that follow the group's `)` on its line, the `)` of the groups it ends.
+
+    An operator of @a forced breaks (see forcedOperators()); any other one
+    joins its operand to the line while it fits the wrap column. For
+    `[Structure] wrapConditionsPer = line`, a line also takes only the
+    operands that `[Structure] wrapConditionsOver` lets share it, asked at
+    the line's last operand (see FormatScopeConditions::conditionsLimit()).
 */
 QByteArray FormatConditionLayout::group(
         int open, int close,
-        int indent, int column, bool isCondition) const
+        int indent, int column, bool isCondition,
+        const QSet<int > & forced, int trailing) const
 {
     const QList<int > ops = this->operators(open, close);
     // Keeps the spaces between the `(` and the first operand, such as the
@@ -232,6 +370,7 @@ QByteArray FormatConditionLayout::group(
         m_document->symbols().at(open).from
     );
     const int maximum = qMax(1, fileConfig.wrapMax);
+    const bool isPerLine = fileConfig.wrapConditionsPer == QLL("line");
     // Counts the operands that the current line holds; an operand that
     // takes more than one line ends its last line.
     int onLine = 0;
@@ -239,21 +378,30 @@ QByteArray FormatConditionLayout::group(
     for (int k = 0; k <= ops.size(); ++k) {
         const int first = k == 0 ? open + 1 : ops.at(k - 1) + 1;
         const int last = k == ops.size() ? close - 1 : ops.at(k) - 1;
+        // Counts the columns that follow the last operand on its line: the
+        // group's `)` and those it ends, and for a condition still on one
+        // line, its `) {`, since the condition then closes there.
+        int after = 0;
+        if (k == ops.size()) {
+            after = ! isCondition ? trailing + 1
+                                  : (text.contains('\n') ? 0 : 3);
+        }
         int operandIndent = continuationIndent(indent);
         if (k > 0) {
             const QByteArray op = m_document->lexem(ops.at(k - 1));
             const int currentWidth = text.size() - lineStart;
 
             // Asks `wrapConditionsOver` at the operand that may end the line.
-            const int limit = m_conditions->conditionsPerLine(
+            const int limit = isPerLine ? m_conditions->conditionsLimit(
                 open,
                 ops.size() + 1,
                 100.0 * (maximum - currentWidth) / maximum
-            );
-            const bool joins = ! endsLine && (limit == 0 || onLine < limit)
+            ) : 0;
+            const bool joins = ! forced.contains(ops.at(k - 1))
+                && ! endsLine && (limit == 0 || onLine < limit)
                 && ! isClosingLine(text.mid(text.lastIndexOf('\n') + 1))
                 && currentWidth + op.size() + 2
-                    + textWidth(sourceText(m_document, first, last))
+                    + textWidth(sourceText(m_document, first, last)) + after
                     <= wrapColumn(m_document, m_document->symbols().at(open).from);
             if (joins) {
                 text += ' ' + op + ' ';
@@ -275,13 +423,18 @@ QByteArray FormatConditionLayout::group(
         // condition breaks first at the `&&` and `||` of its own level; a
         // nested group that breaks takes one more step, so that its
         // operators stand apart from those of the group around it.
-        const bool isNested = m_document->token(start) == LPAREN
+        const QList<int > nestedOps = m_document->token(start) == LPAREN
             && m_document->match(start) == last
-            && ! this->operators(start, last).isEmpty();
+            ? this->operators(start, last) : QList<int >();
+        const bool isNested = ! nestedOps.isEmpty();
         const bool fits = operandColumn
-            + textWidth(sourceText(m_document, first, last)) + 1
+            + textWidth(sourceText(m_document, first, last)) + 1 + after
             <= wrapColumn(m_document, m_document->symbols().at(first).from);
-        if (isNested && ! fits) {
+        bool hasForced = false;
+        for (int n = 0; n < nestedOps.size() && ! hasForced; ++n) {
+            hasForced = forced.contains(nestedOps.at(n));
+        }
+        if (isNested && ( ! fits || hasForced)) {
             const QByteArray signs = start > first
                 ? m_document->text().mid(
                     m_document->symbols().at(first).from,
@@ -293,7 +446,9 @@ QByteArray FormatConditionLayout::group(
                 last,
                 continuationIndent(indent),
                 operandColumn + signs.size(),
-                false
+                false,
+                forced,
+                after
             );
             isComplex = true;
         } else {
@@ -312,7 +467,8 @@ QByteArray FormatConditionLayout::group(
         endsLine = lineStart != lineBefore;
         ++onLine;
     }
-    if (isCondition || isComplex) {
+    // A group that stayed on one line closes there, as it moved nothing.
+    if (isCondition || (isComplex && text.contains('\n'))) {
         text += '\n' + QByteArray(indent, ' ') + ')';
     } else {
         text += ')';

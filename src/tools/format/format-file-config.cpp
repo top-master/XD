@@ -80,12 +80,21 @@
       A condition can instead decide per target using its argument count,
       remaining space, and scope; 3 without a `.formatrc`;
     * `wrapConditionsOver` (`[Structure]`): how many of the `&&` and `||`
-      operands of an `if` or `while` a line holds once the condition breaks
-      (see FormatConditionLayout), asked at each operand that may end a
-      line, with `spaceRemaining` the share of `wrapMax` left after it. A
-      condition that holds gives 1, and one that does not gives 0 (as many
-      as fit); a 0 for the whole condition leaves it as it is.
-      `spaceRemaining < 20% ? 1 : 2` without a `.formatrc`;
+      operands of an `if` or `while` the range that `wrapConditionsPer`
+      names holds once the condition breaks (see FormatConditionLayout);
+      past that number, every operator of the range breaks. A condition
+      that holds gives 1, and one that does not gives 0 (as many as fit); a
+      0 for the whole condition leaves it as it is. `spaceRemaining` is the
+      share of `wrapMax` left after the range's `(`, or after the operand
+      that may end a line. `spaceRemaining < 20% ? 1 : 2` without a
+      `.formatrc`;
+    * `wrapConditionsPer` (`[Structure]`): the range that
+      `wrapConditionsOver` counts: `line`, the operands of each line;
+      `pair`, those of the closest pair of parentheses, or of one argument
+      when the operands are a call's argument; `pair-bundle`, those of the
+      closest parentheses of a call, else of the `if` or `while`, nested
+      groups included; or `pair-root`, every operand of the `if` or
+      `while`. `pair-bundle` without a `.formatrc`;
     * `joinArgs` (`[Structure]`): how many arguments of a broken list may
       share a line, where the list would else give each argument a line of
       its own (see FormatExpressionLayout); a condition, evaluated at each
@@ -344,6 +353,12 @@ Config::Schema FormatFileConfig::schema()
                          &FormatConditionContext::setCountObjects
                      ),
                      QString::fromLatin1(defaultWrapConditionsOverText));
+    structure.addKey(QString(QLL("wrapConditionsPer")),
+                     QStringList() << QString(QLL("line"))
+                         << QString(QLL("pair"))
+                         << QString(QLL("pair-bundle"))
+                         << QString(QLL("pair-root")),
+                     QString(QLL("pair-bundle")));
     structure.addKey(QString(QLL("joinArgs")),
                      Config::Matchers() << Config::Numbers::create(
                          1,
@@ -640,6 +655,9 @@ void FormatFileConfig::fromParser(const Config::Parser &parser,
                          &fileConfig->joinArgs, &fileConfig->joinArgsCondition);
     Config::Scopes::popUntil(scopes);
     fileConfig->wrapSubChain = parser.value(QString(QLL("structure.wrapSubChain")));
+    fileConfig->wrapConditionsPer = parser.value(
+        QString(QLL("structure.wrapConditionsPer"))
+    );
     fileConfig->commentWrapBegin
         = Config::Numbers::parse(parser.value(QString(QLL("comments.wrapBegin"))));
     fileConfig->commentWrapMax = parser

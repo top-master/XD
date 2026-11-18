@@ -145,7 +145,7 @@ private slots:
     void testScopeConditions_shouldEvaluateArgumentExpressions();
     void testScopeConditions_shouldOfferValueToCountSettingsOnly();
     void testScopeConditions_shouldCountConditionOperands();
-    void testScopeConditions_shouldCountConditionsPerLine();
+    void testScopeConditions_shouldLimitConditionRanges();
     void testScopeConditions_shouldReadSettingsThroughCfg();
     void testLayoutConfig_shouldResolveConditionAndSubchainOptions();
     void testLayoutHelpers_shouldRecognizeClosingBracketCombinations();
@@ -3425,7 +3425,11 @@ void tst_FormatRules::testRules_shouldRewriteFile_data()
         << QString(QLL("not-space,condition-wrap")) << QString(QLL("a.cpp"))
         << conditionSample("ov = m ? m->override() : MyTypeDef()")
         << QByteArray("if ( ! myFirstCondition\n"
-                      "    && (mySecond || (myThird && (ov = m ? m->override() : MyTypeDef())))\n"
+                      "    && (mySecond\n"
+                      "        || (myThird\n"
+                      "            && (ov = m ? m->override() : MyTypeDef())\n"
+                      "        )\n"
+                      "    )\n"
                       ") {\n"
                       "    x();\n"
                       "}\n");
@@ -3746,6 +3750,7 @@ void tst_FormatRules::testLayoutConfig_shouldResolveConditionAndSubchainOptions(
     FormatFileConfig::fromParser(parser, &config);
     QCOMPARE(config.wrapConditionsOver, 1);
     QVERIFY( ! config.wrapConditionsOverCondition.isEmpty());
+    QCOMPARE(config.wrapConditionsPer, QString(QLL("pair-bundle")));
     QCOMPARE(config.wrapSubChain, QString(QLL("always")));
     QString error;
     QVERIFY2(parser.readData(
@@ -3768,6 +3773,14 @@ void tst_FormatRules::testLayoutConfig_shouldResolveConditionAndSubchainOptions(
     ), qPrintable(error));
     FormatFileConfig::fromParser(parser, &config);
     QVERIFY( ! config.wrapConditionsOverCondition.isEmpty());
+    QVERIFY2(parser.readData(
+        "[Structure]\nwrapConditionsPer=pair-root\n", QLL("inline"), &error
+    ), qPrintable(error));
+    QVERIFY(readSettings(parser, &config));
+    QCOMPARE(config.wrapConditionsPer, QString(QLL("pair-root")));
+    QVERIFY( ! parser.readData(
+        "[Structure]\nwrapConditionsPer=pairs\n", QLL("inline"), &error
+    ));
     QVERIFY( ! parser.readData(
         "[Structure]\nwrapSubChain=unknown\n", QLL("inline"), &error
     ));
@@ -3810,17 +3823,18 @@ void tst_FormatRules::testScopeConditions_shouldCountConditionOperands()
     QVERIFY( ! conditions.conditionsOver(nested, 2, 20));
 }
 
-/// Asks `wrapConditionsOver` per line: the default gives two operands while a
-/// fifth of `wrapMax` is left, else one; a condition gives 1 or 0.
-void tst_FormatRules::testScopeConditions_shouldCountConditionsPerLine()
+/// Asks `wrapConditionsOver` for the limit of a range: the default gives two
+/// operands while a fifth of `wrapMax` is left, else one; a condition that
+/// holds gives 1, and one that does not gives 0.
+void tst_FormatRules::testScopeConditions_shouldLimitConditionRanges()
 {
     FormatDocument document(
         "void check() { if (ready() && valid() && safe()) {} }\n"
     );
     const int open = symbolIndex(document, "if") + 1;
     FormatScopeConditions conditions(&document);
-    QCOMPARE(conditions.conditionsPerLine(open, 3, 20), 2);
-    QCOMPARE(conditions.conditionsPerLine(open, 3, 19), 1);
+    QCOMPARE(conditions.conditionsLimit(open, 3, 20), 2);
+    QCOMPARE(conditions.conditionsLimit(open, 3, 19), 1);
     FormatFileConfig config;
     QString error;
     const QSharedPointer<Config::Scopes::Scope > scope =
@@ -3830,12 +3844,12 @@ void tst_FormatRules::testScopeConditions_shouldCountConditionsPerLine()
         &config.wrapConditionsOverCondition, &error, true
     ), qPrintable(error));
     document.setConfig(config);
-    QCOMPARE(conditions.conditionsPerLine(open, 3, 50), 1);
-    QCOMPARE(conditions.conditionsPerLine(open, 2, 50), 0);
+    QCOMPARE(conditions.conditionsLimit(open, 3, 50), 1);
+    QCOMPARE(conditions.conditionsLimit(open, 2, 50), 0);
     config.wrapConditionsOverCondition.clear();
     config.wrapConditionsOver = 3;
     document.setConfig(config);
-    QCOMPARE(conditions.conditionsPerLine(open, 3, 50), 3);
+    QCOMPARE(conditions.conditionsLimit(open, 3, 50), 3);
 }
 
 /// Reads another `[Structure]` setting through `cfg`: a setting follows
@@ -3859,14 +3873,14 @@ void tst_FormatRules::testScopeConditions_shouldReadSettingsThroughCfg()
     ), qPrintable(error));
     QVERIFY(readSettings(parser, &config));
     document.setConfig(config);
-    QCOMPARE(conditions.conditionsPerLine(open, 3, 50), 4);
+    QCOMPARE(conditions.conditionsLimit(open, 3, 50), 4);
     QVERIFY2(parser.readData(
         "[Structure]\nwrapMax=100\nwrapConditionsOver=cfg.wrapMax / 50\n",
         QLL("inline"), &error
     ), qPrintable(error));
     QVERIFY(readSettings(parser, &config));
     document.setConfig(config);
-    QCOMPARE(conditions.conditionsPerLine(open, 3, 50), 2);
+    QCOMPARE(conditions.conditionsLimit(open, 3, 50), 2);
 
     // A setting that reaches itself gets the setting's number, 1.
     QVERIFY2(parser.readData(
@@ -3875,7 +3889,7 @@ void tst_FormatRules::testScopeConditions_shouldReadSettingsThroughCfg()
     ), qPrintable(error));
     QVERIFY(readSettings(parser, &config));
     document.setConfig(config);
-    QCOMPARE(conditions.conditionsPerLine(open, 3, 50), 1);
+    QCOMPARE(conditions.conditionsLimit(open, 3, 50), 1);
     QVERIFY2(parser.readData(
         "[Structure]\nwrapArgsOver=cfg.wrapConditionsOver\n"
         "wrapConditionsOver=cfg.wrapArgsOver\n",
@@ -3883,7 +3897,7 @@ void tst_FormatRules::testScopeConditions_shouldReadSettingsThroughCfg()
     ), qPrintable(error));
     QVERIFY(readSettings(parser, &config));
     document.setConfig(config);
-    QCOMPARE(conditions.conditionsPerLine(open, 3, 50), 1);
+    QCOMPARE(conditions.conditionsLimit(open, 3, 50), 1);
 
     // A key that `cfg` lacks is no condition.
     QVERIFY( ! parser.readData(

@@ -31,7 +31,7 @@ public:
     bool argsOver(int token, int count, qreal spaceRemaining);
     bool conditionsOver(int token, int count);
     bool conditionsOver(int token, int count, qreal spaceRemaining);
-    int conditionsPerLine(int token, int count, qreal spaceRemaining);
+    int conditionsLimit(int token, int count, qreal spaceRemaining);
     int argumentCount(int token, int depth, int argument = 0) const;
     int conditionArgumentCount(int token, int depth, int argument = 0) const;
     void reserve(int token, int column);

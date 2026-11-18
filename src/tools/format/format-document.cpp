@@ -600,7 +600,8 @@ void FormatDocument::analyzeBrackets()
 /*!
     Builds the index in symbols() where the head of the token at @a index
     starts: the first token after the end of the statement before it (a `;`,
-    a brace, or a preprocessor directive), stepping over bracket groups.
+    a brace, an access label such as `public:`, or a preprocessor
+    directive), stepping over bracket groups.
 */
 int FormatDocument::headStart(int index) const
 {
@@ -615,6 +616,7 @@ int FormatDocument::headStart(int index) const
             }
         }
         if (before == SEMIC || before == LBRACE || before == RBRACE
+            || this->isAccessLabel(start - 1)
             || this->isDirectiveLine(this->symbolLine(start - 1))
         ) {
             break;
@@ -624,6 +626,30 @@ int FormatDocument::headStart(int index) const
             ? opener : start - 1;
     }
     return start;
+}
+
+/*!
+    Tells whether the token at @a colon of symbols() is the `:` of an access
+    label, such as `public:` or `public slots:`, which ends the declarations
+    before it as a `;` would.
+*/
+bool FormatDocument::isAccessLabel(int colon) const
+{
+    if (colon < 1 || this->token(colon) != COLON) {
+        return false;
+    }
+    switch (this->token(colon - 1)) {
+    case PUBLIC:
+    case PRIVATE:
+    case PROTECTED:
+    case SLOTS:
+    case SIGNALS:
+    case Q_SLOTS_TOKEN:
+    case Q_SIGNALS_TOKEN:
+        return true;
+    default:
+        return false;
+    }
 }
 
 /*!

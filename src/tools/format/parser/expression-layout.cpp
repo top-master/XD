@@ -173,6 +173,33 @@ QByteArray FormatExpressionLayout::layout(
     ) {
         return text;
     }
+    // Keeps a short member chain whole: an object, a single field of it, and
+    // a single member of that field, such as `config.files.at(i)`; hence a
+    // field never splits from its object, nor a method from that field.
+    if ( ! operators.isEmpty() && operators.size() <= 2) {
+        bool isShortChain = true;
+        for (int i = 0; i < operators.size() && isShortChain; ++i) {
+            isShortChain = isMemberAccess(m_document->token(operators.at(i)));
+        }
+        // Takes a field as the first member, and brackets only as the call of
+        // the last member, with neither brackets nor commas in its arguments.
+        const int firstMemberEnd = operators.size() > 1 ? operators.at(1) - 1
+                                                        : last;
+        isShortChain = isShortChain
+            && m_document->token(firstMemberEnd) != RPAREN;
+        int brackets = 0;
+        for (int k = first; k <= last && isShortChain; ++k) {
+            const Token token = m_document->token(k);
+            if (token == LPAREN || token == LBRACK) {
+                isShortChain = k > operators.last() && ++brackets == 1;
+            } else if (token == COMMA) {
+                isShortChain = false;
+            }
+        }
+        if (isShortChain) {
+            return text;
+        }
+    }
     int question = -1;
     int colon = -1;
     if (findTernary(m_document, first, last, &question, &colon)
@@ -291,26 +318,55 @@ QByteArray FormatExpressionLayout::layout(
     ) {
         return this->layoutChain(first, last, operators, column, trailing, forceMath);
     }
-    if (operators.size() > 1
+    // Breaks the arguments of the call that leads a member chain, such as
+    // `object->find(...)` in `object->find(...).name`, or `Info(...)` in
+    // `Info(...).path()` when that call does not fit its line, and keeps the
+    // members after it on its closing line; hence the members of the
+    // argument stay together.
+    if ( ! operators.isEmpty()
         && isMemberAccess(m_document->token(operators.first()))
     ) {
-        const int callEnd = operators.at(1) - 1;
-        const int callOpen = m_document->match(callEnd);
-        const int nextEnd = operators.size() > 2 ? operators.at(2) - 1 : last;
-        if (m_document->token(callEnd) == RPAREN
-            && callOpen > operators.first()
+        // Takes the call before the first member access when that call does
+        // not fit its line, else the one before the second member access.
+        const bool leadsWithCall = m_document->token(operators.first() - 1)
+            == RPAREN
+            && m_document->match(operators.first() - 1) > first
+            && ! this->fits(
+                column,
+                this->oneLine(first, operators.first() - 1),
+                0,
+                first
+            );
+        const int callIndex = leadsWithCall ? 0 : 1;
+        const int callEnd = callIndex < operators.size()
+            ? operators.at(callIndex) - 1 : -1;
+        const int callOpen = callEnd > 0 ? m_document->match(callEnd) : -1;
+        const int nextEnd = callIndex + 1 < operators.size()
+            ? operators.at(callIndex + 1) - 1 : last;
+        // Leaves a call with adjacent string literals to their own break.
+        bool hasAdjacentLiterals = false;
+        for (int k = callOpen + 1; callOpen > 0 && k < callEnd; ++k) {
+            hasAdjacentLiterals |= m_document->token(k - 1) == STRING_LITERAL
+                && m_document->token(k) == STRING_LITERAL;
+        }
+        if (callEnd > 0 && ! hasAdjacentLiterals
+            && m_document->token(callEnd) == RPAREN
+            && callOpen > (leadsWithCall ? first : operators.first())
             && this->isListOpen(callOpen)
-            && (m_document->token(nextEnd) != RPAREN
+            && (leadsWithCall
+                || m_document->token(nextEnd) != RPAREN
                 || m_conditions->argsOver(
-                    callOpen, splitArguments(m_document, callOpen, callEnd).size()
+                    callOpen,
+                    splitArguments(m_document, callOpen, callEnd).size()
                 ))
             && column + textWidth(this->oneLine(first, callOpen)) <= wrap
         ) {
             const QByteArray call = this->layoutList(first, callOpen, callEnd, column);
             if (call.contains('\n')) {
                 return call + this->layoutChainRest(
-                    first, last, operators.mid(1), column, trailing, false,
-                    this->chainStepsIn(first, callEnd, call), false, call
+                    first, last, operators.mid(callIndex), column, trailing,
+                    false, this->chainStepsIn(first, callEnd, call), false,
+                    call
                 );
             }
         }
@@ -413,6 +469,24 @@ QByteArray FormatExpressionLayout::layout(
                     item.first, item.second, column + textWidth(head), 1 + trailing
                 );
                 if (nested.contains('\n')) {
+                    // Breaks a nested call's arguments one step deeper, and
+                    // closes this call on a line of its own, when that call
+                    // leads the argument's member chain.
+                    const int itemOperator = nestedOperators.first();
+                    const int itemCall = m_document->match(itemOperator - 1);
+                    if (m_document->token(itemOperator - 1) == RPAREN
+                        && itemCall > item.first
+                        && nested.left(nested.indexOf('\n')).endsWith('(')
+                    ) {
+                        ++m_paddingLevel;
+                        const QByteArray deeper = this->layout(
+                            item.first, item.second,
+                            column + textWidth(head), 0
+                        );
+                        --m_paddingLevel;
+                        return head + deeper + '\n' + this->pad()
+                            + m_document->lexem(last);
+                    }
                     return head + nested + m_document->lexem(last);
                 }
             }
@@ -780,14 +854,36 @@ QByteArray FormatExpressionLayout::layoutChain(
         }
     }
 
-    // Keep an early first operator with the call it introduces. Its argument
+    // Checks whether breaking before the operators fits every line: the
+    // first operand here, and each operator with its operand a step in.
+    const int firstOperator = operators.first();
+    bool breaksFit = this->fits(
+        column,
+        this->oneLine(first, firstOperator - 1),
+        0,
+        first
+    );
+    const int stepColumn = continuationIndent(textWidth(this->pad()));
+    for (int k = 0; k < operators.size() && breaksFit; ++k) {
+        const int operandLast = k + 1 < operators.size()
+            ? operators.at(k + 1) - 1 : last;
+        breaksFit = this->fits(
+            stepColumn,
+            this->oneLine(operators.at(k), operandLast),
+            k + 1 == operators.size() ? trailing : 0,
+            first
+        );
+    }
+
+    // Keeps an early first operator with the call it introduces, where
+    // breaking before the operators leaves a line too long. Its argument
     // list may break even when the usual argument thresholds do not ask for
     // it, provided the call head itself fits on the line.
-    const int firstOperator = operators.first();
     const int firstOperandLast = operators.size() > 1 ? operators.at(1) - 1
                                                       : last;
     const int callOpen = m_document->match(firstOperandLast);
-    if ( ! forceMath && ! isMemberAccess(m_document->token(firstOperator))
+    if ( ! forceMath && ! breaksFit
+        && ! isMemberAccess(m_document->token(firstOperator))
         && m_document->symbolLine(firstOperator)
             == m_document->symbolLine(first)
         && column + textWidth(this->oneLine(first, firstOperator - 1)) + 1

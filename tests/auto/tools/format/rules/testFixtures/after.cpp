@@ -359,7 +359,8 @@ int kindOf(const Config & publicConfig)
     } else if (publicConfig.type() == QNetworkConfiguration::ServiceNetwork) {
         return 1;
     }
-    if (publicConfig.isValid() && publicConfig.type() == Network::Service
+    if (publicConfig.isValid()
+        && publicConfig.type() == Network::Service
     ) {
         return 2;
     }
@@ -386,13 +387,16 @@ bool pick(int token, int k, const Document *document)
 {
     {
         {
-            if ((token == LPAREN || token == LBRACK)
+            if ((token == LPAREN
+                    || token == LBRACK)
                 && document->match(k) > k
             ) {
                 return true;
             }
-            if ((first == second || third == fourth
-                    || fifth == sixth || seventh == eighth)
+            if ((first == second
+                    || third == fourth
+                    || fifth == sixth
+                    || seventh == eighth)
                 && ready
             ) {
                 return false;
@@ -405,8 +409,10 @@ bool pick(int token, int k, const Document *document)
 // CASE	condition-wrap-split.cpp
 void poll(bool hasData, bool isBuffered, int socketType, Engine *engine)
 {
-    if (!hasData && !isBuffered
-        && socketType == UdpSocketType && engine->isOpen()
+    if (!hasData
+        && !isBuffered
+        && socketType == UdpSocketType
+        && engine->isOpen()
         && engine->lastError() == ConnectionRefusedError
     ) {
         engine->reset();
@@ -1664,5 +1670,110 @@ void dispatch()
         && destinationAcceptsDelivery()
     ) {
         send();
+    }
+}
+// CASE	condition-per-line.cpp
+void dispatch()
+{
+    if (ready && (kind == CLASS || kind == STRUCT)
+        && parcelIsAvailable()
+    ) {
+        send();
+    }
+}
+// CASE	condition-per-pair.cpp
+void dispatch()
+{
+    if (ready
+        && (kind == CLASS || kind == STRUCT)
+        && parcelIsAvailable()
+    ) {
+        send();
+    }
+}
+// CASE	condition-per-bundle.cpp
+void dispatch()
+{
+    if (ready
+        && (kind == CLASS
+            || kind == STRUCT)
+        && parcelIsAvailable()
+    ) {
+        send();
+    }
+}
+// CASE	condition-per-bundle-call.cpp
+void dispatch()
+{
+    if (ready && valid
+        && checkAll(alpha || beta || gamma)
+    ) {
+        send();
+    }
+}
+// CASE	condition-per-root.cpp
+void dispatch()
+{
+    if (ready
+        && valid
+        && checkAll(alpha || beta || gamma)
+    ) {
+        send();
+    }
+}
+// CASE	condition-closers-line.cpp
+void move(const Edit &edit, int end, int offset, bool isStart)
+{
+    for (;;) {
+        if (end < offset
+            || (end == offset && (edit.length > 0 || isStart))
+        ) {
+            moved();
+        }
+    }
+}
+// CASE	condition-closers-bundle.cpp
+void move(const Edit &edit, int end, int offset, bool isStart)
+{
+    for (;;) {
+        if (end < offset
+            || (end == offset
+                && (edit.length > 0
+                    || isStart)
+            )
+        ) {
+            moved();
+        }
+    }
+}
+// CASE	operator-first-access-label.cpp
+class Matcher : public Base
+{
+public:
+    bool match(const QString &value, QString *matched) const Q_DECL_OVERRIDE
+    {
+        if (value.isEmpty()) {
+            return false;
+        } else {
+            check(value);
+        }
+        *matched = value;
+        return true;
+    }
+};
+// CASE	operator-wrap-before-call.cpp
+void Runner::prepare(Config &config)
+{
+    config.snapshotManifest = this->m_snapshotDirectory->path()
+        + QLL("/manifest");
+}
+// CASE	operator-wrap-member-call.cpp
+void Runner::prepare(const Config &config, int i)
+{
+    for (;;) {
+        const QString original = QDir::cleanPath(QFileInfo(
+                config.scheduledFiles.at(i)
+            ).absoluteFilePath()
+        );
     }
 }

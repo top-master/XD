@@ -343,20 +343,37 @@ moveSuffix = " "
   `wrapMax` left after this argument's `,`. `value` gives the list's
   argument count, and the other names of `wrapArgsOver` hold too.
 - `wrapConditionsOver` (in `[Structure]`): how many operands of an `if` or
-  `while`, separated by `&&` and `||`, a line holds once the condition
-  breaks. The tool asks it at each operand that may end a line, hence it
-  may give another number for each line:
+  `while`, separated by `&&` and `||`, the range that `wrapConditionsPer`
+  names holds once the condition breaks. Past that number, every operator
+  of the range breaks; up to it, the operands join while they fit:
 
   ```ini
   wrapConditionsOver = spaceRemaining < 20% ? 1 : 2
   ```
 
-  That is the default: two operands per line, and one once less than a
-  fifth of `wrapMax` is left after the operand. `spaceRemaining` is that
-  share, while `value` and `argCount(0)` count the condition's operands. A
-  condition that holds counts as `1`, and one that does not as `0`, which
-  lets a line take as many operands as fit. A `0` for the whole condition
-  keeps the line breaks it already has, as `never` does.
+  That is the default: two operands per range, and one once less than a
+  fifth of `wrapMax` is left after the range's `(` (for `line`, after the
+  operand that may end the line). `spaceRemaining` is that share, while
+  `value` counts the range's operands. A condition that holds counts as
+  `1`, and one that does not as `0`, which lets the range take as many
+  operands as fit. A `0` for the whole condition keeps the line breaks it
+  already has, as `never` does.
+- `wrapConditionsPer` (in `[Structure]`): the range whose operands
+  `wrapConditionsOver` counts:
+  - `line`: each line, asked again at each operand that may end one;
+  - `pair`: the closest pair of parentheses, or one argument of them when
+    they hold a call's arguments;
+  - `pair-bundle` (the default): the closest parentheses of a call, else
+    those of the `if` or `while`, with the groups in between counted
+    along;
+  - `pair-root`: the parentheses of the `if` or `while`, with every operand
+    in them.
+
+  In `if (ready && check(a || b, c && d))`, the `pair` of `a || b` is the
+  first argument of `check`, its `pair-bundle` is the parentheses of
+  `check`, and its `pair-root` is those of the `if`. The operators inside a
+  call's arguments count toward their ranges; their line breaks come from
+  the rules that wrap arguments.
 
   Any condition of the tool may read another `[Structure]` setting as
   `cfg.<key>`: the number that `wrapMax`, `wrapArgsOver`,

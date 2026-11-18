@@ -596,10 +596,7 @@ bool isDeclarationParen(
         return isOperator
             || document->lexem(paren - 1) == document->lexem(paren - 3);
     }
-    const Token label = document->token(name - 2);
-    const bool afterAccess = typeEnd == COLON
-        && (label == PUBLIC || label == PRIVATE || label == PROTECTED || label == SLOTS
-            || label == SIGNALS);
+    const bool afterAccess = document->isAccessLabel(name - 1);
     return scope == FormatDocument::ClassScope
         && (typeEnd == SEMIC || typeEnd == LBRACE || typeEnd == RBRACE || afterAccess
             || typeEnd == EXPLICIT || typeEnd == INLINE);
