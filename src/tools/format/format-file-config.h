@@ -20,12 +20,14 @@ public:
     enum WrapComma { WrapCommaSoft, WrapCommaHard };
     enum CommentTarget { CommentTargetLong, CommentTargetAny };
     enum CodeTarget { CodeTargetLong, CodeTargetAny };
+    enum WrapMistakes { WrapMistakesArray, WrapMistakesAll, WrapMistakesNone };
     enum LintLevel { LintIgnore, LintWarn, LintError };
 
     inline FormatFileConfig()
         : refSuffix(" "), moveSuffix(FormatSpacing::keep())
         , wrapMax(80), wrapArgsOver(3), wrapConditionsOver(1), joinArgs(1), commentWrapMax(80), wrapExtendsForKeywords(20), wrapEmptyLimit(8)
         , wrapComma(WrapCommaSoft), commentTarget(CommentTargetLong), codeTarget(CodeTargetLong)
+        , wrapMistakes(WrapMistakesArray)
         , docTagSign('@'), nameMismatch(Config::Condition::NameMismatchWarn)
         , byRefVariable(LintWarn)
     {
@@ -100,6 +102,7 @@ public:
     WrapComma wrapComma;
     CommentTarget commentTarget;
     CodeTarget codeTarget;
+    WrapMistakes wrapMistakes;
     QStringList bodyBraces;
     char docTagSign;
     QStringList thisMode;

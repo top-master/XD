@@ -122,6 +122,7 @@ private slots:
     void testSettings_shouldReadFromRootDown();
     void testSettings_shouldReadWrapColumns();
     void testSuperTypedef_shouldFollowPairedFiles();
+    void testWrapMistakes_shouldTakeItsValues();
     void testSuperTypedef_shouldHandleQualifiedBases();
     void testSuperTypedef_shouldUseStableRunnerInputs();
     void testSuperTypedef_shouldFindRelatedExtensions();
@@ -1410,12 +1411,11 @@ void tst_FormatRules::testFix_shouldRewrite_data()
         << QByteArray("void f()\n"
                       "{\n"
                       "    if ( ! this->matchesLast(\n"
-                      "            rootFolder,\n"
-                      "            currentFolder,\n"
-                      "            isLast ? isDirectory : true,\n"
-                      "            &decider\n"
-                      "        )\n"
-                      "    ) {\n"
+                      "        rootFolder,\n"
+                      "        currentFolder,\n"
+                      "        isLast ? isDirectory : true,\n"
+                      "        &decider\n"
+                      "    )) {\n"
                       "        g();\n"
                       "    }\n"
                       "}\n");
@@ -1529,6 +1529,86 @@ void tst_FormatRules::testFix_shouldRewrite_data()
                       "    const char *options[] = { \"-L, --range <range>\", \"--dir <path>\", \"--check\",\n"
                       "                              \"--config <setting>\", \"--config-file <file>\",\n"
                       "                              \"--qmake <path>\", \"--any-comment\" };\n"
+                      "}\n")
+        << QByteArray("void f()\n"
+                      "{\n"
+                      "    const char *options[] = {\n"
+                      "        \"-L, --range <range>\",\n"
+                      "        \"--dir <path>\",\n"
+                      "        \"--check\",\n"
+                      "        \"--config <setting>\",\n"
+                      "        \"--config-file <file>\",\n"
+                      "        \"--qmake <path>\",\n"
+                      "        \"--any-comment\"\n"
+                      "    };\n"
+                      "}\n");
+    QTest::newRow("args-wrap wrapMistakes none keeps a brace list's stray pair")
+        << QString(QLL("args-wrap"))
+        << QByteArray("// @formatter:\n// ```\n// [Structure]\n// wrapMistakes = none\n// ```\n"
+                      "void f()\n"
+                      "{\n"
+                      "    const char *options[] = { \"-L, --range <range>\",\n"
+                      "                              \"--dir <path>\", \"--check\",\n"
+                      "                              \"--qmake <path>\" };\n"
+                      "}\n")
+        << QByteArray("// @formatter:\n// ```\n// [Structure]\n// wrapMistakes = none\n// ```\n"
+                      "void f()\n"
+                      "{\n"
+                      "    const char *options[] = {\n"
+                      "        \"-L, --range <range>\",\n"
+                      "        \"--dir <path>\", \"--check\",\n"
+                      "        \"--qmake <path>\"\n"
+                      "    };\n"
+                      "}\n");
+    QTest::newRow("args-wrap keeps a call's stray count")
+        << QString(QLL("args-wrap"))
+        << QByteArray("void f()\n"
+                      "{\n"
+                      "    report(firstArgumentValue, secondArgumentValue,\n"
+                      "           thirdArgumentValue, fourthArgumentValue,\n"
+                      "           aVeryLongFifthArgumentValueName,\n"
+                      "           sixth, seventh);\n"
+                      "}\n")
+        << QByteArray("void f()\n"
+                      "{\n"
+                      "    report(firstArgumentValue, secondArgumentValue,\n"
+                      "           thirdArgumentValue, fourthArgumentValue,\n"
+                      "           aVeryLongFifthArgumentValueName,\n"
+                      "           sixth, seventh);\n"
+                      "}\n");
+    QTest::newRow("args-wrap wrapMistakes all wraps a call's stray count")
+        << QString(QLL("args-wrap"))
+        << QByteArray("// @formatter:\n// ```\n// [Structure]\n// wrapMistakes = all\n// ```\n"
+                      "void f()\n"
+                      "{\n"
+                      "    report(firstArgumentValue, secondArgumentValue,\n"
+                      "           thirdArgumentValue, fourthArgumentValue,\n"
+                      "           aVeryLongFifthArgumentValueName,\n"
+                      "           sixth, seventh);\n"
+                      "}\n")
+        << QByteArray("// @formatter:\n// ```\n// [Structure]\n// wrapMistakes = all\n// ```\n"
+                      "void f()\n"
+                      "{\n"
+                      "    report(\n"
+                      "        firstArgumentValue,\n"
+                      "        secondArgumentValue,\n"
+                      "        thirdArgumentValue,\n"
+                      "        fourthArgumentValue,\n"
+                      "        aVeryLongFifthArgumentValueName,\n"
+                      "        sixth,\n"
+                      "        seventh\n"
+                      "    );\n"
+                      "}\n");
+    QTest::newRow("args-wrap brace list with a stray pair gets an item per line")
+        << QString(QLL("args-wrap"))
+        << QByteArray("void f()\n"
+                      "{\n"
+                      "    const char *options[] = { \"-L, --range <range>\",\n"
+                      "                              \"--dir <path>\", \"--check\",\n"
+                      "                              \"--config <setting>\",\n"
+                      "                  \"--config-file <file>\",\n"
+                      "                              \"--qmake <path>\",\n"
+                      "                              \"--any-comment\" };\n"
                       "}\n")
         << QByteArray("void f()\n"
                       "{\n"
@@ -1822,9 +1902,11 @@ void tst_FormatRules::testFix_shouldRewrite_data()
                       "    );\n}\n");
     QTest::newRow("args-wrap four arguments")
         << QString(QLL("args-wrap"))
-        << QByteArray("void f()\n{\n    run(firstArgumentName, secondArgumentName,\n"
+        << QByteArray("// @formatter:\n// ```\n// [Structure]\n// wrapBegin = 45\n// ```\n"
+                      "void f()\n{\n    run(firstArgumentName, secondArgumentName,\n"
                       "        thirdArgumentName, fourthArgumentName);\n}\n")
-        << QByteArray("void f()\n"
+        << QByteArray("// @formatter:\n// ```\n// [Structure]\n// wrapBegin = 45\n// ```\n"
+                      "void f()\n"
                       "{\n"
                       "    run(\n"
                       "        firstArgumentName,\n"
@@ -1885,19 +1967,26 @@ void tst_FormatRules::testFix_shouldRewrite_data()
                       " secondArgumentName);\n}\n")
         << QByteArray("void f()\n{\n    const QByteArray input = makeFile(\n"
                       "        firstArgumentName,\n        secondArgumentName\n    );\n}\n");
+    QTest::newRow("args-wrap four arguments keeps the user's lines")
+        << QString(QLL("args-wrap"))
+        << QByteArray("void f()\n{\n    run(firstArgumentName, secondArgumentName,\n"
+                      "        thirdArgumentName, fourthArgumentName);\n}\n")
+        << QByteArray("void f()\n{\n    run(firstArgumentName, secondArgumentName,\n"
+                      "        thirdArgumentName, fourthArgumentName);\n}\n");
     QTest::newRow("args-wrap control head")
         << QString(QLL("args-wrap,condition-close"))
-        << QByteArray("void f()\n{\n    if (check(first, second,\n              third, fourth)) {\n"
+        << QByteArray("// @formatter:\n// ```\n// [Structure]\n// target = any\n// ```\n"
+                      "void f()\n{\n    if (check(first, second,\n              third, fourth)) {\n"
                       "    }\n}\n")
-        << QByteArray("void f()\n"
+        << QByteArray("// @formatter:\n// ```\n// [Structure]\n// target = any\n// ```\n"
+                      "void f()\n"
                       "{\n"
                       "    if (check(\n"
-                      "            first,\n"
-                      "            second,\n"
-                      "            third,\n"
-                      "            fourth\n"
-                      "        )\n"
-                      "    ) {\n"
+                      "        first,\n"
+                      "        second,\n"
+                      "        third,\n"
+                      "        fourth\n"
+                      "    )) {\n"
                       "    }\n"
                       "}\n");
     QTest::newRow("args-wrap declaration")
@@ -2888,6 +2977,43 @@ void tst_FormatRules::testSettings_shouldReadWrapColumns()
     ))
         ->toBeFalsy();
     qExpect(error)->toContain(QString(QLL("[Comments] wrapMax = 70 | 80: use a number from 20 to 200")));
+}
+
+/// Reads `[Structure] wrapMistakes`: `array` without a `.formatrc`, the
+/// value a `.formatrc` gives, and an error that lists the values for one it
+/// does not take.
+void tst_FormatRules::testWrapMistakes_shouldTakeItsValues()
+{
+    QTemporaryDir dir;
+    FormatFileConfig settings;
+    QString error;
+    qExpect(int(FormatFileConfig().wrapMistakes))
+        ->toEqual(int(FormatFileConfig::WrapMistakesArray));
+    writeProject(dir, QStringList() << QString(QLL(".formatrc"))
+        << QString(QLL("[Structure]\nwrapMistakes = all\n"))
+    );
+    qExpect(FormatFileConfig::load(
+        dir.path() + QLL("/a.cpp"),
+        FormatConfig(),
+        &settings,
+        &error
+    ))
+        ->toBeTruthy();
+    qExpect(int(settings.wrapMistakes))
+        ->toEqual(int(FormatFileConfig::WrapMistakesAll));
+    writeProject(dir, QStringList() << QString(QLL(".formatrc"))
+        << QString(QLL("[Structure]\nwrapMistakes = sometimes\n"))
+    );
+    qExpect(FormatFileConfig::load(
+        dir.path() + QLL("/a.cpp"),
+        FormatConfig(),
+        &settings,
+        &error
+    ))
+        ->toBeFalsy();
+    qExpect(error)->toContain(QString(QLL(
+        "[Structure] wrapMistakes = sometimes: use \"array\" or \"all\" or \"none\""
+    )));
 }
 
 void tst_FormatRules::testSuperTypedef_shouldFollowPairedFiles()

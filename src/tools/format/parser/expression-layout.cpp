@@ -1389,8 +1389,8 @@ QByteArray FormatExpressionLayout::layoutGroup(
     @p close and whose items are @p items, the first of them being the
     list's item @p firstItem (zero-based): the items that shared a line keep
     sharing one, one padding step in, when @p keepsGroups is set and that
-    line fits; any other item gets a line of its own. Each line but the last
-    ends with its comma.
+    line fits, up to the first group that does not; any other item gets a
+    line of its own. Each line but the last ends with its comma.
 
     Each line then takes the items after it that `[Structure] joinArgs`
     lets share it (see FormatDocument::joinArgsAt()), asked at the line's
@@ -1415,8 +1415,9 @@ QByteArray FormatExpressionLayout::listLines(
     const int column = textWidth(this->pad());
     QByteArray text;
     int at = 0;
-    // The items before this index belong to a group too long for one line,
-    // hence each gets a line of its own.
+    // The items before this index lay out as `joinArgs` allows, without the
+    // user's groups: from a group too long for one line to the list's end,
+    // since a user group kept after a broken one would read as one more.
     int singlesUntil = 0;
     while (at < items.size()) {
         int size = 1;
@@ -1440,7 +1441,7 @@ QByteArray FormatExpressionLayout::listLines(
             const QByteArray comma = isLastGroup && ! hasTrailingComma
                 ? QByteArray() : QByteArray(",");
             if ( ! this->fits(column, line + comma, 0, open)) {
-                singlesUntil = at + size;
+                singlesUntil = items.size();
                 size = 1;
                 isWrapping = true;
             }

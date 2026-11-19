@@ -113,6 +113,10 @@
       that the code already has where they fit, and `any` lays the code out
       anew, as if each expression sat on one line (see FormatLineJoinRule);
       the command line's `--any-code` sets `any`;
+    * `wrapMistakes` (`[Structure]`): which lists the user broke over lines
+      lose those lines when their items per line stray from the average (see
+      FormatArgsWrapRule): `array` (the default), a brace list; `all`, any
+      list; or `none`;
     * `bodyBraces` (`[Structure]`): `true` (the default) lets
       FormatBodyBracesRule give a body that closes in a chain of brackets
       its own lines, and `false` leaves such a body as it is; a condition
@@ -481,6 +485,10 @@ Config::Schema FormatFileConfig::schema()
     structure.addKey(QString(QLL("target")),
                      QStringList() << QString(QLL("long")) << QString(QLL("any")),
                      QString(QLL("long")));
+    structure.addKey(QString(QLL("wrapMistakes")),
+                     QStringList() << QString(QLL("array")) << QString(QLL("all"))
+                         << QString(QLL("none")),
+                     QString(QLL("array")));
     structure.addKey(QString(QLL("bodyBraces")),
                      Config::Matchers() << Config::Condition::create(
                          FormatScopeConditions::names()
@@ -1023,6 +1031,9 @@ bool FormatFileConfig::fromParser(
         ? CommentTargetAny : CommentTargetLong;
     fileConfig->codeTarget = parser.value(QString(QLL("structure.target"))) == QLL("any")
         ? CodeTargetAny : CodeTargetLong;
+    const QString mistakes = parser.value(QString(QLL("structure.wrapMistakes")));
+    fileConfig->wrapMistakes = mistakes == QLL("all") ? WrapMistakesAll
+        : mistakes == QLL("none") ? WrapMistakesNone : WrapMistakesArray;
     fileConfig->docTagSign = parser.value(QString(QLL("comments.docTagSign"))) == QLL("\\")
         ? '\\' : '@';
     return compileCondition(

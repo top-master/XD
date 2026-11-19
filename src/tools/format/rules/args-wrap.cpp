@@ -27,9 +27,12 @@
         );
 
     A list already broken after its opening keeps the items that share a
-    line together when they fit, and so does, while `[Structure] target` is
-    `long`, any list the user broke between its items; any other list gets
-    an item per line. A
+    line together when they fit, and so does any list the user broke between
+    its items over lines that look meant (see keepsUserLines()); any other
+    list gets an item per line, as `[Structure] joinArgs` allows, and so do
+    the items from a group too long for its line to the list's end. Outside
+    a control head, a list with such lines, each later one right under its
+    first item (see isAlignedUnderFirst()), stays as it is. A
     call with one argument is considered when its list already spans lines
     and that argument holds an operator chain.
 
@@ -52,6 +55,118 @@
     file, namespace or class scope, where a `(` mostly opens a declaration's
     parameters (see FormatParamWrapRule).
 */
+
+/*!
+    Tells whether the layout keeps the lines the user broke the list over,
+    from the token @a open of @a document to its closing token @a close,
+    whose items are @a arguments (a brace list when @a isBrace is set): the
+    settings @a fileConfig take `[Structure] target` as `long`, and the lines
+    look meant:
+
+    * none of them passes the wrap column (see wrapColumn());
+    * no item of a later line starts past the end of the line above, which
+      leaves room the user did not use;
+    * where `[Structure] wrapMistakes` covers the list, each line holds the
+      average count of items per line, rounded, or the last line fewer.
+*/
+static bool keepsUserLines(
+        const FormatDocument *document,
+        int open,
+        int close,
+        const QList<QPair<int, int > > & arguments,
+        bool isBrace,
+        const FormatFileConfig & fileConfig)
+{
+    const int firstLine = document->symbolLine(open);
+    const int lastLine = document->symbolLine(close);
+    if (fileConfig.codeTarget != FormatFileConfig::CodeTargetLong) {
+        return false;
+    }
+
+    // Takes a line past the wrap column as lines that do not fit.
+    for (int l = firstLine; l <= lastLine; ++l) {
+        if (textWidth(document->lineText(l))
+            > wrapColumn(document, document->lineStart(l))
+        ) {
+            return false;
+        }
+    }
+
+    // Counts the items of each line, and finds one past the line above.
+    QList<int > counts;
+    int line = -1;
+    for (int i = 0; i < arguments.size(); ++i) {
+        const int from = document->symbols().at(arguments.at(i).first).from;
+        const int itemLine = document->lineOf(from);
+        const int column = textWidth(document->text().mid(
+            document->lineStart(itemLine),
+            from - document->lineStart(itemLine)
+        ));
+        if (itemLine > firstLine
+            && column > textWidth(document->lineText(itemLine - 1).trimmed())
+                + textWidth(document->indentOf(itemLine - 1))
+        ) {
+            return false;
+        }
+        if (itemLine == line) {
+            ++counts.last();
+        } else {
+            counts << 1;
+            line = itemLine;
+        }
+    }
+
+    // Takes a line whose count strays from the average as a mistake.
+    const bool checksCounts =
+        fileConfig.wrapMistakes == FormatFileConfig::WrapMistakesAll
+        || (isBrace
+            && fileConfig.wrapMistakes == FormatFileConfig::WrapMistakesArray);
+    const int average = qRound(qreal(arguments.size()) / counts.size());
+    for (int i = 0; checksCounts && i < counts.size(); ++i) {
+        const bool isShortLast = i + 1 == counts.size()
+            && counts.at(i) < average;
+        if (counts.at(i) != average && ! isShortLast) {
+            return false;
+        }
+    }
+    return true;
+}
+
+/*!
+    Tells whether the user broke the list from the token @a open of
+    @a document to its closing token @a close, whose items are
+    @a arguments, the way the C++ rules wrap a parameter list: its first
+    item on the line of the opening, each later line starting right under
+    that item, and the closing bracket on the line of the last item.
+*/
+static bool isAlignedUnderFirst(
+        const FormatDocument *document,
+        int open,
+        int close,
+        const QList<QPair<int, int > > & arguments)
+{
+    const int line = document->symbolLine(open);
+    const int first = arguments.first().first;
+    if (document->symbolLine(first) != line
+        || document->symbolLine(arguments.last().second)
+            != document->symbolLine(close)
+    ) {
+        return false;
+    }
+    const int column = textWidth(document->text().mid(
+        document->lineStart(line),
+        document->symbols().at(first).from - document->lineStart(line)
+    ));
+    for (int i = 1; i < arguments.size(); ++i) {
+        const int itemLine = document->symbolLine(arguments.at(i).first);
+        const bool startsLine = itemLine
+            != document->symbolLine(arguments.at(i - 1).second);
+        if (startsLine && textWidth(document->indentOf(itemLine)) != column) {
+            return false;
+        }
+    }
+    return true;
+}
 
 /*!
     Finds a logical operator before the call at @a open whose break keeps
@@ -236,6 +351,24 @@ void FormatArgsWrapRule::run(FormatDocument *document) const
             continue;
         }
 
+        // Leaves a statement's list whose meant lines stand right under its
+        // first item as it is; a list in a control head breaks after its
+        // opening still, as its condition then closes on its own line.
+        const bool keepsLines = keepsUserLines(
+            document,
+            i,
+            close,
+            arguments,
+            isBrace,
+            fileConfig
+        );
+        if (keepsLines
+            && keyword < 0
+            && isAlignedUnderFirst(document, i, close, arguments)
+        ) {
+            continue;
+        }
+
         // Moves a one-line function body that the list's line ends with to a
         // line of its own, when that alone makes it fit.
         const int body = needsBreak ? this->inlineBody(document, i) : -1;
@@ -270,14 +403,13 @@ void FormatArgsWrapRule::run(FormatDocument *document) const
         }
 
         // Writes the list as the layout breaks it, keeping the items the
-        // user put on one line together, unless `[Structure] target` asks
-        // to lay the code out anew.
+        // user put on one line together where the lines look meant.
         const QByteArray text = layout.layoutList(
             i,
             i,
             close,
             column,
-            fileConfig.codeTarget == FormatFileConfig::CodeTargetLong
+            keepsLines
         );
         const int length = (hugsHead
             ? document->symbols().at(headClose).from

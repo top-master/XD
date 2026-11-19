@@ -207,6 +207,11 @@ moveSuffix = " "
   that the code already has where they fit; `any` joins the lines of each
   expression first, hence the layout rules lay it out anew (see
   `line-join`). `--any-code` sets `any`.
+- `wrapMistakes` (in `[Structure]`): the lists that `args-wrap` lays out
+  anew, one item per line as `joinArgs` allows, when the user broke them
+  over lines with a line whose item count strays from the average of the
+  others: `array` (the default) for a brace list, `all` for any list, and
+  `none` for no list.
 - `bodyBraces` (in `[Structure]`): `true` (the default) lets `body-braces`
   give a body that closes in a chain of brackets its own lines; `false`
   leaves such a body as it is. A condition such as `is-header` or

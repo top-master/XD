@@ -1675,10 +1675,8 @@ QString markerOf(const QString & text, Context *context)
     ) {
         return QString();
     }
-    reportEveryValue(
-        firstArgumentValue, secondArgumentValue, thirdValue,
-        fourthArgumentValue, fifthArgumentValue
-    );
+    reportEveryValue(firstArgumentValue, secondArgumentValue, thirdValue,
+                     fourthArgumentValue, fifthArgumentValue);
     return marker;
 }
 
