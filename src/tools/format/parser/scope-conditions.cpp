@@ -9,7 +9,6 @@
 #include "./condition-context.h"
 #include "./layout-helpers.h"
 
-#include "config-choice.h"
 #include "config-condition.h"
 
 #include <QtCore/QFile>
@@ -170,31 +169,64 @@ const FormatFileConfig *ArgumentContext::fileConfig() const
     return &document->configAt(document->symbols().at(this->m_token).from);
 }
 
+/*!
+    Runs @a program at the place that @a context answers, and builds what
+    it gives, converted as the setting @a key takes it (see
+    FormatFileConfig::answer()); an empty @a key takes it as a condition,
+    which holds or not (see Config::Condition::convert()). Builds an invalid
+    value when a term misses what it needs; the caller's default decides.
+*/
+static QVariant answerOf(const QString & key, const QStringList & program,
+                         const Config::Evaluator::Context *context)
+{
+    QVariant value;
+    if (key.isEmpty()) {
+        QVariant answer;
+        if ( ! Config::Condition::answer(
+                program,
+                QSet<QString >(),
+                context,
+                &answer
+            )
+            || ! Config::Condition(QStringList()).convert(answer, &value)
+        ) {
+            return QVariant();
+        }
+        return value;
+    }
+    if ( ! FormatFileConfig::answer(key, program, context, &value)) {
+        return QVariant();
+    }
+    return value;
+}
+
 } // namespace
 
 /*!
-    Tells whether the condition that Config::Condition::compile() made
-    @a program of holds at the token @a token.
+    Tells whether the condition @a program, which the setting @a key
+    compiled, holds at the token @a token (see answerOf()).
 */
-bool FormatScopeConditions::holds(const QStringList & program, int token)
+bool FormatScopeConditions::holds(
+        const QString & key,
+        const QStringList & program, int token)
 {
     const ArgumentContext context(
         this, token, this->argumentTarget(token),
         false, Q_NULLPTR, Q_NULLPTR, true
     );
-    return Config::Condition::evaluate(program, QSet<QString >(), &context);
+    return answerOf(key, program, &context).toBool();
 }
 
 /*!
-    Tells whether the condition @a program holds at the token @a token, with
-    @a percent as the value of its percent terms (see
-    Config::Condition::evaluate()), negative where the use site has none.
-    When a term misses what it needs (Config::Condition logs that), the
-    default condition @a fallback decides instead; the formatting goes on.
+    Tells whether the condition @a program, which the setting @a key
+    compiled, holds at the token @a token, with @a percent as the value of
+    its percent terms, negative where the use site has none. When a term
+    misses what it needs (Config::Condition logs that), the default
+    condition @a fallback decides instead; the formatting goes on.
 */
 bool FormatScopeConditions::holds(
-        const QStringList & program, int token, qreal percent,
-        const QStringList & fallback)
+        const QString & key, const QStringList & program, int token,
+        qreal percent, const QStringList & fallback)
 {
     const qreal space = 100 - percent;
     const ArgumentContext context(
@@ -203,18 +235,32 @@ bool FormatScopeConditions::holds(
         percent >= 0 ? &space : Q_NULLPTR,
         percent >= 0
     );
-    bool ok = true;
-    const bool result = Config::Condition::evaluate(
-        program, QSet<QString >(), &context, &ok
-    );
-    if (ok) {
-        return result;
+    const QVariant value = answerOf(key, program, &context);
+    if (value.isValid()) {
+        return value.toBool();
     }
-    return Config::Condition::evaluate(
-        fallback,
-        QSet<QString >(),
-        &context
-    );
+    return answerOf(key, fallback, &context).toBool();
+}
+
+/*!
+    Tells whether the condition @a program holds at the token @a token, as
+    the holds() above does for a setting's own condition.
+*/
+bool FormatScopeConditions::holds(const QStringList & program, int token)
+{
+    return this->holds(QString(), program, token);
+}
+
+/*!
+    Tells whether the condition @a program holds at the token @a token,
+    with @a percent and @a fallback, as the holds() above does for a
+    setting's own condition.
+*/
+bool FormatScopeConditions::holds(
+        const QStringList & program, int token, qreal percent,
+        const QStringList & fallback)
+{
+    return this->holds(QString(), program, token, percent, fallback);
 }
 
 /*!
@@ -855,27 +901,22 @@ int FormatScopeConditions::limitOf(
     );
     const QSharedPointer<Config::Scopes::Scope > scope =
         FormatConditionContext::pushCountScope();
-    qreal limit = 0;
-    if ( ! Config::Condition::value(
-            fileConfig.wrapConditionsOverCondition,
-            QSet<QString >(),
-            &context,
-            &limit
-        )
-    ) {
-        return fallback;
-    }
-    return qMax(0, int(limit));
+    const QVariant limit = answerOf(
+        QString(QLL("structure.wrapConditionsOver")),
+        fileConfig.wrapConditionsOverCondition,
+        &context
+    );
+    return limit.isValid() ? qMax(0, limit.toInt()) : fallback;
 }
 
 /*!
-    Builds what the choice @a choice picks at the token @a token: one of the
-    words @a words, as a QString, or a number, as a qreal (see
-    Config::Choice::answer()); an invalid value when it misses what it
-    needs, hence the caller's default decides.
+    Builds what @a program, which the setting @a key compiled, gives at the
+    token @a token, converted as that setting takes it (see answerOf()):
+    such as the word or the number a choice picks.
 */
-QVariant FormatScopeConditions::answerAt(const QString & choice,
-                                         const QStringList & words, int token)
+QVariant FormatScopeConditions::answerAt(
+        const QString & key,
+        const QStringList & program, int token)
 {
     const ArgumentContext context(
         this, token, this->argumentTarget(token),
@@ -883,14 +924,7 @@ QVariant FormatScopeConditions::answerAt(const QString & choice,
     );
     const QSharedPointer<Config::Scopes::Scope > scope =
         FormatConditionContext::pushCountScope();
-    QVariant answer;
-    QString error;
-    if ( ! Config::Choice::answer(choice, FormatScopeConditions::names(), words,
-                                  &context, &answer, &error)
-    ) {
-        return QVariant();
-    }
-    return answer;
+    return answerOf(key, program, &context);
 }
 
 bool FormatScopeConditions::countOver(int token, int count,
@@ -913,9 +947,10 @@ bool FormatScopeConditions::countOver(int token, int count,
     );
     const QSharedPointer<Config::Scopes::Scope > scope =
         FormatConditionContext::pushCountScope();
-    bool ok = true;
-    const bool result = Config::Condition::evaluate(
-        program, QSet<QString >(), &context, &ok
+    const QVariant over = answerOf(
+        QString(condition ? QLL("structure.wrapConditionsOver") : QLL("structure.wrapArgsOver")),
+        program,
+        &context
     );
-    return ok ? result : count > limit;
+    return over.isValid() ? over.toDouble() != 0 : count > limit;
 }

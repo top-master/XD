@@ -838,18 +838,18 @@ void FormatReplaceTypesRule::run(FormatDocument *document) const
         ) {
             continue;
         }
-        bool ok = false;
         const FormatReplaceTypesContext context(
             document,
             document->symbolLine(i)
         );
-        if ( ! Config::Condition::evaluate(
+        QVariant wanted;
+        if ( ! FormatFileConfig::answer(
+                QString(QLL("replace.types.target")),
                 *program,
-                QSet<QString >(),
                 &context,
-                &ok
+                &wanted
             )
-            || ! ok
+            || ! wanted.toBool()
         ) {
             continue;
         }

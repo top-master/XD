@@ -81,6 +81,24 @@ bool Config::Numbers::match(const QString & value, QString *matched) const
 }
 
 /*!
+    Converts @a answer, the number a key's program gives, such as the math
+    `1 + 7 - 3`, into @a value, that number as a whole one; returns false
+    for a word, or a number outside of the range this matcher takes.
+*/
+bool Config::Numbers::convert(const QVariant & answer, QVariant *value) const
+{
+    if (answer.type() != QVariant::Double) {
+        return false;
+    }
+    const int number = int(answer.toDouble());
+    if (number < this->m_minimum || number > this->m_maximum) {
+        return false;
+    }
+    *value = number;
+    return true;
+}
+
+/*!
     Builds the description of the numbers this matcher takes.
 */
 QString Config::Numbers::describe() const

@@ -190,15 +190,15 @@ QVariant FormatSettingsObject::dynamicValue(const QByteArray & name) const
     busy->insert(name);
     const QSharedPointer<Config::Scopes::Scope > scope =
         FormatConditionContext::pushCountScope();
-    qreal value = 0;
-    const bool ok = Config::Condition::value(
+    QVariant value;
+    const bool ok = FormatFileConfig::answer(
+        QLL("structure.") + QString::fromLatin1(name),
         *program,
-        QSet<QString >(),
         format,
         &value
     );
     busy->remove(name);
-    return ok ? QVariant(value) : QVariant();
+    return ok ? QVariant(value.toDouble()) : QVariant();
 }
 
 /*!
@@ -221,13 +221,14 @@ QVariant FormatSettingsObject::threshold(
     bool ok = true;
     for (int percent = 0; percent <= 100 && ok; ++percent) {
         const PercentContext context(place, percent);
-        if (Config::Condition::evaluate(
-                program,
-                QSet<QString >(),
-                &context,
-                &ok
-            )
-        ) {
+        QVariant holds;
+        ok = FormatFileConfig::answer(
+            QLL("structure.") + QString::fromLatin1(name),
+            program,
+            &context,
+            &holds
+        );
+        if (ok && holds.toBool()) {
             holdsFrom = percent;
             break;
         }

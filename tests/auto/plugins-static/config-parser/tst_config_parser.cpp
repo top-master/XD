@@ -2002,7 +2002,7 @@ void tst_ConfigParser::testCondition_shouldParsePercentsBeforeKeyChecks()
     QCOMPARE(error, QString(QLL("a name is missing at the end")));
     QVERIFY( ! Config::Condition::compile(QString(QLL("40% + 1 <")),
                                           conditionNames(), &program, &error));
-    QCOMPARE(error, QString(QLL("invalid condition near ''")));
+    QCOMPARE(error, QString(QLL("a name is missing at the end")));
     QVERIFY( ! Config::Condition::compile(QString(QLL("101% | a")),
                                           conditionNames(), &program, &error));
     QCOMPARE(error, QString(QLL("the key takes no percent, as in 101%")));

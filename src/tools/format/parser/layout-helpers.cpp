@@ -398,6 +398,7 @@ bool reachesWrapArgsAt(const FormatDocument *document,
         fileConfig.wrapMax
     );
     return conditions->holds(
+        QString(QLL("structure.wrapArgsAt")),
         fileConfig.wrapArgsAt, token, percent,
         FormatFileConfig::defaultWrapChainAt()
     );

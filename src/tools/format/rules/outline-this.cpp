@@ -134,6 +134,7 @@ void FormatOutlineThisRule::run(FormatDocument *document) const
 
             // Adds or drops the `this->` the condition asks for.
             const bool wanted = conditions.holds(
+                QString(QLL("relations.thisMode")),
                 document->configAt(document->symbols().at(i).from).thisMode,
                 i
             );

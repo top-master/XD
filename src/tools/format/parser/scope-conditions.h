@@ -25,6 +25,9 @@ public:
 
     inline const FormatDocument *document() const { return m_document; }
 
+    bool holds(const QString & key, const QStringList & program, int token);
+    bool holds(const QString & key, const QStringList & program, int token,
+               qreal percent, const QStringList & fallback);
     bool holds(const QStringList & program, int token);
     bool holds(const QStringList & program, int token, qreal percent,
                const QStringList & fallback);
@@ -34,7 +37,7 @@ public:
     bool conditionsOver(int token, int count, qreal spaceRemaining);
     int conditionsLimit(int token, int count);
     int conditionsLimit(int token, int count, qreal spaceRemaining);
-    QVariant answerAt(const QString & choice, const QStringList & words,
+    QVariant answerAt(const QString & key, const QStringList & program,
                       int token);
     int argumentCount(int token, int depth, int argument = 0) const;
     int conditionArgumentCount(int token, int depth, int argument = 0) const;

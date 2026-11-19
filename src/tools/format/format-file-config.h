@@ -57,7 +57,7 @@ public:
     static QStringList superConditionNames();
     static QStringList superChoices();
     static QStringList lintLevels();
-    static QString defaultWrapMistakes();
+    static QStringList defaultWrapMistakes();
     static QStringList wrapMistakesWords();
     static LintLevel lintLevel(
             const QString & value,
@@ -68,6 +68,9 @@ public:
     static QStringList replaceTargetNames();
     bool acceptsFile(const QString &path) const;
     static Config::Schema schema();
+    static bool answer(const QString & key, const QStringList & program,
+                       const Config::Evaluator::Context *context,
+                       QVariant *value);
     static QString defaultTypedefSuper();
     static QString defaultReplaceSuperSites();
     static QStringList defaultThisMode();
@@ -105,7 +108,7 @@ public:
     WrapComma wrapComma;
     CommentTarget commentTarget;
     CodeTarget codeTarget;
-    QString wrapMistakes;
+    QStringList wrapMistakes;
     Compact compact;
     QStringList bodyBraces;
     char docTagSign;

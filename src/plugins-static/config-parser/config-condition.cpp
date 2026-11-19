@@ -143,7 +143,26 @@ public:
     inline bool compile(QStringList *program, QString *error, bool *mismatched)
     {
         m_program << QString(QLL("@expression"));
-        if ( ! expression(0, m_choosesWords) || ! peek().isEmpty()) {
+        const bool isWhole = expression(0, m_choosesWords);
+        const QString rest = peek();
+        if (isWhole && ! rest.isEmpty() && m_error.isEmpty()) {
+            // Names what follows a whole condition.
+            const QChar lead = rest.at(0);
+            m_error = rest == QLL(")") ? QString(QLL("a ( is missing"))
+                : lead.isLetterOrNumber() || lead == QLatin1Char('_')
+                || lead == QLatin1Char('"') || lead == QLatin1Char('(')
+                || lead == QLatin1Char('!')
+                ? QString(QLL("a sign is missing before %1")).arg(rest)
+                : QString(QLL("unknown sign %1")).arg(rest);
+        }
+
+        // Takes a lone number as no condition, where only math uses one.
+        if (isWhole && rest.isEmpty() && ! m_choosesWords
+            && m_program.size() == 2 && m_program.at(1).startsWith(QLL("n:"))
+        ) {
+            m_error = QString(QLL("unknown name %1")).arg(m_text.trimmed());
+        }
+        if ( ! m_error.isEmpty() || ! isWhole) {
             *mismatched = m_mismatched;
             *error = ! m_error.isEmpty()
                 ? m_error
@@ -295,11 +314,31 @@ private:
                     ? QString(QLL("op:neg")) : QString(QLL("op:!")));
             }
         } else if (take(QString(QLL("(")))) {
-            if ( ! expression(0, isValue) || ! take(QString(QLL(")")))) {
+            if ( ! expression(0, isValue)) {
+                return false;
+            }
+            if ( ! take(QString(QLL(")")))) {
+                if (m_error.isEmpty()) {
+                    m_error = QString(QLL("a ) is missing"));
+                }
                 return false;
             }
         } else {
-            if (token.isEmpty()) {
+            // Names a term that is missing: the condition ends, or a sign
+            // stands where a term belongs.
+            const QChar lead = token.isEmpty() ? QChar() : token.at(0);
+            if (token.isEmpty() || ! (lead.isLetterOrNumber()
+                    || lead == QLatin1Char('_') || lead == QLatin1Char('"')
+                    || lead == QLatin1Char('.') || lead == QLatin1Char(':'))
+            ) {
+                if (m_error.isEmpty()) {
+                    m_error = token.isEmpty()
+                        ? QString(QLL("a name is missing at the end"))
+                        : precedence(token) > 0 || token == QLL(")")
+                            || token == QLL("?") || token == QLL(":")
+                        ? QString(QLL("a name is missing before %1")).arg(token)
+                        : QString(QLL("unknown sign %1")).arg(token);
+                }
                 return false;
             }
             take(token);
@@ -322,8 +361,8 @@ private:
             }
             // Reads digits as a number, never a word such as `nan` or `inf`,
             // which `QString::toDouble()` takes too.
-            const QChar lead = number.isEmpty() ? QChar() : number.at(0);
-            if (lead.isDigit() || lead == QLatin1Char('.')) {
+            const QChar digit = number.isEmpty() ? QChar() : number.at(0);
+            if (digit.isDigit() || digit == QLatin1Char('.')) {
                 number.toDouble(&isNumber);
             }
             if (token.startsWith(QLatin1Char('"'))) {
@@ -770,23 +809,28 @@ bool ExpressionCompiler::call(const QString &name)
     Builds the matcher of a condition over the names @a names; when given,
     @a setup adds the objects whose names only this key's conditions may call
     to a scope the matcher pushes while it matches (see Scopes::push()).
+    The key takes from the condition's answer what @a result says (see
+    Config::Condition::convert()).
 */
 Config::Condition::Condition(const QStringList & names, bool takesPercents,
-                             Scopes::Setup setup)
+                             Scopes::Setup setup, Result result)
     : m_names(names), m_takesPercents(takesPercents), m_setup(setup)
+    , m_result(result)
 {
 }
 
 /*!
     Builds a key's shared matcher of a condition over the names @a names,
-    which also takes percent terms when @a takesPercents is set, and the
-    names of the objects that @a setup adds when it is given.
+    which also takes percent terms when @a takesPercents is set, the names
+    of the objects that @a setup adds when it is given, and gives the
+    answer @a result says (see convert()).
 */
 QSharedPointer<const Config::ValueMatcher > Config::Condition::create(
-        const QStringList & names, bool takesPercents, Scopes::Setup setup)
+        const QStringList & names, bool takesPercents, Scopes::Setup setup,
+        Result result)
 {
     return QSharedPointer<const Config::ValueMatcher >(
-            new Config::Condition(names, takesPercents, setup));
+            new Config::Condition(names, takesPercents, setup, result));
 }
 
 /*!
@@ -838,6 +882,22 @@ bool Config::Condition::match(const QString & value, QString *matched) const
 }
 
 /*!
+    Converts @a answer, a number that answer() gives, into @a value as the
+    key takes it: whether the condition holds (a number that is not zero)
+    for ResultHolds, or the number itself for ResultNumber. Returns false
+    for a word, which is no answer of a condition.
+*/
+bool Config::Condition::convert(const QVariant & answer, QVariant *value) const
+{
+    if (answer.type() != QVariant::Double) {
+        return false;
+    }
+    *value = this->m_result == ResultHolds ? QVariant(answer.toDouble() != 0)
+                                           : answer;
+    return true;
+}
+
+/*!
     Builds the description of the values the matcher takes: a condition of
     its names, and of percents when it takes them, joined by `|` and `&`.
 */
@@ -852,10 +912,20 @@ QString Config::Condition::describe() const
 }
 
 /*!
-    Compiles the condition @a text over the names @a names into @a program
-    (see parse()), for a key that takes percent terms when @a takesPercents
-    is set (see checkPercents()); returns false, with @a error, for a text
-    that is no such condition, or that the key does not take.
+    Compiles @a text over the names @a names into @a program, which answer()
+    runs: a condition, for a key that takes percent terms when
+    @a takesPercents is set (see checkPercents()), or, when @a words is
+    given, a choice of those words, which takes no percent terms. Returns
+    false, with @a error, for a text that is no such condition or choice,
+    or that the key does not take.
+
+    In a choice, each whole value is one of the words, a number, or an
+    expression that gives one, such as `cfg.joinArgs`; answer() then gives
+    the word as a QString, or the number as a qreal. With no word listed, a
+    value may be any text in double quotes, or a bare name that nothing
+    defines, such as `Q_DECL_OVERRIDE_IL`. A name of the condition is no
+    value, and a sign after an undefined name, as in `win32-1`, makes the
+    error name the math it reads.
 
     @a mismatch says how to handle a name that differs from a known one in
     case alone (see NameMismatch); when given, @a mismatched tells whether
@@ -866,272 +936,41 @@ bool Config::Condition::compile(
         QStringList *program,
         QString *error,
         bool takesPercents,
-        NameMismatch mismatch, bool *mismatched)
-{
-    return Config::Condition::parse(
-        input,
-        names,
-        program,
-        error,
-        mismatch,
-        mismatched
-    )
-        && Config::Condition::checkPercents(*program, takesPercents, error);
-}
-
-/*!
-    Compiles @a text, a choice of words such as `hasStd("C++11") ? warn :
-    ignore`, into @a program, whose conditions use the names @a names (see
-    compile()) and take no percent terms. Each whole value of the choice is
-    a word (see the words of @a words), a number, or an expression that
-    gives one, such as `cfg.joinArgs`; answer() then runs the program and
-    gives the word as a QString, or the number as a qreal. Without listed
-    words, a value may be any text in double quotes, or a bare name that
-    nothing defines, such as `Q_DECL_OVERRIDE_IL`; a name of the condition
-    is no value. Returns false, with @a error, for any other text; a sign
-    after an undefined name, as in `win32-1`, gets its own reason.
-
-    @a mismatch and @a mismatched work as compile()'s do.
-*/
-bool Config::Condition::compileChoice(
-        const QString & text, const QStringList & names,
-        const QStringList & words, QStringList *program, QString *error,
-        NameMismatch mismatch, bool *mismatched)
+        NameMismatch mismatch, bool *mismatched,
+        const QStringList *words)
 {
     bool nameMismatched = false;
     if ( ! mismatched) {
         mismatched = &nameMismatched;
     }
     *mismatched = false;
-    ExpressionCompiler compiler(text, names, mismatch, true, words);
+    ExpressionCompiler compiler(
+        input, names, mismatch, words != Q_NULLPTR,
+        words ? *words : QStringList()
+    );
     return compiler.compile(program, error, mismatched)
-        && Config::Condition::checkPercents(*program, false, error);
+        && Config::Condition::checkPercents(
+            *program,
+            takesPercents && ! words,
+            error
+        );
 }
 
 /*!
-    Parses the condition @a text over the names @a names into @a program, a
-    list of operands and signs in the order evaluate() runs them (each sign
-    after its operands); returns false, with @a error, for a text that is no
-    such condition, or that uses a name neither @a names nor Config::Scopes
-    offers. A percent term, such as `40%`, is part of every condition; what
-    a key takes is up to checkPercents().
-*/
-bool Config::Condition::parse(
-        const QString & input, const QStringList & names,
-        QStringList *program,
-        QString *error,
-        NameMismatch mismatch, bool *mismatched)
-{
-    bool nameMismatched = false;
-    if ( ! mismatched) {
-        mismatched = &nameMismatched;
-    }
-    *mismatched = false;
-    QString minusCheck = input;
-    for (int i = 0; i < names.size(); ++i) {
-        if (isPredicateName(names.at(i))) {
-            minusCheck.replace(
-                names.at(i),
-                canonicalName(names.at(i)),
-                Qt::CaseInsensitive
-            );
-        }
-    }
-    QString functionCheck = input;
-    for (int i = functionCheck.size() - 1; i >= 0; --i) {
-        if (functionCheck.at(i).isSpace()) {
-            functionCheck.remove(i, 1);
-        }
-    }
-    // Finds a call: a name right before `()`.
-    bool callsFunction = false;
-    for (int at = functionCheck.indexOf(QLL("()")); at >= 0 && ! callsFunction;
-         at = functionCheck.indexOf(QLL("()"), at + 1)
-    ) {
-        const QChar before = at > 0 ? functionCheck.at(at - 1) : QChar();
-        callsFunction = before.isLetterOrNumber() || before == QLatin1Char('_');
-    }
-    // Finds a name that is a whole function's, rather than a part of a
-    // longer name, such as the `at` in `is-static`.
-    QSet<QString > functions;
-    const QStringList scoped = Config::Scopes::names();
-    for (int i = 0; i < scoped.size(); ++i) {
-        functions.insert(foldedName(scoped.at(i)));
-    }
-    const QRegExp word(QString(QLL("[A-Za-z_][A-Za-z0-9_]*")));
-    for (int at = word.indexIn(input); at >= 0 && ! callsFunction;
-         at = word.indexIn(input, at + word.matchedLength())
-    ) {
-        callsFunction = functions.contains(foldedName(word.cap(0)));
-    }
-    if (callsFunction
-        || input.contains(QLatin1Char('?'))
-        || input.contains(QLatin1Char('<')) || input.contains(QLatin1Char('>'))
-        || input.contains(QLatin1Char('=')) || input.contains(QLatin1Char('+'))
-        || input.contains(QLatin1Char('*')) || input.contains(QLatin1Char('/'))
-        || minusCheck.contains(QLatin1Char('-'))
-    ) {
-        ExpressionCompiler compiler(input, names, mismatch);
-        return compiler.compile(program, error, mismatched);
-    }
-    QString text = input;
-    text.replace(QLL("&&"), QLL("&"));
-    text.replace(QLL("||"), QLL("|"));
-    program->clear();
-    QStringList signs;
-    bool expectOperand = true;
-    int i = 0;
-    while (i < text.size()) {
-        const QChar c = text.at(i);
-        if (c.isSpace()) {
-            ++i;
-            continue;
-        }
-
-        // Reads a name.
-        if (c.isLetterOrNumber()
-            || c == QLatin1Char('-')
-            || c == QLatin1Char('_')
-        ) {
-            int end = i;
-            while (end < text.size() && (text.at(end).isLetterOrNumber()
-                    || text.at(end) == QLatin1Char('-')
-                    || text.at(end) == QLatin1Char('_'))
-            ) {
-                ++end;
-            }
-            QString name = text.mid(i, end - i);
-            bool isNumber = false;
-            name.toInt(&isNumber);
-            if (isNumber
-                && end < text.size()
-                && text.at(end) == QLatin1Char('%')
-            ) {
-                name += QLatin1Char('%');
-                ++end;
-            }
-            if ( ! expectOperand) {
-                *error = QString(QLL("a sign is missing before %1")).arg(name);
-                return false;
-            }
-            if ( ! name.endsWith(QLatin1Char('%'))
-                && name != QLL("true") && name != QLL("false")
-            ) {
-                // Takes the name the way the names spell it, and finds the
-                // one a name of another case means.
-                QStringList known;
-                for (int n = 0; n < names.size(); ++n) {
-                    known << canonicalName(names.at(n));
-                }
-                QString canonical = canonicalName(name);
-                if ( ! known.contains(canonical)) {
-                    known << QString(QLL("true")) << QString(QLL("false"));
-                    if ( ! resolveMismatch(
-                            name,
-                            known,
-                            QStringList(),
-                            mismatch,
-                            &canonical,
-                            error,
-                            mismatched
-                        )
-                    ) {
-                        if ( ! *mismatched) {
-                            *error = QString(QLL("unknown name %1")).arg(name);
-                        }
-                        return false;
-                    }
-                }
-                const int index = known.indexOf(canonical);
-                name = index < names.size() ? names.at(index) : canonical;
-            }
-            *program << name;
-            expectOperand = false;
-            i = end;
-            continue;
-        }
-
-        // Reads a sign or a parenthesis; `&` binds closer than `|`.
-        if (c == QLatin1Char('!')) {
-            if ( ! expectOperand) {
-                *error = QString(QLL("a sign is missing before !"));
-                return false;
-            }
-            signs << QString(c);
-        } else if (c == QLatin1Char('(')) {
-            if ( ! expectOperand) {
-                *error = QString(QLL("a sign is missing before ("));
-                return false;
-            }
-            signs << QString(c);
-        } else if (c == QLatin1Char(')')) {
-            if (expectOperand) {
-                *error = QString(QLL("a name is missing before )"));
-                return false;
-            }
-            while ( ! signs.isEmpty() && signs.last() != QLL("(")) {
-                *program << signs.takeLast();
-            }
-            if (signs.isEmpty()) {
-                *error = QString(QLL("a ( is missing"));
-                return false;
-            }
-            signs.removeLast();
-        } else if (c == QLatin1Char('|') || c == QLatin1Char('&')) {
-            if (expectOperand) {
-                *error = QString(QLL("a name is missing before %1")).arg(c);
-                return false;
-            }
-            while ( ! signs.isEmpty() && signs.last() != QLL("(")
-                && (signs.last() == QLL("!") || signs.last() == QLL("&")
-                    || c == QLatin1Char('|'))
-            ) {
-                *program << signs.takeLast();
-            }
-            signs << QString(c);
-            expectOperand = true;
-        } else {
-            *error = QString(QLL("unknown sign %1")).arg(c);
-            return false;
-        }
-        ++i;
-    }
-    if (expectOperand) {
-        *error = QString(QLL("a name is missing at the end"));
-        return false;
-    }
-    while ( ! signs.isEmpty()) {
-        if (signs.last() == QLL("(")) {
-            *error = QString(QLL("a ) is missing"));
-            return false;
-        }
-        *program << signs.takeLast();
-    }
-    return true;
-}
-
-/*!
-    Checks the percent terms of @a program, which parse() made, against a
+    Checks the percent terms of @a program, which compile() made, against a
     key that takes them when @a takesPercents is set, and then only from 0%
     to 100%; returns false, with @a error, for a term the key does not take.
 */
 bool Config::Condition::checkPercents(
         const QStringList & program, bool takesPercents, QString *error)
 {
-    const bool isExpression = ! program.isEmpty()
-        && program.first() == QLL("@expression");
     for (int i = 0; i < program.size(); ++i) {
-        // Finds a percent term: `p:<number>` in a program with math, else a
-        // term that ends with `%`.
+        // Finds a percent term, `p:<number>`.
         const QString & item = program.at(i);
-        QString number;
-        if (isExpression && item.startsWith(QLL("p:"))) {
-            number = item.mid(2);
-        } else if ( ! isExpression && item.endsWith(QLatin1Char('%'))) {
-            number = item.left(item.size() - 1);
-        } else {
+        if ( ! item.startsWith(QLL("p:"))) {
             continue;
         }
+        const QString number = item.mid(2);
         const QString term = number + QLatin1Char('%');
         if ( ! takesPercents) {
             *error = QString(QLL("the key takes no percent, as in %1"))
@@ -1145,62 +984,6 @@ bool Config::Condition::checkPercents(
         }
     }
     return true;
-}
-
-/*!
-    Tells whether the condition that compile() made @a program of holds,
-    given the names @a holding that hold; a percent term, which needs a
-    value, logs a warning and makes the condition fail.
-*/
-bool Config::Condition::evaluate(
-        const QStringList & program,
-        const QSet<QString > & holding)
-{
-    return Config::Condition::run(
-        program,
-        holding,
-        Q_NULLPTR,
-        Q_NULLPTR,
-        Q_NULLPTR
-    );
-}
-
-/*!
-    Tells, like the evaluate() above, whether @a program holds given the
-    names @a holding; @a ok tells whether every term had what it needs.
-*/
-bool Config::Condition::evaluate(
-        const QStringList & program,
-        const QSet<QString > & holding, bool *ok)
-{
-    return Config::Condition::run(
-        program,
-        holding,
-        Q_NULLPTR,
-        Q_NULLPTR,
-        ok
-    );
-}
-
-/*!
-    Tells whether the condition that compile() made @a program of holds,
-    given the names @a holding that hold, and the value @a percent (from 0
-    to 100, or past it) that its percent terms compare with: a term such as
-    `40%` holds when @a percent is more than 40. @a ok, when given, tells
-    whether every term had what it needs.
-*/
-bool Config::Condition::evaluate(
-        const QStringList & program,
-        const QSet<QString > & holding, qreal percent,
-        bool *ok)
-{
-    return Config::Condition::run(
-        program,
-        holding,
-        &percent,
-        Q_NULLPTR,
-        ok
-    );
 }
 
 namespace Config {
@@ -1239,7 +1022,6 @@ private:
 class Operand;
 
 bool calculate(const QStringList &program, Lookup *lookup, Operand *result);
-bool calculateValue(const QStringList &program, Lookup *lookup, qreal *result);
 bool calculateAnswer(const QStringList &program, Lookup *lookup,
                      QVariant *result);
 
@@ -1286,161 +1068,156 @@ bool Lookup::percent(qreal *value)
 }
 
 
-/*!
-    Tells whether the term @a term of a condition holds: `true`, `false`, a
-    percent such as `40%` (past which the percent value of @a lookup must
-    be), or a name that @a lookup answers. A percent without a value logs a
-    warning and sets @a failed.
-*/
-bool termHolds(const QString &term, Lookup *lookup, bool *failed)
-{
-    if (term == QLL("true") || term == QLL("false")) {
-        return term == QLL("true");
-    }
-    if ( ! term.endsWith(QLatin1Char('%'))) {
-        return lookup->holds(term);
-    }
-    qreal value = 0;
-    if ( ! lookup->percent(&value)) {
-        qWarning("Config::Condition: no value is set for the term %s",
-                 qPrintable(term));
-        *failed = true;
-        return false;
-    }
-    return value > term.left(term.size() - 1).toInt();
-}
-
 } // namespace
 } // Namespace `Evaluator`.
 } // Namespace `Config`.
 
 /*!
-    Runs @a program (see evaluate()) with the names @a holding, the value
-    @a percent when it is not null, and the context @a context when it is
-    not null; without a percent value, a percent term logs a warning,
-    clears @a ok when given, and makes the condition fail.
-*/
-bool Config::Condition::run(
-        const QStringList & program, const QSet<QString > & holding,
-        const qreal *percent, const Evaluator::Context *context, bool *ok)
-{
-    if (ok) {
-        *ok = true;
-    }
-    Evaluator::Lookup lookup(holding, percent, context);
-    if ( ! program.isEmpty() && program.first() == QLL("@expression")) {
-        qreal result = 0;
-        if ( ! Evaluator::calculateValue(program, &lookup, &result)) {
-            if (ok) {
-                *ok = false;
-            }
-            return false;
-        }
-        return result != 0;
-    }
-    // Keeps each term as written until a sign needs its value, hence `&`
-    // and `|` skip the right term once the left one decides.
-    QStringList stack;
-    bool failed = false;
-    for (int i = 0; i < program.size() && ! failed; ++i) {
-        const QString & item = program.at(i);
-        if (item == QLL("!") && ! stack.isEmpty()) {
-            const bool operand = Evaluator::termHolds(
-                stack.takeLast(),
-                &lookup,
-                &failed
-            );
-            stack << QString(operand ? QLL("false") : QLL("true"));
-        } else if ((item == QLL("|") || item == QLL("&"))
-            && stack.size() >= 2
-        ) {
-            const QString right = stack.takeLast();
-            const bool left = Evaluator::termHolds(
-                stack.takeLast(),
-                &lookup,
-                &failed
-            );
-            const bool value = item == QLL("|")
-                ? left || Evaluator::termHolds(right, &lookup, &failed)
-                : left && Evaluator::termHolds(right, &lookup, &failed);
-            stack << QString(value ? QLL("true") : QLL("false"));
-        } else {
-            stack << item;
-        }
-    }
-    const bool result = ! failed && ! stack.isEmpty()
-        && Evaluator::termHolds(stack.last(), &lookup, &failed);
-    if (failed) {
-        if (ok) {
-            *ok = false;
-        }
-        return false;
-    }
-    return result;
-}
-
-/*!
-    Tells, like the evaluate() above, whether @a program holds, with the
-    context @a context, which answers each name first (the set @a holding
-    answers a name the context does not know), the percent value, and each
-    registered function the program calls; each one only when a term asks
-    for it. @a ok, when given, tells whether every term had what it needs.
-*/
-bool Config::Condition::evaluate(
-        const QStringList &program, const QSet<QString > &holding,
-        const Evaluator::Context *context, bool *ok)
-{
-    return Config::Condition::run(program, holding, Q_NULLPTR, context, ok);
-}
-
-/*!
-    Builds into @a result the number that @a program gives, as evaluate()
-    runs it with the names @a holding and the context @a context, for a
-    setting that takes a number, such as the choice `isHeader ? 2 : 1`. A
-    condition gives 1 when it holds, else 0. Returns false when a term
-    misses what it needs.
-*/
-bool Config::Condition::value(
-        const QStringList & program, const QSet<QString > & holding,
-        const Evaluator::Context *context, qreal *result)
-{
-    Evaluator::Lookup lookup(holding, Q_NULLPTR, context);
-    if (program.isEmpty() || program.first() != QLL("@expression")) {
-        bool ok = true;
-        *result = Config::Condition::run(
-            program,
-            holding,
-            Q_NULLPTR,
-            context,
-            &ok
-        )
-            ? 1 : 0;
-        return ok;
-    }
-    return Evaluator::calculateValue(program, &lookup, result);
-}
-
-/*!
-    Builds into @a result what @a program gives, as value() does, with the
-    names @a holding and the context @a context: a number as a qreal, or the
-    text an expression leaves, such as the argument of a choice's branch, as
-    a QString; hence the caller tells the two apart by the type. Returns
-    false when a term misses what it needs.
+    Runs @a program, which compile() made, with the names @a holding and the
+    context @a context, and builds into @a result what it gives: a number as
+    a qreal (a condition gives 1 when it holds, else 0, and a percent term
+    gives 1 when the percent value is past it), or the word or text a value
+    leaves as a QString; hence the caller converts it as its setting takes
+    it, and tells the two apart by the type. The context answers each name
+    first (the set @a holding answers a name it does not know), the percent
+    value, and each registered function the program calls; each one only
+    when a term asks for it. Returns false when a term misses what it needs.
 */
 bool Config::Condition::answer(
         const QStringList & program, const QSet<QString > & holding,
         const Evaluator::Context *context, QVariant *result)
 {
-    if (program.isEmpty() || program.first() != QLL("@expression")) {
-        qreal number = 0;
-        if ( ! Config::Condition::value(program, holding, context, &number)) {
-            return false;
-        }
-        *result = number;
-        return true;
-    }
-    Evaluator::Lookup lookup(holding, Q_NULLPTR, context);
+    return Config::Condition::answerWith(
+        program,
+        holding,
+        Q_NULLPTR,
+        context,
+        result
+    );
+}
+
+/*!
+    Runs @a program as answer() does, with the value @a percent for its
+    percent terms when it is not null; this is the one place that runs a
+    program, which every other evaluation converts.
+*/
+bool Config::Condition::answerWith(
+        const QStringList & program, const QSet<QString > & holding,
+        const qreal *percent, const Evaluator::Context *context,
+        QVariant *result)
+{
+    Evaluator::Lookup lookup(holding, percent, context);
     return Evaluator::calculateAnswer(program, &lookup, result);
+}
+
+/*!
+    Converts what answerWith() gives for @a program, with the names
+    @a holding, the value @a percent and the context @a context, into
+    whether the condition holds: a number that is not zero. @a ok, when
+    given, tells whether every term had what it needs; a word, which is no
+    condition, clears it too.
+*/
+bool Config::Condition::holds(
+        const QStringList & program, const QSet<QString > & holding,
+        const qreal *percent, const Evaluator::Context *context, bool *ok)
+{
+    QVariant answer;
+    const bool isNumber = Config::Condition::answerWith(
+        program,
+        holding,
+        percent,
+        context,
+        &answer
+    ) && answer.type() == QVariant::Double;
+    if (ok) {
+        *ok = isNumber;
+    }
+    return isNumber && answer.toDouble() != 0;
+}
+
+/*!
+    Tells whether the condition that compile() made @a program of holds,
+    given the names @a holding that hold (see holds()); a percent term,
+    which needs a value, logs a warning and makes the condition fail.
+*/
+bool Config::Condition::evaluate(
+        const QStringList & program,
+        const QSet<QString > & holding)
+{
+    return Config::Condition::holds(
+        program, holding, Q_NULLPTR, Q_NULLPTR,
+        Q_NULLPTR
+    );
+}
+
+/*!
+    Tells, like the evaluate() above, whether @a program holds given the
+    names @a holding; @a ok tells whether every term had what it needs.
+*/
+bool Config::Condition::evaluate(
+        const QStringList & program,
+        const QSet<QString > & holding, bool *ok)
+{
+    return Config::Condition::holds(
+        program, holding, Q_NULLPTR, Q_NULLPTR,
+        ok
+    );
+}
+
+/*!
+    Tells whether the condition that compile() made @a program of holds,
+    given the names @a holding that hold, and the value @a percent (from 0
+    to 100, or past it) that its percent terms compare with: a term such as
+    `40%` holds when @a percent is more than 40. @a ok, when given, tells
+    whether every term had what it needs.
+*/
+bool Config::Condition::evaluate(
+        const QStringList & program,
+        const QSet<QString > & holding, qreal percent,
+        bool *ok)
+{
+    return Config::Condition::holds(
+        program, holding, &percent, Q_NULLPTR,
+        ok
+    );
+}
+
+/*!
+    Tells, like the evaluate() above, whether @a program holds, with the
+    context @a context (see answer()). @a ok, when given, tells whether
+    every term had what it needs.
+*/
+bool Config::Condition::evaluate(
+        const QStringList &program, const QSet<QString > &holding,
+        const Evaluator::Context *context, bool *ok)
+{
+    return Config::Condition::holds(
+        program,
+        holding,
+        Q_NULLPTR,
+        context,
+        ok
+    );
+}
+
+/*!
+    Converts what answer() gives for @a program, with the names @a holding
+    and the context @a context, into @a result, for a setting that takes a
+    number, such as the choice `isHeader ? 2 : 1`. Returns false when a term
+    misses what it needs, or the program gives a word.
+*/
+bool Config::Condition::value(
+        const QStringList & program, const QSet<QString > & holding,
+        const Evaluator::Context *context, qreal *result)
+{
+    QVariant answer;
+    if ( ! Config::Condition::answer(program, holding, context, &answer)
+        || answer.type() != QVariant::Double
+    ) {
+        return false;
+    }
+    *result = answer.toDouble();
+    return true;
 }
 
 /*!
@@ -1469,6 +1246,17 @@ QString Config::Condition::canonicalName(const QString & name)
         using the name meant; hence the setting keeps its default.
     @value NameMismatchCritical Fails the same way; the tool then stops
         before it changes the files the setting applies to.
+*/
+
+/*!
+    @enum Config::Condition::Result
+
+    Says what a key takes from the answer of its condition (see convert()).
+
+    @value ResultHolds Whether the condition holds, such as for a key that
+        decides where a rule applies.
+    @value ResultNumber The number the condition gives, such as for a key
+        that counts, as in `hasMoreArgs() ? 2 : 1`.
 */
 
 /*!
@@ -1518,7 +1306,7 @@ public:
     Builds into @a result the number @a operand stands for: a percent term
     compares with the percent value of @a lookup, and gives 1 when that
     value is past it, else 0. Returns false for a text, or a percent term
-    without a percent value.
+    without a percent value, which it logs.
 */
 static bool operandNumber(const Operand &operand, Lookup *lookup, qreal *result)
 {
@@ -1529,6 +1317,8 @@ static bool operandNumber(const Operand &operand, Lookup *lookup, qreal *result)
     if (operand.percent) {
         qreal percent = 0;
         if ( ! lookup->percent(&percent)) {
+            qWarning("Config::Condition: no value is set for the term %s%%",
+                     qPrintable(QString::number(operand.number)));
             return false;
         }
         *result = percent > operand.number ? 1 : 0;
@@ -1549,18 +1339,6 @@ static bool operandHolds(const Operand &operand, Lookup *lookup, bool *holds)
     }
     *holds = number != 0;
     return true;
-}
-
-/*!
-    Runs the `@expression` @a program as calculate() does, and builds into
-    @a result the number it leaves (see operandNumber()). Returns false when
-    a term misses a value, or the program leaves a text.
-*/
-bool calculateValue(const QStringList &program, Lookup *lookup, qreal *result)
-{
-    Operand operand;
-    return calculate(program, lookup, &operand)
-        && operandNumber(operand, lookup, result);
 }
 
 /*!

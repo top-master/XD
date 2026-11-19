@@ -106,6 +106,7 @@ void FormatParamWrapRule::run(FormatDocument *document) const
                 limit
             );
             const bool breaksAfterOpen = conditions.holds(
+                QString(QLL("structure.wrapSignatureAt")),
                 fileConfig.wrapSignatureAt,
                 i,
                 percent,
@@ -231,6 +232,7 @@ void FormatParamWrapRule::regroup(
         );
         const qreal percent = textWidth(prefix) * 100.0 / qMax(1, limit);
         const bool mustBreak = conditions->holds(
+            QString(QLL("structure.wrapSignatureAt")),
             fileConfig.wrapSignatureAt, i,
             percent,
             FormatFileConfig::defaultWrapSignatureAt()

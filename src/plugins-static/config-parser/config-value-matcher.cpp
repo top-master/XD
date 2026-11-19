@@ -30,3 +30,14 @@ QString Config::ValueMatcher::explain(const QString &) const
 {
     return QString();
 }
+
+/*!
+    Converts @a answer, what a key's compiled program gives (see
+    Config::Condition::answer()), into @a value, the value of the type the
+    key takes; returns false when this matcher compiles no program, or
+    takes no such answer, hence the next matcher of the key may.
+*/
+bool Config::ValueMatcher::convert(const QVariant &, QVariant *) const
+{
+    return false;
+}

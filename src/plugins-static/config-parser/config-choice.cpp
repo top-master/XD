@@ -10,7 +10,7 @@
 
     Validates a choice between words selected by conditional expressions,
     such as `hasStd("C++11") ? warn : ignore`, which Config::Condition
-    compiles as a whole (see Condition::compileChoice()); resolution runs
+    compiles as a whole (see Condition::compile()); resolution runs
     only the condition and the branch it selects. A branch may spell its
     word in double quotes too, with the escapes of a C++ string literal
     (see Config::Escape), and may give a number instead, such as `2` or
@@ -45,7 +45,7 @@ bool Config::Choice::match(const QString &value, QString *matched) const
 /*!
     Builds why the choice does not take @a value, such as a bare branch
     with signs after a name nothing defines, or a condition that does not
-    compile (see Condition::compileChoice()); empty when it takes it, or no
+    compile (see Condition::compile()); empty when it takes it, or no
     reason is known.
 */
 QString Config::Choice::explain(const QString & value) const
@@ -59,6 +59,32 @@ QString Config::Choice::explain(const QString & value) const
         return QString();
     }
     return error;
+}
+
+/*!
+    Converts @a answer, what the choice gives (see answer()), into @a value:
+    a word the choice lists, in the list's spelling, or any text when it
+    lists none, as a QString, or a number as a qreal. Returns false for any
+    other answer, such as a word it does not list.
+*/
+bool Config::Choice::convert(const QVariant & answer, QVariant *value) const
+{
+    if (answer.type() == QVariant::Double) {
+        *value = answer;
+        return true;
+    }
+    const QString word = answer.toString();
+    for (int i = 0; i < this->m_values.size(); ++i) {
+        if (this->m_values.at(i).compare(word, Qt::CaseInsensitive) == 0) {
+            *value = this->m_values.at(i);
+            return true;
+        }
+    }
+    if (answer.type() != QVariant::String || ! this->m_values.isEmpty()) {
+        return false;
+    }
+    *value = word;
+    return true;
 }
 
 /*!
@@ -87,8 +113,8 @@ bool Config::Choice::check(const QString &expression, const QStringList &names,
                            bool *mismatched)
 {
     QStringList program;
-    return Condition::compileChoice(expression, names, values, &program,
-                                    error, mismatch, mismatched);
+    return Condition::compile(expression, names, &program, error, false,
+                              mismatch, mismatched, &values);
 }
 
 /*!
@@ -124,9 +150,16 @@ bool Config::Choice::answer(const QString &expression, const QStringList &names,
     const QString text = expression.trimmed();
     QStringList program;
     QString reason;
-    if ( ! Condition::compileChoice(text, names, values, &program, &reason,
-                                    Condition::NameMismatchIgnore)
-    ) {
+    if ( ! Condition::compile(
+        text,
+        names,
+        &program,
+        &reason,
+        false,
+        Condition::NameMismatchIgnore,
+        Q_NULLPTR,
+        &values
+    )) {
         *error = QString(QLL("invalid conditional choice: %1")).arg(text);
         if ( ! reason.isEmpty()) {
             *error += QLL(": ") + reason;

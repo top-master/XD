@@ -70,6 +70,7 @@ void FormatBodyBracesRule::run(FormatDocument *document) const
         if (document->token(close) != RBRACE || open < 0
             || ! closesChain(document, close)
             || ! conditions.holds(
+                QString(QLL("structure.bodyBraces")),
                 document->configAt(document->symbols().at(open).from)
                     .bodyBraces,
                 open

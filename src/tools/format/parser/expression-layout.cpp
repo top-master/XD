@@ -1074,6 +1074,7 @@ QByteArray FormatExpressionLayout::layoutChainRest(
             const int operandLast = end + 1 < operators.size()
                 ? operators.at(end + 1) - 1 : last;
             if (m_conditions->holds(
+                    QString(QLL("structure.wrapChainAt")),
                     m_document
                         ->configAt(
                             m_document->symbols().at(operators.at(end)).from
@@ -1626,6 +1627,7 @@ bool FormatExpressionLayout::mayBreakList(int open, int itemCount) const
         fileConfig.wrapMax
     );
     return m_conditions->holds(
+        QString(QLL("structure.wrapArgsAt")),
         fileConfig.wrapArgsAt,
         open,
         percent,

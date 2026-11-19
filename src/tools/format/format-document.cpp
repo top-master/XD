@@ -235,17 +235,16 @@ int FormatDocument::joinArgsAt(int open, int argument, int column,
     );
     const QSharedPointer<Config::Scopes::Scope > scope =
         FormatConditionContext::pushCountScope();
-    qreal count = 1;
-    if ( ! Config::Condition::value(
-            fileConfig.joinArgsCondition,
-            QSet<QString >(),
-            &context,
-            &count
-        )
-    ) {
+    QVariant count;
+    if ( ! FormatFileConfig::answer(
+        QString(QLL("structure.joinArgs")),
+        fileConfig.joinArgsCondition,
+        &context,
+        &count
+    )) {
         return 1;
     }
-    return qMax(1, int(count));
+    return qMax(1, count.toInt());
 }
 
 /*!

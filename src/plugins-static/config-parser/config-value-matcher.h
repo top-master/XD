@@ -6,6 +6,7 @@
 
 #include <QtCore/QList>
 #include <QtCore/QSharedPointer>
+#include <QtCore/QVariant>
 #include <QtCore/QString>
 
 namespace Config {
@@ -28,6 +29,7 @@ public:
     virtual QString describe() const = 0;
 
     virtual QString explain(const QString & value) const;
+    virtual bool convert(const QVariant & answer, QVariant *value) const;
 };
 
 typedef QList<QSharedPointer<const ValueMatcher > > Matchers;

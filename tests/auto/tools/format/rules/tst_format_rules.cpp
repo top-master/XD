@@ -3036,16 +3036,22 @@ void tst_FormatRules::testSettings_shouldReadWrapColumns()
     qExpect(error)->toContain(QString(QLL("[Comments] wrapMax = 70 | 80: use a number from 20 to 200")));
 }
 
-/// Reads `[Structure] wrapMistakes`: `is(array) ? average : never` without
-/// a `.formatrc`, the choice a `.formatrc` gives, and an error that lists
-/// the words for one it does not take.
+/// Reads `[Structure] wrapMistakes`, compiled: `is(array) ? average : never`
+/// without a `.formatrc`, the choice a `.formatrc` gives, and an error that
+/// lists the words for one it does not take.
 void tst_FormatRules::testWrapMistakes_shouldTakeItsValues()
 {
     QTemporaryDir dir;
     FormatFileConfig settings;
     QString error;
-    qExpect(FormatFileConfig().wrapMistakes)
-        ->toEqual(QString(QLL("is(array) ? average : never")));
+    const QStringList words = FormatFileConfig::wrapMistakesWords();
+    QStringList program;
+    QVERIFY2(Config::Condition::compile(
+        QString(QLL("is(array) ? average : never")),
+        FormatScopeConditions::names(), &program, &error, false,
+        Config::Condition::NameMismatchWarn, Q_NULLPTR, &words
+    ), qPrintable(error));
+    qExpect(FormatFileConfig().wrapMistakes)->toEqual(program);
     writeProject(dir, QStringList() << QString(QLL(".formatrc"))
         << QString(QLL("[Structure]\nwrapMistakes = is(call) ? cfg.joinArgs : never\n"))
     );
@@ -3056,8 +3062,12 @@ void tst_FormatRules::testWrapMistakes_shouldTakeItsValues()
         &error
     ))
         ->toBeTruthy();
-    qExpect(settings.wrapMistakes)
-        ->toEqual(QString(QLL("is(call) ? cfg.joinArgs : never")));
+    QVERIFY2(Config::Condition::compile(
+        QString(QLL("is(call) ? cfg.joinArgs : never")),
+        FormatScopeConditions::names(), &program, &error, false,
+        Config::Condition::NameMismatchWarn, Q_NULLPTR, &words
+    ), qPrintable(error));
+    qExpect(settings.wrapMistakes)->toEqual(program);
     writeProject(dir, QStringList() << QString(QLL(".formatrc"))
         << QString(QLL("[Structure]\nwrapMistakes = sometimes\n"))
     );
