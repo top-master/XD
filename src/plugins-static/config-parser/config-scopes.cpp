@@ -529,6 +529,7 @@ bool Config::Scopes::call(
     if ( ! Config::Scopes::resolve(member, context, arguments, &resolved)
         || Config::Types::object(resolved)
     ) {
+        *result = 0;
         return false;
     }
     if (resolved.type() == QVariant::Bool) {

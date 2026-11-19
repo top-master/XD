@@ -795,26 +795,13 @@ bool FormatSuperTypedefRule::wantsTypedef(const FormatDocument *document, int br
     const FormatFileConfig &fileConfig = document->configAt(offset);
     const FormatSuperContext context(this, document, brace, base);
     const QStringList words = FormatFileConfig::superChoices();
-    QStringList program;
     QString error;
     QVariant resolved;
-    if ( ! Config::Condition::compile(
-            fileConfig.typedefSuper,
-            FormatFileConfig::superConditionNames(),
-            &program,
-            &error,
-            false,
-            Config::Condition::NameMismatchIgnore,
-            Q_NULLPTR,
-            &words
-        )
-        || ! FormatFileConfig::resolve(
-            QString(QLL("structure.typedefSuper")),
-            program,
-            &context,
-            &resolved
-        )
-    ) {
+    if ( ! FormatFileConfig::resolveText(
+        QString(QLL("structure.typedefSuper")), fileConfig.typedefSuper,
+        FormatFileConfig::superConditionNames(), &words,
+        Config::Condition::NameMismatchIgnore, &context, &resolved, &error
+    )) {
         return false;
     }
     const QString choice = resolved.toString();
@@ -913,7 +900,6 @@ void FormatSuperTypedefRule::replaceSites(FormatDocument *document) const
         const QString decisionKey =
             key + QLatin1Char('\n') + fileConfig.replaceSuperSites;
         if ( ! decisions.contains(decisionKey)) {
-            QStringList program;
             QString error;
             QVariant replace;
             bool available = false;
@@ -924,16 +910,13 @@ void FormatSuperTypedefRule::replaceSites(FormatDocument *document) const
                 base,
                 &document->formatConfig()
             );
-            const bool ok = Config::Condition::compile(
+            const bool ok = FormatFileConfig::resolveText(
+                QString(QLL("structure.replaceSuperSites")),
                 fileConfig.replaceSuperSites,
-                FormatFileConfig::superConditionNames(),
-                &program, &error, false,
-                Config::Condition::NameMismatchIgnore
-            )
-                && FormatFileConfig::resolve(
-                    QString(QLL("structure.replaceSuperSites")),
-                    program, &context, &replace
-                );
+                FormatFileConfig::superConditionNames(), Q_NULLPTR,
+                Config::Condition::NameMismatchIgnore, &context, &replace,
+                &error
+            );
             decisions.insert(decisionKey, ok && replace.toBool()
                 && context.predicate(
                     QString(QLL("hasSuperTypedef")),

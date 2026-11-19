@@ -528,3 +528,54 @@ bool pointsAhead(const QString & word)
     }
     return false;
 }
+
+/*!
+    Matches a Doxygen or QDoc command whose arguments run to the end of its
+    line: a `(round)` argument of the Doxygen manual, such as the
+    declaration of `@fn`, or the `<word>` and `[optional]` ones of a block
+    command, such as `@class <name> [<header-file>]`.
+*/
+Q_GLOBAL_STATIC_WITH_ARGS(QRegularExpression, docLineCommandPattern, (QString(QLL(
+        "^[\\\\@](fn|var|variable|typedef|property|overload|macro|def"
+        "|class|struct|union|record|enum|namespace|concept|interface|protocol"
+        "|category|package|module|inmodule|file|dir|headerfile|idlexcept"
+        "|memberof|relates|related|relatesalso|relatedalso|extends|implements"
+        "|page|mainpage|section|subsection|subsubsection|paragraph"
+        "|subparagraph|subsubparagraph|name|defgroup|addtogroup|weakgroup"
+        "|ingroup|if|ifnot|elseif|cond|addindex|noop|raisewarning|qualifier"
+        "|requirement|satisfies|verifies|vhdlflow|showdate|doxyconfig"
+        "|example|include|includelineno|includedoc|dontinclude|verbinclude"
+        "|htmlinclude|latexinclude|rtfinclude|maninclude|docbookinclude"
+        "|xmlinclude|snippet|snippetlineno|snippetdoc|line|skip|skipline|until"
+        "|image|dotfile|mscfile|diafile|mermaidfile|plantumlfile"
+        "|qmltype|qmlproperty|qmlmethod|qmlsignal)(?![A-Za-z0-9_])"))))
+
+/*!
+    Matches a Doxygen or QDoc command that takes the one word after it, such
+    as `@a <word>`, at the end of a text.
+*/
+Q_GLOBAL_STATIC_WITH_ARGS(QRegularExpression, docWordCommandPattern, (QString(QLL(
+        "(?:^|\\s)[\\\\@](a|b|c|e|em|p|anchor|ref|link|l|copydoc|copybrief"
+        "|copydetails|emoji|refitem)$"))))
+
+/*!
+    Tells whether the comment text @a text (the text of one comment line,
+    without its markers) opens with a command whose arguments run to the end
+    of its line, such as `@fn <declaration>`: a break inside them would cut
+    the command's argument; hence such a line is never wrapped, and counts
+    as fitting at any width.
+*/
+bool isDocLineCommand(const QString & text)
+{
+    return docLineCommandPattern()->match(text).hasMatch();
+}
+
+/*!
+    Tells whether @a text ends with a command that takes the word after it,
+    such as `@a` or `@ref`: a line break right after @a text would part the
+    command from its word.
+*/
+bool endsWithDocWordCommand(const QString & text)
+{
+    return docWordCommandPattern()->match(text).hasMatch();
+}

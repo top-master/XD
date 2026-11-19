@@ -601,6 +601,18 @@ the first one within `wrapMax`. No
 break falls inside backtick code, and a last line of 17 characters or fewer
 takes words from the line before it.
 
+Doxygen and QDoc commands keep their arguments whole. No break parts a
+command that takes one word (`@a`, `@b`, `@c`, `@e`, `@em`, `@p`, `@anchor`,
+`@ref`, `@link`, `@l`, `@copydoc`, `@copybrief`, `@copydetails`, `@emoji`,
+`@refitem`, written with `@` or `\`) from its word. A line opened by a
+command whose arguments run to the end of the line is neither wrapped nor
+reported, however long: the commands with a `(round)` argument in the Doxygen
+manual (such as `@fn <declaration>`, `@var`, `@typedef`, `@property`,
+`@overload`, `@section <name> <title>`, `@if`), the block commands that take
+only words (such as `@class <name> <header>`, `@enum`, `@namespace`,
+`@relates`, `@include <file>`), and the QDoc topic commands (`@variable`,
+`@macro`, `@inmodule`, `@qmltype`, and the like).
+
 A code keyword that the break would push to the next line stays on the line
 instead, when the break would leave at least `wrapEmptyLimit` columns free
 before the wrap column; the line may then pass `wrapMax` by up to

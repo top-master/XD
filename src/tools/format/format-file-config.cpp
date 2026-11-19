@@ -182,17 +182,17 @@ static const char defaultWrapConditionsOverText[] =
     "spaceRemaining < 20% ? 1 : 2";
 
 /*!
-    Spells the default `[Lint] byRefVariable` (see FormatFileConfig): a
-    warning while the project targets C++11, where some compilers mishandle
-    a non-const reference local, and nothing otherwise.
-*/
-/*!
     Spells the default `[Structure] wrapMistakes` (see FormatFileConfig): a
     brace list takes the average count of items per line, any other list
     keeps the user's lines.
 */
 static const char defaultWrapMistakesText[] = "is(array) ? average : never";
 
+/*!
+    Spells the default `[Lint] byRefVariable` (see FormatFileConfig): a
+    warning while the project targets C++11, where some compilers mishandle
+    a non-const reference local, and nothing otherwise.
+*/
 static const char defaultByRefVariableText[] = "hasStd(\"C++11\") ? warn : ignore";
 
 /*!
@@ -636,6 +636,34 @@ bool FormatFileConfig::resolve(
 }
 
 /*!
+    Compiles @a text over the names @a names (and the words @a words of a
+    choice, when not null; see Config::Condition::compile(), which handles a
+    misspelled name as @a mismatch says), and resolves it as resolve() does.
+    Returns false, with @a error, when the text does not compile, or does
+    not resolve.
+*/
+bool FormatFileConfig::resolveText(
+        const QString & key, const QString & text,
+        const QStringList & names, const QStringList *words,
+        Config::Condition::NameMismatch mismatch,
+        const Config::Evaluator::Context *context,
+        QVariant *value, QString *error)
+{
+    QStringList program;
+    if ( ! Config::Condition::compile(
+        text, names, &program, error, false, mismatch, Q_NULLPTR, words
+    )) {
+        *value = QVariant();
+        return false;
+    }
+    if ( ! FormatFileConfig::resolve(key, program, context, value)) {
+        *error = QString(QLL("cannot evaluate condition: %1")).arg(text);
+        return false;
+    }
+    return true;
+}
+
+/*!
     Logs @a error, a condition that did not compile; @a mismatched tells a
     name mismatch, which `[Code] nameMismatch = error` logs as an error.
 */
@@ -879,6 +907,7 @@ static bool readCountOrCondition(
     const QSharedPointer<Config::Scopes::Scope > scope =
         FormatConditionContext::pushCountScope();
     if ( ! compileCondition(value, program, true, mismatch, error)) {
+        *count = 0;
         return false;
     }
     QVariant constant;
@@ -1177,21 +1206,12 @@ static bool resolveLintChoice(
         QString *word)
 {
     const FormatLintContext context(&config);
-    QStringList program;
     QString error;
     QVariant resolved;
-    if (Config::Condition::compile(
-            value,
-            QStringList(),
-            &program,
-            &error,
-            false,
-            Config::Condition::NameMismatchWarn,
-            Q_NULLPTR,
-            &values
-        )
-        && FormatFileConfig::resolve(key, program, &context, &resolved)
-    ) {
+    if (FormatFileConfig::resolveText(
+        key, value, QStringList(), &values,
+        Config::Condition::NameMismatchWarn, &context, &resolved, &error
+    )) {
         *word = resolved.toString();
         return true;
     }

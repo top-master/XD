@@ -13,7 +13,6 @@ class Escape
 public:
     static bool decode(const QString & text, QString *decoded, QString *error);
     static bool unquote(const QString & text, QString *value, QString *error);
-    static bool isQuoted(const QString & text);
     static bool simple(char name, char *value);
     static int digitOf(QChar c, int base);
     static bool readDigits(const QString & text, int from, int base,

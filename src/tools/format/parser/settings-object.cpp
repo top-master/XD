@@ -63,18 +63,6 @@ public:
         return true;
     }
 
-    inline bool hasStandard(const QString & standard,
-                            bool *value) const Q_DECL_OVERRIDE_IL
-    {
-        return m_place->hasStandard(standard, value);
-    }
-
-    inline bool hasCompiler(const QString & compiler,
-                            bool *value) const Q_DECL_OVERRIDE_IL
-    {
-        return m_place->hasCompiler(compiler, value);
-    }
-
     inline bool isTarget(const QString & kind,
                          bool *value) const Q_DECL_OVERRIDE_IL
     {

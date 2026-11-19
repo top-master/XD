@@ -42,7 +42,7 @@ private:
     QByteArray layoutGroup(int open, int close, int column, int trailing);
     QByteArray listLines(
             int open, int close, const QList<QPair<int, int > > & items,
-            bool keepsGroups, int firstItem);
+            bool keepsGroups, int firstItem, int joinCount);
     QByteArray itemText(int first, int last, int column, int trailing);
     bool breaksOnlyBetweenLiterals(int first, int last) const;
     bool mayBreakList(int open, int itemCount) const;
@@ -59,7 +59,6 @@ private:
     FormatScopeConditions *m_conditions;
     int m_indent;
     int m_paddingLevel;
-    int m_joinCount;
     bool m_brokeUngrouped;
 };
 

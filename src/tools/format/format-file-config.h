@@ -72,6 +72,12 @@ public:
             const QString & key, const QStringList & program,
             const Config::Evaluator::Context *context,
             QVariant *value);
+    static bool resolveText(
+            const QString & key, const QString & text,
+            const QStringList & names, const QStringList *words,
+            Config::Condition::NameMismatch mismatch,
+            const Config::Evaluator::Context *context,
+            QVariant *value, QString *error);
     static QString defaultTypedefSuper();
     static QString defaultReplaceSuperSites();
     static QStringList defaultThisMode();

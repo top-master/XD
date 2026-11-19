@@ -157,17 +157,18 @@ static QString iniKey(const QByteArray & text)
         const bool wide = text.at(i + 1) == 'U';
         const int digits = wide ? 4 : 2;
         const int first = i + (wide ? 2 : 1);
-        bool ok = first + digits <= text.size();
-        for (int d = first; ok && d < first + digits; ++d) {
-            ok = Config::Escape::digitOf(QLatin1Char(text.at(d)), 16) >= 0;
-        }
-        if ( ! ok) {
+        uint code = 0;
+        int read = 0;
+        if ( ! Config::Escape::readDigits(
+            QString::fromLatin1(text.mid(first, digits)), 0, 16, digits,
+            &code, &read
+        )) {
             run += '%';
             continue;
         }
         key += QString::fromUtf8(run);
         run.clear();
-        key += QChar(text.mid(first, digits).toInt(Q_NULLPTR, 16));
+        key += QChar(ushort(code));
         i = first + digits - 1;
     }
     return key + QString::fromUtf8(run);

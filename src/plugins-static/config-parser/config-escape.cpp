@@ -33,9 +33,9 @@ static const uint pastLastCodePoint = uint(QChar::LastValidCodePoint) + 1;
 /*!
     Builds the value of the @a count digits of @a base (8 or 16) of @a text
     at @a from (all of its digits there, when @a count is 0) into @a value,
-    and the number of digits it read into @a read; returns false when a
-    digit is missing. A value past U+10FFFF stays right past it, however
-    many digits follow, rather than wrap (see isCodePoint()).
+    and the number of digits it read into @a read; returns false, with
+    @a value 0, when a digit is missing. A value past U+10FFFF stays right
+    past it, however many digits follow, rather than wrap (see isCodePoint()).
 */
 bool Config::Escape::readDigits(
         const QString & text, int from, int base,
@@ -54,7 +54,11 @@ bool Config::Escape::readDigits(
         *value = qMin(*value * uint(base) + uint(digit), pastLastCodePoint);
         ++*read;
     }
-    return *read > 0 && (count == 0 || *read == count);
+    if (*read == 0 || (count != 0 && *read != count)) {
+        *value = 0;
+        return false;
+    }
+    return true;
 }
 
 /*!
@@ -70,7 +74,7 @@ bool Config::Escape::isCodePoint(uint value)
     ends it (a `\` taking the character after it along); a text of two
     quoted parts, such as `"a" "b"`, is not.
 */
-bool Config::Escape::isQuoted(const QString & text)
+static bool isQuoted(const QString & text)
 {
     if (text.size() < 2 || ! text.startsWith(QLatin1Char('"'))) {
         return false;
@@ -91,7 +95,7 @@ bool Config::Escape::unquote(
         const QString & text, QString *value,
         QString *error)
 {
-    if ( ! Config::Escape::isQuoted(text)) {
+    if ( ! isQuoted(text)) {
         *value = text;
         return true;
     }
@@ -115,6 +119,7 @@ bool Config::Escape::simple(char name, char *value)
     const int place = name != 0
         ? QByteArray::fromRawData(names, sizeof(names) - 1).indexOf(name) : -1;
     if (place < 0) {
+        *value = 0;
         return false;
     }
     *value = values[place];

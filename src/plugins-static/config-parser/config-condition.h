@@ -120,7 +120,7 @@ Q_ALWAYS_INLINE bool Condition::value(
     QVariant result;
     const bool isNumber = resolve(program, holding, context, &result)
         && result.type() == QVariant::Double;
-    *number = isNumber ? result.toDouble() : *number;
+    *number = isNumber ? result.toDouble() : 0;
     return isNumber;
 }
 #endif // Q_MOC_RUN

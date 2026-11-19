@@ -123,7 +123,7 @@ static bool endsWithClosingLine(const QByteArray & text)
 */
 FormatExpressionLayout::FormatExpressionLayout(const FormatDocument *document, FormatScopeConditions *conditions, int indent)
     : m_document(document), m_conditions(conditions)
-    , m_indent(indent), m_paddingLevel(0), m_joinCount(0)
+    , m_indent(indent), m_paddingLevel(0)
     , m_brokeUngrouped(false)
 {
 }
@@ -626,7 +626,8 @@ QByteArray FormatExpressionLayout::layoutList(
                     close,
                     items.mid(1),
                     false,
-                    1
+                    1,
+                    0
                 );
             }
             return text + '\n' + this->pad() + closer;
@@ -648,13 +649,13 @@ QByteArray FormatExpressionLayout::layoutList(
                 item.second
             );
     }
-    m_joinCount = joinCount;
     return head + this->listLines(
         open,
         close,
         items,
         isWhole && (isBroken || (keepsLines && spansLines)),
-        0
+        0,
+        joinCount
     )
         + "\n"
         + this->pad()
@@ -1070,7 +1071,7 @@ QByteArray FormatExpressionLayout::layoutChainRest(
             const int start = column
                 + space.size()
                 + textWidth(this->oneLine(first, operators.at(end) - 1));
-            const qreal spaceUsed = start * 100.0 / wrapMax;
+            const qreal percentUsed = start * 100.0 / wrapMax;
             const int operandLast = end + 1 < operators.size()
                 ? operators.at(end + 1) - 1 : last;
             if (m_conditions->holds(
@@ -1081,7 +1082,7 @@ QByteArray FormatExpressionLayout::layoutChainRest(
                         )
                         .wrapChainAt,
                     operators.at(end),
-                    spaceUsed,
+                    percentUsed,
                     FormatFileConfig::defaultWrapChainAt()
                 )
                 || ! this->fits(
@@ -1398,22 +1399,18 @@ QByteArray FormatExpressionLayout::layoutGroup(
 
     Each line then takes the items after it that `[Structure] joinArgs`
     lets share it (see FormatDocument::joinArgsAt()), asked at the line's
-    last item, or the count layoutList() was given, while the line fits; an
-    item the user grouped with others stays with its group.
+    last item, or @p joinCount when positive (the count layoutList() was
+    given for this list alone, not the lists its items hold), while the line
+    fits; an item the user grouped with others stays with its group.
 */
 QByteArray FormatExpressionLayout::listLines(
         int open,
         int close,
         const QList<QPair<int, int > > & items,
         bool keepsGroups,
-        int firstItem)
+        int firstItem, int joinCount)
 {
     const bool hasTrailingComma = m_document->token(close - 1) == COMMA;
-
-    // Takes the count of items per line that layoutList() was asked for, for
-    // this list alone, not the lists its items hold.
-    const int joinCount = m_joinCount;
-    m_joinCount = 0;
     QList<int > starts;
     for (int i = 0; i < items.size(); ++i) {
         starts << items.at(i).first;

@@ -142,6 +142,7 @@ private slots:
     void testAgentGuides_shouldRemoveLeftoversOfEndedRuns();
     void testSettings_shouldInheritStructureInComments();
     void testCommentWidth_shouldWrap();
+    void testCommentWidth_shouldNotReportLineCommands();
     void testSettings_shouldRejectUnknownValue();
     void testReferenceSpace_shouldFollowSettings_data();
     void testReferenceSpace_shouldFollowSettings();
@@ -2857,6 +2858,12 @@ void tst_FormatRules::testCommentWidth_shouldWrap_data()
     QTest::newRow("trailing comment kept") << QString(QLL(""))
         << QByteArray("int a; // The tool waits for the server to answer each request in turn before it sends the next one.\n")
         << QByteArray("int a; // The tool waits for the server to answer each request in turn before it sends the next one.\n");
+    QTest::newRow("word command kept with its word") << QString()
+        << QByteArray("/*!\n    Builds the value that the setting of the place in question gives to @a name and the rest.\n*/\nvoid f();\n")
+        << QByteArray("/*!\n    Builds the value that the setting of the place in question gives to\n    @a name and the rest.\n*/\nvoid f();\n");
+    QTest::newRow("line command kept whole") << QString()
+        << QByteArray("/*!\n    @fn bool Widget::render(const QString & name, const QSize & size, bool *rendered) const\n\n    Renders it.\n*/\n")
+        << QByteArray("/*!\n    @fn bool Widget::render(const QString & name, const QSize & size, bool *rendered) const\n\n    Renders it.\n*/\n");
 }
 
 /// Wraps with the `.formatrc` of the row, and wraps the result again,
@@ -2886,6 +2893,31 @@ void tst_FormatRules::testCommentWidth_shouldWrap()
         path
     ));
     QCOMPARE(again.text, output);
+}
+
+/// A command whose arguments run to the end of its line, such as `@fn` or
+/// `\class`, takes no break; hence its long line counts as fitting, while
+/// a long line of plain text next to it is still reported.
+void tst_FormatRules::testCommentWidth_shouldNotReportLineCommands()
+{
+    QTemporaryDir dir;
+    writeProject(dir, QStringList());
+    const QByteArray input(
+        "/*!\n"
+        "    @fn bool Widget::render(const QString & name, const QSize & size, bool *rendered) const\n"
+        "    \\class WidgetRendererWithAVeryLongName widgets/widget-renderer-with-a-very-long-name.h\n"
+        "*/\n"
+        "// https://www.example.com/manual/commands.html#somelonganchorthatrunspasteightycolumns\n"
+    );
+    const FormatResult result = qMove(this->formatWith(
+        QString(QLL("comment-width")),
+        input,
+        dir.path() + QLL("/a.cpp")
+    ));
+    qExpect(result.error)->toBeEmpty();
+    QCOMPARE(result.text, input);
+    QCOMPARE(result.issues.size(), 1);
+    QCOMPARE(result.issues.first().line, 5);
 }
 
 /// Hands each file to one batch alone, in the order the readings added it,

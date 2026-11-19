@@ -44,5 +44,7 @@ QList<QPair<int, int > > tableRanges(const FormatDocument *document);
 QString proseOnly(const QString & text);
 bool isCodeWord(const QString & word);
 bool pointsAhead(const QString & word);
+bool isDocLineCommand(const QString & text);
+bool endsWithDocWordCommand(const QString & text);
 
 #endif // PARSER_COMMENT_HELPERS_H

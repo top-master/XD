@@ -112,13 +112,8 @@ bool ArgumentContext::predicate(const QString &name, bool *value) const
 
 bool ArgumentContext::value(qreal *value) const
 {
-    if (this->m_count) {
-        *value = *this->m_count;
-    } else {
-        *value = this->m_condition
-            ? this->m_scope->conditionArgumentCount(this->m_token, 0)
-            : this->m_scope->argumentCount(this->m_token, 0);
-    }
+    *value = this->m_count ? *this->m_count
+                           : this->m_scope->argumentCount(this->m_token, 0);
     return true;
 }
 
@@ -166,9 +161,7 @@ static QVariant resolveOf(
         const Config::Evaluator::Context *context)
 {
     QVariant value;
-    if ( ! FormatFileConfig::resolve(key, program, context, &value)) {
-        return QVariant();
-    }
+    FormatFileConfig::resolve(key, program, context, &value);
     return value;
 }
 
@@ -201,31 +194,36 @@ bool FormatScopeConditions::holds(
         const QString & key, const QStringList & program, int token,
         const QStringList & fallback)
 {
-    const ArgumentContext context(
-        this, token, token,
-        false, Q_NULLPTR, Q_NULLPTR
-    );
-    const QVariant value = resolveOf(key, program, &context);
-    if (value.isValid()) {
-        return value.toBool();
-    }
-    return resolveOf(key, fallback, &context).toBool();
+    return this->holdsAt(key, program, token, Q_NULLPTR, fallback);
 }
 
 /*!
     Tells whether the condition @a program holds at the token @a token, as
     the holds() above does, for a line the caller is still laying out, where
-    @a spaceUsed is the share of `wrapMax` that line uses up to the token
-    (see FormatConditionObject's `spaceUsed`).
+    @a percentUsed is the percent of `wrapMax` (0 to 100) that line uses up
+    to the token (see FormatConditionObject's `spaceUsed`).
 */
 bool FormatScopeConditions::holds(
         const QString & key, const QStringList & program, int token,
-        qreal spaceUsed, const QStringList & fallback)
+        qreal percentUsed, const QStringList & fallback)
 {
-    const qreal space = 100 - spaceUsed;
+    const qreal spaceRemaining = 100 - percentUsed;
+    return this->holdsAt(key, program, token, &spaceRemaining, fallback);
+}
+
+/*!
+    Tells whether the condition @a program holds at the token @a token, with
+    `spaceRemaining` measured right after that token, unless
+    @a spaceRemaining gives it (in percent); the default condition
+    @a fallback decides when a term misses what it needs.
+*/
+bool FormatScopeConditions::holdsAt(
+        const QString & key, const QStringList & program, int token,
+        const qreal *spaceRemaining, const QStringList & fallback)
+{
     const ArgumentContext context(
         this, token, token,
-        false, Q_NULLPTR, &space
+        false, Q_NULLPTR, spaceRemaining
     );
     const QVariant value = resolveOf(key, program, &context);
     if (value.isValid()) {

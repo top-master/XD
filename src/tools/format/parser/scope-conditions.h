@@ -29,7 +29,7 @@ public:
     bool holds(const QString & key, const QStringList & program, int token,
                const QStringList & fallback);
     bool holds(const QString & key, const QStringList & program, int token,
-               qreal spaceUsed, const QStringList & fallback);
+               qreal percentUsed, const QStringList & fallback);
     bool argsOver(int token, int count);
     bool argsOver(int token, int count, qreal spaceRemaining);
     bool conditionsOver(int token, int count);
@@ -50,6 +50,8 @@ public:
     FormatMemberScope functionScope(int brace);
 
 private:
+    bool holdsAt(const QString & key, const QStringList & program, int token,
+                 const qreal *spaceRemaining, const QStringList & fallback);
     bool countOver(int token, int count, const qreal *spaceRemaining,
                    bool condition);
     int limitOf(int token, int count, const qreal *spaceRemaining);

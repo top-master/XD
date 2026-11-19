@@ -7,6 +7,7 @@
 #include "../parser/comment-helpers.h"
 
 #include <QtCore/QRegularExpression>
+#include <QtCore/QSet>
 #include <QtCore/QVector>
 
 /*!
@@ -52,7 +53,11 @@ static bool isParagraphBreak(const QByteArray & text)
     wrap column breaks the line, or, when a word reaches past it, the
     first one within the limit. No break falls inside a backtick code span,
     a word too long for any line gets a line of its own, and a last line of
-    17 characters or fewer takes words from the line before it.
+    17 characters or fewer takes words from the line before it. No break
+    parts a command that takes one word, such as `@a` or `@ref`, from its
+    word, and a line opened by a command whose arguments run to the end of
+    the line, such as `@fn <declaration>` or `@class <name>`, is neither
+    wrapped nor reported (see isDocLineCommand()).
 
     A code keyword (see isCodeWord()) that the break would push to the
     next line, while the break leaves at least `[Comments] wrapEmptyLimit`
@@ -84,7 +89,8 @@ static bool isParagraphBreak(const QByteArray & text)
 
 /*!
     Finds the first space of @a text after @a from that is outside backtick
-    code, or the end of @a text.
+    code and parts no command from its word (see endsWithDocWordCommand()),
+    or the end of @a text.
 */
 static int nextSpace(const QString & text, int from)
 {
@@ -97,7 +103,9 @@ static int nextSpace(const QString & text, int from)
     for (int i = from + 1; i < text.size(); ++i) {
         if (text.at(i) == QLatin1Char('`')) {
             inCode = ! inCode;
-        } else if (text.at(i) == QLatin1Char(' ') && ! inCode) {
+        } else if (text.at(i) == QLatin1Char(' ') && ! inCode
+            && ! endsWithDocWordCommand(text.left(i))
+        ) {
             return i;
         }
     }
@@ -132,7 +140,9 @@ QStringList FormatCommentWidthRule::wrap(
                 inCode = ! inCode;
                 continue;
             }
-            if (c != QLatin1Char(' ') || inCode || i == 0) {
+            if (c != QLatin1Char(' ') || inCode || i == 0
+                || endsWithDocWordCommand(rest.left(i))
+            ) {
                 continue;
             }
             const int end = width + i;
@@ -319,11 +329,21 @@ void FormatCommentWidthRule::runGroup(
         return;
     }
 
-    // Reports each line that stays past the column limit.
+    // Reports each line that stays past the column limit, but for one whose
+    // command takes the rest of the line, which no break may cut.
+    QSet<int > commandLines;
+    for (int k = 0; k < lines.size(); ++k) {
+        if (isDocLineCommand(QString::fromUtf8(lines.at(k).text))) {
+            commandLines << document->lineOf(lines.at(k).offset);
+        }
+    }
     for (int g = 0; g < group.size(); ++g) {
         const int first = document->commentLine(group.at(g));
         const int last = document->commentEndLine(group.at(g));
         for (int line = first; line <= last; ++line) {
+            if (commandLines.contains(line)) {
+                continue;
+            }
             const QString text = QString::fromUtf8(document->lineText(line));
             const FormatFileConfig &fileConfig =
                 document->configAt(document->lineStart(line));

@@ -78,9 +78,7 @@ void FormatInlineKeywordRule::run(FormatDocument *document) const
                 if (hasInline) {
                     this->respell(document, overrideToken, marker);
                     anyInline = true;
-                } else if (marker.isEmpty() || exempt || start < 0) {
-                    continue;
-                } else {
+                } else if ( ! marker.isEmpty() && ! exempt && start >= 0) {
                     lackingOverrides.append(qMakePair(start, overrideToken));
                 }
                 continue;

@@ -127,6 +127,7 @@ private slots:
     void testCondition_shouldPassBareWords();
     void testChoice_shouldResolveWordsAndNumbers();
     void testOutputs_shouldBeClearedOnFailure();
+    void testCondition_shouldTakeNoSignedPercentAlone();
 
 private:
     void write(const QString & relative,
@@ -2448,6 +2449,33 @@ void tst_ConfigParser::testOutputs_shouldBeClearedOnFailure()
     qExpect(head)->toBeEmpty();
     qExpect(fallback)->toBeEmpty();
     qExpect(hasFallback)->toBeFalsy();
+
+    QStringList program = QStringList() << QString(QLL("stale"));
+    qExpect(Config::Condition::compile(QString(QLL("a > 140%")),
+                                       QStringList() << QString(QLL("a")),
+                                       &program, &error, true))->toBeFalsy();
+    qExpect(program)->toBeEmpty();
+}
+
+/// A sign of the percent's own, as in `-40%`, makes no math of it; a sign
+/// of math or a comparison beside the signed percent still does.
+void tst_ConfigParser::testCondition_shouldTakeNoSignedPercentAlone()
+{
+    const QStringList names = QStringList() << QString(QLL("a"));
+    QStringList program;
+    QString error;
+    qExpect(Config::Condition::compile(
+        QString(QLL("-40%")), names, &program, &error, true
+    ))->toBeFalsy();
+    qExpect(error)->toEqual(QString(QLL(
+        "40% alone is no condition; compare it with a value, as in x > 40%"
+    )));
+    qExpect(Config::Condition::compile(
+        QString(QLL("a > -40%")), names, &program, &error, true
+    ))->toBeTruthy();
+    qExpect(Config::Condition::compile(
+        QString(QLL("-40% < a")), names, &program, &error, true
+    ))->toBeTruthy();
 }
 
 QTEST_APPLESS_MAIN(tst_ConfigParser)

@@ -93,14 +93,13 @@ static bool resolveMismatch(const QString & spelling, const QStringList & known,
     // Compares the name with each known one written the same way, hence
     // only case may differ, and no `-` or `_` sign may move.
     for (int i = 0; i < known.size(); ++i) {
-        if (spelledLike(known.at(i), spelling).compare(spelling, Qt::CaseInsensitive)
-                != 0
-        ) {
+        const QString spelled = spelledLike(known.at(i), spelling);
+        if (spelled.compare(spelling, Qt::CaseInsensitive) != 0) {
             continue;
         }
         const QString message = QString(QLL("failed to find the %1 %2 (maybe %3 was meant)."))
             .arg(functions.contains(known.at(i)) ? QLL("function") : QLL("name"))
-            .arg(spelling, spelledLike(known.at(i), spelling));
+            .arg(spelling, spelled);
         if (mismatch == Config::Condition::NameMismatchError
             || mismatch == Config::Condition::NameMismatchCritical
         ) {
@@ -131,40 +130,21 @@ class ExpressionCompiler
 public:
     inline ExpressionCompiler(const QString &text, const QStringList &names,
                               Config::Condition::NameMismatch mismatch,
-                              bool choosesWords = false,
-                              const QStringList &words = QStringList())
-        : m_text(text), m_at(0), m_spellings(names), m_words(words)
+                              const QStringList *words)
+        : m_text(text), m_at(0), m_spellings(names)
+        , m_words(words ? *words : QStringList())
         , m_mismatch(mismatch), m_mismatched(false)
-        , m_choosesWords(choosesWords)
+        , m_choosesWords(words != Q_NULLPTR)
     {
         for (int i = 0; i < names.size(); ++i) {
             m_names.insert(canonicalName(names.at(i)));
         }
     }
 
-    inline bool compile(QStringList *program, QString *error, bool *mismatched)
+    bool compile(QStringList *program, QString *error, bool *mismatched)
     {
         m_program << QString(QLL("@expression"));
-        const bool isWhole = expression(0, m_choosesWords);
-        const QString rest = peek();
-        if (isWhole && ! rest.isEmpty() && m_error.isEmpty()) {
-            // Names what follows a whole condition.
-            const QChar lead = rest.at(0);
-            m_error = rest == QLL(")") ? QString(QLL("a ( is missing"))
-                : lead.isLetterOrNumber() || lead == QLatin1Char('_')
-                || lead == QLatin1Char('"') || lead == QLatin1Char('(')
-                || lead == QLatin1Char('!')
-                ? QString(QLL("a sign is missing before %1")).arg(rest)
-                : QString(QLL("unknown sign %1")).arg(rest);
-        }
-
-        // Takes a lone number as no condition, where only math uses one.
-        if (isWhole && rest.isEmpty() && ! m_choosesWords
-            && m_program.size() == 2 && m_program.at(1).startsWith(QLL("n:"))
-        ) {
-            m_error = QString(QLL("unknown name %1")).arg(m_text.trimmed());
-        }
-        if ( ! m_error.isEmpty() || ! isWhole) {
+        if ( ! expression(0, m_choosesWords) || ! endsWhole()) {
             *mismatched = m_mismatched;
             *error = ! m_error.isEmpty()
                 ? m_error
@@ -318,7 +298,10 @@ private:
         const QString before = m_previous;
         const QString token = peek();
         if (token == QLL("!") || token == QLL("-") || token == QLL("+")) {
+            // Leaves the sign before this one as the term's neighbor, since a
+            // sign of a term's own does not make math of it (`-40%` alone).
             take(token);
+            m_previous = before;
             if ( ! expression(7)) {
                 return false;
             }
@@ -359,7 +342,7 @@ private:
             // Takes a term that stands as a whole value of a choice as its
             // word (see valueWord()).
             const QString next = peek();
-            const bool isWholeValue = m_choosesWords && isValue
+            const bool isWholeValue = isValue
                 && (next.isEmpty() || next == QLL(":") || next == QLL(")"));
             if (isWholeValue && valueWord(token)) {
                 return true;
@@ -402,7 +385,7 @@ private:
                     && ! this->resolve(token, &name)
                 ) {
                     if ( ! m_mismatched) {
-                        m_error = isValue && m_choosesWords
+                        m_error = isValue
                             ? this->undefinedReason(token)
                             : QString(QLL("unknown name %1")).arg(token);
                     }
@@ -477,6 +460,9 @@ private:
     bool isDefined(const QString &token) const;
     bool bareWord();
     QString wordAt() const;
+    bool endsWhole();
+    QStringList knownNames() const;
+    bool decodeQuoted(const QString &token, QString *text);
     bool valueWord(const QString &token);
     QString undefinedReason(const QString &token);
     bool text(const QString &token);
@@ -499,18 +485,74 @@ private:
 };
 
 /*!
+    Tells whether the condition ends where expression() stopped, with why
+    not in m_error: a `)` that no `(` opened, a term that misses the sign
+    before it, an unknown sign, or a lone number, which only math takes.
+*/
+bool ExpressionCompiler::endsWhole()
+{
+    const QString rest = this->peek();
+    if (rest.isEmpty()) {
+        if ( ! this->m_choosesWords && this->m_program.size() == 2
+            && this->m_program.at(1).startsWith(QLL("n:"))
+        ) {
+            this->m_error = QString(QLL("unknown name %1"))
+                .arg(this->m_text.trimmed());
+            return false;
+        }
+        return true;
+    }
+    const QChar lead = rest.at(0);
+    this->m_error = rest == QLL(")") ? QString(QLL("a ( is missing"))
+        : lead.isLetterOrNumber() || lead == QLatin1Char('_')
+        || lead == QLatin1Char('"') || lead == QLatin1Char('(')
+        || lead == QLatin1Char('!')
+        ? QString(QLL("a sign is missing before %1")).arg(rest)
+        : QString(QLL("unknown sign %1")).arg(rest);
+    return false;
+}
+
+/*!
+    Builds every name a condition knows, in its own spelling: the names of
+    the condition, the members of Config::Scopes, `true`, and `false`.
+*/
+QStringList ExpressionCompiler::knownNames() const
+{
+    return QStringList(this->m_names.values()) + Config::Scopes::names()
+        + (QStringList() << QString(QLL("true")) << QString(QLL("false")));
+}
+
+/*!
+    Decodes @a token, a text in double quotes with the escapes of a C++
+    string literal (see Config::Escape), into @a text; returns false, with
+    why in m_error for a bad escape.
+*/
+bool ExpressionCompiler::decodeQuoted(const QString &token, QString *text)
+{
+    QString reason;
+    if (token.size() < 2 || ! token.endsWith(QLatin1Char('"'))) {
+        text->clear();
+        return false;
+    }
+    if ( ! Config::Escape::decode(token.mid(1, token.size() - 2), text,
+                                  &reason)
+    ) {
+        this->m_error = reason;
+        return false;
+    }
+    return true;
+}
+
+/*!
     Finds the known name that @a spelling means in another case into
     @a name (see resolveMismatch()), handled as the compiler's mode says.
 */
 bool ExpressionCompiler::resolve(const QString &spelling, QString *name)
 {
-    const QStringList functions = Config::Scopes::names();
-    const QStringList known = QStringList(this->m_names.values()) + functions
-        + (QStringList() << QString(QLL("true")) << QString(QLL("false")));
     return resolveMismatch(
         spelling,
-        known,
-        functions,
+        this->knownNames(),
+        Config::Scopes::names(),
         this->m_mismatch,
         name,
         &this->m_error,
@@ -526,11 +568,7 @@ bool ExpressionCompiler::resolve(const QString &spelling, QString *name)
 bool ExpressionCompiler::isDefined(const QString &token) const
 {
     const QString folded = foldedName(token);
-    if (folded == QLL("true") || folded == QLL("false")) {
-        return true;
-    }
-    const QStringList names = QStringList(this->m_names.values())
-        + Config::Scopes::names();
+    const QStringList names = this->knownNames();
     for (int i = 0; i < names.size(); ++i) {
         if (foldedName(names.at(i)) == folded) {
             return true;
@@ -614,12 +652,7 @@ bool ExpressionCompiler::valueWord(const QString &token)
 {
     QString text = token;
     const bool isQuoted = token.startsWith(QLatin1Char('"'));
-    QString reason;
-    if (isQuoted
-        && (token.size() < 2 || ! token.endsWith(QLatin1Char('"'))
-            || ! Config::Escape::decode(token.mid(1, token.size() - 2), &text,
-                                        &reason))
-    ) {
+    if (isQuoted && ! this->decodeQuoted(token, &text)) {
         return false;
     }
     for (int i = 0; i < this->m_words.size(); ++i) {
@@ -685,10 +718,7 @@ QString ExpressionCompiler::undefinedReason(const QString &token)
 bool ExpressionCompiler::text(const QString &token)
 {
     QString decoded;
-    QString reason;
-    if (token.size() < 2 || ! token.endsWith(QLatin1Char('"'))
-        || ! Config::Escape::decode(token.mid(1, token.size() - 2), &decoded, &reason)
-    ) {
+    if ( ! this->decodeQuoted(token, &decoded)) {
         return false;
     }
     this->m_program << (QString(QLL("s:")) + decoded);
@@ -973,16 +1003,18 @@ bool Config::Condition::compile(
         mismatched = &nameMismatched;
     }
     *mismatched = false;
-    ExpressionCompiler compiler(
-        input, names, mismatch, words != Q_NULLPTR,
-        words ? *words : QStringList()
-    );
-    return compiler.compile(program, error, mismatched)
-        && Config::Condition::checkPercents(
+    ExpressionCompiler compiler(input, names, mismatch, words);
+    if ( ! compiler.compile(program, error, mismatched)
+        || ! Config::Condition::checkPercents(
             *program,
             takesPercents && ! words,
             error
-        );
+        )
+    ) {
+        program->clear();
+        return false;
+    }
+    return true;
 }
 
 /*!
@@ -1132,8 +1164,8 @@ bool Config::Condition::resolve(
     Converts what resolve() resolves @a program to, with the names
     @a holding and the context @a context, into @a number, for a setting
     that takes a number, such as the choice `isHeader ? 2 : 1`. Returns
-    false, leaving @a number as it is, when a term misses what it needs, or
-    the program gives a word.
+    false, with @a number 0, when a term misses what it needs, or the
+    program gives a word.
 */
 
 /*!
