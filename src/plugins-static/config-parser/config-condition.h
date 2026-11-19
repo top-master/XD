@@ -12,6 +12,7 @@
 #include <QtCore/QHash>
 #include <QtCore/QList>
 #include <QtCore/QStringList>
+#include <QtCore/QVariant>
 
 namespace Config {
 
@@ -40,6 +41,11 @@ public:
                         QString *error, bool takesPercents = false,
                         NameMismatch mismatch = NameMismatchWarn,
                         bool *mismatched = Q_NULLPTR);
+    static bool compileChoice(const QString & text, const QStringList & names,
+                              const QStringList & words, QStringList *program,
+                              QString *error,
+                              NameMismatch mismatch = NameMismatchWarn,
+                              bool *mismatched = Q_NULLPTR);
     static bool evaluate(const QStringList & program,
                          const QSet<QString > & holding);
     static bool evaluate(const QStringList & program,
@@ -53,6 +59,9 @@ public:
     static bool value(const QStringList & program,
                       const QSet<QString > & holding,
                       const Evaluator::Context *context, qreal *result);
+    static bool answer(const QStringList & program,
+                       const QSet<QString > & holding,
+                       const Evaluator::Context *context, QVariant *result);
     static QString canonicalName(const QString & name);
     static NameMismatch nameMismatch(const QString & value);
 

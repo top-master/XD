@@ -128,9 +128,12 @@ class ExpressionCompiler
 {
 public:
     inline ExpressionCompiler(const QString &text, const QStringList &names,
-                              Config::Condition::NameMismatch mismatch)
-        : m_text(text), m_at(0), m_spellings(names), m_mismatch(mismatch)
-        , m_mismatched(false)
+                              Config::Condition::NameMismatch mismatch,
+                              bool choosesWords = false,
+                              const QStringList &words = QStringList())
+        : m_text(text), m_at(0), m_spellings(names), m_words(words)
+        , m_mismatch(mismatch), m_mismatched(false)
+        , m_choosesWords(choosesWords)
     {
         for (int i = 0; i < names.size(); ++i) {
             m_names.insert(canonicalName(names.at(i)));
@@ -140,7 +143,7 @@ public:
     inline bool compile(QStringList *program, QString *error, bool *mismatched)
     {
         m_program << QString(QLL("@expression"));
-        if ( ! expression(0) || ! peek().isEmpty()) {
+        if ( ! expression(0, m_choosesWords) || ! peek().isEmpty()) {
             *mismatched = m_mismatched;
             *error = ! m_error.isEmpty()
                 ? m_error
@@ -171,6 +174,12 @@ private:
                 end += m_text.at(end) == QLatin1Char('\\') ? 2 : 1;
             }
             return m_text.mid(m_at, qMin(end + 1, m_text.size()) - m_at);
+        }
+        if (m_choosesWords) {
+            const QString word = this->wordAt();
+            if ( ! word.isEmpty()) {
+                return word;
+            }
         }
         if (c.isLetter() || c == QLatin1Char('_')) {
             // Preserve established hyphenated names, while leaving any
@@ -273,7 +282,7 @@ private:
         return 0;
     }
 
-    bool expression(int minRank)
+    bool expression(int minRank, bool isValue = false)
     {
         const QString token = peek();
         if (token == QLL("!") || token == QLL("-") || token == QLL("+")) {
@@ -286,7 +295,7 @@ private:
                     ? QString(QLL("op:neg")) : QString(QLL("op:!")));
             }
         } else if (take(QString(QLL("(")))) {
-            if ( ! expression(0) || ! take(QString(QLL(")")))) {
+            if ( ! expression(0, isValue) || ! take(QString(QLL(")")))) {
                 return false;
             }
         } else {
@@ -294,6 +303,18 @@ private:
                 return false;
             }
             take(token);
+
+            // Takes a term that stands as a whole value of a choice as its
+            // word (see valueWord()).
+            const QString next = peek();
+            const bool isWholeValue = m_choosesWords && isValue
+                && (next.isEmpty() || next == QLL(":") || next == QLL(")"));
+            if (isWholeValue && valueWord(token)) {
+                return true;
+            }
+            if ( ! m_error.isEmpty()) {
+                return false;
+            }
             bool isNumber = false;
             QString number = token;
             if (number.endsWith(QLatin1Char('%'))) {
@@ -318,8 +339,15 @@ private:
                     && ! this->resolve(token, &name)
                 ) {
                     if ( ! m_mismatched) {
-                        m_error = QString(QLL("unknown name %1")).arg(token);
+                        m_error = isValue && m_choosesWords
+                            ? this->undefinedReason(token)
+                            : QString(QLL("unknown name %1")).arg(token);
                     }
+                    return false;
+                }
+                if (isWholeValue) {
+                    m_error = QString(QLL("%1 names a value of the condition, "
+                                          "not a choice")).arg(token);
                     return false;
                 }
                 if ( ! Config::Scopes::find(name).isNull()) {
@@ -367,7 +395,7 @@ private:
             }
         }
         if (minRank == 0 && take(QString(QLL("?")))) {
-            return choice();
+            return choice(isValue);
         }
         return true;
     }
@@ -383,18 +411,25 @@ private:
     }
 
     bool resolve(const QString &spelling, QString *name);
+    bool isDefined(const QString &token) const;
     bool bareWord();
+    QString wordAt() const;
+    bool valueWord(const QString &token);
+    QString undefinedReason(const QString &token);
     bool text(const QString &token);
-    bool choice();
+    bool choice(bool isValue);
     bool call(const QString &name);
 
     QString m_text;
     int m_at;
     QSet<QString > m_names;
     QStringList m_spellings;
+    QStringList m_words;
     QStringList m_program;
     Config::Condition::NameMismatch m_mismatch;
     bool m_mismatched;
+    /// Lets a whole value of a choice be a word (see valueWord()).
+    bool m_choosesWords;
     QString m_error;
 };
 
@@ -419,6 +454,27 @@ bool ExpressionCompiler::resolve(const QString &spelling, QString *name)
 }
 
 /*!
+    Tells whether @a token names something, in any case and spelling of its
+    `-` and `_` signs: a name of the condition, a member of Config::Scopes,
+    `true`, or `false`.
+*/
+bool ExpressionCompiler::isDefined(const QString &token) const
+{
+    const QString folded = foldedName(token);
+    if (folded == QLL("true") || folded == QLL("false")) {
+        return true;
+    }
+    const QStringList names = QStringList(this->m_names.values())
+        + Config::Scopes::names();
+    for (int i = 0; i < names.size(); ++i) {
+        if (foldedName(names.at(i)) == folded) {
+            return true;
+        }
+    }
+    return false;
+}
+
+/*!
     Compiles a call's argument that is a lone name nothing defines, in any
     case (see knows()), as its text, such as the `array` of `is(array)`;
     returns false, taking nothing, for any other argument.
@@ -434,19 +490,126 @@ bool ExpressionCompiler::bareWord()
     }
     this->take(token);
     const QString next = this->peek();
-    const QString folded = foldedName(token);
-    bool isKnown = folded == QLL("true") || folded == QLL("false");
-    const QStringList names = QStringList(this->m_names.values())
-        + Config::Scopes::names();
-    for (int i = 0; i < names.size() && ! isKnown; ++i) {
-        isKnown = foldedName(names.at(i)) == folded;
-    }
-    if (isKnown || (next != QLL(",") && next != QLL(")"))) {
+    if (this->isDefined(token) || (next != QLL(",") && next != QLL(")"))) {
         this->m_at = at;
         return false;
     }
     this->m_program << (QString(QLL("s:")) + token);
     return true;
+}
+
+/*!
+    Reads, in a choice of words, the token at the current place that the
+    usual tokens would split: a listed word with signs in it, such as
+    `keep-as-is`, in any case, or a C++ name joined by `::`, such as
+    `Foo::bar` or `::Foo::bar`; empty for any other token.
+*/
+QString ExpressionCompiler::wordAt() const
+{
+    QString word;
+    for (int i = 0; i < this->m_words.size(); ++i) {
+        const QString & listed = this->m_words.at(i);
+        const int end = this->m_at + listed.size();
+        if (listed.size() > word.size()
+            && this->m_text.mid(this->m_at, listed.size()).compare(
+                listed,
+                Qt::CaseInsensitive
+            ) == 0
+            && (end == this->m_text.size()
+                || ! (this->m_text.at(end).isLetterOrNumber()
+                    || this->m_text.at(end) == QLatin1Char('_')))
+        ) {
+            word = this->m_text.mid(this->m_at, listed.size());
+        }
+    }
+    if ( ! word.isEmpty()) {
+        return word;
+    }
+
+    // Reads identifiers joined by `::`, with or without a leading one.
+    const QRegExp name(QString(QLL("(::)?[A-Za-z_][A-Za-z0-9_]*(::[A-Za-z_][A-Za-z0-9_]*)*")));
+    if (name.indexIn(this->m_text, this->m_at) != this->m_at
+        || ! name.cap(0).contains(QLL("::"))
+    ) {
+        return QString();
+    }
+    return name.cap(0);
+}
+
+/*!
+    Compiles @a token, which stands as a whole value of a choice of words,
+    as the word it picks: a listed word, in any case, bare or in double
+    quotes (with its escapes resolved), spelled as the list spells it; or,
+    when no word is listed, any text in double quotes, and any bare name
+    that nothing defines (see isDefined()), such as `Q_DECL_OVERRIDE_IL` or
+    `Foo::bar`. Returns false for any other token, with why in m_error for
+    a text that no listed word matches.
+*/
+bool ExpressionCompiler::valueWord(const QString &token)
+{
+    QString text = token;
+    const bool isQuoted = token.startsWith(QLatin1Char('"'));
+    QString reason;
+    if (isQuoted
+        && (token.size() < 2 || ! token.endsWith(QLatin1Char('"'))
+            || ! Config::Escape::decode(token.mid(1, token.size() - 2), &text,
+                                        &reason))
+    ) {
+        return false;
+    }
+    for (int i = 0; i < this->m_words.size(); ++i) {
+        if (this->m_words.at(i).compare(text, Qt::CaseInsensitive) == 0) {
+            this->m_program << (QString(QLL("s:")) + this->m_words.at(i));
+            return true;
+        }
+    }
+    const QChar lead = token.isEmpty() ? QChar() : token.at(0);
+    const bool isName = lead.isLetter() || lead == QLatin1Char('_')
+        || lead == QLatin1Char(':');
+    if ( ! this->m_words.isEmpty()) {
+        if (isQuoted || (isName && ! this->isDefined(token))) {
+            this->m_error = QString(QLL("%1 is no choice of %2")).arg(
+                token,
+                this->m_words.join(QString(QLL(", ")))
+            );
+        }
+        return false;
+    }
+    if (isQuoted || (isName && ! this->isDefined(token))) {
+        this->m_program << (QString(QLL("s:")) + text);
+        return true;
+    }
+    return false;
+}
+
+/*!
+    Builds why the name @a token, which nothing defines, is no value of a
+    choice: math on it, such as `win32-1`, as a sign follows it, where a
+    value with signs needs double quotes; else that it is an unknown name.
+*/
+QString ExpressionCompiler::undefinedReason(const QString &token)
+{
+    static const char *const verbs[][2] = {
+        { "-", "subtract" }, { "+", "add" }, { "*", "multiply by" },
+        { "/", "divide by" }
+    };
+    const int at = this->m_at;
+    const QString sign = this->peek();
+    for (int v = 0; v < 4; ++v) {
+        if (sign != QLatin1String(verbs[v][0])) {
+            continue;
+        }
+        this->take(sign);
+        const QString right = this->peek();
+        this->m_at = at;
+        return QString(QLL("can't %1 `%2` since `%3` is undefined.")).arg(
+            QLatin1String(verbs[v][1]),
+            right,
+            token
+        );
+    }
+    this->m_at = at;
+    return QString(QLL("unknown name %1")).arg(token);
 }
 
 /*!
@@ -470,20 +633,22 @@ bool ExpressionCompiler::text(const QString &token)
 /*!
     Compiles the rest of a choice `<condition> ? <then> : <else>`, as in
     C, whose condition and `?` are already read: the condition picks
-    which of the two values runs, and the other one never does.
+    which of the two values runs, and the other one never does. With
+    @a isValue set, each of the two values is a whole value of a choice of
+    words (see valueWord()).
 */
-bool ExpressionCompiler::choice()
+bool ExpressionCompiler::choice(bool isValue)
 {
     const int toElse = this->m_program.size();
     this->m_program << QString();
-    if ( ! this->expression(0) || ! this->take(QString(QLL(":")))) {
+    if ( ! this->expression(0, isValue) || ! this->take(QString(QLL(":")))) {
         return false;
     }
     const int toEnd = this->m_program.size();
     this->m_program << QString();
     this->m_program[toElse] = QString(QLL("jelse:"))
         + QString::number(this->m_program.size());
-    if ( ! this->expression(0)) {
+    if ( ! this->expression(0, isValue)) {
         return false;
     }
     this->m_program[toEnd] = QString(QLL("goto:"))
@@ -712,6 +877,35 @@ bool Config::Condition::compile(
         mismatched
     )
         && Config::Condition::checkPercents(*program, takesPercents, error);
+}
+
+/*!
+    Compiles @a text, a choice of words such as `hasStd("C++11") ? warn :
+    ignore`, into @a program, whose conditions use the names @a names (see
+    compile()) and take no percent terms. Each whole value of the choice is
+    a word (see the words of @a words), a number, or an expression that
+    gives one, such as `cfg.joinArgs`; answer() then runs the program and
+    gives the word as a QString, or the number as a qreal. Without listed
+    words, a value may be any text in double quotes, or a bare name that
+    nothing defines, such as `Q_DECL_OVERRIDE_IL`; a name of the condition
+    is no value. Returns false, with @a error, for any other text; a sign
+    after an undefined name, as in `win32-1`, gets its own reason.
+
+    @a mismatch and @a mismatched work as compile()'s do.
+*/
+bool Config::Condition::compileChoice(
+        const QString & text, const QStringList & names,
+        const QStringList & words, QStringList *program, QString *error,
+        NameMismatch mismatch, bool *mismatched)
+{
+    bool nameMismatched = false;
+    if ( ! mismatched) {
+        mismatched = &nameMismatched;
+    }
+    *mismatched = false;
+    ExpressionCompiler compiler(text, names, mismatch, true, words);
+    return compiler.compile(program, error, mismatched)
+        && Config::Condition::checkPercents(*program, false, error);
 }
 
 /*!
@@ -1042,30 +1236,12 @@ private:
     qreal m_contextPercent;
 };
 
-bool calculate(const QStringList &program, Lookup *lookup, qreal *result,
-               bool *isPercent);
+class Operand;
 
-/*!
-    Runs the `@expression` @a program as calculate() does, and builds into
-    @a result the number it leaves; a percent term it leaves compares with
-    the percent value of @a lookup, and gives 1 when that value is past it,
-    else 0. Returns false when a term, or that comparison, misses a value.
-*/
-bool calculateValue(const QStringList &program, Lookup *lookup, qreal *result)
-{
-    bool isPercent = false;
-    if ( ! calculate(program, lookup, result, &isPercent)) {
-        return false;
-    }
-    if (isPercent) {
-        qreal percent = 0;
-        if ( ! lookup->percent(&percent)) {
-            return false;
-        }
-        *result = percent > *result ? 1 : 0;
-    }
-    return true;
-}
+bool calculate(const QStringList &program, Lookup *lookup, Operand *result);
+bool calculateValue(const QStringList &program, Lookup *lookup, qreal *result);
+bool calculateAnswer(const QStringList &program, Lookup *lookup,
+                     QVariant *result);
 
 /*!
     Tells whether the name @a name holds, as the context answers it, else as
@@ -1245,6 +1421,29 @@ bool Config::Condition::value(
 }
 
 /*!
+    Builds into @a result what @a program gives, as value() does, with the
+    names @a holding and the context @a context: a number as a qreal, or the
+    text an expression leaves, such as the argument of a choice's branch, as
+    a QString; hence the caller tells the two apart by the type. Returns
+    false when a term misses what it needs.
+*/
+bool Config::Condition::answer(
+        const QStringList & program, const QSet<QString > & holding,
+        const Evaluator::Context *context, QVariant *result)
+{
+    if (program.isEmpty() || program.first() != QLL("@expression")) {
+        qreal number = 0;
+        if ( ! Config::Condition::value(program, holding, context, &number)) {
+            return false;
+        }
+        *result = number;
+        return true;
+    }
+    Evaluator::Lookup lookup(holding, Q_NULLPTR, context);
+    return Evaluator::calculateAnswer(program, &lookup, result);
+}
+
+/*!
     Builds @a name in the form that names take in a condition: each `-` and
     `_` sign is dropped, and the letter after it upper-cased; hence
     `is-header`, `is_header` and `isHeader` name the same thing, while
@@ -1316,24 +1515,75 @@ public:
 };
 
 /*!
-    Tells, in @a holds, whether @a operand holds where a condition tests it:
-    a percent when the percent value of @a lookup is past it, any other
-    number when it is not zero. Returns false when a percent finds no value.
+    Builds into @a result the number @a operand stands for: a percent term
+    compares with the percent value of @a lookup, and gives 1 when that
+    value is past it, else 0. Returns false for a text, or a percent term
+    without a percent value.
 */
-static bool operandHolds(const Operand &operand, Lookup *lookup, bool *holds)
+static bool operandNumber(const Operand &operand, Lookup *lookup, qreal *result)
 {
     if (operand.isText) {
         return false;
     }
-    if ( ! operand.percent) {
-        *holds = operand.number != 0;
-        return true;
+    *result = operand.number;
+    if (operand.percent) {
+        qreal percent = 0;
+        if ( ! lookup->percent(&percent)) {
+            return false;
+        }
+        *result = percent > operand.number ? 1 : 0;
     }
-    qreal percent = 0;
-    if ( ! lookup->percent(&percent)) {
+    return true;
+}
+
+/*!
+    Tells, in @a holds, whether @a operand holds where a condition tests it:
+    when the number it stands for (see operandNumber()) is not zero.
+    Returns false for a text, or a percent term without a percent value.
+*/
+static bool operandHolds(const Operand &operand, Lookup *lookup, bool *holds)
+{
+    qreal number = 0;
+    if ( ! operandNumber(operand, lookup, &number)) {
         return false;
     }
-    *holds = percent > operand.number;
+    *holds = number != 0;
+    return true;
+}
+
+/*!
+    Runs the `@expression` @a program as calculate() does, and builds into
+    @a result the number it leaves (see operandNumber()). Returns false when
+    a term misses a value, or the program leaves a text.
+*/
+bool calculateValue(const QStringList &program, Lookup *lookup, qreal *result)
+{
+    Operand operand;
+    return calculate(program, lookup, &operand)
+        && operandNumber(operand, lookup, result);
+}
+
+/*!
+    Runs the `@expression` @a program as calculate() does, and builds into
+    @a result what it leaves: a text as a QString, else its number (see
+    operandNumber()) as a qreal. Returns false when a term misses a value.
+*/
+bool calculateAnswer(const QStringList &program, Lookup *lookup,
+                     QVariant *result)
+{
+    Operand operand;
+    if ( ! calculate(program, lookup, &operand)) {
+        return false;
+    }
+    if (operand.isText) {
+        *result = operand.text;
+        return true;
+    }
+    qreal number = 0;
+    if ( ! operandNumber(operand, lookup, &number)) {
+        return false;
+    }
+    *result = number;
     return true;
 }
 
@@ -1347,12 +1597,11 @@ namespace {
 
 /*!
     Runs the `@expression` @a program with the names, the percent value and
-    the context of @a lookup, and puts the number it leaves in @a result,
-    with @a isPercent set when that number is a percent term. Returns false
-    when a term misses what it needs.
+    the context of @a lookup, and puts the operand it leaves in @a result: a
+    number, which may be a percent term, or a text. Returns false when a
+    term misses what it needs.
 */
-bool calculate(const QStringList &program, Lookup *lookup, qreal *result,
-               bool *isPercent)
+bool calculate(const QStringList &program, Lookup *lookup, Operand *result)
 {
     const Config::Evaluator::Context *context = lookup->context();
     QList<Operand > stack;
@@ -1545,11 +1794,10 @@ bool calculate(const QStringList &program, Lookup *lookup, qreal *result,
             return false;
         }
     }
-    if (stack.size() != 1 || stack.first().isText) {
+    if (stack.size() != 1) {
         return false;
     }
-    *result = stack.first().number;
-    *isPercent = stack.first().percent;
+    *result = stack.first();
     return true;
 }
 

@@ -32,7 +32,8 @@ public:
     bool argsOver(int token, int count, qreal spaceRemaining);
     bool conditionsOver(int token, int count);
     bool conditionsOver(int token, int count, qreal spaceRemaining);
-    int conditionsLimit(int token, int count, const qreal *spaceRemaining);
+    int conditionsLimit(int token, int count);
+    int conditionsLimit(int token, int count, qreal spaceRemaining);
     QVariant answerAt(const QString & choice, const QStringList & words,
                       int token);
     int argumentCount(int token, int depth, int argument = 0) const;
@@ -48,6 +49,7 @@ public:
 private:
     bool countOver(int token, int count, const qreal *spaceRemaining,
                    bool condition);
+    int limitOf(int token, int count, const qreal *spaceRemaining);
     int countTargets(int target, int depth, int argument, bool condition) const;
     int argumentTarget(int token) const;
     qreal remainingSpace(int token, bool direct = false) const;

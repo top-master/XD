@@ -812,13 +812,33 @@ bool FormatScopeConditions::conditionsOver(int token, int count,
     Builds how many operands a range of the condition whose `(` is at
     @a token may hold by `[Structure] wrapConditionsOver`, before every
     operator of the range breaks (see `[Structure] wrapConditionsPer`): the
-    range holds @a count operands, and @a spaceRemaining, when given, is the
-    share of `wrapMax` left after the operand that may end a line it is
-    still laying out; else the context finds the share left after the `(`.
+    range holds @a count operands, and `spaceRemaining` is the share of
+    `wrapMax` left after its `(`, which the context finds when a term asks.
     Builds 0 for as many as fit. A condition that holds gives 1, one that
     does not gives 0, and one missing a value gives the setting's number.
 */
+int FormatScopeConditions::conditionsLimit(int token, int count)
+{
+    return this->limitOf(token, count, Q_NULLPTR);
+}
+
+/*!
+    Builds the limit the conditionsLimit() above does, for a line the caller
+    is still laying out, where @a spaceRemaining is the share of `wrapMax`
+    left after the operand that may end that line.
+*/
 int FormatScopeConditions::conditionsLimit(
+        int token, int count,
+        qreal spaceRemaining)
+{
+    return this->limitOf(token, count, &spaceRemaining);
+}
+
+/*!
+    Builds the limit of the conditionsLimit() functions, with
+    @a spaceRemaining when given, else the share the context finds.
+*/
+int FormatScopeConditions::limitOf(
         int token, int count,
         const qreal *spaceRemaining)
 {
