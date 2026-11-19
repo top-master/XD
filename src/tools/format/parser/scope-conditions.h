@@ -27,10 +27,9 @@ public:
 
     bool holds(const QString & key, const QStringList & program, int token);
     bool holds(const QString & key, const QStringList & program, int token,
-               qreal percent, const QStringList & fallback);
-    bool holds(const QStringList & program, int token);
-    bool holds(const QStringList & program, int token, qreal percent,
                const QStringList & fallback);
+    bool holds(const QString & key, const QStringList & program, int token,
+               qreal spaceUsed, const QStringList & fallback);
     bool argsOver(int token, int count);
     bool argsOver(int token, int count, qreal spaceRemaining);
     bool conditionsOver(int token, int count);

@@ -273,7 +273,17 @@ private:
             return false;
         }
         m_at += token.size();
+        m_previous = token;
         return true;
+    }
+
+    /*!
+        Tells whether @a token is a sign of math or of a comparison, which
+        a percent may stand beside (see expression()).
+    */
+    inline bool isMathSign(const QString &token) const
+    {
+        return precedence(token) >= 3;
     }
 
     int precedence(const QString &token) const
@@ -303,6 +313,7 @@ private:
 
     bool expression(int minRank, bool isValue = false)
     {
+        const QString before = m_previous;
         const QString token = peek();
         if (token == QLL("!") || token == QLL("-") || token == QLL("+")) {
             take(token);
@@ -370,7 +381,15 @@ private:
                     return false;
                 }
             } else if (isNumber) {
+                // Takes a percent only where it compares or counts, as in
+                // `x > 40%`, since it stands for no number alone.
                 const bool isPercent = token.endsWith(QLatin1Char('%'));
+                if (isPercent && ! isMathSign(before) && ! isMathSign(peek())) {
+                    m_error = QString(QLL("%1 alone is no condition; compare it "
+                                          "with a value, as in x > %1"))
+                        .arg(token);
+                    return false;
+                }
                 m_program << (QString(isPercent ? QLL("p:") : QLL("n:")) + number);
             } else {
                 QString name = canonicalName(token);
@@ -465,6 +484,8 @@ private:
     QStringList m_spellings;
     QStringList m_words;
     QStringList m_program;
+    /// Lets a term see the token before it, such as a sign a percent needs.
+    QString m_previous;
     Config::Condition::NameMismatch m_mismatch;
     bool m_mismatched;
     /// Lets a whole value of a choice be a word (see valueWord()).
@@ -779,13 +800,12 @@ bool ExpressionCompiler::call(const QString &name)
     (see canonicalName()), and one that differs from such a name in case
     alone follows NameMismatch; spaces around names and signs do not count.
 
-    A condition may hold percent terms such as `40%`, as in
-    `(40% & is-non-header) | (30% & is-header)`; a key that takes them
-    takes them from 0% to 100%, and a key that takes none rejects them (see
-    checkPercents()). The schema only knows that such a term needs a value:
-    each place that evaluates the condition sets the value, as a share of a
-    whole the setting names (for instance a column, as a share of the
-    widest column), and a term holds when that share is past the term's.
+    A condition may compare a value with a percent such as `40%`, which is
+    that share of 1 (0.4), as in
+    `(spaceUsed > 40% & is-non-header) | (spaceUsed > 30% & is-header)`,
+    where the tool's own name answers the share; a percent stands for no
+    condition alone. A key that takes percents takes them from 0% to 100%,
+    and a key that takes none rejects them (see checkPercents()).
 
     compile() turns such a text into a program, and evaluate() runs that
     program against the names that hold at the place in question; hence a
@@ -797,12 +817,11 @@ bool ExpressionCompiler::call(const QString &name)
     of which may lead on with a `.` to a member of the object it answers,
     such as `cfg.wrapMax`, and a
     choice `<condition> ? <then> : <else>`, whose number value() builds. A
-    member may answer a percent, as a text such as `35%`; a percent stays
-    one through `+` and `-`, and through `*` or `/` by a plain number, hence
-    `cfg.wrapArgsAt * 0.875` holds past 87.5% of that key's percent. The
-    class knows no name of its own: each call, each name the caller's set of
-    names leaves out, and the percent value reach the Evaluator::Context
-    that the caller of evaluate() passes, only when a term asks for them.
+    member may answer a share as a text such as `35%`, which reads as 0.35,
+    hence `spaceUsed > cfg.wrapArgsAt * 0.875` compares with 87.5% of that
+    key's share. The class knows no name of its own: each call, and each name
+    the caller's set of names leaves out, reach the Evaluator::Context that
+    the caller of evaluate() passes, only when a term asks for them.
 */
 
 /*!
@@ -899,13 +918,15 @@ bool Config::Condition::convert(const QVariant & answer, QVariant *value) const
 
 /*!
     Builds the description of the values the matcher takes: a condition of
-    its names, and of percents when it takes them, joined by `|` and `&`.
+    its names joined by `|` and `&`, whose comparisons may use percents when
+    it takes them.
 */
 QString Config::Condition::describe() const
 {
     const QString names = this->m_names.join(QString(QLL(", ")));
     if (this->m_takesPercents) {
-        return QString(QLL("a condition of %1, and percents from 0% to 100%, joined by | and &"))
+        return QString(QLL("a condition of %1, joined by | and &, whose "
+                           "comparisons may use percents from 0% to 100%"))
             .arg(names);
     }
     return QString(QLL("a condition of %1, joined by | and &")).arg(names);
@@ -991,32 +1012,26 @@ namespace Evaluator {
 namespace {
 
 /*!
-    Answers the names and the percent value that a program asks for, from a
-    context, else from a fixed set of names and percent; it asks the context
-    only when a term needs the answer, and for the percent only once.
+    Answers the names that a program asks for, from a context, else from a
+    fixed set of names; it asks the context only when a term needs the
+    answer.
 */
 class Lookup
 {
 public:
-    inline Lookup(const QSet<QString > &holding, const qreal *percent,
+    inline Lookup(const QSet<QString > &holding,
                   const Config::Evaluator::Context *context)
-        : m_holding(holding), m_percent(percent), m_context(context)
-        , m_asked(false), m_hasPercent(false), m_contextPercent(0)
+        : m_holding(holding), m_context(context)
     {
     }
 
     bool holds(const QString &name) const;
-    bool percent(qreal *value);
 
     inline const Config::Evaluator::Context *context() const { return m_context; }
 
 private:
     const QSet<QString > &m_holding;
-    const qreal *m_percent;
     const Config::Evaluator::Context *m_context;
-    bool m_asked;
-    bool m_hasPercent;
-    qreal m_contextPercent;
 };
 
 class Operand;
@@ -1047,25 +1062,6 @@ bool Lookup::holds(const QString &name) const
     return false;
 }
 
-/*!
-    Builds in @a value the value that percent terms compare with: the fixed
-    one, else the context's, asked on the first call only. Returns false
-    when there is none.
-*/
-bool Lookup::percent(qreal *value)
-{
-    if (this->m_percent) {
-        *value = *this->m_percent;
-        return true;
-    }
-    if ( ! this->m_asked) {
-        this->m_asked = true;
-        this->m_hasPercent = this->m_context
-            && this->m_context->percent(&this->m_contextPercent);
-    }
-    *value = this->m_contextPercent;
-    return this->m_hasPercent;
-}
 
 
 } // namespace
@@ -1075,13 +1071,12 @@ bool Lookup::percent(qreal *value)
 /*!
     Runs @a program, which compile() made, with the names @a holding and the
     context @a context, and builds into @a result what it gives: a number as
-    a qreal (a condition gives 1 when it holds, else 0, and a percent term
-    gives 1 when the percent value is past it), or the word or text a value
-    leaves as a QString; hence the caller converts it as its setting takes
-    it, and tells the two apart by the type. The context answers each name
-    first (the set @a holding answers a name it does not know), the percent
-    value, and each registered function the program calls; each one only
-    when a term asks for it. Returns false when a term misses what it needs.
+    a qreal (a condition gives 1 when it holds, else 0), or the word or text
+    a value leaves as a QString; hence the caller converts it as its setting
+    takes it, and tells the two apart by the type. The context answers each
+    name first (the set @a holding answers a name it does not know), and
+    each registered function the program calls; each one only when a term
+    asks for it. Returns false when a term misses what it needs.
 */
 bool Config::Condition::answer(
         const QStringList & program, const QSet<QString > & holding,
@@ -1090,114 +1085,82 @@ bool Config::Condition::answer(
     return Config::Condition::answerWith(
         program,
         holding,
-        Q_NULLPTR,
         context,
         result
     );
 }
 
 /*!
-    Runs @a program as answer() does, with the value @a percent for its
-    percent terms when it is not null; this is the one place that runs a
+    Runs @a program as answer() does; this is the one place that runs a
     program, which every other evaluation converts.
 */
 bool Config::Condition::answerWith(
         const QStringList & program, const QSet<QString > & holding,
-        const qreal *percent, const Evaluator::Context *context,
-        QVariant *result)
+        const Evaluator::Context *context, QVariant *result)
 {
-    Evaluator::Lookup lookup(holding, percent, context);
+    Evaluator::Lookup lookup(holding, context);
     return Evaluator::calculateAnswer(program, &lookup, result);
 }
 
 /*!
     Converts what answerWith() gives for @a program, with the names
-    @a holding, the value @a percent and the context @a context, into
-    whether the condition holds: a number that is not zero. @a ok, when
-    given, tells whether every term had what it needs; a word, which is no
-    condition, clears it too.
+    @a holding and the context @a context, into whether the condition holds:
+    a number that is not zero. @a answered, when given, tells whether the
+    program gave a number; when it did not (a term missed what it needs, or
+    the program gave a word), the false this returns is only a default, not
+    the condition's answer.
 */
 bool Config::Condition::holds(
         const QStringList & program, const QSet<QString > & holding,
-        const qreal *percent, const Evaluator::Context *context, bool *ok)
+        const Evaluator::Context *context, bool *answered)
 {
     QVariant answer;
     const bool isNumber = Config::Condition::answerWith(
         program,
         holding,
-        percent,
         context,
         &answer
     ) && answer.type() == QVariant::Double;
-    if (ok) {
-        *ok = isNumber;
+    if (answered) {
+        *answered = isNumber;
     }
     return isNumber && answer.toDouble() != 0;
 }
 
 /*!
     Tells whether the condition that compile() made @a program of holds,
-    given the names @a holding that hold (see holds()); a percent term,
-    which needs a value, logs a warning and makes the condition fail.
+    given the names @a holding that hold (see holds()).
 */
 bool Config::Condition::evaluate(
         const QStringList & program,
         const QSet<QString > & holding)
 {
-    return Config::Condition::holds(
-        program, holding, Q_NULLPTR, Q_NULLPTR,
-        Q_NULLPTR
-    );
+    return Config::Condition::holds(program, holding, Q_NULLPTR, Q_NULLPTR);
 }
 
 /*!
     Tells, like the evaluate() above, whether @a program holds given the
-    names @a holding; @a ok tells whether every term had what it needs.
+    names @a holding; @a answered tells whether the program gave its answer,
+    rather than the default false (see holds()).
 */
 bool Config::Condition::evaluate(
         const QStringList & program,
-        const QSet<QString > & holding, bool *ok)
+        const QSet<QString > & holding, bool *answered)
 {
-    return Config::Condition::holds(
-        program, holding, Q_NULLPTR, Q_NULLPTR,
-        ok
-    );
-}
-
-/*!
-    Tells whether the condition that compile() made @a program of holds,
-    given the names @a holding that hold, and the value @a percent (from 0
-    to 100, or past it) that its percent terms compare with: a term such as
-    `40%` holds when @a percent is more than 40. @a ok, when given, tells
-    whether every term had what it needs.
-*/
-bool Config::Condition::evaluate(
-        const QStringList & program,
-        const QSet<QString > & holding, qreal percent,
-        bool *ok)
-{
-    return Config::Condition::holds(
-        program, holding, &percent, Q_NULLPTR,
-        ok
-    );
+    return Config::Condition::holds(program, holding, Q_NULLPTR, answered);
 }
 
 /*!
     Tells, like the evaluate() above, whether @a program holds, with the
-    context @a context (see answer()). @a ok, when given, tells whether
-    every term had what it needs.
+    context @a context (see answer()). @a answered, when given, tells
+    whether the program gave its answer, rather than the default false (see
+    holds()).
 */
 bool Config::Condition::evaluate(
         const QStringList &program, const QSet<QString > &holding,
-        const Evaluator::Context *context, bool *ok)
+        const Evaluator::Context *context, bool *answered)
 {
-    return Config::Condition::holds(
-        program,
-        holding,
-        Q_NULLPTR,
-        context,
-        ok
-    );
+    return Config::Condition::holds(program, holding, context, answered);
 }
 
 /*!
@@ -1280,61 +1243,49 @@ namespace Evaluator {
 namespace {
 
 /*!
-    Pairs a number of a program with whether it was written as a percent,
-    which compares with the percent value where a condition tests it.
+    Holds a value of a program as it runs: a number, or a text, such as a
+    word a choice picks, or the argument of a call.
 */
 class Operand
 {
 public:
-    inline Operand(qreal value = 0, bool isPercent = false)
-        : number(value), percent(isPercent), isText(false)
+    inline Operand(qreal value = 0)
+        : number(value), isText(false)
     {
     }
 
     inline explicit Operand(const QString & value)
-        : number(0), percent(false), isText(true), text(value)
+        : number(0), isText(true), text(value)
     {
     }
 
     qreal number;
-    bool percent;
     bool isText;
     QString text;
 };
 
 /*!
-    Builds into @a result the number @a operand stands for: a percent term
-    compares with the percent value of @a lookup, and gives 1 when that
-    value is past it, else 0. Returns false for a text, or a percent term
-    without a percent value, which it logs.
+    Builds into @a result the number @a operand stands for; returns false for
+    a text.
 */
-static bool operandNumber(const Operand &operand, Lookup *lookup, qreal *result)
+static bool operandNumber(const Operand &operand, qreal *result)
 {
     if (operand.isText) {
         return false;
     }
     *result = operand.number;
-    if (operand.percent) {
-        qreal percent = 0;
-        if ( ! lookup->percent(&percent)) {
-            qWarning("Config::Condition: no value is set for the term %s%%",
-                     qPrintable(QString::number(operand.number)));
-            return false;
-        }
-        *result = percent > operand.number ? 1 : 0;
-    }
     return true;
 }
 
 /*!
     Tells, in @a holds, whether @a operand holds where a condition tests it:
     when the number it stands for (see operandNumber()) is not zero.
-    Returns false for a text, or a percent term without a percent value.
+    Returns false for a text.
 */
-static bool operandHolds(const Operand &operand, Lookup *lookup, bool *holds)
+static bool operandHolds(const Operand &operand, bool *holds)
 {
     qreal number = 0;
-    if ( ! operandNumber(operand, lookup, &number)) {
+    if ( ! operandNumber(operand, &number)) {
         return false;
     }
     *holds = number != 0;
@@ -1358,7 +1309,7 @@ bool calculateAnswer(const QStringList &program, Lookup *lookup,
         return true;
     }
     qreal number = 0;
-    if ( ! operandNumber(operand, lookup, &number)) {
+    if ( ! operandNumber(operand, &number)) {
         return false;
     }
     *result = number;
@@ -1374,9 +1325,9 @@ namespace Evaluator {
 namespace {
 
 /*!
-    Runs the `@expression` @a program with the names, the percent value and
-    the context of @a lookup, and puts the operand it leaves in @a result: a
-    number, which may be a percent term, or a text. Returns false when a
+    Runs the `@expression` @a program with the names and the context of
+    @a lookup, and puts the operand it leaves in @a result: a number, or a
+    text. Returns false when a
     term misses what it needs.
 */
 bool calculate(const QStringList &program, Lookup *lookup, Operand *result)
@@ -1385,9 +1336,11 @@ bool calculate(const QStringList &program, Lookup *lookup, Operand *result)
     QList<Operand > stack;
     for (int i = 1; i < program.size(); ++i) {
         const QString item = program.at(i);
-        if (item.startsWith(QLL("n:")) || item.startsWith(QLL("p:"))) {
-            stack
-                << Operand(item.mid(2).toDouble(), item.startsWith(QLL("p:")));
+        if (item.startsWith(QLL("n:"))) {
+            stack << Operand(item.mid(2).toDouble());
+        } else if (item.startsWith(QLL("p:"))) {
+            // Reads a percent as that share of 1: `40%` is 0.4.
+            stack << Operand(item.mid(2).toDouble() / 100);
         } else if (item.startsWith(QLL("s:"))) {
             stack << Operand(item.mid(2));
         } else if (item.startsWith(QLL("v:"))) {
@@ -1442,18 +1395,10 @@ bool calculate(const QStringList &program, Lookup *lookup, Operand *result)
             }
             stack.erase(stack.end() - count, stack.end());
             qreal called = 0;
-            bool calledPercent = false;
-            if ( ! Config::Scopes::call(
-                    function,
-                    context,
-                    arguments,
-                    &called,
-                    &calledPercent
-                )
-            ) {
+            if ( ! Config::Scopes::call(function, context, arguments, &called)) {
                 return false;
             }
-            stack << Operand(called, calledPercent);
+            stack << Operand(called);
         } else if (item.startsWith(QLL("f:"))) {
             bool value = false;
             if ( ! context || ! context->predicate(item.mid(2), &value)) {
@@ -1465,7 +1410,7 @@ bool calculate(const QStringList &program, Lookup *lookup, Operand *result)
         ) {
             bool value = false;
             if (stack.isEmpty()
-                || ! operandHolds(stack.last(), lookup, &value)
+                || ! operandHolds(stack.last(), &value)
             ) {
                 return false;
             }
@@ -1479,7 +1424,7 @@ bool calculate(const QStringList &program, Lookup *lookup, Operand *result)
             // when the condition does not hold.
             bool value = false;
             if (stack.isEmpty()
-                || ! operandHolds(stack.takeLast(), lookup, &value)
+                || ! operandHolds(stack.takeLast(), &value)
             ) {
                 return false;
             }
@@ -1499,14 +1444,14 @@ bool calculate(const QStringList &program, Lookup *lookup, Operand *result)
             }
             if (op == QLL("!")) {
                 bool value = false;
-                if ( ! operandHolds(right, lookup, &value)) {
+                if ( ! operandHolds(right, &value)) {
                     return false;
                 }
                 stack << Operand( ! value);
                 continue;
             }
             if (op == QLL("neg")) {
-                stack << Operand(-right.number, right.percent);
+                stack << Operand(-right.number);
                 continue;
             }
             if (stack.isEmpty()) {
@@ -1523,8 +1468,8 @@ bool calculate(const QStringList &program, Lookup *lookup, Operand *result)
             ) {
                 bool l = false;
                 bool r = false;
-                if ( ! operandHolds(left, lookup, &l)
-                    || ! operandHolds(right, lookup, &r)
+                if ( ! operandHolds(left, &l)
+                    || ! operandHolds(right, &r)
                 ) {
                     return false;
                 }
@@ -1533,26 +1478,13 @@ bool calculate(const QStringList &program, Lookup *lookup, Operand *result)
                                                                  : l || r
                     );
             } else if (op == QLL("+")) {
-                // Keeps a percent a percent, as `40% * 0.875` makes `35%`.
-                stack << Operand(
-                    left.number + right.number,
-                    left.percent || right.percent
-                );
+                stack << Operand(left.number + right.number);
             } else if (op == QLL("-")) {
-                stack << Operand(
-                    left.number - right.number,
-                    left.percent || right.percent
-                );
+                stack << Operand(left.number - right.number);
             } else if (op == QLL("*")) {
-                stack << Operand(
-                    left.number * right.number,
-                    left.percent != right.percent
-                );
+                stack << Operand(left.number * right.number);
             } else if (op == QLL("/") && right.number != 0) {
-                stack << Operand(
-                    left.number / right.number,
-                    left.percent && ! right.percent
-                );
+                stack << Operand(left.number / right.number);
             } else if (op == QLL("<")) {
                 stack << Operand(left.number < right.number);
             } else if (op == QLL("<=")) {

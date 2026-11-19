@@ -67,15 +67,13 @@ namespace {
     argument list that holds a token, or at the `(` of an `if` or a `while`
     for a condition's operands, each answer only when a term asks for it:
     the names (see FormatScopeConditions::nameHolds()), `value`, the
-    argument counts, `spaceRemaining`, and the percent value of the percent
-    terms, which is 100 less `spaceRemaining`.
+    argument counts, and `spaceRemaining`, which `spaceUsed` also reads.
 
     The context counts an argument list, and finds `spaceRemaining`, each
     time a term asks. A caller passes @a count only for a count the document
     does not hold, such as the operands of a range of a condition (see
     `[Structure] wrapConditionsPer`), and @a spaceRemaining only for a line
-    it is still laying out; else null. @a hasPercent unset leaves the
-    percent terms without a value.
+    it is still laying out; else null.
 */
 class ArgumentContext : public FormatConditionContext
 {
@@ -83,15 +81,14 @@ class ArgumentContext : public FormatConditionContext
 public:
     inline ArgumentContext(FormatScopeConditions *scope, int token,
                            int target, bool condition, const int *count,
-                           const qreal *spaceRemaining, bool hasPercent)
+                           const qreal *spaceRemaining)
         : m_scope(scope), m_token(token), m_target(target)
         , m_condition(condition), m_count(count)
-        , m_spaceRemaining(spaceRemaining), m_hasPercent(hasPercent)
+        , m_spaceRemaining(spaceRemaining)
     {
     }
 
     bool predicate(const QString &name, bool *value) const Q_DECL_OVERRIDE;
-    bool percent(qreal *value) const Q_DECL_OVERRIDE;
     bool value(qreal *value) const Q_DECL_OVERRIDE;
     bool argumentCount(int depth, int argument,
                        qreal *count) const Q_DECL_OVERRIDE;
@@ -106,22 +103,11 @@ private:
     bool m_condition;
     const int *m_count;
     const qreal *m_spaceRemaining;
-    bool m_hasPercent;
 };
 
 bool ArgumentContext::predicate(const QString &name, bool *value) const
 {
     return this->m_scope->nameHolds(this->m_token, name, value);
-}
-
-bool ArgumentContext::percent(qreal *value) const
-{
-    qreal space = 0;
-    if ( ! this->m_hasPercent || ! this->spaceRemaining(&space)) {
-        return false;
-    }
-    *value = 100 - space;
-    return true;
 }
 
 bool ArgumentContext::value(qreal *value) const
@@ -172,28 +158,13 @@ const FormatFileConfig *ArgumentContext::fileConfig() const
 /*!
     Runs @a program at the place that @a context answers, and builds what
     it gives, converted as the setting @a key takes it (see
-    FormatFileConfig::answer()); an empty @a key takes it as a condition,
-    which holds or not (see Config::Condition::convert()). Builds an invalid
-    value when a term misses what it needs; the caller's default decides.
+    FormatFileConfig::answer()). Builds an invalid value when a term misses
+    what it needs; the caller's default decides.
 */
 static QVariant answerOf(const QString & key, const QStringList & program,
                          const Config::Evaluator::Context *context)
 {
     QVariant value;
-    if (key.isEmpty()) {
-        QVariant answer;
-        if ( ! Config::Condition::answer(
-                program,
-                QSet<QString >(),
-                context,
-                &answer
-            )
-            || ! Config::Condition(QStringList()).convert(answer, &value)
-        ) {
-            return QVariant();
-        }
-        return value;
-    }
     if ( ! FormatFileConfig::answer(key, program, context, &value)) {
         return QVariant();
     }
@@ -206,34 +177,31 @@ static QVariant answerOf(const QString & key, const QStringList & program,
     Tells whether the condition @a program, which the setting @a key
     compiled, holds at the token @a token (see answerOf()).
 */
-bool FormatScopeConditions::holds(
-        const QString & key,
-        const QStringList & program, int token)
+bool FormatScopeConditions::holds(const QString & key,
+                                  const QStringList & program, int token)
 {
     const ArgumentContext context(
         this, token, this->argumentTarget(token),
-        false, Q_NULLPTR, Q_NULLPTR, true
+        false, Q_NULLPTR, Q_NULLPTR
     );
     return answerOf(key, program, &context).toBool();
 }
 
 /*!
     Tells whether the condition @a program, which the setting @a key
-    compiled, holds at the token @a token, with @a percent as the value of
-    its percent terms, negative where the use site has none. When a term
-    misses what it needs (Config::Condition logs that), the default
-    condition @a fallback decides instead; the formatting goes on.
+    compiled, holds at the token @a token, as the holds() above does, with
+    `spaceRemaining` measured right after that token, such as a list's `(`
+    or an `=`; when a term misses what it needs (Config::Condition logs
+    that), the default condition @a fallback decides instead, hence the
+    formatting goes on.
 */
 bool FormatScopeConditions::holds(
         const QString & key, const QStringList & program, int token,
-        qreal percent, const QStringList & fallback)
+        const QStringList & fallback)
 {
-    const qreal space = 100 - percent;
     const ArgumentContext context(
-        this, token, this->argumentTarget(token),
-        false, Q_NULLPTR,
-        percent >= 0 ? &space : Q_NULLPTR,
-        percent >= 0
+        this, token, token,
+        false, Q_NULLPTR, Q_NULLPTR
     );
     const QVariant value = answerOf(key, program, &context);
     if (value.isValid()) {
@@ -244,23 +212,24 @@ bool FormatScopeConditions::holds(
 
 /*!
     Tells whether the condition @a program holds at the token @a token, as
-    the holds() above does for a setting's own condition.
-*/
-bool FormatScopeConditions::holds(const QStringList & program, int token)
-{
-    return this->holds(QString(), program, token);
-}
-
-/*!
-    Tells whether the condition @a program holds at the token @a token,
-    with @a percent and @a fallback, as the holds() above does for a
-    setting's own condition.
+    the holds() above does, for a line the caller is still laying out, where
+    @a spaceUsed is the share of `wrapMax` that line uses up to the token
+    (see FormatConditionObject's `spaceUsed`).
 */
 bool FormatScopeConditions::holds(
-        const QStringList & program, int token, qreal percent,
-        const QStringList & fallback)
+        const QString & key, const QStringList & program, int token,
+        qreal spaceUsed, const QStringList & fallback)
 {
-    return this->holds(QString(), program, token, percent, fallback);
+    const qreal space = 100 - spaceUsed;
+    const ArgumentContext context(
+        this, token, token,
+        false, Q_NULLPTR, &space
+    );
+    const QVariant value = answerOf(key, program, &context);
+    if (value.isValid()) {
+        return value.toBool();
+    }
+    return answerOf(key, fallback, &context).toBool();
 }
 
 /*!
@@ -897,7 +866,7 @@ int FormatScopeConditions::limitOf(
     }
     const ArgumentContext context(
         this, token, token, true, &count,
-        spaceRemaining, true
+        spaceRemaining
     );
     const QSharedPointer<Config::Scopes::Scope > scope =
         FormatConditionContext::pushCountScope();
@@ -920,7 +889,7 @@ QVariant FormatScopeConditions::answerAt(
 {
     const ArgumentContext context(
         this, token, this->argumentTarget(token),
-        false, Q_NULLPTR, Q_NULLPTR, true
+        false, Q_NULLPTR, Q_NULLPTR
     );
     const QSharedPointer<Config::Scopes::Scope > scope =
         FormatConditionContext::pushCountScope();
@@ -943,7 +912,7 @@ bool FormatScopeConditions::countOver(int token, int count,
     const int target = condition ? token : this->argumentTarget(token);
     const ArgumentContext context(
         this, token, target, condition, condition ? &count : Q_NULLPTR,
-        spaceRemaining, true
+        spaceRemaining
     );
     const QSharedPointer<Config::Scopes::Scope > scope =
         FormatConditionContext::pushCountScope();

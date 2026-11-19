@@ -62,23 +62,24 @@
       a `.formatrc` (see FormatOutlineThisRule);
     * `wrapChainAt` (`[Structure]`): where an operator chain that does not
       fit one line breaks before its operators (see FormatExpressionLayout):
-      a condition of the same names and of percents, such as
-      `(40% & is-non-header) | (30% & is-header)`, where a percent holds
-      when the column where an operator starts is past that share of
-      `wrapMax`; the operators before it stay on the chain's first line.
-      `40%` without a `.formatrc`;
+      a condition of the same names, which may compare `spaceUsed` (the
+      share of `wrapMax` used up to where an operator starts) with
+      percents, such as
+      `(spaceUsed > 40% & is-non-header) | (spaceUsed > 30% & is-header)`;
+      the operators before it stay on the chain's first line.
+      `spaceUsed > 40%` without a `.formatrc`;
     * `wrapArgsAt` (`[Structure]`): where a call whose arguments do not fit
       one line breaks after its `(`, one argument per line (see
-      FormatArgsWrapRule): a condition like `wrapChainAt`, where a percent
-      holds when the column of the `(` is past that share of `wrapMax`. It
+      FormatArgsWrapRule): a condition like `wrapChainAt`, where `spaceUsed`
+      is the share of `wrapMax` used up to the `(`. It
       follows `wrapChainAt` until a `.formatrc` sets it, since an argument
       list is a chain of commas;
     * `wrapSignatureAt` (`[Structure]`): `wrapArgsAt` for the parameter
       list of a declaration or definition (a function, a method, or a
       constructor), which past `wrapMax` starts on the next line where it
       holds (see FormatParamWrapRule); the other `wrapArgs` keys still
-      apply there. `cfg.wrapArgsAt * 0.875` without a `.formatrc`, which
-      holds past 87.5% of the percent `wrapArgsAt` gives at the place;
+      apply there. `spaceUsed > cfg.wrapArgsAt * 0.875` without a
+      `.formatrc`: past 87.5% of the share `wrapArgsAt` gives at the place;
     * `wrapArgsOver` (`[Structure]`): how many arguments, or parameters, a
       list holds at most before it may always break, whatever
       `wrapArgsAt` says (see FormatArgsWrapRule and FormatParamWrapRule).
@@ -163,13 +164,13 @@ static const char defaultReplaceSuperSitesText[] =
     Spells the default `[Structure] wrapChainAt`, which `[Structure]
     wrapArgsAt` follows (see FormatFileConfig).
 */
-static const char defaultWrapChainAtText[] = "40%";
+static const char defaultWrapChainAtText[] = "spaceUsed > 40%";
 
 /*!
     Spells the default `[Structure] wrapSignatureAt` (see FormatFileConfig):
-    87.5% of the percent `[Structure] wrapArgsAt` gives at the place.
+    past 87.5% of the share `[Structure] wrapArgsAt` gives at the place.
 */
-static const char defaultWrapSignatureAtText[] = "cfg.wrapArgsAt * 0.875";
+static const char defaultWrapSignatureAtText[] = "spaceUsed > cfg.wrapArgsAt * 0.875";
 
 /*!
     Spells the default `[Structure] wrapConditionsOver` (see

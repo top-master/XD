@@ -1070,7 +1070,7 @@ QByteArray FormatExpressionLayout::layoutChainRest(
             const int start = column
                 + space.size()
                 + textWidth(this->oneLine(first, operators.at(end) - 1));
-            const qreal percent = start * 100.0 / wrapMax;
+            const qreal spaceUsed = start * 100.0 / wrapMax;
             const int operandLast = end + 1 < operators.size()
                 ? operators.at(end + 1) - 1 : last;
             if (m_conditions->holds(
@@ -1081,7 +1081,7 @@ QByteArray FormatExpressionLayout::layoutChainRest(
                         )
                         .wrapChainAt,
                     operators.at(end),
-                    percent,
+                    spaceUsed,
                     FormatFileConfig::defaultWrapChainAt()
                 )
                 || ! this->fits(
@@ -1616,21 +1616,10 @@ bool FormatExpressionLayout::mayBreakList(int open, int itemCount) const
     if (m_conditions->argsOver(open, itemCount)) {
         return true;
     }
-    const int line = m_document->symbolLine(open);
-    const int lineStart = m_document->lineStart(line);
-    const QByteArray head = m_document->text().mid(
-        lineStart,
-        m_document->symbols().at(open).from + 1 - lineStart
-    );
-    const qreal percent = textWidth(head) * 100.0 / qMax(
-        1,
-        fileConfig.wrapMax
-    );
     return m_conditions->holds(
         QString(QLL("structure.wrapArgsAt")),
         fileConfig.wrapArgsAt,
         open,
-        percent,
         FormatFileConfig::defaultWrapChainAt()
     );
 }

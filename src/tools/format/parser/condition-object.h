@@ -16,6 +16,7 @@ class FormatConditionObject : public Config::Object
     Q_OBJECT
     typedef Config::Object super;
     Q_PROPERTY(QVariant spaceRemaining READ spaceRemaining)
+    Q_PROPERTY(QVariant spaceUsed READ spaceUsed)
     Q_PROPERTY(QVariant hasMoreArgs READ hasMoreArgs)
     Q_PROPERTY(QVariant isWrapping READ isWrapping)
     Q_PROPERTY(QObject *cfg READ cfg)
@@ -24,6 +25,7 @@ public:
 
     QObject *cfg() const;
     QVariant spaceRemaining() const;
+    QVariant spaceUsed() const;
     QVariant hasMoreArgs() const;
     QVariant isWrapping() const;
 

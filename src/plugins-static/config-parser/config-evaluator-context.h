@@ -15,7 +15,6 @@ class Context
 public:
     virtual ~Context() {}
     virtual bool predicate(const QString &name, bool *value) const;
-    virtual bool percent(qreal *value) const;
 };
 
 } // Namespace `Evaluator`.

@@ -379,27 +379,18 @@ QList<int > loosestOperators(
 /*!
     Tells whether the token at @a token of @a document stands at or past
     `[Structure] wrapArgsAt`: whether its condition (see
-    FormatScopeConditions::holds()) holds, its percents comparing the column
-    right after the token with `[Structure] wrapMax`. A list may break after
+    FormatScopeConditions::holds()) holds, its `spaceUsed` being the share
+    of `[Structure] wrapMax` the line uses up to right after the token. A list may break after
     such a `(`, and a value may move below such an `=`.
 */
 bool reachesWrapArgsAt(const FormatDocument *document,
                        FormatScopeConditions *conditions, int token)
 {
-    const int lineStart = document->lineStart(document->symbolLine(token));
-    const QByteArray head = document->text().mid(
-        lineStart,
-        document->symbolEnd(token) - lineStart
-    );
     const FormatFileConfig &fileConfig =
         document->configAt(document->symbols().at(token).from);
-    const qreal percent = textWidth(head) * 100.0 / qMax(
-        1,
-        fileConfig.wrapMax
-    );
     return conditions->holds(
         QString(QLL("structure.wrapArgsAt")),
-        fileConfig.wrapArgsAt, token, percent,
+        fileConfig.wrapArgsAt, token,
         FormatFileConfig::defaultWrapChainAt()
     );
 }

@@ -588,7 +588,7 @@ void tst_FormatCli::testConfig_shouldTakeEveryWrapKeyInComments()
     );
     const QStringList arguments = QStringList() << QString(QLL("--headless"))
         << QString(QLL("-c=comments.wrapBegin=70")) << QString(QLL("-c=comments.wrapMax=90"))
-        << QString(QLL("-c=comments.wrapArgsAt=30%")) << file;
+        << QString(QLL("-c=comments.wrapArgsAt=spaceUsed > 30%")) << file;
     qExpect(this->run(arguments, &out, &err))->toEqual(0);
     qExpect(err)->toBeEmpty();
 }

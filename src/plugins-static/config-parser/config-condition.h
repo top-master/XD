@@ -56,13 +56,11 @@ public:
     static bool evaluate(const QStringList & program,
                          const QSet<QString > & holding);
     static bool evaluate(const QStringList & program,
-                         const QSet<QString > & holding, bool *ok);
-    static bool evaluate(const QStringList & program,
-                         const QSet<QString > & holding, qreal percent,
-                         bool *ok = Q_NULLPTR);
+                         const QSet<QString > & holding, bool *answered);
     static bool evaluate(const QStringList & program,
                          const QSet<QString > & holding,
-                         const Evaluator::Context *context, bool *ok = Q_NULLPTR);
+                         const Evaluator::Context *context,
+                         bool *answered = Q_NULLPTR);
     static bool value(const QStringList & program,
                       const QSet<QString > & holding,
                       const Evaluator::Context *context, qreal *result);
@@ -73,11 +71,11 @@ private:
     static bool checkPercents(const QStringList & program,
                               bool takesPercents, QString *error);
     static bool answerWith(const QStringList & program,
-                           const QSet<QString > & holding, const qreal *percent,
+                           const QSet<QString > & holding,
                            const Evaluator::Context *context, QVariant *result);
     static bool holds(const QStringList & program,
-                      const QSet<QString > & holding, const qreal *percent,
-                      const Evaluator::Context *context, bool *ok);
+                      const QSet<QString > & holding,
+                      const Evaluator::Context *context, bool *answered);
 
     QStringList m_names;
     bool m_takesPercents;

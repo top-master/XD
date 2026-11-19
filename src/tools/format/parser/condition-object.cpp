@@ -19,7 +19,10 @@
       arguments of the calls at that depth (see
       FormatConditionContext::argumentCount());
     * `spaceRemaining`: the share of `[Structure] wrapMax` that is left on
-      the line;
+      the line, from 0 to 1, as a percent reads (`20%` is 0.2); hence
+      `spaceRemaining * cfg.wrapMax` gives its columns;
+    * `spaceUsed`: the share of `[Structure] wrapMax` that the line uses,
+      1 less `spaceRemaining`, as in `spaceUsed > 40%`;
     * `hasMoreArgs`: another argument follows the one in question;
     * `isWrapping`: the argument in question gets a line of its own, since
       the tool breaks its list;
@@ -58,8 +61,10 @@ QObject *FormatConditionObject::cfg() const
 }
 
 /*!
-    Builds the share of `[Structure] wrapMax`, from 0 to 100, that is left on
-    the line, or an invalid value where the place has no line to measure.
+    Builds the share of `[Structure] wrapMax`, from 0 to 1, that is left on
+    the line, as a percent of a condition reads (`20%` is 0.2); hence
+    `spaceRemaining * cfg.wrapMax` gives its columns. Builds an invalid value
+    where the place has no line to measure.
 */
 QVariant FormatConditionObject::spaceRemaining() const
 {
@@ -69,7 +74,21 @@ QVariant FormatConditionObject::spaceRemaining() const
     if ( ! format || ! format->spaceRemaining(&percent)) {
         return QVariant();
     }
-    return percent;
+    return percent / 100;
+}
+
+/*!
+    Builds the share of `[Structure] wrapMax`, from 0 to 1, that the line
+    uses at the place: 1 less spaceRemaining(), or an invalid value where
+    the place does not know the line.
+*/
+QVariant FormatConditionObject::spaceUsed() const
+{
+    const QVariant remaining = this->spaceRemaining();
+    if ( ! remaining.isValid()) {
+        return QVariant();
+    }
+    return 1 - remaining.toDouble();
 }
 
 /*!

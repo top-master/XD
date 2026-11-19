@@ -514,17 +514,14 @@ bool Config::Scopes::answer(
 /*!
     Calls @a member with @a arguments, for the place @a context stands for,
     and gives the number it answers to @a result: a `bool` answers 1 or 0,
-    and a text such as `35%` answers a percent, which @a isPercent tells
-    when given. Returns false when the member has no answer there (an
-    invalid value), or one that is no number.
+    and a text such as `35%` answers that share of 1, 0.35, as a percent
+    of a condition does. Returns false when the member has no answer there
+    (an invalid value), or one that is no number.
 */
 bool Config::Scopes::call(
         const Member & member, const Evaluator::Context *context,
-        const QVariantList & arguments, qreal *result, bool *isPercent)
+        const QVariantList & arguments, qreal *result)
 {
-    if (isPercent) {
-        *isPercent = false;
-    }
     QVariant answer;
     if ( ! Config::Scopes::answer(member, context, arguments, &answer)
         || Config::Types::object(answer)
@@ -542,11 +539,8 @@ bool Config::Scopes::call(
         text.chop(1);
     }
     bool isNumber = false;
-    *result = endsWithPercent ? text.toDouble(&isNumber)
+    *result = endsWithPercent ? text.toDouble(&isNumber) / 100
                               : answer.toDouble(&isNumber);
-    if (isPercent) {
-        *isPercent = endsWithPercent && isNumber;
-    }
     return isNumber;
 }
 

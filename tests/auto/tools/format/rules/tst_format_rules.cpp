@@ -154,7 +154,7 @@ private slots:
     void testThisMode_shouldRejectUnknownName();
     void testThisMode_shouldReachMembersInBlocks();
     void testScopeConditions_shouldNameScopeOfToken();
-    void testScopeConditions_shouldFallBackWithoutPercent();
+    void testScopeConditions_shouldFallBackWithoutValue();
     void testScopeConditions_shouldEvaluateArgumentExpressions();
     void testScopeConditions_shouldOfferValueToCountSettingsOnly();
     void testScopeConditions_shouldCountConditionOperands();
@@ -4120,9 +4120,9 @@ void tst_FormatRules::testScopeConditions_shouldNameScopeOfToken()
         ->toEqual(QSet<QString >() << always << QString(QLL("is-non-header")) << outline);
 }
 
-/// Asks for a condition with a percent term without setting its value: the
-/// condition logs that, and the default condition decides instead.
-void tst_FormatRules::testScopeConditions_shouldFallBackWithoutPercent()
+/// Asks for a condition whose term misses a value, such as `is()` of an
+/// unknown kind: the default condition decides instead.
+void tst_FormatRules::testScopeConditions_shouldFallBackWithoutValue()
 {
     const FormatDocument document(
         "void f()\n{\n    run(first);\n}\n",
@@ -4133,10 +4133,18 @@ void tst_FormatRules::testScopeConditions_shouldFallBackWithoutPercent()
     QStringList program;
     QStringList fallback;
     QString error;
+    QStringList missing;
     qExpect(Config::Condition::compile(
-        QString(QLL("40% | never")),
+        QString(QLL("spaceUsed > 40% | never")),
         names,
         &program,
+        &error,
+        true
+    ))->toBeTruthy();
+    qExpect(Config::Condition::compile(
+        QString(QLL("is(other) | never")),
+        names,
+        &missing,
         &error,
         true
     ))->toBeTruthy();
@@ -4148,10 +4156,10 @@ void tst_FormatRules::testScopeConditions_shouldFallBackWithoutPercent()
         true
     ))->toBeTruthy();
     const int token = symbolIndex(document, "run");
-    QTest::ignoreMessage(QtWarningMsg, "Config::Condition: no value is set for the term 40%");
-    qExpect(conditions.holds(program, token, -1, fallback))->toBeTruthy();
-    qExpect(conditions.holds(program, token, 50, fallback))->toBeTruthy();
-    qExpect(conditions.holds(program, token, 30, fallback))->toBeFalsy();
+    const QString key = QString(QLL("structure.wrapArgsAt"));
+    qExpect(conditions.holds(key, missing, token, fallback))->toBeTruthy();
+    qExpect(conditions.holds(key, program, token, 50, fallback))->toBeTruthy();
+    qExpect(conditions.holds(key, program, token, 30, fallback))->toBeFalsy();
 }
 
 void tst_FormatRules::testLayoutHelpers_shouldRecognizeClosingBracketCombinations()
@@ -4295,9 +4303,9 @@ void tst_FormatRules::testScopeConditions_shouldLimitConditionRanges()
     QCOMPARE(conditions.conditionsLimit(open, 3, 50), 3);
 }
 
-/// Breaks a signature past 87.5% of the percent `wrapArgsAt` gives at its
-/// `(` by default (35% for the default 40%), and follows `wrapArgsAt` when a
-/// `.formatrc` changes it.
+/// Breaks a signature past 87.5% of the share `wrapArgsAt` gives at its `(`
+/// by default (35% for the default `spaceUsed > 40%`), and follows
+/// `wrapArgsAt` when a `.formatrc` changes it.
 void tst_FormatRules::testScopeConditions_shouldPlaceSignaturesByWrapArgsAt()
 {
     FormatDocument document(
@@ -4310,16 +4318,17 @@ void tst_FormatRules::testScopeConditions_shouldPlaceSignaturesByWrapArgsAt()
     FormatFileConfig config;
     QVERIFY(readSettings(parser, &config));
     document.setConfig(config);
-    QVERIFY(conditions.holds(config.wrapSignatureAt, open, 36, fallback));
-    QVERIFY( ! conditions.holds(config.wrapSignatureAt, open, 34, fallback));
+    const QString key = QString(QLL("structure.wrapSignatureAt"));
+    QVERIFY(conditions.holds(key, config.wrapSignatureAt, open, 36, fallback));
+    QVERIFY( ! conditions.holds(key, config.wrapSignatureAt, open, 34, fallback));
     QString error;
     QVERIFY2(parser.readData(
-        "[Structure]\nwrapArgsAt=80%\n", QLL("inline"), &error
+        "[Structure]\nwrapArgsAt=spaceUsed > 80%\n", QLL("inline"), &error
     ), qPrintable(error));
     QVERIFY(readSettings(parser, &config));
     document.setConfig(config);
-    QVERIFY(conditions.holds(config.wrapSignatureAt, open, 71, fallback));
-    QVERIFY( ! conditions.holds(config.wrapSignatureAt, open, 69, fallback));
+    QVERIFY(conditions.holds(key, config.wrapSignatureAt, open, 71, fallback));
+    QVERIFY( ! conditions.holds(key, config.wrapSignatureAt, open, 69, fallback));
 }
 
 /// Reads another `[Structure]` setting through `cfg`: a setting follows
@@ -4492,7 +4501,11 @@ void tst_FormatRules::testScopeConditions_shouldEvaluateArgumentExpressions()
     ));
     document.setConfig(settings);
     QVERIFY(conditions.argsOver(inner, 2, 0));
-    QVERIFY(conditions.holds(settings.wrapArgsOverCondition, inner));
+    QVERIFY(conditions.holds(
+        QString(QLL("structure.wrapArgsOver")),
+        settings.wrapArgsOverCondition,
+        inner
+    ));
     QCOMPARE(conditions.argumentCount(
         symbolIndex(document, "empty") + 1,
         0
@@ -4510,7 +4523,7 @@ void tst_FormatRules::testScopeConditions_shouldEvaluateArgumentExpressions()
     document.setConfig(settings);
     QVERIFY(conditions.argsOver(declaration, 4, 70));
     QVERIFY(Config::Condition::compile(
-        QString(QLL("argCount(0) > 3 && 40%")),
+        QString(QLL("argCount(0) > 3 && spaceUsed > 40%")),
         FormatScopeConditions::names(),
         &settings.wrapArgsOverCondition,
         &error,
@@ -4518,12 +4531,14 @@ void tst_FormatRules::testScopeConditions_shouldEvaluateArgumentExpressions()
     ));
     const QStringList fallback = QStringList() << QString(QLL("never"));
     QVERIFY( ! conditions.holds(
+        QString(QLL("structure.wrapArgsOver")),
         settings.wrapArgsOverCondition,
         outer,
         40,
         fallback
     ));
     QVERIFY(conditions.holds(
+        QString(QLL("structure.wrapArgsOver")),
         settings.wrapArgsOverCondition,
         outer,
         41,
@@ -4570,20 +4585,20 @@ void tst_FormatRules::testArgsWrap_shouldFollowSettings_data()
         << QString(QLL("is-non-header")) << QString(QLL("a.h"))
         << argsWrapFile(near) << argsWrapFile(near);
     QTest::newRow("percents by file, in a header")
-        << QString(QLL("(40% & is-non-header) | (30% & is-header)")) << QString(QLL("a.h"))
+        << QString(QLL("(spaceUsed > 40% & is-non-header) | (spaceUsed > 30% & is-header)")) << QString(QLL("a.h"))
         << argsWrapFile(total) << argsWrapBroken(total);
     QTest::newRow("percents by file, in a source")
-        << QString(QLL("(40% & is-non-header) | (30% & is-header)")) << QString(QLL("a.cpp"))
+        << QString(QLL("(spaceUsed > 40% & is-non-header) | (spaceUsed > 30% & is-header)")) << QString(QLL("a.cpp"))
         << argsWrapFile(total) << argsWrapFile(total);
-    QTest::newRow("a percent no column passes") << QString(QLL("100%")) << QString(QLL("a.h"))
+    QTest::newRow("a percent no column passes") << QString(QLL("spaceUsed > 100%")) << QString(QLL("a.h"))
         << argsWrapFile(total) << argsWrapFile(total);
-    QTest::newRow("every column") << QString(QLL("0%")) << QString(QLL("a.h"))
+    QTest::newRow("every column") << QString(QLL("spaceUsed > 0%")) << QString(QLL("a.h"))
         << argsWrapFile(near) << argsWrapBroken(near);
     QTest::newRow("argument query with a passed percent")
-        << QString(QLL("argCount(0) == 2 && 10%")) << QString(QLL("a.cpp"))
+        << QString(QLL("argCount(0) == 2 && spaceUsed > 10%")) << QString(QLL("a.cpp"))
         << argsWrapFile(near) << argsWrapBroken(near);
     QTest::newRow("argument query with an unpassed percent")
-        << QString(QLL("argCount(0) == 2 && 20%")) << QString(QLL("a.cpp"))
+        << QString(QLL("argCount(0) == 2 && spaceUsed > 20%")) << QString(QLL("a.cpp"))
         << argsWrapFile(near) << argsWrapFile(near);
 }
 
@@ -4773,22 +4788,22 @@ void tst_FormatRules::testWrapChainAt_shouldKeepLeadingOperators_data()
                       "        << thirdValue\n        << fourthValue\n        << fifthValue\n"
                       "        << sixthValue;\n}\n");
     QTest::newRow("at 0%, every operator breaks")
-        << QString(QLL("[Structure]\nwrapChainAt = 0%\n")) << QString(QLL("operator-wrap"))
+        << QString(QLL("[Structure]\nwrapChainAt = spaceUsed > 0%\n")) << QString(QLL("operator-wrap"))
         << chain
         << QByteArray("void f()\n{\n    out\n        << \"label\"\n        << firstValue\n"
                       "        << secondValue\n        << thirdValue\n        << fourthValue\n"
                       "        << fifthValue\n        << sixthValue;\n}\n");
     QTest::newRow("at 100%, the operators stay while the line fits")
-        << QString(QLL("[Structure]\nwrapChainAt = 100%\n")) << QString(QLL("operator-wrap"))
+        << QString(QLL("[Structure]\nwrapChainAt = spaceUsed > 100%\n")) << QString(QLL("operator-wrap"))
         << chain
         << QByteArray("void f()\n{\n    out << \"label\" << firstValue << secondValue"
                       " << thirdValue << fourthValue\n        << fifthValue\n"
                       "        << sixthValue;\n}\n");
     QTest::newRow("wrapArgsAt follows it")
-        << QString(QLL("[Structure]\nwrapChainAt = 0%\n")) << QString(QLL("args-wrap"))
+        << QString(QLL("[Structure]\nwrapChainAt = spaceUsed > 0%\n")) << QString(QLL("args-wrap"))
         << argsWrapFile(near) << argsWrapBroken(near);
     QTest::newRow("wrapArgsAt set on its own wins")
-        << QString(QLL("[Structure]\nwrapChainAt = 0%\nwrapArgsAt = 100%\n"))
+        << QString(QLL("[Structure]\nwrapChainAt = spaceUsed > 0%\nwrapArgsAt = spaceUsed > 100%\n"))
         << QString(QLL("args-wrap")) << argsWrapFile(near) << argsWrapFile(near);
 }
 

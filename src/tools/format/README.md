@@ -288,26 +288,28 @@ moveSuffix = " "
   ```
 - `wrapChainAt` (in `[Structure]`): where an operator chain that does not
   fit one line breaks before its operators (see `operator-wrap` under
-  "Laying out code" below): a condition of the same names, and of percents
-  from `0%` to `100%`. A percent holds when the column where an operator
-  starts (right after what comes before it) is past that share of
-  `wrapMax`; the chain's leading operators that start before it stay on its
+  "Laying out code" below): a condition of the same names, which may
+  compare `spaceUsed`, the share of `wrapMax` used up to where an operator
+  starts (right after what comes before it), with a percent from `0%` to
+  `100%`. The chain's leading operators where it does not hold stay on its
   first line, while that line fits, and each operator from the first one
-  past it gets a line of its own. The default is `40%`; `0%` breaks before
-  every operator, and `100%` only where the line would not fit.
+  where it holds gets a line of its own. The default is `spaceUsed > 40%`;
+  `spaceUsed > 0%` breaks before every operator, and `spaceUsed > 100%`
+  only where the line would not fit. A
+  percent alone is no condition: compare it, as in `spaceUsed > 40%`.
 - `wrapArgsAt` (in `[Structure]`): where a call whose arguments do not fit
   one line breaks after its `(` (see `args-wrap` under "Laying out code"
   below): a condition like
-  `wrapChainAt`, whose percent holds when the column right after the `(` is
-  past that share of `wrapMax`; with `wrapMax = 80`, `40%` holds from
+  `wrapChainAt`, whose `spaceUsed` is the share of `wrapMax` used up to
+  right after the `(`; with `wrapMax = 80`, `spaceUsed > 40%` holds from
   column 33 on. Until a `.formatrc` sets it, it follows `wrapChainAt` (an
-  argument list being a chain of commas), hence `40%` by default; a name
-  alone needs no percent:
+  argument list being a chain of commas), hence `spaceUsed > 40%` by
+  default; a name alone needs no share:
 
   ```
   [Structure]
   ; Breaks sooner in a header.
-  wrapArgsAt = (40% & is-non-header) | (30% & is-header)
+  wrapArgsAt = (spaceUsed > 40% & is-non-header) | (spaceUsed > 30% & is-header)
   ; Breaks every wrapped call of a source file.
   wrapArgsAt = is-non-header
   ```
@@ -316,11 +318,11 @@ moveSuffix = " "
   which start on the next line where it holds once the line passes
   `wrapMax` (see `param-wrap` under "Laying out code" below). The other
   `wrapArgs` keys, such as `wrapArgsOver`, apply there as for a call. The
-  default is `cfg.wrapArgsAt * 0.875`: 87.5% of the percent `wrapArgsAt`
-  gives at that place, hence `35%` (column 29 on) while `wrapArgsAt` is
-  `40%`. A condition may read `cfg.wrapChainAt`, `cfg.wrapArgsAt`, and
-  `cfg.wrapSignatureAt` as such a percent, the one past which the key
-  holds at the place.
+  default is `spaceUsed > cfg.wrapArgsAt * 0.875`: past 87.5% of the share
+  `wrapArgsAt` gives at that place, hence past `35%` (column 29 on) while
+  `wrapArgsAt` is `spaceUsed > 40%`. A condition may read
+  `cfg.wrapChainAt`, `cfg.wrapArgsAt`, and `cfg.wrapSignatureAt` as such a
+  percent, the `spaceUsed` past which the key holds at the place.
 - `wrapArgsOver` (in `[Structure]`): how many arguments, or parameters, a
   list holds at most before it may always break, whatever `wrapArgsAt`
   says; the default is `3`. It can also be a condition evaluated at the
@@ -331,9 +333,11 @@ moveSuffix = " "
   ```
 
   `value` and `argCount(0)` give the target's argument or parameter count.
-  `spaceRemaining` is the percentage of `wrapMax` after the opening
-  parenthesis, measured only when the condition reaches it; `isSignature`
-  identifies a function declaration or definition.
+  `spaceRemaining` is the share of `wrapMax` left after the opening
+  parenthesis, from 0 to 1, measured only when the condition reaches it,
+  and `spaceUsed` is 1 less it; a percent is that share of 1 (`18.75%` is
+  0.1875), hence `spaceRemaining * cfg.wrapMax` gives the columns left.
+  `isSignature` identifies a function declaration or definition.
   A condition decides whether the target's argument list may be wrapped and
   preserves an existing list when it is false, including with `target=any`.
   A name is case-sensitive; a `-` or `_` sign in it drops out and

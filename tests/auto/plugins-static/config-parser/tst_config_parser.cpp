@@ -88,7 +88,7 @@ private slots:
     void testCondition_shouldComparePercents();
     void testCondition_shouldRejectBadPercent_data();
     void testCondition_shouldRejectBadPercent();
-    void testCondition_shouldWarnWithoutPercent();
+    void testCondition_shouldTakeNoPercentAlone();
     void testCondition_shouldEvaluateExpressions();
     void testCondition_shouldCallObjectMembers();
     void testCondition_shouldChooseNumbers();
@@ -904,7 +904,7 @@ void tst_ConfigParser::testCondition_shouldRejectBadText_data()
         << QString(QLL("unknown name d"));
     QTest::newRow("unknown sign") << QString(QLL("a ^ b"))
         << QString(QLL("unknown sign ^"));
-    QTest::newRow("percent where the key takes none") << QString(QLL("40% | a"))
+    QTest::newRow("percent where the key takes none") << QString(QLL("1 > 40% | a"))
         << QString(QLL("the key takes no percent, as in 40%"));
 }
 
@@ -936,67 +936,15 @@ void tst_ConfigParser::testCondition_shouldKeepSpellingAndSpaceSigns()
     qExpect(condition.describe())->toEqual(QString(QLL("a condition of a, b, c, joined by | and &")));
 }
 
-void tst_ConfigParser::testCondition_shouldComparePercents_data()
-{
-    QTest::addColumn<QString >("text");
-    QTest::addColumn<QStringList >("holding");
-    QTest::addColumn<qreal >("percent");
-    QTest::addColumn<bool >("expected");
-    const QString a = QString(QLL("a"));
-    QTest::newRow("past the percent") << QString(QLL("40%")) << QStringList() << qreal(52.5)
-        << true;
-    QTest::newRow("at the percent") << QString(QLL("40%")) << QStringList() << qreal(40)
-        << false;
-    QTest::newRow("below the percent") << QString(QLL("40%")) << QStringList() << qreal(10)
-        << false;
-    QTest::newRow("a percent with a name")
-        << QString(QLL("(40% & a) | (30% & b)")) << (QStringList() << a) << qreal(45) << true;
-    QTest::newRow("a percent with a name, the other one")
-        << QString(QLL("(40% & a) | (30% & b)")) << (QStringList() << a) << qreal(35) << false;
-    QTest::newRow("a name alone") << a << (QStringList() << a) << qreal(0)
-        << true;
-    QTest::newRow("no percent") << QString(QLL("0%")) << QStringList()
-        << qreal(0) << false;
-    QTest::newRow("every percent") << QString(QLL("100%")) << QStringList() << qreal(100)
-        << false;
-}
-
-void tst_ConfigParser::testCondition_shouldComparePercents()
-{
-    QFETCH(QString, text);
-    QFETCH(QStringList, holding);
-    QFETCH(qreal, percent);
-    QFETCH(bool, expected);
-    QStringList program;
-    QString error;
-    qExpect(Config::Condition::compile(
-        text,
-        conditionNames(),
-        &program,
-        &error,
-        true
-    ))
-        ->toBeTruthy();
-    bool ok = false;
-    qExpect(Config::Condition::evaluate(
-        program,
-        holding.toSet(),
-        percent,
-        &ok
-    ))
-        ->toEqual(expected);
-    qExpect(ok)->toBeTruthy();
-}
-
 void tst_ConfigParser::testCondition_shouldRejectBadPercent_data()
 {
     QTest::addColumn<QString >("text");
     QTest::addColumn<QString >("error");
-    QTest::newRow("past 100%") << QString(QLL("101%"))
+    QTest::newRow("past 100%") << QString(QLL("1 > 101%"))
         << QString(QLL("101% is not from 0% to 100%"));
     QTest::newRow("a number without %") << QString(QLL("40"))
         << QString(QLL("unknown name 40"));
-    QTest::newRow("two percents") << QString(QLL("40% 30%"))
+    QTest::newRow("two percents") << QString(QLL("1 > 40% 30%"))
         << QString(QLL("a sign is missing before 30%"));
 }
 
@@ -1017,9 +965,11 @@ void tst_ConfigParser::testCondition_shouldRejectBadPercent()
     qExpect(message)->toEqual(error);
 }
 
-/// Evaluates a percent term before its value is set: the condition logs
-/// it, fails, and says so through `ok`; a name alone needs no value.
-void tst_ConfigParser::testCondition_shouldWarnWithoutPercent()
+/// Takes a percent only beside a comparison or math, since alone it is a
+/// share of 1 that always holds: it fails to compile there, while math
+/// reads it as that share, as in `100 * 40%`, which gives 40, also as an
+/// operand of `|` beside a name that does not hold.
+void tst_ConfigParser::testCondition_shouldTakeNoPercentAlone()
 {
     QStringList program;
     QString error;
@@ -1029,55 +979,49 @@ void tst_ConfigParser::testCondition_shouldWarnWithoutPercent()
         &program,
         &error,
         true
-    ))->toBeTruthy();
-    const QSet<QString > holding = QSet<QString >() << QString(QLL("b"));
-    bool ok = true;
-    QTest::ignoreMessage(QtWarningMsg, "Config::Condition: no value is set for the term 40%");
-    qExpect(Config::Condition::evaluate(program, holding, &ok))->toBeFalsy();
-    qExpect(ok)->toBeFalsy();
-
-    const Config::Condition condition(conditionNames(), true);
-    QString matched;
-    qExpect(condition.match(QString(QLL("(40%&A) | b")), &matched))->toBeTruthy();
-    qExpect(matched)->toEqual(QString(QLL("(40% & A) | b")));
+    ))->toBeFalsy();
+    qExpect(error)->toEqual(QString(QLL(
+        "40% alone is no condition; compare it with a value, as in x > 40%"
+    )));
     qExpect(Config::Condition::compile(
-        QString(QLL("a")),
+        QString(QLL("a | 100 * 40% == 40")),
         conditionNames(),
         &program,
         &error,
         true
     ))->toBeTruthy();
-    qExpect(Config::Condition::evaluate(program, holding, &ok))->toBeFalsy();
-    qExpect(ok)->toBeTruthy();
+    const QSet<QString > holding = QSet<QString >() << QString(QLL("b"));
+    bool answered = false;
+    qExpect(Config::Condition::evaluate(program, holding, &answered))
+        ->toBeTruthy();
+    qExpect(answered)->toBeTruthy();
+
+    const Config::Condition condition(conditionNames(), true);
+    QString matched;
+    qExpect(condition.match(QString(QLL("(1>40%&A) | b")), &matched))->toBeTruthy();
+    qExpect(matched)->toEqual(QString(QLL("(1>40% & A) | b")));
 }
 
 /// Answers the names that pushTestObjects() adds, the way a tool's
 /// own context answers them at the place where it evaluates a condition:
 /// `argCount()` gives 7 for the third argument two calls up, `spaceRemaining`
-/// gives `space` once it is set, and each call of it counts in `spaceCalls`.
+/// gives `space` (in percents) once it is set, as a share of 1, the way a
+/// percent reads, and each call of it counts in `spaceCalls`.
 class TestArgumentContext : public Config::Evaluator::Context
 {
     typedef Config::Evaluator::Context super;
 public:
     inline TestArgumentContext()
-        : count(-1), space(-1), spaceCalls(0), percentCalls(0)
+        : count(-1), space(-1), spaceCalls(0)
     {
     }
 
     inline qreal argumentCount(int depth, int argument) const
     { return depth == -2 && argument == 3 ? 7 : -1; }
 
-    inline bool percent(qreal *value) const Q_DECL_OVERRIDE_IL
-    {
-        ++percentCalls;
-        *value = 100 - space;
-        return space >= 0;
-    }
-
     qreal count;
     qreal space;
     mutable int spaceCalls;
-    mutable int percentCalls;
 };
 
 /// Offers the names of TestArgumentContext to the conditions of a test:
@@ -1099,7 +1043,7 @@ public:
     inline QVariant spaceRemaining() const
     {
         ++test()->spaceCalls;
-        return test()->space >= 0 ? QVariant(test()->space) : QVariant();
+        return test()->space >= 0 ? QVariant(test()->space / 100) : QVariant();
     }
 
     /// Stands for a method that is invokable, yet no public slot; hence no
@@ -1229,6 +1173,67 @@ static QSharedPointer<Config::Scopes::Scope > pushTestObjects()
     return scope;
 }
 
+/// Compares the share a place uses (1 less `spaceRemaining`) with a
+/// percent, which is that share of 1, alone or beside names: past the
+/// percent only, as in C.
+void tst_ConfigParser::testCondition_shouldComparePercents_data()
+{
+    QTest::addColumn<QString >("text");
+    QTest::addColumn<QStringList >("holding");
+    QTest::addColumn<qreal >("used");
+    QTest::addColumn<bool >("expected");
+    const QString a = QString(QLL("a"));
+    const QString used = QString(QLL("1 - spaceRemaining > %1"));
+    QTest::newRow("past the percent") << used.arg(QLL("40%")) << QStringList()
+        << qreal(52.5) << true;
+    QTest::newRow("at the percent") << used.arg(QLL("40%")) << QStringList()
+        << qreal(40) << false;
+    QTest::newRow("below the percent") << used.arg(QLL("40%")) << QStringList()
+        << qreal(10) << false;
+    const QString both = QString(QLL("(%1 & a) | (%2 & b)")).arg(
+        used.arg(QLL("40%")),
+        used.arg(QLL("30%"))
+    );
+    QTest::newRow("a percent with a name") << both << (QStringList() << a)
+        << qreal(45) << true;
+    QTest::newRow("a percent with a name, the other one") << both
+        << (QStringList() << a) << qreal(35) << false;
+    QTest::newRow("a name alone") << a << (QStringList() << a) << qreal(0)
+        << true;
+    QTest::newRow("no percent") << used.arg(QLL("0%")) << QStringList()
+        << qreal(0) << false;
+    QTest::newRow("every percent") << used.arg(QLL("100%")) << QStringList()
+        << qreal(100) << false;
+}
+
+void tst_ConfigParser::testCondition_shouldComparePercents()
+{
+    QFETCH(QString, text);
+    QFETCH(QStringList, holding);
+    QFETCH(qreal, used);
+    QFETCH(bool, expected);
+    const QSharedPointer<Config::Scopes::Scope > scope = pushTestObjects();
+    QStringList program;
+    QString error;
+    QVERIFY2(Config::Condition::compile(
+        text,
+        conditionNames(),
+        &program,
+        &error,
+        true
+    ), qPrintable(error));
+    TestArgumentContext context;
+    context.space = 100 - used;
+    bool ok = false;
+    qExpect(Config::Condition::evaluate(
+        program,
+        holding.toSet(),
+        &context,
+        &ok
+    ))
+        ->toEqual(expected);
+    qExpect(ok)->toBeTruthy();
+}
 
 void tst_ConfigParser::testCondition_shouldEvaluateExpressions()
 {
@@ -1291,8 +1296,7 @@ void tst_ConfigParser::testCondition_shouldEvaluateExpressions()
 }
 
 /// Calls an object's member only when its term runs, with the context the
-/// caller passes, and asks the context for the percent value only when a
-/// percent term needs it, once.
+/// caller passes.
 void tst_ConfigParser::testCondition_shouldCallObjectMembers()
 {
     const QSharedPointer<Config::Scopes::Scope > scope = pushTestObjects();
@@ -1322,21 +1326,6 @@ void tst_ConfigParser::testCondition_shouldCallObjectMembers()
     ))->toBeTruthy();
     qExpect(context.spaceCalls)->toEqual(1);
 
-    // Asks for the percent value only where a percent term needs it.
-    QVERIFY2(Config::Condition::compile(
-        QString(QLL("is-signature && 40%")), names, &program, &error, true
-    ), qPrintable(error));
-    qExpect(Config::Condition::evaluate(
-        program, QSet<QString >(), &context, &ok
-    ))->toBeFalsy();
-    qExpect(context.percentCalls)->toEqual(0);
-    qExpect(Config::Condition::evaluate(
-        program,
-        QSet<QString >() << QString(QLL("is-signature")),
-        &context,
-        &ok
-    ))->toBeTruthy();
-    qExpect(context.percentCalls)->toEqual(1);
     QVERIFY2(Config::Condition::compile(
         QString(QLL("is-signature && space_remaining() >= 40%")),
         names,
@@ -1386,7 +1375,7 @@ void tst_ConfigParser::testCondition_shouldChooseNumbers()
     QStringList program;
     QString error;
     QVERIFY2(Config::Condition::compile(
-        QString(QLL("is-header ? 2 : is-signature ? 3 : spaceRemaining + 1")),
+        QString(QLL("is-header ? 2 : is-signature ? 3 : spaceRemaining * 100 + 1")),
         names,
         &program,
         &error,
@@ -1659,11 +1648,14 @@ void tst_ConfigParser::testScopes_shouldOfferDynamicPropertiesAndPaths()
         QCOMPARE(result, qreal(13));
     }
 
-    // Keeps a percent a percent through math: `share * 0.875` holds past 35%.
+    // Keeps a percent a percent through math: the share used past
+    // `share * 0.875`, 35%, holds.
+    scope->add(new TestArgumentObject);
     QStringList program;
     QString error;
     QVERIFY2(Config::Condition::compile(
-        QString(QLL("share * 0.875")), QStringList(), &program, &error, true
+        QString(QLL("1 - space_remaining > share * 0.875")), QStringList(),
+        &program, &error, true
     ), qPrintable(error));
     context.space = 64;
     qExpect(Config::Condition::evaluate(
@@ -1968,10 +1960,10 @@ void tst_ConfigParser::testCondition_shouldCheckMathLikePlainOnes()
 {
     QStringList program;
     QString error;
-    QVERIFY( ! Config::Condition::compile(QString(QLL("150% | b == 1")),
+    QVERIFY( ! Config::Condition::compile(QString(QLL("1 > 150% | b == 1")),
                                           conditionNames(), &program, &error, true));
     QCOMPARE(error, QString(QLL("150% is not from 0% to 100%")));
-    QVERIFY( ! Config::Condition::compile(QString(QLL("40% | b == 1")),
+    QVERIFY( ! Config::Condition::compile(QString(QLL("1 > 40% | b == 1")),
                                           conditionNames(), &program, &error));
     QCOMPARE(error, QString(QLL("the key takes no percent, as in 40%")));
     QVERIFY( ! Config::Condition::compile(QString(QLL("nope < 2")),
@@ -1983,7 +1975,7 @@ void tst_ConfigParser::testCondition_shouldCheckMathLikePlainOnes()
         Config::Scopes::push();
     scope->add(new Config::ArrayObj(QStringList() << QString(QLL("x"))));
     QVERIFY( ! Config::Condition::compile(
-        QString(QLL("is-static & 140%")),
+        QString(QLL("is-static & 1 > 140%")),
         QStringList() << QString(QLL("is-static")), &program, &error, true
     ));
     QCOMPARE(error, QString(QLL("140% is not from 0% to 100%")));
@@ -1997,13 +1989,13 @@ void tst_ConfigParser::testCondition_shouldParsePercentsBeforeKeyChecks()
 {
     QStringList program;
     QString error;
-    QVERIFY( ! Config::Condition::compile(QString(QLL("40% |")),
+    QVERIFY( ! Config::Condition::compile(QString(QLL("1 > 40% |")),
                                           conditionNames(), &program, &error));
     QCOMPARE(error, QString(QLL("a name is missing at the end")));
     QVERIFY( ! Config::Condition::compile(QString(QLL("40% + 1 <")),
                                           conditionNames(), &program, &error));
     QCOMPARE(error, QString(QLL("a name is missing at the end")));
-    QVERIFY( ! Config::Condition::compile(QString(QLL("101% | a")),
+    QVERIFY( ! Config::Condition::compile(QString(QLL("1 > 101% | a")),
                                           conditionNames(), &program, &error));
     QCOMPARE(error, QString(QLL("the key takes no percent, as in 101%")));
     QVERIFY( ! Config::Condition::compile(QString(QLL("a | 2 * 10% < 1")),

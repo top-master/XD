@@ -106,12 +106,6 @@ public:
         return true;
     }
 
-    inline bool percent(qreal *value) const Q_DECL_OVERRIDE_IL
-    {
-        *value = 100 - m_conditions->spaceRemaining(m_last);
-        return true;
-    }
-
     inline bool spaceRemaining(qreal *percent) const Q_DECL_OVERRIDE_IL
     {
         *percent = m_conditions->spaceRemaining(m_last);

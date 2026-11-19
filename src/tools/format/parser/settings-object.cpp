@@ -24,8 +24,8 @@
     A key answers the number its setting gives at the place (see
     dynamicValue()), from the settings that the place's
     FormatConditionContext names, else nothing; a key of percents, such as
-    `wrapArgsAt`, answers the percent past which it holds there (`40%`, for
-    one). Each property stores the default the schema spells for its key.
+    `wrapArgsAt`, answers the `spaceUsed` past which it holds there (`40%`,
+    for one). Each property stores the default the schema spells for its key.
 */
 
 namespace {
@@ -39,8 +39,8 @@ Q_GLOBAL_STATIC(QThreadStorage<QSet<QByteArray > >, busyKeys)
 
 /*!
     Answers a condition of percents at a place as @a place does, with
-    @a percent as the value of its percent terms; hence the condition can be
-    asked at every percent of the place.
+    @a percent as the place's `spaceUsed` (100 less its `spaceRemaining`);
+    hence the condition can be asked at every share of the place.
 */
 class PercentContext : public FormatConditionContext
 {
@@ -57,15 +57,10 @@ public:
         return m_place->predicate(name, value);
     }
 
-    inline bool percent(qreal *value) const Q_DECL_OVERRIDE_IL
-    {
-        *value = m_percent;
-        return true;
-    }
-
     inline bool spaceRemaining(qreal *percent) const Q_DECL_OVERRIDE_IL
     {
-        return m_place->spaceRemaining(percent);
+        *percent = 100 - m_percent;
+        return true;
     }
 
     inline bool hasStandard(const QString & standard,
@@ -202,7 +197,7 @@ QVariant FormatSettingsObject::dynamicValue(const QByteArray & name) const
 }
 
 /*!
-    Builds the percent past which the condition @a program of the key
+    Builds the `spaceUsed` past which the condition @a program of the key
     @a name holds at the place that @a place answers, such as `40%`: one
     less than the smallest whole percent, from 0 to 100, at which it holds,
     else `100%`. Builds an invalid value where the condition misses a

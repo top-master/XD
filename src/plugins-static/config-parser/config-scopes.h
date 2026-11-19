@@ -59,8 +59,7 @@ QStringList names();
 bool answer(const Member & member, const Evaluator::Context *context,
             const QVariantList & arguments, QVariant *result);
 bool call(const Member & member, const Evaluator::Context *context,
-          const QVariantList & arguments, qreal *result,
-          bool *isPercent = Q_NULLPTR);
+          const QVariantList & arguments, qreal *result);
 bool invoke(Object *object, const QString & name,
             const QVariantList & arguments, QVariant *result);
 

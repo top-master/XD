@@ -25,8 +25,8 @@
     a comma, each line under the first parameter, as many parameters per
     line as fit; it starts on the next line instead when even the first
     parameter does not fit under the `(`, or when `[Structure]
-    wrapSignatureAt` holds at the `(` (whose percents compare the column
-    after the `(` with `wrapMax`, as `wrapArgsAt` does for a call, see
+    wrapSignatureAt` holds at the `(` (whose `spaceUsed` is the share of
+    `wrapMax` up to after the `(`, as for `wrapArgsAt` of a call, see
     FormatArgsWrapRule). A function, a
     constructor, a destructor, and an operator count alike, at file,
     namespace, or class scope. A list the user already broke over lines
@@ -101,15 +101,10 @@ void FormatParamWrapRule::run(FormatDocument *document) const
             QList<QByteArray > lines;
             const QByteArray head = prefix + items.first()
                 + (items.size() == 1 ? suffix : ",");
-            const qreal percent = textWidth(prefix) * 100.0 / qMax(
-                1,
-                limit
-            );
             const bool breaksAfterOpen = conditions.holds(
                 QString(QLL("structure.wrapSignatureAt")),
                 fileConfig.wrapSignatureAt,
                 i,
-                percent,
                 FormatFileConfig::defaultWrapSignatureAt()
             );
             if (conditions.argsOver(i, items.size())) {
@@ -230,11 +225,9 @@ void FormatParamWrapRule::regroup(
             document->symbols().at(close).from,
             end - document->symbols().at(close).from
         );
-        const qreal percent = textWidth(prefix) * 100.0 / qMax(1, limit);
         const bool mustBreak = conditions->holds(
             QString(QLL("structure.wrapSignatureAt")),
             fileConfig.wrapSignatureAt, i,
-            percent,
             FormatFileConfig::defaultWrapSignatureAt()
         );
 

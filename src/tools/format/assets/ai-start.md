@@ -55,9 +55,9 @@ Each kind below names the stream it comes on and what to do with it:
   error (wrapped over several lines when long): you named a path that the
   ignore files leave out, and the `#:` question after it asks what to do
   with it (see "The question about ignored paths" below).
-- A line from a library the tool uses, such as `Config::Condition: no value
-  is set for the term 40%`: a fault of the tool itself, which goes on as it
-  can. Report the line to the user as it is; nothing in the files needs a
+- A line from a library the tool uses, such as `Config::Scopes: scope 2 is
+  still referenced`: a fault of the tool itself, which goes on as it can.
+  Report the line to the user as it is; nothing in the files needs a
   change for it.
 
 ## The requests
