@@ -56,8 +56,8 @@ int count();
 Member find(const QString & name);
 Member member(Object *object, const QString & name);
 QStringList names();
-bool answer(const Member & member, const Evaluator::Context *context,
-            const QVariantList & arguments, QVariant *result);
+bool resolve(const Member & member, const Evaluator::Context *context,
+             const QVariantList & arguments, QVariant *result);
 bool call(const Member & member, const Evaluator::Context *context,
           const QVariantList & arguments, qreal *result);
 bool invoke(Object *object, const QString & name,

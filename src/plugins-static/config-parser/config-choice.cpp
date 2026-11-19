@@ -36,6 +36,7 @@ bool Config::Choice::match(const QString &value, QString *matched) const
                                  Condition::NameMismatchIgnore, &error,
                                  &mismatched)
     ) {
+        *matched = QString();
         return false;
     }
     *matched = value.trimmed();
@@ -81,7 +82,10 @@ bool Config::Choice::convert(const QVariant & resolved, QVariant *value) const
             return true;
         }
     }
-    if (resolved.type() != QVariant::String || ! this->m_values.isEmpty()) {
+    if (resolved.type() != QVariant::String
+        || ! this->m_values.isEmpty()
+    ) {
+        *value = QVariant();
         return false;
     }
     *value = word;
@@ -123,14 +127,17 @@ bool Config::Choice::check(const QString &expression, const QStringList &names,
     @a result as text, a number as its digits (see the resolve() below).
     Reports an invalid expression in @a error.
 */
-bool Config::Choice::resolve(const QString &expression, const QStringList &names,
-                             const QStringList &values, const Evaluator::Context *context,
-                             QString *result, QString *error)
+bool Config::Choice::resolve(
+        const QString &expression, const QStringList &names,
+        const QStringList &values, const Evaluator::Context *context,
+        QString *result, QString *error)
 {
     QVariant resolved;
-    if ( ! Config::Choice::resolve(expression, names, values, context,
-                                   &resolved, error)
-    ) {
+    if ( ! Config::Choice::resolve(
+        expression, names, values, context,
+        &resolved, error
+    )) {
+        *result = QString();
         return false;
     }
     *result = resolved.toString();
@@ -143,10 +150,11 @@ bool Config::Choice::resolve(const QString &expression, const QStringList &names
     Condition::resolve()); hence the caller tells the two apart by the type.
     Reports an invalid expression in @a error.
 */
-bool Config::Choice::resolve(const QString &expression, const QStringList &names,
-                             const QStringList &values,
-                             const Evaluator::Context *context,
-                             QVariant *result, QString *error)
+bool Config::Choice::resolve(
+        const QString &expression, const QStringList &names,
+        const QStringList &values,
+        const Evaluator::Context *context,
+        QVariant *result, QString *error)
 {
     const QString text = expression.trimmed();
     QStringList program;
@@ -165,6 +173,7 @@ bool Config::Choice::resolve(const QString &expression, const QStringList &names
         if ( ! reason.isEmpty()) {
             *error += QLL(": ") + reason;
         }
+        *result = QVariant();
         return false;
     }
     if ( ! Condition::resolve(program, QSet<QString >(), context, result)) {

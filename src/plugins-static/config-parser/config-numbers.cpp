@@ -65,6 +65,7 @@ bool Config::Numbers::match(const QString & value, QString *matched) const
     if (numbers.isEmpty()
         || (this->m_maximumCount > 0 && numbers.size() > this->m_maximumCount)
     ) {
+        *matched = QString();
         return false;
     }
     QStringList parts;
@@ -72,6 +73,7 @@ bool Config::Numbers::match(const QString & value, QString *matched) const
         if (numbers.at(i) < this->m_minimum
             || numbers.at(i) > this->m_maximum
         ) {
+            *matched = QString();
             return false;
         }
         parts << QString::number(numbers.at(i));
@@ -88,10 +90,12 @@ bool Config::Numbers::match(const QString & value, QString *matched) const
 bool Config::Numbers::convert(const QVariant & resolved, QVariant *value) const
 {
     if (resolved.type() != QVariant::Double) {
+        *value = QVariant();
         return false;
     }
     const int number = int(resolved.toDouble());
     if (number < this->m_minimum || number > this->m_maximum) {
+        *value = QVariant();
         return false;
     }
     *value = number;

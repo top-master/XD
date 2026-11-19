@@ -30,6 +30,7 @@ bool Config::AnySpace::match(const QString & value, QString *matched) const
         if (value.at(i) != QLatin1Char(' ')
             && value.at(i) != QLatin1Char('\t')
         ) {
+            *matched = QString();
             return false;
         }
     }

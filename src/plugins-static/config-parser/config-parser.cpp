@@ -781,6 +781,7 @@ bool Config::Parser::matchValue(const Config::Key & key, const QString & value,
                 &matchedFallback
             )
         ) {
+            *matched = QString();
             return false;
         }
         *matched = matchedHead + QLL(" |");
@@ -794,5 +795,6 @@ bool Config::Parser::matchValue(const Config::Key & key, const QString & value,
             return true;
         }
     }
+    *matched = QString();
     return false;
 }

@@ -106,6 +106,7 @@ static bool resolveMismatch(const QString & spelling, const QStringList & known,
         ) {
             *error = message;
             *mismatched = true;
+            *meant = QString();
             return false;
         }
         if (mismatch == Config::Condition::NameMismatchWarn) {
@@ -114,6 +115,7 @@ static bool resolveMismatch(const QString & spelling, const QStringList & known,
         *meant = known.at(i);
         return true;
     }
+    *meant = QString();
     return false;
 }
 
@@ -741,18 +743,18 @@ bool ExpressionCompiler::call(const QString &name)
         }
         this->take(step);
 
-        // Finds the next member on the object the path so far answers.
-        QVariant answer;
+        // Finds the next member on the object the path so far resolves to.
+        QVariant resolved;
         Config::Object *object = Q_NULLPTR;
         if (function.minimumArguments == 0
-            && Config::Scopes::answer(
+            && Config::Scopes::resolve(
                 function,
                 Q_NULLPTR,
                 QVariantList(),
-                &answer
+                &resolved
             )
         ) {
-            object = Config::Types::object(answer);
+            object = Config::Types::object(resolved);
         }
         function = Config::Scopes::member(object, step);
         if (function.isNull()) {
@@ -878,6 +880,7 @@ bool Config::Condition::match(const QString & value, QString *matched) const
             this->m_takesPercents, NameMismatchIgnore
         )
     ) {
+        *matched = QString();
         return false;
     }
 
@@ -909,9 +912,11 @@ bool Config::Condition::match(const QString & value, QString *matched) const
     zero) for ResultHolds, or the number itself for ResultNumber. Returns
     false for a word, which no condition resolves to.
 */
-bool Config::Condition::convert(const QVariant & resolved, QVariant *value) const
+bool Config::Condition::convert(
+        const QVariant & resolved, QVariant *value) const
 {
     if (resolved.type() != QVariant::Double) {
+        *value = QVariant();
         return false;
     }
     *value = this->m_result == ResultHolds ? QVariant(resolved.toDouble() != 0)
@@ -1251,6 +1256,7 @@ bool calculateResult(const QStringList &program, Lookup *lookup,
 {
     Operand operand;
     if ( ! calculate(program, lookup, &operand)) {
+        *result = QVariant();
         return false;
     }
     *result = operand.isText ? QVariant(operand.text)
@@ -1312,7 +1318,7 @@ bool calculate(const QStringList &program, Lookup *lookup, Operand *result)
             // Walks a path such as `cfg.wrapMax` to its last member.
             for (int step = 1; step < path.size(); ++step) {
                 QVariant answer;
-                if ( ! Config::Scopes::answer(
+                if ( ! Config::Scopes::resolve(
                         function,
                         context,
                         QVariantList(),

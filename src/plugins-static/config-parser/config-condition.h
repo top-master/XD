@@ -118,7 +118,7 @@ Q_ALWAYS_INLINE bool Condition::value(
         const Evaluator::Context *context, qreal *number)
 {
     QVariant result;
-    const bool isNumber = Condition::resolve(program, holding, context, &result)
+    const bool isNumber = resolve(program, holding, context, &result)
         && result.type() == QVariant::Double;
     *number = isNumber ? result.toDouble() : *number;
     return isNumber;

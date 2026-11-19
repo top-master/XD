@@ -4326,7 +4326,7 @@ void tst_FormatRules::testScopeConditions_shouldPlaceSignaturesByWrapArgsAt()
         36,
         fallback
     ));
-    QVERIFY(! conditions.holds(
+    QVERIFY( ! conditions.holds(
         key,
         config.wrapSignatureAt,
         open,
@@ -4346,7 +4346,7 @@ void tst_FormatRules::testScopeConditions_shouldPlaceSignaturesByWrapArgsAt()
         71,
         fallback
     ));
-    QVERIFY(! conditions.holds(
+    QVERIFY( ! conditions.holds(
         key,
         config.wrapSignatureAt,
         open,

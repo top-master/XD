@@ -14,7 +14,7 @@
     Holds what the expressions of settings need to know about the types of
     their values, beyond what Qt's own meta-types tell: which value is a
     Config::Object, whose names an expression may then reach with `.` (see
-    Config::Scopes::answer()).
+    Config::Scopes::resolve()).
 
     A slot may return a pointer to a Config::Object subclass with no
     registration at all: Qt then does not know the return type, and the

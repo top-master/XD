@@ -380,9 +380,8 @@ QList<int > loosestOperators(
     Tells whether the token at @a token of @a document stands at or past
     `[Structure] wrapArgsAt`: whether its condition (see
     FormatScopeConditions::holds()) holds, its `spaceUsed` being the share
-    of `[Structure] wrapMax` the line uses up to right after the token. A
-    list may break after such a `(`, and a value may move below such an
-    `=`.
+    of `[Structure] wrapMax` the line uses up to right after the token.
+    A list may break after such a `(`; a value may move below such an `=`.
 */
 bool reachesWrapArgsAt(const FormatDocument *document,
                        FormatScopeConditions *conditions, int token)

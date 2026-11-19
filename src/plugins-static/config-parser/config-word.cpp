@@ -34,6 +34,7 @@ QSharedPointer<const Config::ValueMatcher > Config::Word::create(
 bool Config::Word::match(const QString & value, QString *matched) const
 {
     if (value.compare(this->m_word, Qt::CaseInsensitive) != 0) {
+        *matched = QString();
         return false;
     }
     *matched = this->m_word;

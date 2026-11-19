@@ -496,67 +496,69 @@ static bool literalValues(const QString & text, QVariantList *values)
 }
 
 /*!
-    Builds what the member @a name of @a object answers with @a values, at
-    the place @a context stands for, to @a result; returns false when
-    @a object offers no such member, or it has no answer there (such as
+    Resolves what the member @a name of @a object gives with @a values, at
+    the place @a context stands for, into @a result; returns false when
+    @a object offers no such member, or it gives no result there (such as
     `at()` past the arguments).
 */
-static bool memberAnswer(Config::Object *object, const QString & name,
-                         const QVariantList & values,
-                         const FormatConditionContext *context,
-                         QVariant *result)
+static bool resolveMember(Config::Object *object, const QString & name,
+                          const QVariantList & values,
+                          const FormatConditionContext *context,
+                          QVariant *result)
 {
     Config::Scopes::Member member;
     member.object = object;
     member.name = Config::Condition::canonicalName(name);
-    return Config::Scopes::answer(member, context, values, result);
+    return Config::Scopes::resolve(member, context, values, result);
 }
 
 /*!
-    Builds the object that the name @a name of the scopes answers, at the
-    place @a context stands for, else null: a name whose answer is no
+    Builds the object that the name @a name of the scopes resolves to, at
+    the place @a context stands for, else null: a name whose result is no
     Config::Object, such as a plain number, counts as no such name.
 */
 static Config::Object *scopeObject(
         const QString & name,
         const FormatConditionContext *context)
 {
-    QVariant answer;
+    QVariant resolved;
     const Config::Scopes::Member member = Config::Scopes::find(
         Config::Condition::canonicalName(name)
     );
     if (member.isNull()
         || member.minimumArguments > 0
-        || ! Config::Scopes::answer(
+        || ! Config::Scopes::resolve(
             member,
             context,
             QVariantList(),
-            &answer
+            &resolved
         )
     ) {
         return Q_NULLPTR;
     }
-    return Config::Types::object(answer);
+    return Config::Types::object(resolved);
 }
 
 /*!
-    Builds the text that @a object answers at the steps of @a pattern from
+    Builds the text that @a object gives at the steps of @a pattern from
     @a *position on, to @a result, and moves @a *position past them: each
     step is `[<index>]`, which calls `at(<index>)`, or `.<name>` and
     `.<name>(<literals>)`, which read or call that member. A step whose
-    answer is another object goes on with that object's names. Returns
-    false when a member has no answer, or the last answer is an object.
+    result is another object goes on with that object's names. Returns
+    false, clearing @a result, when a member gives no result, or the last
+    result is an object.
 */
 static bool stepsText(const QString & pattern, int *position,
                       Config::Object *object,
                       const FormatConditionContext *context, QString *result)
 {
+    result->clear();
     const QRegExp index(QString(QLL("^\\[(\\d+)\\]")));
     const QRegExp member(QString(QLL(
         "^\\.([A-Za-z_][A-Za-z0-9_]*)"
         "(\\(((?:[^\"()\\\\]|\\\\.|\"(?:[^\"\\\\]|\\\\.)*\")*)\\))?"
     )));
-    QVariant answer;
+    QVariant resolved;
     while (object) {
         const QString rest = pattern.mid(*position);
         QRegExp indexAt = index;
@@ -576,15 +578,15 @@ static bool stepsText(const QString & pattern, int *position,
         } else {
             break;
         }
-        if ( ! memberAnswer(object, name, values, context, &answer)) {
+        if ( ! resolveMember(object, name, values, context, &resolved)) {
             return false;
         }
-        object = Config::Types::object(answer);
+        object = Config::Types::object(resolved);
     }
-    if (object || ! answer.isValid()) {
+    if (object || ! resolved.isValid()) {
         return false;
     }
-    *result = answer.toString();
+    *result = resolved.toString();
     return true;
 }
 
@@ -667,6 +669,7 @@ static bool fillTemplate(const QString & pattern, const QStringList & arguments,
                     &text
                 )
             ) {
+                result->clear();
                 return false;
             }
             *result += text;
@@ -702,6 +705,7 @@ static bool fillTemplate(const QString & pattern, const QStringList & arguments,
         }
         QString text;
         if ( ! stepsText(pattern, &position, object, &context, &text)) {
+            result->clear();
             return false;
         }
         *result += text;
@@ -746,6 +750,8 @@ static bool replacement(
         } else {
             QString filled;
             if ( ! fillTemplate(value, arguments, &filled)) {
+                head->clear();
+                call->clear();
                 return false;
             }
             const int filledParen = filled.indexOf(QLatin1Char('('));

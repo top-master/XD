@@ -153,9 +153,9 @@ static Config::Scopes::Member memberOf(
 /*!
     Builds @a value, unless it holds a pointer to a QObject that is no
     Config::Object that lives (see Config::Types::object()); then an invalid
-    value, which counts as no answer.
+    value, which counts as no result.
 */
-static QVariant liveAnswer(const QVariant & value)
+static QVariant liveResult(const QVariant & value)
 {
     if ((QMetaType::typeFlags(value.userType()) & QMetaType::PointerToQObject)
         && ! Config::Types::object(value)
@@ -173,6 +173,7 @@ static QVariant liveAnswer(const QVariant & value)
 static bool invokeSlot(Config::Object *object, const QMetaMethod & method,
                        const QVariantList & arguments, QVariant *result)
 {
+    *result = QVariant();
     if (arguments.size() != method.parameterCount()
         || arguments.size() > 10
     ) {
@@ -240,7 +241,7 @@ static bool invokeSlot(Config::Object *object, const QMetaMethod & method,
             : QVariant();
         return true;
     }
-    *result = liveAnswer(returned);
+    *result = liveResult(returned);
     return true;
 }
 
@@ -491,14 +492,16 @@ Config::Scopes::Member Config::Scopes::member(
 
 /*!
     Calls @a member with @a arguments, for the place @a context stands for
-    (see Config::Object::context()), and gives what it answers to @a result.
-    Returns false when the member has no answer there (an invalid value).
+    (see Config::Object::context()), and resolves what it gives into
+    @a result. Returns false when the member gives no result there (an
+    invalid value).
 */
-bool Config::Scopes::answer(
+bool Config::Scopes::resolve(
         const Member & member, const Evaluator::Context *context,
         const QVariantList & arguments, QVariant *result)
 {
     if (member.isNull()) {
+        *result = QVariant();
         return false;
     }
     const ContextGuard guard(context);
@@ -513,42 +516,42 @@ bool Config::Scopes::answer(
 
 /*!
     Calls @a member with @a arguments, for the place @a context stands for,
-    and gives the number it answers to @a result: a `bool` answers 1 or 0,
-    and a text such as `35%` answers that share of 1, 0.35, as a percent
-    of a condition does. Returns false when the member has no answer there
-    (an invalid value), or one that is no number.
+    and resolves what it gives into the number @a result: a `bool` gives 1
+    or 0, and a text such as `35%` gives that share of 1, 0.35, as a
+    percent of a condition does. Returns false when the member gives no
+    result there (an invalid value), or one that is no number.
 */
 bool Config::Scopes::call(
         const Member & member, const Evaluator::Context *context,
         const QVariantList & arguments, qreal *result)
 {
-    QVariant answer;
-    if ( ! Config::Scopes::answer(member, context, arguments, &answer)
-        || Config::Types::object(answer)
+    QVariant resolved;
+    if ( ! Config::Scopes::resolve(member, context, arguments, &resolved)
+        || Config::Types::object(resolved)
     ) {
         return false;
     }
-    if (answer.type() == QVariant::Bool) {
-        *result = answer.toBool() ? 1 : 0;
+    if (resolved.type() == QVariant::Bool) {
+        *result = resolved.toBool() ? 1 : 0;
         return true;
     }
-    QString text = answer.toString().trimmed();
-    const bool endsWithPercent = answer.type() == QVariant::String
+    QString text = resolved.toString().trimmed();
+    const bool endsWithPercent = resolved.type() == QVariant::String
         && text.endsWith(QLatin1Char('%'));
     if (endsWithPercent) {
         text.chop(1);
     }
     bool isNumber = false;
     *result = endsWithPercent ? text.toDouble(&isNumber) / 100
-                              : answer.toDouble(&isNumber);
+                              : resolved.toDouble(&isNumber);
     return isNumber;
 }
 
 /*!
     Calls the slot or reads the property @a name (in any spelling of its `_`
     and `-` signs that Config::Condition::canonicalName() makes equal) of
-    @a object with @a arguments, and gives what it
-    answers to @a result; returns false when @a object offers no such member
+    @a object with @a arguments, and gives what it returns to @a result;
+    returns false when @a object offers no such member
     (see Config::Object for which count) that takes that many arguments.
 */
 bool Config::Scopes::invoke(
@@ -566,11 +569,11 @@ bool Config::Scopes::invoke(
 
         // Reads a property for a call without arguments only.
         if (item.kind == ObjectMember::Property && arguments.isEmpty()) {
-            *result = liveAnswer(meta->property(item.index).read(object));
+            *result = liveResult(meta->property(item.index).read(object));
             return true;
         }
         if (item.kind == ObjectMember::DynamicProperty && arguments.isEmpty()) {
-            *result = liveAnswer(object->dynamicValue(
+            *result = liveResult(object->dynamicValue(
                 object->dynamicPropertyNames().at(item.index)
             ));
             return true;
@@ -581,5 +584,6 @@ bool Config::Scopes::invoke(
             return invokeSlot(object, meta->method(item.index), arguments, result);
         }
     }
+    *result = QVariant();
     return false;
 }

@@ -199,6 +199,8 @@ static bool logicalBreakBeforeCall(
         const FormatDocument *document, int open,
         int *operatorIndex, QByteArray *indent)
 {
+    *operatorIndex = -1;
+    indent->clear();
     const int close = document->match(open);
     const int line = document->symbolLine(open);
     if (close <= open || document->symbolEndLine(close) != line

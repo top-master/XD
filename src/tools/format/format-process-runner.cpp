@@ -247,6 +247,7 @@ bool FormatProcessRunner::decodeEnd(const QByteArray & line, QString *path)
 {
     const QList<QByteArray > fields = line.split('\t');
     if (fields.size() != 2 || fields.at(0) != "end") {
+        path->clear();
         return false;
     }
     *path = QString::fromUtf8(QByteArray::fromPercentEncoding(fields.at(1)));

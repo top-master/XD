@@ -626,13 +626,13 @@ bool FormatFileConfig::resolve(
         QVariant *value)
 {
     QVariant resolved;
-    return Config::Condition::resolve(
-        program,
-        QSet<QString >(),
-        context,
-        &resolved
-    )
-        && settingsSchema()->convert(key, resolved, value);
+    if ( ! Config::Condition::resolve(
+        program, QSet<QString >(), context, &resolved
+    )) {
+        *value = QVariant();
+        return false;
+    }
+    return settingsSchema()->convert(key, resolved, value);
 }
 
 /*!
@@ -682,6 +682,7 @@ static bool compileCondition(const QString & text, QStringList *program,
             && mismatch == Config::Condition::NameMismatchCritical
         ) {
             *error = reason;
+            program->clear();
             return false;
         }
         reportCondition(reason, mismatched);
@@ -1196,6 +1197,7 @@ static bool resolveLintChoice(
     }
     qWarning("Invalid %s: %s", qPrintable(key), qPrintable(error.isEmpty()
         ? value : error));
+    *word = QString();
     return false;
 }
 

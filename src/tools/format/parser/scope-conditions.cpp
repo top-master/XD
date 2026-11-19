@@ -157,11 +157,13 @@ const FormatFileConfig *ArgumentContext::fileConfig() const
 
 /*!
     Resolves @a program at the place that @a context answers, converted as
-    the setting @a key takes it (see FormatFileConfig::resolve()). Builds an invalid value when a term misses
-    what it needs; the caller's default decides.
+    the setting @a key takes it (see FormatFileConfig::resolve()).
+    Builds an invalid value when a term misses what it needs;
+    the caller's default decides.
 */
-static QVariant resolveOf(const QString & key, const QStringList & program,
-                         const Config::Evaluator::Context *context)
+static QVariant resolveOf(
+        const QString & key, const QStringList & program,
+        const Config::Evaluator::Context *context)
 {
     QVariant value;
     if ( ! FormatFileConfig::resolve(key, program, context, &value)) {

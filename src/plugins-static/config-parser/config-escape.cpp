@@ -142,6 +142,7 @@ void Config::Escape::appendCodePoint(QString *text, uint codePoint)
 bool Config::Escape::decode(const QString & text, QString *decoded,
                             QString *error)
 {
+    decoded->clear();
     QString out;
     for (int i = 0; i < text.size(); ++i) {
         const QChar c = text.at(i);

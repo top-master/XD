@@ -47,6 +47,9 @@ bool Config::RegExp::split(
         const QString & value, QString *head, QString *fallback,
         bool *hasFallback)
 {
+    head->clear();
+    fallback->clear();
+    *hasFallback = false;
     const QString prefix = QString::fromLatin1(regExpPrefix);
     if ( ! value.startsWith(prefix)) {
         return false;
@@ -173,6 +176,7 @@ bool Config::RegExp::match(const QString & value, QString *matched) const
         || hasFallback
         || ! Config::RegExp::parse(value, &pattern, &replacement)
     ) {
+        *matched = QString();
         return false;
     }
     *matched = value;

@@ -37,6 +37,7 @@ bool Config::Name::match(const QString & value, QString *matched) const
     }
     const QRegExp name(pattern);
     if ( ! name.exactMatch(value.trimmed())) {
+        *matched = QString();
         return false;
     }
     *matched = value.trimmed();

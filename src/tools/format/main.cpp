@@ -249,6 +249,7 @@ static bool runGit(const QStringList & arguments, QByteArray *output,
     process.start(QString(QLL("git")), arguments);
     if ( ! process.waitForStarted() || ! process.waitForFinished(-1)) {
         *error = QString(QLL("--git: cannot run git"));
+        output->clear();
         return false;
     }
     *output = process.readAllStandardOutput();
@@ -259,12 +260,13 @@ static bool runGit(const QStringList & arguments, QByteArray *output,
             QString::fromLocal8Bit(process.readAllStandardError());
         *error = QString(QLL("--git: git %1 failed: %2"))
             .arg(arguments.join(QLatin1Char(' ')), diagnostics.trimmed());
+        output->clear();
         return false;
     }
     return true;
 #else
     Q_UNUSED(arguments);
-    Q_UNUSED(output);
+    output->clear();
     *error = QString(QLL("--git: this build cannot run processes"));
     return false;
 #endif

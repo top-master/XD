@@ -126,6 +126,7 @@ private slots:
     void testCondition_shouldPassStrings();
     void testCondition_shouldPassBareWords();
     void testChoice_shouldResolveWordsAndNumbers();
+    void testOutputs_shouldBeClearedOnFailure();
 
 private:
     void write(const QString & relative,
@@ -1582,7 +1583,7 @@ void tst_ConfigParser::testTypes_shouldReachReturnedObjects()
         << QString(QLL("items")) << QString(QLL("list"));
     for (int i = 0; i < names.size(); ++i) {
         QVariant answer;
-        qExpect(Config::Scopes::answer(
+        qExpect(Config::Scopes::resolve(
             Config::Scopes::find(names.at(i)), Q_NULLPTR, QVariantList(),
             &answer
         ))->toBeTruthy();
@@ -1598,7 +1599,7 @@ void tst_ConfigParser::testTypes_shouldReachReturnedObjects()
 
     // An address that names no `Config::Object` gives no answer.
     QVariant stray;
-    qExpect(Config::Scopes::answer(
+    qExpect(Config::Scopes::resolve(
         Config::Scopes::find(QString(QLL("stray"))), Q_NULLPTR,
         QVariantList(), &stray
     ))->toBeFalsy();
@@ -2202,7 +2203,7 @@ void tst_ConfigParser::testScopes_shouldRunGlobalSetups()
         Config::Scopes::find(QString(QLL("globalMark")));
     qExpect(member.isNull())->toBeFalsy();
     QVariant answer;
-    qExpect(Config::Scopes::answer(
+    qExpect(Config::Scopes::resolve(
         member,
         Q_NULLPTR,
         QVariantList(),
@@ -2373,18 +2374,23 @@ void tst_ConfigParser::testChoice_shouldResolveWordsAndNumbers()
                                             << QString(QLL("never"));
     QVariant answer;
     QString error;
-    QVERIFY2(Config::Choice::resolve(QString(QLL("true ? 2 : never")), noNames,
-                                    words, Q_NULLPTR, &answer, &error),
+    QVERIFY2(Config::Choice::resolve(
+        QString(QLL("true ? 2 : never")),
+        noNames, words, Q_NULLPTR,
+        &answer, &error
+    ),
              qPrintable(error));
     QCOMPARE(int(answer.type()), int(QVariant::Double));
     QCOMPARE(answer.toInt(), 2);
-    QVERIFY2(Config::Choice::resolve(QString(QLL("false ? 2 : never")), noNames,
-                                    words, Q_NULLPTR, &answer, &error),
+    QVERIFY2(Config::Choice::resolve(QString(QLL("false ? 2 : never")),
+                                     noNames, words, Q_NULLPTR,
+                                     &answer, &error),
              qPrintable(error));
     QCOMPARE(int(answer.type()), int(QVariant::String));
     QCOMPARE(answer.toString(), QString(QLL("never")));
     QVERIFY2(Config::Choice::resolve(QString(QLL("true ? 1 + 2 : average")),
-                                    noNames, words, Q_NULLPTR, &answer, &error),
+                                     noNames, words, Q_NULLPTR,
+                                     &answer, &error),
              qPrintable(error));
     QCOMPARE(answer.toInt(), 3);
     QString picked;
@@ -2398,6 +2404,50 @@ void tst_ConfigParser::testChoice_shouldResolveWordsAndNumbers()
     QString matched;
     QVERIFY(choice.match(QString(QLL("ready ? 1 + 1 : never")), &matched));
     QVERIFY( ! choice.match(QString(QLL("true ? ready : never")), &matched));
+}
+
+/// Each call starts from an output a former call filled; hence a caller
+/// that only checks the output sees no stale value after a failure.
+void tst_ConfigParser::testOutputs_shouldBeClearedOnFailure()
+{
+    const QStringList noNames;
+    const QStringList words = QStringList() << QString(QLL("never"));
+    QString error;
+    QString text = QString(QLL("stale"));
+    qExpect(Config::Choice::resolve(QString(QLL("true ? (")), noNames, words,
+                                    Q_NULLPTR, &text, &error))->toBeFalsy();
+    qExpect(text)->toBeEmpty();
+    QVariant value = QVariant(7);
+    qExpect(Config::Choice::resolve(QString(QLL("true ? (")), noNames, words,
+                                    Q_NULLPTR, &value, &error))->toBeFalsy();
+    qExpect(value.isValid())->toBeFalsy();
+
+    text = QString(QLL("stale"));
+    qExpect(Config::Escape::decode(QString(QLL("a\\q")), &text, &error))
+        ->toBeFalsy();
+    qExpect(text)->toBeEmpty();
+
+    const Config::Numbers numbers(1, 3, 1);
+    text = QString(QLL("stale"));
+    qExpect(numbers.match(QString(QLL("9")), &text))->toBeFalsy();
+    qExpect(text)->toBeEmpty();
+    value = QVariant(7);
+    qExpect(numbers.convert(QVariant(9.0), &value))->toBeFalsy();
+    qExpect(value.isValid())->toBeFalsy();
+
+    value = QVariant(7);
+    qExpect(Config::Scopes::resolve(Config::Scopes::Member(), Q_NULLPTR,
+                                    QVariantList(), &value))->toBeFalsy();
+    qExpect(value.isValid())->toBeFalsy();
+
+    QString head = QString(QLL("stale"));
+    QString fallback = QString(QLL("stale"));
+    bool hasFallback = true;
+    qExpect(Config::RegExp::split(QString(QLL("plain")), &head, &fallback,
+                                  &hasFallback))->toBeFalsy();
+    qExpect(head)->toBeEmpty();
+    qExpect(fallback)->toBeEmpty();
+    qExpect(hasFallback)->toBeFalsy();
 }
 
 QTEST_APPLESS_MAIN(tst_ConfigParser)

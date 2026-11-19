@@ -85,10 +85,11 @@ Config::Key Config::Schema::key(const QString & name) const
 
 /*!
     Converts @a resolved, what a compiled program of the setting @a name
-    resolves to (see Config::Condition::resolve()), into @a value, the value
-    of the type that setting takes: the first of its matchers that takes
-    such a result converts it (see Config::ValueMatcher::convert()). Returns false when
-    none does, or the schema does not list the setting.
+    resolves to (see Config::Condition::resolve()),
+    into @a value, the value of the type that setting takes: the first of
+    its matchers that takes such a result converts it
+    (see Config::ValueMatcher::convert()). Returns false when none does,
+    or the schema does not list the setting.
 */
 bool Config::Schema::convert(
         const QString & name, const QVariant & resolved,
@@ -100,5 +101,6 @@ bool Config::Schema::convert(
             return true;
         }
     }
+    *value = QVariant();
     return false;
 }

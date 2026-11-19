@@ -37,7 +37,8 @@ QString Config::ValueMatcher::explain(const QString &) const
     key takes; returns false when this matcher compiles no program, or
     takes no such result, hence the next matcher of the key may.
 */
-bool Config::ValueMatcher::convert(const QVariant &, QVariant *) const
+bool Config::ValueMatcher::convert(const QVariant &, QVariant *value) const
 {
+    *value = QVariant();
     return false;
 }

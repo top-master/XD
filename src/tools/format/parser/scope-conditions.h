@@ -36,8 +36,9 @@ public:
     bool conditionsOver(int token, int count, qreal spaceRemaining);
     int conditionsLimit(int token, int count);
     int conditionsLimit(int token, int count, qreal spaceRemaining);
-    QVariant resolveAt(const QString & key, const QStringList & program,
-                      int token);
+    QVariant resolveAt(
+            const QString & key, const QStringList & program,
+            int token);
     int argumentCount(int token, int depth, int argument = 0) const;
     int conditionArgumentCount(int token, int depth, int argument = 0) const;
     void reserve(int token, int column);
