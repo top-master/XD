@@ -230,7 +230,7 @@ int FormatDocument::joinArgsAt(int open, int argument, int column,
     const QSharedPointer<Config::Scopes::Scope > scope =
         FormatConditionContext::pushCountScope();
     QVariant count;
-    if ( ! FormatFileConfig::answer(
+    if ( ! FormatFileConfig::resolve(
         QString(QLL("structure.joinArgs")),
         fileConfig.joinArgsCondition,
         &context,

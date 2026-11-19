@@ -797,7 +797,7 @@ bool FormatSuperTypedefRule::wantsTypedef(const FormatDocument *document, int br
     const QStringList words = FormatFileConfig::superChoices();
     QStringList program;
     QString error;
-    QVariant answer;
+    QVariant resolved;
     if ( ! Config::Condition::compile(
             fileConfig.typedefSuper,
             FormatFileConfig::superConditionNames(),
@@ -808,16 +808,16 @@ bool FormatSuperTypedefRule::wantsTypedef(const FormatDocument *document, int br
             Q_NULLPTR,
             &words
         )
-        || ! FormatFileConfig::answer(
+        || ! FormatFileConfig::resolve(
             QString(QLL("structure.typedefSuper")),
             program,
             &context,
-            &answer
+            &resolved
         )
     ) {
         return false;
     }
-    const QString choice = answer.toString();
+    const QString choice = resolved.toString();
     return choice == QLL("always")
         || (choice == QLL("if-needed") && this->isNeeded(document, brace, base));
 }
@@ -930,7 +930,7 @@ void FormatSuperTypedefRule::replaceSites(FormatDocument *document) const
                 &program, &error, false,
                 Config::Condition::NameMismatchIgnore
             )
-                && FormatFileConfig::answer(
+                && FormatFileConfig::resolve(
                     QString(QLL("structure.replaceSuperSites")),
                     program, &context, &replace
                 );

@@ -84,19 +84,19 @@ Config::Key Config::Schema::key(const QString & name) const
 }
 
 /*!
-    Converts @a answer, what a compiled program of the setting @a name gives
-    (see Config::Condition::answer()), into @a value, the value of the type
-    that setting takes: the first of its matchers that takes such an answer
-    converts it (see Config::ValueMatcher::convert()). Returns false when
+    Converts @a resolved, what a compiled program of the setting @a name
+    resolves to (see Config::Condition::resolve()), into @a value, the value
+    of the type that setting takes: the first of its matchers that takes
+    such a result converts it (see Config::ValueMatcher::convert()). Returns false when
     none does, or the schema does not list the setting.
 */
 bool Config::Schema::convert(
-        const QString & name, const QVariant & answer,
+        const QString & name, const QVariant & resolved,
         QVariant *value) const
 {
     const Config::Key found = this->key(name);
     for (int i = 0; i < found.matchers.size(); ++i) {
-        if (found.matchers.at(i)->convert(answer, value)) {
+        if (found.matchers.at(i)->convert(resolved, value)) {
             return true;
         }
     }

@@ -156,16 +156,15 @@ const FormatFileConfig *ArgumentContext::fileConfig() const
 }
 
 /*!
-    Runs @a program at the place that @a context answers, and builds what
-    it gives, converted as the setting @a key takes it (see
-    FormatFileConfig::answer()). Builds an invalid value when a term misses
+    Resolves @a program at the place that @a context answers, converted as
+    the setting @a key takes it (see FormatFileConfig::resolve()). Builds an invalid value when a term misses
     what it needs; the caller's default decides.
 */
-static QVariant answerOf(const QString & key, const QStringList & program,
+static QVariant resolveOf(const QString & key, const QStringList & program,
                          const Config::Evaluator::Context *context)
 {
     QVariant value;
-    if ( ! FormatFileConfig::answer(key, program, context, &value)) {
+    if ( ! FormatFileConfig::resolve(key, program, context, &value)) {
         return QVariant();
     }
     return value;
@@ -175,16 +174,17 @@ static QVariant answerOf(const QString & key, const QStringList & program,
 
 /*!
     Tells whether the condition @a program, which the setting @a key
-    compiled, holds at the token @a token (see answerOf()).
+    compiled, holds at the token @a token (see resolveOf()).
 */
-bool FormatScopeConditions::holds(const QString & key,
-                                  const QStringList & program, int token)
+bool FormatScopeConditions::holds(
+        const QString & key,
+        const QStringList & program, int token)
 {
     const ArgumentContext context(
         this, token, this->argumentTarget(token),
         false, Q_NULLPTR, Q_NULLPTR
     );
-    return answerOf(key, program, &context).toBool();
+    return resolveOf(key, program, &context).toBool();
 }
 
 /*!
@@ -203,11 +203,11 @@ bool FormatScopeConditions::holds(
         this, token, token,
         false, Q_NULLPTR, Q_NULLPTR
     );
-    const QVariant value = answerOf(key, program, &context);
+    const QVariant value = resolveOf(key, program, &context);
     if (value.isValid()) {
         return value.toBool();
     }
-    return answerOf(key, fallback, &context).toBool();
+    return resolveOf(key, fallback, &context).toBool();
 }
 
 /*!
@@ -225,11 +225,11 @@ bool FormatScopeConditions::holds(
         this, token, token,
         false, Q_NULLPTR, &space
     );
-    const QVariant value = answerOf(key, program, &context);
+    const QVariant value = resolveOf(key, program, &context);
     if (value.isValid()) {
         return value.toBool();
     }
-    return answerOf(key, fallback, &context).toBool();
+    return resolveOf(key, fallback, &context).toBool();
 }
 
 /*!
@@ -870,7 +870,7 @@ int FormatScopeConditions::limitOf(
     );
     const QSharedPointer<Config::Scopes::Scope > scope =
         FormatConditionContext::pushCountScope();
-    const QVariant limit = answerOf(
+    const QVariant limit = resolveOf(
         QString(QLL("structure.wrapConditionsOver")),
         fileConfig.wrapConditionsOverCondition,
         &context
@@ -879,11 +879,11 @@ int FormatScopeConditions::limitOf(
 }
 
 /*!
-    Builds what @a program, which the setting @a key compiled, gives at the
-    token @a token, converted as that setting takes it (see answerOf()):
+    Resolves @a program, which the setting @a key compiled, at the token
+    @a token, converted as that setting takes it (see resolveOf()):
     such as the word or the number a choice picks.
 */
-QVariant FormatScopeConditions::answerAt(
+QVariant FormatScopeConditions::resolveAt(
         const QString & key,
         const QStringList & program, int token)
 {
@@ -893,7 +893,7 @@ QVariant FormatScopeConditions::answerAt(
     );
     const QSharedPointer<Config::Scopes::Scope > scope =
         FormatConditionContext::pushCountScope();
-    return answerOf(key, program, &context);
+    return resolveOf(key, program, &context);
 }
 
 bool FormatScopeConditions::countOver(int token, int count,
@@ -916,7 +916,7 @@ bool FormatScopeConditions::countOver(int token, int count,
     );
     const QSharedPointer<Config::Scopes::Scope > scope =
         FormatConditionContext::pushCountScope();
-    const QVariant over = answerOf(
+    const QVariant over = resolveOf(
         QString(condition ? QLL("structure.wrapConditionsOver") : QLL("structure.wrapArgsOver")),
         program,
         &context

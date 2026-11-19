@@ -125,7 +125,7 @@ private slots:
     void testCondition_shouldHandleNameMismatch();
     void testCondition_shouldPassStrings();
     void testCondition_shouldPassBareWords();
-    void testChoice_shouldAnswerWordsAndNumbers();
+    void testChoice_shouldResolveWordsAndNumbers();
 
 private:
     void write(const QString & relative,
@@ -991,14 +991,15 @@ void tst_ConfigParser::testCondition_shouldTakeNoPercentAlone()
         true
     ))->toBeTruthy();
     const QSet<QString > holding = QSet<QString >() << QString(QLL("b"));
-    bool answered = false;
-    qExpect(Config::Condition::evaluate(program, holding, &answered))
+    bool resolved = false;
+    qExpect(Config::Condition::evaluate(program, holding, &resolved))
         ->toBeTruthy();
-    qExpect(answered)->toBeTruthy();
+    qExpect(resolved)->toBeTruthy();
 
     const Config::Condition condition(conditionNames(), true);
     QString matched;
-    qExpect(condition.match(QString(QLL("(1>40%&A) | b")), &matched))->toBeTruthy();
+    qExpect(condition.match(QString(QLL("(1>40%&A) | b")), &matched))
+        ->toBeTruthy();
     qExpect(matched)->toEqual(QString(QLL("(1>40% & A) | b")));
 }
 
@@ -1230,8 +1231,7 @@ void tst_ConfigParser::testCondition_shouldComparePercents()
         holding.toSet(),
         &context,
         &ok
-    ))
-        ->toEqual(expected);
+    ))->toEqual(expected);
     qExpect(ok)->toBeTruthy();
 }
 
@@ -1295,8 +1295,8 @@ void tst_ConfigParser::testCondition_shouldEvaluateExpressions()
     ));
 }
 
-/// Calls an object's member only when its term runs, with the context the
-/// caller passes.
+/// Calls an object's member only when its term runs, with the context that
+/// the caller of the condition passes.
 void tst_ConfigParser::testCondition_shouldCallObjectMembers()
 {
     const QSharedPointer<Config::Scopes::Scope > scope = pushTestObjects();
@@ -1960,14 +1960,27 @@ void tst_ConfigParser::testCondition_shouldCheckMathLikePlainOnes()
 {
     QStringList program;
     QString error;
-    QVERIFY( ! Config::Condition::compile(QString(QLL("1 > 150% | b == 1")),
-                                          conditionNames(), &program, &error, true));
+    QVERIFY( ! Config::Condition::compile(
+        QString(QLL("1 > 150% | b == 1")),
+        conditionNames(),
+        &program,
+        &error,
+        true
+    ));
     QCOMPARE(error, QString(QLL("150% is not from 0% to 100%")));
-    QVERIFY( ! Config::Condition::compile(QString(QLL("1 > 40% | b == 1")),
-                                          conditionNames(), &program, &error));
+    QVERIFY( ! Config::Condition::compile(
+        QString(QLL("1 > 40% | b == 1")),
+        conditionNames(),
+        &program,
+        &error
+    ));
     QCOMPARE(error, QString(QLL("the key takes no percent, as in 40%")));
-    QVERIFY( ! Config::Condition::compile(QString(QLL("nope < 2")),
-                                          conditionNames(), &program, &error));
+    QVERIFY( ! Config::Condition::compile(
+        QString(QLL("nope < 2")),
+        conditionNames(),
+        &program,
+        &error
+    ));
     QCOMPARE(error, QString(QLL("unknown name nope")));
 
     // Takes a function's name inside another name as no call.
@@ -1989,14 +2002,22 @@ void tst_ConfigParser::testCondition_shouldParsePercentsBeforeKeyChecks()
 {
     QStringList program;
     QString error;
-    QVERIFY( ! Config::Condition::compile(QString(QLL("1 > 40% |")),
-                                          conditionNames(), &program, &error));
+    QVERIFY( ! Config::Condition::compile(
+        QString(QLL("1 > 40% |")),
+        conditionNames(),
+        &program,
+        &error
+    ));
     QCOMPARE(error, QString(QLL("a name is missing at the end")));
     QVERIFY( ! Config::Condition::compile(QString(QLL("40% + 1 <")),
                                           conditionNames(), &program, &error));
     QCOMPARE(error, QString(QLL("a name is missing at the end")));
-    QVERIFY( ! Config::Condition::compile(QString(QLL("1 > 101% | a")),
-                                          conditionNames(), &program, &error));
+    QVERIFY( ! Config::Condition::compile(
+        QString(QLL("1 > 101% | a")),
+        conditionNames(),
+        &program,
+        &error
+    ));
     QCOMPARE(error, QString(QLL("the key takes no percent, as in 101%")));
     QVERIFY( ! Config::Condition::compile(QString(QLL("a | 2 * 10% < 1")),
                                           conditionNames(), &program, &error));
@@ -2345,24 +2366,24 @@ void tst_ConfigParser::testCondition_shouldPassBareWords()
 /// Answers a choice with the word its branch picks, as a QString, or with
 /// the number of a branch that is a number literal or a whole expression,
 /// as a qreal; a lone name of the condition is no number branch.
-void tst_ConfigParser::testChoice_shouldAnswerWordsAndNumbers()
+void tst_ConfigParser::testChoice_shouldResolveWordsAndNumbers()
 {
     const QStringList noNames;
     const QStringList words = QStringList() << QString(QLL("average"))
                                             << QString(QLL("never"));
     QVariant answer;
     QString error;
-    QVERIFY2(Config::Choice::answer(QString(QLL("true ? 2 : never")), noNames,
+    QVERIFY2(Config::Choice::resolve(QString(QLL("true ? 2 : never")), noNames,
                                     words, Q_NULLPTR, &answer, &error),
              qPrintable(error));
     QCOMPARE(int(answer.type()), int(QVariant::Double));
     QCOMPARE(answer.toInt(), 2);
-    QVERIFY2(Config::Choice::answer(QString(QLL("false ? 2 : never")), noNames,
+    QVERIFY2(Config::Choice::resolve(QString(QLL("false ? 2 : never")), noNames,
                                     words, Q_NULLPTR, &answer, &error),
              qPrintable(error));
     QCOMPARE(int(answer.type()), int(QVariant::String));
     QCOMPARE(answer.toString(), QString(QLL("never")));
-    QVERIFY2(Config::Choice::answer(QString(QLL("true ? 1 + 2 : average")),
+    QVERIFY2(Config::Choice::resolve(QString(QLL("true ? 1 + 2 : average")),
                                     noNames, words, Q_NULLPTR, &answer, &error),
              qPrintable(error));
     QCOMPARE(answer.toInt(), 3);

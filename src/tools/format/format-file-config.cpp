@@ -170,7 +170,8 @@ static const char defaultWrapChainAtText[] = "spaceUsed > 40%";
     Spells the default `[Structure] wrapSignatureAt` (see FormatFileConfig):
     past 87.5% of the share `[Structure] wrapArgsAt` gives at the place.
 */
-static const char defaultWrapSignatureAtText[] = "spaceUsed > cfg.wrapArgsAt * 0.875";
+static const char defaultWrapSignatureAtText[] =
+    "spaceUsed > cfg.wrapArgsAt * 0.875";
 
 /*!
     Spells the default `[Structure] wrapConditionsOver` (see
@@ -603,35 +604,35 @@ Config::Schema FormatFileConfig::schema()
 }
 
 /*!
-    Builds the schema of the settings once, for answer() to convert with,
+    Builds the schema of the settings once, for resolve() to convert with,
     while each load builds its own (see schema()).
 */
 Q_GLOBAL_STATIC_WITH_ARGS(Config::Schema, settingsSchema,
                           (FormatFileConfig::schema()))
 
 /*!
-    Runs @a program, which a setting @a key (`<section>.<key>`) compiled,
-    with the place that @a context answers (see Config::Condition::answer()),
-    and builds into @a value the value of the type that the setting takes,
-    as its matchers in the schema convert it (see Config::Schema::convert()):
+    Resolves @a program, which a setting @a key (`<section>.<key>`) compiled,
+    at the place that @a context answers (see Config::Condition::resolve()),
+    into @a value, the value of the type that the setting takes, as its
+    matchers in the schema convert it (see Config::Schema::convert()):
     whether a condition holds, the number a count gives, or the word a
     choice picks. This is the one way the tool evaluates a setting; returns
     false when a term misses what it needs, or the setting takes no such
-    answer, hence its default decides.
+    result, hence its default decides.
 */
-bool FormatFileConfig::answer(
+bool FormatFileConfig::resolve(
         const QString & key, const QStringList & program,
         const Config::Evaluator::Context *context,
         QVariant *value)
 {
-    QVariant answer;
-    return Config::Condition::answer(
+    QVariant resolved;
+    return Config::Condition::resolve(
         program,
         QSet<QString >(),
         context,
-        &answer
+        &resolved
     )
-        && settingsSchema()->convert(key, answer, value);
+        && settingsSchema()->convert(key, resolved, value);
 }
 
 /*!
@@ -856,7 +857,7 @@ static bool isConstant(const QStringList & program)
 /*!
     Reads the setting @a key of @a parser, which takes a count or a
     condition: a count, or math that gives one (such as `1 + 7 - 3`), goes
-    to @a count, as the setting converts it (see FormatFileConfig::answer()),
+    to @a count, as the setting converts it (see FormatFileConfig::resolve()),
     and clears @a program; any other condition is compiled into @a program,
     which then decides in place of the count. Returns false, with @a error,
     when a name mismatch fails it under @a mismatch `critical`.
@@ -881,7 +882,7 @@ static bool readCountOrCondition(
     }
     QVariant constant;
     if (isConstant(*program)
-        && FormatFileConfig::answer(key, *program, Q_NULLPTR, &constant)
+        && FormatFileConfig::resolve(key, *program, Q_NULLPTR, &constant)
     ) {
         *count = constant.toInt();
         program->clear();
@@ -1165,7 +1166,7 @@ private:
     Resolves the `[Lint]` choice @a value among @a values (any text in double
     quotes, and any undefined name, when it is empty; see Config::Choice)
     into @a word, where `hasStd()` and `hasCompiler()` answer from @a config,
-    as the setting @a key (`<section>.<key>`) converts it (see answer());
+    as the setting @a key (`<section>.<key>`) converts it (see resolve());
     logs a choice that cannot pick one, naming that key, and returns false
     for such a choice.
 */
@@ -1177,7 +1178,7 @@ static bool resolveLintChoice(
     const FormatLintContext context(&config);
     QStringList program;
     QString error;
-    QVariant answer;
+    QVariant resolved;
     if (Config::Condition::compile(
             value,
             QStringList(),
@@ -1188,9 +1189,9 @@ static bool resolveLintChoice(
             Q_NULLPTR,
             &values
         )
-        && FormatFileConfig::answer(key, program, &context, &answer)
+        && FormatFileConfig::resolve(key, program, &context, &resolved)
     ) {
-        *word = answer.toString();
+        *word = resolved.toString();
         return true;
     }
     qWarning("Invalid %s: %s", qPrintable(key), qPrintable(error.isEmpty()

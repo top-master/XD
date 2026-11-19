@@ -186,7 +186,7 @@ QVariant FormatSettingsObject::dynamicValue(const QByteArray & name) const
     const QSharedPointer<Config::Scopes::Scope > scope =
         FormatConditionContext::pushCountScope();
     QVariant value;
-    const bool ok = FormatFileConfig::answer(
+    const bool ok = FormatFileConfig::resolve(
         QLL("structure.") + QString::fromLatin1(name),
         *program,
         format,
@@ -217,7 +217,7 @@ QVariant FormatSettingsObject::threshold(
     for (int percent = 0; percent <= 100 && ok; ++percent) {
         const PercentContext context(place, percent);
         QVariant holds;
-        ok = FormatFileConfig::answer(
+        ok = FormatFileConfig::resolve(
             QLL("structure.") + QString::fromLatin1(name),
             program,
             &context,

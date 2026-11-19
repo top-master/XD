@@ -132,7 +132,7 @@ static bool keepsUserLines(
 
     // Takes a line whose count strays from the average as a mistake, which
     // `wrapMistakes` lays out anew with its count per line.
-    const QVariant mistakes = conditions->answerAt(
+    const QVariant mistakes = conditions->resolveAt(
         QString(QLL("structure.wrapMistakes")),
         fileConfig.wrapMistakes,
         open

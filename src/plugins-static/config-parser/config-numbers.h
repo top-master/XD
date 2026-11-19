@@ -24,7 +24,7 @@ public:
 
     bool match(const QString & value, QString *matched) const Q_DECL_OVERRIDE;
     QString describe() const Q_DECL_OVERRIDE;
-    bool convert(const QVariant & answer,
+    bool convert(const QVariant & resolved,
                  QVariant *value) const Q_DECL_OVERRIDE;
 
 private:

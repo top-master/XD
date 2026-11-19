@@ -62,25 +62,26 @@ QString Config::Choice::explain(const QString & value) const
 }
 
 /*!
-    Converts @a answer, what the choice gives (see answer()), into @a value:
+    Converts @a resolved, what the choice resolves to (see resolve()), into
+    @a value:
     a word the choice lists, in the list's spelling, or any text when it
     lists none, as a QString, or a number as a qreal. Returns false for any
-    other answer, such as a word it does not list.
+    other result, such as a word it does not list.
 */
-bool Config::Choice::convert(const QVariant & answer, QVariant *value) const
+bool Config::Choice::convert(const QVariant & resolved, QVariant *value) const
 {
-    if (answer.type() == QVariant::Double) {
-        *value = answer;
+    if (resolved.type() == QVariant::Double) {
+        *value = resolved;
         return true;
     }
-    const QString word = answer.toString();
+    const QString word = resolved.toString();
     for (int i = 0; i < this->m_values.size(); ++i) {
         if (this->m_values.at(i).compare(word, Qt::CaseInsensitive) == 0) {
             *value = this->m_values.at(i);
             return true;
         }
     }
-    if (answer.type() != QVariant::String || ! this->m_values.isEmpty()) {
+    if (resolved.type() != QVariant::String || ! this->m_values.isEmpty()) {
         return false;
     }
     *value = word;
@@ -119,33 +120,33 @@ bool Config::Choice::check(const QString &expression, const QStringList &names,
 
 /*!
     Resolves @a expression with @a context and stores its selected word in
-    @a result as text, a number as its digits (see answer()). Reports an
-    invalid expression in @a error.
+    @a result as text, a number as its digits (see the resolve() below).
+    Reports an invalid expression in @a error.
 */
 bool Config::Choice::resolve(const QString &expression, const QStringList &names,
                              const QStringList &values, const Evaluator::Context *context,
                              QString *result, QString *error)
 {
-    QVariant answer;
-    if ( ! Config::Choice::answer(expression, names, values, context, &answer,
-                                  error)
+    QVariant resolved;
+    if ( ! Config::Choice::resolve(expression, names, values, context,
+                                   &resolved, error)
     ) {
         return false;
     }
-    *result = answer.toString();
+    *result = resolved.toString();
     return true;
 }
 
 /*!
     Resolves @a expression with @a context into @a result: the word it picks
     as a QString, or the number it gives as a qreal (see
-    Condition::answer()); hence the caller tells the two apart by the type.
+    Condition::resolve()); hence the caller tells the two apart by the type.
     Reports an invalid expression in @a error.
 */
-bool Config::Choice::answer(const QString &expression, const QStringList &names,
-                            const QStringList &values,
-                            const Evaluator::Context *context,
-                            QVariant *result, QString *error)
+bool Config::Choice::resolve(const QString &expression, const QStringList &names,
+                             const QStringList &values,
+                             const Evaluator::Context *context,
+                             QVariant *result, QString *error)
 {
     const QString text = expression.trimmed();
     QStringList program;
@@ -166,7 +167,7 @@ bool Config::Choice::answer(const QString &expression, const QStringList &names,
         }
         return false;
     }
-    if ( ! Condition::answer(program, QSet<QString >(), context, result)) {
+    if ( ! Condition::resolve(program, QSet<QString >(), context, result)) {
         *error = QString(QLL("cannot evaluate condition: %1")).arg(text);
         return false;
     }

@@ -384,7 +384,10 @@ private:
                 // Takes a percent only where it compares or counts, as in
                 // `x > 40%`, since it stands for no number alone.
                 const bool isPercent = token.endsWith(QLatin1Char('%'));
-                if (isPercent && ! isMathSign(before) && ! isMathSign(peek())) {
+                if (isPercent
+                    && ! isMathSign(before)
+                    && ! isMathSign(peek())
+                ) {
                     m_error = QString(QLL("%1 alone is no condition; compare it "
                                           "with a value, as in x > %1"))
                         .arg(token);
@@ -828,8 +831,8 @@ bool ExpressionCompiler::call(const QString &name)
     Builds the matcher of a condition over the names @a names; when given,
     @a setup adds the objects whose names only this key's conditions may call
     to a scope the matcher pushes while it matches (see Scopes::push()).
-    The key takes from the condition's answer what @a result says (see
-    Config::Condition::convert()).
+    @a result says what the key takes from the value the condition resolves
+    to (see Config::Condition::convert()).
 */
 Config::Condition::Condition(const QStringList & names, bool takesPercents,
                              Scopes::Setup setup, Result result)
@@ -842,7 +845,7 @@ Config::Condition::Condition(const QStringList & names, bool takesPercents,
     Builds a key's shared matcher of a condition over the names @a names,
     which also takes percent terms when @a takesPercents is set, the names
     of the objects that @a setup adds when it is given, and gives the
-    answer @a result says (see convert()).
+    result @a result says (see convert()).
 */
 QSharedPointer<const Config::ValueMatcher > Config::Condition::create(
         const QStringList & names, bool takesPercents, Scopes::Setup setup,
@@ -901,25 +904,25 @@ bool Config::Condition::match(const QString & value, QString *matched) const
 }
 
 /*!
-    Converts @a answer, a number that answer() gives, into @a value as the
-    key takes it: whether the condition holds (a number that is not zero)
-    for ResultHolds, or the number itself for ResultNumber. Returns false
-    for a word, which is no answer of a condition.
+    Converts @a resolved, a number that resolve() builds, into @a value as
+    the key takes it: whether the condition holds (a number that is not
+    zero) for ResultHolds, or the number itself for ResultNumber. Returns
+    false for a word, which no condition resolves to.
 */
-bool Config::Condition::convert(const QVariant & answer, QVariant *value) const
+bool Config::Condition::convert(const QVariant & resolved, QVariant *value) const
 {
-    if (answer.type() != QVariant::Double) {
+    if (resolved.type() != QVariant::Double) {
         return false;
     }
-    *value = this->m_result == ResultHolds ? QVariant(answer.toDouble() != 0)
-                                           : answer;
+    *value = this->m_result == ResultHolds ? QVariant(resolved.toDouble() != 0)
+                                           : resolved;
     return true;
 }
 
 /*!
     Builds the description of the values the matcher takes: a condition of
-    its names joined by `|` and `&`, whose comparisons may use percents when
-    it takes them.
+    its names joined by `|` and `&`, and, when it takes percents, whose
+    comparisons may use them.
 */
 QString Config::Condition::describe() const
 {
@@ -933,7 +936,7 @@ QString Config::Condition::describe() const
 }
 
 /*!
-    Compiles @a text over the names @a names into @a program, which answer()
+    Compiles @a text over the names @a names into @a program, which resolve()
     runs: a condition, for a key that takes percent terms when
     @a takesPercents is set (see checkPercents()), or, when @a words is
     given, a choice of those words, which takes no percent terms. Returns
@@ -941,7 +944,7 @@ QString Config::Condition::describe() const
     or that the key does not take.
 
     In a choice, each whole value is one of the words, a number, or an
-    expression that gives one, such as `cfg.joinArgs`; answer() then gives
+    expression that gives one, such as `cfg.joinArgs`; resolve() then gives
     the word as a QString, or the number as a qreal. With no word listed, a
     value may be any text in double quotes, or a bare name that nothing
     defines, such as `Q_DECL_OVERRIDE_IL`. A name of the condition is no
@@ -1013,8 +1016,7 @@ namespace {
 
 /*!
     Answers the names that a program asks for, from a context, else from a
-    fixed set of names; it asks the context only when a term needs the
-    answer.
+    fixed set of names; it asks the context only when a term needs it.
 */
 class Lookup
 {
@@ -1037,7 +1039,7 @@ private:
 class Operand;
 
 bool calculate(const QStringList &program, Lookup *lookup, Operand *result);
-bool calculateAnswer(const QStringList &program, Lookup *lookup,
+bool calculateResult(const QStringList &program, Lookup *lookup,
                      QVariant *result);
 
 /*!
@@ -1069,119 +1071,65 @@ bool Lookup::holds(const QString &name) const
 } // Namespace `Config`.
 
 /*!
-    Runs @a program, which compile() made, with the names @a holding and the
-    context @a context, and builds into @a result what it gives: a number as
-    a qreal (a condition gives 1 when it holds, else 0), or the word or text
-    a value leaves as a QString; hence the caller converts it as its setting
-    takes it, and tells the two apart by the type. The context answers each
-    name first (the set @a holding answers a name it does not know), and
+    Resolves @a program, which compile() made, with the names @a holding
+    and the context @a context, into @a result: a number as a qreal (a
+    condition gives 1 when it holds, else 0), or the word or text a value
+    leaves as a QString; hence the caller converts it as its setting takes
+    it, and tells the two apart by the type. This is the one way a program
+    runs, which evaluate() and value() convert. The context resolves each
+    name first (the set @a holding resolves a name it does not know), and
     each registered function the program calls; each one only when a term
     asks for it. Returns false when a term misses what it needs.
 */
-bool Config::Condition::answer(
-        const QStringList & program, const QSet<QString > & holding,
-        const Evaluator::Context *context, QVariant *result)
-{
-    return Config::Condition::answerWith(
-        program,
-        holding,
-        context,
-        result
-    );
-}
-
-/*!
-    Runs @a program as answer() does; this is the one place that runs a
-    program, which every other evaluation converts.
-*/
-bool Config::Condition::answerWith(
+bool Config::Condition::resolve(
         const QStringList & program, const QSet<QString > & holding,
         const Evaluator::Context *context, QVariant *result)
 {
     Evaluator::Lookup lookup(holding, context);
-    return Evaluator::calculateAnswer(program, &lookup, result);
+    return Evaluator::calculateResult(program, &lookup, result);
 }
 
 /*!
-    Converts what answerWith() gives for @a program, with the names
-    @a holding and the context @a context, into whether the condition holds:
-    a number that is not zero. @a answered, when given, tells whether the
-    program gave a number; when it did not (a term missed what it needs, or
-    the program gave a word), the false this returns is only a default, not
-    the condition's answer.
+    @fn bool Config::Condition::evaluate(const QStringList & program, const QSet<QString > & holding, const Evaluator::Context *context, bool *resolved)
+
+    Tells whether the condition @a program holds, as resolve() resolves it
+    with the names @a holding and the context @a context: a number that is
+    not zero. @a resolved tells whether the program resolved to a number;
+    when it did not (a term missed what it needs, or the program gave a
+    word), the false this returns is only a default.
 */
-bool Config::Condition::holds(
-        const QStringList & program, const QSet<QString > & holding,
-        const Evaluator::Context *context, bool *answered)
-{
-    QVariant answer;
-    const bool isNumber = Config::Condition::answerWith(
-        program,
-        holding,
-        context,
-        &answer
-    ) && answer.type() == QVariant::Double;
-    if (answered) {
-        *answered = isNumber;
-    }
-    return isNumber && answer.toDouble() != 0;
-}
 
 /*!
-    Tells whether the condition that compile() made @a program of holds,
-    given the names @a holding that hold (see holds()).
+    @fn bool Config::Condition::evaluate(const QStringList & program, const QSet<QString > & holding, const Evaluator::Context *context)
+
+    Tells, like the evaluate() above, whether @a program holds with the
+    names @a holding and the context @a context.
 */
-bool Config::Condition::evaluate(
-        const QStringList & program,
-        const QSet<QString > & holding)
-{
-    return Config::Condition::holds(program, holding, Q_NULLPTR, Q_NULLPTR);
-}
 
 /*!
+    @fn bool Config::Condition::evaluate(const QStringList & program, const QSet<QString > & holding, bool *resolved)
+
     Tells, like the evaluate() above, whether @a program holds given the
-    names @a holding; @a answered tells whether the program gave its answer,
-    rather than the default false (see holds()).
+    names @a holding alone; @a resolved tells whether the program resolved
+    to a number, rather than to the default false.
 */
-bool Config::Condition::evaluate(
-        const QStringList & program,
-        const QSet<QString > & holding, bool *answered)
-{
-    return Config::Condition::holds(program, holding, Q_NULLPTR, answered);
-}
 
 /*!
-    Tells, like the evaluate() above, whether @a program holds, with the
-    context @a context (see answer()). @a answered, when given, tells
-    whether the program gave its answer, rather than the default false (see
-    holds()).
+    @fn bool Config::Condition::evaluate(const QStringList & program, const QSet<QString > & holding)
+
+    Tells, like the evaluate() above, whether @a program holds given the
+    names @a holding alone.
 */
-bool Config::Condition::evaluate(
-        const QStringList &program, const QSet<QString > &holding,
-        const Evaluator::Context *context, bool *answered)
-{
-    return Config::Condition::holds(program, holding, context, answered);
-}
 
 /*!
-    Converts what answer() gives for @a program, with the names @a holding
-    and the context @a context, into @a result, for a setting that takes a
-    number, such as the choice `isHeader ? 2 : 1`. Returns false when a term
-    misses what it needs, or the program gives a word.
+    @fn bool Config::Condition::value(const QStringList & program, const QSet<QString > & holding, const Evaluator::Context *context, qreal *number)
+
+    Converts what resolve() resolves @a program to, with the names
+    @a holding and the context @a context, into @a number, for a setting
+    that takes a number, such as the choice `isHeader ? 2 : 1`. Returns
+    false, leaving @a number as it is, when a term misses what it needs, or
+    the program gives a word.
 */
-bool Config::Condition::value(
-        const QStringList & program, const QSet<QString > & holding,
-        const Evaluator::Context *context, qreal *result)
-{
-    QVariant answer;
-    if ( ! Config::Condition::answer(program, holding, context, &answer)
-        || answer.type() != QVariant::Double
-    ) {
-        return false;
-    }
-    *result = answer.toDouble();
-    return true;
-}
 
 /*!
     Builds @a name in the form that names take in a condition: each `-` and
@@ -1214,7 +1162,8 @@ QString Config::Condition::canonicalName(const QString & name)
 /*!
     @enum Config::Condition::Result
 
-    Says what a key takes from the answer of its condition (see convert()).
+    Says what a key takes from what its condition resolves to (see
+    convert()).
 
     @value ResultHolds Whether the condition holds, such as for a key that
         decides where a rule applies.
@@ -1265,8 +1214,8 @@ public:
 };
 
 /*!
-    Builds into @a result the number @a operand stands for; returns false for
-    a text.
+    Builds into @a result the number @a operand stands for; returns false,
+    with no number, for a text.
 */
 static bool operandNumber(const Operand &operand, qreal *result)
 {
@@ -1294,25 +1243,18 @@ static bool operandHolds(const Operand &operand, bool *holds)
 
 /*!
     Runs the `@expression` @a program as calculate() does, and builds into
-    @a result what it leaves: a text as a QString, else its number (see
-    operandNumber()) as a qreal. Returns false when a term misses a value.
+    @a result what it leaves: a text as a QString, else its number as a
+    qreal. Returns false when a term misses a value.
 */
-bool calculateAnswer(const QStringList &program, Lookup *lookup,
+bool calculateResult(const QStringList &program, Lookup *lookup,
                      QVariant *result)
 {
     Operand operand;
     if ( ! calculate(program, lookup, &operand)) {
         return false;
     }
-    if (operand.isText) {
-        *result = operand.text;
-        return true;
-    }
-    qreal number = 0;
-    if ( ! operandNumber(operand, &number)) {
-        return false;
-    }
-    *result = number;
+    *result = operand.isText ? QVariant(operand.text)
+                             : QVariant(operand.number);
     return true;
 }
 
@@ -1395,7 +1337,12 @@ bool calculate(const QStringList &program, Lookup *lookup, Operand *result)
             }
             stack.erase(stack.end() - count, stack.end());
             qreal called = 0;
-            if ( ! Config::Scopes::call(function, context, arguments, &called)) {
+            if ( ! Config::Scopes::call(
+                function,
+                context,
+                arguments,
+                &called
+            )) {
                 return false;
             }
             stack << Operand(called);

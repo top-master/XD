@@ -68,7 +68,7 @@ public:
     static QStringList replaceTargetNames();
     bool acceptsFile(const QString &path) const;
     static Config::Schema schema();
-    static bool answer(const QString & key, const QStringList & program,
+    static bool resolve(const QString & key, const QStringList & program,
                        const Config::Evaluator::Context *context,
                        QVariant *value);
     static QString defaultTypedefSuper();

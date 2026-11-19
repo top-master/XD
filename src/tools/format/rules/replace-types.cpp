@@ -843,7 +843,7 @@ void FormatReplaceTypesRule::run(FormatDocument *document) const
             document->symbolLine(i)
         );
         QVariant wanted;
-        if ( ! FormatFileConfig::answer(
+        if ( ! FormatFileConfig::resolve(
                 QString(QLL("replace.types.target")),
                 *program,
                 &context,

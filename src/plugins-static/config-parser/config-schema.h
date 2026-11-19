@@ -19,7 +19,7 @@ public:
     Section sectionOf(const QString & name) const;
     inline const QList<Section > &sections() const { return m_sections; }
     Key key(const QString & name) const;
-    bool convert(const QString & name, const QVariant & answer,
+    bool convert(const QString & name, const QVariant & resolved,
                  QVariant *value) const;
 
 private:

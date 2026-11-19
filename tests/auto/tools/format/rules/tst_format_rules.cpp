@@ -4319,16 +4319,40 @@ void tst_FormatRules::testScopeConditions_shouldPlaceSignaturesByWrapArgsAt()
     QVERIFY(readSettings(parser, &config));
     document.setConfig(config);
     const QString key = QString(QLL("structure.wrapSignatureAt"));
-    QVERIFY(conditions.holds(key, config.wrapSignatureAt, open, 36, fallback));
-    QVERIFY( ! conditions.holds(key, config.wrapSignatureAt, open, 34, fallback));
+    QVERIFY(conditions.holds(
+        key,
+        config.wrapSignatureAt,
+        open,
+        36,
+        fallback
+    ));
+    QVERIFY(! conditions.holds(
+        key,
+        config.wrapSignatureAt,
+        open,
+        34,
+        fallback
+    ));
     QString error;
     QVERIFY2(parser.readData(
         "[Structure]\nwrapArgsAt=spaceUsed > 80%\n", QLL("inline"), &error
     ), qPrintable(error));
     QVERIFY(readSettings(parser, &config));
     document.setConfig(config);
-    QVERIFY(conditions.holds(key, config.wrapSignatureAt, open, 71, fallback));
-    QVERIFY( ! conditions.holds(key, config.wrapSignatureAt, open, 69, fallback));
+    QVERIFY(conditions.holds(
+        key,
+        config.wrapSignatureAt,
+        open,
+        71,
+        fallback
+    ));
+    QVERIFY(! conditions.holds(
+        key,
+        config.wrapSignatureAt,
+        open,
+        69,
+        fallback
+    ));
 }
 
 /// Reads another `[Structure]` setting through `cfg`: a setting follows
