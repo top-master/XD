@@ -31,6 +31,7 @@ public slots:
     QVariant argCount(int depth, int argument = 0);
     QVariant hasStd(const QString & standard);
     QVariant hasCompiler(const QString & compiler);
+    QVariant is(const QString & kind);
 
 private:
     typedef bool (FormatConditionContext::*Question)(

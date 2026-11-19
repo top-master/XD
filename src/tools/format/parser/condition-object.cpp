@@ -28,6 +28,9 @@
     * `hasCompiler("<spec>")`: the project builds with that compiler, named
       by its qmake spec, such as `hasCompiler("win32-msvc2010")` (see
       `[Code] compilers`);
+    * `is(<kind>)`: the list at the place is of that kind: `array`, a brace
+      initializer list; `call`, a call's arguments; or `condition`, the
+      condition of an `if` or a `while` (see FormatScopeConditions::targetIs());
     * `cfg.<key>`: the number that the `[Structure]` setting `<key>` gives
       at the place, such as `cfg.wrapArgsOver` (see FormatSettingsObject).
 
@@ -133,6 +136,16 @@ QVariant FormatConditionObject::hasStd(const QString & standard)
 QVariant FormatConditionObject::hasCompiler(const QString & compiler)
 {
     return this->ask(&FormatConditionContext::hasCompiler, compiler);
+}
+
+/*!
+    Builds whether the list at the place is of the kind @a kind, such as
+    `array` (see FormatScopeConditions::targetIs()), or an invalid value
+    where the place is no list, or the kind is unknown.
+*/
+QVariant FormatConditionObject::is(const QString & kind)
+{
+    return this->ask(&FormatConditionContext::isTarget, kind);
 }
 
 /*!

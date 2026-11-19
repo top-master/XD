@@ -15,10 +15,10 @@
     Closes a condition that spans lines with its `)` on a line of its own, at
     the column of its keyword, followed by the body's `{` on that line.
 
-    A condition whose last operand is a bracket group opened on the
-    keyword's line, and closed at the start of a line at the keyword's
-    column, closes right after that group instead, as `)) {` (see
-    FormatArgsWrapRule).
+    Under `[Structure] compact = always`, a condition whose last operand is
+    a bracket group opened on the keyword's line, and closed at the start of
+    a line at the keyword's column, closes right after that group instead,
+    as `)) {` (see FormatArgsWrapRule).
 */
 
 /*!
@@ -52,7 +52,10 @@ void FormatConditionCloseRule::run(FormatDocument *document) const
         const int last = close - 1;
         const int closeLine = document->symbolLine(close);
         const Token lastToken = document->token(last);
-        const bool hugsGroup = (lastToken == RPAREN || lastToken == RBRACK)
+        const bool hugsGroup = document->configAt(
+                document->symbols().at(i).from
+            ).compact == FormatFileConfig::CompactAlways
+            && (lastToken == RPAREN || lastToken == RBRACK)
             && document->match(last) >= 0
             && document->symbolLine(document->match(last))
                 == document->symbolLine(i)

@@ -9,6 +9,7 @@
 #include "./condition-context.h"
 #include "./layout-helpers.h"
 
+#include "config-choice.h"
 #include "config-condition.h"
 
 #include <QtCore/QFile>
@@ -70,8 +71,11 @@ namespace {
     argument counts, `spaceRemaining`, and the percent value of the percent
     terms, which is 100 less `spaceRemaining`.
 
-    A caller that already knows `value` or `spaceRemaining` passes it in
-    @a count or @a spaceRemaining, else null; @a hasPercent unset leaves the
+    The context counts an argument list, and finds `spaceRemaining`, each
+    time a term asks. A caller passes @a count only for a count the document
+    does not hold, such as the operands of a range of a condition (see
+    `[Structure] wrapConditionsPer`), and @a spaceRemaining only for a line
+    it is still laying out; else null. @a hasPercent unset leaves the
     percent terms without a value.
 */
 class ArgumentContext : public FormatConditionContext
@@ -93,6 +97,7 @@ public:
     bool argumentCount(int depth, int argument,
                        qreal *count) const Q_DECL_OVERRIDE;
     bool spaceRemaining(qreal *percent) const Q_DECL_OVERRIDE;
+    bool isTarget(const QString & kind, bool *value) const Q_DECL_OVERRIDE;
     const FormatFileConfig *fileConfig() const Q_DECL_OVERRIDE;
 
 private:
@@ -122,8 +127,13 @@ bool ArgumentContext::percent(qreal *value) const
 
 bool ArgumentContext::value(qreal *value) const
 {
-    *value = this->m_count ? *this->m_count
-                           : this->m_scope->argumentCount(this->m_token, 0);
+    if (this->m_count) {
+        *value = *this->m_count;
+    } else {
+        *value = this->m_condition
+            ? this->m_scope->conditionArgumentCount(this->m_token, 0)
+            : this->m_scope->argumentCount(this->m_token, 0);
+    }
     return true;
 }
 
@@ -147,6 +157,11 @@ bool ArgumentContext::spaceRemaining(qreal *percent) const
         ? *this->m_spaceRemaining
         : this->m_scope->spaceRemaining(this->m_target);
     return true;
+}
+
+bool ArgumentContext::isTarget(const QString & kind, bool *value) const
+{
+    return this->m_scope->targetIs(this->m_token, kind, value);
 }
 
 const FormatFileConfig *ArgumentContext::fileConfig() const
@@ -658,6 +673,37 @@ qreal FormatScopeConditions::spaceRemaining(int token) const
     return this->remainingSpace(token, true);
 }
 
+/*!
+    Tells in @a value whether the list at the token @a token (the list it
+    opens, else the argument list that holds it) is of the kind @a kind, in
+    any case: `array`, a brace initializer list; `call`, a call's arguments;
+    or `condition`, the condition of an `if` or a `while`. It looks at the
+    document each time it is asked; returns false for another kind.
+*/
+bool FormatScopeConditions::targetIs(int token, const QString & kind,
+                                     bool *value) const
+{
+    const Token own = m_document->token(token);
+    const int open = own == LBRACE || own == LPAREN
+        ? token : this->argumentTarget(token);
+    const Token opening = open >= 0 ? m_document->token(open) : NOTOKEN;
+    const Token before = open > 0 ? m_document->token(open - 1) : NOTOKEN;
+    const bool isCondition = opening == LPAREN
+        && (before == IF || before == WHILE);
+    if (kind.compare(QLL("array"), Qt::CaseInsensitive) == 0) {
+        *value = opening == LBRACE
+            && m_document->braceScope(open) == FormatDocument::InitScope;
+    } else if (kind.compare(QLL("call"), Qt::CaseInsensitive) == 0) {
+        *value = open >= 0 && isArgumentTarget(m_document, open)
+            && ! isCondition;
+    } else if (kind.compare(QLL("condition"), Qt::CaseInsensitive) == 0) {
+        *value = isCondition;
+    } else {
+        return false;
+    }
+    return true;
+}
+
 int FormatScopeConditions::argumentCount(
         int token, int depth, int argument) const
 {
@@ -766,14 +812,15 @@ bool FormatScopeConditions::conditionsOver(int token, int count,
     Builds how many operands a range of the condition whose `(` is at
     @a token may hold by `[Structure] wrapConditionsOver`, before every
     operator of the range breaks (see `[Structure] wrapConditionsPer`): the
-    range holds @a count operands, and @a spaceRemaining is the share of
-    `wrapMax` left after its `(`, or after the operand that may end a line.
+    range holds @a count operands, and @a spaceRemaining, when given, is the
+    share of `wrapMax` left after the operand that may end a line it is
+    still laying out; else the context finds the share left after the `(`.
     Builds 0 for as many as fit. A condition that holds gives 1, one that
     does not gives 0, and one missing a value gives the setting's number.
 */
 int FormatScopeConditions::conditionsLimit(
         int token, int count,
-        qreal spaceRemaining)
+        const qreal *spaceRemaining)
 {
     const FormatFileConfig &fileConfig = m_document->configAt(
         m_document->symbols().at(token).from
@@ -784,7 +831,7 @@ int FormatScopeConditions::conditionsLimit(
     }
     const ArgumentContext context(
         this, token, token, true, &count,
-        &spaceRemaining, true
+        spaceRemaining, true
     );
     const QSharedPointer<Config::Scopes::Scope > scope =
         FormatConditionContext::pushCountScope();
@@ -799,6 +846,31 @@ int FormatScopeConditions::conditionsLimit(
         return fallback;
     }
     return qMax(0, int(limit));
+}
+
+/*!
+    Builds what the choice @a choice picks at the token @a token: one of the
+    words @a words, as a QString, or a number, as a qreal (see
+    Config::Choice::answer()); an invalid value when it misses what it
+    needs, hence the caller's default decides.
+*/
+QVariant FormatScopeConditions::answerAt(const QString & choice,
+                                         const QStringList & words, int token)
+{
+    const ArgumentContext context(
+        this, token, this->argumentTarget(token),
+        false, Q_NULLPTR, Q_NULLPTR, true
+    );
+    const QSharedPointer<Config::Scopes::Scope > scope =
+        FormatConditionContext::pushCountScope();
+    QVariant answer;
+    QString error;
+    if ( ! Config::Choice::answer(choice, FormatScopeConditions::names(), words,
+                                  &context, &answer, &error)
+    ) {
+        return QVariant();
+    }
+    return answer;
 }
 
 bool FormatScopeConditions::countOver(int token, int count,
@@ -816,7 +888,7 @@ bool FormatScopeConditions::countOver(int token, int count,
     }
     const int target = condition ? token : this->argumentTarget(token);
     const ArgumentContext context(
-        this, token, target, condition, &count,
+        this, token, target, condition, condition ? &count : Q_NULLPTR,
         spaceRemaining, true
     );
     const QSharedPointer<Config::Scopes::Scope > scope =

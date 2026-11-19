@@ -85,9 +85,9 @@ class JoinArgsContext : public FormatConditionContext
     typedef FormatConditionContext super;
 public:
     inline JoinArgsContext(FormatScopeConditions *conditions, int open,
-                           int argument, int count, int last, bool isWrapping)
+                           int argument, int last, bool isWrapping)
         : m_conditions(conditions), m_open(open), m_argument(argument)
-        , m_count(count), m_last(last), m_isWrapping(isWrapping)
+        , m_last(last), m_isWrapping(isWrapping)
     {
     }
 
@@ -102,7 +102,7 @@ public:
 
     inline bool value(qreal *value) const Q_DECL_OVERRIDE_IL
     {
-        *value = m_count;
+        *value = this->count();
         return true;
     }
 
@@ -120,7 +120,7 @@ public:
 
     inline bool hasMoreArgs(bool *value) const Q_DECL_OVERRIDE_IL
     {
-        *value = m_argument + 1 < m_count;
+        *value = m_argument + 1 < this->count();
         return true;
     }
 
@@ -130,6 +130,12 @@ public:
         return true;
     }
 
+    inline bool isTarget(const QString & kind,
+                         bool *value) const Q_DECL_OVERRIDE_IL
+    {
+        return m_conditions->targetIs(m_open, kind, value);
+    }
+
     inline const FormatFileConfig *fileConfig() const Q_DECL_OVERRIDE_IL
     {
         const FormatDocument *document = m_conditions->document();
@@ -137,13 +143,27 @@ public:
     }
 
 private:
+    int count() const;
+
     FormatScopeConditions *m_conditions;
     int m_open;
     int m_argument;
-    int m_count;
     int m_last;
     bool m_isWrapping;
 };
+
+/*!
+    Counts the arguments of the list in question, each time it is asked.
+*/
+int JoinArgsContext::count() const
+{
+    const FormatDocument *document = this->m_conditions->document();
+    return splitArguments(
+        document,
+        this->m_open,
+        document->match(this->m_open)
+    ).size();
+}
 
 /*!
     Counts as FormatScopeConditions::argumentCount() does, except that a
@@ -210,7 +230,7 @@ int FormatDocument::joinArgsAt(int open, int argument, int column,
     conditions.reserve(last, column + (hasComma ? 1 : 0));
 
     const JoinArgsContext context(
-        &conditions, open, argument, items.size(),
+        &conditions, open, argument,
         last, isWrapping
     );
     const QSharedPointer<Config::Scopes::Scope > scope =

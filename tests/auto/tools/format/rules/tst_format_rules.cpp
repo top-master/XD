@@ -1411,11 +1411,12 @@ void tst_FormatRules::testFix_shouldRewrite_data()
         << QByteArray("void f()\n"
                       "{\n"
                       "    if ( ! this->matchesLast(\n"
-                      "        rootFolder,\n"
-                      "        currentFolder,\n"
-                      "        isLast ? isDirectory : true,\n"
-                      "        &decider\n"
-                      "    )) {\n"
+                      "            rootFolder,\n"
+                      "            currentFolder,\n"
+                      "            isLast ? isDirectory : true,\n"
+                      "            &decider\n"
+                      "        )\n"
+                      "    ) {\n"
                       "        g();\n"
                       "    }\n"
                       "}\n");
@@ -1542,23 +1543,21 @@ void tst_FormatRules::testFix_shouldRewrite_data()
                       "        \"--any-comment\"\n"
                       "    };\n"
                       "}\n");
-    QTest::newRow("args-wrap wrapMistakes none keeps a brace list's stray pair")
+    QTest::newRow("args-wrap wrapMistakes never keeps a brace list's stray pair")
         << QString(QLL("args-wrap"))
-        << QByteArray("// @formatter:\n// ```\n// [Structure]\n// wrapMistakes = none\n// ```\n"
+        << QByteArray("// @formatter:\n// ```\n// [Structure]\n// wrapMistakes = never\n// ```\n"
                       "void f()\n"
                       "{\n"
                       "    const char *options[] = { \"-L, --range <range>\",\n"
                       "                              \"--dir <path>\", \"--check\",\n"
                       "                              \"--qmake <path>\" };\n"
                       "}\n")
-        << QByteArray("// @formatter:\n// ```\n// [Structure]\n// wrapMistakes = none\n// ```\n"
+        << QByteArray("// @formatter:\n// ```\n// [Structure]\n// wrapMistakes = never\n// ```\n"
                       "void f()\n"
                       "{\n"
-                      "    const char *options[] = {\n"
-                      "        \"-L, --range <range>\",\n"
-                      "        \"--dir <path>\", \"--check\",\n"
-                      "        \"--qmake <path>\"\n"
-                      "    };\n"
+                      "    const char *options[] = { \"-L, --range <range>\",\n"
+                      "                              \"--dir <path>\", \"--check\",\n"
+                      "                              \"--qmake <path>\" };\n"
                       "}\n");
     QTest::newRow("args-wrap keeps a call's stray count")
         << QString(QLL("args-wrap"))
@@ -1576,9 +1575,9 @@ void tst_FormatRules::testFix_shouldRewrite_data()
                       "           aVeryLongFifthArgumentValueName,\n"
                       "           sixth, seventh);\n"
                       "}\n");
-    QTest::newRow("args-wrap wrapMistakes all wraps a call's stray count")
+    QTest::newRow("args-wrap wrapMistakes cfg.joinArgs wraps a call's stray count")
         << QString(QLL("args-wrap"))
-        << QByteArray("// @formatter:\n// ```\n// [Structure]\n// wrapMistakes = all\n// ```\n"
+        << QByteArray("// @formatter:\n// ```\n// [Structure]\n// wrapMistakes = cfg.joinArgs\n// ```\n"
                       "void f()\n"
                       "{\n"
                       "    report(firstArgumentValue, secondArgumentValue,\n"
@@ -1586,7 +1585,7 @@ void tst_FormatRules::testFix_shouldRewrite_data()
                       "           aVeryLongFifthArgumentValueName,\n"
                       "           sixth, seventh);\n"
                       "}\n")
-        << QByteArray("// @formatter:\n// ```\n// [Structure]\n// wrapMistakes = all\n// ```\n"
+        << QByteArray("// @formatter:\n// ```\n// [Structure]\n// wrapMistakes = cfg.joinArgs\n// ```\n"
                       "void f()\n"
                       "{\n"
                       "    report(\n"
@@ -1596,6 +1595,26 @@ void tst_FormatRules::testFix_shouldRewrite_data()
                       "        fourthArgumentValue,\n"
                       "        aVeryLongFifthArgumentValueName,\n"
                       "        sixth,\n"
+                      "        seventh\n"
+                      "    );\n"
+                      "}\n");
+    QTest::newRow("args-wrap wrapMistakes average lays a call's stray count out evenly")
+        << QString(QLL("args-wrap"))
+        << QByteArray("// @formatter:\n// ```\n// [Structure]\n// wrapMistakes = is(call) ? average : never\n// ```\n"
+                      "void f()\n"
+                      "{\n"
+                      "    report(firstArgumentValue, secondArgumentValue,\n"
+                      "           thirdArgumentValue, fourthArgumentValue,\n"
+                      "           aVeryLongFifthArgumentValueName,\n"
+                      "           sixth, seventh);\n"
+                      "}\n")
+        << QByteArray("// @formatter:\n// ```\n// [Structure]\n// wrapMistakes = is(call) ? average : never\n// ```\n"
+                      "void f()\n"
+                      "{\n"
+                      "    report(\n"
+                      "        firstArgumentValue, secondArgumentValue,\n"
+                      "        thirdArgumentValue, fourthArgumentValue,\n"
+                      "        aVeryLongFifthArgumentValueName, sixth,\n"
                       "        seventh\n"
                       "    );\n"
                       "}\n");
@@ -1982,11 +2001,49 @@ void tst_FormatRules::testFix_shouldRewrite_data()
                       "void f()\n"
                       "{\n"
                       "    if (check(\n"
+                      "            first,\n"
+                      "            second,\n"
+                      "            third,\n"
+                      "            fourth\n"
+                      "        )\n"
+                      "    ) {\n"
+                      "    }\n"
+                      "}\n");
+    QTest::newRow("args-wrap control head, compact")
+        << QString(QLL("args-wrap,condition-close"))
+        << QByteArray("// @formatter:\n// ```\n// [Structure]\n// target = any\n// compact = always\n// ```\n"
+                      "void f()\n{\n    if (check(first, second,\n              third, fourth)) {\n"
+                      "    }\n}\n")
+        << QByteArray("// @formatter:\n// ```\n// [Structure]\n// target = any\n// compact = always\n// ```\n"
+                      "void f()\n"
+                      "{\n"
+                      "    if (check(\n"
                       "        first,\n"
                       "        second,\n"
                       "        third,\n"
                       "        fourth\n"
                       "    )) {\n"
+                      "    }\n"
+                      "}\n");
+    QTest::newRow("args-wrap call in a control head, compact")
+        << QString(QLL("args-wrap,condition-close"))
+        << QByteArray("// @formatter:\n// ```\n// [Structure]\n// compact = always\n// ```\n"
+                      "void f()\n"
+                      "{\n"
+                      "    if ( ! this->matchesLast(rootFolder, currentFolder, isLast ? isDirectory : true, &decider)) {\n"
+                      "        g();\n"
+                      "    }\n"
+                      "}\n")
+        << QByteArray("// @formatter:\n// ```\n// [Structure]\n// compact = always\n// ```\n"
+                      "void f()\n"
+                      "{\n"
+                      "    if ( ! this->matchesLast(\n"
+                      "        rootFolder,\n"
+                      "        currentFolder,\n"
+                      "        isLast ? isDirectory : true,\n"
+                      "        &decider\n"
+                      "    )) {\n"
+                      "        g();\n"
                       "    }\n"
                       "}\n");
     QTest::newRow("args-wrap declaration")
@@ -2979,18 +3036,18 @@ void tst_FormatRules::testSettings_shouldReadWrapColumns()
     qExpect(error)->toContain(QString(QLL("[Comments] wrapMax = 70 | 80: use a number from 20 to 200")));
 }
 
-/// Reads `[Structure] wrapMistakes`: `array` without a `.formatrc`, the
-/// value a `.formatrc` gives, and an error that lists the values for one it
-/// does not take.
+/// Reads `[Structure] wrapMistakes`: `is(array) ? average : never` without
+/// a `.formatrc`, the choice a `.formatrc` gives, and an error that lists
+/// the words for one it does not take.
 void tst_FormatRules::testWrapMistakes_shouldTakeItsValues()
 {
     QTemporaryDir dir;
     FormatFileConfig settings;
     QString error;
-    qExpect(int(FormatFileConfig().wrapMistakes))
-        ->toEqual(int(FormatFileConfig::WrapMistakesArray));
+    qExpect(FormatFileConfig().wrapMistakes)
+        ->toEqual(QString(QLL("is(array) ? average : never")));
     writeProject(dir, QStringList() << QString(QLL(".formatrc"))
-        << QString(QLL("[Structure]\nwrapMistakes = all\n"))
+        << QString(QLL("[Structure]\nwrapMistakes = is(call) ? cfg.joinArgs : never\n"))
     );
     qExpect(FormatFileConfig::load(
         dir.path() + QLL("/a.cpp"),
@@ -2999,8 +3056,8 @@ void tst_FormatRules::testWrapMistakes_shouldTakeItsValues()
         &error
     ))
         ->toBeTruthy();
-    qExpect(int(settings.wrapMistakes))
-        ->toEqual(int(FormatFileConfig::WrapMistakesAll));
+    qExpect(settings.wrapMistakes)
+        ->toEqual(QString(QLL("is(call) ? cfg.joinArgs : never")));
     writeProject(dir, QStringList() << QString(QLL(".formatrc"))
         << QString(QLL("[Structure]\nwrapMistakes = sometimes\n"))
     );
@@ -3012,7 +3069,8 @@ void tst_FormatRules::testWrapMistakes_shouldTakeItsValues()
     ))
         ->toBeFalsy();
     qExpect(error)->toContain(QString(QLL(
-        "[Structure] wrapMistakes = sometimes: use \"array\" or \"all\" or \"none\""
+        "[Structure] wrapMistakes = sometimes: use a choice of average, never, "
+        "optionally selected by a condition"
     )));
 }
 

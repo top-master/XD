@@ -23,6 +23,7 @@ public:
     virtual FormatArgsArray *callArguments() const;
     virtual bool hasStandard(const QString & standard, bool *value) const;
     virtual bool hasCompiler(const QString & compiler, bool *value) const;
+    virtual bool isTarget(const QString & kind, bool *value) const;
     virtual const FormatFileConfig *fileConfig() const;
     static void registerObjects();
     static void setGlobalObjects(Config::Scopes::Scope *scope);

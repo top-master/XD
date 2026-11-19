@@ -192,16 +192,54 @@ static bool splitChoice(const QString &text, QString *condition,
 }
 
 /*!
+    Tells whether the branch @a expression is a number: a number literal,
+    such as `2`, or a whole expression of math, a call or a member (see
+    Config::Condition), such as `cfg.joinArgs`, which it compiles into
+    @a program (left empty for a literal); a lone name of the condition is
+    no number.
+*/
+static bool isNumberBranch(const QString &expression, const QStringList &names,
+                           QStringList *program)
+{
+    program->clear();
+    const QChar lead = expression.isEmpty() ? QChar() : expression.at(0);
+    bool isLiteral = false;
+    if (lead.isDigit() || lead == QLatin1Char('.')) {
+        expression.toDouble(&isLiteral);
+    }
+    QString error;
+    return isLiteral
+        || (Config::Condition::compile(
+                expression,
+                names,
+                program,
+                &error,
+                false,
+                Config::Condition::NameMismatchIgnore
+            )
+            && ! program->isEmpty()
+            && program->first() == QLL("@expression"));
+}
+
+/*!
     Splits the choice @a expression, which picks no word itself (see
-    branchWord()), into @a condition, @a yes and @a no (see splitChoice());
-    returns false for no such choice, with why in @a error for a bare
-    branch that signs follow (see explainSigns()) when @a values is empty.
+    branchWord()), into @a condition, @a yes and @a no (see splitChoice()),
+    or, setting @a isNumber, compiles it into @a program when it is a number
+    branch instead (see isNumberBranch()); returns false for neither, with
+    why in @a error for a bare branch that signs follow (see explainSigns())
+    when @a values is empty.
 */
 static bool readChoice(const QString &expression, const QStringList &names,
                        const QStringList &values, QString *condition,
-                       QString *yes, QString *no, QString *error)
+                       QString *yes, QString *no, bool *isNumber,
+                       QStringList *program, QString *error)
 {
+    *isNumber = false;
     if (splitChoice(expression, condition, yes, no)) {
+        return true;
+    }
+    if (isNumberBranch(expression, names, program)) {
+        *isNumber = true;
         return true;
     }
     if (values.isEmpty()) {
@@ -224,6 +262,7 @@ static bool choiceValid(const QString &text, const QStringList &names,
     QString yes;
     QString no;
     QStringList program;
+    bool isNumber = false;
     if ( ! readChoice(
         expression,
         names,
@@ -231,9 +270,14 @@ static bool choiceValid(const QString &text, const QStringList &names,
         &condition,
         &yes,
         &no,
+        &isNumber,
+        &program,
         error
     )) {
         return false;
+    }
+    if (isNumber) {
+        return true;
     }
     return Config::Condition::compile(
         condition,
@@ -331,14 +375,38 @@ bool Config::Choice::check(const QString &expression, const QStringList &names,
 
 /*!
     Resolves @a expression with @a context and stores its selected word in
-    @a result (see branchWord()). Reports an invalid expression in @a error.
+    @a result as text, a number branch as its digits (see answer()).
+    Reports an invalid expression in @a error.
 */
 bool Config::Choice::resolve(const QString &expression, const QStringList &names,
                              const QStringList &values, const Evaluator::Context *context,
                              QString *result, QString *error)
 {
+    QVariant answer;
+    if ( ! Config::Choice::answer(expression, names, values, context, &answer,
+                                  error)
+    ) {
+        return false;
+    }
+    *result = answer.toString();
+    return true;
+}
+
+/*!
+    Resolves @a expression with @a context into @a result: the word its
+    branch picks (see branchWord()) as a QString, or the number a number
+    branch gives (see isNumberBranch()) as a qreal; hence the caller tells
+    the two apart by the type. Reports an invalid expression in @a error.
+*/
+bool Config::Choice::answer(const QString &expression, const QStringList &names,
+                            const QStringList &values,
+                            const Evaluator::Context *context,
+                            QVariant *result, QString *error)
+{
     const QString text = stripChoiceParens(expression);
-    if (branchWord(text, values, names, result)) {
+    QString word;
+    if (branchWord(text, values, names, &word)) {
+        *result = word;
         return true;
     }
     QString condition;
@@ -346,15 +414,19 @@ bool Config::Choice::resolve(const QString &expression, const QStringList &names
     QString no;
     QStringList program;
     QString reason;
-    if ( ! readChoice(text, names, values, &condition, &yes, &no, &reason)
-        || ! Condition::compile(
-            condition,
-            names,
-            &program,
-            &reason,
-            false,
-            Condition::NameMismatchIgnore
-        )
+    QStringList numberProgram;
+    bool isNumber = false;
+    if ( ! readChoice(text, names, values, &condition, &yes, &no, &isNumber,
+                      &numberProgram, &reason)
+        || ( ! isNumber
+            && ! Condition::compile(
+                condition,
+                names,
+                &program,
+                &reason,
+                false,
+                Condition::NameMismatchIgnore
+            ))
     ) {
         // Keeps what the condition's compile found, after the choice.
         *error = QString(QLL("invalid conditional choice: %1")).arg(text);
@@ -363,6 +435,20 @@ bool Config::Choice::resolve(const QString &expression, const QStringList &names
         }
         return false;
     }
+
+    // Builds the number of a number branch, a literal one or a compiled one.
+    if (isNumber) {
+        qreal number = text.toDouble();
+        if ( ! numberProgram.isEmpty()
+            && ! Condition::value(numberProgram, QSet<QString >(), context,
+                                  &number)
+        ) {
+            *error = QString(QLL("cannot evaluate: %1")).arg(text);
+            return false;
+        }
+        *result = number;
+        return true;
+    }
     bool ok = false;
     const bool selected = Condition::evaluate(program, QSet<QString >(),
                                                context, &ok);
@@ -370,5 +456,6 @@ bool Config::Choice::resolve(const QString &expression, const QStringList &names
         *error = QString(QLL("cannot evaluate condition: %1")).arg(condition);
         return false;
     }
-    return resolve(selected ? yes : no, names, values, context, result, error);
+    return Config::Choice::answer(selected ? yes : no, names, values, context,
+                                  result, error);
 }

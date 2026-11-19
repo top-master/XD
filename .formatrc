@@ -9,6 +9,10 @@ moveSuffix = keep-as-is
 ::QLatin1String = ::QLL
 ::QLatin1Literal = ::QLL
 
+[Structure]
+# Closes a condition that ends in a broken call right after the call's `)`.
+compact = always
+
 [Code]
 # The compilers XD builds with, which conditions ask about through
 # hasCompiler("<spec>").

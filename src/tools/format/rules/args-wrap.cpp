@@ -32,7 +32,8 @@
     list gets an item per line, as `[Structure] joinArgs` allows, and so do
     the items from a group too long for its line to the list's end. Outside
     a control head, a list with such lines, each later one right under its
-    first item (see isAlignedUnderFirst()), stays as it is. A
+    first item (see isAlignedUnderFirst()), stays as it is where
+    `[Structure] wrapArgsAt` does not hold at its opening. A
     call with one argument is considered when its list already spans lines
     and that argument holds an operator chain.
 
@@ -47,9 +48,10 @@
     the user broke over lines whose lines are not one step past the line of
     the opening. A list in the head of a control
     statement takes the condition's operand level, one step past the
-    keyword's line, as its base; a call that ends the condition of an `if`
-    or a `while`, its `(` on the keyword's line, takes the keyword's line
-    instead, and the condition's `)` hugs the call's, as `)) {`. The rule leaves alone a list with a brace
+    keyword's line, as its base; under `[Structure] compact = always`, a call
+    that ends the condition of an `if` or a `while`, its `(` on the
+    keyword's line, takes the keyword's line instead, and the condition's `)`
+    hugs the call's, as `)) {`. The rule leaves alone a list with a brace
     (other than a nested brace list), a `;` or a comment in it, a
     `connect()` or `disconnect()` (see FormatConnectLayoutRule), and one at
     file, namespace or class scope, where a `(` mostly opens a declaration's
@@ -59,24 +61,32 @@
 /*!
     Tells whether the layout keeps the lines the user broke the list over,
     from the token @a open of @a document to its closing token @a close,
-    whose items are @a arguments (a brace list when @a isBrace is set): the
-    settings @a fileConfig take `[Structure] target` as `long`, and the lines
-    look meant:
+    whose items are @a arguments: the settings @a fileConfig take
+    `[Structure] target` as `long`, and the lines look meant:
 
+    * each item sits whole on one line;
     * none of them passes the wrap column (see wrapColumn());
     * no item of a later line starts past the end of the line above, which
       leaves room the user did not use;
-    * where `[Structure] wrapMistakes` covers the list, each line holds the
-      average count of items per line, rounded, or the last line fewer.
+    * each line holds the average count of items per line, rounded, or the
+      last line fewer, as no more items may follow; unless
+      `[Structure] wrapMistakes`, asked at the list through @a conditions,
+      picks `never`.
+
+    For a line that strays from that average, @a joinCount gets the count of
+    items per line `wrapMistakes` lays the list out with: the average for
+    `average`, else the number it gives; 0 leaves them to `joinArgs`.
 */
 static bool keepsUserLines(
         const FormatDocument *document,
         int open,
         int close,
         const QList<QPair<int, int > > & arguments,
-        bool isBrace,
-        const FormatFileConfig & fileConfig)
+        FormatScopeConditions *conditions,
+        const FormatFileConfig & fileConfig,
+        int *joinCount)
 {
+    *joinCount = 0;
     const int firstLine = document->symbolLine(open);
     const int lastLine = document->symbolLine(close);
     if (fileConfig.codeTarget != FormatFileConfig::CodeTargetLong) {
@@ -96,8 +106,12 @@ static bool keepsUserLines(
     QList<int > counts;
     int line = -1;
     for (int i = 0; i < arguments.size(); ++i) {
-        const int from = document->symbols().at(arguments.at(i).first).from;
+        const QPair<int, int > & item = arguments.at(i);
+        const int from = document->symbols().at(item.first).from;
         const int itemLine = document->lineOf(from);
+        if (itemLine != document->symbolEndLine(item.second)) {
+            return false;
+        }
         const int column = textWidth(document->text().mid(
             document->lineStart(itemLine),
             from - document->lineStart(itemLine)
@@ -116,16 +130,23 @@ static bool keepsUserLines(
         }
     }
 
-    // Takes a line whose count strays from the average as a mistake.
-    const bool checksCounts =
-        fileConfig.wrapMistakes == FormatFileConfig::WrapMistakesAll
-        || (isBrace
-            && fileConfig.wrapMistakes == FormatFileConfig::WrapMistakesArray);
+    // Takes a line whose count strays from the average as a mistake, which
+    // `wrapMistakes` lays out anew with its count per line.
+    const QVariant mistakes = conditions->answerAt(
+        fileConfig.wrapMistakes,
+        FormatFileConfig::wrapMistakesWords(),
+        open
+    );
+    const bool isNumber = mistakes.type() == QVariant::Double;
+    if ( ! isNumber && mistakes.toString() != QLL("average")) {
+        return true;
+    }
     const int average = qRound(qreal(arguments.size()) / counts.size());
-    for (int i = 0; checksCounts && i < counts.size(); ++i) {
+    for (int i = 0; i < counts.size(); ++i) {
         const bool isShortLast = i + 1 == counts.size()
             && counts.at(i) < average;
         if (counts.at(i) != average && ! isShortLast) {
+            *joinCount = isNumber ? qMax(1, mistakes.toInt()) : average;
             return false;
         }
     }
@@ -303,7 +324,8 @@ void FormatArgsWrapRule::run(FormatDocument *document) const
         // it, as `)) {` (see FormatConditionCloseRule).
         const int headClose = keyword >= 0
             ? document->match(keyword + 1) : -1;
-        const bool hugsHead = isCall
+        const bool hugsHead = fileConfig.compact == FormatFileConfig::CompactAlways
+            && isCall
             && isHeadLine
             && (document->token(keyword) == IF
                 || document->token(keyword) == WHILE)
@@ -352,18 +374,22 @@ void FormatArgsWrapRule::run(FormatDocument *document) const
         }
 
         // Leaves a statement's list whose meant lines stand right under its
-        // first item as it is; a list in a control head breaks after its
-        // opening still, as its condition then closes on its own line.
+        // first item as it is, unless `[Structure] wrapArgsAt` asks for a
+        // break after its opening; a list in a control head breaks there
+        // still, as its condition then closes on its own line.
+        int joinCount = 0;
         const bool keepsLines = keepsUserLines(
             document,
             i,
             close,
             arguments,
-            isBrace,
-            fileConfig
+            &conditions,
+            fileConfig,
+            &joinCount
         );
         if (keepsLines
             && keyword < 0
+            && ! reachesWrapArgsAt(document, &conditions, i)
             && isAlignedUnderFirst(document, i, close, arguments)
         ) {
             continue;
@@ -409,7 +435,8 @@ void FormatArgsWrapRule::run(FormatDocument *document) const
             i,
             close,
             column,
-            keepsLines
+            keepsLines,
+            joinCount
         );
         const int length = (hugsHead
             ? document->symbols().at(headClose).from

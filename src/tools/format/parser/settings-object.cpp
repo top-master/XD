@@ -80,6 +80,12 @@ public:
         return m_place->hasCompiler(compiler, value);
     }
 
+    inline bool isTarget(const QString & kind,
+                         bool *value) const Q_DECL_OVERRIDE_IL
+    {
+        return m_place->isTarget(kind, value);
+    }
+
     inline const FormatFileConfig *fileConfig() const Q_DECL_OVERRIDE_IL
     {
         return m_place->fileConfig();

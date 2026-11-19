@@ -113,10 +113,19 @@
       that the code already has where they fit, and `any` lays the code out
       anew, as if each expression sat on one line (see FormatLineJoinRule);
       the command line's `--any-code` sets `any`;
-    * `wrapMistakes` (`[Structure]`): which lists the user broke over lines
-      lose those lines when their items per line stray from the average (see
-      FormatArgsWrapRule): `array` (the default), a brace list; `all`, any
-      list; or `none`;
+    * `wrapMistakes` (`[Structure]`): how a list the user broke over lines
+      is laid out anew when one of its lines strays from the average count
+      of items per line (see FormatArgsWrapRule): `average`, that count per
+      line; a number, such as `cfg.joinArgs`, that many per line; or `never`,
+      the user's lines stay. A condition picks it at each list, such as
+      `is(array) ? average : never`, the default, where `is()` asks the list
+      in question (see FormatConditionObject);
+    * `compact` (`[Structure]`): `always` lets a call that ends the
+      condition of an `if` or a `while`, its `(` on the keyword's line, close
+      the condition right after its own `)`, as `)) {` (see
+      FormatArgsWrapRule and FormatConditionCloseRule); `never` (the
+      default) closes the condition on a line of its own, which changes fewer
+      lines of existing code;
     * `bodyBraces` (`[Structure]`): `true` (the default) lets
       FormatBodyBracesRule give a body that closes in a chain of brackets
       its own lines, and `false` leaves such a body as it is; a condition
@@ -175,6 +184,13 @@ static const char defaultWrapConditionsOverText[] =
     warning while the project targets C++11, where some compilers mishandle
     a non-const reference local, and nothing otherwise.
 */
+/*!
+    Spells the default `[Structure] wrapMistakes` (see FormatFileConfig): a
+    brace list takes the average count of items per line, any other list
+    keeps the user's lines.
+*/
+static const char defaultWrapMistakesText[] = "is(array) ? average : never";
+
 static const char defaultByRefVariableText[] = "hasStd(\"C++11\") ? warn : ignore";
 
 /*!
@@ -485,10 +501,16 @@ Config::Schema FormatFileConfig::schema()
     structure.addKey(QString(QLL("target")),
                      QStringList() << QString(QLL("long")) << QString(QLL("any")),
                      QString(QLL("long")));
+    structure.addKey(QString(QLL("compact")),
+                     QStringList() << QString(QLL("never")) << QString(QLL("always")),
+                     QString(QLL("never")));
     structure.addKey(QString(QLL("wrapMistakes")),
-                     QStringList() << QString(QLL("array")) << QString(QLL("all"))
-                         << QString(QLL("none")),
-                     QString(QLL("array")));
+                     Config::Matchers() << QSharedPointer<const Config::ValueMatcher >(
+                         new Config::Choice(
+                             FormatScopeConditions::names(),
+                             FormatFileConfig::wrapMistakesWords()
+                         )),
+                     QString::fromLatin1(defaultWrapMistakesText));
     structure.addKey(QString(QLL("bodyBraces")),
                      Config::Matchers() << Config::Condition::create(
                          FormatScopeConditions::names()
@@ -1031,9 +1053,9 @@ bool FormatFileConfig::fromParser(
         ? CommentTargetAny : CommentTargetLong;
     fileConfig->codeTarget = parser.value(QString(QLL("structure.target"))) == QLL("any")
         ? CodeTargetAny : CodeTargetLong;
-    const QString mistakes = parser.value(QString(QLL("structure.wrapMistakes")));
-    fileConfig->wrapMistakes = mistakes == QLL("all") ? WrapMistakesAll
-        : mistakes == QLL("none") ? WrapMistakesNone : WrapMistakesArray;
+    fileConfig->compact = parser.value(QString(QLL("structure.compact"))) == QLL("always")
+        ? CompactAlways : CompactNever;
+    fileConfig->wrapMistakes = parser.value(QString(QLL("structure.wrapMistakes")));
     fileConfig->docTagSign = parser.value(QString(QLL("comments.docTagSign"))) == QLL("\\")
         ? '\\' : '@';
     return compileCondition(
@@ -1145,6 +1167,24 @@ QString FormatFileConfig::inlineMarker(
         return QString(QLL("override"));
     }
     return marker.trimmed();
+}
+
+/*!
+    Builds the default `[Structure] wrapMistakes` choice (see
+    FormatFileConfig).
+*/
+QString FormatFileConfig::defaultWrapMistakes()
+{
+    return QString::fromLatin1(defaultWrapMistakesText);
+}
+
+/*!
+    Lists the words a `[Structure] wrapMistakes` choice may pick beside a
+    number: `average` and `never`.
+*/
+QStringList FormatFileConfig::wrapMistakesWords()
+{
+    return QStringList() << QString(QLL("average")) << QString(QLL("never"));
 }
 
 /*!

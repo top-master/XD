@@ -123,7 +123,7 @@ static bool endsWithClosingLine(const QByteArray & text)
 */
 FormatExpressionLayout::FormatExpressionLayout(const FormatDocument *document, FormatScopeConditions *conditions, int indent)
     : m_document(document), m_conditions(conditions)
-    , m_indent(indent), m_paddingLevel(0)
+    , m_indent(indent), m_paddingLevel(0), m_joinCount(0)
     , m_brokeUngrouped(false)
 {
 }
@@ -557,14 +557,16 @@ QByteArray FormatExpressionLayout::layout(
     bracket at @p open, and its closing bracket is at @p close. With
     @p keepsLines set, a list that spans lines, each item whole on one line,
     keeps the items that share a line together where they fit, wherever its
-    first item starts.
+    first item starts. A positive @p joinCount lets that many items share a
+    line, where `[Structure] joinArgs` would decide (see listLines()).
 */
 QByteArray FormatExpressionLayout::layoutList(
         int first,
         int open,
         int close,
         int column,
-        bool keepsLines)
+        bool keepsLines,
+        int joinCount)
 {
     const int wrap = wrapColumn(m_document, m_document->symbols().at(first).from);
     const QList<QPair<int, int > > items =
@@ -646,6 +648,7 @@ QByteArray FormatExpressionLayout::layoutList(
                 item.second
             );
     }
+    m_joinCount = joinCount;
     return head + this->listLines(
         open,
         close,
@@ -1394,8 +1397,8 @@ QByteArray FormatExpressionLayout::layoutGroup(
 
     Each line then takes the items after it that `[Structure] joinArgs`
     lets share it (see FormatDocument::joinArgsAt()), asked at the line's
-    last item, while the line fits; an item the user grouped with others
-    stays with its group.
+    last item, or the count layoutList() was given, while the line fits; an
+    item the user grouped with others stays with its group.
 */
 QByteArray FormatExpressionLayout::listLines(
         int open,
@@ -1405,6 +1408,11 @@ QByteArray FormatExpressionLayout::listLines(
         int firstItem)
 {
     const bool hasTrailingComma = m_document->token(close - 1) == COMMA;
+
+    // Takes the count of items per line that layoutList() was asked for, for
+    // this list alone, not the lists its items hold.
+    const int joinCount = m_joinCount;
+    m_joinCount = 0;
     QList<int > starts;
     for (int i = 0; i < items.size(); ++i) {
         starts << items.at(i).first;
@@ -1472,7 +1480,7 @@ QByteArray FormatExpressionLayout::listLines(
             if (nextSize > 1) {
                 break;
             }
-            const int allowed = m_document->joinArgsAt(
+            const int allowed = joinCount > 0 ? joinCount : m_document->joinArgsAt(
                 open,
                 firstItem + last,
                 column + textWidth(line),

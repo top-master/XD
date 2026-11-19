@@ -20,14 +20,14 @@ public:
     enum WrapComma { WrapCommaSoft, WrapCommaHard };
     enum CommentTarget { CommentTargetLong, CommentTargetAny };
     enum CodeTarget { CodeTargetLong, CodeTargetAny };
-    enum WrapMistakes { WrapMistakesArray, WrapMistakesAll, WrapMistakesNone };
+    enum Compact { CompactNever, CompactAlways };
     enum LintLevel { LintIgnore, LintWarn, LintError };
 
     inline FormatFileConfig()
         : refSuffix(" "), moveSuffix(FormatSpacing::keep())
         , wrapMax(80), wrapArgsOver(3), wrapConditionsOver(1), joinArgs(1), commentWrapMax(80), wrapExtendsForKeywords(20), wrapEmptyLimit(8)
         , wrapComma(WrapCommaSoft), commentTarget(CommentTargetLong), codeTarget(CodeTargetLong)
-        , wrapMistakes(WrapMistakesArray)
+        , compact(CompactNever)
         , docTagSign('@'), nameMismatch(Config::Condition::NameMismatchWarn)
         , byRefVariable(LintWarn)
     {
@@ -40,6 +40,7 @@ public:
         wrapConditionsOverCondition =
             FormatFileConfig::defaultWrapConditionsOver();
         bodyBraces << QString::fromLatin1("always");
+        wrapMistakes = FormatFileConfig::defaultWrapMistakes();
         extensions = FormatFileConfig::defaultExtensions();
         typedefSuper = FormatFileConfig::defaultTypedefSuper();
         replaceSuperSites = FormatFileConfig::defaultReplaceSuperSites();
@@ -56,6 +57,8 @@ public:
     static QStringList superConditionNames();
     static QStringList superChoices();
     static QStringList lintLevels();
+    static QString defaultWrapMistakes();
+    static QStringList wrapMistakesWords();
     static LintLevel lintLevel(
             const QString & value,
             const FormatFileConfig & config);
@@ -102,7 +105,8 @@ public:
     WrapComma wrapComma;
     CommentTarget commentTarget;
     CodeTarget codeTarget;
-    WrapMistakes wrapMistakes;
+    QString wrapMistakes;
+    Compact compact;
     QStringList bodyBraces;
     char docTagSign;
     QStringList thisMode;

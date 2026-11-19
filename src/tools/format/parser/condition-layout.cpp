@@ -175,7 +175,7 @@ QSet<int > FormatConditionLayout::forcedOperators(int open, int close) const
         const int limit = m_conditions->conditionsLimit(
             i.key().first,
             i.value(),
-            m_conditions->spaceRemaining(i.key().first)
+            Q_NULLPTR
         );
         if (limit > 0 && i.value() > limit) {
             over.insert(i.key());
@@ -392,10 +392,11 @@ QByteArray FormatConditionLayout::group(
             const int currentWidth = text.size() - lineStart;
 
             // Asks `wrapConditionsOver` at the operand that may end the line.
+            const qreal lineSpace = 100.0 * (maximum - currentWidth) / maximum;
             const int limit = isPerLine ? m_conditions->conditionsLimit(
                 open,
                 ops.size() + 1,
-                100.0 * (maximum - currentWidth) / maximum
+                &lineSpace
             ) : 0;
             const bool joins = ! forced.contains(ops.at(k - 1))
                 && ! endsLine && (limit == 0 || onLine < limit)

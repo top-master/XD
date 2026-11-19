@@ -383,6 +383,7 @@ private:
     }
 
     bool resolve(const QString &spelling, QString *name);
+    bool bareWord();
     bool text(const QString &token);
     bool choice();
     bool call(const QString &name);
@@ -415,6 +416,37 @@ bool ExpressionCompiler::resolve(const QString &spelling, QString *name)
         &this->m_error,
         &this->m_mismatched
     );
+}
+
+/*!
+    Compiles a call's argument that is a lone name nothing defines, in any
+    case (see knows()), as its text, such as the `array` of `is(array)`;
+    returns false, taking nothing, for any other argument.
+*/
+bool ExpressionCompiler::bareWord()
+{
+    const int at = this->m_at;
+    const QString token = this->peek();
+    if (token.isEmpty()
+        || ! (token.at(0).isLetter() || token.at(0) == QLatin1Char('_'))
+    ) {
+        return false;
+    }
+    this->take(token);
+    const QString next = this->peek();
+    const QString folded = foldedName(token);
+    bool isKnown = folded == QLL("true") || folded == QLL("false");
+    const QStringList names = QStringList(this->m_names.values())
+        + Config::Scopes::names();
+    for (int i = 0; i < names.size() && ! isKnown; ++i) {
+        isKnown = foldedName(names.at(i)) == folded;
+    }
+    if (isKnown || (next != QLL(",") && next != QLL(")"))) {
+        this->m_at = at;
+        return false;
+    }
+    this->m_program << (QString(QLL("s:")) + token);
+    return true;
 }
 
 /*!
@@ -504,7 +536,7 @@ bool ExpressionCompiler::call(const QString &name)
     if (this->take(QString(QLL("(")))) {
         if ( ! this->take(QString(QLL(")")))) {
             do {
-                if ( ! this->expression(0)) {
+                if ( ! this->bareWord() && ! this->expression(0)) {
                     return false;
                 }
                 ++count;

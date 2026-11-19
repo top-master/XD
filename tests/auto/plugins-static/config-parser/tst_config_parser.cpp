@@ -124,6 +124,8 @@ private slots:
     void testScopes_shouldRunGlobalSetups();
     void testCondition_shouldHandleNameMismatch();
     void testCondition_shouldPassStrings();
+    void testCondition_shouldPassBareWords();
+    void testChoice_shouldAnswerWordsAndNumbers();
 
 private:
     void write(const QString & relative,
@@ -2318,6 +2320,71 @@ void tst_ConfigParser::testCondition_shouldPassStrings()
         &context, &picked, &error
     ), qPrintable(error));
     qExpect(picked)->toEqual(QString(QLL("no")));
+}
+
+/// Passes a lone name that nothing defines, as a call's argument, as its
+/// text, such as the `array` of `is(array)`; a name with signs after it is
+/// still an unknown name.
+void tst_ConfigParser::testCondition_shouldPassBareWords()
+{
+    const QSharedPointer<Config::Scopes::Scope > scope = pushTestObjects();
+    TestArgumentContext context;
+    QStringList program;
+    QString error;
+    bool ok = false;
+    QVERIFY2(Config::Condition::compile(
+        QString(QLL("named(other) || 1")), QStringList(), &program, &error
+    ), qPrintable(error));
+    qExpect(Config::Condition::evaluate(program, QSet<QString >(), &context, &ok))
+        ->toBeTruthy();
+    qExpect(ok)->toBeTruthy();
+    QVERIFY2(Config::Condition::compile(
+        QString(QLL("named(other)")), QStringList(), &program, &error
+    ), qPrintable(error));
+    qExpect(Config::Condition::evaluate(program, QSet<QString >(), &context, &ok))
+        ->toBeFalsy();
+    qExpect(ok)->toBeTruthy();
+    QVERIFY( ! Config::Condition::compile(
+        QString(QLL("named(other + 1)")), QStringList(), &program, &error
+    ));
+    QCOMPARE(error, QString(QLL("unknown name other")));
+}
+
+/// Answers a choice with the word its branch picks, as a QString, or with
+/// the number of a branch that is a number literal or a whole expression,
+/// as a qreal; a lone name of the condition is no number branch.
+void tst_ConfigParser::testChoice_shouldAnswerWordsAndNumbers()
+{
+    const QStringList noNames;
+    const QStringList words = QStringList() << QString(QLL("average"))
+                                            << QString(QLL("never"));
+    QVariant answer;
+    QString error;
+    QVERIFY2(Config::Choice::answer(QString(QLL("true ? 2 : never")), noNames,
+                                    words, Q_NULLPTR, &answer, &error),
+             qPrintable(error));
+    QCOMPARE(int(answer.type()), int(QVariant::Double));
+    QCOMPARE(answer.toInt(), 2);
+    QVERIFY2(Config::Choice::answer(QString(QLL("false ? 2 : never")), noNames,
+                                    words, Q_NULLPTR, &answer, &error),
+             qPrintable(error));
+    QCOMPARE(int(answer.type()), int(QVariant::String));
+    QCOMPARE(answer.toString(), QString(QLL("never")));
+    QVERIFY2(Config::Choice::answer(QString(QLL("true ? 1 + 2 : average")),
+                                    noNames, words, Q_NULLPTR, &answer, &error),
+             qPrintable(error));
+    QCOMPARE(answer.toInt(), 3);
+    QString picked;
+    QVERIFY2(Config::Choice::resolve(QString(QLL("true ? 2 : never")), noNames,
+                                     words, Q_NULLPTR, &picked, &error),
+             qPrintable(error));
+    QCOMPARE(picked, QString(QLL("2")));
+
+    const QStringList names = QStringList() << QString(QLL("ready"));
+    const Config::Choice choice(names, words);
+    QString matched;
+    QVERIFY(choice.match(QString(QLL("ready ? 1 + 1 : never")), &matched));
+    QVERIFY( ! choice.match(QString(QLL("true ? ready : never")), &matched));
 }
 
 QTEST_APPLESS_MAIN(tst_ConfigParser)

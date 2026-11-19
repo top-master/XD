@@ -21,7 +21,7 @@ public:
     QByteArray layout(int first, int last, int column, int trailing,
                       bool forceMath = false);
     QByteArray layoutList(int first, int open, int close, int column,
-                          bool keepsLines = false);
+                          bool keepsLines = false, int joinCount = 0);
     QByteArray oneLine(int first, int last) const;
     bool hasChain(int first, int last) const;
     bool hasOuterChain(int first, int last) const;
@@ -59,6 +59,7 @@ private:
     FormatScopeConditions *m_conditions;
     int m_indent;
     int m_paddingLevel;
+    int m_joinCount;
     bool m_brokeUngrouped;
 };
 

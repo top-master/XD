@@ -119,6 +119,17 @@ bool FormatConditionContext::hasCompiler(const QString & compiler, bool *value) 
 }
 
 /*!
+    Tells in @a value whether the list at the place is of the kind @a kind
+    (see FormatScopeConditions::targetIs()), asked each time a condition
+    calls `is()`; returns false when the place is no list, or the kind is
+    unknown.
+*/
+bool FormatConditionContext::isTarget(const QString &, bool *) const
+{
+    return false;
+}
+
+/*!
     Builds the settings that hold at the place, which `cfg` answers from
     (see FormatSettingsObject), or null when the place names none.
 */

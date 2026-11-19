@@ -6,6 +6,8 @@
 
 #include "./config-condition.h"
 
+#include <QtCore/QVariant>
+
 namespace Config {
 
 class Choice : public ValueMatcher
@@ -19,6 +21,10 @@ public:
     static bool resolve(const QString &expression, const QStringList &names,
                         const QStringList &values, const Evaluator::Context *context,
                         QString *result, QString *error);
+    static bool answer(const QString &expression, const QStringList &names,
+                       const QStringList &values,
+                       const Evaluator::Context *context, QVariant *result,
+                       QString *error);
     static bool check(const QString &expression, const QStringList &names,
                       const QStringList &values,
                       Condition::NameMismatch mismatch, QString *error,

@@ -1662,8 +1662,12 @@ QString markerOf(const QString & text, Context *context)
         return QString();
     }
     if (isReady && Config::Choice::resolve(
-        text, QStringList(), QStringList(),
-        context, &marker, &error
+        text,
+        QStringList(),
+        QStringList(),
+        context,
+        &marker,
+        &error
     )) {
         return marker;
     }

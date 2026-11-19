@@ -12,6 +12,7 @@
 #include <QtCore/QSet>
 #include <QtCore/QString>
 #include <QtCore/QStringList>
+#include <QtCore/QVariant>
 
 class FormatDocument;
 
@@ -31,12 +32,15 @@ public:
     bool argsOver(int token, int count, qreal spaceRemaining);
     bool conditionsOver(int token, int count);
     bool conditionsOver(int token, int count, qreal spaceRemaining);
-    int conditionsLimit(int token, int count, qreal spaceRemaining);
+    int conditionsLimit(int token, int count, const qreal *spaceRemaining);
+    QVariant answerAt(const QString & choice, const QStringList & words,
+                      int token);
     int argumentCount(int token, int depth, int argument = 0) const;
     int conditionArgumentCount(int token, int depth, int argument = 0) const;
     void reserve(int token, int column);
     qreal spaceRemaining(int token) const;
     bool nameHolds(int token, const QString & name, bool *value);
+    bool targetIs(int token, const QString & kind, bool *value) const;
     QSet<QString > holding(int token);
     FormatMemberScope scopeOf(int token);
     FormatMemberScope functionScope(int brace);
