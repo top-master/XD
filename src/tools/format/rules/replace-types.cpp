@@ -8,6 +8,7 @@
 #include "../format-file-config.h"
 #include "../parser/condition-context.h"
 
+#include "config-cache.h"
 #include "config-condition.h"
 #include "config-scopes.h"
 #include "config-types.h"
@@ -59,6 +60,7 @@ public:
         if (name.compare(QLL("isNew"), Qt::CaseInsensitive) != 0) {
             return false;
         }
+        Config::Cache::skip();
         *value = m_document->isLineSelected(m_line);
         return true;
     }

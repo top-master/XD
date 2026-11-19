@@ -6,6 +6,7 @@
 PLUGIN_HEADERS = \
     config-any-space.h \
     config-array-obj.h \
+    config-cache.h \
     config-choice.h \
     config-condition.h \
     config-escape.h \
@@ -28,6 +29,7 @@ PLUGIN_HEADERS = \
 PLUGIN_SOURCES = \
     config-any-space.cpp \
     config-array-obj.cpp \
+    config-cache.cpp \
     config-choice.cpp \
     config-condition.cpp \
     config-escape.cpp \

@@ -5,6 +5,7 @@
 #define CONFIG_SCHEMA_H
 
 #include "./config-section.h"
+#include "./config-evaluator-context.h"
 
 #include <QtCore/QList>
 #include <QtCore/QString>
@@ -19,6 +20,8 @@ public:
     Section sectionOf(const QString & name) const;
     inline const QList<Section > &sections() const { return m_sections; }
     Key key(const QString & name) const;
+    bool resolve(const QString & name, const QStringList & program,
+                 const Evaluator::Context *context, QVariant *value) const;
     bool convert(const QString & name, const QVariant & resolved,
                  QVariant *value) const;
 

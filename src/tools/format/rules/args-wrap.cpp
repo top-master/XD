@@ -146,7 +146,8 @@ static bool keepsUserLines(
         const bool isShortLast = i + 1 == counts.size()
             && counts.at(i) < average;
         if (counts.at(i) != average && ! isShortLast) {
-            *joinCount = isNumber ? qMax(1, mistakes.toInt()) : average;
+            *joinCount = isNumber ? qMax(1, FormatFileConfig::countOf(mistakes))
+                                  : average;
             return false;
         }
     }

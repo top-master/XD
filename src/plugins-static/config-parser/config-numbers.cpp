@@ -5,6 +5,8 @@
 
 #include <QtCore/QStringList>
 
+#include <limits>
+
 /*!
     @class Config::Numbers
     @internal
@@ -19,7 +21,7 @@
     Builds the matcher of up to @a maximumCount numbers (any count for 0),
     each from @a minimum to @a maximum.
 */
-Config::Numbers::Numbers(int minimum, int maximum, int maximumCount)
+Config::Numbers::Numbers(qint64 minimum, qint64 maximum, int maximumCount)
     : m_minimum(minimum), m_maximum(maximum), m_maximumCount(maximumCount)
 {
 }
@@ -29,7 +31,7 @@ Config::Numbers::Numbers(int minimum, int maximum, int maximumCount)
     0), each from @a minimum to @a maximum, for a key's matchers.
 */
 QSharedPointer<const Config::ValueMatcher > Config::Numbers::create(
-        int minimum, int maximum,
+        qint64 minimum, qint64 maximum,
         int maximumCount)
 {
     return QSharedPointer<const Config::ValueMatcher >(
@@ -40,15 +42,15 @@ QSharedPointer<const Config::ValueMatcher > Config::Numbers::create(
     Builds the numbers of @a value, in order; an empty list for a value with
     a part that is no whole number.
 */
-QList<int > Config::Numbers::parse(const QString & value)
+QList<qint64 > Config::Numbers::parse(const QString & value)
 {
-    QList<int > numbers;
+    QList<qint64 > numbers;
     const QStringList parts = value.split(QLatin1Char('|'));
     for (int i = 0; i < parts.size(); ++i) {
         bool ok = false;
-        const int number = parts.at(i).trimmed().toInt(&ok);
+        const qint64 number = parts.at(i).trimmed().toLongLong(&ok);
         if ( ! ok) {
-            return QList<int >();
+            return QList<qint64 >();
         }
         numbers << number;
     }
@@ -61,7 +63,7 @@ QList<int > Config::Numbers::parse(const QString & value)
 */
 bool Config::Numbers::match(const QString & value, QString *matched) const
 {
-    const QList<int > numbers = Config::Numbers::parse(value);
+    const QList<qint64 > numbers = Config::Numbers::parse(value);
     if (numbers.isEmpty()
         || (this->m_maximumCount > 0 && numbers.size() > this->m_maximumCount)
     ) {
@@ -93,12 +95,12 @@ bool Config::Numbers::convert(const QVariant & resolved, QVariant *value) const
         *value = QVariant();
         return false;
     }
-    const int number = int(resolved.toDouble());
-    if (number < this->m_minimum || number > this->m_maximum) {
+    const qreal number = resolved.toDouble();
+    if (number < qreal(this->m_minimum) || number > qreal(this->m_maximum)) {
         *value = QVariant();
         return false;
     }
-    *value = number;
+    *value = qint64(number);
     return true;
 }
 
@@ -108,16 +110,26 @@ bool Config::Numbers::convert(const QVariant & resolved, QVariant *value) const
 QString Config::Numbers::describe() const
 {
     if (this->m_maximumCount == 1) {
-        return QString(QLL("a number from %1 to %2"))
-            .arg(this->m_minimum)
-            .arg(this->m_maximum);
+        return QString(QLL("a number %1")).arg(this->range());
     }
     if (this->m_maximumCount > 1) {
-        return QString(QLL("up to %1 numbers from %2 to %3, joined by |"))
+        return QString(QLL("up to %1 numbers %2, joined by |"))
             .arg(this->m_maximumCount)
-            .arg(this->m_minimum)
-            .arg(this->m_maximum);
+            .arg(this->range());
     }
-    return QString(QLL("numbers from %1 to %2, joined by |")).arg(this->m_minimum)
+    return QString(QLL("numbers %1, joined by |")).arg(this->range());
+}
+
+/*!
+    Builds the range of the numbers this matcher takes, as describe() names
+    it: `from <minimum> to <maximum>`, or `of <minimum> or more` when only
+    the size of a qint64 limits them.
+*/
+QString Config::Numbers::range() const
+{
+    if (this->m_maximum == std::numeric_limits<qint64 >::max()) {
+        return QString(QLL("of %1 or more")).arg(this->m_minimum);
+    }
+    return QString(QLL("from %1 to %2")).arg(this->m_minimum)
         .arg(this->m_maximum);
 }

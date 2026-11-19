@@ -3,6 +3,7 @@
 
 #include "config-any-space.h"
 #include "config-array-obj.h"
+#include "config-cache.h"
 #include "config-choice.h"
 #include "config-condition.h"
 #include "config-escape.h"
@@ -21,6 +22,8 @@
 #include <QtCore/QFileInfo>
 #include <QtCore/QTemporaryDir>
 #include <QtTest/QtTest>
+
+#include <limits>
 
 /// Tests the settings parser: the project root and the folders and files
 /// it reads level by level, the schema's keys, values and aliases, and the
@@ -128,6 +131,9 @@ private slots:
     void testChoice_shouldResolveWordsAndNumbers();
     void testOutputs_shouldBeClearedOnFailure();
     void testCondition_shouldTakeNoSignedPercentAlone();
+    void testNumbers_shouldTakeQint64();
+    void testCache_shouldSkipProgramsThatReadThePlace();
+    void testParser_shouldTellReadValues();
 
 private:
     void write(const QString & relative,
@@ -260,6 +266,21 @@ void tst_ConfigParser::testValue_shouldStartAtDefault()
 {
     Config::Parser parser(tst_ConfigParser::schema());
     qExpect(parser.value(QString(QLL("types.refSuffix"))))->toEqual(QString(QLL(" ")));
+}
+
+/// A value read counts in `hasValue()`, in any case of its name, and
+/// `settings()` hands it out by its name in lower case.
+void tst_ConfigParser::testParser_shouldTellReadValues()
+{
+    Config::Parser parser(tst_ConfigParser::schema());
+    QString error;
+    QVERIFY2(parser.readData(QByteArray("[Layout]\nwidth = 100\n"),
+                             QString(QLL("inline")), &error),
+             qPrintable(error));
+    qExpect(parser.hasValue(QString(QLL("Layout.Width"))))->toBeTruthy();
+    qExpect(parser.hasValue(QString(QLL("layout.depth"))))->toBeFalsy();
+    qExpect(parser.settings().values.value(QString(QLL("layout.width"))))
+        ->toEqual(QString(QLL("100")));
 }
 
 void tst_ConfigParser::testReadLevels_shouldLetDeeperFilesOverride()
@@ -2476,6 +2497,71 @@ void tst_ConfigParser::testCondition_shouldTakeNoSignedPercentAlone()
     qExpect(Config::Condition::compile(
         QString(QLL("-40% < a")), names, &program, &error, true
     ))->toBeTruthy();
+}
+
+/// Answers `placed`, a name that reads the place in question, hence a
+/// program that asks for it skips the cache (see `Config::Cache::skip()`).
+class TestPlaceContext : public Config::Evaluator::Context
+{
+    typedef Config::Evaluator::Context super;
+public:
+    inline bool predicate(const QString &name,
+                          bool *value) const Q_DECL_OVERRIDE_IL
+    {
+        if (name != QLL("placed")) {
+            return false;
+        }
+        Config::Cache::skip();
+        *value = true;
+        return true;
+    }
+};
+
+/// Marks only a program that read the place on a run, and only while it
+/// ran; a later run of another program is not marked by it.
+void tst_ConfigParser::testCache_shouldSkipProgramsThatReadThePlace()
+{
+    const QStringList names = QStringList() << QString(QLL("placed"))
+                                            << QString(QLL("fixed"));
+    QStringList placed;
+    QStringList fixed;
+    QStringList shortCut;
+    QString error;
+    QVERIFY2(Config::Condition::compile(QString(QLL("fixed | placed")), names,
+                                        &placed, &error), qPrintable(error));
+    QVERIFY2(Config::Condition::compile(QString(QLL("fixed & !fixed")), names,
+                                        &fixed, &error), qPrintable(error));
+    QVERIFY2(Config::Condition::compile(QString(QLL("true | placed")), names,
+                                        &shortCut, &error), qPrintable(error));
+    const TestPlaceContext context;
+    const QSet<QString > holding;
+    QVariant result;
+    qExpect(Config::Cache::skipsFor(placed))->toBeFalsy();
+    QVERIFY(Config::Condition::resolve(placed, holding, &context, &result));
+    qExpect(Config::Cache::skipsFor(placed))->toBeTruthy();
+    QVERIFY(Config::Condition::resolve(fixed, holding, &context, &result));
+    qExpect(Config::Cache::skipsFor(fixed))->toBeFalsy();
+    QVERIFY(Config::Condition::resolve(shortCut, holding, &context, &result));
+    qExpect(Config::Cache::skipsFor(shortCut))->toBeFalsy();
+
+    // Marks nothing while no program runs.
+    Config::Cache::skip();
+    qExpect(Config::Cache::skipsFor(fixed))->toBeFalsy();
+}
+
+/// Only the size of a qint64 limits a matcher made with its largest value,
+/// which its description says.
+void tst_ConfigParser::testNumbers_shouldTakeQint64()
+{
+    const Config::Numbers numbers(1, std::numeric_limits<qint64 >::max(), 1);
+    QString matched;
+    qExpect(numbers.match(QString(QLL("5000000000")), &matched))->toBeTruthy();
+    qExpect(matched)->toEqual(QString(QLL("5000000000")));
+    QVariant value;
+    qExpect(numbers.convert(QVariant(5000000000.0), &value))->toBeTruthy();
+    qExpect(value.toLongLong())->toEqual(Q_INT64_C(5000000000));
+    qExpect(numbers.convert(QVariant(0.0), &value))->toBeFalsy();
+    qExpect(numbers.describe())->toEqual(QString(QLL("a number of 1 or more")));
 }
 
 QTEST_APPLESS_MAIN(tst_ConfigParser)

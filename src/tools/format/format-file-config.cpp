@@ -7,6 +7,7 @@
 #include "./parser/scope-conditions.h"
 
 #include "config-any-space.h"
+#include "config-cache.h"
 #include "config-choice.h"
 #include "config-condition.h"
 #include "config-scopes.h"
@@ -17,6 +18,8 @@
 
 #include <QtCore/QFileInfo>
 #include <QtCore/QRegularExpression>
+
+#include <limits>
 
 /*!
     @class FormatFileConfig
@@ -458,7 +461,7 @@ Config::Schema FormatFileConfig::schema()
     structure.addKey(QString(QLL("wrapArgsOver")),
                      Config::Matchers() << Config::Numbers::create(
                          1,
-                         100,
+                         std::numeric_limits<qint64 >::max(),
                          1
                      ) << Config::Condition::create(
                          FormatScopeConditions::names(),
@@ -469,7 +472,7 @@ Config::Schema FormatFileConfig::schema()
     structure.addKey(QString(QLL("wrapConditionsOver")),
                      Config::Matchers() << Config::Numbers::create(
                          1,
-                         100,
+                         std::numeric_limits<qint64 >::max(),
                          1
                      ) << Config::Condition::create(
                          FormatScopeConditions::names(),
@@ -487,7 +490,7 @@ Config::Schema FormatFileConfig::schema()
     structure.addKey(QString(QLL("joinArgs")),
                      Config::Matchers() << Config::Numbers::create(
                          1,
-                         100,
+                         std::numeric_limits<qint64 >::max(),
                          1
                      ) << Config::Condition::create(
                          FormatScopeConditions::names(),
@@ -625,14 +628,43 @@ bool FormatFileConfig::resolve(
         const Config::Evaluator::Context *context,
         QVariant *value)
 {
-    QVariant resolved;
-    if ( ! Config::Condition::resolve(
-        program, QSet<QString >(), context, &resolved
-    )) {
-        *value = QVariant();
-        return false;
+    return settingsSchema()->resolve(key, program, context, value);
+}
+
+/*!
+    Builds the count that @a count, the number of a count setting (such as
+    `joinArgs`, which takes any qint64 from 1 on), stands for as an int:
+    past the int range, that range's end, which no list reaches.
+*/
+int FormatFileConfig::countOf(const QVariant & count)
+{
+    return int(qBound(
+        qreal(std::numeric_limits<int >::min()), count.toDouble(),
+        qreal(std::numeric_limits<int >::max())
+    ));
+}
+
+/*!
+    Resolves @a program, which the setting @a key compiled, at the place
+    that @a context answers, as resolve() does; a value that read no place
+    (see Config::Cache::skipsFor()) is the same at every place, hence these
+    settings keep it, and give it again without running the program.
+*/
+QVariant FormatFileConfig::resolveCached(
+        const QString & key, const QStringList & program,
+        const Config::Evaluator::Context *context) const
+{
+    const QHash<QString, QVariant >::const_iterator kept =
+        this->m_cachedValues.constFind(key);
+    if (kept != this->m_cachedValues.constEnd()) {
+        return kept.value();
     }
-    return settingsSchema()->convert(key, resolved, value);
+    QVariant value;
+    FormatFileConfig::resolve(key, program, context, &value);
+    if ( ! Config::Cache::skipsFor(key)) {
+        this->m_cachedValues.insert(key, value);
+    }
+    return value;
 }
 
 /*!
@@ -884,6 +916,21 @@ static bool isConstant(const QStringList & program)
 }
 
 /*!
+    Builds the columns of @a value, a wrap column setting such as
+    `wrapBegin = 75 | 51`, in order (see Config::Numbers::parse()); its
+    schema keeps each one within the int range.
+*/
+static QList<int > columnsOf(const QString & value)
+{
+    const QList<qint64 > numbers = Config::Numbers::parse(value);
+    QList<int > columns;
+    for (int i = 0; i < numbers.size(); ++i) {
+        columns << int(numbers.at(i));
+    }
+    return columns;
+}
+
+/*!
     Reads the setting @a key of @a parser, which takes a count or a
     condition: a count, or math that gives one (such as `1 + 7 - 3`), goes
     to @a count, as the setting converts it (see FormatFileConfig::resolve()),
@@ -898,9 +945,9 @@ static bool readCountOrCondition(
 {
     const QString value = parser.value(key);
     bool isNumber = false;
-    const int number = value.toInt(&isNumber);
+    const qint64 number = value.toLongLong(&isNumber);
     if (isNumber) {
-        *count = number;
+        *count = FormatFileConfig::countOf(number);
         program->clear();
         return true;
     }
@@ -914,7 +961,7 @@ static bool readCountOrCondition(
     if (isConstant(*program)
         && FormatFileConfig::resolve(key, *program, Q_NULLPTR, &constant)
     ) {
-        *count = constant.toInt();
+        *count = FormatFileConfig::countOf(constant);
         program->clear();
     }
     return true;
@@ -1059,6 +1106,18 @@ bool FormatFileConfig::fromParser(
     ) {
         return false;
     }
+    const QStringList superChoices = FormatFileConfig::superChoices();
+    Config::Condition::compile(
+        fileConfig->typedefSuper, FormatFileConfig::superConditionNames(),
+        &fileConfig->typedefSuperProgram, &reason, false,
+        Config::Condition::NameMismatchIgnore, Q_NULLPTR, &superChoices
+    );
+    Config::Condition::compile(
+        fileConfig->replaceSuperSites, FormatFileConfig::superConditionNames(),
+        &fileConfig->replaceSuperSitesProgram, &reason, false,
+        Config::Condition::NameMismatchIgnore
+    );
+    fileConfig->m_cachedValues.clear();
     fileConfig->replaceTypesAction = parser.value(
         QString(QLL("replace.types.action"))
     );
@@ -1076,7 +1135,7 @@ bool FormatFileConfig::fromParser(
         schema.key(moveSuffix).defaultValue
     );
     fileConfig->wrapBegin
-        = Config::Numbers::parse(parser.value(QString(QLL("structure.wrapBegin"))));
+        = columnsOf(parser.value(QString(QLL("structure.wrapBegin"))));
     fileConfig->wrapMax = parser.value(QString(QLL("structure.wrapMax"))).toInt();
     const int scopes = Config::Scopes::count();
     // Lays out one operand per line where a condition misses a value.
@@ -1105,7 +1164,7 @@ bool FormatFileConfig::fromParser(
         QString(QLL("structure.wrapConditionsPer"))
     );
     fileConfig->commentWrapBegin
-        = Config::Numbers::parse(parser.value(QString(QLL("comments.wrapBegin"))));
+        = columnsOf(parser.value(QString(QLL("comments.wrapBegin"))));
     fileConfig->commentWrapMax = parser
         .value(QString(QLL("comments.wrapMax")))
         .toInt();

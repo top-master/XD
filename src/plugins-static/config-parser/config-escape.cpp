@@ -74,7 +74,7 @@ bool Config::Escape::isCodePoint(uint value)
     ends it (a `\` taking the character after it along); a text of two
     quoted parts, such as `"a" "b"`, is not.
 */
-static bool isQuoted(const QString & text)
+bool Config::Escape::isQuoted(const QString & text)
 {
     if (text.size() < 2 || ! text.startsWith(QLatin1Char('"'))) {
         return false;
@@ -95,7 +95,7 @@ bool Config::Escape::unquote(
         const QString & text, QString *value,
         QString *error)
 {
-    if ( ! isQuoted(text)) {
+    if ( ! Config::Escape::isQuoted(text)) {
         *value = text;
         return true;
     }

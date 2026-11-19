@@ -7,6 +7,7 @@
 #include "./parser/layout-helpers.h"
 #include "./parser/scope-conditions.h"
 
+#include "config-cache.h"
 #include "config-condition.h"
 #include "preprocessor.h"
 
@@ -97,6 +98,7 @@ public:
     inline bool predicate(const QString &name,
                           bool *value) const Q_DECL_OVERRIDE_IL
     {
+        Config::Cache::skip();
         return m_conditions->nameHolds(m_open, name, value);
     }
 
@@ -238,7 +240,7 @@ int FormatDocument::joinArgsAt(int open, int argument, int column,
     )) {
         return 1;
     }
-    return qMax(1, count.toInt());
+    return qMax(1, FormatFileConfig::countOf(count));
 }
 
 /*!

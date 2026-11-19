@@ -9,6 +9,7 @@
 #include "./condition-context.h"
 #include "./layout-helpers.h"
 
+#include "config-cache.h"
 #include "config-condition.h"
 
 #include <QtCore/QFile>
@@ -107,6 +108,7 @@ private:
 
 bool ArgumentContext::predicate(const QString &name, bool *value) const
 {
+    Config::Cache::skip();
     return this->m_scope->nameHolds(this->m_token, name, value);
 }
 
@@ -875,7 +877,8 @@ int FormatScopeConditions::limitOf(
         fileConfig.wrapConditionsOverCondition,
         &context
     );
-    return limit.isValid() ? qMax(0, limit.toInt()) : fallback;
+    return limit.isValid() ? qMax(0, FormatFileConfig::countOf(limit))
+                           : fallback;
 }
 
 /*!

@@ -6,6 +6,8 @@
 #include "./condition-context.h"
 #include "./settings-object.h"
 
+#include "config-cache.h"
+
 /*!
     @class FormatConditionObject
     @internal
@@ -68,6 +70,7 @@ QObject *FormatConditionObject::cfg() const
 */
 QVariant FormatConditionObject::spaceRemaining() const
 {
+    Config::Cache::skip();
     const FormatConditionContext *format =
         static_cast<const FormatConditionContext * >(this->context());
     qreal percent = 0;
@@ -97,6 +100,7 @@ QVariant FormatConditionObject::spaceUsed() const
 */
 QVariant FormatConditionObject::hasMoreArgs() const
 {
+    Config::Cache::skip();
     const FormatConditionContext *format =
         static_cast<const FormatConditionContext * >(this->context());
     bool value = false;
@@ -112,6 +116,7 @@ QVariant FormatConditionObject::hasMoreArgs() const
 */
 QVariant FormatConditionObject::isWrapping() const
 {
+    Config::Cache::skip();
     const FormatConditionContext *format =
         static_cast<const FormatConditionContext * >(this->context());
     bool value = false;
@@ -128,6 +133,7 @@ QVariant FormatConditionObject::isWrapping() const
 */
 QVariant FormatConditionObject::argCount(int depth, int argument)
 {
+    Config::Cache::skip();
     const FormatConditionContext *format =
         static_cast<const FormatConditionContext * >(this->context());
     qreal count = 0;
@@ -164,6 +170,7 @@ QVariant FormatConditionObject::hasCompiler(const QString & compiler)
 */
 QVariant FormatConditionObject::is(const QString & kind)
 {
+    Config::Cache::skip();
     return this->ask(&FormatConditionContext::isTarget, kind);
 }
 

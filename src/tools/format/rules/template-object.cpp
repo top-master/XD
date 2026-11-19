@@ -6,6 +6,8 @@
 #include "./args-array.h"
 #include "../parser/condition-context.h"
 
+#include "config-cache.h"
+
 /*!
     @class FormatTemplateObject
     @internal
@@ -23,6 +25,7 @@
 */
 FormatArgsArray *FormatTemplateObject::args() const
 {
+    Config::Cache::skip();
     const FormatConditionContext *format =
         static_cast<const FormatConditionContext * >(this->context());
     if ( ! format) {

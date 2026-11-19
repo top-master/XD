@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: Apache-2.0
 
 #include "./config-condition.h"
+#include "./config-cache.h"
 #include "./config-escape.h"
 #include "./config-scopes.h"
 #include "./config-types.h"
@@ -939,8 +940,9 @@ bool Config::Condition::match(const QString & value, QString *matched) const
 /*!
     Converts @a resolved, a number that resolve() builds, into @a value as
     the key takes it: whether the condition holds (a number that is not
-    zero) for ResultHolds, or the number itself for ResultNumber. Returns
-    false for a word, which no condition resolves to.
+    zero) for ResultHolds, or the number itself for ResultNumber, such as
+    the 0 of a condition that does not hold. Returns false for a word, which
+    no condition resolves to.
 */
 bool Config::Condition::convert(
         const QVariant & resolved, QVariant *value) const

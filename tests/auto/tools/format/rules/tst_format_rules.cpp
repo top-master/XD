@@ -24,6 +24,8 @@
 #include <QtCore/QTemporaryDir>
 #include <QtTest/QtTest>
 
+#include <limits>
+
 /// Converts the settings of `parser` into `config`, the way the tool loads
 /// a file's settings, and tells whether that succeeded.
 static bool readSettings(const Config::Parser & parser,
@@ -156,6 +158,8 @@ private slots:
     void testThisMode_shouldReachMembersInBlocks();
     void testScopeConditions_shouldNameScopeOfToken();
     void testScopeConditions_shouldFallBackWithoutValue();
+    void testScopeConditions_shouldTellTargetKinds();
+    void testScopeConditions_shouldCountOverWithGivenSpace();
     void testScopeConditions_shouldEvaluateArgumentExpressions();
     void testScopeConditions_shouldOfferValueToCountSettingsOnly();
     void testScopeConditions_shouldCountConditionOperands();
@@ -163,6 +167,7 @@ private slots:
     void testScopeConditions_shouldReadSettingsThroughCfg();
     void testScopeConditions_shouldPlaceSignaturesByWrapArgsAt();
     void testLayoutConfig_shouldResolveConditionAndSubchainOptions();
+    void testCountSettings_shouldTakeAnyQint64();
     void testLayoutHelpers_shouldRecognizeClosingBracketCombinations();
     void testArgsWrap_shouldFollowSettings_data();
     void testArgsWrap_shouldFollowSettings();
@@ -4194,12 +4199,111 @@ void tst_FormatRules::testScopeConditions_shouldFallBackWithoutValue()
     qExpect(conditions.holds(key, program, token, 30, fallback))->toBeFalsy();
 }
 
+/// Tells `is(<kind>)` of the list at a token, read from the document each
+/// time: the `(` of an `if` is a condition, a call's `(` is a call, and the
+/// `{` of a brace initializer list is an array.
+void tst_FormatRules::testScopeConditions_shouldTellTargetKinds()
+{
+    const FormatDocument document(
+        "void check()\n{\n    if (ready(first, second)) {\n"
+        "        int values[] = {1, 2};\n    }\n}\n"
+    );
+    FormatScopeConditions conditions(&document);
+    const int condition = symbolIndex(document, "if") + 1;
+    const int call = symbolIndex(document, "ready") + 1;
+    const int array = symbolIndex(document, "1") - 1;
+    bool value = false;
+    QVERIFY(conditions.targetIs(condition, QString(QLL("condition")), &value));
+    QVERIFY(value);
+    QVERIFY(conditions.targetIs(condition, QString(QLL("call")), &value));
+    QVERIFY( ! value);
+    QVERIFY(conditions.targetIs(call, QString(QLL("Call")), &value));
+    QVERIFY(value);
+    QVERIFY(conditions.targetIs(call, QString(QLL("condition")), &value));
+    QVERIFY( ! value);
+    QVERIFY(conditions.targetIs(array, QString(QLL("array")), &value));
+    QVERIFY(value);
+    QVERIFY(conditions.targetIs(array, QString(QLL("condition")), &value));
+    QVERIFY( ! value);
+    QVERIFY( ! conditions.targetIs(call, QString(QLL("other")), &value));
+
+    QStringList program;
+    QString error;
+    QVERIFY2(Config::Condition::compile(
+        QString(QLL("is(condition)")), FormatScopeConditions::names(),
+        &program, &error, true
+    ), qPrintable(error));
+    const QString key = QString(QLL("structure.wrapArgsAt"));
+    QVERIFY(conditions.holds(key, program, condition));
+    QVERIFY( ! conditions.holds(key, program, call));
+}
+
+/// A plain count decides by the count alone, whatever space the caller
+/// gives; a condition reads that space as its `spaceRemaining`.
+void tst_FormatRules::testScopeConditions_shouldCountOverWithGivenSpace()
+{
+    FormatDocument document(
+        "void check() { if (ready() && valid() && safe()) { run(a, b, c); } }\n"
+    );
+    const int condition = symbolIndex(document, "if") + 1;
+    const int call = symbolIndex(document, "run") + 1;
+    FormatScopeConditions conditions(&document);
+    FormatFileConfig config;
+    config.wrapArgsOver = 2;
+    config.wrapArgsOverCondition.clear();
+    config.wrapConditionsOver = 2;
+    config.wrapConditionsOverCondition.clear();
+    document.setConfig(config);
+    QVERIFY(conditions.argsOver(call, 3, 0));
+    QVERIFY(conditions.argsOver(call, 3, 100));
+    QVERIFY( ! conditions.argsOver(call, 2, 0));
+    QVERIFY(conditions.conditionsOver(condition, 3, 100));
+    QVERIFY( ! conditions.conditionsOver(condition, 2, 0));
+
+    QString error;
+    QVERIFY2(Config::Condition::compile(
+        QString(QLL("spaceRemaining < 30%")), FormatScopeConditions::names(),
+        &config.wrapArgsOverCondition, &error, true
+    ), qPrintable(error));
+    QVERIFY2(Config::Condition::compile(
+        QString(QLL("spaceRemaining < 30%")), FormatScopeConditions::names(),
+        &config.wrapConditionsOverCondition, &error, true
+    ), qPrintable(error));
+    document.setConfig(config);
+    QVERIFY(conditions.argsOver(call, 1, 20));
+    QVERIFY( ! conditions.argsOver(call, 9, 40));
+    QVERIFY(conditions.conditionsOver(condition, 1, 20));
+    QVERIFY( ! conditions.conditionsOver(condition, 9, 40));
+}
+
 void tst_FormatRules::testLayoutHelpers_shouldRecognizeClosingBracketCombinations()
 {
     QVERIFY(isClosingLine(QByteArray("    )] }\t")));
     QVERIFY(isClosingLine(QByteArray("  ])}")));
     QVERIFY( ! isClosingLine(QByteArray("  ]).field")));
     QVERIFY( ! isClosingLine(QByteArray("   ")));
+}
+
+/// A count past the int range stands for the largest int, more than any
+/// list holds.
+void tst_FormatRules::testCountSettings_shouldTakeAnyQint64()
+{
+    Config::Parser parser(FormatFileConfig::schema());
+    FormatFileConfig config;
+    QString error;
+    QVERIFY2(parser.readData(
+        "[Structure]\njoinArgs=200\nwrapConditionsOver=1 < 2 ? 300 : 1\n",
+        QLL("inline"), &error
+    ), qPrintable(error));
+    QVERIFY(readSettings(parser, &config));
+    QCOMPARE(config.joinArgs, 200);
+    QCOMPARE(config.wrapConditionsOver, 300);
+    QVERIFY(config.wrapConditionsOverCondition.isEmpty());
+    QVERIFY2(parser.readData(
+        "[Structure]\njoinArgs=5000000000\n", QLL("inline"), &error
+    ), qPrintable(error));
+    QVERIFY(readSettings(parser, &config));
+    QCOMPARE(config.joinArgs, std::numeric_limits<int >::max());
 }
 
 void tst_FormatRules::testLayoutConfig_shouldResolveConditionAndSubchainOptions()

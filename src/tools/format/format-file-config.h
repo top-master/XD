@@ -10,9 +10,11 @@
 #include "config-condition.h"
 #include "config-parser.h"
 
+#include <QtCore/QHash>
 #include <QtCore/QList>
 #include <QtCore/QPair>
 #include <QtCore/QString>
+#include <QtCore/QVariant>
 
 class FormatFileConfig
 {
@@ -72,6 +74,10 @@ public:
             const QString & key, const QStringList & program,
             const Config::Evaluator::Context *context,
             QVariant *value);
+    static int countOf(const QVariant & count);
+    QVariant resolveCached(
+            const QString & key, const QStringList & program,
+            const Config::Evaluator::Context *context) const;
     static bool resolveText(
             const QString & key, const QString & text,
             const QStringList & names, const QStringList *words,
@@ -125,7 +131,9 @@ public:
     QStringList wrapSignatureAt;
     QString extensions;
     QString typedefSuper;
+    QStringList typedefSuperProgram;
     QString replaceSuperSites;
+    QStringList replaceSuperSitesProgram;
     QList<QPair<QString, QString > > replaceTypes;
     QString replaceTypesTarget;
     QString replaceTypesAction;
@@ -139,6 +147,8 @@ private:
     static FormatSpacing toSpacing(
             const QString & value,
             const QString & defaultValue);
+
+    mutable QHash<QString, QVariant > m_cachedValues;
 };
 
 #endif // FORMAT_FILE_CONFIG_H

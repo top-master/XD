@@ -2,6 +2,8 @@
 // SPDX-License-Identifier: Apache-2.0
 
 #include "./config-schema.h"
+#include "./config-cache.h"
+#include "./config-condition.h"
 
 /*!
     @class Config::Schema
@@ -81,6 +83,28 @@ Config::Key Config::Schema::key(const QString & name) const
         return key;
     }
     return Config::Key();
+}
+
+/*!
+    Resolves the setting @a name's compiled @a program at @a context and
+    converts its result into @a value. Returns false when resolution or
+    conversion fails.
+*/
+bool Config::Schema::resolve(
+        const QString & name, const QStringList & program,
+        const Evaluator::Context *context, QVariant *value) const
+{
+    if (this->key(name).isNull()) {
+        *value = QVariant();
+        return false;
+    }
+    const Cache::Running running(name.toLower());
+    QVariant resolved;
+    if ( ! Condition::resolve(program, QSet<QString >(), context, &resolved)) {
+        *value = QVariant();
+        return false;
+    }
+    return this->convert(name, resolved, value);
 }
 
 /*!

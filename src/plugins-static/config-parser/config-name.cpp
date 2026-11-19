@@ -15,7 +15,8 @@
     `dispose*`. It keeps the name as written, without the spaces around it.
 
     One that takes a call matches a call of such a name as well, with any
-    arguments in its parentheses, such as `QLL($1)`.
+    arguments in its parentheses, such as `QLL($1)` (see the template of
+    `[Replace.types]` in the format tool's README).
 */
 
 /*!

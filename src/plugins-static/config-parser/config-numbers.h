@@ -15,12 +15,12 @@ class Numbers : public ValueMatcher
 {
     typedef ValueMatcher super;
 public:
-    Numbers(int minimum, int maximum, int maximumCount);
+    Numbers(qint64 minimum, qint64 maximum, int maximumCount);
 
     static QSharedPointer<const ValueMatcher > create(
-            int minimum, int maximum,
+            qint64 minimum, qint64 maximum,
             int maximumCount = 0);
-    static QList<int > parse(const QString & value);
+    static QList<qint64 > parse(const QString & value);
 
     bool match(const QString & value, QString *matched) const Q_DECL_OVERRIDE;
     QString describe() const Q_DECL_OVERRIDE;
@@ -28,8 +28,10 @@ public:
                  QVariant *value) const Q_DECL_OVERRIDE;
 
 private:
-    int m_minimum;
-    int m_maximum;
+    QString range() const;
+
+    qint64 m_minimum;
+    qint64 m_maximum;
     int m_maximumCount;
 };
 

@@ -5,6 +5,8 @@
 
 #include "./condition-context.h"
 
+#include "config-cache.h"
+
 /*!
     @class FormatCountObject
     @internal
@@ -21,6 +23,7 @@
 */
 QVariant FormatCountObject::value() const
 {
+    Config::Cache::skip();
     const FormatConditionContext *format =
         static_cast<const FormatConditionContext * >(this->context());
     qreal count = 0;
