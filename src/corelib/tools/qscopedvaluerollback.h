@@ -42,29 +42,31 @@ template <typename T>
 class QScopedValueRollback
 {
 public:
-    explicit QScopedValueRollback(T &var) :
-        varRef(var), oldValue(var)
+    explicit QScopedValueRollback(T & var) :
+        varPtr(reinterpret_cast<T * >(&const_cast<char & >(
+            reinterpret_cast<const volatile char & >(var)))), oldValue(var)
     {
     }
 
-    explicit QScopedValueRollback(T &var, T value) :
-        varRef(var), oldValue(var)
+    explicit QScopedValueRollback(T & var, T value) :
+        varPtr(reinterpret_cast<T * >(&const_cast<char & >(
+            reinterpret_cast<const volatile char & >(var)))), oldValue(var)
     {
-        varRef = qMove(value);
+        *varPtr = qMove(value);
     }
 
     ~QScopedValueRollback()
     {
-        varRef = qMove(oldValue);
+        *varPtr = qMove(oldValue);
     }
 
     void commit()
     {
-        oldValue = varRef;
+        oldValue = *varPtr;
     }
 
 private:
-    T& varRef;
+    T *varPtr;
     T oldValue;
 
     Q_DISABLE_COPY(QScopedValueRollback)

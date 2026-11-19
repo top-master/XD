@@ -7,6 +7,7 @@
 #include "./format-config.h"
 #include "./format-spacing.h"
 
+#include "config-cache.h"
 #include "config-condition.h"
 #include "config-parser.h"
 
@@ -148,7 +149,7 @@ private:
             const QString & value,
             const QString & defaultValue);
 
-    mutable QHash<QString, QVariant > m_cachedValues;
+    mutable Config::Cache m_cache;
 };
 
 #endif // FORMAT_FILE_CONFIG_H

@@ -3,93 +3,133 @@
 
 #include "./config-cache.h"
 
-#include <QtCore/QMutex>
-#include <QtCore/QMutexLocker>
-#include <QtCore/QSet>
 #include <QtCore/QThreadStorage>
 
 /*!
     @class Config::Cache
     @internal
 
-    Tells a tool which compiled programs give the same value at every place,
-    hence which values it may keep: while a program runs (see Running), each
-    name that reads the place in question calls skip(), and skipsFor() then
-    tells that the program depends on the place. The plugin keeps no value
-    itself; a tool that asks for a value keeps it, once skipsFor() says no.
+    Keeps resolved settings that do not read their place while running.
 */
 
 namespace {
 
-/*!
-    Lets skip() mark every program this thread runs at the moment: a program
-    that reads another setting runs that setting's program inside its own.
-*/
-Q_GLOBAL_STATIC(QThreadStorage<QStringList >, runningPrograms)
-
-/*!
-    Lists the programs that read a place once (see Config::Cache::skip()),
-    each by its configuration path; any thread may add to it.
-*/
-class SkippingPrograms
+class CacheState
 {
 public:
-    QMutex mutex;
-    QSet<QString > keys;
+    inline CacheState() : active(Q_NULLPTR), skipped(false) {}
+
+    QString root;
+    Config::CacheScope *active;
+    bool skipped;
 };
 
-Q_GLOBAL_STATIC(SkippingPrograms, skippingPrograms)
+Q_GLOBAL_STATIC(QThreadStorage<CacheState >, cacheState)
 
 } // namespace
 
 /*!
-    @class Config::Cache::Running
-    @internal
-
-    Marks a program as running in this thread, from its construction to its
-    destruction, for skip() to find.
+    Returns the value kept for @a key and @a program, or an invalid value
+    when absent. Sets @a found when it is not null.
 */
-
-/*!
-    Marks the setting at @a key as running in this thread.
-*/
-Config::Cache::Running::Running(const QString & key)
+QVariant Config::Cache::get(
+        const QString & key, const QStringList & program, bool *found) const
 {
-    runningPrograms()->localData().append(key);
+    const QHash<QString, Entry >::const_iterator entry =
+        this->m_values.constFind(key);
+    if (entry != this->m_values.constEnd()) {
+        if (entry->program == program) {
+            if (found) {
+                *found = true;
+            }
+            return entry->value;
+        }
+    }
+    if (found) {
+        *found = false;
+    }
+    return QVariant();
 }
 
 /*!
-    Marks the program as done.
+    Keeps @a value for @a key and @a program when it does not depend on
+    the place.
 */
-Config::Cache::Running::~Running()
+void Config::Cache::add(
+        const QString & key, const QStringList & program, const QVariant & value)
 {
-    runningPrograms()->localData().removeLast();
+    if ( ! Cache::skipsFor(key)) {
+        Entry entry;
+        entry.program = program;
+        entry.value = value;
+        this->m_values.insert(key, entry);
+    }
 }
 
 /*!
-    Marks each program this thread runs at the moment as one that reads the
-    place in question; hence skipsFor() keeps telling so for it.
+    Removes the values kept in the cache.
+*/
+void Config::Cache::clear()
+{
+    this->m_values.clear();
+}
+
+/*!
+    Tracks the setting @a key while its program runs. An empty key leaves
+    the current tracking scope unchanged.
+*/
+Config::CacheScope::CacheScope(const QString & key)
+    : m_target(key), m_parent(Q_NULLPTR), m_active( ! key.isEmpty())
+{
+    if ( ! this->m_active) {
+        return;
+    }
+    CacheState *state = &(cacheState()->localData());
+    if ( ! state->active) {
+        state->root = key;
+        state->skipped = false;
+    }
+    this->m_parent = state->active;
+    state->active = this;
+}
+
+/*!
+    Restores the enclosing tracking scope.
+*/
+Config::CacheScope::~CacheScope()
+{
+    if (this->m_active) {
+        CacheState *state = &(cacheState()->localData());
+        state->active = this->m_parent;
+    }
+}
+
+/*!
+    Marks the setting running in this thread as dependent on its place.
 */
 void Config::Cache::skip()
 {
-    const QStringList running = runningPrograms()->localData();
-    if (running.isEmpty()) {
-        return;
-    }
-    QRef<SkippingPrograms > skipping = skippingPrograms();
-    QMutexLocker locker(&skipping->mutex);
-    for (int i = 0; i < running.size(); ++i) {
-        skipping->keys.insert(running.at(i));
+    CacheState *state = &(cacheState()->localData());
+    if (state->active) {
+        state->skipped = true;
     }
 }
 
 /*!
-    Tells whether the setting at @a key read the place it ran at, in any run
-    so far (see skip()); a tool keeps the value of a program that did not.
+    Tells whether the last setting evaluated in this thread was @a key and
+    read its place.
 */
 bool Config::Cache::skipsFor(const QString & key)
 {
-    QRef<SkippingPrograms > skipping = skippingPrograms();
-    QMutexLocker locker(&skipping->mutex);
-    return skipping->keys.contains(key.toLower());
+    const CacheState *state = &(cacheState()->localData());
+    if ( ! state->skipped) {
+        return false;
+    }
+    const CacheScope *entry = state->active;
+    for (; entry; entry = entry->m_parent) {
+        if (entry->m_target.compare(key, Qt::CaseInsensitive) == 0) {
+            return true;
+        }
+    }
+    return state->root.compare(key, Qt::CaseInsensitive) == 0;
 }

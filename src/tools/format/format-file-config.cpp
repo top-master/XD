@@ -646,24 +646,19 @@ int FormatFileConfig::countOf(const QVariant & count)
 
 /*!
     Resolves @a program, which the setting @a key compiled, at the place
-    that @a context answers, as resolve() does; a value that read no place
-    (see Config::Cache::skipsFor()) is the same at every place, hence these
-    settings keep it, and give it again without running the program.
+    that @a context answers. Keeps values that do not depend on the place.
 */
 QVariant FormatFileConfig::resolveCached(
         const QString & key, const QStringList & program,
         const Config::Evaluator::Context *context) const
 {
-    const QHash<QString, QVariant >::const_iterator kept =
-        this->m_cachedValues.constFind(key);
-    if (kept != this->m_cachedValues.constEnd()) {
-        return kept.value();
+    bool found = false;
+    QVariant value = this->m_cache.get(key, program, &found);
+    if (found) {
+        return value;
     }
-    QVariant value;
-    FormatFileConfig::resolve(key, program, context, &value);
-    if ( ! Config::Cache::skipsFor(key)) {
-        this->m_cachedValues.insert(key, value);
-    }
+    settingsSchema()->resolve(key, program, context, &value);
+    this->m_cache.add(key, program, value);
     return value;
 }
 
@@ -1117,7 +1112,6 @@ bool FormatFileConfig::fromParser(
         &fileConfig->replaceSuperSitesProgram, &reason, false,
         Config::Condition::NameMismatchIgnore
     );
-    fileConfig->m_cachedValues.clear();
     fileConfig->replaceTypesAction = parser.value(
         QString(QLL("replace.types.action"))
     );

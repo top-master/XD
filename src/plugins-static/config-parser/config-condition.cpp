@@ -2,7 +2,6 @@
 // SPDX-License-Identifier: Apache-2.0
 
 #include "./config-condition.h"
-#include "./config-cache.h"
 #include "./config-escape.h"
 #include "./config-scopes.h"
 #include "./config-types.h"

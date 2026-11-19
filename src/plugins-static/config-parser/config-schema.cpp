@@ -94,13 +94,17 @@ bool Config::Schema::resolve(
         const QString & name, const QStringList & program,
         const Evaluator::Context *context, QVariant *value) const
 {
-    if (this->key(name).isNull()) {
+    const Config::Key found = this->key(name);
+    QVariant resolved;
+    if (found.isNull()) {
         *value = QVariant();
         return false;
     }
-    const Cache::Running running(name.toLower());
-    QVariant resolved;
-    if ( ! Condition::resolve(program, QSet<QString >(), context, &resolved)) {
+    const CacheScope scope(found.name);
+    Q_UNUSED(scope);
+    if ( ! Condition::resolve(
+        program, QSet<QString >(), context, &resolved
+    )) {
         *value = QVariant();
         return false;
     }
