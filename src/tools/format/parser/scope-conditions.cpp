@@ -89,6 +89,8 @@ public:
     {
     }
 
+    inline QStringList names() const Q_DECL_OVERRIDE_IL
+    { return FormatScopeConditions::names(); }
     bool predicate(const QString &name, bool *value) const Q_DECL_OVERRIDE;
     bool value(qreal *value) const Q_DECL_OVERRIDE;
     bool argumentCount(int depth, int argument,

@@ -68,7 +68,6 @@ public:
     static QString inlineMarker(
             const QString & value,
             const FormatFileConfig & config);
-    static QStringList replaceTargetNames();
     bool acceptsFile(const QString &path) const;
     static Config::Schema schema();
     static bool resolve(

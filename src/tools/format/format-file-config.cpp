@@ -219,15 +219,6 @@ QStringList FormatFileConfig::superConditionNames()
         << QString(QLL("hasSuperTypedef"));
 }
 
-/*!
-    Builds the names that `[Replace.types] target` may use: `isNew`, which
-    holds on a line `-L` or `--git` selects (every line, without them).
-*/
-QStringList FormatFileConfig::replaceTargetNames()
-{
-    return QStringList() << QString(QLL("isNew"));
-}
-
 QStringList FormatFileConfig::superChoices()
 {
     return QStringList() << QString(QLL("always")) << QString(QLL("never"))
@@ -461,7 +452,7 @@ QString FormatReplacementMatcher::explain(const QString & value) const
     Q_UNUSED(scope);
     const QStringList words;
     if (Config::Condition::compile(
-        value, FormatFileConfig::replaceTargetNames(), &program, &error, false,
+        value, FormatReplaceTypesContext().names(), &program, &error, false,
         Config::Condition::NameMismatchError, Q_NULLPTR, &words
     )) {
         return QString();
@@ -643,7 +634,7 @@ Config::Schema FormatFileConfig::schema()
     Config::Section replaceTypes(QString(QLL("Replace.types")));
     replaceTypes.addKey(QString(QLL("target")),
                         Config::Matchers() << Config::Condition::create(
-                            FormatFileConfig::replaceTargetNames()),
+                            FormatReplaceTypesContext().names()),
                         QString(QLL("isNew")));
     replaceTypes.addKey(QString(QLL("action")),
                         QStringList() << QString(QLL("replace")) << QString(QLL("report")),
@@ -1188,7 +1179,7 @@ bool FormatFileConfig::fromParser(
         )
         || ! checkCondition(
             &fileConfig->replaceTypesTarget,
-            FormatFileConfig::replaceTargetNames(),
+            FormatReplaceTypesContext().names(),
             parser.schema().key(QString(QLL("replace.types.target")))
                 .defaultValue,
             mismatch,

@@ -49,40 +49,6 @@
 */
 
 /*!
-    Answers `isNew` of `[Replace.types] target` for one line of a document:
-    it holds on a line that `-L` or `--git` selects.
-*/
-class FormatReplaceTypesContext : public FormatConditionContext
-{
-    typedef FormatConditionContext super;
-public:
-    inline FormatReplaceTypesContext(const FormatDocument *document, int line,
-                                     const FormatFileConfig *config)
-        : m_document(document), m_line(line), m_config(config) {}
-
-    inline bool predicate(const QString &name,
-                          bool *value) const Q_DECL_OVERRIDE_IL
-    {
-        if (name.compare(QLL("isNew"), Qt::CaseInsensitive) != 0) {
-            return false;
-        }
-        Config::Cache::skip();
-        *value = m_document->isLineSelected(m_line);
-        return true;
-    }
-
-    inline const FormatFileConfig *fileConfig() const Q_DECL_OVERRIDE_IL
-    {
-        return this->m_config;
-    }
-
-private:
-    const FormatDocument *m_document;
-    int m_line;
-    const FormatFileConfig *m_config;
-};
-
-/*!
     Answers `args` for the call that a call template turns (see
     FormatTemplateObject): its arguments, as written.
 */
@@ -98,6 +64,11 @@ public:
     inline FormatArgsArray *callArguments() const Q_DECL_OVERRIDE_IL
     {
         return m_arguments;
+    }
+
+    inline QStringList names() const Q_DECL_OVERRIDE_IL
+    {
+        return m_place ? m_place->names() : QStringList();
     }
 
     inline const FormatFileConfig *fileConfig() const Q_DECL_OVERRIDE_IL
@@ -875,28 +846,17 @@ static bool replacement(
         FormatArgsArray args(bound);
         const FormatCallTemplateContext context(&args, place);
         QVariant resolved;
-        bool literal = false;
-        QStringList program;
-        const QStringList words;
-        if (Config::Condition::compile(
-            value, FormatFileConfig::replaceTargetNames(), &program, error,
-            false, Config::Condition::NameMismatchError, Q_NULLPTR, &words
-        )) {
-            if ( ! Config::Condition::resolve(
-                program, QSet<QString >(), &context, &resolved
-            )) {
-                *error = QString(QLL("cannot evaluate condition: %1")).arg(value);
-                return false;
-            }
-        } else {
-            QString matched;
-            if ( ! Config::Name(true).match(value, &matched)) {
-                return false;
-            }
-            resolved = matched;
-            error->clear();
-            literal = true;
+        const Config::Name fallback(true);
+        const Config::EvalRes result = Config::Condition::eval(
+            value, &context,
+            &resolved, error, &fallback
+        );
+        if (result.includes(Config::FailedToResolve)
+            || result.includes(Config::FailedToFallback)
+        ) {
+            return false;
         }
+        const bool literal = result.includes(Config::Fallback);
         if ( ! resolved.isValid()) {
             if (step == 0) {
                 head->clear();
@@ -1045,12 +1005,17 @@ void FormatReplaceTypesRule::run(FormatDocument *document) const
         }
 
         // Checks `target` for this line.
+        const FormatReplaceTypesContext context(
+            document,
+            document->symbolLine(i),
+            &config
+        );
         QStringList *program = &(programs[config.replaceTypesTarget]);
         QString error;
         if (program->isEmpty()
             && ! Config::Condition::compile(
                 config.replaceTypesTarget,
-                FormatFileConfig::replaceTargetNames(),
+                context.names(),
                 program,
                 &error,
                 false,
@@ -1059,11 +1024,6 @@ void FormatReplaceTypesRule::run(FormatDocument *document) const
         ) {
             continue;
         }
-        const FormatReplaceTypesContext context(
-            document,
-            document->symbolLine(i),
-            &config
-        );
         QVariant wanted;
         if ( ! FormatFileConfig::resolve(
                 QString(QLL("replace.types.target")),

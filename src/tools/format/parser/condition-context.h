@@ -10,6 +10,7 @@
 
 class FormatArgsArray;
 class FormatFileConfig;
+class FormatDocument;
 
 class FormatConditionContext : public Config::Evaluator::Context
 {
@@ -29,6 +30,26 @@ public:
     static void setGlobalObjects(Config::Scopes::Scope *scope);
     static void setCountObjects(Config::Scopes::Scope *scope);
     static QSharedPointer<Config::Scopes::Scope > pushCountScope();
+};
+
+class FormatReplaceTypesContext : public FormatConditionContext
+{
+    typedef FormatConditionContext super;
+public:
+    inline FormatReplaceTypesContext(const FormatDocument *document = Q_NULLPTR,
+                                     int line = 0,
+                                     const FormatFileConfig *config = Q_NULLPTR)
+        : m_document(document), m_line(line), m_config(config) {}
+
+    QStringList names() const Q_DECL_OVERRIDE;
+    bool predicate(const QString & name, bool *value) const Q_DECL_OVERRIDE;
+    inline const FormatFileConfig *fileConfig() const Q_DECL_OVERRIDE_IL
+    { return this->m_config; }
+
+private:
+    const FormatDocument *m_document;
+    int m_line;
+    const FormatFileConfig *m_config;
 };
 
 #endif // PARSER_CONDITION_CONTEXT_H

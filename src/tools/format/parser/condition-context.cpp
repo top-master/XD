@@ -4,9 +4,32 @@
 #include "./condition-context.h"
 
 #include "../format-file-config.h"
+#include "../format-document.h"
 #include "./condition-object.h"
 #include "./count-object.h"
 #include "../rules/template-object.h"
+#include "config-cache.h"
+
+/*!
+    Lists the predicates available to replacement conditions.
+*/
+QStringList FormatReplaceTypesContext::names() const
+{
+    return QStringList() << QString(QLL("isNew"));
+}
+
+/*!
+    Answers whether the current line is selected.
+*/
+bool FormatReplaceTypesContext::predicate(const QString & name, bool *value) const
+{
+    if (name.compare(QLL("isNew"), Qt::CaseInsensitive) != 0 || ! this->m_document) {
+        return false;
+    }
+    Config::Cache::skip();
+    *value = this->m_document->isLineSelected(this->m_line);
+    return true;
+}
 
 /*!
     @class FormatConditionContext

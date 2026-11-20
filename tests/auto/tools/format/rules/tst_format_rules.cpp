@@ -45,6 +45,8 @@ class CountingConditionContext : public FormatConditionContext
     typedef FormatConditionContext super;
 public:
     inline CountingConditionContext() : isNew(false), calls(0) {}
+    inline QStringList names() const Q_DECL_OVERRIDE_IL
+    { return QStringList() << QString(QLL("isNewClass")) << QString(QLL("isNeeded")); }
     bool predicate(const QString &name, bool *value) const Q_DECL_OVERRIDE
     {
         if (name == QLL("isNewClass")) {
@@ -4167,16 +4169,16 @@ void tst_FormatRules::testThisMode_shouldDefaultToBaseExistingAndHeaderOutline()
     const QString outline = QString(QLL("is-outline"));
     QSet<QString > holding;
     holding << QString(QLL("is-base-member"));
-    qExpect(Config::Condition::evaluate(program, holding))->toBeTruthy();
+    qExpect(Config::Condition::resolve(program, holding))->toBeTruthy();
     holding.clear();
     holding << outline << QString(QLL("is-non-header"));
-    qExpect(Config::Condition::evaluate(program, holding))->toBeFalsy();
+    qExpect(Config::Condition::resolve(program, holding))->toBeFalsy();
     holding.clear();
     holding << outline << QString(QLL("is-header"));
-    qExpect(Config::Condition::evaluate(program, holding))->toBeTruthy();
+    qExpect(Config::Condition::resolve(program, holding))->toBeTruthy();
     holding.clear();
     holding << QString(QLL("already-existing"));
-    qExpect(Config::Condition::evaluate(program, holding))->toBeTruthy();
+    qExpect(Config::Condition::resolve(program, holding))->toBeTruthy();
 }
 
 void tst_FormatRules::testThisMode_shouldRejectUnknownName()
@@ -4710,7 +4712,7 @@ void tst_FormatRules::testScopeConditions_shouldEvaluateArgumentExpressions()
         QString(QLL("false && value > 0")), QStringList(),
         &lazyProgram, &lazyError
     ));
-    QVERIFY( ! Config::Condition::evaluate(
+    QVERIFY( ! Config::Condition::resolve(
         lazyProgram, QSet<QString >(), Q_NULLPTR,
         &lazyOk
     ));
@@ -4720,7 +4722,7 @@ void tst_FormatRules::testScopeConditions_shouldEvaluateArgumentExpressions()
         QString(QLL("false && isAvailable()")), predicates,
         &lazyProgram, &lazyError
     ));
-    QVERIFY( ! Config::Condition::evaluate(
+    QVERIFY( ! Config::Condition::resolve(
         lazyProgram, QSet<QString >(), Q_NULLPTR,
         &lazyOk
     ));
@@ -4729,7 +4731,7 @@ void tst_FormatRules::testScopeConditions_shouldEvaluateArgumentExpressions()
         QString(QLL("true || value > 0")), QStringList(),
         &lazyProgram, &lazyError
     ));
-    QVERIFY(Config::Condition::evaluate(
+    QVERIFY(Config::Condition::resolve(
         lazyProgram, QSet<QString >(), Q_NULLPTR,
         &lazyOk
     ));

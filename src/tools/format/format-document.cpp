@@ -95,6 +95,11 @@ public:
     bool argumentCount(int depth, int argument,
                        qreal *count) const Q_DECL_OVERRIDE;
 
+    inline QStringList names() const Q_DECL_OVERRIDE_IL
+    {
+        return FormatScopeConditions::names();
+    }
+
     inline bool predicate(const QString &name,
                           bool *value) const Q_DECL_OVERRIDE_IL
     {

@@ -5,6 +5,7 @@
 #define CONFIG_EVALUATOR_CONTEXT_H
 
 #include <QtCore/QString>
+#include <QtCore/QStringList>
 
 namespace Config {
 
@@ -14,6 +15,7 @@ class Context
 {
 public:
     virtual ~Context() {}
+    virtual QStringList names() const;
     virtual bool predicate(const QString &name, bool *value) const;
 };
 

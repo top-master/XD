@@ -847,7 +847,7 @@ bool ExpressionCompiler::call(const QString &name)
     condition alone. A key that takes percents takes them from 0% to 100%,
     and a key that takes none rejects them (see checkPercents()).
 
-    compile() turns such a text into a program, and evaluate() runs that
+    compile() turns such a text into a program, and eval() runs that
     program against the names that hold at the place in question; hence a
     tool parses a setting once, and evaluates it as often as it needs.
 
@@ -861,7 +861,7 @@ bool ExpressionCompiler::call(const QString &name)
     hence `spaceUsed > cfg.wrapArgsAt * 0.875` compares with 87.5% of that
     key's share. The class knows no name of its own: each call, and each name
     the caller's set of names leaves out, reach the Evaluator::Context that
-    the caller of evaluate() passes, only when a term asks for them.
+    the caller of eval() passes, only when a term asks for them.
 */
 
 /*!
@@ -1125,7 +1125,7 @@ bool Lookup::holds(const QString &name) const
     condition gives 1 when it holds, else 0), or the word or text a value
     leaves as a QString; hence the caller converts it as its setting takes
     it, and tells the two apart by the type. This is the one way a program
-    runs, which evaluate() and value() convert. The context resolves each
+    runs, which eval() and value() convert. The context resolves each
     name first (the set @a holding resolves a name it does not know), and
     each registered function the program calls; each one only when a term
     asks for it. Returns false when a term misses what it needs.
@@ -1139,36 +1139,49 @@ bool Config::Condition::resolve(
 }
 
 /*!
-    @fn bool Config::Condition::evaluate(const QStringList & program, const QSet<QString > & holding, const Evaluator::Context *context, bool *resolved)
+    @enum Config::EvalFlag
 
-    Tells whether the condition @a program holds, as resolve() resolves it
-    with the names @a holding and the context @a context: a number that is
-    not zero. @a resolved tells whether the program resolved to a number;
-    when it did not (a term missed what it needs, or the program gave a
-    word), the false this returns is only a default.
+    FailedToCompile marks a failed compilation. Fallback marks a successful
+    fallback; FailedToFallback marks its failure. FailedToResolve marks a
+    compiled program that failed to resolve. Resolved marks a successful
+    compilation and resolution.
 */
 
 /*!
-    @fn bool Config::Condition::evaluate(const QStringList & program, const QSet<QString > & holding, const Evaluator::Context *context)
-
-    Tells, like the evaluate() above, whether @a program holds with the
-    names @a holding and the context @a context.
+    Compiles @a text over the names of @a context and resolves it into
+    @a result. If compilation fails, @a fallback may match a literal value.
+    Returns EvalFlag bits for the stages that ran and their outcome;
+    @a error describes a failure.
 */
-
-/*!
-    @fn bool Config::Condition::evaluate(const QStringList & program, const QSet<QString > & holding, bool *resolved)
-
-    Tells, like the evaluate() above, whether @a program holds given the
-    names @a holding alone; @a resolved tells whether the program resolved
-    to a number, rather than to the default false.
-*/
-
-/*!
-    @fn bool Config::Condition::evaluate(const QStringList & program, const QSet<QString > & holding)
-
-    Tells, like the evaluate() above, whether @a program holds given the
-    names @a holding alone.
-*/
+Config::EvalRes Config::Condition::eval(
+        const QString & text,
+        const Evaluator::Context *context, QVariant *result, QString *error,
+        const ValueMatcher *fallback)
+{
+    QStringList program;
+    const QStringList words;
+    const QStringList names = context ? context->names() : QStringList();
+    if ( ! Condition::compile(text, names, &program, error, false,
+                              NameMismatchError, Q_NULLPTR, &words)) {
+        QString matched;
+        if ( ! fallback) {
+            *result = QVariant();
+            return FailedToCompile;
+        }
+        if ( ! fallback->match(text, &matched)) {
+            *result = QVariant();
+            return FailedToCompile | FailedToFallback;
+        }
+        *result = matched;
+        error->clear();
+        return FailedToCompile | Fallback;
+    }
+    if ( ! Condition::resolve(program, QSet<QString >(), context, result)) {
+        *error = QString(QLL("cannot evaluate condition: %1")).arg(text);
+        return FailedToResolve;
+    }
+    return Resolved;
+}
 
 /*!
     @fn bool Config::Condition::value(const QStringList & program, const QSet<QString > & holding, const Evaluator::Context *context, qreal *number)

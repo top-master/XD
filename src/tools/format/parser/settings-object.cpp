@@ -51,6 +51,9 @@ public:
     {
     }
 
+    inline QStringList names() const Q_DECL_OVERRIDE_IL
+    { return m_place->names(); }
+
     inline bool predicate(const QString &name,
                           bool *value) const Q_DECL_OVERRIDE_IL
     {

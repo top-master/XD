@@ -9,12 +9,23 @@
 #include "./config-value-matcher.h"
 
 #include <QtCore/QSet>
+#include <QtCore/QFlags>
 #include <QtCore/QHash>
 #include <QtCore/QList>
 #include <QtCore/QStringList>
 #include <QtCore/QVariant>
 
 namespace Config {
+
+enum EvalFlag {
+    FailedToCompile = 0x01,
+    Fallback = 0x02,
+    FailedToResolve = 0x04,
+    FailedToFallback = 0x08,
+    Resolved = 0x10
+};
+Q_DECLARE_FLAGS(EvalRes, EvalFlag)
+Q_DECLARE_OPERATORS_FOR_FLAGS(EvalRes)
 
 class Condition : public ValueMatcher
 {
@@ -53,16 +64,16 @@ public:
     static bool resolve(const QStringList & program,
                         const QSet<QString > & holding,
                         const Evaluator::Context *context, QVariant *result);
-    static bool evaluate(const QStringList & program,
-                         const QSet<QString > & holding,
-                         const Evaluator::Context *context, bool *resolved);
-    static bool evaluate(const QStringList & program,
-                         const QSet<QString > & holding,
-                         const Evaluator::Context *context);
-    static bool evaluate(const QStringList & program,
-                         const QSet<QString > & holding, bool *resolved);
-    static bool evaluate(const QStringList & program,
-                         const QSet<QString > & holding);
+    static bool resolve(const QStringList & program,
+                        const QSet<QString > & holding,
+                        const Evaluator::Context *context = Q_NULLPTR,
+                        bool *resolved = Q_NULLPTR);
+    static bool resolve(const QStringList & program,
+                        const QSet<QString > & holding, bool *resolved);
+    static EvalRes eval(
+            const QString & text,
+            const Evaluator::Context *context, QVariant *result,
+            QString *error, const ValueMatcher *fallback = Q_NULLPTR);
     static bool value(const QStringList & program,
                       const QSet<QString > & holding,
                       const Evaluator::Context *context, qreal *number);
@@ -80,37 +91,24 @@ private:
 };
 
 #ifndef Q_MOC_RUN
-Q_ALWAYS_INLINE bool Condition::evaluate(
+Q_ALWAYS_INLINE bool Condition::resolve(
         const QStringList & program, const QSet<QString > & holding,
         const Evaluator::Context *context, bool *resolved)
 {
-    QVariant result;
-    *resolved = Condition::resolve(program, holding, context, &result)
-        && result.type() == QVariant::Double;
-    return *resolved && result.toDouble() != 0;
+    QVariant value;
+    const bool ok = resolve(program, holding, context, &value)
+        && value.type() == QVariant::Double;
+    if (resolved) {
+        *resolved = ok;
+    }
+    return ok && value.toDouble() != 0;
 }
 
-Q_ALWAYS_INLINE bool Condition::evaluate(
-        const QStringList & program, const QSet<QString > & holding,
-        const Evaluator::Context *context)
-{
-    bool resolved = false;
-    return Condition::evaluate(program, holding, context, &resolved);
-}
-
-Q_ALWAYS_INLINE bool Condition::evaluate(
+Q_ALWAYS_INLINE bool Condition::resolve(
         const QStringList & program, const QSet<QString > & holding,
         bool *resolved)
 {
-    const Evaluator::Context *context = Q_NULLPTR;
-    return Condition::evaluate(program, holding, context, resolved);
-}
-
-Q_ALWAYS_INLINE bool Condition::evaluate(
-        const QStringList & program, const QSet<QString > & holding)
-{
-    bool resolved = false;
-    return Condition::evaluate(program, holding, &resolved);
+    return resolve(program, holding, Q_NULLPTR, resolved);
 }
 
 Q_ALWAYS_INLINE bool Condition::value(
