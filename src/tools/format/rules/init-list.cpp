@@ -72,10 +72,9 @@ void FormatInitListRule::run(FormatDocument *document) const
             }
             const int from = document->symbolEnd(k - 1);
             if (document->spansDirective(
-                    from,
-                    document->symbols().at(k + 1).from
-                )
-            ) {
+                from,
+                document->symbols().at(k + 1).from
+            )) {
                 continue;
             }
             document->replace(

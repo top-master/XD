@@ -214,8 +214,9 @@ bool formatIsInXdTree(const QString & path)
     a call's first one) gets that growth's characters added to its
     indent, or taken from it.
 */
-void formatShiftContinuations(FormatDocument *document,
-                              const QList<FormatGrowth > & growths)
+void formatShiftContinuations(
+        FormatDocument *document,
+        const QList<FormatGrowth > & growths)
 {
     QMap<int, QList<FormatGrowth > > byLine;
     for (int i = 0; i < growths.size(); ++i) {

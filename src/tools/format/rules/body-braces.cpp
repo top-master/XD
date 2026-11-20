@@ -71,8 +71,9 @@ void FormatBodyBracesRule::run(FormatDocument *document) const
             || ! closesChain(document, close)
             || ! conditions.holds(
                 QString(QLL("structure.bodyBraces")),
-                document->configAt(document->symbols().at(open).from)
-                    .bodyBraces,
+                document->configAt(
+                    document->symbols().at(open).from
+                ).bodyBraces,
                 open
             )
         ) {

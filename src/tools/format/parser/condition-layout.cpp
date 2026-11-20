@@ -401,7 +401,10 @@ QByteArray FormatConditionLayout::group(
                 && ! isClosingLine(text.mid(text.lastIndexOf('\n') + 1))
                 && currentWidth + op.size() + 2
                     + textWidth(sourceText(m_document, first, last)) + after
-                    <= wrapColumn(m_document, m_document->symbols().at(open).from);
+                    <= wrapColumn(
+                        m_document,
+                        m_document->symbols().at(open).from
+                    );
             if (joins) {
                 text += ' ' + op + ' ';
             } else {
@@ -519,7 +522,8 @@ QByteArray FormatConditionLayout::atom(
             )) > m_document->configAt(offset).wrapMax
         ) {
             const int comparison = comparisons.first();
-            const QByteArray head = sourceText(m_document, first, comparison) + ' ';
+            const QByteArray head =
+                sourceText(m_document, first, comparison) + ' ';
             FormatExpressionLayout value(m_document, m_conditions, indent);
             const QByteArray right = value.layout(
                 comparison + 1, last, column + textWidth(head), 0

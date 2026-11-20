@@ -166,7 +166,9 @@ QStringList FormatProcessRunner::workerArguments() const
     for (int i = 0; i < this->m_options.lineSpecs.size(); ++i) {
         arguments << QString(QLL("-L")) << this->m_options.lineSpecs.at(i);
     }
-    if ( ! this->m_options.git.isEmpty() && this->m_options.config.snapshotManifest.isEmpty()) {
+    if ( ! this->m_options.git.isEmpty()
+        && this->m_options.config.snapshotManifest.isEmpty()
+    ) {
         arguments << QString(QLL("--git")) << this->m_options.git;
     }
     if ( ! this->m_options.rules.isEmpty()) {
@@ -184,7 +186,8 @@ QStringList FormatProcessRunner::workerArguments() const
     }
     const FormatConfig & config = this->m_options.config;
     if ( ! config.snapshotManifest.isEmpty()) {
-        arguments << QString(QLL("--snapshot-manifest")) << config.snapshotManifest;
+        arguments << QString(QLL("--snapshot-manifest"))
+            << config.snapshotManifest;
     }
     if ( ! config.file.isEmpty()) {
         arguments << QString(QLL("--config-file")) << config.file;

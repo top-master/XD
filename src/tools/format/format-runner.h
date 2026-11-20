@@ -42,8 +42,9 @@ public:
 protected:
     int jobCount(int fileCount) const;
     bool prepareRun(const QStringList &files, QString *error);
-    QList<FormatFileResult > runFailure(const QStringList &files,
-                                        const QString &error) const;
+    QList<FormatFileResult > runFailure(
+            const QStringList &files,
+            const QString &error) const;
 
     const Formatter *m_formatter;
     FormatOptions m_options;

@@ -57,7 +57,13 @@ void FormatGlobalStaticRule::run(FormatDocument *document) const
                     "each entry can stay"));
                 const int offset = document->symbols().at(i).from;
                 if (document->agentMode()) {
-                    document->request(offset, "global-static", message, 1, 0);
+                    document->request(
+                        offset,
+                        "global-static",
+                        message,
+                        1,
+                        0
+                    );
                 } else {
                     document->report(offset, "global-static", message);
                 }
@@ -98,8 +104,9 @@ void FormatGlobalStaticRule::run(FormatDocument *document) const
     variable: its type is followed by a name and then by a `;`, `=`, `[`,
     `{` or `(` (which may start the variable's initializer).
 */
-bool FormatGlobalStaticRule::isVariable(const FormatDocument *document,
-                                        int index) const
+bool FormatGlobalStaticRule::isVariable(
+        const FormatDocument *document,
+        int index) const
 {
     int depth = 0;
     for (int k = index + 1; k + 1 < document->symbols().size(); ++k) {

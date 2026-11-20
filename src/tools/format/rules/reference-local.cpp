@@ -96,7 +96,10 @@ void FormatReferenceLocalRule::run(FormatDocument *document) const
         const QString message = QString(QLL(
             "name the local through a pointer, `%1 *%2 = &(...);`, then use "
             "`*%2`, in place of a non-const reference"
-        )).arg(QString::fromUtf8(type), QString::fromUtf8(document->lexem(i + 1)));
+        )).arg(
+            QString::fromUtf8(type),
+            QString::fromUtf8(document->lexem(i + 1))
+        );
         const int offset = document->symbols().at(i).from;
         if (document->agentMode()) {
             document->request(offset, "reference-local", message, 1, 0);

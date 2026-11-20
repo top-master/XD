@@ -22,8 +22,9 @@
 /*!
     Replaces each line of @a group whose prose the mapping changes.
 */
-void FormatProseRule::runGroup(FormatDocument *document,
-                               const QList<int > & group) const
+void FormatProseRule::runGroup(
+        FormatDocument *document,
+        const QList<int > & group) const
 {
     const QList<FormatCommentLine > lines = groupLines(document, group);
     const QVector<bool > fenced = fencedLines(lines);

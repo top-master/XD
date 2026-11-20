@@ -196,7 +196,8 @@ static const char defaultWrapMistakesText[] = "is(array) ? average : never";
     warning while the project targets C++11, where some compilers mishandle
     a non-const reference local, and nothing otherwise.
 */
-static const char defaultByRefVariableText[] = "hasStd(\"C++11\") ? warn : ignore";
+static const char defaultByRefVariableText[] =
+    "hasStd(\"C++11\") ? warn : ignore";
 
 /*!
     Builds the name of the settings files the tool reads in each folder.
@@ -245,22 +246,34 @@ QStringList FormatFileConfig::lintLevels()
 static bool extensionPattern(const QString &text, QRegularExpression *pattern)
 {
     QString value = text.trimmed();
-    if (value.startsWith(QLL("regexp/")) && value.endsWith(QLatin1Char('/'))) {
+    if (value.startsWith(QLL("regexp/"))
+        && value.endsWith(QLatin1Char('/'))
+    ) {
         value = value.mid(7, value.size() - 8);
-    } else if (value.startsWith(QLatin1Char('/')) && value.endsWith(QLatin1Char('/'))
-               && value.size() >= 2) {
+    } else if (value.startsWith(QLatin1Char('/'))
+        && value.endsWith(QLatin1Char('/'))
+        && value.size() >= 2
+    ) {
         value = value.mid(1, value.size() - 2);
     } else if (value.startsWith(QLL("regexp:"))) {
         value.remove(0, 7);
-    } else if (value.contains(QLatin1Char('^')) || value.contains(QLatin1Char('$'))
-               || value.contains(QLatin1Char('|')) || value.contains(QLatin1Char('('))
-               || value.contains(QLatin1Char('\\')) || value.contains(QLatin1Char('?'))
-               || value.contains(QLatin1Char('{')) || value.contains(QLL(".*"))
-               || value.contains(QLL(".+"))) {
+    } else if (value.contains(QLatin1Char('^'))
+        || value.contains(QLatin1Char('$'))
+        || value.contains(QLatin1Char('|'))
+        || value.contains(QLatin1Char('('))
+        || value.contains(QLatin1Char('\\'))
+        || value.contains(QLatin1Char('?'))
+        || value.contains(QLatin1Char('{'))
+        || value.contains(QLL(".*"))
+        || value.contains(QLL(".+"))
+    ) {
     } else {
         return false;
     }
-    *pattern = QRegularExpression(value, QRegularExpression::CaseInsensitiveOption);
+    *pattern = QRegularExpression(
+        value,
+        QRegularExpression::CaseInsensitiveOption
+    );
     return true;
 }
 
@@ -272,10 +285,15 @@ static bool extensionPattern(const QString &text, QRegularExpression *pattern)
 static QStringList listItems(const QString &text)
 {
     QString value = text.trimmed();
-    if (value.startsWith(QLatin1Char('[')) && value.endsWith(QLatin1Char(']'))) {
+    if (value.startsWith(QLatin1Char('['))
+        && value.endsWith(QLatin1Char(']'))
+    ) {
         value = value.mid(1, value.size() - 2);
     }
-    QStringList items = value.split(QLatin1Char(','), QString::SkipEmptyParts);
+    QStringList items = value.split(
+        QLatin1Char(','),
+        QString::SkipEmptyParts
+    );
     for (int i = 0; i < items.size(); ++i) {
         QString item = items.at(i).trimmed();
         if (item.size() >= 2
@@ -355,7 +373,7 @@ public:
     {
     }
 
-    bool match(const QString &value, QString *matched) const Q_DECL_OVERRIDE
+    inline bool match(const QString &value, QString *matched) const Q_DECL_OVERRIDE_IL
     {
         const QStringList names = listItems(value);
         const QRegularExpression pattern(m_pattern);
@@ -371,7 +389,7 @@ public:
         return true;
     }
 
-    QString describe() const Q_DECL_OVERRIDE
+    inline QString describe() const Q_DECL_OVERRIDE_IL
     {
         return m_description;
     }
@@ -427,8 +445,10 @@ Config::Schema FormatFileConfig::schema()
     Config::Section structure(QString(QLL("Structure")));
     structure.addKey(QString(QLL("typedefSuper")),
                      Config::Matchers() << QSharedPointer<const Config::ValueMatcher >(
-                         new Config::Choice(FormatFileConfig::superConditionNames(),
-                                            FormatFileConfig::superChoices())),
+                         new Config::Choice(
+                             FormatFileConfig::superConditionNames(),
+                             FormatFileConfig::superChoices()
+                         )),
                      FormatFileConfig::defaultTypedefSuper());
     structure.addKey(QString(QLL("replaceSuperSites")),
                      Config::Matchers() << Config::Condition::create(
@@ -594,7 +614,10 @@ Config::Schema FormatFileConfig::schema()
                 QString(QLL("c++11")));
     lint.addKey(QString(QLL("byRefVariable")),
                 Config::Matchers() << QSharedPointer<const Config::ValueMatcher >(
-                    new Config::Choice(QStringList(), FormatFileConfig::lintLevels())),
+                    new Config::Choice(
+                        QStringList(),
+                        FormatFileConfig::lintLevels()
+                    )),
                 QString::fromLatin1(defaultByRefVariableText));
     lint.addKey(QString(QLL("inlineOverride")),
                 Config::Matchers() << Config::Name::create()
@@ -723,16 +746,15 @@ static bool compileCondition(const QString & text, QStringList *program,
     QStringList compiled;
     bool mismatched = false;
     if ( ! Config::Condition::compile(
-            text,
-            FormatScopeConditions::names(),
-            &compiled,
-            &reason,
-            takesPercents,
-            mismatch,
-            &mismatched,
-            words
-        )
-    ) {
+        text,
+        FormatScopeConditions::names(),
+        &compiled,
+        &reason,
+        takesPercents,
+        mismatch,
+        &mismatched,
+        words
+    )) {
         if (mismatched
             && mismatch == Config::Condition::NameMismatchCritical
         ) {
@@ -849,8 +871,9 @@ bool FormatFileConfig::readConfig(
     returns false, with @a error naming the file, the key, and the values it
     takes, for a setting the schema does not take.
 */
-bool FormatFileConfig::load(const QString & path, const FormatConfig & config,
-                          FormatFileConfig *fileConfig, QString *error)
+bool FormatFileConfig::load(
+        const QString & path, const FormatConfig & config,
+        FormatFileConfig *fileConfig, QString *error)
 {
     Config::Parser parser(FormatFileConfig::schema());
     if ( ! FormatFileConfig::readParser(path, config, &parser, error)) {
@@ -869,8 +892,9 @@ bool FormatFileConfig::load(const QString & path, const FormatConfig & config,
     Reads the settings for @a path and @a config into @a parser, reporting
     validation errors in @a error.
 */
-bool FormatFileConfig::readParser(const QString &path, const FormatConfig &config,
-                                Config::Parser *parser, QString *error)
+bool FormatFileConfig::readParser(
+        const QString &path, const FormatConfig &config,
+        Config::Parser *parser, QString *error)
 {
     if ( ! config.file.isEmpty()) {
         if ( ! parser->readFile(config.file, error)) {
@@ -1045,8 +1069,12 @@ bool FormatFileConfig::fromParser(
     const Config::Condition::NameMismatch mismatch =
         Config::Condition::nameMismatch(parser.value(QString(QLL("code.nameMismatch"))));
     fileConfig->nameMismatch = mismatch;
-    fileConfig->standards = listItems(parser.value(QString(QLL("lint.standards"))));
-    fileConfig->compilers = listItems(parser.value(QString(QLL("code.compilers"))));
+    fileConfig->standards = listItems(parser.value(
+        QString(QLL("lint.standards"))
+    ));
+    fileConfig->compilers = listItems(parser.value(
+        QString(QLL("code.compilers"))
+    ));
     fileConfig->inlineOverride = FormatFileConfig::inlineMarker(
         parser.value(QString(QLL("lint.inlineOverride"))),
         *fileConfig
@@ -1056,8 +1084,12 @@ bool FormatFileConfig::fromParser(
         *fileConfig
     );
     fileConfig->extensions = parser.value(QString(QLL("general.extensions")));
-    fileConfig->typedefSuper = parser.value(QString(QLL("structure.typedefSuper")));
-    fileConfig->replaceSuperSites = parser.value(QString(QLL("structure.replaceSuperSites")));
+    fileConfig->typedefSuper = parser.value(
+        QString(QLL("structure.typedefSuper"))
+    );
+    fileConfig->replaceSuperSites = parser.value(
+        QString(QLL("structure.replaceSuperSites"))
+    );
     fileConfig->replaceTypesTarget = parser.value(
         QString(QLL("replace.types.target"))
     );
@@ -1130,7 +1162,8 @@ bool FormatFileConfig::fromParser(
     );
     fileConfig->wrapBegin
         = columnsOf(parser.value(QString(QLL("structure.wrapBegin"))));
-    fileConfig->wrapMax = parser.value(QString(QLL("structure.wrapMax"))).toInt();
+    fileConfig->wrapMax = parser.value(QString(QLL("structure.wrapMax")))
+        .toInt();
     const int scopes = Config::Scopes::count();
     // Lays out one operand per line where a condition misses a value.
     fileConfig->wrapConditionsOver = 1;
@@ -1153,7 +1186,9 @@ bool FormatFileConfig::fromParser(
     if ( ! counted) {
         return false;
     }
-    fileConfig->wrapSubChain = parser.value(QString(QLL("structure.wrapSubChain")));
+    fileConfig->wrapSubChain = parser.value(
+        QString(QLL("structure.wrapSubChain"))
+    );
     fileConfig->wrapConditionsPer = parser.value(
         QString(QLL("structure.wrapConditionsPer"))
     );

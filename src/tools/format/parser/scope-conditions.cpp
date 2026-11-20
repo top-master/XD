@@ -128,8 +128,7 @@ bool ArgumentContext::argumentCount(
             this->m_token,
             depth,
             argument
-        )
-        : this->m_scope->argumentCount(this->m_token, depth, argument);
+        ) : this->m_scope->argumentCount(this->m_token, depth, argument);
     return true;
 }
 
@@ -555,12 +554,16 @@ static bool isArgumentTarget(const FormatDocument *document, int open)
         || before == RANGLE || before == GTGT || before == IF || before == WHILE;
 }
 
-static QList<QPair<int, int > > targetItems(const FormatDocument *document,
-                                             int open)
+static QList<QPair<int, int > > targetItems(
+        const FormatDocument *document,
+        int open)
 {
     const int close = document->match(open);
     const Token before = document->token(open - 1);
-    if (before != IF && before != WHILE && isArgumentTarget(document, open)) {
+    if (before != IF
+        && before != WHILE
+        && isArgumentTarget(document, open)
+    ) {
         return splitArguments(document, open, close);
     }
     QList<QPair<int, int > > items;
@@ -572,7 +575,10 @@ static QList<QPair<int, int > > targetItems(const FormatDocument *document,
         ) {
             i = document->match(i);
         } else if (token == QUESTION) {
-            return QList<QPair<int, int > >() << qMakePair(open + 1, close - 1);
+            return QList<QPair<int, int > >() << qMakePair(
+                open + 1,
+                close - 1
+            );
         } else if (token == ANDAND || token == OROR) {
             items << qMakePair(first, i - 1);
             first = i + 1;
@@ -600,7 +606,9 @@ static int enclosingConditionTarget(const FormatDocument *document, int token)
         if (document->token(i) != LPAREN || document->match(i) < token) {
             continue;
         }
-        if (isArgumentTarget(document, i) || targetItems(document, i).size() > 1) {
+        if (isArgumentTarget(document, i)
+            || targetItems(document, i).size() > 1
+        ) {
             return i;
         }
     }
@@ -697,8 +705,9 @@ qreal FormatScopeConditions::spaceRemaining(int token) const
     or `condition`, the condition of an `if` or a `while`. It looks at the
     document each time it is asked; returns false for another kind.
 */
-bool FormatScopeConditions::targetIs(int token, const QString & kind,
-                                     bool *value) const
+bool FormatScopeConditions::targetIs(
+        int token, const QString & kind,
+        bool *value) const
 {
     const Token own = m_document->token(token);
     const int open = own == LBRACE || own == LPAREN
@@ -724,14 +733,21 @@ bool FormatScopeConditions::targetIs(int token, const QString & kind,
 int FormatScopeConditions::argumentCount(
         int token, int depth, int argument) const
 {
-    return this->countTargets(this->argumentTarget(token), depth, argument, false);
+    return this->countTargets(
+        this->argumentTarget(token),
+        depth,
+        argument,
+        false
+    );
 }
 
 int FormatScopeConditions::conditionArgumentCount(
         int token, int depth, int argument) const
 {
-    if (token < 0 || token >= m_document->symbols().size()
-        || m_document->token(token) != LPAREN || m_document->match(token) <= token
+    if (token < 0
+        || token >= m_document->symbols().size()
+        || m_document->token(token) != LPAREN
+        || m_document->match(token) <= token
     ) {
         return -1;
     }
@@ -819,8 +835,9 @@ bool FormatScopeConditions::conditionsOver(int token, int count)
     return this->countOver(token, count, Q_NULLPTR, true);
 }
 
-bool FormatScopeConditions::conditionsOver(int token, int count,
-                                           qreal spaceRemaining)
+bool FormatScopeConditions::conditionsOver(
+        int token, int count,
+        qreal spaceRemaining)
 {
     return this->countOver(token, count, &spaceRemaining, true);
 }
@@ -899,16 +916,18 @@ QVariant FormatScopeConditions::resolveAt(
     return resolveOf(key, program, &context);
 }
 
-bool FormatScopeConditions::countOver(int token, int count,
-                                      const qreal *spaceRemaining,
-                                      bool condition)
+bool FormatScopeConditions::countOver(
+        int token, int count,
+        const qreal *spaceRemaining,
+        bool condition)
 {
     const FormatFileConfig &fileConfig = m_document->configAt(
         m_document->symbols().at(token).from
     );
     const QStringList &program = condition ? fileConfig.wrapConditionsOverCondition
                                            : fileConfig.wrapArgsOverCondition;
-    const int limit = condition ? fileConfig.wrapConditionsOver : fileConfig.wrapArgsOver;
+    const int limit = condition ? fileConfig.wrapConditionsOver
+                                : fileConfig.wrapArgsOver;
     if (program.isEmpty()) {
         return count > limit;
     }

@@ -62,13 +62,15 @@ public:
         m_inlineError.clear();
         m_ruleCaches.clear();
     }
-    inline QVariant ruleCache(const FormatRule *rule,
-                              const QByteArray &key) const
+    inline QVariant ruleCache(
+            const FormatRule *rule,
+            const QByteArray &key) const
     {
         return m_ruleCaches.value(rule).value(key);
     }
-    inline void setRuleCache(const FormatRule *rule, const QByteArray &key,
-                             const QVariant &value)
+    inline void setRuleCache(
+            const FormatRule *rule, const QByteArray &key,
+            const QVariant &value)
     {
         m_ruleCaches[rule].insert(key, value);
     }
@@ -119,7 +121,8 @@ public:
     bool isLineSelected(int line) const;
 
     bool replace(int offset, int length, const QByteArray & text);
-    inline bool canInsert(int offset) const { return this->canReplace(offset, 0); }
+    inline bool canInsert(int offset) const
+    { return this->canReplace(offset, 0); }
     bool replace(
             int offset, int length, const QByteArray & text,
             int otherOffset, int otherLength, const QByteArray & otherText);
@@ -153,7 +156,8 @@ private:
     };
 
     void moveInlineConfiguration(const QList<Edit > & edits);
-    static int movedOffset(int offset, bool isStart, const QList<Edit > & edits);
+    static int movedOffset(int offset, bool isStart,
+                           const QList<Edit > & edits);
     void analyze();
     void appendComment(const Symbol & symbol, int previousCodeLine);
     void analyzeBrackets();

@@ -66,7 +66,15 @@ QString FormatDocPlacementRule::headerSource(const QString & path) const
     if (stem.endsWith(QLL("_p"))) {
         stem.chop(2);
     }
-    const char *const sources[] = { "cpp", "cc", "cxx", "c++", "c", "mm", "m" };
+    const char *const sources[] = {
+        "cpp",
+        "cc",
+        "cxx",
+        "c++",
+        "c",
+        "mm",
+        "m"
+    };
     for (size_t i = 0; i < sizeof(sources) / sizeof(sources[0]); ++i) {
         const QString candidate = info.dir().filePath(
             stem + QLatin1Char('.')

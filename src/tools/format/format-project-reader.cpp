@@ -37,12 +37,11 @@ bool FormatProjectReader::readSpec(int index, QString *error)
     for (int i = 0; i < this->m_projects.size(); ++i) {
         Project::Parser parser;
         if ( ! parser.run(
-                this->m_projects.at(i),
-                this->m_qmake,
-                arguments,
-                error
-            )
-        ) {
+            this->m_projects.at(i),
+            this->m_qmake,
+            arguments,
+            error
+        )) {
             return false;
         }
         this->m_files->add(parser.files(), parser.includePaths());

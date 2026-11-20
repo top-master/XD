@@ -165,10 +165,9 @@ void FormatOperatorFirstRule::run(FormatDocument *document) const
         }
         const int from = document->symbolEnd(i - 1);
         if (document->spansDirective(
-                from,
-                document->symbols().at(i + 1).from
-            )
-        ) {
+            from,
+            document->symbols().at(i + 1).from
+        )) {
             continue;
         }
         document->replace(

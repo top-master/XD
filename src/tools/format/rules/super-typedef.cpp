@@ -42,7 +42,12 @@ public:
         } else if (name == QLL("hasSuperTypedef")) {
             *value = m_rule->superIsBase(m_document, m_brace, m_base);
             if ( ! *value && m_runConfig) {
-                *value = m_rule->willHaveSuper(m_document, m_brace, m_base, *m_runConfig);
+                *value = m_rule->willHaveSuper(
+                    m_document,
+                    m_brace,
+                    m_base,
+                    *m_runConfig
+                );
             }
         } else {
             return false;
@@ -63,7 +68,8 @@ static QString cleanPath(const QString &path)
     return QDir::cleanPath(QFileInfo(path).absoluteFilePath());
 }
 
-static QStringList relatedFiles(const FormatDocument *document, const FormatFileConfig &fileConfig)
+static QStringList relatedFiles(
+        const FormatDocument *document, const FormatFileConfig &fileConfig)
 {
     if (document->path().isEmpty()) {
         return QStringList();
@@ -73,11 +79,15 @@ static QStringList relatedFiles(const FormatDocument *document, const FormatFile
     if (stem.endsWith(QLL("_p"))) {
         stem.chop(2);
     }
-    const QFileInfoList entries = current.dir().entryInfoList(QDir::Files, QDir::Name);
+    const QFileInfoList entries = current.dir().entryInfoList(
+        QDir::Files,
+        QDir::Name
+    );
     QStringList paths;
     for (int i = 0; i < entries.size(); ++i) {
         const QFileInfo entry = entries.at(i);
-        if ((entry.completeBaseName() == stem || entry.completeBaseName() == stem + QLL("_p"))
+        if ((entry.completeBaseName() == stem
+                || entry.completeBaseName() == stem + QLL("_p"))
             && fileConfig.acceptsFile(entry.fileName())
             && cleanPath(entry.filePath()) != cleanPath(document->path())
         ) {
@@ -87,8 +97,10 @@ static QStringList relatedFiles(const FormatDocument *document, const FormatFile
     const QStringList includes = document->quotedIncludes();
     for (int i = 0; i < includes.size(); ++i) {
         const QString path = document->findInclude(includes.at(i));
-        if ( ! path.isEmpty() && fileConfig.acceptsFile(path)
-            && ! paths.contains(path) && cleanPath(path) != cleanPath(document->path())
+        if ( ! path.isEmpty()
+            && fileConfig.acceptsFile(path)
+            && ! paths.contains(path)
+            && cleanPath(path) != cleanPath(document->path())
         ) {
             paths << path;
         }
@@ -96,8 +108,9 @@ static QStringList relatedFiles(const FormatDocument *document, const FormatFile
     return paths;
 }
 
-static FormatDocument *readRelated(const QString &path, const FormatConfig &config,
-                                   bool withSelection = true)
+static FormatDocument *readRelated(
+        const QString &path, const FormatConfig &config,
+        bool withSelection = true)
 {
     const QString snap = config.snapshots.value(cleanPath(path), path);
     QByteArray text;
@@ -152,8 +165,9 @@ static FormatDocument *readRelated(const QString &path, const FormatConfig &conf
     return document.take();
 }
 
-static int matchBase(const FormatDocument *document, int first, const QByteArray &base,
-                     bool allowGlobal)
+static int matchBase(
+        const FormatDocument *document, int first, const QByteArray &base,
+        bool allowGlobal)
 {
     if ((document->token(first) != IDENTIFIER && document->token(first) != SCOPE)
         || (document->token(first) == IDENTIFIER && first > 0
@@ -256,10 +270,13 @@ void FormatSuperTypedefRule::run(FormatDocument *document) const
 {
     const FormatConfig &config = document->formatConfig();
     const FormatFileConfig &fileConfig = document->config();
-    if ( ! document->hasInlineConfiguration() && ! document->hasSelectedRanges()
-        && config.fileLineSpecs.isEmpty() && config.lineSpecs.isEmpty()
+    if ( ! document->hasInlineConfiguration()
+        && ! document->hasSelectedRanges()
+        && config.fileLineSpecs.isEmpty()
+        && config.lineSpecs.isEmpty()
         && fileConfig.typedefSuper == FormatFileConfig::defaultTypedefSuper()
-        && fileConfig.replaceSuperSites == FormatFileConfig::defaultReplaceSuperSites()
+        && fileConfig.replaceSuperSites
+            == FormatFileConfig::defaultReplaceSuperSites()
     ) {
         return;
     }
@@ -294,7 +311,11 @@ void FormatSuperTypedefRule::run(FormatDocument *document) const
             const int offset = document->symbolEnd(i);
             const bool hasSpace = offset < document->text().size()
                 && (document->text().at(offset) == ' ' || document->text().at(offset) == '\t');
-            document->replace(offset, 0, " " + line + (hasSpace ? "" : " "));
+            document->replace(
+                offset,
+                0,
+                " " + line + (hasSpace ? "" : " ")
+            );
             continue;
         }
         const Token token = document->token(first);
@@ -344,7 +365,10 @@ QByteArray FormatSuperTypedefRule::baseName(
             --templateDepth;
         } else if (token == GTGT) {
             templateDepth -= 2;
-        } else if (templateDepth == 0 && (token == CLASS || token == STRUCT)) {
+        } else if (templateDepth == 0
+            && (token == CLASS
+                || token == STRUCT)
+        ) {
             key = i;
             *isStruct = token == STRUCT;
         }
@@ -389,7 +413,10 @@ QByteArray FormatSuperTypedefRule::baseName(
     for (int i = first + 1; i <= last; ++i) {
         const int previousEnd = document->symbolEnd(i - 1);
         const int currentStart = document->symbols().at(i).from;
-        const QByteArray gap = document->text().mid(previousEnd, currentStart - previousEnd);
+        const QByteArray gap = document->text().mid(
+            previousEnd,
+            currentStart - previousEnd
+        );
         result += gap.contains('\n') || gap.contains('\r')
             || document->hasCommentBetween(previousEnd, currentStart) ? QByteArray(" ") : gap;
         result += document->lexem(i);
@@ -436,8 +463,9 @@ static bool sameType(const FormatDocument *document, int first, int last,
     return true;
 }
 
-bool FormatSuperTypedefRule::superIsBase(const FormatDocument *document, int brace,
-                                        const QByteArray &base) const
+bool FormatSuperTypedefRule::superIsBase(
+        const FormatDocument *document, int brace,
+        const QByteArray &base) const
 {
     const int close = document->match(brace);
     for (int i = brace + 1; i < close; ++i) {
@@ -447,14 +475,17 @@ bool FormatSuperTypedefRule::superIsBase(const FormatDocument *document, int bra
         }
         if (document->token(i) == TYPEDEF) {
             for (int end = i + 1; end < close && document->token(end) != SEMIC; ++end) {
-                if (document->token(end) == IDENTIFIER && document->lexem(end) == "super"
+                if (document->token(end) == IDENTIFIER
+                    && document->lexem(end) == "super"
                     && document->token(end + 1) == SEMIC
                 ) {
                     return sameType(document, i + 1, end, base);
                 }
             }
-        } else if (document->token(i) == USING && document->lexem(i + 1) == "super"
-                   && document->token(i + 2) == EQ) {
+        } else if (document->token(i) == USING
+            && document->lexem(i + 1) == "super"
+            && document->token(i + 2) == EQ
+        ) {
             int end = i + 3;
             while (end < close && document->token(end) != SEMIC) {
                 ++end;
@@ -467,7 +498,8 @@ bool FormatSuperTypedefRule::superIsBase(const FormatDocument *document, int bra
     return false;
 }
 
-bool FormatSuperTypedefRule::isNewClass(const FormatDocument *document, int brace) const
+bool FormatSuperTypedefRule::isNewClass(
+        const FormatDocument *document, int brace) const
 {
     if ( ! document->hasSelectedRanges()) {
         return false;
@@ -485,8 +517,9 @@ bool FormatSuperTypedefRule::isNewClass(const FormatDocument *document, int brac
     return true;
 }
 
-static QList<QByteArray > enclosingNames(const FormatDocument *document, int token,
-                                         bool includeClasses)
+static QList<QByteArray > enclosingNames(
+        const FormatDocument *document, int token,
+        bool includeClasses)
 {
     QList<QByteArray > names;
     for (int i = 0; i < token; ++i) {
@@ -544,7 +577,8 @@ static QByteArray qualifiedClass(const FormatDocument *document, int brace)
     return joinNames(names);
 }
 
-static int findQualifiedClass(const FormatDocument *document, const QByteArray &name)
+static int findQualifiedClass(
+        const FormatDocument *document, const QByteArray &name)
 {
     for (int i = 0; i < document->symbols().size(); ++i) {
         if (document->token(i) == LBRACE
@@ -557,8 +591,9 @@ static int findQualifiedClass(const FormatDocument *document, const QByteArray &
     return -1;
 }
 
-static QByteArray qualifiedMemberOwner(const FormatDocument *document, int member,
-                                       int position)
+static QByteArray qualifiedMemberOwner(
+        const FormatDocument *document, int member,
+        int position)
 {
     int cursor = member - 1;
     if (document->token(cursor) == TILDE) {
@@ -571,11 +606,14 @@ static QByteArray qualifiedMemberOwner(const FormatDocument *document, int membe
     QList<QByteArray > names;
     bool global = false;
     for (;;) {
-        if (document->token(cursor) == RANGLE || document->token(cursor) == GTGT) {
+        if (document->token(cursor) == RANGLE
+            || document->token(cursor) == GTGT
+        ) {
             int depth = document->token(cursor) == GTGT ? 2 : 1;
             while (--cursor >= 0 && depth > 0) {
                 const Token kind = document->token(cursor);
-                depth += kind == RANGLE ? 1 : (kind == GTGT ? 2 : (kind == LANGLE ? -1 : 0));
+                depth += kind == RANGLE
+                    ? 1 : (kind == GTGT ? 2 : (kind == LANGLE ? -1 : 0));
             }
             --cursor;
         }
@@ -588,7 +626,8 @@ static QByteArray qualifiedMemberOwner(const FormatDocument *document, int membe
         }
         cursor -= 2;
         if (document->token(cursor) != IDENTIFIER
-            && document->token(cursor) != RANGLE && document->token(cursor) != GTGT
+            && document->token(cursor) != RANGLE
+            && document->token(cursor) != GTGT
         ) {
             global = true;
             break;
@@ -598,7 +637,8 @@ static QByteArray qualifiedMemberOwner(const FormatDocument *document, int membe
         return QByteArray();
     }
     if ( ! global) {
-        const QList<QByteArray > prefix = enclosingNames(document, position, false);
+        const QList<QByteArray > prefix =
+            enclosingNames(document, position, false);
         for (int i = prefix.size() - 1; i >= 0; --i) {
             names.prepend(prefix.at(i));
         }
@@ -606,8 +646,9 @@ static QByteArray qualifiedMemberOwner(const FormatDocument *document, int membe
     return joinNames(names);
 }
 
-static QByteArray ownerOf(const FormatDocument *document, FormatScopeConditions *scopes,
-                         int token)
+static QByteArray ownerOf(
+        const FormatDocument *document, FormatScopeConditions *scopes,
+        int token)
 {
     const int classBody = enclosingClassBody(document, token);
     if (classBody >= 0) {
@@ -615,7 +656,11 @@ static QByteArray ownerOf(const FormatDocument *document, FormatScopeConditions 
     }
     const FormatMemberScope scope = scopes->scopeOf(token);
     if (scope.memberToken >= 0) {
-        return qualifiedMemberOwner(document, scope.memberToken, scope.body);
+        return qualifiedMemberOwner(
+            document,
+            scope.memberToken,
+            scope.body
+        );
     }
     int headerStart = document->headStart(token);
     for (int next = token + 1; next < document->symbols().size(); ++next) {
@@ -624,7 +669,10 @@ static QByteArray ownerOf(const FormatDocument *document, FormatScopeConditions 
         }
         if (document->token(next) == RBRACE) {
             const int open = document->match(next);
-            if (open >= 0 && open < token && document->braceScope(open) == FormatDocument::InitScope) {
+            if (open >= 0
+                && open < token
+                && document->braceScope(open) == FormatDocument::InitScope
+            ) {
                 headerStart = qMin(headerStart, document->headStart(open));
                 continue;
             }
@@ -639,8 +687,14 @@ static QByteArray ownerOf(const FormatDocument *document, FormatScopeConditions 
             }
             if (document->headStart(next) <= token) {
                 const FormatMemberScope function = scopes->functionScope(next);
-                if (function.memberToken >= 0 && token > function.memberToken) {
-                    return qualifiedMemberOwner(document, function.memberToken, next);
+                if (function.memberToken >= 0
+                    && token > function.memberToken
+                ) {
+                    return qualifiedMemberOwner(
+                        document,
+                        function.memberToken,
+                        next
+                    );
                 }
             }
             for (int head = headerStart; head < token; ++head) {
@@ -662,8 +716,9 @@ static QByteArray ownerOf(const FormatDocument *document, FormatScopeConditions 
         if (document->token(i) == EQ) {
             assignment = true;
         } else if ( ! assignment && document->token(i) == IDENTIFIER
-                   && document->token(i + 1) == SCOPE
-                   && document->token(i + 2) == IDENTIFIER) {
+            && document->token(i + 1) == SCOPE
+            && document->token(i + 2) == IDENTIFIER
+        ) {
             member = i + 2;
         }
     }
@@ -671,15 +726,18 @@ static QByteArray ownerOf(const FormatDocument *document, FormatScopeConditions 
         ? qualifiedMemberOwner(document, member, token) : QByteArray();
 }
 
-static bool isShadowed(const FormatDocument *document, FormatScopeConditions *scopes,
-                       int token, const QByteArray &base)
+static bool isShadowed(
+        const FormatDocument *document, FormatScopeConditions *scopes,
+        int token, const QByteArray &base)
 {
     const QByteArray name = baseIdentifier(base);
     if (name.isEmpty() || document->lexem(token) != name) {
         return false;
     }
     const FormatMemberScope scope = scopes->scopeOf(token);
-    if (scope.body >= 0 && document->braceScope(scope.body) == FormatDocument::FunctionScope) {
+    if (scope.body >= 0
+        && document->braceScope(scope.body) == FormatDocument::FunctionScope
+    ) {
         const int head = document->headStart(scope.body);
         int templateDepth = 0;
         for (int i = head; i < scope.body; ++i) {
@@ -694,20 +752,24 @@ static bool isShadowed(const FormatDocument *document, FormatScopeConditions *sc
             } else if (templateDepth > 0 && kind == GTGT) {
                 templateDepth -= 2;
             } else if (templateDepth > 0 && kind == IDENTIFIER
-                       && document->lexem(i) == name
-                       && (document->token(i - 1) == CLASS
-                           || document->lexem(i - 1) == "typename")) {
+                && document->lexem(i) == name
+                && (document->token(i - 1) == CLASS
+                    || document->lexem(i - 1) == "typename")
+            ) {
                 return true;
             }
         }
     }
-    const int start = scope.body >= 0 ? scope.body + 1 : document->headStart(token);
+    const int start = scope.body >= 0 ? scope.body + 1
+                                      : document->headStart(token);
     for (int i = start; i < token; ++i) {
-        if (document->token(i) != IDENTIFIER || document->lexem(i) != name) {
+        if (document->token(i) != IDENTIFIER
+            || document->lexem(i) != name
+        ) {
             continue;
         }
         bool declaration = (document->token(i - 1) == USING
-                            && document->token(i + 1) == EQ)
+            && document->token(i + 1) == EQ)
             || document->token(i - 1) == CLASS || document->token(i - 1) == STRUCT;
         if (document->token(i + 1) == SEMIC) {
             for (int before = i - 1; before >= start; --before) {
@@ -742,8 +804,9 @@ static bool isShadowed(const FormatDocument *document, FormatScopeConditions *sc
     return false;
 }
 
-static bool usesBase(const FormatDocument *document, const QByteArray &className,
-                     const QByteArray &base)
+static bool usesBase(
+        const FormatDocument *document, const QByteArray &className,
+        const QByteArray &base)
 {
     FormatScopeConditions scopes(document);
     for (int i = 0; i < document->symbols().size(); ++i) {
@@ -769,8 +832,9 @@ static bool usesBase(const FormatDocument *document, const QByteArray &className
     return false;
 }
 
-bool FormatSuperTypedefRule::isNeeded(const FormatDocument *document, int brace,
-                                      const QByteArray &base) const
+bool FormatSuperTypedefRule::isNeeded(
+        const FormatDocument *document, int brace,
+        const QByteArray &base) const
 {
     const QByteArray className = qualifiedClass(document, brace);
     if (className.isEmpty()) {
@@ -779,10 +843,13 @@ bool FormatSuperTypedefRule::isNeeded(const FormatDocument *document, int brace,
     if (usesBase(document, className, base)) {
         return true;
     }
-    const FormatFileConfig &fileConfig = document->configAt(document->symbols().at(brace).from);
+    const FormatFileConfig &fileConfig = document->configAt(
+        document->symbols().at(brace).from
+    );
     const QStringList paths = relatedFiles(document, fileConfig);
     for (int i = 0; i < paths.size(); ++i) {
-        QScopedPointer<FormatDocument > related(readRelated(paths.at(i), document->formatConfig(), false));
+        QScopedPointer<FormatDocument > related(
+                readRelated(paths.at(i), document->formatConfig(), false));
         if (related && usesBase(related.data(), className, base)) {
             return true;
         }
@@ -790,8 +857,9 @@ bool FormatSuperTypedefRule::isNeeded(const FormatDocument *document, int brace,
     return false;
 }
 
-bool FormatSuperTypedefRule::wantsTypedef(const FormatDocument *document, int brace,
-                                          const QByteArray &base) const
+bool FormatSuperTypedefRule::wantsTypedef(
+        const FormatDocument *document, int brace,
+        const QByteArray &base) const
 {
     const int offset = document->symbols().at(brace).from;
     const FormatFileConfig &fileConfig = document->configAt(offset);
@@ -801,12 +869,14 @@ bool FormatSuperTypedefRule::wantsTypedef(const FormatDocument *document, int br
         &context
     ).toString();
     return choice == QLL("always")
-        || (choice == QLL("if-needed") && this->isNeeded(document, brace, base));
+        || (choice == QLL("if-needed")
+            && this->isNeeded(document, brace, base));
 }
 
-bool FormatSuperTypedefRule::willHaveSuper(const FormatDocument *document, int brace,
-                                          const QByteArray &base,
-                                          const FormatConfig &config) const
+bool FormatSuperTypedefRule::willHaveSuper(
+        const FormatDocument *document, int brace,
+        const QByteArray &base,
+        const FormatConfig &config) const
 {
     if (this->hasSuper(document, brace) || document->path().isEmpty()) {
         return false;
@@ -820,7 +890,10 @@ bool FormatSuperTypedefRule::willHaveSuper(const FormatDocument *document, int b
         }
     }
     bool isStruct = false;
-    if ( ! scheduled || this->baseName(document, brace, &isStruct).isEmpty() || isStruct) {
+    if ( ! scheduled
+        || this->baseName(document, brace, &isStruct).isEmpty()
+        || isStruct
+    ) {
         return false;
     }
     const int first = brace + 1;
@@ -832,7 +905,8 @@ bool FormatSuperTypedefRule::willHaveSuper(const FormatDocument *document, int b
     if (firstLine == document->symbolLine(brace)) {
         offset = document->symbolEnd(brace);
     } else if (document->token(first) == Q_OBJECT_TOKEN
-               || document->token(first) == Q_GADGET_TOKEN) {
+        || document->token(first) == Q_GADGET_TOKEN
+    ) {
         offset = contentEnd(document, firstLine);
     }
     if ( ! document->canInsert(offset)) {
@@ -861,16 +935,27 @@ void FormatSuperTypedefRule::replaceSites(FormatDocument *document) const
         if (className.isEmpty()) {
             continue;
         }
-        const FormatFileConfig &fileConfig = document->configAt(document->symbols().at(i).from);
+        const FormatFileConfig &fileConfig = document->configAt(
+            document->symbols().at(i).from
+        );
         if ( ! pathsByExtensions.contains(fileConfig.extensions)) {
-            pathsByExtensions.insert(fileConfig.extensions, relatedFiles(document, fileConfig));
+            pathsByExtensions.insert(
+                fileConfig.extensions,
+                relatedFiles(document, fileConfig)
+            );
         }
-        const QString key = fileConfig.extensions + QLatin1Char('\n') + QString::fromUtf8(className);
+        const QString key = fileConfig.extensions
+            + QLatin1Char('\n')
+            + QString::fromUtf8(className);
         if ( ! classBraces.contains(key)) {
             int found = findQualifiedClass(document, className);
-            const QStringList paths = pathsByExtensions.value(fileConfig.extensions);
+            const QStringList paths = pathsByExtensions.value(
+                fileConfig.extensions
+            );
             for (int p = 0; found < 0 && p < paths.size(); ++p) {
-                QSharedPointer<FormatDocument > related(readRelated(paths.at(p), document->formatConfig()));
+                QSharedPointer<FormatDocument > related(
+                    readRelated(paths.at(p), document->formatConfig())
+                );
                 if (related) {
                     found = findQualifiedClass(related.data(), className);
                     if (found >= 0) {
@@ -884,7 +969,8 @@ void FormatSuperTypedefRule::replaceSites(FormatDocument *document) const
         if (brace < 0) {
             continue;
         }
-        const FormatDocument *owner = owners.contains(key) ? owners.value(key).data() : document;
+        const FormatDocument *owner = owners.contains(key)
+            ? owners.value(key).data() : document;
         bool isStruct = false;
         const QByteArray base = this->baseName(owner, brace, &isStruct);
         const int scopeToken = base.isEmpty() ? -1

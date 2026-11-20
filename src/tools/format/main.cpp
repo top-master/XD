@@ -417,8 +417,9 @@ static bool isTerminal(int fd)
     has a prompt template gets, in place of its message, the prompt file that
     @a guides writes for it: `Run prompt at: "<path>"`.
 */
-static QString agentRequests(const QList<FormatFileResult > & results,
-                             FormatAgentGuides *guides, QStringList *asked)
+static QString agentRequests(
+        const QList<FormatFileResult > & results,
+        FormatAgentGuides *guides, QStringList *asked)
 {
     QString text;
     for (int i = 0; i < results.size(); ++i) {
@@ -802,14 +803,23 @@ int main(int argc, char *argv[])
     FormatConfig config;
     if (parser.isSet(snapshotOption)) {
         QFile manifest(parser.value(snapshotOption));
-        if ( ! parser.isSet(workerOption) || ! manifest.open(QIODevice::ReadOnly)) {
-            logger.logError(QString(QLL("cannot read the formatting snapshot manifest")));
+        if ( ! parser.isSet(workerOption)
+            || ! manifest.open(QIODevice::ReadOnly)
+        ) {
+            logger.logError(
+                QString(QLL("cannot read the formatting snapshot manifest"))
+            );
             return ExitError;
         }
         QDataStream input(&manifest);
-        input >> config.scheduledFiles >> config.snapshots >> config.fileLineSpecs >> config.lineSpecs;
+        input >> config.scheduledFiles
+            >> config.snapshots
+            >> config.fileLineSpecs
+            >> config.lineSpecs;
         if (input.status() != QDataStream::Ok) {
-            logger.logError(QString(QLL("invalid formatting snapshot manifest")));
+            logger.logError(
+                QString(QLL("invalid formatting snapshot manifest"))
+            );
             return ExitError;
         }
         config.snapshotManifest = parser.value(snapshotOption);
@@ -1005,7 +1015,10 @@ int main(int argc, char *argv[])
     }
     for (int i = 0; i < folders.size(); ++i) {
         const QString root = QDir::cleanPath(folders.at(i));
-        const QStringList found = ignores.findFiles(root, QStringList() << QString(QLL("*")));
+        const QStringList found = ignores.findFiles(
+            root,
+            QStringList() << QString(QLL("*"))
+        );
 
         // Names the files the way the folder was named on the command line.
         const QString absolute = QDir::cleanPath(
@@ -1013,7 +1026,13 @@ int main(int argc, char *argv[])
         );
         for (int f = 0; f < found.size(); ++f) {
             bool matches = false;
-            if ( ! matchesSource(found.at(f), config, &sourceSettings, &matches, &error)) {
+            if ( ! matchesSource(
+                found.at(f),
+                config,
+                &sourceSettings,
+                &matches,
+                &error
+            )) {
                 logger.logError(error);
                 return ExitError;
             }
@@ -1029,7 +1048,13 @@ int main(int argc, char *argv[])
     );
     for (int i = 0; i < projectSources.size(); ++i) {
         bool matches = false;
-        if ( ! matchesSource(projectSources.at(i), config, &sourceSettings, &matches, &error)) {
+        if ( ! matchesSource(
+            projectSources.at(i),
+            config,
+            &sourceSettings,
+            &matches,
+            &error
+        )) {
             logger.logError(error);
             return ExitError;
         }
@@ -1046,7 +1071,13 @@ int main(int argc, char *argv[])
         QStringList sources;
         for (int i = 0; i < changed.size(); ++i) {
             bool matches = false;
-            if ( ! matchesSource(changed.at(i), config, &sourceSettings, &matches, &error)) {
+            if ( ! matchesSource(
+                changed.at(i),
+                config,
+                &sourceSettings,
+                &matches,
+                &error
+            )) {
                 logger.logError(error);
                 return ExitError;
             }
@@ -1075,9 +1106,11 @@ int main(int argc, char *argv[])
 
     // Reads the run's options.
     FormatOptions options;
-    options.lineSpecs = parser.isSet(snapshotOption) ? config.lineSpecs : parser.values(lineOption);
+    options.lineSpecs = parser.isSet(snapshotOption)
+        ? config.lineSpecs : parser.values(lineOption);
     options.git = parser.value(gitOption);
-    options.fileLineSpecs = parser.isSet(snapshotOption) ? config.fileLineSpecs : gitLineSpecs;
+    options.fileLineSpecs = parser.isSet(snapshotOption) ? config.fileLineSpecs
+                                                         : gitLineSpecs;
     options.rules = rules;
     options.config = config;
     options.config.verbose = parser.isSet(verboseOption);

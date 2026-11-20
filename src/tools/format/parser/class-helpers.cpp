@@ -150,7 +150,10 @@ FormatClassMembers collectMembers(
     for (int t = 0; t < tokens.size(); ++t) {
         const int i = tokens.at(t);
         const Token token = document->token(i);
-        if (token == SEMIC || token == RBRACE || (token == LBRACE && document->match(i) > i)
+        if (token == SEMIC
+            || token == RBRACE
+            || (token == LBRACE
+                && document->match(i) > i)
             || document->isAccessLabel(i)
         ) {
             isStatic = false;

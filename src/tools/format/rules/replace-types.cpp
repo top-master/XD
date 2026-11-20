@@ -219,8 +219,9 @@ static QStringList visibleScopes(const FormatDocument *document, int index)
     Builds the full names that the name @a written (as the source spells it)
     may stand for in a location that sees @a scopes.
 */
-static QStringList candidates(const QString & written,
-                              const QStringList & scopes)
+static QStringList candidates(
+        const QString & written,
+        const QStringList & scopes)
 {
     if (written.startsWith(QLL("::"))) {
         return QStringList() << written.mid(2);
@@ -664,13 +665,12 @@ static bool fillTemplate(const QString & pattern, const QStringList & arguments,
             int position = 0;
             QString text;
             if ( ! stepsText(
-                    shorthand,
-                    &position,
-                    scopeObject(QString(QLL("args")), &context),
-                    &context,
-                    &text
-                )
-            ) {
+                shorthand,
+                &position,
+                scopeObject(QString(QLL("args")), &context),
+                &context,
+                &text
+            )) {
                 result->clear();
                 return false;
             }
@@ -866,14 +866,13 @@ void FormatReplaceTypesRule::run(FormatDocument *document) const
         QString head;
         QString call;
         if ( ! replacement(
-                config.replaceTypes,
-                mapping,
-                capture,
-                callArguments(document, i + 1, close),
-                &head,
-                &call
-            )
-        ) {
+            config.replaceTypes,
+            mapping,
+            capture,
+            callArguments(document, i + 1, close),
+            &head,
+            &call
+        )) {
             document->report(from, "replace-types",
                              QString(QLL("%1 lacks an argument that its [Replace.types] "
                                          "template takes")).arg(written));

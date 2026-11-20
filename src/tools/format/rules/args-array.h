@@ -11,8 +11,9 @@ class FormatArgsArray : public Config::ArrayObj
     Q_OBJECT
     typedef Config::ArrayObj super;
 public:
-    explicit FormatArgsArray(const QStringList & arguments,
-                             QObject *parent = Q_NULLPTR);
+    explicit FormatArgsArray(
+            const QStringList & arguments,
+            QObject *parent = Q_NULLPTR);
 };
 
 #endif // RULES_ARGS_ARRAY_H

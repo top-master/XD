@@ -35,8 +35,9 @@ private:
                   const QByteArray &base) const;
     bool wantsTypedef(const FormatDocument *document, int brace,
                       const QByteArray &base) const;
-    bool willHaveSuper(const FormatDocument *document, int brace,
-                       const QByteArray &base, const FormatConfig &config) const;
+    bool willHaveSuper(
+            const FormatDocument *document, int brace,
+            const QByteArray &base, const FormatConfig &config) const;
     void replaceSites(FormatDocument *document) const;
 };
 

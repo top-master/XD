@@ -97,10 +97,11 @@ bool Formatter::selectRules(const QStringList & names, QString *error)
     fix that makes room for another one of the same rule (such as a nested
     `if`) gets it on the next pass.
 */
-FormatResult Formatter::format(const QByteArray & text, const QString & path,
-                               const QStringList & lineSpecs,
-                               const FormatConfig & config,
-                               bool agentMode) const
+FormatResult Formatter::format(
+        const QByteArray & text, const QString & path,
+        const QStringList & lineSpecs,
+        const FormatConfig & config,
+        bool agentMode) const
 {
     FormatResult result;
     FormatDocument document(text, path);
@@ -134,12 +135,11 @@ FormatResult Formatter::format(const QByteArray & text, const QString & path,
             lines.removeLast();
         }
         if ( ! FormatLineSpec::resolveAll(
-                lineSpecs,
-                lines,
-                &ranges,
-                &result.error
-            )
-        ) {
+            lineSpecs,
+            lines,
+            &ranges,
+            &result.error
+        )) {
             return result;
         }
         document.setLineRanges(ranges);

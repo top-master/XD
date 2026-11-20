@@ -36,8 +36,9 @@ Q_GLOBAL_STATIC_WITH_ARGS(QRegularExpression, codeLikePattern, (QString(QLL("_|[
     an upper-case letter after a lower-case one); with @a chainsOnly set,
     only the access chains.
 */
-static QString backtickNames(const QString & text, const QSet<QString > *names,
-                             bool chainsOnly)
+static QString backtickNames(
+        const QString & text, const QSet<QString > *names,
+        bool chainsOnly)
 {
     QString result;
     int from = 0;

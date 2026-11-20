@@ -84,10 +84,9 @@ void FormatNamespaceBracesRule::run(FormatDocument *document) const
         }
         const int close = document->match(open);
         if (close < 0 || document->spansDirective(
-                document->symbols().at(open).from,
-                document->symbolEnd(close)
-            )
-        ) {
+            document->symbols().at(open).from,
+            document->symbolEnd(close)
+        )) {
             continue;
         }
         const QByteArray name = open > i + 1

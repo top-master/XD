@@ -112,10 +112,12 @@ static bool keepsUserLines(
         if (itemLine != document->symbolEndLine(item.second)) {
             return false;
         }
-        const int column = textWidth(document->text().mid(
-            document->lineStart(itemLine),
-            from - document->lineStart(itemLine)
-        ));
+        const int column = textWidth(
+            document->text().mid(
+                document->lineStart(itemLine),
+                from - document->lineStart(itemLine)
+            )
+        );
         if (itemLine > firstLine
             && column > textWidth(document->lineText(itemLine - 1).trimmed())
                 + textWidth(document->indentOf(itemLine - 1))
@@ -146,7 +148,10 @@ static bool keepsUserLines(
         const bool isShortLast = i + 1 == counts.size()
             && counts.at(i) < average;
         if (counts.at(i) != average && ! isShortLast) {
-            *joinCount = isNumber ? qMax(1, FormatFileConfig::countOf(mistakes))
+            *joinCount = isNumber ? qMax(
+                1,
+                FormatFileConfig::countOf(mistakes)
+            )
                                   : average;
             return false;
         }
@@ -175,15 +180,19 @@ static bool isAlignedUnderFirst(
     ) {
         return false;
     }
-    const int column = textWidth(document->text().mid(
-        document->lineStart(line),
-        document->symbols().at(first).from - document->lineStart(line)
-    ));
+    const int column = textWidth(
+        document->text().mid(
+            document->lineStart(line),
+            document->symbols().at(first).from - document->lineStart(line)
+        )
+    );
     for (int i = 1; i < arguments.size(); ++i) {
         const int itemLine = document->symbolLine(arguments.at(i).first);
         const bool startsLine = itemLine
             != document->symbolLine(arguments.at(i - 1).second);
-        if (startsLine && textWidth(document->indentOf(itemLine)) != column) {
+        if (startsLine
+            && textWidth(document->indentOf(itemLine)) != column
+        ) {
             return false;
         }
     }
@@ -405,11 +414,10 @@ void FormatArgsWrapRule::run(FormatDocument *document) const
             const int start = document->symbolEnd(body - 1);
             const QByteArray indent = document->indentOf(line);
             if (document->replace(
-                    start,
-                    document->symbols().at(body).from - start,
-                    "\n" + indent
-                )
-            ) {
+                start,
+                document->symbols().at(body).from - start,
+                "\n" + indent
+            )) {
                 i = document->match(body);
                 continue;
             }
@@ -418,15 +426,13 @@ void FormatArgsWrapRule::run(FormatDocument *document) const
         int logicalOperator = -1;
         QByteArray logicalIndent;
         if (isCall && needsBreak && logicalBreakBeforeCall(
-                document, i, &logicalOperator, &logicalIndent
-            )
-        ) {
+            document, i, &logicalOperator, &logicalIndent
+        )) {
             const int start = document->symbolEnd(logicalOperator - 1);
             if (document->replace(
-                    start, document->symbols().at(logicalOperator).from - start,
-                    "\n" + logicalIndent
-                )
-            ) {
+                start, document->symbols().at(logicalOperator).from - start,
+                "\n" + logicalIndent
+            )) {
                 continue;
             }
         }

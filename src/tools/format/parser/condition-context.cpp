@@ -108,7 +108,8 @@ bool FormatConditionContext::hasStandard(
     compilers`), from the settings of the place (see fileConfig()); returns
     false when the place names no settings.
 */
-bool FormatConditionContext::hasCompiler(const QString & compiler, bool *value) const
+bool FormatConditionContext::hasCompiler(
+        const QString & compiler, bool *value) const
 {
     return listsName(
         this->fileConfig(),

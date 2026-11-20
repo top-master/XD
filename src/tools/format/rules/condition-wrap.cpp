@@ -37,8 +37,9 @@
     @a document to the `)` at @a close, in its place, with the body's `{`
     right after it when that `{` shares the line of the `)`.
 */
-static void replaceCondition(FormatDocument *document, int open, int close,
-                             QByteArray text)
+static void replaceCondition(
+        FormatDocument *document, int open, int close,
+        QByteArray text)
 {
     const int from = document->symbols().at(open).from;
     int to = document->symbolEnd(close);

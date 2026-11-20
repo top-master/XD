@@ -65,7 +65,8 @@ static bool isMathOperator(Token token)
     @a document has more than one operator and a numeric operand. Nested
     brackets and operands of other operators form separate chains.
 */
-static bool isNumberMathChain(const FormatDocument *document, int first, int last)
+static bool isNumberMathChain(
+        const FormatDocument *document, int first, int last)
 {
     int count = 0;
     bool hasNumber = false;
@@ -75,7 +76,9 @@ static bool isNumberMathChain(const FormatDocument *document, int first, int las
             && document->match(i) > i
         ) {
             i = document->match(i);
-        } else if (token == LANGLE && document->token(i - 1) == IDENTIFIER) {
+        } else if (token == LANGLE
+            && document->token(i - 1) == IDENTIFIER
+        ) {
             const int close = templateClose(document, i, last + 1);
             if (close <= i) {
                 return false;
@@ -85,12 +88,16 @@ static bool isNumberMathChain(const FormatDocument *document, int first, int las
             if (isMathOperator(token)) {
                 ++count;
                 int next = i + 1;
-                if (document->token(next) == PLUS || document->token(next) == MINUS) {
+                if (document->token(next) == PLUS
+                    || document->token(next) == MINUS
+                ) {
                     ++next;
                 }
                 hasNumber |= document->token(next) == INTEGER_LITERAL
                     || document->token(next) == FLOATING_LITERAL;
-            } else if (isBinaryOperator(token) || isAssignmentOperator(token)) {
+            } else if (isBinaryOperator(token)
+                || isAssignmentOperator(token)
+            ) {
                 return false;
             }
         }
@@ -147,10 +154,9 @@ QByteArray FormatExpressionLayout::layout(
     const int wrapMax = wrapMaxAt(m_document, offset);
     const QByteArray text = this->oneLine(first, last);
     if (m_document->hasCommentBetween(
-            m_document->symbols().at(first).from,
-            m_document->symbolEnd(last)
-        )
-    ) {
+        m_document->symbols().at(first).from,
+        m_document->symbolEnd(last)
+    )) {
         return text;
     }
 
@@ -316,7 +322,14 @@ QByteArray FormatExpressionLayout::layout(
     if ( ! operators.isEmpty()
         && ! isMemberAccess(m_document->token(operators.first()))
     ) {
-        return this->layoutChain(first, last, operators, column, trailing, forceMath);
+        return this->layoutChain(
+            first,
+            last,
+            operators,
+            column,
+            trailing,
+            forceMath
+        );
     }
     // Breaks the arguments of the call that leads a member chain, such as
     // `object->find(...)` in `object->find(...).name`, or `Info(...)` in
@@ -361,7 +374,12 @@ QByteArray FormatExpressionLayout::layout(
                 ))
             && column + textWidth(this->oneLine(first, callOpen)) <= wrap
         ) {
-            const QByteArray call = this->layoutList(first, callOpen, callEnd, column);
+            const QByteArray call = this->layoutList(
+                first,
+                callOpen,
+                callEnd,
+                column
+            );
             if (call.contains('\n')) {
                 return call + this->layoutChainRest(
                     first, last, operators.mid(callIndex), column, trailing,
@@ -461,12 +479,21 @@ QByteArray FormatExpressionLayout::layout(
                 ? splitArguments(m_document, nestedOpen, item.second)
                 : QList<QPair<int, int > >();
             const bool endsWithChain = nestedItems.size() > 1
-                && this->hasChain(nestedItems.last().first, nestedItems.last().second)
-                && ! this->hasChain(nestedItems.first().first, nestedItems.first().second);
+                && this->hasChain(
+                    nestedItems.last().first,
+                    nestedItems.last().second
+                )
+                && ! this->hasChain(
+                    nestedItems.first().first,
+                    nestedItems.first().second
+                );
             if (isMemberChain && ! endsWithChain) {
                 const QByteArray head = this->oneLine(first, open);
                 const QByteArray nested = this->layout(
-                    item.first, item.second, column + textWidth(head), 1 + trailing
+                    item.first,
+                    item.second,
+                    column + textWidth(head),
+                    1 + trailing
                 );
                 if (nested.contains('\n')) {
                     // Breaks a nested call's arguments one step deeper, and
@@ -546,7 +573,14 @@ QByteArray FormatExpressionLayout::layout(
         }
     }
     if ( ! operators.isEmpty()) {
-        return this->layoutChain(first, last, operators, column, trailing, forceMath);
+        return this->layoutChain(
+            first,
+            last,
+            operators,
+            column,
+            trailing,
+            forceMath
+        );
     }
     return text;
 }
@@ -656,8 +690,7 @@ QByteArray FormatExpressionLayout::layoutList(
         isWhole && (isBroken || (keepsLines && spansLines)),
         0,
         joinCount
-    )
-        + "\n"
+    ) + "\n"
         + this->pad()
         + closer;
 }
@@ -974,7 +1007,9 @@ QByteArray FormatExpressionLayout::layoutChain(
                 operators.size() == 1 ? trailing : 0, forceMath
             );
             const int split = value.indexOf('\n');
-            if (split >= 0 && valueColumn + textWidth(value.left(split)) <= wrapMax) {
+            if (split >= 0
+                && valueColumn + textWidth(value.left(split)) <= wrapMax
+            ) {
                 const QByteArray prefix = head + value;
                 if (operators.size() == 1) {
                     return prefix;
@@ -1076,11 +1111,9 @@ QByteArray FormatExpressionLayout::layoutChainRest(
                 ? operators.at(end + 1) - 1 : last;
             if (m_conditions->holds(
                     QString(QLL("structure.wrapChainAt")),
-                    m_document
-                        ->configAt(
-                            m_document->symbols().at(operators.at(end)).from
-                        )
-                        .wrapChainAt,
+                    m_document->configAt(
+                        m_document->symbols().at(operators.at(end)).from
+                    ).wrapChainAt,
                     operators.at(end),
                     percentUsed,
                     FormatFileConfig::defaultWrapChainAt()
@@ -1120,12 +1153,11 @@ QByteArray FormatExpressionLayout::layoutChainRest(
             const QByteArray more =
                 space + this->oneLine(operators.first(), lastOfLine);
             if (this->fits(
-                    column,
-                    this->oneLine(first, operators.first() - 1) + more,
-                    end < operators.size() ? 0 : trailing,
-                    first
-                )
-            ) {
+                column,
+                this->oneLine(first, operators.first() - 1) + more,
+                end < operators.size() ? 0 : trailing,
+                first
+            )) {
                 text += more;
                 at = end;
             }
@@ -1228,7 +1260,7 @@ QByteArray FormatExpressionLayout::layoutChainRest(
                 && previousOpen >= operators.first()
                 && this->isListOpen(previousOpen);
             if (((afterClosingLine && ! followsCall) || (subChain && member
-                    && subChainMode != QLL("always")))
+                        && subChainMode != QLL("always")))
                 && m_document->token(op) != ANDAND
                 && m_document->token(op) != OROR
             ) {
@@ -1246,7 +1278,10 @@ QByteArray FormatExpressionLayout::layoutChainRest(
                     ? operand : operand.left(firstBreak)
                 );
                 int limit = wrapMax;
-                if (subChain && ! afterClosingLine && subChainMode == QLL("wrap-begin")) {
+                if (subChain
+                    && ! afterClosingLine
+                    && subChainMode == QLL("wrap-begin")
+                ) {
                     limit = wrapColumn(m_document, offset);
                 }
                 if ((subChain && ! afterClosingLine && subChainMode == QLL("never"))
@@ -1353,8 +1388,7 @@ QByteArray FormatExpressionLayout::layoutGroup(
             close - 1,
             column + 1,
             trailing + 1
-        )
-            + ')';
+        ) + ')';
     }
     const QByteArray lead = this->layout(
         open + 1,

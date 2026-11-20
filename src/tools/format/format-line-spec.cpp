@@ -39,14 +39,13 @@ bool FormatLineSpec::resolveAll(
         int first = 0;
         int last = 0;
         if ( ! FormatLineSpec::resolve(
-                specs.at(i),
-                lines,
-                anchor,
-                &first,
-                &last,
-                error
-            )
-        ) {
+            specs.at(i),
+            lines,
+            anchor,
+            &first,
+            &last,
+            error
+        )) {
             return false;
         }
         ranges->append(qMakePair(first, last));

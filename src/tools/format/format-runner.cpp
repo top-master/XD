@@ -149,8 +149,9 @@ static bool snapshotFile(const QString &original, const QString &copy)
 #elif defined(Q_OS_WIN) && !defined(Q_OS_WINRT)
         const QString sourceName = QDir::toNativeSeparators(original);
         const QString copyName = QDir::toNativeSeparators(copy);
-        if (CreateHardLinkW(reinterpret_cast<LPCWSTR>(copyName.utf16()),
-                            reinterpret_cast<LPCWSTR>(sourceName.utf16()), Q_NULLPTR)) {
+        if (CreateHardLinkW(reinterpret_cast<LPCWSTR >(copyName.utf16()),
+                            reinterpret_cast<LPCWSTR >(sourceName.utf16()), Q_NULLPTR)
+        ) {
             return true;
         }
 #endif
@@ -170,7 +171,9 @@ bool FormatRunner::prepareRun(const QStringList &files, QString *error)
         config.scheduledFiles.clear();
     }
     this->m_prepared = true;
-    if ( ! config.snapshots.isEmpty() || ! config.snapshotManifest.isEmpty()) {
+    if ( ! config.snapshots.isEmpty()
+        || ! config.snapshotManifest.isEmpty()
+    ) {
         return true;
     }
     if (config.scheduledFiles.isEmpty()) {
@@ -192,7 +195,10 @@ bool FormatRunner::prepareRun(const QStringList &files, QString *error)
         return false;
     }
     for (int i = 0; i < config.scheduledFiles.size(); ++i) {
-        const QString original = QDir::cleanPath(QFileInfo(config.scheduledFiles.at(i)).absoluteFilePath());
+        const QString original = QDir::cleanPath(QFileInfo(
+                config.scheduledFiles.at(i)
+            ).absoluteFilePath()
+        );
         const QString copy = this->m_snapshotDirectory->path() + QLatin1Char('/')
             + QString::number(i);
         QFile input(original);
@@ -206,14 +212,18 @@ bool FormatRunner::prepareRun(const QStringList &files, QString *error)
         }
         config.snapshots.insert(original, copy);
     }
-    config.snapshotManifest = this->m_snapshotDirectory->path() + QLL("/manifest");
+    config.snapshotManifest = this->m_snapshotDirectory->path()
+        + QLL("/manifest");
     QFile manifest(config.snapshotManifest);
     if ( ! manifest.open(QIODevice::WriteOnly)) {
         *error = QString(QLL("cannot write the formatting snapshot manifest"));
         return false;
     }
     QDataStream output(&manifest);
-    output << config.scheduledFiles << config.snapshots << config.fileLineSpecs << config.lineSpecs;
+    output << config.scheduledFiles
+        << config.snapshots
+        << config.fileLineSpecs
+        << config.lineSpecs;
     if (output.status() != QDataStream::Ok) {
         *error = QString(QLL("cannot write the formatting snapshot manifest"));
         return false;
@@ -221,8 +231,9 @@ bool FormatRunner::prepareRun(const QStringList &files, QString *error)
     return true;
 }
 
-QList<FormatFileResult > FormatRunner::runFailure(const QStringList &files,
-                                                  const QString &error) const
+QList<FormatFileResult > FormatRunner::runFailure(
+        const QStringList &files,
+        const QString &error) const
 {
     QList<FormatFileResult > results;
     for (int i = 0; i < files.size(); ++i) {

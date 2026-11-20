@@ -201,8 +201,9 @@ bool JoinArgsContext::argumentCount(
     argument follows, hence its `spaceRemaining` counts the space after that
     `,`. A condition that misses a value gives 1.
 */
-int FormatDocument::joinArgsAt(int open, int argument, int column,
-                               bool isWrapping) const
+int FormatDocument::joinArgsAt(
+        int open, int argument, int column,
+        bool isWrapping) const
 {
     const FormatFileConfig &fileConfig = this->configAt(
         this->symbols().at(open).from
@@ -350,11 +351,10 @@ bool FormatDocument::setInlineConfiguration(
                 continue;
             }
             if ( ! layers.pushLines(
-                    directive.lines,
-                    QString(QLL("Format rule")),
-                    error
-                )
-            ) {
+                directive.lines,
+                QString(QLL("Format rule")),
+                error
+            )) {
                 return false;
             }
         } else if (directive.kind == FormatConfigDirective::End) {
@@ -366,11 +366,10 @@ bool FormatDocument::setInlineConfiguration(
             }
         } else {
             if ( ! layers.addLines(
-                    directive.lines,
-                    QString(QLL("Format rule")),
-                    error
-                )
-            ) {
+                directive.lines,
+                QString(QLL("Format rule")),
+                error
+            )) {
                 return false;
             }
         }
@@ -411,8 +410,9 @@ QList<FormatIssue > FormatDocument::inlineWarnings(bool verbose) const
                 warnings.append(FormatIssue(
                     line,
                     "format-warning",
-                    QString(QLL("#: format warning: configuration applied inside an off region at line %1."))
-                        .arg(line)
+                    QString(
+                        QLL("#: format warning: configuration applied inside an off region at line %1.")
+                    ).arg(line)
                 ));
             }
         }
@@ -432,8 +432,9 @@ QList<FormatIssue > FormatDocument::inlineWarnings(bool verbose) const
                 warnings.append(FormatIssue(
                     line,
                     "format-warning",
-                    QString(QLL("#: format warning: unmatched \"Format rule end.\" at line %1"))
-                        .arg(line)
+                    QString(
+                        QLL("#: format warning: unmatched \"Format rule end.\" at line %1")
+                    ).arg(line)
                 ));
             } else {
                 openings.removeLast();
@@ -1133,9 +1134,10 @@ bool FormatDocument::replace(int offset, int length, const QByteArray & text)
     with @a otherText. Returns whether both were queued: neither one is when
     either would be dropped (see the one-edit replace()), or when they overlap.
 */
-bool FormatDocument::replace(int offset, int length, const QByteArray & text,
-                             int otherOffset, int otherLength,
-                             const QByteArray & otherText)
+bool FormatDocument::replace(
+        int offset, int length, const QByteArray & text,
+        int otherOffset, int otherLength,
+        const QByteArray & otherText)
 {
     const bool apart = offset + length <= otherOffset
         || otherOffset + otherLength <= offset;
@@ -1332,12 +1334,23 @@ void FormatDocument::moveInlineConfiguration(const QList<Edit > & edits)
         int *offset = &(m_fileConfigRegions[i].first);
         *offset = FormatDocument::movedOffset(*offset, false, edits);
     }
-    QVector<QPair<int, int > > *ranges[] = { &m_inlineRanges, &m_disabledRanges };
+    QVector<QPair<int, int > > *ranges[] = {
+        &m_inlineRanges,
+        &m_disabledRanges
+    };
     for (int k = 0; k < 2; ++k) {
         for (int i = 0; i < ranges[k]->size(); ++i) {
             QPair<int, int > *range = &((*ranges[k])[i]);
-            range->first = FormatDocument::movedOffset(range->first, true, edits);
-            range->second = FormatDocument::movedOffset(range->second, false, edits);
+            range->first = FormatDocument::movedOffset(
+                range->first,
+                true,
+                edits
+            );
+            range->second = FormatDocument::movedOffset(
+                range->second,
+                false,
+                edits
+            );
         }
     }
     m_ruleCaches.clear();
@@ -1349,13 +1362,19 @@ void FormatDocument::moveInlineConfiguration(const QList<Edit > & edits)
     @a offset comes before a part that starts there, when @a isStart is
     set, and after a part that ends there, else.
 */
-int FormatDocument::movedOffset(int offset, bool isStart, const QList<Edit > & edits)
+int FormatDocument::movedOffset(
+        int offset, bool isStart, const QList<Edit > & edits)
 {
     int moved = offset;
     for (int i = 0; i < edits.size(); ++i) {
         const Edit & edit = edits.at(i);
         const int end = edit.offset + edit.length;
-        if (end < offset || (end == offset && (edit.length > 0 || isStart))) {
+        if (end < offset
+            || (end == offset
+                && (edit.length > 0
+                    || isStart)
+            )
+        ) {
             moved += edit.text.size() - edit.length;
         }
     }
