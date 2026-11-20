@@ -6,6 +6,8 @@
 
 #include "../format-named-rule.h"
 
+#include <QtCore/QStringList>
+
 class FormatReplaceTypesRule : public FormatNamedRule
 {
     typedef FormatNamedRule super;

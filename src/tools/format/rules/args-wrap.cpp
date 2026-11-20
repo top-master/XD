@@ -151,8 +151,7 @@ static bool keepsUserLines(
             *joinCount = isNumber ? qMax(
                 1,
                 FormatFileConfig::countOf(mistakes)
-            )
-                                  : average;
+            ) : average;
             return false;
         }
     }

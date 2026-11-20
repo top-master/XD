@@ -93,6 +93,7 @@ private slots:
     void testCondition_shouldRejectBadPercent();
     void testCondition_shouldTakeNoPercentAlone();
     void testCondition_shouldEvaluateExpressions();
+    void testCondition_shouldResolveTextAndNull();
     void testCondition_shouldCallObjectMembers();
     void testCondition_shouldChooseNumbers();
     void testScopes_shouldStackAndUnregister();
@@ -2562,6 +2563,40 @@ void tst_ConfigParser::testNumbers_shouldTakeQint64()
     qExpect(value.toLongLong())->toEqual(Q_INT64_C(5000000000));
     qExpect(numbers.convert(QVariant(0.0), &value))->toBeFalsy();
     qExpect(numbers.describe())->toEqual(QString(QLL("a number of 1 or more")));
+}
+
+void tst_ConfigParser::testCondition_shouldResolveTextAndNull()
+{
+    const QStringList words;
+    QStringList program;
+    QString error;
+    QVariant result;
+    QVERIFY2(Config::Condition::compile(
+        QString(QLL("true ? \"one\" + \"two\" : null")), QStringList(),
+        &program, &error, false, Config::Condition::NameMismatchError,
+        Q_NULLPTR, &words
+    ), qPrintable(error));
+    QVERIFY(Config::Condition::resolve(program, QSet<QString >(), Q_NULLPTR, &result));
+    QCOMPARE(result.toString(), QString(QLL("onetwo")));
+
+    QVERIFY2(Config::Condition::compile(
+        QString(QLL("false ? \"one\" : null")), QStringList(),
+        &program, &error, false, Config::Condition::NameMismatchError,
+        Q_NULLPTR, &words
+    ), qPrintable(error));
+    QVERIFY(Config::Condition::resolve(program, QSet<QString >(), Q_NULLPTR, &result));
+    QVERIFY( ! result.isValid());
+
+    QVERIFY2(Config::Condition::compile(
+        QString(QLL("true ? \"null\" : null")), QStringList(),
+        &program, &error, false, Config::Condition::NameMismatchError,
+        Q_NULLPTR, &words
+    ), qPrintable(error));
+    QVERIFY(Config::Condition::resolve(program, QSet<QString >(), Q_NULLPTR, &result));
+    QVERIFY(result.isValid());
+    QCOMPARE(result.toString(), QString(QLL("null")));
+
+
 }
 
 QTEST_APPLESS_MAIN(tst_ConfigParser)

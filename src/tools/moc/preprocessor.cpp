@@ -181,6 +181,42 @@ Symbols Preprocessor::tokenize(const QByteArray& input, int lineNum, Preprocesso
             || mode == TokenizeDefine
 #endif
 		) {
+            // Keeps raw strings whole in source-token mode.
+            if (Preprocessor::preprocessOnly
+                && data[0] == 'R'
+                && data[1] == '"'
+            ) {
+                const int delimiterStart = int(indexBegin) + 2;
+                int open = delimiterStart;
+                while (open < input.size()
+                    && open - delimiterStart <= 16
+                    && input.at(open) != '('
+                ) {
+                    const char c = input.at(open);
+                    if (c <= ' ' || c > '~' || c == ')' || c == '\\') {
+                        break;
+                    }
+                    ++open;
+                }
+                if (open < input.size()
+                    && open - delimiterStart <= 16
+                    && input.at(open) == '('
+                ) {
+                    const QByteArray delimiter = input.mid(
+                        delimiterStart, open - delimiterStart
+                    );
+                    const QByteArray closing = QByteArray(")") + delimiter + '"';
+                    const int end = input.indexOf(closing, open + 1);
+                    if (end >= 0) {
+                        const int length = end + closing.size() - int(indexBegin);
+                        symbols += Symbol(lineNum, STRING_LITERAL, input,
+                                          int(indexBegin), length);
+                        lineNum += input.mid(int(indexBegin), length).count('\n');
+                        data += length;
+                        continue;
+                    }
+                }
+            }
             int column = 0;
 
             const char *lexem = data;

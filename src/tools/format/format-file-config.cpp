@@ -5,6 +5,7 @@
 
 #include "./parser/condition-context.h"
 #include "./parser/scope-conditions.h"
+#include "./rules/template-object.h"
 
 #include "config-any-space.h"
 #include "config-cache.h"
@@ -373,7 +374,8 @@ public:
     {
     }
 
-    inline bool match(const QString &value, QString *matched) const Q_DECL_OVERRIDE_IL
+    inline bool match(const QString &value,
+                      QString *matched) const Q_DECL_OVERRIDE_IL
     {
         const QStringList names = listItems(value);
         const QRegularExpression pattern(m_pattern);
@@ -409,6 +411,66 @@ bool FormatFileConfig::acceptsFile(const QString &path) const
             || pattern.match(info.suffix()).hasMatch();
     }
     return extensionList(this->extensions).contains(info.suffix().toLower());
+}
+
+/*!
+    Matches a call replacement or an expression that builds one.
+*/
+class FormatReplacementMatcher : public Config::ValueMatcher
+{
+    typedef Config::ValueMatcher super;
+public:
+    bool match(const QString & value, QString *matched) const Q_DECL_OVERRIDE;
+    QString describe() const Q_DECL_OVERRIDE;
+    QString explain(const QString & value) const Q_DECL_OVERRIDE;
+};
+
+/*!
+    Matches the replacement expression @a value into @a matched.
+*/
+bool FormatReplacementMatcher::match(
+        const QString & value, QString *matched) const
+{
+    if ( ! this->explain(value).isEmpty()) {
+        *matched = QString();
+        return false;
+    }
+    *matched = value.trimmed();
+    return true;
+}
+
+/*!
+    Describes the accepted replacement expression.
+*/
+QString FormatReplacementMatcher::describe() const
+{
+    return QString(QLL(
+        "a call name, template, or replacement expression"
+    ));
+}
+
+/*!
+    Describes why the replacement expression @a value does not compile.
+*/
+QString FormatReplacementMatcher::explain(const QString & value) const
+{
+    QStringList program;
+    QString error;
+    const QSharedPointer<Config::Scopes::Scope > scope =
+        FormatTemplateObject::argumentScope(value);
+    Q_UNUSED(scope);
+    const QStringList words;
+    if (Config::Condition::compile(
+        value, FormatFileConfig::replaceTargetNames(), &program, &error, false,
+        Config::Condition::NameMismatchError, Q_NULLPTR, &words
+    )) {
+        return QString();
+    }
+    QString matched;
+    if (Config::Name(true).match(value, &matched)) {
+        return QString();
+    }
+    return error;
 }
 
 /*!
@@ -586,8 +648,10 @@ Config::Schema FormatFileConfig::schema()
     replaceTypes.addKey(QString(QLL("action")),
                         QStringList() << QString(QLL("replace")) << QString(QLL("report")),
                         QString(QLL("replace")));
-    replaceTypes.setOpen(Config::Matchers() << Config::Name::create(true)
-                             << Config::Word::create(QString(QLL("keep-as-is"))));
+    replaceTypes.setOpen(Config::Matchers()
+        << QSharedPointer<const Config::ValueMatcher >(
+            new FormatReplacementMatcher)
+        << Config::Word::create(QString(QLL("keep-as-is"))));
     schema.addSection(replaceTypes);
     Config::Section code(QString(QLL("Code")));
     code.addKey(QString(QLL("nameMismatch")),

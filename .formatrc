@@ -6,7 +6,7 @@ refSuffix = keep-as-is
 moveSuffix = keep-as-is
 
 [Replace.types]
-::QLatin1String = ::QLL
+QLatin1String = isLiteral($1) ? "QLL(%1)" : null
 ::QLatin1Literal = ::QLL
 
 [Structure]

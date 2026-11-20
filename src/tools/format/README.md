@@ -507,19 +507,29 @@ call of it turns into, such as XD's own:
 
 ```
 [Replace.types]
-::QLatin1String = ::QLL
+QLatin1String = isLiteral($1) ? "QLL(%1)" : null
 ::QLatin1Literal = ::QLL
 ```
 
 - A value that is a name renames the call and keeps its arguments.
+- An expression can use `$1`, `$2`, and so on for the call's arguments.
+  It may build a replacement with `+`, or use a condition
+  that yields `null` to leave the call unchanged. `isLiteral($1)` holds when
+  the argument text starts with a double quote. The same expression works
+  for any mapped call. A key with placeholders binds its
+  arguments in the specified order and matches only calls of that arity.
+  Only the branch selected by a condition reads its arguments. In a
+  replacement, `%1`, `%2`, and so on insert those arguments as written
+  through `QString::arg()`.
 - A value that is a call template turns the call into that call:
   `args[0]`, `args[1]`, and so on stand for one argument as written, and
   `args.join(", ")` for all of them joined by the given separator; `$1`, `$2`,
   and so on are short for `args[0]`, `args[1]`, and so on; `$*` and `$@`,
   outside double quotes, for `args.join(", ")`; and `$$` stands for a `$`. A
   call that lacks an argument the template takes is reported.
-- A `*` in a key matches any part of a name, and a `*` in its value stands for
-  what it matched.
+- A `*` in a key matches any part of a name. In a name or template value,
+  each `*` stands for what it matched. In an expression, a `*` in the
+  resulting call's name stands for it.
 - A key that starts with `&` continues the latest key that does not: the `&`
   stands for that key. A second `&` in a key sets what a later `&` stands for
   to the text before it, and drops out.

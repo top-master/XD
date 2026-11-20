@@ -73,6 +73,7 @@ private slots:
     /// Moc's tokenizer.
     void testTokenize_shouldDropCommentsByDefault();
     void testTokenize_shouldEmitCommentsWhenKept();
+    void testTokenize_shouldKeepRawStringWhole();
 
     /// Document.
     void testComments_shouldTellEachKind_data();
@@ -113,6 +114,7 @@ private slots:
     /// Rules.
     void testFix_shouldRewrite_data();
     void testFix_shouldRewrite();
+    void testReplaceTypes_shouldReadConditionalMapping();
     void testNameMismatch_shouldFollowCodeSetting();
     void testByRefVariable_shouldFollowLintSetting();
     void testReport_shouldFlagLines_data();
@@ -793,8 +795,31 @@ FormatResult tst_FormatRules::formatWith(
         config.assignments << QString(QLL("structure.typedefSuper=always"));
     }
     if (rule == QLL("replace-types")) {
-        config.assignments << QString(QLL("replace.types.::QLatin1String=::QLL"))
+        config.assignments << QString(QLL("lint.standards=C++11"));
+        config.assignments << QString(QLL(
+            "replace.types.QLatin1String="
+            "isLiteral($1) ? \"QLL(%1)\" : null"
+        ))
             << QString(QLL("replace.types.::QLatin1Literal=::QLL"))
+            << QString(QLL("replace.types.::Dynamic($1)="
+                           "isLiteral($1) ? \"::Changed(\" + $1 + \")\" : null"))
+            << QString(QLL("replace.types.::Swap($2,$1)="
+                           "isLiteral($1) ? \"::Changed(%2, %1)\" : null"))
+            << QString(QLL("replace.types.::Fallback($1)="
+                           "isLiteral($1) ? \"::Changed(\" + $1 + \")\""
+                           " : \"::Other(\" + $1 + \")\""))
+            << QString(QLL("replace.types.::Any*($1)="
+                           "isLiteral($1) ? \"::New*(\" + $1 + \")\" : null"))
+            << QString(QLL("replace.types.::Chain($1)=::Dynamic($1)"))
+            << QString(QLL("replace.types.::Lazy($1)="
+                           "isLiteral($1) ? \"::Changed(\" + $1 + \")\" : $2"))
+            << QString(QLL("replace.types.::Selected($1)="
+                           "isNew ? \"::Changed(\" + $1 + \")\" : null"))
+            << QString(QLL("replace.types.::Standard($1)="
+                           "hasStd(\"C++11\") ? \"::Changed(\" + $1 + \")\" : null"))
+            << QString(QLL("replace.types.::Unconditional($1)=\"::Changed(\" + $1 + \")\""))
+            << QString(QLL("replace.types.::Pass=$1"))
+            << QString(QLL("replace.types.::Leave=null"))
             << QString(QLL("replace.types.::std::x::y::z::Old=::std::x::y::z::New"))
             << QString(QLL("replace.types.::OldClass=::MyClass::create($1)"))
             << QString(QLL("replace.types.::Legacy=::OldClass($2, $1)"))
@@ -935,6 +960,27 @@ void tst_FormatRules::testTokenize_shouldEmitCommentsWhenKept()
     const QList<QByteArray > expected = QList<QByteArray >() << "// one" << "/* two\n */"
         << "// three";
     QCOMPARE(comments, expected);
+}
+
+void tst_FormatRules::testTokenize_shouldKeepRawStringWhole()
+{
+    const QByteArray text("auto s = R\"tag(a\"b,\n())tag\";\nint next;\n");
+    const Symbols symbols = this->tokenize(text, true);
+    int literals = 0;
+    int nextLine = 0;
+    for (int i = 0; i < symbols.size(); ++i) {
+        const Symbol & symbol = symbols.at(i);
+        if (symbol.token == STRING_LITERAL) {
+            ++literals;
+            QCOMPARE(text.mid(symbol.from, symbol.len),
+                     QByteArray("R\"tag(a\"b,\n())tag\""));
+        }
+        if (symbol.lexem() == "next") {
+            nextLine = symbol.lineNum;
+        }
+    }
+    QCOMPARE(literals, 1);
+    QCOMPARE(nextLine, 3);
 }
 
 void tst_FormatRules::testComments_shouldTellEachKind_data()
@@ -1180,9 +1226,35 @@ void tst_FormatRules::testFix_shouldRewrite_data()
         << QByteArray("QString s = QLatin1String(\"a\") + QLatin1Literal(\"b\") + QLatin1String(p);\n"
                       "bool k = key == QLatin1String(\"c\") || key.startsWith(QLatin1String(\"d\"));\n"
                       "QString t = c ? QLatin1String(\"x\") : QLatin1String(\"y\");\n")
-        << QByteArray("QString s = QLL(\"a\") + QLL(\"b\") + QLL(p);\n"
+        << QByteArray("QString s = QLL(\"a\") + QLL(\"b\") + QLatin1String(p);\n"
                       "bool k = key == QLL(\"c\") || key.startsWith(QLL(\"d\"));\n"
                       "QString t = c ? QLL(\"x\") : QLL(\"y\");\n");
+    QTest::newRow("replace-types conditional expressions")
+        << QString(QLL("replace-types"))
+        << QByteArray("auto a = Dynamic(\"a\") + Dynamic(variable);\n"
+                      "auto b = Swap(value, \"x\") + Swap(\"x\", value);\n"
+                      "auto c = QLatin1String(\"one\" \"two\") + QLatin1String(words[i]);\n"
+                      "auto d = Fallback(x) + AnyThing(\"x\") + Chain(value);\n"
+                      "auto e = Unconditional(variable) + Selected(variable) + Standard(variable);\n"
+                      "auto f = Lazy(\"x\") + Lazy(variable);\n"
+                      "auto g = Chain(/*,*/ \"x\") + Chain(R\"tag(a\",b)tag\");\n"
+                      "auto h = Pass(Other(value)) + Leave(value);\n"
+                      "auto i = Pass(Other(\"%1\"));\n")
+        << QByteArray("auto a = Changed(\"a\") + Dynamic(variable);\n"
+                      "auto b = Changed(value, \"x\") + Swap(\"x\", value);\n"
+                      "auto c = QLL(\"one\" \"two\") + QLatin1String(words[i]);\n"
+                      "auto d = Other(x) + NewThing(\"x\") + Dynamic(value);\n"
+                      "auto e = Changed(variable) + Changed(variable) + Changed(variable);\n"
+                      "auto f = Changed(\"x\") + Lazy(variable);\n"
+                      "auto g = Dynamic(/*,*/ \"x\") + Dynamic(R\"tag(a\",b)tag\");\n"
+                      "auto h = Other(value) + Leave(value);\n"
+                      "auto i = Other(\"%1\");\n");
+    QTest::newRow("replace-types trailing line comment")
+        << QString(QLL("replace-types"))
+        << QByteArray("auto a = QLatin1String(\"x\" // comment\n);\n"
+                      "auto b = Chain(\"x\" // comment\n);\n")
+        << QByteArray("auto a = QLL(\"x\" // comment\n);\n"
+                      "auto b = Changed(\"x\" // comment\n);\n");
     QTest::newRow("replace-types templates")
         << QString(QLL("replace-types"))
         << QByteArray("Foo *f = OldClass(x + 1);\n"
@@ -2329,6 +2401,63 @@ void tst_FormatRules::testFix_shouldRewrite()
     // Formats the result again, which changes nothing.
     const FormatResult again = qMove(this->formatWith(rule, result.text));
     QCOMPARE(again.text, output);
+}
+
+void tst_FormatRules::testReplaceTypes_shouldReadConditionalMapping()
+{
+    QTemporaryDir dir;
+    QVERIFY(dir.isValid());
+    QFile configFile(dir.path() + QLL("/.formatrc"));
+    QVERIFY(configFile.open(QIODevice::WriteOnly));
+    const QByteArray config(
+        "[Replace.types]\n"
+        "::Wrap = isLiteral($1) ? \"::Result(%1)\" : null\n"
+        "::Concat = isLiteral($1) ? \"::Result(\" + $1 + \")\" : null\n"
+        "::Arity($1) = isLiteral($1) ? \"::Result(\" + $1 + \")\" : null\n"
+    );
+    Config::Parser parser(FormatFileConfig::schema());
+    QString parseError;
+    QVERIFY2(parser.readData(config, QLL("inline"), &parseError),
+             qPrintable(parseError));
+    QVERIFY( ! parser.readData(
+        "[Replace.types]\n::Broken($1) = isLiteral($1) ? \"ok\" :\n",
+        QLL("inline"), &parseError
+    ));
+    QCOMPARE(configFile.write(config), qint64(config.size()));
+    configFile.close();
+
+    Formatter formatter;
+    QString error;
+    QVERIFY2(formatter.selectRules(QStringList() << QLL("replace-types"), &error),
+             qPrintable(error));
+    const QByteArray input(
+        "auto a = Wrap(\"text\") + Wrap(variable);\n"
+        "auto b = Wrap(R\"tag(raw)tag\") + Wrap(\"a\" \"b\");\n"
+        "auto c = Wrap(/*before*/ \"x\" /*after*/);\n"
+        "auto d = Wrap(\"a\\\"b\");\n"
+        "auto e = Arity() + Arity(\"a\", n);\n"
+        "auto f = Wrap(R\"tag(a\"b,())tag\");\n"
+        "auto g = Wrap(\"a\", n);\n"
+        "auto h = Wrap(\"a\" + \"b\") + Wrap(\"a\" \"b\");\n"
+        "auto i = Wrap(\"%1\");\n"
+        "auto j = Wrap(\"same\") + Concat(\"same\");\n"
+    );
+    const FormatResult result = formatter.format(
+        input, dir.path() + QLL("/source.cpp"), QStringList()
+    );
+    QVERIFY2(result.error.isEmpty(), qPrintable(result.error));
+    QCOMPARE(result.text, QByteArray(
+        "auto a = Result(\"text\") + Wrap(variable);\n"
+        "auto b = Wrap(R\"tag(raw)tag\") + Result(\"a\" \"b\");\n"
+        "auto c = Wrap(/*before*/ \"x\" /*after*/);\n"
+        "auto d = Result(\"a\\\"b\");\n"
+        "auto e = Arity() + Arity(\"a\", n);\n"
+        "auto f = Wrap(R\"tag(a\"b,())tag\");\n"
+        "auto g = Result(\"a\");\n"
+        "auto h = Result(\"a\" + \"b\") + Result(\"a\" \"b\");\n"
+        "auto i = Result(\"%1\");\n"
+        "auto j = Result(\"same\") + Result(\"same\");\n"
+    ));
 }
 
 void tst_FormatRules::testReport_shouldFlagLines_data()

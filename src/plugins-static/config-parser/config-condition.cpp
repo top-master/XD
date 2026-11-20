@@ -182,7 +182,7 @@ private:
                 return word;
             }
         }
-        if (c.isLetter() || c == QLatin1Char('_')) {
+        if (c.isLetter() || c == QLatin1Char('_') || c == QLatin1Char('$')) {
             // Preserve established hyphenated names, while leaving any
             // following minus sign to the expression parser.
             QString known;
@@ -325,7 +325,8 @@ private:
             const QChar lead = token.isEmpty() ? QChar() : token.at(0);
             if (token.isEmpty() || ! (lead.isLetterOrNumber()
                     || lead == QLatin1Char('_') || lead == QLatin1Char('"')
-                    || lead == QLatin1Char('.') || lead == QLatin1Char(':'))
+                    || lead == QLatin1Char('.') || lead == QLatin1Char(':')
+                    || lead == QLatin1Char('$'))
             ) {
                 if (m_error.isEmpty()) {
                     m_error = token.isEmpty()
@@ -391,7 +392,7 @@ private:
                     }
                     return false;
                 }
-                if (isWholeValue) {
+                if (isWholeValue && Config::Scopes::find(name).isNull()) {
                     m_error = QString(QLL("%1 names a value of the condition, "
                                           "not a choice")).arg(token);
                     return false;
@@ -650,6 +651,10 @@ QString ExpressionCompiler::wordAt() const
 */
 bool ExpressionCompiler::valueWord(const QString &token)
 {
+    if (token == QLL("null")) {
+        this->m_program << QString(QLL("z:"));
+        return true;
+    }
     QString text = token;
     const bool isQuoted = token.startsWith(QLatin1Char('"'));
     if (isQuoted && ! this->decodeQuoted(token, &text)) {
@@ -987,6 +992,10 @@ QString Config::Condition::describe() const
     value, and a sign after an undefined name, as in `win32-1`, makes the
     error name the math it reads.
 
+    A choice may yield `null`, which resolves to an invalid QVariant.
+    `$1`, `$2`, and so on read argument text from the context. A `+`
+    between two texts joins them.
+
     @a mismatch says how to handle a name that differs from a known one in
     case alone (see NameMismatch); when given, @a mismatched tells whether
     such a name made the compile fail, which a caller may treat apart.
@@ -1004,7 +1013,9 @@ bool Config::Condition::compile(
         mismatched = &nameMismatched;
     }
     *mismatched = false;
-    ExpressionCompiler compiler(input, names, mismatch, words);
+    ExpressionCompiler compiler(
+        input, names, mismatch, words
+    );
     if ( ! compiler.compile(program, error, mismatched)
         || ! Config::Condition::checkPercents(
             *program,
@@ -1237,17 +1248,18 @@ class Operand
 {
 public:
     inline Operand(qreal value = 0)
-        : number(value), isText(false)
+        : number(value), isText(false), isNull(false)
     {
     }
 
     inline explicit Operand(const QString & value)
-        : number(0), isText(true), text(value)
+        : number(0), isText(true), isNull(false), text(value)
     {
     }
 
     qreal number;
     bool isText;
+    bool isNull;
     QString text;
 };
 
@@ -1257,8 +1269,21 @@ public:
 */
 static bool operandNumber(const Operand &operand, qreal *result)
 {
-    if (operand.isText) {
+    if (operand.isNull) {
         return false;
+    }
+    if (operand.isText) {
+        QString text = operand.text.trimmed();
+        const bool percent = text.endsWith(QLatin1Char('%'));
+        if (percent) {
+            text.chop(1);
+        }
+        bool valid = false;
+        *result = text.toDouble(&valid);
+        if (percent) {
+            *result /= 100;
+        }
+        return valid;
     }
     *result = operand.number;
     return true;
@@ -1291,6 +1316,10 @@ bool calculateResult(const QStringList &program, Lookup *lookup,
     if ( ! calculate(program, lookup, &operand)) {
         *result = QVariant();
         return false;
+    }
+    if (operand.isNull) {
+        *result = QVariant();
+        return true;
     }
     *result = operand.isText ? QVariant(operand.text)
                              : QVariant(operand.number);
@@ -1375,8 +1404,8 @@ bool calculate(const QStringList &program, Lookup *lookup, Operand *result)
                                               : QVariant(argument.number));
             }
             stack.erase(stack.end() - count, stack.end());
-            qreal called = 0;
-            if ( ! Config::Scopes::call(
+            QVariant called;
+            if ( ! Config::Scopes::resolve(
                 function,
                 context,
                 arguments,
@@ -1384,7 +1413,16 @@ bool calculate(const QStringList &program, Lookup *lookup, Operand *result)
             )) {
                 return false;
             }
-            stack << Operand(called);
+            if (called.type() == QVariant::String) {
+                stack << Operand(called.toString());
+            } else {
+                bool valid = false;
+                const qreal number = called.toDouble(&valid);
+                if ( ! valid) {
+                    return false;
+                }
+                stack << Operand(number);
+            }
         } else if (item.startsWith(QLL("f:"))) {
             bool value = false;
             if ( ! context || ! context->predicate(item.mid(2), &value)) {
@@ -1425,7 +1463,14 @@ bool calculate(const QStringList &program, Lookup *lookup, Operand *result)
                 return false;
             }
             Operand right = stack.takeLast();
-            if (right.isText) {
+            if (op == QLL("+")) {
+                if (right.isText && ! stack.isEmpty() && stack.last().isText) {
+                    const Operand left = stack.takeLast();
+                    stack << Operand(left.text + right.text);
+                    continue;
+                }
+            }
+            if ( ! operandNumber(right, &right.number)) {
                 return false;
             }
             if (op == QLL("!")) {
@@ -1444,7 +1489,7 @@ bool calculate(const QStringList &program, Lookup *lookup, Operand *result)
                 return false;
             }
             Operand left = stack.takeLast();
-            if (left.isText) {
+            if ( ! operandNumber(left, &left.number)) {
                 return false;
             }
             if (op == QLL("&")
@@ -1486,6 +1531,10 @@ bool calculate(const QStringList &program, Lookup *lookup, Operand *result)
             } else {
                 return false;
             }
+        } else if (item == QLL("z:")) {
+            Operand nullValue;
+            nullValue.isNull = true;
+            stack << nullValue;
         } else {
             return false;
         }

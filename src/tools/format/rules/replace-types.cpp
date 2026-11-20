@@ -4,12 +4,14 @@
 #include "./replace-types.h"
 
 #include "./args-array.h"
+#include "./template-object.h"
 #include "../format-document.h"
 #include "../format-file-config.h"
 #include "../parser/condition-context.h"
 
 #include "config-cache.h"
 #include "config-condition.h"
+#include "config-name.h"
 #include "config-scopes.h"
 #include "config-types.h"
 
@@ -28,13 +30,16 @@
     `[Replace.types]` matches, where `target` holds. A key is a full name from
     the global scope, such as `::QLatin1String`, in which a `*` stands for any
     part of a name (see FormatFileConfig::expandPrevious() for the `&` of a
-    key). Its value is one of two things, in which each `*` stands for what
-    the key's `*` matched:
+    key). A key may bind its call's arguments as `$1`, `$2`, and so on.
+    In a name or template, each `*` stands for what the key's `*` matched;
+    in an expression, a `*` in the resulting call's name stands for it:
 
     * a name, such as `::QLL`, which renames the call and keeps all of its
       arguments as written;
     * a call template, such as `::MyClass::create($1)`, which turns the call
-      into that call (see fillTemplate()).
+      into that call (see fillTemplate());
+    * an expression that builds a call, or yields `null` to keep it as it
+      is (see Config::Condition::resolve()).
 
     A result that calls a name another key matches turns again (see
     replacement()); hence lines chain. Each name is matched and written as
@@ -51,8 +56,9 @@ class FormatReplaceTypesContext : public FormatConditionContext
 {
     typedef FormatConditionContext super;
 public:
-    inline FormatReplaceTypesContext(const FormatDocument *document, int line)
-        : m_document(document), m_line(line) {}
+    inline FormatReplaceTypesContext(const FormatDocument *document, int line,
+                                     const FormatFileConfig *config)
+        : m_document(document), m_line(line), m_config(config) {}
 
     inline bool predicate(const QString &name,
                           bool *value) const Q_DECL_OVERRIDE_IL
@@ -65,9 +71,15 @@ public:
         return true;
     }
 
+    inline const FormatFileConfig *fileConfig() const Q_DECL_OVERRIDE_IL
+    {
+        return this->m_config;
+    }
+
 private:
     const FormatDocument *m_document;
     int m_line;
+    const FormatFileConfig *m_config;
 };
 
 /*!
@@ -78,16 +90,30 @@ class FormatCallTemplateContext : public FormatConditionContext
 {
     typedef FormatConditionContext super;
 public:
-    inline explicit FormatCallTemplateContext(FormatArgsArray *arguments)
-        : m_arguments(arguments) {}
+    inline explicit FormatCallTemplateContext(
+            FormatArgsArray *arguments,
+            const FormatConditionContext *place = Q_NULLPTR)
+        : m_arguments(arguments), m_place(place) {}
 
     inline FormatArgsArray *callArguments() const Q_DECL_OVERRIDE_IL
     {
         return m_arguments;
     }
 
+    inline const FormatFileConfig *fileConfig() const Q_DECL_OVERRIDE_IL
+    {
+        return m_place ? m_place->fileConfig() : Q_NULLPTR;
+    }
+
+    inline bool predicate(const QString & name,
+                          bool *value) const Q_DECL_OVERRIDE_IL
+    {
+        return m_place && m_place->predicate(name, value);
+    }
+
 private:
     FormatArgsArray *m_arguments;
+    const FormatConditionContext *m_place;
 };
 
 /*!
@@ -104,7 +130,8 @@ static QString fullName(const QString & name)
 */
 static QRegExp keyPattern(const QString & key)
 {
-    const QStringList pieces = fullName(key).split(QLatin1Char('*'));
+    const QString name = fullName(key).section(QLatin1Char('('), 0, 0);
+    const QStringList pieces = name.split(QLatin1Char('*'));
     QStringList escaped;
     for (int i = 0; i < pieces.size(); ++i) {
         escaped << QRegExp::escape(pieces.at(i));
@@ -118,7 +145,7 @@ static QRegExp keyPattern(const QString & key)
 */
 static bool lastPartMatches(const QString & key, const QString & last)
 {
-    const QString name = fullName(key);
+    const QString name = fullName(key).section(QLatin1Char('('), 0, 0);
     const int scope = name.lastIndexOf(QLL("::"));
     return keyPattern(name.mid(scope < 0 ? 0 : scope + 2)).exactMatch(last);
 }
@@ -236,17 +263,66 @@ static QStringList candidates(
 }
 
 /*!
+    Binds @a arguments to the numbered placeholders in @a key and writes
+    them to @a bound. A key without a parameter list takes every call.
+*/
+static bool bindArguments(const QString & key, const QStringList & arguments,
+                          QStringList *bound)
+{
+    const int open = key.indexOf(QLatin1Char('('));
+    if (open < 0) {
+        *bound = arguments;
+        return true;
+    }
+    if ( ! key.endsWith(QLatin1Char(')'))) {
+        return false;
+    }
+    const QString inner = key.mid(open + 1, key.size() - open - 2).trimmed();
+    const QStringList parameters = inner.isEmpty() ? QStringList()
+        : inner.split(QLatin1Char(','));
+    if (parameters.size() != arguments.size()) {
+        return false;
+    }
+    const QRegExp parameter(QString(QLL("^\\$([1-9][0-9]*)$")));
+    bound->clear();
+    for (int i = 0; i < parameters.size(); ++i) {
+        if ( ! parameter.exactMatch(parameters.at(i).trimmed())) {
+            return false;
+        }
+        bool valid = false;
+        const int index = parameter.cap(1).toInt(&valid) - 1;
+        if ( ! valid || index < 0 || index >= parameters.size()) {
+            return false;
+        }
+        while (bound->size() <= index) {
+            bound->append(QString());
+        }
+        if ( ! bound->at(index).isNull()
+            && bound->at(index) != arguments.at(i)
+        ) {
+            return false;
+        }
+        (*bound)[index] = arguments.at(i);
+    }
+    return true;
+}
+
+/*!
     Finds the first mapping of @a mappings whose key matches one of the full
     names @a names, and gives what its first `*` matched to @a capture; -1
     for none, and for a mapping to `keep-as-is`.
 */
 static int mappingOf(const QList<QPair<QString, QString > > & mappings,
-                     const QStringList & names, QString *capture)
+                     const QStringList & names, const QStringList & arguments,
+                     QString *capture, QStringList *bound)
 {
     for (int m = 0; m < mappings.size(); ++m) {
         QRegExp pattern = keyPattern(mappings.at(m).first);
         for (int n = 0; n < names.size(); ++n) {
             if ( ! pattern.exactMatch(names.at(n))) {
+                continue;
+            }
+            if ( ! bindArguments(mappings.at(m).first, arguments, bound)) {
                 continue;
             }
             if (mappings.at(m).second == QLL("keep-as-is")) {
@@ -367,6 +443,20 @@ static bool isCall(const FormatDocument *document, int index)
 }
 
 /*!
+    Trims @a text while keeping a trailing newline that may end a comment.
+*/
+static QString sourceArgument(const QString & text)
+{
+    const QString trimmed = text.trimmed();
+    int end = text.size();
+    while (end > 0 && text.at(end - 1).isSpace()) {
+        --end;
+    }
+    const QString trailing = text.mid(end);
+    return trailing.contains(QLatin1Char('\n')) ? trimmed + trailing : trimmed;
+}
+
+/*!
     Builds the arguments of the call whose parentheses are the tokens
     @a open and @a close of @a document, each as the source writes it.
 */
@@ -375,6 +465,7 @@ static QStringList callArguments(
 {
     QStringList arguments;
     int first = open + 1;
+    int from = document->symbolEnd(open);
     for (int k = open + 1; k <= close; ++k) {
         const Token token = document->token(k);
         if ((token == LPAREN || token == LBRACK || token == LBRACE)
@@ -385,14 +476,13 @@ static QStringList callArguments(
         }
         if (token == COMMA || k == close) {
             if (k > first) {
-                const int from = document->symbols().at(first).from;
-                arguments << QString::fromLatin1(
-                    document->text().mid(
-                        from, document->symbolEnd(k - 1) - from
-                    )
-                );
+                const int to = document->symbols().at(k).from;
+                arguments << sourceArgument(QString::fromLatin1(
+                    document->text().mid(from, to - from)
+                ));
             }
             first = k + 1;
+            from = document->symbolEnd(k);
         }
     }
     return arguments;
@@ -400,7 +490,7 @@ static QStringList callArguments(
 
 /*!
     Splits the argument list @a inner (the text between a call's
-    parentheses) at its commas outside brackets and quotes.
+    parentheses) at its commas outside brackets, literals and comments.
 */
 static QStringList splitArguments(const QString & inner)
 {
@@ -422,7 +512,27 @@ static QStringList splitArguments(const QString & inner)
             }
             continue;
         }
-        if (c == QLatin1Char('"') || c == QLatin1Char('\'')) {
+        if (c == QLatin1Char('/') && k + 1 < inner.size()
+            && inner.at(k + 1) == QLatin1Char('*')
+        ) {
+            const int end = inner.indexOf(QLL("*/"), k + 2);
+            k = end < 0 ? inner.size() - 1 : end + 1;
+        } else if (c == QLatin1Char('/') && k + 1 < inner.size()
+                   && inner.at(k + 1) == QLatin1Char('/')) {
+            const int end = inner.indexOf(QLatin1Char('\n'), k + 2);
+            k = end < 0 ? inner.size() - 1 : end;
+        } else if (c == QLatin1Char('R') && k + 1 < inner.size()
+                   && inner.at(k + 1) == QLatin1Char('"')) {
+            const int open = inner.indexOf(QLatin1Char('('), k + 2);
+            if (open >= 0) {
+                const QString end = QLatin1Char(')') + inner.mid(k + 2, open - k - 2)
+                    + QLatin1Char('"');
+                const int close = inner.indexOf(end, open + 1);
+                if (close >= 0) {
+                    k = close + end.size() - 1;
+                }
+            }
+        } else if (c == QLatin1Char('"') || c == QLatin1Char('\'')) {
             quote = c;
         } else if (c == QLatin1Char('(')
             || c == QLatin1Char('[')
@@ -435,7 +545,7 @@ static QStringList splitArguments(const QString & inner)
         ) {
             --depth;
         } else if (c == QLatin1Char(',') && depth == 0) {
-            arguments << inner.mid(first, k - first).trimmed();
+            arguments << sourceArgument(inner.mid(first, k - first));
             first = k + 1;
         }
     }
@@ -717,31 +827,109 @@ static bool fillTemplate(const QString & pattern, const QStringList & arguments,
 }
 
 /*!
+    Fills the placeholders of @a pattern with QString::arg() and @a arguments.
+*/
+static bool fillPositions(const QString & pattern, const QStringList & arguments,
+                          QString *result)
+{
+    QRegExp placeholder(QString(QLL("%L?([0-9]{1,2})")));
+    QSet<int > positions;
+    int position = 0;
+    while ((position = placeholder.indexIn(pattern, position)) >= 0) {
+        positions.insert(placeholder.cap(1).toInt());
+        position += placeholder.matchedLength();
+    }
+    if (positions.size() > arguments.size()) {
+        return false;
+    }
+    *result = pattern;
+    for (int i = 0; i < positions.size(); ++i) {
+        if (arguments.at(i).isNull()) {
+            return false;
+        }
+        *result = result->arg(arguments.at(i));
+    }
+    return true;
+}
+
+/*!
     Builds what a call matched by mapping @a m of @a mappings, whose key's
     `*` matched @a capture, turns into, with @a arguments: the name to call,
     as a full name, to @a head, and the parenthesized arguments to @a call.
     A result that calls a name another key matches turns again, at most as
     often as there are mappings; hence mappings chain, and a cycle ends.
-    Returns false for an argument a template needs that the call lacks.
+    Returns false with @a error when an argument is missing or a replacement
+    expression does not resolve.
 */
 static bool replacement(
         const QList<QPair<QString, QString > > & mappings, int m,
-        QString capture, QStringList arguments,
-        QString *head, QString *call)
+        QString capture, QStringList arguments, QStringList bound,
+        const FormatConditionContext *place,
+        QString *head, QString *call, QString *error)
 {
     for (int step = 0; step <= mappings.size(); ++step) {
-        // Writes what the key's `*` matched in place of each `*` of the value,
-        // but for the `$*` shorthand.
-        QString value;
-        const QString pattern = mappings.at(m).second;
-        for (int k = 0; k < pattern.size(); ++k) {
-            if (pattern.at(k) == QLatin1Char('*')
-                && (k == 0 || pattern.at(k - 1) != QLatin1Char('$'))
-            ) {
-                value += capture;
-            } else {
-                value += pattern.at(k);
+        QString value = mappings.at(m).second;
+        const QSharedPointer<Config::Scopes::Scope > scope =
+            FormatTemplateObject::argumentScope(value);
+        Q_UNUSED(scope);
+        FormatArgsArray args(bound);
+        const FormatCallTemplateContext context(&args, place);
+        QVariant resolved;
+        bool literal = false;
+        QStringList program;
+        const QStringList words;
+        if (Config::Condition::compile(
+            value, FormatFileConfig::replaceTargetNames(), &program, error,
+            false, Config::Condition::NameMismatchError, Q_NULLPTR, &words
+        )) {
+            if ( ! Config::Condition::resolve(
+                program, QSet<QString >(), &context, &resolved
+            )) {
+                *error = QString(QLL("cannot evaluate condition: %1")).arg(value);
+                return false;
             }
+        } else {
+            QString matched;
+            if ( ! Config::Name(true).match(value, &matched)) {
+                return false;
+            }
+            resolved = matched;
+            error->clear();
+            literal = true;
+        }
+        if ( ! resolved.isValid()) {
+            if (step == 0) {
+                head->clear();
+                call->clear();
+            }
+            return true;
+        }
+        if (resolved.type() != QVariant::String || resolved.toString().isEmpty()) {
+            *error = QString(QLL("the replacement expression must give a call or null"));
+            return false;
+        }
+        value = resolved.toString();
+        const QRegExp placeholder(QString(QLL("%L?[0-9]{1,2}")));
+        if (placeholder.indexIn(mappings.at(m).second) >= 0) {
+            QString filledPositions;
+            if ( ! fillPositions(value, bound, &filledPositions)) {
+                *error = QString(QLL("a template argument is missing"));
+                return false;
+            }
+            value = filledPositions;
+        }
+        if (literal) {
+            QString expanded;
+            for (int k = 0; k < value.size(); ++k) {
+                if (value.at(k) == QLatin1Char('*')
+                    && (k == 0 || value.at(k - 1) != QLatin1Char('$'))
+                ) {
+                    expanded += capture;
+                } else {
+                    expanded += value.at(k);
+                }
+            }
+            value = expanded;
         }
         const int paren = value.indexOf(QLatin1Char('('));
         if (paren < 0) {
@@ -751,24 +939,48 @@ static bool replacement(
                 + QLatin1Char(')');
         } else {
             QString filled;
-            if ( ! fillTemplate(value, arguments, &filled)) {
+            if ( ! literal) {
+                filled = value;
+            } else if ( ! fillTemplate(value, bound, &filled)) {
                 head->clear();
                 call->clear();
+                *error = QString(QLL("a template argument is missing"));
                 return false;
             }
             const int filledParen = filled.indexOf(QLatin1Char('('));
             *head = filled.left(filledParen).trimmed();
             *call = filled.mid(filledParen);
         }
-        const int next = mappingOf(
-            mappings,
-            QStringList() << fullName(*head),
-            &capture
-        );
-        if (next < 0 || next == m || ! call->endsWith(QLatin1Char(')'))) {
+        if ( ! literal && mappings.at(m).first.contains(QLatin1Char('*'))) {
+            head->replace(QLatin1Char('*'), capture);
+        }
+        if ( ! literal) {
+            QString matched;
+            if ( ! Config::Name().match(*head, &matched)
+                || ! call->endsWith(QLatin1Char(')'))
+            ) {
+                *error = QString(QLL(
+                    "the replacement expression must give a call or null"
+                ));
+                return false;
+            }
+        }
+        if ( ! call->endsWith(QLatin1Char(')'))) {
             return true;
         }
-        arguments = splitArguments(call->mid(1, call->size() - 2));
+        const QStringList nextArguments = splitArguments(
+            call->mid(1, call->size() - 2)
+        );
+        QStringList nextBound;
+        const int next = mappingOf(
+            mappings, QStringList() << fullName(*head), nextArguments,
+            &capture, &nextBound
+        );
+        if (next < 0 || next == m) {
+            return true;
+        }
+        arguments = nextArguments;
+        bound = nextBound;
         m = next;
     }
     return true;
@@ -822,10 +1034,11 @@ void FormatReplaceTypesRule::run(FormatDocument *document) const
         const QString written = readName(document, start, &end);
         const QStringList scopes = visibleScopes(document, start);
         QString capture;
+        const QStringList arguments = callArguments(document, i + 1, close);
+        QStringList bound;
         const int mapping = mappingOf(
-            config.replaceTypes,
-            candidates(written, scopes),
-            &capture
+            config.replaceTypes, candidates(written, scopes), arguments,
+            &capture, &bound
         );
         if (mapping < 0) {
             continue;
@@ -848,7 +1061,8 @@ void FormatReplaceTypesRule::run(FormatDocument *document) const
         }
         const FormatReplaceTypesContext context(
             document,
-            document->symbolLine(i)
+            document->symbolLine(i),
+            &config
         );
         QVariant wanted;
         if ( ! FormatFileConfig::resolve(
@@ -869,13 +1083,18 @@ void FormatReplaceTypesRule::run(FormatDocument *document) const
             config.replaceTypes,
             mapping,
             capture,
-            callArguments(document, i + 1, close),
+            arguments,
+            bound,
+            &context,
             &head,
-            &call
+            &call,
+            &error
         )) {
             document->report(from, "replace-types",
-                             QString(QLL("%1 lacks an argument that its [Replace.types] "
-                                         "template takes")).arg(written));
+                             QString(QLL("%1: %2")).arg(written, error));
+            continue;
+        }
+        if (head.isEmpty()) {
             continue;
         }
         const QString shortest = shortestName(head, scopes);
