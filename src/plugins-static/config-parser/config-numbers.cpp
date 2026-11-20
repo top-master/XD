@@ -86,22 +86,19 @@ bool Config::Numbers::match(const QString & value, QString *matched) const
 
 /*!
     Converts @a resolved, the number a key's program resolves to, such as
-    the math `1 + 7 - 3`, into @a value, that number as a whole one; returns
-    false for a word, or a number outside of the range this matcher takes.
+    the math `1 + 7 - 3`, into a whole number. Builds an invalid value for a
+    word or a number outside the range this matcher takes.
 */
-bool Config::Numbers::convert(const QVariant & resolved, QVariant *value) const
+QVariant Config::Numbers::convert(const QVariant & resolved) const
 {
     if (resolved.type() != QVariant::Double) {
-        *value = QVariant();
-        return false;
+        return QVariant();
     }
     const qreal number = resolved.toDouble();
     if (number < qreal(this->m_minimum) || number > qreal(this->m_maximum)) {
-        *value = QVariant();
-        return false;
+        return QVariant();
     }
-    *value = qint64(number);
-    return true;
+    return QVariant(qint64(number));
 }
 
 /*!

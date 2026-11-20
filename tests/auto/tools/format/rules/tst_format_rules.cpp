@@ -26,6 +26,22 @@
 
 #include <limits>
 
+/*! Compiles a test expression and exposes the result and diagnostics. */
+static bool compileConditionForTest(
+        const QString & text, const QStringList & names, QStringList *program,
+        QString *error, bool takesPercents = false,
+        Config::NameMismatch mismatch = Config::NameMismatchWarn,
+        bool *mismatched = Q_NULLPTR, const QStringList *words = Q_NULLPTR)
+{
+    const Config::Evaluator::CompileContext context(names, words, mismatch);
+    *program = Config::Condition::compile(text, &context, takesPercents);
+    *error = context.lastErrorForCompile();
+    if (mismatched) {
+        *mismatched = context.mismatched();
+    }
+    return context.lastCompiled();
+}
+
 /// Converts the settings of `parser` into `config`, the way the tool loads
 /// a file's settings, and tells whether that succeeded.
 static bool readSettings(const Config::Parser & parser,
@@ -45,8 +61,10 @@ class CountingConditionContext : public FormatConditionContext
     typedef FormatConditionContext super;
 public:
     inline CountingConditionContext() : isNew(false), calls(0) {}
-    inline QStringList names() const Q_DECL_OVERRIDE_IL
+    inline QStringList onNames() const Q_DECL_OVERRIDE_IL
     { return QStringList() << QString(QLL("isNewClass")) << QString(QLL("isNeeded")); }
+    inline QStringList onEnumKeys() const Q_DECL_OVERRIDE_IL
+    { return FormatFileConfig::superChoices(); }
     bool predicate(const QString &name, bool *value) const Q_DECL_OVERRIDE
     {
         if (name == QLL("isNewClass")) {
@@ -3093,25 +3111,25 @@ void tst_FormatRules::testSettings_shouldReadWrapColumns()
     QString error;
     CountingConditionContext conditionContext;
     QString choice;
-    QVERIFY(Config::Choice::resolve(
-        FormatFileConfig().typedefSuper, FormatFileConfig::superConditionNames(),
-        FormatFileConfig::superChoices(), &conditionContext, &choice, &error
-    ));
+    choice = Config::Choice::resolve(
+        FormatFileConfig().typedefSuper, &conditionContext
+    ).toString();
+    QVERIFY(conditionContext.lastResolvePassed());
     QCOMPARE(choice, QString(QLL("never")));
     QCOMPARE(conditionContext.calls, 0);
     conditionContext.isNew = true;
-    QVERIFY(Config::Choice::resolve(
-        FormatFileConfig().typedefSuper, FormatFileConfig::superConditionNames(),
-        FormatFileConfig::superChoices(), &conditionContext, &choice, &error
-    ));
+    choice = Config::Choice::resolve(
+        FormatFileConfig().typedefSuper, &conditionContext
+    ).toString();
+    QVERIFY(conditionContext.lastResolvePassed());
     QCOMPARE(choice, QString(QLL("always")));
     QCOMPARE(conditionContext.calls, 1);
     conditionContext.calls = 0;
-    QVERIFY(Config::Choice::resolve(
+    choice = Config::Choice::resolve(
         QString(QLL("is_new_class( ) && is_needed() ? if-needed : never")),
-        FormatFileConfig::superConditionNames(), FormatFileConfig::superChoices(),
-        &conditionContext, &choice, &error
-    ));
+        &conditionContext
+    ).toString();
+    QVERIFY(conditionContext.lastResolvePassed());
     QCOMPARE(choice, QString(QLL("if-needed")));
     QCOMPARE(conditionContext.calls, 1);
     Config::Parser choiceParser(FormatFileConfig::schema());
@@ -3214,10 +3232,10 @@ void tst_FormatRules::testWrapMistakes_shouldTakeItsValues()
     QString error;
     const QStringList words = FormatFileConfig::wrapMistakesWords();
     QStringList program;
-    QVERIFY2(Config::Condition::compile(
+    QVERIFY2(compileConditionForTest(
         QString(QLL("is(array) ? average : never")),
         FormatScopeConditions::names(), &program, &error, false,
-        Config::Condition::NameMismatchWarn, Q_NULLPTR, &words
+        Config::NameMismatchWarn, Q_NULLPTR, &words
     ), qPrintable(error));
     qExpect(FormatFileConfig().wrapMistakes)->toEqual(program);
     writeProject(dir, QStringList() << QString(QLL(".formatrc"))
@@ -3230,10 +3248,10 @@ void tst_FormatRules::testWrapMistakes_shouldTakeItsValues()
         &error
     ))
         ->toBeTruthy();
-    QVERIFY2(Config::Condition::compile(
+    QVERIFY2(compileConditionForTest(
         QString(QLL("is(call) ? cfg.joinArgs : never")),
         FormatScopeConditions::names(), &program, &error, false,
-        Config::Condition::NameMismatchWarn, Q_NULLPTR, &words
+        Config::NameMismatchWarn, Q_NULLPTR, &words
     ), qPrintable(error));
     qExpect(settings.wrapMistakes)->toEqual(program);
     writeProject(dir, QStringList() << QString(QLL(".formatrc"))
@@ -4164,21 +4182,22 @@ void tst_FormatRules::testThisMode_shouldFollowSettings()
 
 void tst_FormatRules::testThisMode_shouldDefaultToBaseExistingAndHeaderOutline()
 {
+    const Config::Evaluator::Context testContext(false);
     const QStringList program = FormatFileConfig().thisMode;
     qExpect(program)->toEqual(FormatFileConfig::defaultThisMode());
     const QString outline = QString(QLL("is-outline"));
     QSet<QString > holding;
     holding << QString(QLL("is-base-member"));
-    qExpect(Config::Condition::resolve(program, holding))->toBeTruthy();
+    qExpect(Config::Condition::resolve(program, holding, &testContext).toBool())->toBeTruthy();
     holding.clear();
     holding << outline << QString(QLL("is-non-header"));
-    qExpect(Config::Condition::resolve(program, holding))->toBeFalsy();
+    qExpect(Config::Condition::resolve(program, holding, &testContext).toBool())->toBeFalsy();
     holding.clear();
     holding << outline << QString(QLL("is-header"));
-    qExpect(Config::Condition::resolve(program, holding))->toBeTruthy();
+    qExpect(Config::Condition::resolve(program, holding, &testContext).toBool())->toBeTruthy();
     holding.clear();
     holding << QString(QLL("already-existing"));
-    qExpect(Config::Condition::resolve(program, holding))->toBeTruthy();
+    qExpect(Config::Condition::resolve(program, holding, &testContext).toBool())->toBeTruthy();
 }
 
 void tst_FormatRules::testThisMode_shouldRejectUnknownName()
@@ -4302,21 +4321,21 @@ void tst_FormatRules::testScopeConditions_shouldFallBackWithoutValue()
     QStringList fallback;
     QString error;
     QStringList missing;
-    qExpect(Config::Condition::compile(
+    qExpect(compileConditionForTest(
         QString(QLL("spaceUsed > 40% | never")),
         names,
         &program,
         &error,
         true
     ))->toBeTruthy();
-    qExpect(Config::Condition::compile(
+    qExpect(compileConditionForTest(
         QString(QLL("is(other) | never")),
         names,
         &missing,
         &error,
         true
     ))->toBeTruthy();
-    qExpect(Config::Condition::compile(
+    qExpect(compileConditionForTest(
         QString(QLL("is-header")),
         names,
         &fallback,
@@ -4360,7 +4379,7 @@ void tst_FormatRules::testScopeConditions_shouldTellTargetKinds()
 
     QStringList program;
     QString error;
-    QVERIFY2(Config::Condition::compile(
+    QVERIFY2(compileConditionForTest(
         QString(QLL("is(condition)")), FormatScopeConditions::names(),
         &program, &error, true
     ), qPrintable(error));
@@ -4392,11 +4411,11 @@ void tst_FormatRules::testScopeConditions_shouldCountOverWithGivenSpace()
     QVERIFY( ! conditions.conditionsOver(condition, 2, 0));
 
     QString error;
-    QVERIFY2(Config::Condition::compile(
+    QVERIFY2(compileConditionForTest(
         QString(QLL("spaceRemaining < 30%")), FormatScopeConditions::names(),
         &config.wrapArgsOverCondition, &error, true
     ), qPrintable(error));
-    QVERIFY2(Config::Condition::compile(
+    QVERIFY2(compileConditionForTest(
         QString(QLL("spaceRemaining < 30%")), FormatScopeConditions::names(),
         &config.wrapConditionsOverCondition, &error, true
     ), qPrintable(error));
@@ -4530,7 +4549,7 @@ void tst_FormatRules::testScopeConditions_shouldCountConditionOperands()
     QCOMPARE(loopConditions.conditionArgumentCount(symbolIndex(loop, "while") + 1, 0), 2);
     FormatFileConfig config;
     QString error;
-    QVERIFY(Config::Condition::compile(
+    QVERIFY(compileConditionForTest(
         QString(QLL("argCount(0) > 2 && spaceRemaining <= 20%")),
         FormatScopeConditions::names(), &config.wrapConditionsOverCondition,
         &error, true
@@ -4557,7 +4576,7 @@ void tst_FormatRules::testScopeConditions_shouldLimitConditionRanges()
     QString error;
     const QSharedPointer<Config::Scopes::Scope > scope =
         FormatConditionContext::pushCountScope();
-    QVERIFY2(Config::Condition::compile(
+    QVERIFY2(compileConditionForTest(
         QString(QLL("value > 2")), FormatScopeConditions::names(),
         &config.wrapConditionsOverCondition, &error, true
     ), qPrintable(error));
@@ -4682,19 +4701,19 @@ void tst_FormatRules::testScopeConditions_shouldOfferValueToCountSettingsOnly()
 {
     QStringList program;
     QString error;
-    QVERIFY( ! Config::Condition::compile(
+    QVERIFY( ! compileConditionForTest(
         QString(QLL("value > 1")), FormatScopeConditions::names(),
         &program, &error, true
     ));
     {
         const QSharedPointer<Config::Scopes::Scope > scope =
             FormatConditionContext::pushCountScope();
-        QVERIFY2(Config::Condition::compile(
+        QVERIFY2(compileConditionForTest(
             QString(QLL("value > 1")), FormatScopeConditions::names(),
             &program, &error, true
         ), qPrintable(error));
     }
-    QVERIFY( ! Config::Condition::compile(
+    QVERIFY( ! compileConditionForTest(
         QString(QLL("value > 1")), FormatScopeConditions::names(),
         &program, &error, true
     ));
@@ -4702,39 +4721,41 @@ void tst_FormatRules::testScopeConditions_shouldOfferValueToCountSettingsOnly()
 
 void tst_FormatRules::testScopeConditions_shouldEvaluateArgumentExpressions()
 {
+    const Config::Evaluator::Context testContext(false);
+    QVariant testResolvedValue;
     // Gives the conditions below the `value` of a count setting.
     const QSharedPointer<Config::Scopes::Scope > countScope =
         FormatConditionContext::pushCountScope();
     QStringList lazyProgram;
     QString lazyError;
     bool lazyOk = false;
-    QVERIFY(Config::Condition::compile(
+    QVERIFY(compileConditionForTest(
         QString(QLL("false && value > 0")), QStringList(),
         &lazyProgram, &lazyError
     ));
-    QVERIFY( ! Config::Condition::resolve(
-        lazyProgram, QSet<QString >(), Q_NULLPTR,
-        &lazyOk
-    ));
+    testResolvedValue = Config::Condition::resolve(lazyProgram, QSet<QString >(), &testContext);
+    lazyOk = testContext.lastResolvePassed()
+        && testResolvedValue.type() == QVariant::Double;
+    QVERIFY( ! (lazyOk && testResolvedValue.toBool()));
     QVERIFY(lazyOk);
     const QStringList predicates = QStringList() << QString(QLL("isAvailable"));
-    QVERIFY(Config::Condition::compile(
+    QVERIFY(compileConditionForTest(
         QString(QLL("false && isAvailable()")), predicates,
         &lazyProgram, &lazyError
     ));
-    QVERIFY( ! Config::Condition::resolve(
-        lazyProgram, QSet<QString >(), Q_NULLPTR,
-        &lazyOk
-    ));
+    testResolvedValue = Config::Condition::resolve(lazyProgram, QSet<QString >(), &testContext);
+    lazyOk = testContext.lastResolvePassed()
+        && testResolvedValue.type() == QVariant::Double;
+    QVERIFY( ! (lazyOk && testResolvedValue.toBool()));
     QVERIFY(lazyOk);
-    QVERIFY(Config::Condition::compile(
+    QVERIFY(compileConditionForTest(
         QString(QLL("true || value > 0")), QStringList(),
         &lazyProgram, &lazyError
     ));
-    QVERIFY(Config::Condition::resolve(
-        lazyProgram, QSet<QString >(), Q_NULLPTR,
-        &lazyOk
-    ));
+    testResolvedValue = Config::Condition::resolve(lazyProgram, QSet<QString >(), &testContext);
+    lazyOk = testContext.lastResolvePassed()
+        && testResolvedValue.type() == QVariant::Double;
+    QVERIFY(lazyOk && testResolvedValue.toBool());
     QVERIFY(lazyOk);
     FormatDocument document(
         "void declareThing(int first, int second, int third, int fourth);\n"
@@ -4770,7 +4791,7 @@ void tst_FormatRules::testScopeConditions_shouldEvaluateArgumentExpressions()
 
     FormatFileConfig settings;
     QString error;
-    QVERIFY(Config::Condition::compile(
+    QVERIFY(compileConditionForTest(
         QString(QLL("argCount(0) > 3 && (space_remaining <= 18.75% || is_signature)")),
         FormatScopeConditions::names(),
         &settings.wrapArgsOverCondition,
@@ -4783,7 +4804,7 @@ void tst_FormatRules::testScopeConditions_shouldEvaluateArgumentExpressions()
     QVERIFY( ! conditions.argsOver(outer, 4, 18.76));
     QVERIFY( ! conditions.argsOver(inner, 2, 10));
     QVERIFY(conditions.argsOver(declaration, 4, 90));
-    QVERIFY(Config::Condition::compile(
+    QVERIFY(compileConditionForTest(
         QString(QLL("argCount(-1) == 4 && argCount(1, 2) - 1 == 1")),
         FormatScopeConditions::names(),
         &settings.wrapArgsOverCondition,
@@ -4804,7 +4825,7 @@ void tst_FormatRules::testScopeConditions_shouldEvaluateArgumentExpressions()
     QCOMPARE(conditions.argumentCount(outer, 1, 3), -1);
     const int definition = symbolIndex(document, "work") + 1;
     QVERIFY(conditions.holding(definition).contains(QString(QLL("is-signature"))));
-    QVERIFY(Config::Condition::compile(
+    QVERIFY(compileConditionForTest(
         QString(QLL("value - 1 == 3 && isSignature")),
         FormatScopeConditions::names(),
         &settings.wrapArgsOverCondition,
@@ -4813,7 +4834,7 @@ void tst_FormatRules::testScopeConditions_shouldEvaluateArgumentExpressions()
     ));
     document.setConfig(settings);
     QVERIFY(conditions.argsOver(declaration, 4, 70));
-    QVERIFY(Config::Condition::compile(
+    QVERIFY(compileConditionForTest(
         QString(QLL("argCount(0) > 3 && spaceUsed > 40%")),
         FormatScopeConditions::names(),
         &settings.wrapArgsOverCondition,
@@ -4835,7 +4856,7 @@ void tst_FormatRules::testScopeConditions_shouldEvaluateArgumentExpressions()
         41,
         fallback
     ));
-    QVERIFY( ! Config::Condition::compile(
+    QVERIFY( ! compileConditionForTest(
         QString(QLL("space-remaining < 20%")), FormatScopeConditions::names(),
         &settings.wrapArgsOverCondition, &error, true
     ));

@@ -17,27 +17,10 @@
 
 namespace Config {
 
-enum EvalFlag {
-    FailedToCompile = 0x01,
-    Fallback = 0x02,
-    FailedToResolve = 0x04,
-    FailedToFallback = 0x08,
-    Resolved = 0x10
-};
-Q_DECLARE_FLAGS(EvalRes, EvalFlag)
-Q_DECLARE_OPERATORS_FOR_FLAGS(EvalRes)
-
 class Condition : public ValueMatcher
 {
     typedef ValueMatcher super;
 public:
-    enum NameMismatch {
-        NameMismatchIgnore,
-        NameMismatchWarn,
-        NameMismatchError,
-        NameMismatchCritical
-    };
-
     enum Result {
         ResultHolds,
         ResultNumber
@@ -51,29 +34,17 @@ public:
             Scopes::Setup setup = Q_NULLPTR, Result result = ResultHolds);
     bool match(const QString & value, QString *matched) const Q_DECL_OVERRIDE;
     QString describe() const Q_DECL_OVERRIDE;
-    bool convert(const QVariant & resolved,
-                 QVariant *value) const Q_DECL_OVERRIDE;
+    QVariant convert(const QVariant & resolved) const Q_DECL_OVERRIDE;
 
-    static bool compile(const QString & text,
-                        const QStringList & names,
-                        QStringList *program,
-                        QString *error, bool takesPercents = false,
-                        NameMismatch mismatch = NameMismatchWarn,
-                        bool *mismatched = Q_NULLPTR,
-                        const QStringList *words = Q_NULLPTR);
-    static bool resolve(const QStringList & program,
-                        const QSet<QString > & holding,
-                        const Evaluator::Context *context, QVariant *result);
-    static bool resolve(const QStringList & program,
-                        const QSet<QString > & holding,
-                        const Evaluator::Context *context = Q_NULLPTR,
-                        bool *resolved = Q_NULLPTR);
-    static bool resolve(const QStringList & program,
-                        const QSet<QString > & holding, bool *resolved);
-    static EvalRes eval(
-            const QString & text,
-            const Evaluator::Context *context, QVariant *result,
-            QString *error, const ValueMatcher *fallback = Q_NULLPTR);
+    static QStringList compile(const QString & text,
+                        const Evaluator::CompileContext *context,
+                        bool takesPercents = false);
+    static QVariant resolve(const QStringList & program,
+                            const QSet<QString > & holding,
+                            const Evaluator::Context *context);
+    static QVariant eval(const QString & text,
+                         const Evaluator::Context *context,
+                         const ValueMatcher *fallback = Q_NULLPTR);
     static bool value(const QStringList & program,
                       const QSet<QString > & holding,
                       const Evaluator::Context *context, qreal *number);
@@ -91,32 +62,16 @@ private:
 };
 
 #ifndef Q_MOC_RUN
-Q_ALWAYS_INLINE bool Condition::resolve(
-        const QStringList & program, const QSet<QString > & holding,
-        const Evaluator::Context *context, bool *resolved)
-{
-    QVariant value;
-    const bool ok = resolve(program, holding, context, &value)
-        && value.type() == QVariant::Double;
-    if (resolved) {
-        *resolved = ok;
-    }
-    return ok && value.toDouble() != 0;
-}
-
-Q_ALWAYS_INLINE bool Condition::resolve(
-        const QStringList & program, const QSet<QString > & holding,
-        bool *resolved)
-{
-    return resolve(program, holding, Q_NULLPTR, resolved);
-}
-
 Q_ALWAYS_INLINE bool Condition::value(
         const QStringList & program, const QSet<QString > & holding,
         const Evaluator::Context *context, qreal *number)
 {
-    QVariant result;
-    const bool isNumber = resolve(program, holding, context, &result)
+    const Evaluator::Context empty(false);
+    if ( ! context) {
+        context = &empty;
+    }
+    const QVariant result = resolve(program, holding, context);
+    const bool isNumber = context->lastResolvePassed()
         && result.type() == QVariant::Double;
     *number = isNumber ? result.toDouble() : 0;
     return isNumber;

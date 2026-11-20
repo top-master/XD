@@ -30,12 +30,9 @@ Config::Choice::Choice(const QStringList &names, const QStringList &values)
 */
 bool Config::Choice::match(const QString &value, QString *matched) const
 {
-    QString error;
-    bool mismatched = false;
-    if ( ! Config::Choice::check(value, this->m_names, this->m_values,
-                                 Condition::NameMismatchIgnore, &error,
-                                 &mismatched)
-    ) {
+    const Evaluator::CompileContext context(this->m_names, &this->m_values);
+    Condition::compile(value, &context);
+    if ( ! context.lastCompiled()) {
         *matched = QString();
         return false;
     }
@@ -51,45 +48,36 @@ bool Config::Choice::match(const QString &value, QString *matched) const
 */
 QString Config::Choice::explain(const QString & value) const
 {
-    QString error;
-    bool mismatched = false;
-    if (Config::Choice::check(value, this->m_names, this->m_values,
-                              Condition::NameMismatchIgnore, &error,
-                              &mismatched)
-    ) {
+    const Evaluator::CompileContext context(this->m_names, &this->m_values);
+    Condition::compile(value, &context);
+    if (context.lastCompiled()) {
         return QString();
     }
-    return error;
+    return context.lastErrorForCompile();
 }
 
 /*!
-    Converts @a resolved, what the choice resolves to (see resolve()), into
-    @a value:
-    a word the choice lists, in the list's spelling, or any text when it
-    lists none, as a QString, or a number as a qreal. Returns false for any
-    other result, such as a word it does not list.
+    Converts @a resolved, what the choice resolves to (see resolve()), to a
+    listed word in its own spelling, any text when no word is listed, or a
+    number as a qreal. Builds an invalid value for any other result.
 */
-bool Config::Choice::convert(const QVariant & resolved, QVariant *value) const
+QVariant Config::Choice::convert(const QVariant & resolved) const
 {
     if (resolved.type() == QVariant::Double) {
-        *value = resolved;
-        return true;
+        return resolved;
     }
     const QString word = resolved.toString();
     for (int i = 0; i < this->m_values.size(); ++i) {
         if (this->m_values.at(i).compare(word, Qt::CaseInsensitive) == 0) {
-            *value = this->m_values.at(i);
-            return true;
+            return this->m_values.at(i);
         }
     }
     if (resolved.type() != QVariant::String
         || ! this->m_values.isEmpty()
     ) {
-        *value = QVariant();
-        return false;
+        return QVariant();
     }
-    *value = word;
-    return true;
+    return word;
 }
 
 /*!
@@ -106,79 +94,28 @@ QString Config::Choice::describe() const
 }
 
 /*!
-    Checks the conditions of @a expression, a choice over @a names and
-    @a values, and handles a name that differs from a known one in case
-    alone as @a mismatch says (see Condition::NameMismatch); returns false,
-    with @a error, for a choice that does not compile, and sets
-    @a mismatched when a name mismatch failed it.
+    Resolves @a expression at @a context: a word as a QString or a number
+    as a qreal. The context records whether resolution passed and any error.
 */
-bool Config::Choice::check(const QString &expression, const QStringList &names,
-                           const QStringList &values,
-                           Condition::NameMismatch mismatch, QString *error,
-                           bool *mismatched)
+QVariant Config::Choice::resolve(const QString & expression,
+                                  const Evaluator::Context *context)
 {
-    QStringList program;
-    return Condition::compile(expression, names, &program, error, false,
-                              mismatch, mismatched, &values);
-}
-
-/*!
-    Resolves @a expression with @a context and stores its selected word in
-    @a result as text, a number as its digits (see the resolve() below).
-    Reports an invalid expression in @a error.
-*/
-bool Config::Choice::resolve(
-        const QString &expression, const QStringList &names,
-        const QStringList &values, const Evaluator::Context *context,
-        QString *result, QString *error)
-{
-    QVariant resolved;
-    if ( ! Config::Choice::resolve(
-        expression, names, values, context,
-        &resolved, error
-    )) {
-        *result = QString();
-        return false;
-    }
-    *result = resolved.toString();
-    return true;
-}
-
-/*!
-    Resolves @a expression with @a context into @a result: the word it picks
-    as a QString, or the number it gives as a qreal (see
-    Condition::resolve()); hence the caller tells the two apart by the type.
-    Reports an invalid expression in @a error.
-*/
-bool Config::Choice::resolve(
-        const QString &expression, const QStringList &names,
-        const QStringList &values,
-        const Evaluator::Context *context,
-        QVariant *result, QString *error)
-{
+    Q_ASSERT(context);
     const QString text = expression.trimmed();
-    QStringList program;
-    QString reason;
-    if ( ! Condition::compile(
-        text,
-        names,
-        &program,
-        &reason,
-        false,
-        Condition::NameMismatchIgnore,
-        Q_NULLPTR,
-        &values
-    )) {
-        *error = QString(QLL("invalid conditional choice: %1")).arg(text);
-        if ( ! reason.isEmpty()) {
-            *error += QLL(": ") + reason;
+    Evaluator::MismatchScope scope(context, NameMismatchIgnore);
+    const QStringList program = Condition::compile(text, context);
+    scope.close();
+    if ( ! context->lastCompiled()) {
+        context->m_lastResolvePassed = false;
+        context->m_lastError = QString(QLL("invalid conditional choice: %1")).arg(text);
+        if ( ! context->lastErrorForCompile().isEmpty()) {
+            context->m_lastError += QLL(": ") + context->lastErrorForCompile();
         }
-        *result = QVariant();
-        return false;
+        return QVariant();
     }
-    if ( ! Condition::resolve(program, QSet<QString >(), context, result)) {
-        *error = QString(QLL("cannot evaluate condition: %1")).arg(text);
-        return false;
+    const QVariant result = Condition::resolve(program, QSet<QString >(), context);
+    if ( ! context->lastResolvePassed()) {
+        context->m_lastError = QString(QLL("cannot evaluate condition: %1")).arg(text);
     }
-    return true;
+    return result;
 }

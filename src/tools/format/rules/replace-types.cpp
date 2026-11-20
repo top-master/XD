@@ -66,9 +66,14 @@ public:
         return m_arguments;
     }
 
-    inline QStringList names() const Q_DECL_OVERRIDE_IL
+    inline QStringList onNames() const Q_DECL_OVERRIDE_IL
     {
         return m_place ? m_place->names() : QStringList();
+    }
+
+    inline QStringList onEnumKeys() const Q_DECL_OVERRIDE_IL
+    {
+        return Config::Evaluator::CompileContext::anyEnumKeys();
     }
 
     inline const FormatFileConfig *fileConfig() const Q_DECL_OVERRIDE_IL
@@ -581,19 +586,17 @@ static bool literalValues(const QString & text, QVariantList *values)
 
 /*!
     Resolves what the member @a name of @a object gives with @a values, at
-    the place @a context stands for, into @a result; returns false when
-    @a object offers no such member, or it gives no result there (such as
-    `at()` past the arguments).
+    the place @a context stands for. Builds an invalid value if it has no
+    result there.
 */
-static bool resolveMember(Config::Object *object, const QString & name,
-                          const QVariantList & values,
-                          const FormatConditionContext *context,
-                          QVariant *result)
+static QVariant resolveMember(Config::Object *object, const QString & name,
+                              const QVariantList & values,
+                              const FormatConditionContext *context)
 {
     Config::Scopes::Member member;
     member.object = object;
     member.name = Config::Condition::canonicalName(name);
-    return Config::Scopes::resolve(member, context, values, result);
+    return Config::Scopes::resolve(member, context, values);
 }
 
 /*!
@@ -605,22 +608,17 @@ static Config::Object *scopeObject(
         const QString & name,
         const FormatConditionContext *context)
 {
-    QVariant resolved;
     const Config::Scopes::Member member = Config::Scopes::find(
         Config::Condition::canonicalName(name)
     );
     if (member.isNull()
         || member.minimumArguments > 0
-        || ! Config::Scopes::resolve(
-            member,
-            context,
-            QVariantList(),
-            &resolved
-        )
     ) {
         return Q_NULLPTR;
     }
-    return Config::Types::object(resolved);
+    return Config::Types::object(Config::Scopes::resolve(
+        member, context, QVariantList()
+    ));
 }
 
 /*!
@@ -662,7 +660,8 @@ static bool stepsText(const QString & pattern, int *position,
         } else {
             break;
         }
-        if ( ! resolveMember(object, name, values, context, &resolved)) {
+        resolved = resolveMember(object, name, values, context);
+        if ( ! resolved.isValid()) {
             return false;
         }
         object = Config::Types::object(resolved);
@@ -845,15 +844,13 @@ static bool replacement(
         Q_UNUSED(scope);
         FormatArgsArray args(bound);
         const FormatCallTemplateContext context(&args, place);
-        QVariant resolved;
         const Config::Name fallback(true);
-        const Config::EvalRes result = Config::Condition::eval(
-            value, &context,
-            &resolved, error, &fallback
-        );
+        const QVariant resolved = Config::Condition::eval(value, &context, &fallback);
+        const Config::EvalRes result = context.lastEvalResult();
         if (result.includes(Config::FailedToResolve)
             || result.includes(Config::FailedToFallback)
         ) {
+            *error = context.lastError();
             return false;
         }
         const bool literal = result.includes(Config::Fallback);
@@ -1011,26 +1008,18 @@ void FormatReplaceTypesRule::run(FormatDocument *document) const
             &config
         );
         QStringList *program = &(programs[config.replaceTypesTarget]);
-        QString error;
-        if (program->isEmpty()
-            && ! Config::Condition::compile(
-                config.replaceTypesTarget,
-                context.names(),
-                program,
-                &error,
-                false,
-                Config::Condition::NameMismatchIgnore
-            )
-        ) {
-            continue;
+        if (program->isEmpty()) {
+            Config::Evaluator::MismatchScope scope(&context, Config::NameMismatchIgnore);
+            *program = Config::Condition::compile(config.replaceTypesTarget, &context);
+            scope.close();
+            if ( ! context.lastCompiled()) {
+                continue;
+            }
         }
-        QVariant wanted;
-        if ( ! FormatFileConfig::resolve(
-                QString(QLL("replace.types.target")),
-                *program,
-                &context,
-                &wanted
-            )
+        const QVariant wanted = FormatFileConfig::resolve(
+            QString(QLL("replace.types.target")), *program, &context
+        );
+        if ( ! context.lastResolvePassed()
             || ! wanted.toBool()
         ) {
             continue;
@@ -1039,6 +1028,7 @@ void FormatReplaceTypesRule::run(FormatDocument *document) const
         const int from = document->symbols().at(start).from;
         QString head;
         QString call;
+        QString error;
         if ( ! replacement(
             config.replaceTypes,
             mapping,

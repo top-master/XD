@@ -89,7 +89,7 @@ public:
     {
     }
 
-    inline QStringList names() const Q_DECL_OVERRIDE_IL
+    inline QStringList onNames() const Q_DECL_OVERRIDE_IL
     { return FormatScopeConditions::names(); }
     bool predicate(const QString &name, bool *value) const Q_DECL_OVERRIDE;
     bool value(qreal *value) const Q_DECL_OVERRIDE;
@@ -163,9 +163,7 @@ static QVariant resolveOf(
         const QString & key, const QStringList & program,
         const Config::Evaluator::Context *context)
 {
-    QVariant value;
-    FormatFileConfig::resolve(key, program, context, &value);
-    return value;
+    return FormatFileConfig::resolve(key, program, context);
 }
 
 } // namespace

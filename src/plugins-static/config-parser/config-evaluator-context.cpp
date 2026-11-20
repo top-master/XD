@@ -10,15 +10,51 @@
     Answers what a condition asks for at the place its caller evaluates it
     (see Config::Condition::eval()): its names, before the caller's set
     of names does; the objects a tool adds to a scope of Config::Scopes reach
-    it as well, and answer from it (see Config::Object::context()).
+    it as well, and answer from it (see Config::Object::context()). Construct
+    a context with `false` when it has no place to answer for. Each context
+    belongs to one thread; each operation records its final status after any
+    inner call that reused the context finishes.
 */
 
 /*!
     Lists the predicate names this context can resolve.
 */
-QStringList Config::Evaluator::Context::names() const
+QStringList Config::Evaluator::CompileContext::names() const
 {
-    return QStringList();
+    if ( ! this->m_isOnNamesCalled) {
+        this->m_names = this->onNames();
+        this->m_isOnNamesCalled = true;
+    }
+    return this->m_names;
+}
+
+/*!
+    Builds the predicate names that names() caches.
+*/
+QStringList Config::Evaluator::CompileContext::onNames() const
+{
+    return this->m_names;
+}
+
+/*!
+    Lists the allowed words in a choice. An empty list takes no choice;
+    anyEnumKeys() takes any word.
+*/
+QStringList Config::Evaluator::CompileContext::enumKeys() const
+{
+    if ( ! this->m_isOnEnumKeysCalled) {
+        this->m_enumKeys = this->onEnumKeys();
+        this->m_isOnEnumKeysCalled = true;
+    }
+    return this->m_enumKeys;
+}
+
+/*!
+    Builds the choice words that enumKeys() caches.
+*/
+QStringList Config::Evaluator::CompileContext::onEnumKeys() const
+{
+    return this->m_enumKeys;
 }
 
 /*!

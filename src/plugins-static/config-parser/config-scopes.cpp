@@ -167,17 +167,15 @@ static QVariant liveResult(const QVariant & value)
 
 /*!
     Calls the slot @a method of @a object with @a arguments, each converted
-    to the type of its parameter, and gives what it returns to @a result;
-    returns false for an argument that does not convert.
+    to the type of its parameter. Sets @a invoked when the call succeeds.
 */
-static bool invokeSlot(Config::Object *object, const QMetaMethod & method,
-                       const QVariantList & arguments, QVariant *result)
+static QVariant invokeSlot(Config::Object *object, const QMetaMethod & method,
+                           const QVariantList & arguments, bool *invoked)
 {
-    *result = QVariant();
     if (arguments.size() != method.parameterCount()
         || arguments.size() > 10
     ) {
-        return false;
+        return QVariant();
     }
     QVariantList values = arguments;
     QGenericArgument passed[10];
@@ -188,7 +186,7 @@ static bool invokeSlot(Config::Object *object, const QMetaMethod & method,
             continue;
         }
         if ( ! values[i].convert(type)) {
-            return false;
+            return QVariant();
         }
         passed[i] = QGenericArgument(
             QMetaType::typeName(type),
@@ -205,7 +203,7 @@ static bool invokeSlot(Config::Object *object, const QMetaMethod & method,
         // A pointer of a type Qt does not know counts only once it names a
         // `Config::Object` that lives (see `Config::Types::liveObject()`).
         if ( ! QByteArray(method.typeName()).endsWith('*')) {
-            return false;
+            return QVariant();
         }
         storage = QGenericReturnArgument(method.typeName(), &address);
     } else if (returnType != QMetaType::Void) {
@@ -232,17 +230,18 @@ static bool invokeSlot(Config::Object *object, const QMetaMethod & method,
             passed[9]
         )
     ) {
-        return false;
+        return QVariant();
+    }
+    if (invoked) {
+        *invoked = true;
     }
     if (returnType == QMetaType::UnknownType) {
         Config::Object *object = Config::Types::liveObject(address);
-        *result = object
+        return object
             ? QVariant::fromValue<QObject * >(object)
             : QVariant();
-        return true;
     }
-    *result = liveResult(returned);
-    return true;
+    return liveResult(returned);
 }
 
 /*!
@@ -492,26 +491,22 @@ Config::Scopes::Member Config::Scopes::member(
 
 /*!
     Calls @a member with @a arguments, for the place @a context stands for
-    (see Config::Object::context()), and resolves what it gives into
-    @a result. Returns false when the member gives no result there (an
-    invalid value).
+    (see Config::Object::context()). An invalid value means it gives no
+    result there.
 */
-bool Config::Scopes::resolve(
+QVariant Config::Scopes::resolve(
         const Member & member, const Evaluator::Context *context,
-        const QVariantList & arguments, QVariant *result)
+        const QVariantList & arguments)
 {
     if (member.isNull()) {
-        *result = QVariant();
-        return false;
+        return QVariant();
     }
     const ContextGuard guard(context);
     return Config::Scopes::invoke(
         member.object,
         member.name,
-        arguments,
-        result
-    )
-        && result->isValid();
+        arguments
+    );
 }
 
 /*!
@@ -525,8 +520,8 @@ bool Config::Scopes::call(
         const Member & member, const Evaluator::Context *context,
         const QVariantList & arguments, qreal *result)
 {
-    QVariant resolved;
-    if ( ! Config::Scopes::resolve(member, context, arguments, &resolved)
+    const QVariant resolved = Config::Scopes::resolve(member, context, arguments);
+    if ( ! resolved.isValid()
         || Config::Types::object(resolved)
     ) {
         *result = 0;
@@ -551,14 +546,16 @@ bool Config::Scopes::call(
 /*!
     Calls the slot or reads the property @a name (in any spelling of its `_`
     and `-` signs that Config::Condition::canonicalName() makes equal) of
-    @a object with @a arguments, and gives what it returns to @a result;
-    returns false when @a object offers no such member
-    (see Config::Object for which count) that takes that many arguments.
+    @a object with @a arguments. Sets @a invoked when a member accepts
+    the call, including when that member returns an invalid value.
 */
-bool Config::Scopes::invoke(
+QVariant Config::Scopes::invoke(
         Config::Object *object, const QString & name,
-        const QVariantList & arguments, QVariant *result)
+        const QVariantList & arguments, bool *invoked)
 {
+    if (invoked) {
+        *invoked = false;
+    }
     const QString canonical = Config::Condition::canonicalName(name);
     const QMetaObject *meta = object->metaObject();
     const QList<ObjectMember > members = membersOf(object);
@@ -570,21 +567,24 @@ bool Config::Scopes::invoke(
 
         // Reads a property for a call without arguments only.
         if (item.kind == ObjectMember::Property && arguments.isEmpty()) {
-            *result = liveResult(meta->property(item.index).read(object));
-            return true;
+            if (invoked) {
+                *invoked = true;
+            }
+            return liveResult(meta->property(item.index).read(object));
         }
         if (item.kind == ObjectMember::DynamicProperty && arguments.isEmpty()) {
-            *result = liveResult(object->dynamicValue(
+            if (invoked) {
+                *invoked = true;
+            }
+            return liveResult(object->dynamicValue(
                 object->dynamicPropertyNames().at(item.index)
             ));
-            return true;
         }
         if (item.kind == ObjectMember::Slot
             && meta->method(item.index).parameterCount() == arguments.size()
         ) {
-            return invokeSlot(object, meta->method(item.index), arguments, result);
+            return invokeSlot(object, meta->method(item.index), arguments, invoked);
         }
     }
-    *result = QVariant();
-    return false;
+    return QVariant();
 }

@@ -445,23 +445,22 @@ QString FormatReplacementMatcher::describe() const
 */
 QString FormatReplacementMatcher::explain(const QString & value) const
 {
-    QStringList program;
-    QString error;
     const QSharedPointer<Config::Scopes::Scope > scope =
         FormatTemplateObject::argumentScope(value);
     Q_UNUSED(scope);
     const QStringList words;
-    if (Config::Condition::compile(
-        value, FormatReplaceTypesContext().names(), &program, &error, false,
-        Config::Condition::NameMismatchError, Q_NULLPTR, &words
-    )) {
+    const Config::Evaluator::CompileContext context(
+        FormatReplaceTypesContext().names(), &words, Config::NameMismatchError
+    );
+    Config::Condition::compile(value, &context);
+    if (context.lastCompiled()) {
         return QString();
     }
     QString matched;
     if (Config::Name(true).match(value, &matched)) {
         return QString();
     }
-    return error;
+    return context.lastErrorForCompile();
 }
 
 /*!
@@ -694,19 +693,17 @@ Q_GLOBAL_STATIC_WITH_ARGS(Config::Schema, settingsSchema,
 /*!
     Resolves @a program, which a setting @a key (`<section>.<key>`) compiled,
     at the place that @a context answers (see Config::Condition::resolve()),
-    into @a value, the value of the type that the setting takes, as its
+    into the value of the type that the setting takes, as its
     matchers in the schema convert it (see Config::Schema::convert()):
     whether a condition holds, the number a count gives, or the word a
-    choice picks. This is the one way the tool evaluates a setting; returns
-    false when a term misses what it needs, or the setting takes no such
-    result, hence its default decides.
+    choice picks. The context records whether resolution and conversion
+    passed; a missing term or an invalid result leaves its default to decide.
 */
-bool FormatFileConfig::resolve(
+QVariant FormatFileConfig::resolve(
         const QString & key, const QStringList & program,
-        const Config::Evaluator::Context *context,
-        QVariant *value)
+        const Config::Evaluator::Context *context)
 {
-    return settingsSchema()->resolve(key, program, context, value);
+    return settingsSchema()->resolve(key, program, context);
 }
 
 /*!
@@ -735,37 +732,9 @@ QVariant FormatFileConfig::resolveCached(
     if (found) {
         return value;
     }
-    settingsSchema()->resolve(key, program, context, &value);
+    value = settingsSchema()->resolve(key, program, context);
     this->m_cache.add(key, program, value);
     return value;
-}
-
-/*!
-    Compiles @a text over the names @a names (and the words @a words of a
-    choice, when not null; see Config::Condition::compile(), which handles a
-    misspelled name as @a mismatch says), and resolves it as resolve() does.
-    Returns false, with @a error, when the text does not compile, or does
-    not resolve.
-*/
-bool FormatFileConfig::resolveText(
-        const QString & key, const QString & text,
-        const QStringList & names, const QStringList *words,
-        Config::Condition::NameMismatch mismatch,
-        const Config::Evaluator::Context *context,
-        QVariant *value, QString *error)
-{
-    QStringList program;
-    if ( ! Config::Condition::compile(
-        text, names, &program, error, false, mismatch, Q_NULLPTR, words
-    )) {
-        *value = QVariant();
-        return false;
-    }
-    if ( ! FormatFileConfig::resolve(key, program, context, value)) {
-        *error = QString(QLL("cannot evaluate condition: %1")).arg(text);
-        return false;
-    }
-    return true;
 }
 
 /*!
@@ -792,32 +761,25 @@ static void reportCondition(const QString & error, bool mismatched)
 */
 static bool compileCondition(const QString & text, QStringList *program,
                              bool takesPercents = false,
-                             Config::Condition::NameMismatch mismatch
-                                 = Config::Condition::NameMismatchWarn,
+                             Config::NameMismatch mismatch
+                                 = Config::NameMismatchWarn,
                              QString *error = Q_NULLPTR,
                              const QStringList *words = Q_NULLPTR)
 {
-    QString reason;
-    QStringList compiled;
-    bool mismatched = false;
-    if ( ! Config::Condition::compile(
-        text,
-        FormatScopeConditions::names(),
-        &compiled,
-        &reason,
-        takesPercents,
-        mismatch,
-        &mismatched,
-        words
-    )) {
-        if (mismatched
-            && mismatch == Config::Condition::NameMismatchCritical
+    const Config::Evaluator::CompileContext context(
+        FormatScopeConditions::names(), words, mismatch
+    );
+    const QStringList compiled = Config::Condition::compile(text, &context, takesPercents);
+    if ( ! context.lastCompiled()) {
+        if (context.mismatched()
+            && mismatch == Config::NameMismatchCritical
         ) {
-            *error = reason;
+            *error = context.lastErrorForCompile();
             program->clear();
             return false;
         }
-        reportCondition(reason, mismatched);
+        reportCondition(context.lastErrorForCompile(),
+                        context.mismatched());
         return true;
     }
     *program = compiled;
@@ -1015,7 +977,7 @@ static QList<int > columnsOf(const QString & value)
 static bool readCountOrCondition(
         const Config::Parser & parser, const QString & key, int *count,
         QStringList *program,
-        Config::Condition::NameMismatch mismatch, QString *error)
+        Config::NameMismatch mismatch, QString *error)
 {
     const QString value = parser.value(key);
     bool isNumber = false;
@@ -1031,12 +993,13 @@ static bool readCountOrCondition(
         *count = 0;
         return false;
     }
-    QVariant constant;
-    if (isConstant(*program)
-        && FormatFileConfig::resolve(key, *program, Q_NULLPTR, &constant)
-    ) {
-        *count = FormatFileConfig::countOf(constant);
-        program->clear();
+    if (isConstant(*program)) {
+        const Config::Evaluator::Context context(false);
+        const QVariant constant = FormatFileConfig::resolve(key, *program, &context);
+        if (context.lastResolvePassed()) {
+            *count = FormatFileConfig::countOf(constant);
+            program->clear();
+        }
     }
     return true;
 }
@@ -1082,30 +1045,21 @@ QList<QPair<QString, QString > > FormatFileConfig::expandPrevious(
 */
 static bool checkCondition(QString *text, const QStringList & names,
                            const QString & defaultValue,
-                           Config::Condition::NameMismatch mismatch,
+                           Config::NameMismatch mismatch,
                            QString *error)
 {
-    QStringList program;
-    QString reason;
-    bool mismatched = false;
-    if (Config::Condition::compile(
-            *text,
-            names,
-            &program,
-            &reason,
-            false,
-            mismatch,
-            &mismatched
-        )
-        || ! mismatched
+    const Config::Evaluator::CompileContext context(names, Q_NULLPTR, mismatch);
+    Config::Condition::compile(*text, &context);
+    if (context.lastCompiled()
+        || ! context.mismatched()
     ) {
         return true;
     }
-    if (mismatch == Config::Condition::NameMismatchCritical) {
-        *error = reason;
+    if (mismatch == Config::NameMismatchCritical) {
+        *error = context.lastErrorForCompile();
         return false;
     }
-    reportCondition(reason, true);
+    reportCondition(context.lastErrorForCompile(), true);
     *text = defaultValue;
     return true;
 }
@@ -1113,7 +1067,7 @@ static bool checkCondition(QString *text, const QStringList & names,
 /*!
     Converts the validated values in @a parser to @a fileConfig. The
     conditions handle a name that differs from a known one in case alone as
-    `[Code] nameMismatch` says (see Config::Condition::NameMismatch);
+    `[Code] nameMismatch` says (see Config::NameMismatch);
     returns false, with @a error, for such a name under `critical`.
 */
 bool FormatFileConfig::fromParser(
@@ -1121,7 +1075,7 @@ bool FormatFileConfig::fromParser(
         FormatFileConfig *fileConfig, QString *error)
 {
     const QStringList words = FormatFileConfig::wrapMistakesWords();
-    const Config::Condition::NameMismatch mismatch =
+    const Config::NameMismatch mismatch =
         Config::Condition::nameMismatch(parser.value(QString(QLL("code.nameMismatch"))));
     fileConfig->nameMismatch = mismatch;
     fileConfig->standards = listItems(parser.value(
@@ -1151,23 +1105,19 @@ bool FormatFileConfig::fromParser(
 
     // Reports the mismatches of the conditions that rules compile later;
     // those rules then use the names meant.
-    bool mismatched = false;
-    QString reason;
-    if ( ! Config::Choice::check(
-            fileConfig->typedefSuper,
-            FormatFileConfig::superConditionNames(),
-            FormatFileConfig::superChoices(),
-            mismatch,
-            &reason,
-            &mismatched
-        )
-        && mismatched
+    const QStringList superChoices = FormatFileConfig::superChoices();
+    const Config::Evaluator::CompileContext superContext(
+        FormatFileConfig::superConditionNames(), &superChoices, mismatch
+    );
+    Config::Condition::compile(fileConfig->typedefSuper, &superContext);
+    if ( ! superContext.lastCompiled()
+        && superContext.mismatched()
     ) {
-        if (mismatch == Config::Condition::NameMismatchCritical) {
-            *error = reason;
+        if (mismatch == Config::NameMismatchCritical) {
+            *error = superContext.lastErrorForCompile();
             return false;
         }
-        reportCondition(reason, true);
+        reportCondition(superContext.lastErrorForCompile(), true);
         fileConfig->typedefSuper = FormatFileConfig::defaultTypedefSuper();
     }
     if ( ! checkCondition(
@@ -1188,17 +1138,14 @@ bool FormatFileConfig::fromParser(
     ) {
         return false;
     }
-    const QStringList superChoices = FormatFileConfig::superChoices();
-    Config::Condition::compile(
-        fileConfig->typedefSuper, FormatFileConfig::superConditionNames(),
-        &fileConfig->typedefSuperProgram, &reason, false,
-        Config::Condition::NameMismatchIgnore, Q_NULLPTR, &superChoices
+    superContext.setMismatchMode(Config::NameMismatchIgnore);
+    fileConfig->typedefSuperProgram = Config::Condition::compile(
+        fileConfig->typedefSuper, &superContext);
+    const Config::Evaluator::CompileContext sitesContext(
+        FormatFileConfig::superConditionNames()
     );
-    Config::Condition::compile(
-        fileConfig->replaceSuperSites, FormatFileConfig::superConditionNames(),
-        &fileConfig->replaceSuperSitesProgram, &reason, false,
-        Config::Condition::NameMismatchIgnore
-    );
+    fileConfig->replaceSuperSitesProgram = Config::Condition::compile(
+        fileConfig->replaceSuperSites, &sitesContext);
     fileConfig->replaceTypesAction = parser.value(
         QString(QLL("replace.types.action"))
     );
@@ -1323,8 +1270,11 @@ class FormatLintContext : public FormatConditionContext
 {
     typedef FormatConditionContext super;
 public:
-    inline explicit FormatLintContext(const FormatFileConfig *config)
-        : m_config(config) {}
+    inline FormatLintContext(const FormatFileConfig *config, const QStringList & values)
+        : m_config(config), m_values(values) {}
+
+    inline QStringList onEnumKeys() const Q_DECL_OVERRIDE_IL
+    { return m_values.isEmpty() ? super::anyEnumKeys() : m_values; }
 
     inline const FormatFileConfig *fileConfig() const Q_DECL_OVERRIDE_IL
     {
@@ -1333,6 +1283,7 @@ public:
 
 private:
     const FormatFileConfig *m_config;
+    QStringList m_values;
 };
 
 /*!
@@ -1348,15 +1299,19 @@ static bool resolveLintChoice(
         const FormatFileConfig & config, const QString & key,
         QString *word)
 {
-    const FormatLintContext context(&config);
+    const FormatLintContext context(&config, values);
+    context.setMismatchMode(Config::NameMismatchWarn);
     QString error;
-    QVariant resolved;
-    if (FormatFileConfig::resolveText(
-        key, value, QStringList(), &values,
-        Config::Condition::NameMismatchWarn, &context, &resolved, &error
-    )) {
-        *word = resolved.toString();
-        return true;
+    const QStringList program = Config::Condition::compile(value, &context);
+    if (context.lastCompiled()) {
+        const QVariant resolved = FormatFileConfig::resolve(key, program, &context);
+        if (context.lastResolvePassed()) {
+            *word = resolved.toString();
+            return true;
+        }
+        error = QString(QLL("cannot evaluate condition: %1")).arg(value);
+    } else {
+        error = context.lastErrorForCompile();
     }
     qWarning("Invalid %s: %s", qPrintable(key), qPrintable(error.isEmpty()
         ? value : error));
@@ -1403,7 +1358,7 @@ QStringList FormatFileConfig::defaultWrapMistakes()
         QString::fromLatin1(defaultWrapMistakesText),
         &program,
         false,
-        Config::Condition::NameMismatchWarn,
+        Config::NameMismatchWarn,
         Q_NULLPTR,
         &words
     );

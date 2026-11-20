@@ -87,48 +87,51 @@ Config::Key Config::Schema::key(const QString & name) const
 
 /*!
     Resolves the setting @a name's compiled @a program at @a context and
-    converts its result into @a value. Returns false when resolution or
-    conversion fails.
+    converts its result. The context records whether resolution and
+    conversion passed.
 */
-bool Config::Schema::resolve(
+QVariant Config::Schema::resolve(
         const QString & name, const QStringList & program,
-        const Evaluator::Context *context, QVariant *value) const
+        const Evaluator::Context *context) const
 {
+    Q_ASSERT(context);
     const Config::Key found = this->key(name);
-    QVariant resolved;
     if (found.isNull()) {
-        *value = QVariant();
-        return false;
+        context->m_lastResolvePassed = false;
+        context->m_lastError = QString(QLL("unknown setting %1")).arg(name);
+        return QVariant();
     }
     const CacheScope scope(found.name);
     Q_UNUSED(scope);
-    if ( ! Condition::resolve(
-        program, QSet<QString >(), context, &resolved
-    )) {
-        *value = QVariant();
-        return false;
+    const QVariant resolved = Condition::resolve(program, QSet<QString >(), context);
+    if ( ! context->lastResolvePassed()) {
+        return QVariant();
     }
-    return this->convert(name, resolved, value);
+    const QVariant value = this->convert(name, resolved);
+    if ( ! value.isValid()) {
+        context->m_lastResolvePassed = false;
+        context->m_lastError = QString(QLL("cannot convert setting %1")).arg(name);
+    }
+    return value;
 }
 
 /*!
     Converts @a resolved, what a compiled program of the setting @a name
     resolves to (see Config::Condition::resolve()),
-    into @a value, the value of the type that setting takes: the first of
+    into the value of the type that setting takes: the first of
     its matchers that takes such a result converts it
-    (see Config::ValueMatcher::convert()). Returns false when none does,
-    or the schema does not list the setting.
+    (see Config::ValueMatcher::convert()). Builds an invalid value when none
+    does, or the schema does not list the setting.
 */
-bool Config::Schema::convert(
-        const QString & name, const QVariant & resolved,
-        QVariant *value) const
+QVariant Config::Schema::convert(
+        const QString & name, const QVariant & resolved) const
 {
     const Config::Key found = this->key(name);
     for (int i = 0; i < found.matchers.size(); ++i) {
-        if (found.matchers.at(i)->convert(resolved, value)) {
-            return true;
+        const QVariant value = found.matchers.at(i)->convert(resolved);
+        if (value.isValid()) {
+            return value;
         }
     }
-    *value = QVariant();
-    return false;
+    return QVariant();
 }

@@ -25,6 +25,22 @@
 
 #include <limits>
 
+/*! Compiles a test expression and exposes the result and diagnostics. */
+static bool compileConditionForTest(
+        const QString & text, const QStringList & names, QStringList *program,
+        QString *error, bool takesPercents = false,
+        Config::NameMismatch mismatch = Config::NameMismatchWarn,
+        bool *mismatched = Q_NULLPTR, const QStringList *words = Q_NULLPTR)
+{
+    const Config::Evaluator::CompileContext context(names, words, mismatch);
+    *program = Config::Condition::compile(text, &context, takesPercents);
+    *error = context.lastErrorForCompile();
+    if (mismatched) {
+        *mismatched = context.mismatched();
+    }
+    return context.lastCompiled();
+}
+
 /// Tests the settings parser: the project root and the folders and files
 /// it reads level by level, the schema's keys, values and aliases, and the
 /// order in which files and assignments override each other.
@@ -878,6 +894,7 @@ void tst_ConfigParser::testCondition_shouldBindAndCloserThanOr_data()
 
 void tst_ConfigParser::testCondition_shouldBindAndCloserThanOr()
 {
+    const Config::Evaluator::Context testContext(false);
     QFETCH(QString, text);
     QFETCH(QStringList, holding);
     QFETCH(bool, expected);
@@ -896,14 +913,14 @@ void tst_ConfigParser::testCondition_shouldBindAndCloserThanOr()
             );
         }
     }
-    qExpect(Config::Condition::compile(
+    qExpect(compileConditionForTest(
         text,
         conditionNames(),
         &program,
         &error
     ))->toBeTruthy();
     qExpect(error)->toBeEmpty();
-    qExpect(Config::Condition::resolve(program, holding.toSet()))->toEqual(expected);
+    qExpect(Config::Condition::resolve(program, holding.toSet(), &testContext).toBool())->toEqual(expected);
 }
 
 void tst_ConfigParser::testCondition_shouldRejectBadText_data()
@@ -938,7 +955,7 @@ void tst_ConfigParser::testCondition_shouldRejectBadText()
     QFETCH(QString, error);
     QStringList program;
     QString message;
-    qExpect(Config::Condition::compile(
+    qExpect(compileConditionForTest(
         text,
         conditionNames(),
         &program,
@@ -978,7 +995,7 @@ void tst_ConfigParser::testCondition_shouldRejectBadPercent()
     QFETCH(QString, error);
     QStringList program;
     QString message;
-    qExpect(Config::Condition::compile(
+    qExpect(compileConditionForTest(
         text,
         conditionNames(),
         &program,
@@ -995,9 +1012,11 @@ void tst_ConfigParser::testCondition_shouldRejectBadPercent()
 /// operand of `|` beside a name that does not hold.
 void tst_ConfigParser::testCondition_shouldTakeNoPercentAlone()
 {
+    const Config::Evaluator::Context testContext(false);
+    QVariant testResolvedValue;
     QStringList program;
     QString error;
-    qExpect(Config::Condition::compile(
+    qExpect(compileConditionForTest(
         QString(QLL("a | 40%")),
         conditionNames(),
         &program,
@@ -1007,7 +1026,7 @@ void tst_ConfigParser::testCondition_shouldTakeNoPercentAlone()
     qExpect(error)->toEqual(QString(QLL(
         "40% alone is no condition; compare it with a value, as in x > 40%"
     )));
-    qExpect(Config::Condition::compile(
+    qExpect(compileConditionForTest(
         QString(QLL("a | 100 * 40% == 40")),
         conditionNames(),
         &program,
@@ -1016,7 +1035,10 @@ void tst_ConfigParser::testCondition_shouldTakeNoPercentAlone()
     ))->toBeTruthy();
     const QSet<QString > holding = QSet<QString >() << QString(QLL("b"));
     bool resolved = false;
-    qExpect(Config::Condition::resolve(program, holding, &resolved))
+    testResolvedValue = Config::Condition::resolve(program, holding, &testContext);
+    resolved = testContext.lastResolvePassed()
+        && testResolvedValue.type() == QVariant::Double;
+    qExpect(resolved && testResolvedValue.toBool())
         ->toBeTruthy();
     qExpect(resolved)->toBeTruthy();
 
@@ -1026,6 +1048,20 @@ void tst_ConfigParser::testCondition_shouldTakeNoPercentAlone()
         ->toBeTruthy();
     qExpect(matched)->toEqual(QString(QLL("(1>40% & A) | b")));
 }
+
+class TestChoiceContext : public Config::Evaluator::Context
+{
+    typedef Config::Evaluator::Context super;
+public:
+    inline TestChoiceContext(const QStringList & names, const QStringList & values)
+        : super(false), m_names(names), m_values(values) {}
+    inline QStringList onNames() const Q_DECL_OVERRIDE_IL { return m_names; }
+    inline QStringList onEnumKeys() const Q_DECL_OVERRIDE_IL
+    { return m_values.isEmpty() ? super::anyEnumKeys() : m_values; }
+private:
+    QStringList m_names;
+    QStringList m_values;
+};
 
 /// Answers the names that pushTestObjects() adds, the way a tool's
 /// own context answers them at the place where it evaluates a condition:
@@ -1043,7 +1079,11 @@ public:
 
     inline qreal argumentCount(int depth, int argument) const
     { return depth == -2 && argument == 3 ? 7 : -1; }
+    inline QStringList onEnumKeys() const Q_DECL_OVERRIDE_IL { return choiceValues; }
+    inline void setChoiceValues(const QStringList & values)
+    { choiceValues = values; m_isOnEnumKeysCalled = false; }
 
+    QStringList choiceValues;
     qreal count;
     qreal space;
     mutable int spaceCalls;
@@ -1233,6 +1273,7 @@ void tst_ConfigParser::testCondition_shouldComparePercents_data()
 
 void tst_ConfigParser::testCondition_shouldComparePercents()
 {
+    QVariant testResolvedValue;
     QFETCH(QString, text);
     QFETCH(QStringList, holding);
     QFETCH(qreal, used);
@@ -1240,7 +1281,7 @@ void tst_ConfigParser::testCondition_shouldComparePercents()
     const QSharedPointer<Config::Scopes::Scope > scope = pushTestObjects();
     QStringList program;
     QString error;
-    QVERIFY2(Config::Condition::compile(
+    QVERIFY2(compileConditionForTest(
         text,
         conditionNames(),
         &program,
@@ -1250,17 +1291,16 @@ void tst_ConfigParser::testCondition_shouldComparePercents()
     TestArgumentContext context;
     context.space = 100 - used;
     bool ok = false;
-    qExpect(Config::Condition::resolve(
-        program,
-        holding.toSet(),
-        &context,
-        &ok
-    ))->toEqual(expected);
+    testResolvedValue = Config::Condition::resolve(program, holding.toSet(), &context);
+    ok = context.lastResolvePassed()
+        && testResolvedValue.type() == QVariant::Double;
+    qExpect(ok && testResolvedValue.toBool())->toEqual(expected);
     qExpect(ok)->toBeTruthy();
 }
 
 void tst_ConfigParser::testCondition_shouldEvaluateExpressions()
 {
+    QVariant testResolvedValue;
     const QSharedPointer<Config::Scopes::Scope > scope = pushTestObjects();
     const QStringList names = QStringList() << QString(QLL("is-signature"));
     QStringList program;
@@ -1268,7 +1308,7 @@ void tst_ConfigParser::testCondition_shouldEvaluateExpressions()
     const QString expression = QString(QLL(
         "argCount(-2, 3) - 1 == value && (space_remaining <= 18.75% || is_signature)"
     ));
-    QVERIFY2(Config::Condition::compile(
+    QVERIFY2(compileConditionForTest(
         expression,
         names,
         &program,
@@ -1279,40 +1319,32 @@ void tst_ConfigParser::testCondition_shouldEvaluateExpressions()
     context.count = 6;
     context.space = 18.75;
     bool ok = false;
-    QVERIFY(Config::Condition::resolve(
-        program,
-        QSet<QString >(),
-        &context,
-        &ok
-    ));
+    testResolvedValue = Config::Condition::resolve(program, QSet<QString >(), &context);
+    ok = context.lastResolvePassed()
+        && testResolvedValue.type() == QVariant::Double;
+    QVERIFY(ok && testResolvedValue.toBool());
     QVERIFY(ok);
     context.space = 19;
-    QVERIFY( ! Config::Condition::resolve(
-        program,
-        QSet<QString >(),
-        &context,
-        &ok
-    ));
+    testResolvedValue = Config::Condition::resolve(program, QSet<QString >(), &context);
+    ok = context.lastResolvePassed()
+        && testResolvedValue.type() == QVariant::Double;
+    QVERIFY( ! (ok && testResolvedValue.toBool()));
     QVERIFY(ok);
-    QVERIFY(Config::Condition::resolve(
-        program,
-        QSet<QString >() << QString(QLL("is-signature")),
-        &context,
-        &ok
-    ));
-    QVERIFY( ! Config::Condition::compile(
+    testResolvedValue = Config::Condition::resolve(program, QSet<QString >() << QString(QLL("is-signature")), &context);
+    ok = context.lastResolvePassed()
+        && testResolvedValue.type() == QVariant::Double;
+    QVERIFY(ok && testResolvedValue.toBool());
+    QVERIFY( ! compileConditionForTest(
         QString(QLL("space-remaining < 20%")), names, &program, &error, true
     ));
-    QVERIFY(Config::Condition::compile(
+    QVERIFY(compileConditionForTest(
         QString(QLL("is-signature-1 == 0")), names, &program, &error, true
     ));
-    QVERIFY(Config::Condition::resolve(
-        program,
-        QSet<QString >() << QString(QLL("is-signature")),
-        &context,
-        &ok
-    ));
-    QVERIFY( ! Config::Condition::compile(
+    testResolvedValue = Config::Condition::resolve(program, QSet<QString >() << QString(QLL("is-signature")), &context);
+    ok = context.lastResolvePassed()
+        && testResolvedValue.type() == QVariant::Double;
+    QVERIFY(ok && testResolvedValue.toBool());
+    QVERIFY( ! compileConditionForTest(
         QString(QLL("odd-name")),
         names + (QStringList() << QString(QLL("odd-name"))),
         &program, &error, true
@@ -1323,11 +1355,13 @@ void tst_ConfigParser::testCondition_shouldEvaluateExpressions()
 /// the caller of the condition passes.
 void tst_ConfigParser::testCondition_shouldCallObjectMembers()
 {
+    const Config::Evaluator::Context testContext(false);
+    QVariant testResolvedValue;
     const QSharedPointer<Config::Scopes::Scope > scope = pushTestObjects();
     const QStringList names = QStringList() << QString(QLL("is-signature"));
     QStringList program;
     QString error;
-    QVERIFY2(Config::Condition::compile(
+    QVERIFY2(compileConditionForTest(
         QString(QLL("is-signature && space_remaining() >= 40%")),
         names,
         &program,
@@ -1337,20 +1371,19 @@ void tst_ConfigParser::testCondition_shouldCallObjectMembers()
     TestArgumentContext context;
     context.space = 50;
     bool ok = false;
-    qExpect(Config::Condition::resolve(
-        program, QSet<QString >(), &context, &ok
-    ))->toBeFalsy();
+    testResolvedValue = Config::Condition::resolve(program, QSet<QString >(), &context);
+    ok = context.lastResolvePassed()
+        && testResolvedValue.type() == QVariant::Double;
+    qExpect(ok && testResolvedValue.toBool())->toBeFalsy();
     qExpect(ok)->toBeTruthy();
     qExpect(context.spaceCalls)->toEqual(0);
-    qExpect(Config::Condition::resolve(
-        program,
-        QSet<QString >() << QString(QLL("is-signature")),
-        &context,
-        &ok
-    ))->toBeTruthy();
+    testResolvedValue = Config::Condition::resolve(program, QSet<QString >() << QString(QLL("is-signature")), &context);
+    ok = context.lastResolvePassed()
+        && testResolvedValue.type() == QVariant::Double;
+    qExpect(ok && testResolvedValue.toBool())->toBeTruthy();
     qExpect(context.spaceCalls)->toEqual(1);
 
-    QVERIFY2(Config::Condition::compile(
+    QVERIFY2(compileConditionForTest(
         QString(QLL("is-signature && space_remaining() >= 40%")),
         names,
         &program,
@@ -1360,31 +1393,27 @@ void tst_ConfigParser::testCondition_shouldCallObjectMembers()
 
     // A call the place cannot answer misses a value.
     context.space = -1;
-    qExpect(Config::Condition::resolve(
-        program,
-        QSet<QString >() << QString(QLL("is-signature")),
-        &context,
-        &ok
-    ))->toBeFalsy();
+    testResolvedValue = Config::Condition::resolve(program, QSet<QString >() << QString(QLL("is-signature")), &context);
+    ok = context.lastResolvePassed()
+        && testResolvedValue.type() == QVariant::Double;
+    qExpect(ok && testResolvedValue.toBool())->toBeFalsy();
     qExpect(ok)->toBeFalsy();
 
     // A call without a context misses a value as well.
-    qExpect(Config::Condition::resolve(
-        program,
-        QSet<QString >() << QString(QLL("is-signature")),
-        Q_NULLPTR,
-        &ok
-    ))->toBeFalsy();
+    testResolvedValue = Config::Condition::resolve(program, QSet<QString >() << QString(QLL("is-signature")), &testContext);
+    ok = testContext.lastResolvePassed()
+        && testResolvedValue.type() == QVariant::Double;
+    qExpect(ok && testResolvedValue.toBool())->toBeFalsy();
     qExpect(ok)->toBeFalsy();
 
     // A call takes as many arguments as its registration allows.
-    qExpect(Config::Condition::compile(
+    qExpect(compileConditionForTest(
         QString(QLL("argCount() > 1")), names, &program, &error, true
     ))->toBeFalsy();
-    qExpect(Config::Condition::compile(
+    qExpect(compileConditionForTest(
         QString(QLL("argCount(1, 2, 3) > 1")), names, &program, &error, true
     ))->toBeFalsy();
-    qExpect(Config::Condition::compile(
+    qExpect(compileConditionForTest(
         QString(QLL("spaceRemaining(1) > 1")), names, &program, &error, true
     ))->toBeFalsy();
 }
@@ -1398,7 +1427,7 @@ void tst_ConfigParser::testCondition_shouldChooseNumbers()
         << QString(QLL("is-signature"));
     QStringList program;
     QString error;
-    QVERIFY2(Config::Condition::compile(
+    QVERIFY2(compileConditionForTest(
         QString(QLL("is-header ? 2 : is-signature ? 3 : spaceRemaining * 100 + 1")),
         names,
         &program,
@@ -1433,7 +1462,7 @@ void tst_ConfigParser::testCondition_shouldChooseNumbers()
     qExpect(context.spaceCalls)->toEqual(1);
 
     // A choice inside parentheses, and around a condition with `&&`.
-    QVERIFY2(Config::Condition::compile(
+    QVERIFY2(compileConditionForTest(
         QString(QLL("(is-header && argCount(-2, 3) == 7 ? 4 : 1) * 2")),
         names,
         &program,
@@ -1449,7 +1478,7 @@ void tst_ConfigParser::testCondition_shouldChooseNumbers()
     qExpect(result)->toEqual(qreal(8));
 
     // A condition that holds gives 1, and one that does not gives 0.
-    QVERIFY(Config::Condition::compile(
+    QVERIFY(compileConditionForTest(
         QString(QLL("is-header")), names, &program, &error, true
     ));
     qExpect(Config::Condition::value(
@@ -1461,10 +1490,10 @@ void tst_ConfigParser::testCondition_shouldChooseNumbers()
     qExpect(result)->toEqual(qreal(0));
 
     // A choice misses neither of its values, nor its `:`.
-    qExpect(Config::Condition::compile(
+    qExpect(compileConditionForTest(
         QString(QLL("is-header ? 2")), names, &program, &error, true
     ))->toBeFalsy();
-    qExpect(Config::Condition::compile(
+    qExpect(compileConditionForTest(
         QString(QLL("is-header ? : 1")), names, &program, &error, true
     ))->toBeFalsy();
 }
@@ -1478,7 +1507,7 @@ void tst_ConfigParser::testScopes_shouldStackAndUnregister()
     QStringList program;
     QString error;
     const int depth = Config::Scopes::count();
-    qExpect(Config::Condition::compile(
+    qExpect(compileConditionForTest(
         QString(QLL("value > 0")), names, &program, &error, true
     ))->toBeFalsy();
 
@@ -1486,7 +1515,7 @@ void tst_ConfigParser::testScopes_shouldStackAndUnregister()
     context.count = 5;
     QSharedPointer<Config::Scopes::Scope > outer = pushTestObjects();
     qExpect(Config::Scopes::count())->toEqual(depth + 1);
-    QVERIFY2(Config::Condition::compile(
+    QVERIFY2(compileConditionForTest(
         QString(QLL("value")), names, &program, &error, true
     ), qPrintable(error));
     qreal result = 0;
@@ -1556,16 +1585,13 @@ void tst_ConfigParser::testScopes_shouldOfferOnlyOwnSlotsAndProperties()
 
     // Reading or calling them directly fails as well.
     TestArgumentObject object;
-    QVariant result;
-    qExpect(Config::Scopes::invoke(
-        &object, QString(QLL("objectName")), QVariantList(), &result
-    ))->toBeFalsy();
-    qExpect(Config::Scopes::invoke(
-        &object, QString(QLL("deleteLater")), QVariantList(), &result
-    ))->toBeFalsy();
-    qExpect(Config::Scopes::invoke(
-        &object, QString(QLL("changed")), QVariantList(), &result
-    ))->toBeFalsy();
+    bool invoked = false;
+    Config::Scopes::invoke(&object, QString(QLL("objectName")), QVariantList(), &invoked);
+    qExpect(invoked)->toBeFalsy();
+    Config::Scopes::invoke(&object, QString(QLL("deleteLater")), QVariantList(), &invoked);
+    qExpect(invoked)->toBeFalsy();
+    Config::Scopes::invoke(&object, QString(QLL("changed")), QVariantList(), &invoked);
+    qExpect(invoked)->toBeFalsy();
 }
 
 /// Gives expressions the items of a list through `size`, `at()` and
@@ -1575,22 +1601,21 @@ void tst_ConfigParser::testArrayObj_shouldOfferItems()
     Config::ArrayObj array(QStringList() << QString(QLL("first"))
                            << QString(QLL("second")));
     QVariant result;
-    qExpect(Config::Scopes::invoke(
-        &array, QString(QLL("size")), QVariantList(), &result
-    ))->toBeTruthy();
+    bool invoked = false;
+    result = Config::Scopes::invoke(&array, QString(QLL("size")), QVariantList(), &invoked);
+    qExpect(invoked)->toBeTruthy();
     qExpect(result.toInt())->toEqual(2);
-    qExpect(Config::Scopes::invoke(
+    result = Config::Scopes::invoke(
         &array, QString(QLL("join")),
-        QVariantList() << QString(QLL(", ")), &result
-    ))->toBeTruthy();
+        QVariantList() << QString(QLL(", ")), &invoked
+    );
+    qExpect(invoked)->toBeTruthy();
     qExpect(result.toString())->toEqual(QString(QLL("first, second")));
-    qExpect(Config::Scopes::invoke(
-        &array, QString(QLL("at")), QVariantList() << 1, &result
-    ))->toBeTruthy();
+    result = Config::Scopes::invoke(&array, QString(QLL("at")), QVariantList() << 1, &invoked);
+    qExpect(invoked)->toBeTruthy();
     qExpect(result.toString())->toEqual(QString(QLL("second")));
-    qExpect(Config::Scopes::invoke(
-        &array, QString(QLL("at")), QVariantList() << 2, &result
-    ))->toBeTruthy();
+    result = Config::Scopes::invoke(&array, QString(QLL("at")), QVariantList() << 2, &invoked);
+    qExpect(invoked)->toBeTruthy();
     qExpect(result.isValid())->toBeFalsy();
 }
 
@@ -1605,32 +1630,32 @@ void tst_ConfigParser::testTypes_shouldReachReturnedObjects()
     const QStringList names = QStringList()
         << QString(QLL("items")) << QString(QLL("list"));
     for (int i = 0; i < names.size(); ++i) {
-        QVariant answer;
-        qExpect(Config::Scopes::resolve(
-            Config::Scopes::find(names.at(i)), Q_NULLPTR, QVariantList(),
-            &answer
-        ))->toBeTruthy();
+        const QVariant answer = Config::Scopes::resolve(
+            Config::Scopes::find(names.at(i)), Q_NULLPTR, QVariantList()
+        );
+        qExpect(answer.isValid())->toBeTruthy();
         Config::Object *array = Config::Types::object(answer);
         qExpect(array)->Not->toBeNull();
-        QVariant joined;
-        qExpect(Config::Scopes::invoke(
+        bool invoked = false;
+        const QVariant joined = Config::Scopes::invoke(
             array, QString(QLL("join")),
-            QVariantList() << QString(QLL("+")), &joined
-        ))->toBeTruthy();
+            QVariantList() << QString(QLL("+")), &invoked
+        );
+        qExpect(invoked)->toBeTruthy();
         qExpect(joined.toString())->toEqual(QString(QLL("first+second")));
     }
 
     // An address that names no `Config::Object` gives no answer.
-    QVariant stray;
-    qExpect(Config::Scopes::resolve(
+    const QVariant stray = Config::Scopes::resolve(
         Config::Scopes::find(QString(QLL("stray"))), Q_NULLPTR,
-        QVariantList(), &stray
-    ))->toBeFalsy();
+        QVariantList()
+    );
+    qExpect(stray.isValid())->toBeFalsy();
 
     // A condition takes no object as a number.
     QStringList program;
     QString error;
-    QVERIFY2(Config::Condition::compile(
+    QVERIFY2(compileConditionForTest(
         QString(QLL("items > 0")), QStringList(), &program, &error, true
     ), qPrintable(error));
     TestArgumentContext context;
@@ -1662,7 +1687,7 @@ void tst_ConfigParser::testScopes_shouldOfferDynamicPropertiesAndPaths()
     for (int i = 0; i < texts.size(); ++i) {
         QStringList program;
         QString error;
-        QVERIFY2(Config::Condition::compile(
+        QVERIFY2(compileConditionForTest(
             texts.at(i), QStringList(), &program, &error, true
         ), qPrintable(error));
         qreal result = 0;
@@ -1677,21 +1702,17 @@ void tst_ConfigParser::testScopes_shouldOfferDynamicPropertiesAndPaths()
     scope->add(new TestArgumentObject);
     QStringList program;
     QString error;
-    QVERIFY2(Config::Condition::compile(
+    QVERIFY2(compileConditionForTest(
         QString(QLL("1 - space_remaining > share * 0.875")), QStringList(),
         &program, &error, true
     ), qPrintable(error));
     context.space = 64;
-    qExpect(Config::Condition::resolve(
-        program, QSet<QString >(), &context
-    ))->toBeTruthy();
+    qExpect(Config::Condition::resolve(program, QSet<QString >(), &context).toBool())->toBeTruthy();
     context.space = 66;
-    qExpect(Config::Condition::resolve(
-        program, QSet<QString >(), &context
-    ))->toBeFalsy();
+    qExpect(Config::Condition::resolve(program, QSet<QString >(), &context).toBool())->toBeFalsy();
 
     // A member the object lacks fails to compile.
-    qExpect(Config::Condition::compile(
+    qExpect(compileConditionForTest(
         QString(QLL("settings.missing > 1")), QStringList(), &program,
         &error, true
     ))->toBeFalsy();
@@ -1748,7 +1769,7 @@ void tst_ConfigParser::testCondition_shouldDoMathOnMemberAnswers()
     scope->add(new TestDynamicObject);
     QStringList program;
     QString error;
-    QVERIFY2(Config::Condition::compile(
+    QVERIFY2(compileConditionForTest(
         text, QStringList(), &program, &error, true
     ), qPrintable(error));
     TestArgumentContext context;
@@ -1767,10 +1788,11 @@ void tst_ConfigParser::testChoice_shouldTakeUndefinedNamesAsText()
     const Config::Choice choice(names, QStringList());
     QString result;
     QString error;
-    QVERIFY2(Config::Choice::resolve(
-        QString(QLL("true ? Q_DECL_OVERRIDE_IL : override")), names,
-        QStringList(), Q_NULLPTR, &result, &error
-    ), qPrintable(error));
+    const TestChoiceContext context(names, QStringList());
+    result = Config::Choice::resolve(
+        QString(QLL("true ? Q_DECL_OVERRIDE_IL : override")), &context
+    ).toString();
+    QVERIFY2(context.lastResolvePassed(), qPrintable(context.lastError()));
     QCOMPARE(result, QString(QLL("Q_DECL_OVERRIDE_IL")));
     QString matched;
     QVERIFY( ! choice.match(QString(QLL("true ? ready : other")), &matched));
@@ -1813,7 +1835,7 @@ void tst_ConfigParser::testCondition_shouldSkipRightTermOfAndOr()
     for (int i = 0; i < texts.size(); ++i) {
         QStringList program;
         QString error;
-        QVERIFY2(Config::Condition::compile(
+        QVERIFY2(compileConditionForTest(
             texts.at(i), QStringList(), &program, &error, true
         ), qPrintable(error));
         qreal result = -1;
@@ -1832,16 +1854,16 @@ void tst_ConfigParser::testChoice_shouldKeepScopedNamesWhole()
     QString matched;
     QVERIFY(choice.match(QString(QLL("true ? Foo::bar : other")), &matched));
     QString result;
-    QString error;
-    QVERIFY2(Config::Choice::resolve(
-        QString(QLL("true ? Foo::bar : other")), QStringList(),
-        QStringList(), Q_NULLPTR, &result, &error
-    ), qPrintable(error));
+    const TestChoiceContext context(noNames, noNames);
+    result = Config::Choice::resolve(
+        QString(QLL("true ? Foo::bar : other")), &context
+    ).toString();
+    QVERIFY2(context.lastResolvePassed(), qPrintable(context.lastError()));
     QCOMPARE(result, QString(QLL("Foo::bar")));
-    QVERIFY2(Config::Choice::resolve(
-        QString(QLL("false ? other : ::Foo::bar")), QStringList(),
-        QStringList(), Q_NULLPTR, &result, &error
-    ), qPrintable(error));
+    result = Config::Choice::resolve(
+        QString(QLL("false ? other : ::Foo::bar")), &context
+    ).toString();
+    QVERIFY2(context.lastResolvePassed(), qPrintable(context.lastError()));
     QCOMPARE(result, QString(QLL("::Foo::bar")));
 }
 
@@ -1984,7 +2006,7 @@ void tst_ConfigParser::testCondition_shouldCheckMathLikePlainOnes()
 {
     QStringList program;
     QString error;
-    QVERIFY( ! Config::Condition::compile(
+    QVERIFY( ! compileConditionForTest(
         QString(QLL("1 > 150% | b == 1")),
         conditionNames(),
         &program,
@@ -1992,14 +2014,14 @@ void tst_ConfigParser::testCondition_shouldCheckMathLikePlainOnes()
         true
     ));
     QCOMPARE(error, QString(QLL("150% is not from 0% to 100%")));
-    QVERIFY( ! Config::Condition::compile(
+    QVERIFY( ! compileConditionForTest(
         QString(QLL("1 > 40% | b == 1")),
         conditionNames(),
         &program,
         &error
     ));
     QCOMPARE(error, QString(QLL("the key takes no percent, as in 40%")));
-    QVERIFY( ! Config::Condition::compile(
+    QVERIFY( ! compileConditionForTest(
         QString(QLL("nope < 2")),
         conditionNames(),
         &program,
@@ -2011,7 +2033,7 @@ void tst_ConfigParser::testCondition_shouldCheckMathLikePlainOnes()
     const QSharedPointer<Config::Scopes::Scope > scope =
         Config::Scopes::push();
     scope->add(new Config::ArrayObj(QStringList() << QString(QLL("x"))));
-    QVERIFY( ! Config::Condition::compile(
+    QVERIFY( ! compileConditionForTest(
         QString(QLL("is-static & 1 > 140%")),
         QStringList() << QString(QLL("is-static")), &program, &error, true
     ));
@@ -2026,27 +2048,27 @@ void tst_ConfigParser::testCondition_shouldParsePercentsBeforeKeyChecks()
 {
     QStringList program;
     QString error;
-    QVERIFY( ! Config::Condition::compile(
+    QVERIFY( ! compileConditionForTest(
         QString(QLL("1 > 40% |")),
         conditionNames(),
         &program,
         &error
     ));
     QCOMPARE(error, QString(QLL("a name is missing at the end")));
-    QVERIFY( ! Config::Condition::compile(QString(QLL("40% + 1 <")),
+    QVERIFY( ! compileConditionForTest(QString(QLL("40% + 1 <")),
                                           conditionNames(), &program, &error));
     QCOMPARE(error, QString(QLL("a name is missing at the end")));
-    QVERIFY( ! Config::Condition::compile(
+    QVERIFY( ! compileConditionForTest(
         QString(QLL("1 > 101% | a")),
         conditionNames(),
         &program,
         &error
     ));
     QCOMPARE(error, QString(QLL("the key takes no percent, as in 101%")));
-    QVERIFY( ! Config::Condition::compile(QString(QLL("a | 2 * 10% < 1")),
+    QVERIFY( ! compileConditionForTest(QString(QLL("a | 2 * 10% < 1")),
                                           conditionNames(), &program, &error));
     QCOMPARE(error, QString(QLL("the key takes no percent, as in 10%")));
-    QVERIFY(Config::Condition::compile(QString(QLL("a | 2 * 10% < 1")),
+    QVERIFY(compileConditionForTest(QString(QLL("a | 2 * 10% < 1")),
                                        conditionNames(), &program, &error,
                                        true));
 }
@@ -2057,10 +2079,10 @@ void tst_ConfigParser::testCondition_shouldReadWordsAsNames()
 {
     QStringList program;
     QString error;
-    QVERIFY( ! Config::Condition::compile(QString(QLL("inf > 1")),
+    QVERIFY( ! compileConditionForTest(QString(QLL("inf > 1")),
                                           conditionNames(), &program, &error));
     QCOMPARE(error, QString(QLL("unknown name inf")));
-    QVERIFY( ! Config::Condition::compile(QString(QLL("a | nan == 1")),
+    QVERIFY( ! compileConditionForTest(QString(QLL("a | nan == 1")),
                                           conditionNames(), &program, &error));
     QCOMPARE(error, QString(QLL("unknown name nan")));
 }
@@ -2075,13 +2097,10 @@ void tst_ConfigParser::testChoice_shouldTakeNamesAlikeEverywhere()
     QString matched;
     QVERIFY( ! choice.match(QString(QLL("true ? READY : other")), &matched));
     QVERIFY( ! choice.match(QString(QLL("true ? TRUE : other")), &matched));
-    QString result;
-    QString error;
-    QVERIFY( ! Config::Choice::resolve(
-        QString(QLL("win32-1")), names, QStringList(), Q_NULLPTR, &result,
-        &error
-    ));
-    QCOMPARE(error, QString(QLL("invalid conditional choice: win32-1: "
+    const TestChoiceContext context(names, QStringList());
+    Config::Choice::resolve(QString(QLL("win32-1")), &context);
+    QVERIFY( ! context.lastResolvePassed());
+    QCOMPARE(context.lastError(), QString(QLL("invalid conditional choice: win32-1: "
                                 "can't subtract `1` since `win32` is undefined.")));
 }
 
@@ -2188,13 +2207,13 @@ void tst_ConfigParser::testCondition_shouldMatchCaseAloneAsMismatch()
     const QStringList names = QStringList() << QString(QLL("is-header"));
     QStringList program;
     QString error;
-    QVERIFY2(Config::Condition::compile(
+    QVERIFY2(compileConditionForTest(
         QString(QLL("is-heaDer")), names, &program, &error, false,
-        Config::Condition::NameMismatchIgnore
+        Config::NameMismatchIgnore
     ), qPrintable(error));
-    QVERIFY( ! Config::Condition::compile(
+    QVERIFY( ! compileConditionForTest(
         QString(QLL("ish_eader")), names, &program, &error, false,
-        Config::Condition::NameMismatchIgnore
+        Config::NameMismatchIgnore
     ));
     QCOMPARE(error, QString(QLL("unknown name ish_eader")));
 }
@@ -2205,14 +2224,15 @@ void tst_ConfigParser::testMatchers_shouldNameTheirLimits()
 {
     QCOMPARE(Config::Numbers(1, 9, 2).describe(),
              QString(QLL("up to 2 numbers from 1 to 9, joined by |")));
-    QString result;
-    QString error;
-    QVERIFY( ! Config::Choice::resolve(
-        QString(QLL("nope < 2 ? a : b")), conditionNames(),
-        QStringList() << QString(QLL("a")) << QString(QLL("b")),
-        Q_NULLPTR, &result, &error
-    ));
-    QVERIFY2(error.endsWith(QLL(": unknown name nope")), qPrintable(error));
+    const TestChoiceContext context(
+        conditionNames(), QStringList() << QString(QLL("a")) << QString(QLL("b"))
+    );
+    Config::Choice::resolve(
+        QString(QLL("nope < 2 ? a : b")), &context
+    );
+    QVERIFY( ! context.lastResolvePassed());
+    QVERIFY2(context.lastError().endsWith(QLL(": unknown name nope")),
+             qPrintable(context.lastError()));
 }
 
 /// Adds the objects of a setup function to the global scope, at once when
@@ -2225,13 +2245,12 @@ void tst_ConfigParser::testScopes_shouldRunGlobalSetups()
     const Config::Scopes::Member member =
         Config::Scopes::find(QString(QLL("globalMark")));
     qExpect(member.isNull())->toBeFalsy();
-    QVariant answer;
-    qExpect(Config::Scopes::resolve(
+    const QVariant answer = Config::Scopes::resolve(
         member,
         Q_NULLPTR,
-        QVariantList(),
-        &answer
-    ))->toBeTruthy();
+        QVariantList()
+    );
+    qExpect(answer.isValid())->toBeTruthy();
     qExpect(answer.toInt())->toEqual(7);
 }
 
@@ -2241,6 +2260,7 @@ void tst_ConfigParser::testScopes_shouldRunGlobalSetups()
 /// `critical` fail with it as the error, and tell it was a name mismatch.
 void tst_ConfigParser::testCondition_shouldHandleNameMismatch()
 {
+    const Config::Evaluator::Context testContext(false);
     const QStringList names = QStringList() << QString(QLL("is-header"));
     QStringList program;
     QString error;
@@ -2249,41 +2269,39 @@ void tst_ConfigParser::testCondition_shouldHandleNameMismatch()
     // `warn` logs, then uses the name meant.
     QTest::ignoreMessage(QtWarningMsg,
         "failed to find the name is-heaDer (maybe is-header was meant).");
-    qExpect(Config::Condition::compile(
+    qExpect(compileConditionForTest(
         QString(QLL("is-heaDer")), names, &program, &error, false,
-        Config::Condition::NameMismatchWarn, &mismatched
+        Config::NameMismatchWarn, &mismatched
     ))->toBeTruthy();
     qExpect(mismatched)->toBeFalsy();
-    qExpect(Config::Condition::resolve(
-        program, QSet<QString >() << QString(QLL("is-header"))
-    ))->toBeTruthy();
+    qExpect(Config::Condition::resolve(program, QSet<QString >() << QString(QLL("is-header")), &testContext).toBool())->toBeTruthy();
 
     // The suggestion follows the spelling: no sign, then `_`.
     QTest::ignoreMessage(QtWarningMsg,
         "failed to find the name isHeAder (maybe isHeader was meant).");
-    qExpect(Config::Condition::compile(
+    qExpect(compileConditionForTest(
         QString(QLL("isHeAder")), names, &program, &error
     ))->toBeTruthy();
     QTest::ignoreMessage(QtWarningMsg,
         "failed to find the name is_heaDer (maybe is_header was meant).");
-    qExpect(Config::Condition::compile(
+    qExpect(compileConditionForTest(
         QString(QLL("is_heaDer")), names, &program, &error
     ))->toBeTruthy();
 
     // `ignore` uses the name meant without a word.
-    qExpect(Config::Condition::compile(
+    qExpect(compileConditionForTest(
         QString(QLL("Is-Header")), names, &program, &error, false,
-        Config::Condition::NameMismatchIgnore
+        Config::NameMismatchIgnore
     ))->toBeTruthy();
 
     // `error` and `critical` fail with the suggestion.
-    const Config::Condition::NameMismatch failing[] = {
-        Config::Condition::NameMismatchError,
-        Config::Condition::NameMismatchCritical
+    const Config::NameMismatch failing[] = {
+        Config::NameMismatchError,
+        Config::NameMismatchCritical
     };
     for (int i = 0; i < 2; ++i) {
         mismatched = false;
-        qExpect(Config::Condition::compile(
+        qExpect(compileConditionForTest(
             QString(QLL("is-heaDer")), names, &program, &error, false,
             failing[i], &mismatched
         ))->toBeFalsy();
@@ -2299,19 +2317,19 @@ void tst_ConfigParser::testCondition_shouldHandleNameMismatch()
     QTest::ignoreMessage(QtWarningMsg,
         "failed to find the function spaceremaining "
         "(maybe spaceRemaining was meant).");
-    qExpect(Config::Condition::compile(
+    qExpect(compileConditionForTest(
         QString(QLL("spaceremaining > 10")), names, &program, &error
     ))->toBeTruthy();
     mismatched = false;
-    qExpect(Config::Condition::compile(
+    qExpect(compileConditionForTest(
         QString(QLL("is-footer")), names, &program, &error, false,
-        Config::Condition::NameMismatchError, &mismatched
+        Config::NameMismatchError, &mismatched
     ))->toBeFalsy();
     qExpect(mismatched)->toBeFalsy();
     qExpect(int(Config::Condition::nameMismatch(QString(QLL("Critical")))))
-        ->toEqual(int(Config::Condition::NameMismatchCritical));
+        ->toEqual(int(Config::NameMismatchCritical));
     qExpect(int(Config::Condition::nameMismatch(QString(QLL("other")))))
-        ->toEqual(int(Config::Condition::NameMismatchWarn));
+        ->toEqual(int(Config::NameMismatchWarn));
 }
 
 /// Passes a string, in double quotes with the escapes of a C++ string
@@ -2319,43 +2337,54 @@ void tst_ConfigParser::testCondition_shouldHandleNameMismatch()
 /// choice's `?` or `:` inside a string splits nothing.
 void tst_ConfigParser::testCondition_shouldPassStrings()
 {
+    QVariant testResolvedValue;
     const QSharedPointer<Config::Scopes::Scope > scope = pushTestObjects();
     TestArgumentContext context;
     QStringList program;
     QString error;
     bool ok = false;
-    QVERIFY2(Config::Condition::compile(
+    QVERIFY2(compileConditionForTest(
         QString(QLL("named(\"a b\") && 1")), QStringList(), &program, &error
     ), qPrintable(error));
-    qExpect(Config::Condition::resolve(program, QSet<QString >(), &context, &ok))
+    testResolvedValue = Config::Condition::resolve(program, QSet<QString >(), &context);
+    ok = context.lastResolvePassed()
+        && testResolvedValue.type() == QVariant::Double;
+    qExpect(ok && testResolvedValue.toBool())
         ->toBeTruthy();
     qExpect(ok)->toBeTruthy();
-    QVERIFY2(Config::Condition::compile(
+    QVERIFY2(compileConditionForTest(
         QString(QLL("named(\"a\\040b\")")), QStringList(), &program, &error
     ), qPrintable(error));
-    qExpect(Config::Condition::resolve(program, QSet<QString >(), &context, &ok))
+    testResolvedValue = Config::Condition::resolve(program, QSet<QString >(), &context);
+    ok = context.lastResolvePassed()
+        && testResolvedValue.type() == QVariant::Double;
+    qExpect(ok && testResolvedValue.toBool())
         ->toBeTruthy();
-    QVERIFY2(Config::Condition::compile(
+    QVERIFY2(compileConditionForTest(
         QString(QLL("named(\"other\")")), QStringList(), &program, &error
     ), qPrintable(error));
-    qExpect(Config::Condition::resolve(program, QSet<QString >(), &context, &ok))
+    testResolvedValue = Config::Condition::resolve(program, QSet<QString >(), &context);
+    ok = context.lastResolvePassed()
+        && testResolvedValue.type() == QVariant::Double;
+    qExpect(ok && testResolvedValue.toBool())
         ->toBeFalsy();
     qExpect(ok)->toBeTruthy();
 
     // A string where a number belongs gives no answer.
-    QVERIFY2(Config::Condition::compile(
+    QVERIFY2(compileConditionForTest(
         QString(QLL("\"a b\" == 1")), QStringList(), &program, &error
     ), qPrintable(error));
-    Config::Condition::resolve(program, QSet<QString >(), &context, &ok);
+    testResolvedValue = Config::Condition::resolve(program, QSet<QString >(), &context);
+    ok = context.lastResolvePassed()
+        && testResolvedValue.type() == QVariant::Double;
     qExpect(ok)->toBeFalsy();
 
     // A choice splits outside its strings alone.
-    QString picked;
-    QVERIFY2(Config::Choice::resolve(
-        QString(QLL("named(\"a?b:c\") ? yes : no")), QStringList(),
-        QStringList() << QString(QLL("yes")) << QString(QLL("no")),
-        &context, &picked, &error
-    ), qPrintable(error));
+    context.setChoiceValues(QStringList() << QString(QLL("yes")) << QString(QLL("no")));
+    const QString picked = Config::Choice::resolve(
+        QString(QLL("named(\"a?b:c\") ? yes : no")), &context
+    ).toString();
+    QVERIFY2(context.lastResolvePassed(), qPrintable(context.lastError()));
     qExpect(picked)->toEqual(QString(QLL("no")));
 }
 
@@ -2364,24 +2393,31 @@ void tst_ConfigParser::testCondition_shouldPassStrings()
 /// still an unknown name.
 void tst_ConfigParser::testCondition_shouldPassBareWords()
 {
+    QVariant testResolvedValue;
     const QSharedPointer<Config::Scopes::Scope > scope = pushTestObjects();
     TestArgumentContext context;
     QStringList program;
     QString error;
     bool ok = false;
-    QVERIFY2(Config::Condition::compile(
+    QVERIFY2(compileConditionForTest(
         QString(QLL("named(other) || 1")), QStringList(), &program, &error
     ), qPrintable(error));
-    qExpect(Config::Condition::resolve(program, QSet<QString >(), &context, &ok))
+    testResolvedValue = Config::Condition::resolve(program, QSet<QString >(), &context);
+    ok = context.lastResolvePassed()
+        && testResolvedValue.type() == QVariant::Double;
+    qExpect(ok && testResolvedValue.toBool())
         ->toBeTruthy();
     qExpect(ok)->toBeTruthy();
-    QVERIFY2(Config::Condition::compile(
+    QVERIFY2(compileConditionForTest(
         QString(QLL("named(other)")), QStringList(), &program, &error
     ), qPrintable(error));
-    qExpect(Config::Condition::resolve(program, QSet<QString >(), &context, &ok))
+    testResolvedValue = Config::Condition::resolve(program, QSet<QString >(), &context);
+    ok = context.lastResolvePassed()
+        && testResolvedValue.type() == QVariant::Double;
+    qExpect(ok && testResolvedValue.toBool())
         ->toBeFalsy();
     qExpect(ok)->toBeTruthy();
-    QVERIFY( ! Config::Condition::compile(
+    QVERIFY( ! compileConditionForTest(
         QString(QLL("named(other + 1)")), QStringList(), &program, &error
     ));
     QCOMPARE(error, QString(QLL("unknown name other")));
@@ -2396,30 +2432,26 @@ void tst_ConfigParser::testChoice_shouldResolveWordsAndNumbers()
     const QStringList words = QStringList() << QString(QLL("average"))
                                             << QString(QLL("never"));
     QVariant answer;
-    QString error;
-    QVERIFY2(Config::Choice::resolve(
-        QString(QLL("true ? 2 : never")),
-        noNames, words, Q_NULLPTR,
-        &answer, &error
-    ),
-             qPrintable(error));
+    const TestChoiceContext context(noNames, words);
+    answer = Config::Choice::resolve(
+        QString(QLL("true ? 2 : never")), &context
+    );
+    QVERIFY2(context.lastResolvePassed(), qPrintable(context.lastError()));
     QCOMPARE(int(answer.type()), int(QVariant::Double));
     QCOMPARE(answer.toInt(), 2);
-    QVERIFY2(Config::Choice::resolve(QString(QLL("false ? 2 : never")),
-                                     noNames, words, Q_NULLPTR,
-                                     &answer, &error),
-             qPrintable(error));
+    answer = Config::Choice::resolve(QString(QLL("false ? 2 : never")),
+                                     &context);
+    QVERIFY2(context.lastResolvePassed(), qPrintable(context.lastError()));
     QCOMPARE(int(answer.type()), int(QVariant::String));
     QCOMPARE(answer.toString(), QString(QLL("never")));
-    QVERIFY2(Config::Choice::resolve(QString(QLL("true ? 1 + 2 : average")),
-                                     noNames, words, Q_NULLPTR,
-                                     &answer, &error),
-             qPrintable(error));
+    answer = Config::Choice::resolve(QString(QLL("true ? 1 + 2 : average")),
+                                     &context);
+    QVERIFY2(context.lastResolvePassed(), qPrintable(context.lastError()));
     QCOMPARE(answer.toInt(), 3);
-    QString picked;
-    QVERIFY2(Config::Choice::resolve(QString(QLL("true ? 2 : never")), noNames,
-                                     words, Q_NULLPTR, &picked, &error),
-             qPrintable(error));
+    const QString picked = Config::Choice::resolve(
+        QString(QLL("true ? 2 : never")), &context
+    ).toString();
+    QVERIFY2(context.lastResolvePassed(), qPrintable(context.lastError()));
     QCOMPARE(picked, QString(QLL("2")));
 
     const QStringList names = QStringList() << QString(QLL("ready"));
@@ -2437,12 +2469,13 @@ void tst_ConfigParser::testOutputs_shouldBeClearedOnFailure()
     const QStringList words = QStringList() << QString(QLL("never"));
     QString error;
     QString text = QString(QLL("stale"));
-    qExpect(Config::Choice::resolve(QString(QLL("true ? (")), noNames, words,
-                                    Q_NULLPTR, &text, &error))->toBeFalsy();
+    const TestChoiceContext context(noNames, words);
+    text = Config::Choice::resolve(QString(QLL("true ? (")), &context).toString();
+    qExpect(context.lastResolvePassed())->toBeFalsy();
     qExpect(text)->toBeEmpty();
     QVariant value = QVariant(7);
-    qExpect(Config::Choice::resolve(QString(QLL("true ? (")), noNames, words,
-                                    Q_NULLPTR, &value, &error))->toBeFalsy();
+    value = Config::Choice::resolve(QString(QLL("true ? (")), &context);
+    qExpect(context.lastResolvePassed())->toBeFalsy();
     qExpect(value.isValid())->toBeFalsy();
 
     text = QString(QLL("stale"));
@@ -2455,12 +2488,12 @@ void tst_ConfigParser::testOutputs_shouldBeClearedOnFailure()
     qExpect(numbers.match(QString(QLL("9")), &text))->toBeFalsy();
     qExpect(text)->toBeEmpty();
     value = QVariant(7);
-    qExpect(numbers.convert(QVariant(9.0), &value))->toBeFalsy();
+    value = numbers.convert(QVariant(9.0));
     qExpect(value.isValid())->toBeFalsy();
 
     value = QVariant(7);
-    qExpect(Config::Scopes::resolve(Config::Scopes::Member(), Q_NULLPTR,
-                                    QVariantList(), &value))->toBeFalsy();
+    value = Config::Scopes::resolve(Config::Scopes::Member(), Q_NULLPTR,
+                                    QVariantList());
     qExpect(value.isValid())->toBeFalsy();
 
     QString head = QString(QLL("stale"));
@@ -2473,7 +2506,7 @@ void tst_ConfigParser::testOutputs_shouldBeClearedOnFailure()
     qExpect(hasFallback)->toBeFalsy();
 
     QStringList program = QStringList() << QString(QLL("stale"));
-    qExpect(Config::Condition::compile(QString(QLL("a > 140%")),
+    qExpect(compileConditionForTest(QString(QLL("a > 140%")),
                                        QStringList() << QString(QLL("a")),
                                        &program, &error, true))->toBeFalsy();
     qExpect(program)->toBeEmpty();
@@ -2486,16 +2519,16 @@ void tst_ConfigParser::testCondition_shouldTakeNoSignedPercentAlone()
     const QStringList names = QStringList() << QString(QLL("a"));
     QStringList program;
     QString error;
-    qExpect(Config::Condition::compile(
+    qExpect(compileConditionForTest(
         QString(QLL("-40%")), names, &program, &error, true
     ))->toBeFalsy();
     qExpect(error)->toEqual(QString(QLL(
         "40% alone is no condition; compare it with a value, as in x > 40%"
     )));
-    qExpect(Config::Condition::compile(
+    qExpect(compileConditionForTest(
         QString(QLL("a > -40%")), names, &program, &error, true
     ))->toBeTruthy();
-    qExpect(Config::Condition::compile(
+    qExpect(compileConditionForTest(
         QString(QLL("-40% < a")), names, &program, &error, true
     ))->toBeTruthy();
 }
@@ -2506,7 +2539,7 @@ class TestPlaceContext : public Config::Evaluator::Context
 {
     typedef Config::Evaluator::Context super;
 public:
-    inline QStringList names() const Q_DECL_OVERRIDE_IL
+    inline QStringList onNames() const Q_DECL_OVERRIDE_IL
     { return QStringList() << QString(QLL("placed")); }
     inline bool predicate(const QString &name,
                           bool *value) const Q_DECL_OVERRIDE_IL
@@ -2527,6 +2560,24 @@ public:
     { return false; }
 };
 
+class TestNestedContext : public Config::Evaluator::Context
+{
+public:
+    inline TestNestedContext() : succeeds(true) {}
+    inline QStringList onNames() const Q_DECL_OVERRIDE_IL
+    { return QStringList() << QString(QLL("outer")) << QString(QLL("missing")); }
+    inline bool predicate(const QString & name, bool *value) const Q_DECL_OVERRIDE_IL
+    {
+        if (name != QLL("outer")) {
+            return false;
+        }
+        Config::Condition::eval(QString(QLL("missing()")), this);
+        *value = true;
+        return succeeds;
+    }
+    bool succeeds;
+};
+
 /// Marks only a program that read the place on a run, and only while it
 /// ran; a later run of another program is not marked by it.
 void tst_ConfigParser::testCache_shouldSkipProgramsThatReadThePlace()
@@ -2537,21 +2588,24 @@ void tst_ConfigParser::testCache_shouldSkipProgramsThatReadThePlace()
     QStringList fixed;
     QStringList shortCut;
     QString error;
-    QVERIFY2(Config::Condition::compile(QString(QLL("fixed | placed")), names,
+    QVERIFY2(compileConditionForTest(QString(QLL("fixed | placed")), names,
                                         &placed, &error), qPrintable(error));
-    QVERIFY2(Config::Condition::compile(QString(QLL("fixed & !fixed")), names,
+    QVERIFY2(compileConditionForTest(QString(QLL("fixed & !fixed")), names,
                                         &fixed, &error), qPrintable(error));
-    QVERIFY2(Config::Condition::compile(QString(QLL("true | placed")), names,
+    QVERIFY2(compileConditionForTest(QString(QLL("true | placed")), names,
                                         &shortCut, &error), qPrintable(error));
     const TestPlaceContext context;
     const QSet<QString > holding;
     QVariant result;
     qExpect(Config::Cache::skipsFor(placed))->toBeFalsy();
-    QVERIFY(Config::Condition::resolve(placed, holding, &context, &result));
+    result = Config::Condition::resolve(placed, holding, &context);
+    QVERIFY(context.lastResolvePassed());
     qExpect(Config::Cache::skipsFor(placed))->toBeTruthy();
-    QVERIFY(Config::Condition::resolve(fixed, holding, &context, &result));
+    result = Config::Condition::resolve(fixed, holding, &context);
+    QVERIFY(context.lastResolvePassed());
     qExpect(Config::Cache::skipsFor(fixed))->toBeFalsy();
-    QVERIFY(Config::Condition::resolve(shortCut, holding, &context, &result));
+    result = Config::Condition::resolve(shortCut, holding, &context);
+    QVERIFY(context.lastResolvePassed());
     qExpect(Config::Cache::skipsFor(shortCut))->toBeFalsy();
 
     // Marks nothing while no program runs.
@@ -2567,68 +2621,88 @@ void tst_ConfigParser::testNumbers_shouldTakeQint64()
     QString matched;
     qExpect(numbers.match(QString(QLL("5000000000")), &matched))->toBeTruthy();
     qExpect(matched)->toEqual(QString(QLL("5000000000")));
-    QVariant value;
-    qExpect(numbers.convert(QVariant(5000000000.0), &value))->toBeTruthy();
+    const QVariant value = numbers.convert(QVariant(5000000000.0));
+    qExpect(value.isValid())->toBeTruthy();
     qExpect(value.toLongLong())->toEqual(Q_INT64_C(5000000000));
-    qExpect(numbers.convert(QVariant(0.0), &value))->toBeFalsy();
+    qExpect(numbers.convert(QVariant(0.0)).isValid())->toBeFalsy();
     qExpect(numbers.describe())->toEqual(QString(QLL("a number of 1 or more")));
 }
 
 void tst_ConfigParser::testCondition_shouldResolveTextAndNull()
 {
+    const Config::Evaluator::Context testContext(false);
     const QStringList words;
     QStringList program;
     QString error;
     QVariant result;
-    QVERIFY2(Config::Condition::compile(
+    QVERIFY2(compileConditionForTest(
         QString(QLL("true ? \"one\" + \"two\" : null")), QStringList(),
-        &program, &error, false, Config::Condition::NameMismatchError,
+        &program, &error, false, Config::NameMismatchError,
         Q_NULLPTR, &words
     ), qPrintable(error));
-    QVERIFY(Config::Condition::resolve(program, QSet<QString >(), Q_NULLPTR, &result));
+    result = Config::Condition::resolve(program, QSet<QString >(), &testContext);
+    QVERIFY(testContext.lastResolvePassed());
     QCOMPARE(result.toString(), QString(QLL("onetwo")));
 
-    QVERIFY2(Config::Condition::compile(
+    QVERIFY2(compileConditionForTest(
         QString(QLL("false ? \"one\" : null")), QStringList(),
-        &program, &error, false, Config::Condition::NameMismatchError,
+        &program, &error, false, Config::NameMismatchError,
         Q_NULLPTR, &words
     ), qPrintable(error));
-    QVERIFY(Config::Condition::resolve(program, QSet<QString >(), Q_NULLPTR, &result));
+    result = Config::Condition::resolve(program, QSet<QString >(), &testContext);
+    QVERIFY(testContext.lastResolvePassed());
     QVERIFY( ! result.isValid());
 
-    QVERIFY2(Config::Condition::compile(
+    QVERIFY2(compileConditionForTest(
         QString(QLL("true ? \"null\" : null")), QStringList(),
-        &program, &error, false, Config::Condition::NameMismatchError,
+        &program, &error, false, Config::NameMismatchError,
         Q_NULLPTR, &words
     ), qPrintable(error));
-    QVERIFY(Config::Condition::resolve(program, QSet<QString >(), Q_NULLPTR, &result));
+    result = Config::Condition::resolve(program, QSet<QString >(), &testContext);
+    QVERIFY(testContext.lastResolvePassed());
     QVERIFY(result.isValid());
     QCOMPARE(result.toString(), QString(QLL("null")));
 
     const Config::Name fallback(true);
-    QCOMPARE(int(Config::Condition::eval(
-        QString(QLL("true ? \"yes\" : null")), Q_NULLPTR,
-        &result, &error, &fallback
-    )), int(Config::Resolved));
+    const QStringList noNames;
+    const TestChoiceContext placeEmpty(noNames, noNames);
+    result = Config::Condition::eval(QString(QLL("true ? \"yes\" : null")),
+                                     &placeEmpty, &fallback);
+    QCOMPARE(int(placeEmpty.lastEvalResult()), int(Config::Resolved));
     QCOMPARE(result.toString(), QString(QLL("yes")));
-    QCOMPARE(int(Config::Condition::eval(
-        QString(QLL("Result($1)")), Q_NULLPTR,
-        &result, &error, &fallback
-    )), int(Config::FailedToCompile | Config::Fallback));
+    result = Config::Condition::eval(QString(QLL("Result($1)")), &placeEmpty, &fallback);
+    QCOMPARE(int(placeEmpty.lastEvalResult()), int(Config::FailedToCompile | Config::Fallback));
     QCOMPARE(result.toString(), QString(QLL("Result($1)")));
-    QCOMPARE(int(Config::Condition::eval(
-        QString(QLL("true ? :")), Q_NULLPTR,
-        &result, &error, &fallback
-    )), int(Config::FailedToCompile | Config::FailedToFallback));
+    result = Config::Condition::eval(QString(QLL("true ? :")), &placeEmpty, &fallback);
+    QCOMPARE(int(placeEmpty.lastEvalResult()), int(Config::FailedToCompile | Config::FailedToFallback));
+    QVERIFY( ! result.isValid());
+    QVERIFY( ! placeEmpty.lastError().isEmpty());
+    result = Config::Condition::eval(QString(QLL("false ? \"x\" : null")),
+                                     &placeEmpty, &fallback);
+    QVERIFY( ! result.isValid());
+    QVERIFY(placeEmpty.lastEvalResult().includes(Config::Resolved));
+    QVERIFY(placeEmpty.lastResolvePassed());
+    QVERIFY(placeEmpty.lastError().isEmpty());
     const TestPlaceContext place;
-    QCOMPARE(int(Config::Condition::eval(
-        QString(QLL("placed()")), &place, &result, &error, &fallback
-    )), int(Config::Resolved));
+    result = Config::Condition::eval(QString(QLL("placed()")), &place, &fallback);
+    QCOMPARE(int(place.lastEvalResult()), int(Config::Resolved));
     QVERIFY(result.toBool());
     const TestMissingPlaceContext missing;
-    QCOMPARE(int(Config::Condition::eval(
-        QString(QLL("placed()")), &missing, &result, &error, &fallback
-    )), int(Config::FailedToResolve));
+    result = Config::Condition::eval(QString(QLL("placed()")), &missing, &fallback);
+    QCOMPARE(int(missing.lastEvalResult()), int(Config::FailedToResolve));
+
+    TestNestedContext nested;
+    result = Config::Condition::eval(QString(QLL("outer()")), &nested);
+    QVERIFY(result.toBool());
+    QVERIFY(nested.lastEvalResult().includes(Config::Resolved));
+    QVERIFY(nested.lastResolvePassed());
+    QVERIFY(nested.lastError().isEmpty());
+    nested.succeeds = false;
+    result = Config::Condition::eval(QString(QLL("outer()")), &nested);
+    QVERIFY( ! result.isValid());
+    QVERIFY(nested.lastEvalResult().includes(Config::FailedToResolve));
+    QVERIFY( ! nested.lastResolvePassed());
+    QVERIFY( ! nested.lastError().isEmpty());
 }
 
 QTEST_APPLESS_MAIN(tst_ConfigParser)

@@ -32,7 +32,7 @@ public:
         : m_rule(rule), m_document(document), m_brace(brace), m_base(base)
         , m_runConfig(runConfig) {}
 
-    inline QStringList names() const Q_DECL_OVERRIDE_IL
+    inline QStringList onNames() const Q_DECL_OVERRIDE_IL
     { return FormatFileConfig::superConditionNames(); }
 
     bool predicate(const QString &name, bool *value) const Q_DECL_OVERRIDE

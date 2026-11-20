@@ -20,10 +20,9 @@ public:
     Section sectionOf(const QString & name) const;
     inline const QList<Section > &sections() const { return m_sections; }
     Key key(const QString & name) const;
-    bool resolve(const QString & name, const QStringList & program,
-                 const Evaluator::Context *context, QVariant *value) const;
-    bool convert(const QString & name, const QVariant & resolved,
-                 QVariant *value) const;
+    QVariant resolve(const QString & name, const QStringList & program,
+                     const Evaluator::Context *context) const;
+    QVariant convert(const QString & name, const QVariant & resolved) const;
 
 private:
     QList<Section > m_sections;

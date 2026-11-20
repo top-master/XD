@@ -13,7 +13,7 @@
 /*!
     Lists the predicates available to replacement conditions.
 */
-QStringList FormatReplaceTypesContext::names() const
+QStringList FormatReplaceTypesContext::onNames() const
 {
     return QStringList() << QString(QLL("isNew"));
 }

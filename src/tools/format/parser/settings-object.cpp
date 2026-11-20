@@ -51,7 +51,7 @@ public:
     {
     }
 
-    inline QStringList names() const Q_DECL_OVERRIDE_IL
+    inline QStringList onNames() const Q_DECL_OVERRIDE_IL
     { return m_place->names(); }
 
     inline bool predicate(const QString &name,
@@ -176,13 +176,12 @@ QVariant FormatSettingsObject::dynamicValue(const QByteArray & name) const
     busy->insert(name);
     const QSharedPointer<Config::Scopes::Scope > scope =
         FormatConditionContext::pushCountScope();
-    QVariant value;
-    const bool ok = FormatFileConfig::resolve(
+    const QVariant value = FormatFileConfig::resolve(
         QLL("structure.") + QString::fromLatin1(name),
         *program,
-        format,
-        &value
+        format
     );
+    const bool ok = format->lastResolvePassed();
     busy->remove(name);
     return ok ? QVariant(value.toDouble()) : QVariant();
 }
@@ -207,13 +206,12 @@ QVariant FormatSettingsObject::threshold(
     bool ok = true;
     for (int percent = 0; percent <= 100 && ok; ++percent) {
         const PercentContext context(place, percent);
-        QVariant holds;
-        ok = FormatFileConfig::resolve(
+        const QVariant holds = FormatFileConfig::resolve(
             QLL("structure.") + QString::fromLatin1(name),
             program,
-            &context,
-            &holds
+            &context
         );
+        ok = context.lastResolvePassed();
         if (ok && holds.toBool()) {
             holdsFrom = percent;
             break;

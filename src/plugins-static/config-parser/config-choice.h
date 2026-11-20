@@ -18,19 +18,9 @@ public:
     bool match(const QString &value, QString *matched) const Q_DECL_OVERRIDE;
     QString describe() const Q_DECL_OVERRIDE;
     QString explain(const QString & value) const Q_DECL_OVERRIDE;
-    bool convert(const QVariant & resolved,
-                 QVariant *value) const Q_DECL_OVERRIDE;
-    static bool resolve(const QString &expression, const QStringList &names,
-                        const QStringList &values, const Evaluator::Context *context,
-                        QString *result, QString *error);
-    static bool resolve(const QString &expression, const QStringList &names,
-                        const QStringList &values,
-                        const Evaluator::Context *context, QVariant *result,
-                        QString *error);
-    static bool check(const QString &expression, const QStringList &names,
-                      const QStringList &values,
-                      Condition::NameMismatch mismatch, QString *error,
-                      bool *mismatched);
+    QVariant convert(const QVariant & resolved) const Q_DECL_OVERRIDE;
+    static QVariant resolve(const QString & expression,
+                            const Evaluator::Context *context);
 
 private:
     QStringList m_names;

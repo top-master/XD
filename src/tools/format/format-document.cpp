@@ -95,7 +95,7 @@ public:
     bool argumentCount(int depth, int argument,
                        qreal *count) const Q_DECL_OVERRIDE;
 
-    inline QStringList names() const Q_DECL_OVERRIDE_IL
+    inline QStringList onNames() const Q_DECL_OVERRIDE_IL
     {
         return FormatScopeConditions::names();
     }
@@ -237,13 +237,12 @@ int FormatDocument::joinArgsAt(
     );
     const QSharedPointer<Config::Scopes::Scope > scope =
         FormatConditionContext::pushCountScope();
-    QVariant count;
-    if ( ! FormatFileConfig::resolve(
+    const QVariant count = FormatFileConfig::resolve(
         QString(QLL("structure.joinArgs")),
         fileConfig.joinArgsCondition,
-        &context,
-        &count
-    )) {
+        &context
+    );
+    if ( ! context.lastResolvePassed()) {
         return 1;
     }
     return qMax(1, FormatFileConfig::countOf(count));

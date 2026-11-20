@@ -41,7 +41,7 @@ public:
                                      const FormatFileConfig *config = Q_NULLPTR)
         : m_document(document), m_line(line), m_config(config) {}
 
-    QStringList names() const Q_DECL_OVERRIDE;
+    QStringList onNames() const Q_DECL_OVERRIDE;
     bool predicate(const QString & name, bool *value) const Q_DECL_OVERRIDE;
     inline const FormatFileConfig *fileConfig() const Q_DECL_OVERRIDE_IL
     { return this->m_config; }

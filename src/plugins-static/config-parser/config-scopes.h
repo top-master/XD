@@ -56,12 +56,12 @@ int count();
 Member find(const QString & name);
 Member member(Object *object, const QString & name);
 QStringList names();
-bool resolve(const Member & member, const Evaluator::Context *context,
-             const QVariantList & arguments, QVariant *result);
+QVariant resolve(const Member & member, const Evaluator::Context *context,
+                 const QVariantList & arguments);
 bool call(const Member & member, const Evaluator::Context *context,
           const QVariantList & arguments, qreal *result);
-bool invoke(Object *object, const QString & name,
-            const QVariantList & arguments, QVariant *result);
+QVariant invoke(Object *object, const QString & name,
+                const QVariantList & arguments, bool *invoked = Q_NULLPTR);
 
 } // Namespace `Scopes`.
 

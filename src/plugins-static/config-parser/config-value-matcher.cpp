@@ -33,12 +33,10 @@ QString Config::ValueMatcher::explain(const QString &) const
 
 /*!
     Converts @a resolved, what a key's compiled program resolves to (see
-    Config::Condition::resolve()), into @a value, the value of the type the
-    key takes; returns false when this matcher compiles no program, or
-    takes no such result, hence the next matcher of the key may.
+    Config::Condition::resolve()), into the value of the type the key takes.
+    An invalid value leaves the result to the next matcher of the key.
 */
-bool Config::ValueMatcher::convert(const QVariant &, QVariant *value) const
+QVariant Config::ValueMatcher::convert(const QVariant &) const
 {
-    *value = QVariant();
-    return false;
+    return QVariant();
 }

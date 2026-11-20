@@ -31,7 +31,7 @@ public:
         , wrapMax(80), wrapArgsOver(3), wrapConditionsOver(1), joinArgs(1), commentWrapMax(80), wrapExtendsForKeywords(20), wrapEmptyLimit(8)
         , wrapComma(WrapCommaSoft), commentTarget(CommentTargetLong), codeTarget(CodeTargetLong)
         , compact(CompactNever)
-        , docTagSign('@'), nameMismatch(Config::Condition::NameMismatchWarn)
+        , docTagSign('@'), nameMismatch(Config::NameMismatchWarn)
         , byRefVariable(LintWarn)
     {
         wrapBegin << 75;
@@ -70,20 +70,13 @@ public:
             const FormatFileConfig & config);
     bool acceptsFile(const QString &path) const;
     static Config::Schema schema();
-    static bool resolve(
+    static QVariant resolve(
             const QString & key, const QStringList & program,
-            const Config::Evaluator::Context *context,
-            QVariant *value);
+            const Config::Evaluator::Context *context);
     static int countOf(const QVariant & count);
     QVariant resolveCached(
             const QString & key, const QStringList & program,
             const Config::Evaluator::Context *context) const;
-    static bool resolveText(
-            const QString & key, const QString & text,
-            const QStringList & names, const QStringList *words,
-            Config::Condition::NameMismatch mismatch,
-            const Config::Evaluator::Context *context,
-            QVariant *value, QString *error);
     static QString defaultTypedefSuper();
     static QString defaultReplaceSuperSites();
     static QStringList defaultThisMode();
@@ -137,7 +130,7 @@ public:
     QList<QPair<QString, QString > > replaceTypes;
     QString replaceTypesTarget;
     QString replaceTypesAction;
-    Config::Condition::NameMismatch nameMismatch;
+    Config::NameMismatch nameMismatch;
     LintLevel byRefVariable;
     QStringList standards;
     QStringList compilers;

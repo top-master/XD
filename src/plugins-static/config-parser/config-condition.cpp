@@ -76,47 +76,6 @@ static QString spelledLike(const QString & canonical, const QString & spelling)
     return spelled;
 }
 
-/*!
-    Finds the name of @a known (each in the form canonicalName() gives) that
-    @a spelling means in another case, and handles it as @a mismatch says:
-    `ignore` and `warn` give it to @a meant (`warn` logs a warning first),
-    `error` and `critical` set @a error and @a mismatched instead. Returns
-    true when @a meant may be used; false when no name differs in case
-    alone, or the mode refuses the one that does. A name of @a functions
-    counts as a function in the message.
-*/
-static bool resolveMismatch(const QString & spelling, const QStringList & known,
-                            const QStringList & functions,
-                            Config::Condition::NameMismatch mismatch,
-                            QString *meant, QString *error, bool *mismatched)
-{
-    // Compares the name with each known one written the same way, hence
-    // only case may differ, and no `-` or `_` sign may move.
-    for (int i = 0; i < known.size(); ++i) {
-        const QString spelled = spelledLike(known.at(i), spelling);
-        if (spelled.compare(spelling, Qt::CaseInsensitive) != 0) {
-            continue;
-        }
-        const QString message = QString(QLL("failed to find the %1 %2 (maybe %3 was meant)."))
-            .arg(functions.contains(known.at(i)) ? QLL("function") : QLL("name"))
-            .arg(spelling, spelled);
-        if (mismatch == Config::Condition::NameMismatchError
-            || mismatch == Config::Condition::NameMismatchCritical
-        ) {
-            *error = message;
-            *mismatched = true;
-            *meant = QString();
-            return false;
-        }
-        if (mismatch == Config::Condition::NameMismatchWarn) {
-            qWarning("%s", qPrintable(message));
-        }
-        *meant = known.at(i);
-        return true;
-    }
-    *meant = QString();
-    return false;
-}
 
 static bool isPredicateName(const QString &name)
 {
@@ -125,33 +84,29 @@ static bool isPredicateName(const QString &name)
         || lower.startsWith(QLL("already-"));
 }
 
+} // namespace
+
 class ExpressionCompiler
 {
 public:
-    inline ExpressionCompiler(const QString &text, const QStringList &names,
-                              Config::Condition::NameMismatch mismatch,
-                              const QStringList *words)
-        : m_text(text), m_at(0), m_spellings(names)
-        , m_words(words ? *words : QStringList())
-        , m_mismatch(mismatch), m_mismatched(false)
-        , m_choosesWords(words != Q_NULLPTR)
+    inline ExpressionCompiler(const QString & text,
+                              const Config::Evaluator::CompileContext *context)
+        : m_text(text), m_at(0), m_context(context)
     {
+        const QStringList names = context->names();
         for (int i = 0; i < names.size(); ++i) {
             m_names.insert(canonicalName(names.at(i)));
         }
     }
 
-    bool compile(QStringList *program, QString *error, bool *mismatched)
+    bool compile(QStringList *program)
     {
         m_program << QString(QLL("@expression"));
-        if ( ! expression(0, m_choosesWords) || ! endsWhole()) {
-            *mismatched = m_mismatched;
-            *error = ! m_error.isEmpty()
-                ? m_error
-                : QString(QLL("invalid condition near '%1'")).arg(m_text.mid(
-                    m_at,
-                    20
-                ));
+        if ( ! expression(0, ! m_context->enumKeys().isEmpty()) || ! endsWhole()) {
+            if (m_context->m_lastCE.isEmpty()) {
+                m_context->m_lastCE =
+                    QString(QLL("invalid condition near '%1'")).arg(m_text.mid(m_at, 20));
+            }
             return false;
         }
         *program = m_program;
@@ -176,7 +131,7 @@ private:
             }
             return m_text.mid(m_at, qMin(end + 1, m_text.size()) - m_at);
         }
-        if (m_choosesWords) {
+        if ( ! m_context->enumKeys().isEmpty()) {
             const QString word = this->wordAt();
             if ( ! word.isEmpty()) {
                 return word;
@@ -186,8 +141,9 @@ private:
             // Preserve established hyphenated names, while leaving any
             // following minus sign to the expression parser.
             QString known;
-            for (int i = 0; i < m_spellings.size(); ++i) {
-                const QString name = m_spellings.at(i);
+            const QStringList names = m_context->names();
+            for (int i = 0; i < names.size(); ++i) {
+                const QString name = names.at(i);
                 const int end = m_at + name.size();
                 if (isPredicateName(name) && name.size() > known.size()
                     && m_text.mid(m_at, name.size()).compare(
@@ -314,8 +270,8 @@ private:
                 return false;
             }
             if ( ! take(QString(QLL(")")))) {
-                if (m_error.isEmpty()) {
-                    m_error = QString(QLL("a ) is missing"));
+                if (m_context->m_lastCE.isEmpty()) {
+                    m_context->m_lastCE = QString(QLL("a ) is missing"));
                 }
                 return false;
             }
@@ -328,8 +284,8 @@ private:
                     || lead == QLatin1Char('.') || lead == QLatin1Char(':')
                     || lead == QLatin1Char('$'))
             ) {
-                if (m_error.isEmpty()) {
-                    m_error = token.isEmpty()
+                if (m_context->m_lastCE.isEmpty()) {
+                    m_context->m_lastCE = token.isEmpty()
                         ? QString(QLL("a name is missing at the end"))
                         : precedence(token) > 0 || token == QLL(")")
                             || token == QLL("?") || token == QLL(":")
@@ -348,7 +304,7 @@ private:
             if (isWholeValue && valueWord(token)) {
                 return true;
             }
-            if ( ! m_error.isEmpty()) {
+            if ( ! m_context->m_lastCE.isEmpty()) {
                 return false;
             }
             bool isNumber = false;
@@ -374,7 +330,7 @@ private:
                     && ! isMathSign(before)
                     && ! isMathSign(peek())
                 ) {
-                    m_error = QString(QLL("%1 alone is no condition; compare it "
+                    m_context->m_lastCE = QString(QLL("%1 alone is no condition; compare it "
                                           "with a value, as in x > %1"))
                         .arg(token);
                     return false;
@@ -385,15 +341,15 @@ private:
                 if ( ! this->knows(name)
                     && ! this->resolve(token, &name)
                 ) {
-                    if ( ! m_mismatched) {
-                        m_error = isValue
+                    if ( ! m_context->mismatched()) {
+                        m_context->m_lastCE = isValue
                             ? this->undefinedReason(token)
                             : QString(QLL("unknown name %1")).arg(token);
                     }
                     return false;
                 }
                 if (isWholeValue && Config::Scopes::find(name).isNull()) {
-                    m_error = QString(QLL("%1 names a value of the condition, "
+                    m_context->m_lastCE = QString(QLL("%1 names a value of the condition, "
                                           "not a choice")).arg(token);
                     return false;
                 }
@@ -457,6 +413,8 @@ private:
             || name == QLL("false") || ! Config::Scopes::find(name).isNull();
     }
 
+    bool resolveMismatch(const QString & spelling, const QStringList & known,
+                         const QStringList & functions, QString *meant);
     bool resolve(const QString &spelling, QString *name);
     bool isDefined(const QString &token) const;
     bool bareWord();
@@ -472,39 +430,74 @@ private:
 
     QString m_text;
     int m_at;
+    const Config::Evaluator::CompileContext *m_context;
     QSet<QString > m_names;
-    QStringList m_spellings;
-    QStringList m_words;
     QStringList m_program;
     /// Lets a term see the token before it, such as a sign a percent needs.
     QString m_previous;
-    Config::Condition::NameMismatch m_mismatch;
-    bool m_mismatched;
-    /// Lets a whole value of a choice be a word (see valueWord()).
-    bool m_choosesWords;
-    QString m_error;
 };
 
 /*!
+    Finds the name of @a known (each in the form canonicalName() gives) that
+    @a spelling means in another case, and handles it as the context says:
+    `ignore` and `warn` give it to @a meant (`warn` logs a warning first),
+    `error` and `critical` record the error and failure instead. Returns
+    true when @a meant may be used; false when no name differs in case
+    alone, or the mode refuses the one that does. A name of @a functions
+    counts as a function in the message.
+*/
+bool ExpressionCompiler::resolveMismatch(
+        const QString & spelling, const QStringList & known,
+        const QStringList & functions, QString *meant)
+{
+    // Compares the name with each known one written the same way, hence
+    // only case may differ, and no `-` or `_` sign may move.
+    for (int i = 0; i < known.size(); ++i) {
+        const QString spelled = spelledLike(known.at(i), spelling);
+        if (spelled.compare(spelling, Qt::CaseInsensitive) != 0) {
+            continue;
+        }
+        const QString message = QString(QLL("failed to find the %1 %2 (maybe %3 was meant)."))
+            .arg(functions.contains(known.at(i)) ? QLL("function") : QLL("name"))
+            .arg(spelling, spelled);
+        if (this->m_context->mismatchMode() == Config::NameMismatchError
+            || this->m_context->mismatchMode() == Config::NameMismatchCritical
+        ) {
+            this->m_context->m_lastCompile.append(Config::Mismatched);
+            this->m_context->m_lastCE = message;
+            *meant = QString();
+            return false;
+        }
+        if (this->m_context->mismatchMode() == Config::NameMismatchWarn) {
+            qWarning("%s", qPrintable(message));
+        }
+        *meant = known.at(i);
+        return true;
+    }
+    *meant = QString();
+    return false;
+}
+
+/*!
     Tells whether the condition ends where expression() stopped, with why
-    not in m_error: a `)` that no `(` opened, a term that misses the sign
+    not in the context's compile error: a `)` that no `(` opened, a term that misses the sign
     before it, an unknown sign, or a lone number, which only math takes.
 */
 bool ExpressionCompiler::endsWhole()
 {
     const QString rest = this->peek();
     if (rest.isEmpty()) {
-        if ( ! this->m_choosesWords && this->m_program.size() == 2
+        if (this->m_context->enumKeys().isEmpty() && this->m_program.size() == 2
             && this->m_program.at(1).startsWith(QLL("n:"))
         ) {
-            this->m_error = QString(QLL("unknown name %1"))
+            this->m_context->m_lastCE = QString(QLL("unknown name %1"))
                 .arg(this->m_text.trimmed());
             return false;
         }
         return true;
     }
     const QChar lead = rest.at(0);
-    this->m_error = rest == QLL(")") ? QString(QLL("a ( is missing"))
+    this->m_context->m_lastCE = rest == QLL(")") ? QString(QLL("a ( is missing"))
         : lead.isLetterOrNumber() || lead == QLatin1Char('_')
         || lead == QLatin1Char('"') || lead == QLatin1Char('(')
         || lead == QLatin1Char('!')
@@ -526,7 +519,7 @@ QStringList ExpressionCompiler::knownNames() const
 /*!
     Decodes @a token, a text in double quotes with the escapes of a C++
     string literal (see Config::Escape), into @a text; returns false, with
-    why in m_error for a bad escape.
+    the compile error for a bad escape.
 */
 bool ExpressionCompiler::decodeQuoted(const QString &token, QString *text)
 {
@@ -538,7 +531,7 @@ bool ExpressionCompiler::decodeQuoted(const QString &token, QString *text)
     if ( ! Config::Escape::decode(token.mid(1, token.size() - 2), text,
                                   &reason)
     ) {
-        this->m_error = reason;
+        this->m_context->m_lastCE = reason;
         return false;
     }
     return true;
@@ -550,14 +543,11 @@ bool ExpressionCompiler::decodeQuoted(const QString &token, QString *text)
 */
 bool ExpressionCompiler::resolve(const QString &spelling, QString *name)
 {
-    return resolveMismatch(
+    return this->resolveMismatch(
         spelling,
         this->knownNames(),
         Config::Scopes::names(),
-        this->m_mismatch,
-        name,
-        &this->m_error,
-        &this->m_mismatched
+        name
     );
 }
 
@@ -611,8 +601,9 @@ bool ExpressionCompiler::bareWord()
 QString ExpressionCompiler::wordAt() const
 {
     QString word;
-    for (int i = 0; i < this->m_words.size(); ++i) {
-        const QString & listed = this->m_words.at(i);
+    const QStringList words = this->m_context->enumKeys();
+    for (int i = 0; i < words.size(); ++i) {
+        const QString & listed = words.at(i);
         const int end = this->m_at + listed.size();
         if (listed.size() > word.size()
             && this->m_text.mid(this->m_at, listed.size()).compare(
@@ -646,7 +637,7 @@ QString ExpressionCompiler::wordAt() const
     quotes (with its escapes resolved), spelled as the list spells it; or,
     when no word is listed, any text in double quotes, and any bare name
     that nothing defines (see isDefined()), such as `Q_DECL_OVERRIDE_IL` or
-    `Foo::bar`. Returns false for any other token, with why in m_error for
+    `Foo::bar`. Returns false for any other token, with a compile error for
     a text that no listed word matches.
 */
 bool ExpressionCompiler::valueWord(const QString &token)
@@ -660,20 +651,21 @@ bool ExpressionCompiler::valueWord(const QString &token)
     if (isQuoted && ! this->decodeQuoted(token, &text)) {
         return false;
     }
-    for (int i = 0; i < this->m_words.size(); ++i) {
-        if (this->m_words.at(i).compare(text, Qt::CaseInsensitive) == 0) {
-            this->m_program << (QString(QLL("s:")) + this->m_words.at(i));
+    const QStringList words = this->m_context->enumKeys();
+    for (int i = 0; i < words.size(); ++i) {
+        if (words.at(i).compare(text, Qt::CaseInsensitive) == 0) {
+            this->m_program << (QString(QLL("s:")) + words.at(i));
             return true;
         }
     }
     const QChar lead = token.isEmpty() ? QChar() : token.at(0);
     const bool isName = lead.isLetter() || lead == QLatin1Char('_')
         || lead == QLatin1Char(':');
-    if ( ! this->m_words.isEmpty()) {
+    if (words != Config::Evaluator::CompileContext::anyEnumKeys()) {
         if (isQuoted || (isName && ! this->isDefined(token))) {
-            this->m_error = QString(QLL("%1 is no choice of %2")).arg(
+            this->m_context->m_lastCE = QString(QLL("%1 is no choice of %2")).arg(
                 token,
-                this->m_words.join(QString(QLL(", ")))
+                words.join(QString(QLL(", ")))
             );
         }
         return false;
@@ -779,16 +771,11 @@ bool ExpressionCompiler::call(const QString &name)
         this->take(step);
 
         // Finds the next member on the object the path so far resolves to.
-        QVariant resolved;
         Config::Object *object = Q_NULLPTR;
-        if (function.minimumArguments == 0
-            && Config::Scopes::resolve(
-                function,
-                Q_NULLPTR,
-                QVariantList(),
-                &resolved
-            )
-        ) {
+        if (function.minimumArguments == 0) {
+            const QVariant resolved = Config::Scopes::resolve(
+                function, Q_NULLPTR, QVariantList()
+            );
             object = Config::Types::object(resolved);
         }
         function = Config::Scopes::member(object, step);
@@ -818,15 +805,13 @@ bool ExpressionCompiler::call(const QString &name)
             ? QString::number(function.minimumArguments)
             : QString(QLL("%1 to %2")).arg(function.minimumArguments)
                 .arg(function.maximumArguments);
-        this->m_error = QString(QLL("%1 takes %2 arguments, not %3"))
+        this->m_context->m_lastCE = QString(QLL("%1 takes %2 arguments, not %3"))
             .arg(path, wanted, QString::number(count));
         return false;
     }
     this->m_program << QString(QLL("r:%1:%2")).arg(path, QString::number(count));
     return true;
 }
-
-} // namespace
 
 /*!
     @class Config::Condition
@@ -908,13 +893,9 @@ bool Config::Condition::match(const QString & value, QString *matched) const
         scope = Config::Scopes::push();
         this->m_setup(scope.data());
     }
-    QStringList program;
-    QString error;
-    if ( ! Config::Condition::compile(
-            normalized, this->m_names, &program, &error,
-            this->m_takesPercents, NameMismatchIgnore
-        )
-    ) {
+    const Evaluator::CompileContext context(this->m_names);
+    Config::Condition::compile(normalized, &context, this->m_takesPercents);
+    if ( ! context.lastCompiled()) {
         *matched = QString();
         return false;
     }
@@ -942,22 +923,19 @@ bool Config::Condition::match(const QString & value, QString *matched) const
 }
 
 /*!
-    Converts @a resolved, a number that resolve() builds, into @a value as
+    Converts @a resolved, a number that resolve() builds, as
     the key takes it: whether the condition holds (a number that is not
     zero) for ResultHolds, or the number itself for ResultNumber, such as
-    the 0 of a condition that does not hold. Returns false for a word, which
-    no condition resolves to.
+    the 0 of a condition that does not hold. Builds an invalid value for a
+    word, which no condition resolves to.
 */
-bool Config::Condition::convert(
-        const QVariant & resolved, QVariant *value) const
+QVariant Config::Condition::convert(const QVariant & resolved) const
 {
     if (resolved.type() != QVariant::Double) {
-        *value = QVariant();
-        return false;
+        return QVariant();
     }
-    *value = this->m_result == ResultHolds ? QVariant(resolved.toDouble() != 0)
-                                           : resolved;
-    return true;
+    return this->m_result == ResultHolds ? QVariant(resolved.toDouble() != 0)
+                                         : resolved;
 }
 
 /*!
@@ -977,12 +955,11 @@ QString Config::Condition::describe() const
 }
 
 /*!
-    Compiles @a text over the names @a names into @a program, which resolve()
-    runs: a condition, for a key that takes percent terms when
-    @a takesPercents is set (see checkPercents()), or, when @a words is
-    given, a choice of those words, which takes no percent terms. Returns
-    false, with @a error, for a text that is no such condition or choice,
-    or that the key does not take.
+    Compiles @a input over the names of @a context into @a program, which
+    resolve() runs: a condition, for a key that takes percent terms when
+    @a takesPercents is set (see checkPercents()), or a choice of the
+    context's enum keys, which takes no percent terms. Returns an empty list
+    and records the compile error in @a context for an invalid text.
 
     In a choice, each whole value is one of the words, a number, or an
     expression that gives one, such as `cfg.joinArgs`; resolve() then gives
@@ -996,37 +973,28 @@ QString Config::Condition::describe() const
     `$1`, `$2`, and so on read argument text from the context. A `+`
     between two texts joins them.
 
-    @a mismatch says how to handle a name that differs from a known one in
-    case alone (see NameMismatch); when given, @a mismatched tells whether
-    such a name made the compile fail, which a caller may treat apart.
+    The context's mismatch handler decides how to handle a name that differs
+    from a known one in case alone (see NameMismatch), and records failure.
 */
-bool Config::Condition::compile(
-        const QString & input, const QStringList & names,
-        QStringList *program,
-        QString *error,
-        bool takesPercents,
-        NameMismatch mismatch, bool *mismatched,
-        const QStringList *words)
+QStringList Config::Condition::compile(
+        const QString & input, const Evaluator::CompileContext *context,
+        bool takesPercents)
 {
-    bool nameMismatched = false;
-    if ( ! mismatched) {
-        mismatched = &nameMismatched;
-    }
-    *mismatched = false;
-    ExpressionCompiler compiler(
-        input, names, mismatch, words
-    );
-    if ( ! compiler.compile(program, error, mismatched)
-        || ! Config::Condition::checkPercents(
-            *program,
-            takesPercents && ! words,
-            error
-        )
+    Q_ASSERT(context);
+    context->m_lastCE.clear();
+    context->m_lastCompile = CompileRes();
+    QStringList program;
+    ExpressionCompiler compiler(input, context);
+    if (compiler.compile(&program)
+        && Config::Condition::checkPercents(program,
+                                            takesPercents && context->enumKeys().isEmpty(),
+                                            &context->m_lastCE)
     ) {
-        program->clear();
-        return false;
+        context->m_lastCompile |= Compiled;
+    } else {
+        program.clear();
     }
-    return true;
+    return program;
 }
 
 /*!
@@ -1087,9 +1055,15 @@ private:
 
 class Operand;
 
+struct Calculation
+{
+    inline Calculation() : passed(false) {}
+    QVariant value;
+    bool passed;
+};
+
 bool calculate(const QStringList &program, Lookup *lookup, Operand *result);
-bool calculateResult(const QStringList &program, Lookup *lookup,
-                     QVariant *result);
+Calculation calculateResult(const QStringList &program, Lookup *lookup);
 
 /*!
     Tells whether the name @a name holds, as the context answers it, else as
@@ -1121,21 +1095,25 @@ bool Lookup::holds(const QString &name) const
 
 /*!
     Resolves @a program, which compile() made, with the names @a holding
-    and the context @a context, into @a result: a number as a qreal (a
+    and the context @a context: a number as a qreal (a
     condition gives 1 when it holds, else 0), or the word or text a value
     leaves as a QString; hence the caller converts it as its setting takes
     it, and tells the two apart by the type. This is the one way a program
-    runs, which eval() and value() convert. The context resolves each
+    runs, which eval() and value() use. The context resolves each
     name first (the set @a holding resolves a name it does not know), and
     each registered function the program calls; each one only when a term
-    asks for it. Returns false when a term misses what it needs.
+    asks for it. The context records whether resolution passed.
 */
-bool Config::Condition::resolve(
+QVariant Config::Condition::resolve(
         const QStringList & program, const QSet<QString > & holding,
-        const Evaluator::Context *context, QVariant *result)
+        const Evaluator::Context *context)
 {
+    Q_ASSERT(context);
     Evaluator::Lookup lookup(holding, context);
-    return Evaluator::calculateResult(program, &lookup, result);
+    const Evaluator::Calculation result = Evaluator::calculateResult(program, &lookup);
+    context->m_lastResolvePassed = result.passed;
+    context->m_lastError = result.passed ? QString() : QString(QLL("cannot resolve condition"));
+    return result.value;
 }
 
 /*!
@@ -1148,39 +1126,39 @@ bool Config::Condition::resolve(
 */
 
 /*!
-    Compiles @a text over the names of @a context and resolves it into
-    @a result. If compilation fails, @a fallback may match a literal value.
-    Returns EvalFlag bits for the stages that ran and their outcome;
-    @a error describes a failure.
+    Compiles @a text over the names of @a context and resolves it. If
+    compilation fails, @a fallback may match a literal value. The context
+    records EvalFlag bits and any error.
 */
-Config::EvalRes Config::Condition::eval(
-        const QString & text,
-        const Evaluator::Context *context, QVariant *result, QString *error,
+QVariant Config::Condition::eval(
+        const QString & text, const Evaluator::Context *context,
         const ValueMatcher *fallback)
 {
-    QStringList program;
-    const QStringList words;
-    const QStringList names = context ? context->names() : QStringList();
-    if ( ! Condition::compile(text, names, &program, error, false,
-                              NameMismatchError, Q_NULLPTR, &words)) {
+    Q_ASSERT(context);
+    Evaluator::MismatchScope scope(context, NameMismatchError);
+    const QStringList program = Condition::compile(text, context);
+    scope.close();
+    if ( ! context->lastCompiled()) {
         QString matched;
-        if ( ! fallback) {
-            *result = QVariant();
-            return FailedToCompile;
+        if (fallback && fallback->match(text, &matched)) {
+            context->m_lastEvalResult = FailedToCompile | Fallback;
+            context->m_lastError.clear();
+            return matched;
         }
-        if ( ! fallback->match(text, &matched)) {
-            *result = QVariant();
-            return FailedToCompile | FailedToFallback;
-        }
-        *result = matched;
-        error->clear();
-        return FailedToCompile | Fallback;
+        context->m_lastEvalResult = fallback
+            ? EvalRes(FailedToCompile | FailedToFallback) : EvalRes(FailedToCompile);
+        context->m_lastError = context->lastErrorForCompile();
+        return QVariant();
     }
-    if ( ! Condition::resolve(program, QSet<QString >(), context, result)) {
-        *error = QString(QLL("cannot evaluate condition: %1")).arg(text);
-        return FailedToResolve;
+    const QVariant result = Condition::resolve(program, QSet<QString >(), context);
+    if ( ! context->lastResolvePassed()) {
+        context->m_lastEvalResult = FailedToResolve;
+        context->m_lastError = QString(QLL("cannot evaluate condition: %1")).arg(text);
+        return QVariant();
     }
-    return Resolved;
+    context->m_lastEvalResult = Resolved;
+    context->m_lastError.clear();
+    return result;
 }
 
 /*!
@@ -1205,7 +1183,7 @@ QString Config::Condition::canonicalName(const QString & name)
 }
 
 /*!
-    @enum Config::Condition::NameMismatch
+    @enum Config::NameMismatch
 
     Says what compile() does with a name that differs from a known one in
     case alone, such as `is-heaDer` for `is-header`; each mode but `ignore`
@@ -1237,7 +1215,7 @@ QString Config::Condition::canonicalName(const QString & name)
     Builds the mode that @a value names: `warn`, `error` or `critical`, in
     any case; any other value is `warn`.
 */
-Config::Condition::NameMismatch Config::Condition::nameMismatch(
+Config::NameMismatch Config::Condition::nameMismatch(
         const QString & value)
 {
     if (value.compare(QLL("critical"), Qt::CaseInsensitive) == 0) {
@@ -1318,25 +1296,22 @@ static bool operandHolds(const Operand &operand, bool *holds)
 }
 
 /*!
-    Runs the `@expression` @a program as calculate() does, and builds into
-    @a result what it leaves: a text as a QString, else its number as a
-    qreal. Returns false when a term misses a value.
+    Runs the `@expression` @a program as calculate() does, and builds what
+    it leaves as a value and whether it passed.
 */
-bool calculateResult(const QStringList &program, Lookup *lookup,
-                     QVariant *result)
+Calculation calculateResult(const QStringList &program, Lookup *lookup)
 {
+    Calculation result;
     Operand operand;
     if ( ! calculate(program, lookup, &operand)) {
-        *result = QVariant();
-        return false;
+        return result;
     }
-    if (operand.isNull) {
-        *result = QVariant();
-        return true;
+    result.passed = true;
+    if ( ! operand.isNull) {
+        result.value = operand.isText ? QVariant(operand.text)
+                                      : QVariant(operand.number);
     }
-    *result = operand.isText ? QVariant(operand.text)
-                             : QVariant(operand.number);
-    return true;
+    return result;
 }
 
 } // namespace
@@ -1383,7 +1358,7 @@ bool calculate(const QStringList &program, Lookup *lookup, Operand *result)
             const int count = item.mid(split + 1).toInt();
             Config::Scopes::Member function =
                 Config::Scopes::find(path.first());
-            if ( ! context
+            if ( ! context->hasPlace()
                 || function.isNull()
                 || stack.size() < count
             ) {
@@ -1392,14 +1367,10 @@ bool calculate(const QStringList &program, Lookup *lookup, Operand *result)
 
             // Walks a path such as `cfg.wrapMax` to its last member.
             for (int step = 1; step < path.size(); ++step) {
-                QVariant answer;
-                if ( ! Config::Scopes::resolve(
-                        function,
-                        context,
-                        QVariantList(),
-                        &answer
-                    )
-                ) {
+                const QVariant answer = Config::Scopes::resolve(
+                    function, context, QVariantList()
+                );
+                if ( ! answer.isValid()) {
                     return false;
                 }
                 function = Config::Scopes::member(
@@ -1417,13 +1388,10 @@ bool calculate(const QStringList &program, Lookup *lookup, Operand *result)
                                               : QVariant(argument.number));
             }
             stack.erase(stack.end() - count, stack.end());
-            QVariant called;
-            if ( ! Config::Scopes::resolve(
-                function,
-                context,
-                arguments,
-                &called
-            )) {
+            const QVariant called = Config::Scopes::resolve(
+                function, context, arguments
+            );
+            if ( ! called.isValid()) {
                 return false;
             }
             if (called.type() == QVariant::String) {
@@ -1438,7 +1406,7 @@ bool calculate(const QStringList &program, Lookup *lookup, Operand *result)
             }
         } else if (item.startsWith(QLL("f:"))) {
             bool value = false;
-            if ( ! context || ! context->predicate(item.mid(2), &value)) {
+            if ( ! context->hasPlace() || ! context->predicate(item.mid(2), &value)) {
                 return false;
             }
             stack << Operand(value);
