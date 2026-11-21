@@ -26,16 +26,17 @@ class FormatSuperContext : public FormatConditionContext
 {
     typedef FormatConditionContext super;
 public:
-    FormatSuperContext(const FormatSuperTypedefRule *rule, const FormatDocument *document,
-                       int brace, const QByteArray &base,
-                       const FormatConfig *runConfig = Q_NULLPTR)
+    inline FormatSuperContext(const FormatSuperTypedefRule *rule, const FormatDocument *document,
+                              int brace, const QByteArray &base,
+                              const FormatConfig *runConfig = Q_NULLPTR)
         : m_rule(rule), m_document(document), m_brace(brace), m_base(base)
         , m_runConfig(runConfig) {}
 
     inline QStringList onNames() const Q_DECL_OVERRIDE_IL
     { return FormatFileConfig::superConditionNames(); }
 
-    bool predicate(const QString &name, bool *value) const Q_DECL_OVERRIDE
+    inline bool predicate(const QString &name,
+                          bool *value) const Q_DECL_OVERRIDE_IL
     {
         Config::Cache::skip();
         if (name == QLL("isNewClass")) {

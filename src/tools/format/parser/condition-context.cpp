@@ -21,9 +21,12 @@ QStringList FormatReplaceTypesContext::onNames() const
 /*!
     Answers whether the current line is selected.
 */
-bool FormatReplaceTypesContext::predicate(const QString & name, bool *value) const
+bool FormatReplaceTypesContext::predicate(
+        const QString & name, bool *value) const
 {
-    if (name.compare(QLL("isNew"), Qt::CaseInsensitive) != 0 || ! this->m_document) {
+    if (name.compare(QLL("isNew"), Qt::CaseInsensitive) != 0
+        || ! this->m_document
+    ) {
         return false;
     }
     Config::Cache::skip();

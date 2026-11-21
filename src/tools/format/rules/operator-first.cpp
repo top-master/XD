@@ -55,6 +55,7 @@ static bool isTernaryColon(const FormatDocument *document, int index)
 static bool joinsClosingLine(FormatDocument *document, int index)
 {
     const Token token = document->token(index);
+    // Keeps logical operators on their own continuation lines.
     if (token == ANDAND || token == OROR) {
         return false;
     }
@@ -63,6 +64,7 @@ static bool joinsClosingLine(FormatDocument *document, int index)
         && (next == SEMIC || next == RPAREN || next == RBRACK || next == COMMA);
     const bool isTight = isPostfix || token == DOT || token == ARROW
         || token == DOTSTAR || token == ARROW_STAR;
+    // Joins expression operators, leaving labels and prefix increments alone.
     if ( ! isTight && ! isAssignmentOperator(token)
         && ( ! isBinaryOperator(token)
             || (token == COLON && ! isTernaryColon(document, index)))
@@ -71,6 +73,8 @@ static bool joinsClosingLine(FormatDocument *document, int index)
     }
     const int line = document->symbolLine(index);
     const int before = index - 1;
+    // Requires adjacent lines with only closing brackets on the first one,
+    // and leaves comments and directives alone.
     if (line < 2
         || document->firstSymbolOfLine(line) != index
         || document->lastSymbolOfLine(line) == index
@@ -87,11 +91,13 @@ static bool joinsClosingLine(FormatDocument *document, int index)
     }
     const int open = document->match(before);
     const Token closer = document->token(before);
+    // Joins initializer braces, leaving block braces on their own lines.
     if (closer == RBRACE
         && (open < 0 || document->braceScope(open) != FormatDocument::InitScope)
     ) {
         return false;
     }
+    // Keeps a control statement's body separate from its closing parenthesis.
     if (closer == RPAREN && open > 0) {
         const Token keyword = document->token(open - 1);
         if (keyword == IF
@@ -113,6 +119,7 @@ static bool joinsClosingLine(FormatDocument *document, int index)
         previousStart,
         previousEnd - previousStart
     ) + space + text;
+    // Keeps the break when the joined line would exceed `wrapMax`.
     if (textWidth(joined)
             > document->configAt(document->lineStart(line)).wrapMax
     ) {
@@ -137,8 +144,14 @@ static bool joinsClosingLine(FormatDocument *document, int index)
 */
 void FormatOperatorFirstRule::run(FormatDocument *document) const
 {
+    const bool members = this->forMembers();
     for (int i = 1; i + 1 < document->symbols().size(); ++i) {
         const Token token = document->token(i);
+        const bool memberAccess = token == DOT || token == ARROW
+            || token == DOTSTAR || token == ARROW_STAR;
+        if (memberAccess != members) {
+            continue;
+        }
         if (joinsClosingLine(document, i)) {
             continue;
         }

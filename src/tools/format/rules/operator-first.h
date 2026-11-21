@@ -12,11 +12,24 @@ class FormatOperatorFirstRule : public FormatNamedRule
 public:
     inline FormatOperatorFirstRule()
         : super("operator-first",
-                "Breaks a long expression before an operator, not after it.")
-    {
-    }
-
+                "Breaks a long expression before an operator, not after it.") {}
     void run(FormatDocument *document) const Q_DECL_OVERRIDE;
+
+protected:
+    inline virtual bool forMembers() const { return false; }
+};
+
+class FormatChainMembersFirstRule : public FormatOperatorFirstRule
+{
+    typedef FormatOperatorFirstRule super;
+public:
+    inline QByteArray name() const Q_DECL_OVERRIDE_IL
+    { return QByteArray("chain-members-first"); }
+    inline QString summary() const Q_DECL_OVERRIDE_IL
+    { return QString::fromLatin1("Joins member access after closing brackets when it fits."); }
+
+protected:
+    inline bool forMembers() const Q_DECL_OVERRIDE_IL { return true; }
 };
 
 #endif // RULES_OPERATOR_FIRST_H

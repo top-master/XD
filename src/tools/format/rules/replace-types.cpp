@@ -453,9 +453,9 @@ static QStringList callArguments(
         if (token == COMMA || k == close) {
             if (k > first) {
                 const int to = document->symbols().at(k).from;
-                arguments << sourceArgument(QString::fromLatin1(
-                    document->text().mid(from, to - from)
-                ));
+                arguments << sourceArgument(
+                    QString::fromLatin1(document->text().mid(from, to - from))
+                );
             }
             first = k + 1;
             from = document->symbolEnd(k);
@@ -494,15 +494,19 @@ static QStringList splitArguments(const QString & inner)
             const int end = inner.indexOf(QLL("*/"), k + 2);
             k = end < 0 ? inner.size() - 1 : end + 1;
         } else if (c == QLatin1Char('/') && k + 1 < inner.size()
-                   && inner.at(k + 1) == QLatin1Char('/')) {
+            && inner.at(k + 1) == QLatin1Char('/')
+        ) {
             const int end = inner.indexOf(QLatin1Char('\n'), k + 2);
             k = end < 0 ? inner.size() - 1 : end;
         } else if (c == QLatin1Char('R') && k + 1 < inner.size()
-                   && inner.at(k + 1) == QLatin1Char('"')) {
+            && inner.at(k + 1) == QLatin1Char('"')
+        ) {
             const int open = inner.indexOf(QLatin1Char('('), k + 2);
             if (open >= 0) {
-                const QString end = QLatin1Char(')') + inner.mid(k + 2, open - k - 2)
-                    + QLatin1Char('"');
+                const QString end = QLatin1Char(')') + inner.mid(
+                    k + 2,
+                    open - k - 2
+                ) + QLatin1Char('"');
                 const int close = inner.indexOf(end, open + 1);
                 if (close >= 0) {
                     k = close + end.size() - 1;
@@ -589,9 +593,10 @@ static bool literalValues(const QString & text, QVariantList *values)
     the place @a context stands for. Builds an invalid value if it has no
     result there.
 */
-static QVariant resolveMember(Config::Object *object, const QString & name,
-                              const QVariantList & values,
-                              const FormatConditionContext *context)
+static QVariant resolveMember(
+        Config::Object *object, const QString & name,
+        const QVariantList & values,
+        const FormatConditionContext *context)
 {
     Config::Scopes::Member member;
     member.object = object;
@@ -799,8 +804,9 @@ static bool fillTemplate(const QString & pattern, const QStringList & arguments,
 /*!
     Fills the placeholders of @a pattern with QString::arg() and @a arguments.
 */
-static bool fillPositions(const QString & pattern, const QStringList & arguments,
-                          QString *result)
+static bool fillPositions(
+        const QString & pattern, const QStringList & arguments,
+        QString *result)
 {
     QRegExp placeholder(QString(QLL("%L?([0-9]{1,2})")));
     QSet<int > positions;
@@ -845,7 +851,8 @@ static bool replacement(
         FormatArgsArray args(bound);
         const FormatCallTemplateContext context(&args, place);
         const Config::Name fallback(true);
-        const QVariant resolved = Config::Condition::eval(value, &context, &fallback);
+        const QVariant resolved =
+            Config::Condition::eval(value, &context, &fallback);
         const Config::EvalRes result = context.lastEvalResult();
         if (result.includes(Config::FailedToResolve)
             || result.includes(Config::FailedToFallback)
@@ -861,7 +868,9 @@ static bool replacement(
             }
             return true;
         }
-        if (resolved.type() != QVariant::String || resolved.toString().isEmpty()) {
+        if (resolved.type() != QVariant::String
+            || resolved.toString().isEmpty()
+        ) {
             *error = QString(QLL("the replacement expression must give a call or null"));
             return false;
         }
@@ -908,7 +917,9 @@ static bool replacement(
             *head = filled.left(filledParen).trimmed();
             *call = filled.mid(filledParen);
         }
-        if ( ! literal && mappings.at(m).first.contains(QLatin1Char('*'))) {
+        if ( ! literal
+            && mappings.at(m).first.contains(QLatin1Char('*'))
+        ) {
             head->replace(QLatin1Char('*'), capture);
         }
         if ( ! literal) {
@@ -1009,8 +1020,13 @@ void FormatReplaceTypesRule::run(FormatDocument *document) const
         );
         QStringList *program = &(programs[config.replaceTypesTarget]);
         if (program->isEmpty()) {
-            Config::Evaluator::MismatchScope scope(&context, Config::NameMismatchIgnore);
-            *program = Config::Condition::compile(config.replaceTypesTarget, &context);
+            Config::Evaluator::MismatchScope scope(
+                &context, Config::NameMismatchIgnore
+            );
+            *program = Config::Condition::compile(
+                config.replaceTypesTarget,
+                &context
+            );
             scope.close();
             if ( ! context.lastCompiled()) {
                 continue;

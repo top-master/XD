@@ -56,22 +56,27 @@
 
 /*!
     Builds one of each code rule, the fixes first, in the order they run:
-    the spaces of a `!` before every break, since they count in a line's
-    width; the braces before the condition layout, since a brace they add is
+    type and inline marker changes before wrapping, since they affect line
+    width; the spaces of a `!` before every break for the same reason; the
+    braces before the condition layout, since a brace they add is
     the one the condition closes next to; and the operator breaks of a long
     line before the condition layout too, since a condition they break then
-    closes in the same way.
+    closes in the same way. Member-access joins run before argument wrapping;
+    the other operator joins run after it.
 */
 static QList<FormatRule * > formatCreateCodeRules()
 {
     QList<FormatRule * > rules;
     rules << new FormatMocRunRule << new FormatReplaceTypesRule << new FormatRelativeIncludeRule
+        << new FormatInlineKeywordRule
         << new FormatNotSpaceRule << new FormatLineJoinRule
         << new FormatControlBracesRule << new FormatNamespaceBracesRule
         << new FormatOperatorWrapRule
         << new FormatConditionWrapRule << new FormatTernaryWrapRule
-        << new FormatOperatorFirstRule << new FormatContinuationIndentRule
+        << new FormatChainMembersFirstRule
+        << new FormatContinuationIndentRule
         << new FormatInitListRule << new FormatParamWrapRule << new FormatArgsWrapRule
+        << new FormatOperatorFirstRule
         << new FormatConditionCloseRule
         << new FormatTemplateCloseRule << new FormatReferenceSpaceRule
         << new FormatOneStatementRule;
@@ -88,8 +93,7 @@ static QList<FormatRule * > formatCreateCodeRules()
 static QList<FormatRule * > formatCreateClassRules()
 {
     QList<FormatRule * > rules;
-    rules << new FormatOutlineThisRule << new FormatInlineKeywordRule
-        << new FormatConnectLayoutRule;
+    rules << new FormatOutlineThisRule << new FormatConnectLayoutRule;
     rules << new FormatConstOverloadRule << new FormatQPointerGetterRule;
     return rules;
 }

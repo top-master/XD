@@ -83,7 +83,14 @@ bh_build_in_order() {
             && { [ -z "${BH_REBUILD:-}" ] || [ "$BH_REBUILD" = '^.*$' ]; }; then
         _bio_unrecorded=0
     fi
+    _bio_total=${BH_STEPS_TOTAL:-}
+    if [ -n "${BH_BUILD_ORDER_PREVIOUS:-}" ]; then
+        _step=$BH_BUILD_ORDER_PREVIOUS
+        unset BH_BUILD_ORDER_PREVIOUS
+    fi
+    BH_STEPS_TOTAL=$((${_step:-0} + 1))
     bh_run --whole build-order bh_prepare_build_order "$1" "$_bio_unrecorded"
+    BH_STEPS_TOTAL=$_bio_total
     bh_build_walk prepare
     _bw_count=$_bw_total
     # Counts those projects too, hence the counter of each line covers both.
@@ -356,7 +363,8 @@ bh_build_candidate() {
         fi
         echo
         echo "$BH_BUILD_LABEL [$_bw_total/$_bw_count]: $_bc_rel"
-        ( cd "$_bc_bd" && BH_MAKEFILE=$_bc_makefile bh_make "$JOBS" ) \
+        ( cd "$_bc_bd" && bh_project_progress 0 0 "$_bc_rel" "$_bc_makefile" \
+            && BH_MAKEFILE=$_bc_makefile bh_make "$JOBS" ) \
             || bh_error "--filter: build failed for $_bc_rel"
         return 0
     fi
@@ -370,7 +378,8 @@ bh_build_candidate() {
     # builds it again.
     bh_save_space_unfinish "$_bc_pro"
     echo "--save-space build [$_bw_total/$_bw_count]: $_bc_rel"
-    ( cd "$_bc_bd" && BH_MAKEFILE=$_bc_makefile bh_make "$JOBS" ) \
+    ( cd "$_bc_bd" && bh_project_progress 0 0 "$_bc_rel" "$_bc_makefile" \
+        && BH_MAKEFILE=$_bc_makefile bh_make "$JOBS" ) \
         || bh_error "--save-space: build failed for $_bc_rel"
     bh_save_space_mark_finished "$_bc_pro" "$_bc_bd/$_bc_makefile"
 }
@@ -427,7 +436,7 @@ bh_build_alone() {
         _ba_order=CONFIG+=save_order
     fi
     # shellcheck disable=SC2086  # intentional word-split of forwarded args.
-    ( mkdir -p "$_ba_bd" && cd "$_ba_bd" \
+    ( mkdir -p "$_ba_bd" && cd "$_ba_bd" && bh_project_progress 1 0 "$2" "$_ba_mf" \
         && BH_MAKEFILE=$_ba_mf BH_FORCE_QMAKE=$_ba_force BH_QMAKE_CLEAN=$_ba_clean \
             bh_run_qmake qmake "$1" $_ba_order $BH_REMAINING_ARGS \
         && BH_MAKEFILE=$_ba_mf bh_make "$JOBS" ) \

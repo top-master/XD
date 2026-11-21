@@ -1405,6 +1405,14 @@ void tst_FormatRules::testFix_shouldRewrite_data()
         << QString(QLL("operator-first"))
         << QByteArray("void f()\n{\n    out << a <<\n        b;\n}\n")
         << QByteArray("void f()\n{\n    out << a\n        << b;\n}\n");
+    QTest::newRow("operator-first leaves member access")
+        << QString(QLL("operator-first"))
+        << QByteArray("void f()\n{\n    value = call(\n        x\n    )\n        .member;\n}\n")
+        << QByteArray("void f()\n{\n    value = call(\n        x\n    )\n        .member;\n}\n");
+    QTest::newRow("chain-members-first joins member access")
+        << QString(QLL("chain-members-first"))
+        << QByteArray("void f()\n{\n    value = call(\n        x\n    )\n        .member;\n}\n")
+        << QByteArray("void f()\n{\n    value = call(\n        x\n    ).member;\n}\n");
     QTest::newRow("init-list-lead")
         << QString(QLL("init-list-lead"))
         << QByteArray("Foo::Foo() :\n    a(0),\n    b(0)\n{\n}\n")

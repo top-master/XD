@@ -20,7 +20,9 @@ public slots:
     bool isLiteral(const QVariant & value) const;
 public:
     QVariant dynamicValue(const QByteArray & name) const Q_DECL_OVERRIDE;
-    static QSharedPointer<Config::Scopes::Scope > argumentScope(const QString & text);
+    static QSharedPointer<Config::Scopes::Scope > argumentScope(
+        const QString & text
+    );
 };
 
 #endif // RULES_TEMPLATE_OBJECT_H

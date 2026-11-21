@@ -635,7 +635,7 @@ void result()
         + other;
 }
 
-// CASE	operator-join-closings.cpp	operator-first		1
+// CASE	operator-join-closings.cpp	operator-first,chain-members-first		1
 void operators()
 {
     target = calculate(

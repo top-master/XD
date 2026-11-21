@@ -516,8 +516,8 @@ bh_default_qmakespec() {
 #
 # Standard Y/N gate used by every "do you want to ..." prompt the
 # scripts surface (Xcode-license accept, qmake bootstrap, XD's
-# continue-or-abort prompt). Returns 0 on Y/empty/anything-not-N and
-# 1 on N variants (`n`/`N`/`no`/`NO`/`No`).
+# continue-or-abort prompt). Returns 0 on yes or empty, and 1 on no or EOF;
+# asks again for any other answer.
 #
 # Under --headless (BH_HEADLESS > 0) the prompt is skipped and 0 is
 # returned -- "the caller has signed up for the unattended path".
@@ -526,12 +526,15 @@ bh_yes_no() {
     if [ "${BH_HEADLESS:-0}" -gt 0 ]; then
         return 0
     fi
-    printf '%s ' "$1"
-    read -r _bh_yes_no_answer
-    case "$_bh_yes_no_answer" in
-        n|N|no|NO|No) return 1;;
-    esac
-    return 0
+    while :; do
+        printf '%s ' "$1"
+        read -r _bh_yes_no_answer || return 1
+        case "$_bh_yes_no_answer" in
+            ''|[yY]|[yY][eE][sS]) return 0;;
+            [nN]|[nN][oO]) return 1;;
+            *) echo 'Please answer yes or no.' >&2;;
+        esac
+    done
 }
 
 
@@ -2588,9 +2591,13 @@ ${BH_FORWARD_ARGS:-}
         [ -z "${BH_BUILD_DIR_SHOWN:-}" ] || export BH_BUILD_DIR_SHOWN
         if [ "$_db_script" = "$XD_DIR/build.sh" ]; then
             export BH_XD_BUILD_FILTER
+            [ -z "${BH_BUILD_ORDER_PREVIOUS:-}" ] || export BH_BUILD_ORDER_PREVIOUS
         fi
         sh "$_db_script" "$@"
     ) || bh_error "building through \"$_db_script\" failed (see the output above)"
+    if [ "$_db_script" = "$XD_DIR/build.sh" ]; then
+        unset BH_BUILD_ORDER_PREVIOUS
+    fi
 }
 
 # bh_xd_missing <shared|static>
@@ -2739,6 +2746,18 @@ bh_static_record() {
     fi
 }
 
+# Tells whether this run will record a build order.
+bh_build_order_pending() {
+    [ "${BH_NO_BUILD:-0}" -eq 0 ] || return 1
+    if [ "${BH_TEMPLATE:-}" = subdirs ]; then
+        [ -n "${BH_FILTER:-}" ] || [ -n "${BH_REBUILD:-}" ] \
+            || [ "${BH_SAVE_SPACE:-0}" -eq 1 ]
+        return $?
+    fi
+    [ "${BH_NO_XD_BUILD:-0}" -eq 0 ] && [ "$XD_DIR" != "$BH_ROOT" ] \
+        && [ -n "${BH_XD_BUILD_FILTER:-}" ]
+}
+
 # bh_static_clean_switched <switched> <static>
 #
 # Cleans the projects of <switched>, a newline-separated list of `.pro` paths
@@ -2753,6 +2772,14 @@ bh_static_clean_switched() {
     [ -n "$1" ] || return 0
     _scs_switched=$1
     _scs_static=$2
+    _scs_total=${BH_STEPS_TOTAL:-}
+    _scs_start=${_step:-0}
+    _scs_prepare=0
+    if bh_build_order_pending; then
+        _scs_prepare=1
+    fi
+    _scs_marker=$LOGS/.static-clean-$$
+    rm -f "$_scs_marker"
     _scs_nl='
 '
     if [ -f "$BUILD_DIR/.qmake.save_space" ]; then
@@ -2780,8 +2807,33 @@ bh_static_clean_switched() {
             *)                             _scs_mode=shared ;;
         esac
         echo "--static: ${_scs_pro#"$BH_ROOT"/} switches to $_scs_mode mode; cleaning ${_scs_makefile#"$BUILD_DIR"/}."
+        if [ "$_scs_prepare" -eq 1 ]; then
+            if [ "${_scs_first:-1}" -eq 1 ]; then
+                _step=0
+                _scs_first=0
+            fi
+            BH_STEPS_TOTAL=$((_step + 2))
+        fi
         bh_make_clean "$_scs_makefile"
-    done || bh_error "--static: cleaning a project that switches mode failed"
+        _step=$((_step + 1))
+        printf '%s\n' "$_step" > "$_scs_marker"
+    done || {
+        rm -f "$_scs_marker"
+        bh_error "--static: cleaning a project that switches mode failed"
+    }
+    if [ -f "$_scs_marker" ]; then
+        IFS= read -r _scs_end < "$_scs_marker"
+        if [ "$_scs_prepare" -eq 1 ]; then
+            BH_BUILD_ORDER_PREVIOUS=$_scs_end
+        else
+            _step=$_scs_end
+            if [ -n "$_scs_total" ]; then
+                _scs_total=$((_scs_total + _step - _scs_start))
+            fi
+        fi
+        rm -f "$_scs_marker"
+    fi
+    BH_STEPS_TOTAL=$_scs_total
 }
 
 # bh_makefile_project <makefile>
@@ -3151,21 +3203,25 @@ bh_make() {
         # and each bh_make_step contributes two visible phases
         # (computing + compiling) -- so the split adds two extra
         # phases overall (release-computing + release-compiling
-        # vs. the single non-split pair). Bump BH_STEPS_TOTAL by 2
-        # so the counter walks all the way to N/N at the end of
-        # `make-debug compiling`. Templates seed assuming a single
-        # non-split bh_make.
-        if [ -n "${BH_STEPS_TOTAL:-}" ]; then
-            BH_STEPS_TOTAL=$((BH_STEPS_TOTAL + 2))
+        # vs. the single non-split pair). Add them only when the
+        # project's initial estimate did not already include them.
+        if [ "${BH_PROJECT_SPLIT_PLANNED:-0}" -eq 0 ]; then
+            if [ -n "${BH_STEPS_TOTAL:-}" ]; then
+                BH_STEPS_TOTAL=$((BH_STEPS_TOTAL + 2))
+            fi
+            bh_progress_plan_steps 1
         fi
-        # The second make run's build-plan step, when the progress mode
-        # hides it (see `bh_progress_plan_steps`).
-        bh_progress_plan_steps 1
         bh_make_step make-release  release-all "$_bh_jobs" "$@"
         bh_make_step make-debug    debug-all   "$_bh_jobs" "$@"
     else
+        if [ "${BH_PROJECT_SPLIT_PLANNED:-0}" -eq 1 ]; then
+            BH_STEPS_TOTAL=$((BH_STEPS_TOTAL - 2))
+            bh_progress_mode_resolve
+            [ "$_bhpp_mode" != estimate ] || BH_STEPS_TOTAL=$((BH_STEPS_TOTAL + 1))
+        fi
         bh_make_step make ""        "$_bh_jobs" "$@"
     fi
+    BH_PROJECT_SPLIT_PLANNED=0
 }
 
 # bh_make_is_split <makefile>
@@ -3587,6 +3643,28 @@ bh_run_tests() {
     esac
 }
 
+# Estimates qmake ($1), make, and tests ($2), using the project's Makefile ($4).
+bh_project_progress() {
+    _step=0
+    BH_STEPS_TOTAL=$(($1 + 3 + $2))
+    bh_progress_plan_steps 1
+    BH_PROJECT_SPLIT_PLANNED=0
+    if bh_make_is_split "${4:-Makefile}"; then
+        BH_PROJECT_SPLIT_PLANNED=1
+    elif [ ! -f "${4:-Makefile}" ] && [ -n "${3:-}" ] \
+            && BH_SPLIT_PROJECT="$BH_ROOT/$3" bh_save_space_has_line \
+                'NF == 3 && $1 == ENVIRON["BH_SPLIT_PROJECT"] && $2 ~ /^debug_and_release:/'; then
+        BH_PROJECT_SPLIT_PLANNED=1
+    fi
+    if [ "$BH_PROJECT_SPLIT_PLANNED" -eq 1 ]; then
+        BH_STEPS_TOTAL=$((BH_STEPS_TOTAL + 2))
+        bh_progress_plan_steps 1
+    fi
+    if [ -n "${3:-}" ]; then
+        bh_logs_init "$BUILD_DIR/logs/projects/${3%.pro}"
+    fi
+}
+
 # bh_run_one_test <abs-pro>
 #
 # Builds and runs one test project, in its own build and log subdir (so
@@ -3605,9 +3683,19 @@ bh_run_one_test() {
     _bhrot_pro=$1
     [ -f "$_bhrot_pro" ] || bh_error "test project not found: $_bhrot_pro"
     _bh_tests_total=$((_bh_tests_total + 1))
-    # Flat, unique name for this test's build + log subdirs.
-    _bhrot_name=$(printf '%s' "${_bhrot_pro#"$BH_ROOT"/}" | tr -c 'A-Za-z0-9' '_')
+    # Keep build paths stable; name logs relative to the test directory.
+    _bhrot_rel=${_bhrot_pro#"$BH_ROOT"/}
+    _bhrot_build_name=$(printf '%s' "$_bhrot_rel" | tr -c 'A-Za-z0-9' '_')
+    if [ -n "${BH_TEST_ROOT_DIR:-}" ] && [ "$BH_TEST_ROOT_DIR" != / ]; then
+        case "$_bhrot_pro" in
+            "$BH_TEST_ROOT_DIR"/*) _bhrot_rel=${_bhrot_pro#"$BH_TEST_ROOT_DIR"/} ;;
+        esac
+        _bhrot_name=$(printf '%s' "$_bhrot_rel" | tr -c 'A-Za-z0-9' '_')
+    else
+        bh_test_unique_name "$_bhrot_pro"
+    fi
     _bhrot_rc=0
+    printf '\nTest project: %s\n' "${_bhrot_pro#"$BH_ROOT"/}"
     # shellcheck disable=SC2086  # intentional split of forwarded args.
     (
         # The consumer may use its app's static Qt mode for these tests.
@@ -3616,9 +3704,10 @@ bh_run_one_test() {
             _bhrot_static=CONFIG+=qt_static
         fi
         LOGS=$BUILD_DIR/logs/tests/$_bhrot_name
-        _bhrot_tb=$BUILD_DIR/tests-build/$_bhrot_name
-        _step=0
+        _bhrot_tb=$BUILD_DIR/tests-build/$_bhrot_build_name
         if [ "${BH_BUILD_TESTS:-1}" -eq 0 ]; then
+            _step=0
+            BH_STEPS_TOTAL=1
             # Don't (re)build the test -- assume it's already built and
             # just run it. `make check` on an up-to-date tree only runs the
             # test; a missing build makes it fail, the "fail if not really
@@ -3631,6 +3720,7 @@ bh_run_one_test() {
         else
             mkdir -p "$LOGS" "$_bhrot_tb" \
                 && cd "$_bhrot_tb" \
+                && bh_project_progress 1 1 \
                 && bh_run_qmake test-qmake "$_bhrot_pro" CONFIG+="$BH_MODE" \
                     $_bhrot_static $BH_REMAINING_ARGS \
                 && bh_make "$JOBS" \
@@ -3721,11 +3811,70 @@ bh_export_test_paths() {
     fi
 }
 
+# Finds a distinct shortest suffix when the test projects share no directory.
+bh_test_unique_name() {
+    _bh_unique_tail=${1##*/}
+    _bh_unique_parent=${1%/*}
+    while :; do
+        _bhrot_name=$(printf '%s' "$_bh_unique_tail" | tr -c 'A-Za-z0-9' '_')
+        _bh_unique_conflict=0
+        while IFS= read -r _bh_unique_other; do
+            [ -n "$_bh_unique_other" ] && [ "$_bh_unique_other" != "$1" ] || continue
+            _bh_unique_encoded=$(printf '%s' "$_bh_unique_other" | tr -c 'A-Za-z0-9' '_')
+            case "$_bh_unique_encoded" in
+                *"$_bhrot_name") _bh_unique_conflict=1; break ;;
+            esac
+        done <<EOF
+$BH_TEST_ROOT
+EOF
+        [ "$_bh_unique_conflict" -eq 1 ] || return 0
+        _bh_unique_part=${_bh_unique_parent##*/}
+        if [ -z "$_bh_unique_part" ]; then
+            _bhrot_name=$(printf '%s' "$1" | od -An -v -tx1 | tr -d ' \n')
+            return 0
+        fi
+        _bh_unique_tail=$_bh_unique_part/$_bh_unique_tail
+        _bh_unique_next=${_bh_unique_parent%/*}
+        if [ "$_bh_unique_next" = "$_bh_unique_parent" ]; then
+            _bh_unique_parent=
+        else
+            _bh_unique_parent=$_bh_unique_next
+        fi
+    done
+}
+
+# Finds the common parent of the projects in `BH_TEST_ROOT`.
+bh_test_common_root() {
+    BH_TEST_ROOT_DIR=
+    while IFS= read -r _bh_common_pro; do
+        [ -n "$_bh_common_pro" ] || continue
+        _bh_common_dir=${_bh_common_pro%/*}
+        if [ -z "$BH_TEST_ROOT_DIR" ]; then
+            BH_TEST_ROOT_DIR=${_bh_common_dir:-/}
+            continue
+        fi
+        while [ "$BH_TEST_ROOT_DIR" != / ]; do
+            case "$_bh_common_dir/" in
+                "$BH_TEST_ROOT_DIR/"*) break ;;
+            esac
+            _bh_common_parent=${BH_TEST_ROOT_DIR%/*}
+            if [ "$_bh_common_parent" = "$BH_TEST_ROOT_DIR" ]; then
+                BH_TEST_ROOT_DIR=
+                return 0
+            fi
+            BH_TEST_ROOT_DIR=${_bh_common_parent:-/}
+        done
+    done <<EOF
+$BH_TEST_ROOT
+EOF
+}
+
 # Runs each test project that `BH_TEST_ROOT` lists, one per line, through
 # `bh_run_one_test`; with a `1` argument, skips a project that is no test
 # case (`CONFIG += testcase`).
 bh_run_test_root() {
     _bhrtr_vet=$1
+    bh_test_common_root
     _bhrtr_ifs=$IFS
     IFS='
 '
@@ -3795,13 +3944,15 @@ bh_template_app() {
         BH_STEPS_TOTAL=$((BH_STEPS_TOTAL + 1))
     fi
     # `--test` adds: test-qmake + test-make-computing + test-make-compiling + tests = 4
-    [ "${BH_RUN_TESTS:-0}"   -gt 0 ] && BH_STEPS_TOTAL=$((BH_STEPS_TOTAL + 4))
+    if [ "${BH_RUN_TESTS:-0}" -gt 0 ] && [ -z "${BH_TEST_ROOT:-}" ]; then
+        BH_STEPS_TOTAL=$((BH_STEPS_TOTAL + 4))
+    fi
     [ "${BH_RUN_TARGET:-0}"  -gt 0 ] && BH_STEPS_TOTAL=$((BH_STEPS_TOTAL + 1))
     # `bh_make` runs the moc pass as a step of its own (see
     # bh_mocables_prepass), and the progress mode may hide the build-plan step
     # of each make run (see bh_progress_plan_steps): the app's, and the tests'.
     BH_STEPS_TOTAL=$((BH_STEPS_TOTAL + 1))
-    if [ "${BH_RUN_TESTS:-0}" -gt 0 ]; then
+    if [ "${BH_RUN_TESTS:-0}" -gt 0 ] && [ -z "${BH_TEST_ROOT:-}" ]; then
         bh_progress_plan_steps 2
     else
         bh_progress_plan_steps 1
@@ -4389,6 +4540,7 @@ bh_template_subdirs() {
             bh_run_silent_fg 'Staging Qt plugins for runtime search path' \
                 bh_searchpath_plugins
             bh_export_test_paths
+            bh_test_common_root
 
             _bh_tests_total=0
             _bh_tests_failed=0
