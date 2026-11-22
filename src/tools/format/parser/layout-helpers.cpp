@@ -245,16 +245,17 @@ QByteArray sourceText(const FormatDocument *document, int first, int last)
 }
 
 /*!
-    Finds the one `?` of a conditional expression among the tokens from
-    @a first up to @a last of @a document, outside of every bracket pair, and
-    the first `:` after it; returns false when there is no such `?`, or more
-    than one (a nested conditional expression), or no `:`.
+    Finds the first `?` of a conditional expression among the tokens from
+    @a first up to @a last of @a document, outside of every bracket pair,
+    and its matching `:`. Returns false when either token is absent.
 */
 bool findTernary(const FormatDocument *document, int first, int last,
                  int *question, int *colon)
 {
     *question = -1;
     *colon = -1;
+    int depth = 0;
+    // Match the outer conditional while skipping nested brackets.
     for (int k = first; k <= last; ++k) {
         const Token token = document->token(k);
         if ((token == LPAREN
@@ -264,15 +265,16 @@ bool findTernary(const FormatDocument *document, int first, int last,
         ) {
             k = document->match(k);
         } else if (token == QUESTION) {
-            if (*question >= 0) {
-                return false;
+            if (*question < 0) {
+                *question = k;
             }
-            *question = k;
-        } else if (token == COLON && *question >= 0 && *colon < 0) {
+            ++depth;
+        } else if (token == COLON && depth > 0 && --depth == 0) {
             *colon = k;
+            return true;
         }
     }
-    return *question >= 0 && *colon >= 0;
+    return false;
 }
 
 /*!

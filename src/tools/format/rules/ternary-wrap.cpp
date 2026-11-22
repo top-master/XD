@@ -26,7 +26,7 @@
     FormatConditionLayout::layoutHead()); an `if` condition's own `?` is
     laid out by FormatConditionWrapRule.
     The rule leaves alone a control statement's head, a statement with a
-    brace or a comment, and a preprocessor line.
+    comment, and a preprocessor line.
 */
 
 /*!
@@ -73,15 +73,21 @@ void FormatTernaryWrapRule::run(FormatDocument *document) const
             continue;
         }
 
-        // Leaves a line of more than one statement, or with a brace or a
-        // comment in it; the line starts its statement (checked above).
+        // Leave comments in place when rewriting the statement.
         bool isPlain = ! document->hasCommentBetween(
             document->symbols().at(first).from,
             document->symbolEnd(last)
         );
+        // Skip nested expressions when looking for another statement.
         for (int k = first; k < last && isPlain; ++k) {
             const Token token = document->token(k);
-            isPlain = token != SEMIC && token != LBRACE && token != RBRACE;
+            if ((token == LPAREN || token == LBRACK || token == LBRACE)
+                && document->match(k) > k
+            ) {
+                k = document->match(k);
+                continue;
+            }
+            isPlain = token != SEMIC && token != RBRACE;
         }
         int question = -1;
         int colon = -1;

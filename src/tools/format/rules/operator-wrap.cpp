@@ -37,9 +37,8 @@
 /*!
     Finds the statement that @a line of @a document holds whole, and gives
     its first token to @a first and its `;` to @a last. Returns false unless
-    the statement starts the line, ends there with its only `;`, holds
-    neither braces, a comment, nor a `?` outside of brackets, and is no
-    control statement.
+    the statement starts the line, ends there with its only top-level `;`,
+    holds no comment, and is no control statement.
 */
 bool FormatOperatorWrapRule::wholeStatement(
         const FormatDocument *document, int line,
@@ -73,19 +72,17 @@ bool FormatOperatorWrapRule::wholeStatement(
     ) {
         return false;
     }
-    int depth = 0;
+    // Skip nested expressions while checking the statement boundary.
     for (int i = *first; i <= *last; ++i) {
         const Token token = document->token(i);
-        if (token == LBRACE || token == RBRACE || (token == SEMIC && i < *last)
-            || (token == QUESTION && depth == 0)
+        if ((token == LPAREN || token == LBRACK || token == LBRACE)
+            && document->match(i) > i
         ) {
+            i = document->match(i);
+            continue;
+        }
+        if ((token == SEMIC && i < *last) || token == RBRACE) {
             return false;
-        }
-        if (token == RPAREN || token == RBRACK) {
-            --depth;
-        }
-        if (token == LPAREN || token == LBRACK) {
-            ++depth;
         }
     }
     return true;

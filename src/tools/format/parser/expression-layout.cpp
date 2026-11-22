@@ -788,6 +788,7 @@ QList<int > FormatExpressionLayout::chainOperators(int first, int last) const
     QList<int > operators;
     int loosest = 0;
     int angles = 0;
+    int assignment = -1;
     for (int i = first; i <= last; ++i) {
         const Token token = m_document->token(i);
         const int match = m_document->match(i);
@@ -818,12 +819,15 @@ QList<int > FormatExpressionLayout::chainOperators(int first, int last) const
         if (angles == 0
             && i > first
             && i < last
+            && assignment < 0
             && isAssignmentOperator(token)
             && isOperandEnd(m_document->token(i - 1))
         ) {
-            operators.clear();
-            operators << i;
-            return operators;
+            assignment = i;
+            continue;
+        }
+        if (assignment >= 0) {
+            continue;
         }
         const int rank = isMemberAccess(token) ? MemberAccessRank
                                                : operatorPrecedence(token);
@@ -841,7 +845,7 @@ QList<int > FormatExpressionLayout::chainOperators(int first, int last) const
             operators << i;
         }
     }
-    return operators;
+    return assignment >= 0 ? QList<int >() << assignment : operators;
 }
 
 /*!

@@ -51,8 +51,8 @@
     keyword's line, as its base; under `[Structure] compact = always`, a call
     that ends the condition of an `if` or a `while`, its `(` on the
     keyword's line, takes the keyword's line instead, and the condition's `)`
-    hugs the call's, as `)) {`. The rule leaves alone a list with a brace
-    (other than a nested brace list), a `;` or a comment in it, a
+    hugs the call's, as `)) {`. The rule leaves alone a list with a top-level
+    `;` or a comment in it, a
     `connect()` or `disconnect()` (see FormatConnectLayoutRule), and one at
     file, namespace or class scope, where a `(` mostly opens a declaration's
     parameters (see FormatParamWrapRule).
@@ -294,16 +294,19 @@ void FormatArgsWrapRule::run(FormatDocument *document) const
         const int closeFrom = document->symbols().at(close).from;
         const int closeEnd = document->symbolEnd(close);
 
-        // Leaves a list alone when it holds a brace, a `;`, a comment, or a
-        // preprocessor directive.
+        // Leave comments and directives in place while laying out the list.
         bool isPlain = ! document->hasCommentBetween(from + 1, closeFrom)
             && ! document->spansDirective(from, closeEnd);
+        // Skip nested expressions when looking for a statement boundary.
         for (int k = i + 1; k < close && isPlain; ++k) {
             const Token token = document->token(k);
-            isPlain = token != SEMIC
-                && (( ! isBrace && token != LBRACE && token != RBRACE)
-                    || (isBrace && (token != LBRACE
-                        || document->braceScope(k) == FormatDocument::InitScope)));
+            if ((token == LPAREN || token == LBRACK || token == LBRACE)
+                && document->match(k) > k
+            ) {
+                k = document->match(k);
+                continue;
+            }
+            isPlain = token != SEMIC;
         }
         const QList<QPair<int, int > > arguments = splitArguments(
             document,
