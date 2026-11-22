@@ -15,7 +15,7 @@
     @class FormatOperatorWrapRule
     @internal
 
-    Breaks a statement that sits whole on one line, runs past the column
+    Breaks a statement that runs past the column
     limit (`[Structure] wrapMax`, 80 by default), and holds a chain of binary
     operators (`<<`, `+`, `-`, `|`, `^`, `&&`, `||`, and the like) outside of
     its brackets, or as the last argument of its call, as
@@ -23,9 +23,8 @@
     the loosest level that does not fit, one operand per line, each
     continuation line led by its operator one step past the line it breaks
     from; a call whose last argument is the chain keeps the chain's head on
-    the call's line, and closes on a line of its own. A statement already
-    wrapped, a compact one with braces, and a control statement are left to
-    the other rules and to people.
+    the call's line, and closes on a line of its own. A statement with
+    existing argument breaks can move those breaks to its outer operators.
 
     Only the width decides those breaks, while the rule for a long operator
     chain asks to break between groups of operands that belong together;
@@ -35,9 +34,10 @@
 */
 
 /*!
-    Finds the statement that @a line of @a document holds whole, and gives
+    Finds a statement starting on @a line of @a document and gives
     its first token to @a first and its `;` to @a last. Returns false unless
-    the statement starts the line, ends there with its only top-level `;`,
+    the statement ends with its only top-level `;` on the same line or
+    the closing line of a nested expression,
     holds no comment, and is no control statement.
 */
 bool FormatOperatorWrapRule::wholeStatement(
@@ -137,9 +137,8 @@ void FormatOperatorWrapRule::run(FormatDocument *document) const
         );
         const int from = document->symbols().at(first).from;
         const int length = document->symbolEnd(last - 1) - from;
-        // Reconsider existing argument breaks only when moving the breaks
-        // to operators actually shortens the layout.
-        if (nestedBreak && laidOut.count('\n') >= document->symbolLine(last) - line) {
+        // Prefer the outer breaks even when both layouts take as many lines.
+        if (nestedBreak && laidOut.count('\n') > document->symbolLine(last) - line) {
             continue;
         }
         if (laidOut == document->text().mid(from, length)
