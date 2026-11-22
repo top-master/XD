@@ -26,19 +26,6 @@ public:
 private:
     void regroup(FormatDocument *document,
                  FormatScopeConditions *conditions) const;
-    QList<QByteArray > groupedLines(
-            const QByteArray & prefix,
-            const QList<QList<QByteArray > > & groups,
-            const QByteArray & suffix, bool breaksAfterOpen,
-            const QByteArray & breakPad, int limit,
-            bool *fits) const;
-    QList<QByteArray > parameters(
-            const FormatDocument *document, int open,
-            int close) const;
-    QList<QByteArray > fill(const QByteArray & first, const QByteArray & pad,
-                            const QList<QByteArray > & items,
-                            const QByteArray & suffix,
-                            int limit) const;
 };
 
 #endif // RULES_PARAM_WRAP_H

@@ -22,12 +22,24 @@ public:
                       bool forceMath = false);
     QByteArray layoutList(int first, int open, int close, int column,
                           bool keepsLines = false, int joinCount = 0);
+    QList<QByteArray > layoutDeclaration(
+            int open, const QByteArray & prefix, const QByteArray & suffix,
+            bool breaksAfterOpen, bool wrapping, const QByteArray & pad,
+            int limit, bool *fits);
     QByteArray oneLine(int first, int last) const;
     bool hasChain(int first, int last) const;
     bool hasOuterChain(int first, int last) const;
     inline bool brokeUngrouped() const { return m_brokeUngrouped; }
 
 private:
+    struct LineLayout {
+        QByteArray firstLead;
+        QByteArray nextLead;
+        QByteArray suffix;
+        int limit;
+        bool preserveText;
+        bool wrapItems;
+    };
     QList<int > chainOperators(int first, int last) const;
     QByteArray layoutChain(
             int first, int last, const QList<int > & operators, int column,
@@ -40,9 +52,13 @@ private:
     bool chainStepsIn(int headFirst, int headLast,
                       const QByteArray & head) const;
     QByteArray layoutGroup(int open, int close, int column, int trailing);
-    QByteArray listLines(
+    QByteArray layoutArray(
             int open, int close, const QList<QPair<int, int > > & items,
             bool keepsGroups, int firstItem, int joinCount);
+    QByteArray listLines(
+            int open, int close, const QList<QPair<int, int > > & items,
+            bool keepsGroups, int firstItem, int joinCount,
+            const LineLayout & layout, bool *fits);
     QByteArray itemText(int first, int last, int column, int trailing);
     bool breaksOnlyBetweenLiterals(int first, int last) const;
     bool mayBreakList(int open, int itemCount) const;

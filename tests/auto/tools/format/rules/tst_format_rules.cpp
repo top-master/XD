@@ -1446,13 +1446,38 @@ void tst_FormatRules::testFix_shouldRewrite_data()
                       "        QStringList *program, QString *error, bool takesPercents)\n"
                       "{\n"
                       "}\n");
-    QTest::newRow("param-wrap moves the last parameters of a line group that does not fit")
+    QTest::newRow("param-wrap applies joinArgs after a group does not fit")
         << QString(QLL("param-wrap"))
         << QByteArray("void f(const QString & text, const QStringList & names,\n"
                       "       QStringList *program, QString *errorMessage, bool takesPercents, int extra);\n")
         << QByteArray("void f(const QString & text, const QStringList & names,\n"
-                      "       QStringList *program, QString *errorMessage, bool takesPercents,\n"
+                      "       QStringList *program,\n"
+                      "       QString *errorMessage,\n"
+                      "       bool takesPercents,\n"
                       "       int extra);\n");
+    QTest::newRow("param-wrap splits every argument of an ungrouped list")
+        << QString(QLL("param-wrap"))
+        << QByteArray("void f()\n{\n"
+                      "    const Config::Evaluator::CompileContext context(\n"
+                      "        FormatReplaceTypesContext().names(), &words, Config::NameMismatchError\n"
+                      "    );\n}\n")
+        << QByteArray("void f()\n{\n"
+                      "    const Config::Evaluator::CompileContext context(\n"
+                      "            FormatReplaceTypesContext().names(),\n"
+                      "            &words,\n"
+                      "            Config::NameMismatchError);\n}\n");
+    QTest::newRow("param-wrap honors joinArgs when a group splits")
+        << QString(QLL("param-wrap"))
+        << QByteArray("// @formatter:\n// ```\n// [Structure]\n// joinArgs = 2\n// ```\n"
+                      "void f()\n{\n"
+                      "    const Config::Evaluator::CompileContext context(\n"
+                      "        FormatReplaceTypesContext().names(), &words, Config::NameMismatchError\n"
+                      "    );\n}\n")
+        << QByteArray("// @formatter:\n// ```\n// [Structure]\n// joinArgs = 2\n// ```\n"
+                      "void f()\n{\n"
+                      "    const Config::Evaluator::CompileContext context(\n"
+                      "            FormatReplaceTypesContext().names(), &words,\n"
+                      "            Config::NameMismatchError);\n}\n");
     QTest::newRow("param-wrap gives each parameter of a one-line list of more than 3 a line")
         << QString(QLL("param-wrap"))
         << QByteArray("bool Config::Condition::compile(const QString & text, const QStringList & names, QStringList *program, QString *error, bool takesPercents);\n")

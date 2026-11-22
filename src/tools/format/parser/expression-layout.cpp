@@ -592,7 +592,7 @@ QByteArray FormatExpressionLayout::layout(
     @p keepsLines set, a list that spans lines, each item whole on one line,
     keeps the items that share a line together where they fit, wherever its
     first item starts. A positive @p joinCount lets that many items share a
-    line, where `[Structure] joinArgs` would decide (see listLines()).
+    line, where `[Structure] joinArgs` would decide (see layoutArray()).
 */
 QByteArray FormatExpressionLayout::layoutList(
         int first,
@@ -655,7 +655,7 @@ QByteArray FormatExpressionLayout::layoutList(
         ) {
             QByteArray text = head + item;
             if (items.size() > 1) {
-                text += ',' + this->listLines(
+                text += ',' + this->layoutArray(
                     open,
                     close,
                     items.mid(1),
@@ -683,7 +683,7 @@ QByteArray FormatExpressionLayout::layoutList(
                 item.second
             );
     }
-    return head + this->listLines(
+    return head + this->layoutArray(
         open,
         close,
         items,
@@ -1424,6 +1424,34 @@ QByteArray FormatExpressionLayout::layoutGroup(
 }
 
 /*!
+    Builds item lines at @p open with the supplied @p prefix, @p suffix,
+    indentation @p pad and width @p limit. When @p breaksAfterOpen is set,
+    the first item starts on a new line. With @p wrapping, lays out
+    every item using `joinArgs`. Sets @p fits when every original
+    group fits on its line.
+*/
+QList<QByteArray > FormatExpressionLayout::layoutDeclaration(
+        int open, const QByteArray & prefix, const QByteArray & suffix,
+        bool breaksAfterOpen, bool wrapping, const QByteArray & pad,
+        int limit, bool *fits)
+{
+    const int close = m_document->match(open);
+    LineLayout layout;
+    layout.firstLead = breaksAfterOpen ? prefix + "\n" + pad : prefix;
+    layout.nextLead = "\n" + pad;
+    layout.suffix = suffix;
+    layout.limit = limit;
+    layout.preserveText = true;
+    layout.wrapItems = false;
+    *fits = true;
+    const QByteArray text = this->listLines(
+        open, close, splitArguments(m_document, open, close), ! wrapping, 0, 0,
+        layout, fits
+    );
+    return text.split('\n');
+}
+
+/*!
     Builds the item lines of the list whose brackets are at @p open and
     @p close and whose items are @p items, the first of them being the
     list's item @p firstItem (zero-based): the items that shared a line keep
@@ -1437,12 +1465,31 @@ QByteArray FormatExpressionLayout::layoutGroup(
     given for this list alone, not the lists its items hold), while the line
     fits; an item the user grouped with others stays with its group.
 */
+QByteArray FormatExpressionLayout::layoutArray(
+        int open, int close, const QList<QPair<int, int > > & items,
+        bool keepsGroups, int firstItem, int joinCount)
+{
+    ++m_paddingLevel;
+    const QByteArray lead = "\n" + this->pad();
+    LineLayout layout;
+    layout.firstLead = lead;
+    layout.nextLead = lead;
+    layout.suffix = QByteArray();
+    layout.limit = wrapMaxAt(m_document, m_document->symbols().at(open).from);
+    layout.preserveText = false;
+    layout.wrapItems = true;
+    bool fits = true;
+    const QByteArray text = this->listLines(
+        open, close, items, keepsGroups, firstItem, joinCount, layout, &fits
+    );
+    --m_paddingLevel;
+    return text;
+}
+
 QByteArray FormatExpressionLayout::listLines(
-        int open,
-        int close,
-        const QList<QPair<int, int > > & items,
-        bool keepsGroups,
-        int firstItem, int joinCount)
+        int open, int close, const QList<QPair<int, int > > & items,
+        bool keepsGroups, int firstItem, int joinCount,
+        const LineLayout & layout, bool *fits)
 {
     const bool hasTrailingComma = m_document->token(close - 1) == COMMA;
     QList<int > starts;
@@ -1451,8 +1498,6 @@ QByteArray FormatExpressionLayout::listLines(
     }
     const QList<QList<int > > groups = keepsGroups ? this->lineGroups(starts)
                                                    : QList<QList<int > >();
-    ++m_paddingLevel;
-    const int column = textWidth(this->pad());
     QByteArray text;
     int at = 0;
     // The items before this index lay out as `joinArgs` allows, without the
@@ -1460,6 +1505,8 @@ QByteArray FormatExpressionLayout::listLines(
     // since a user group kept after a broken one would read as one more.
     int singlesUntil = 0;
     while (at < items.size()) {
+        const QByteArray lead = at == 0 ? layout.firstLead : layout.nextLead;
+        const int column = lastLineWidth(lead);
         int size = 1;
         for (int g = 0; g < groups.size() && at >= singlesUntil; ++g) {
             if (groups.at(g).first() == items.at(at).first) {
@@ -1472,15 +1519,19 @@ QByteArray FormatExpressionLayout::listLines(
         QByteArray line;
         if (size > 1) {
             for (int k = at; k < at + size; ++k) {
-                line += (k > at ? ", " : "") + this->oneLine(
-                    items.at(k).first,
-                    items.at(k).second
-                );
+                line += (k > at ? ", " : "") + (layout.preserveText
+                    ? sourceText(m_document, items.at(k).first, items.at(k).second)
+                    : this->oneLine(items.at(k).first, items.at(k).second));
             }
             const bool isLastGroup = at + size == items.size();
             const QByteArray comma = isLastGroup && ! hasTrailingComma
                 ? QByteArray() : QByteArray(",");
-            if ( ! this->fits(column, line + comma, 0, open)) {
+            const QByteArray tail = isLastGroup && ! hasTrailingComma
+                ? layout.suffix : comma;
+            if (line.contains('\n')
+                || column + textWidth(line + tail) > layout.limit
+            ) {
+                *fits = false;
                 singlesUntil = items.size();
                 size = 1;
                 isWrapping = true;
@@ -1490,12 +1541,10 @@ QByteArray FormatExpressionLayout::listLines(
         // Writes an item on a line of its own.
         if (size == 1) {
             const bool isLast = at + 1 == items.size() && ! hasTrailingComma;
-            line = this->itemText(
-                items.at(at).first,
-                items.at(at).second,
-                column,
-                isLast ? 0 : 1
-            );
+            line = layout.wrapItems
+                ? this->itemText(items.at(at).first, items.at(at).second,
+                                 column, isLast ? 0 : 1)
+                : sourceText(m_document, items.at(at).first, items.at(at).second);
         }
 
         // Joins the items that `joinArgs` lets share the line.
@@ -1523,21 +1572,27 @@ QByteArray FormatExpressionLayout::listLines(
             }
             const bool nextIsLast = last + 2 == items.size()
                 && ! hasTrailingComma;
-            const QByteArray joined = line + ", " + this->oneLine(
-                items.at(last + 1).first,
-                items.at(last + 1).second
-            );
-            if ( ! this->fits(column, joined, nextIsLast ? 0 : 1, open)) {
+            const QByteArray joined = line + ", " + (layout.preserveText
+                ? sourceText(m_document, items.at(last + 1).first,
+                             items.at(last + 1).second)
+                : this->oneLine(items.at(last + 1).first,
+                                items.at(last + 1).second));
+            const QByteArray tail = nextIsLast ? layout.suffix : QByteArray(",");
+            if (joined.contains('\n')
+                || column + textWidth(joined + tail) > layout.limit
+            ) {
                 break;
             }
             line = joined;
             ++last;
         }
         const bool isLast = last + 1 == items.size() && ! hasTrailingComma;
-        text += "\n" + this->pad() + line + (isLast ? "" : ",");
+        const QByteArray tail = isLast ? layout.suffix : QByteArray(",");
+        *fits = *fits && ! line.contains('\n')
+            && column + textWidth(line + tail) <= layout.limit;
+        text += lead + line + tail;
         at = last + 1;
     }
-    --m_paddingLevel;
     if ( ! keepsGroups) {
         m_brokeUngrouped = true;
     }

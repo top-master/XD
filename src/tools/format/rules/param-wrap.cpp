@@ -5,6 +5,7 @@
 
 #include "../format-document.h"
 #include "../parser/code-helpers.h"
+#include "../parser/expression-layout.h"
 #include "../parser/layout-helpers.h"
 #include "../parser/scope-conditions.h"
 
@@ -20,10 +21,10 @@
     Wraps the parameter list of a declaration or definition whose line runs
     past the column limit (`[Structure] wrapMax`, 80 by default). A list of
     more than `[Structure] wrapArgsOver` parameters (3 by default) starts
-    on the next line, indented two steps past the line it starts on, one
-    parameter per line. A shorter list wraps after
-    a comma, each line under the first parameter, as many parameters per
-    line as fit; it starts on the next line instead when even the first
+    on the next line, indented two steps past the line it starts on, and
+    follows `[Structure] joinArgs`. A shorter list that needs to break follows
+    `[Structure] joinArgs`, each line under the first parameter; it starts
+    on the next line instead when even the first
     parameter does not fit under the `(`, or when `[Structure]
     wrapSignatureAt` holds at the `(` (whose `spaceUsed` is the share of
     `wrapMax` up to after the `(`, as for `wrapArgsAt` of a call, see
@@ -40,19 +41,23 @@
 void FormatParamWrapRule::run(FormatDocument *document) const
 {
     FormatScopeConditions conditions(document);
+    // Find declaration lines that exceed their configured width.
     for (int line = 1; line <= document->lineCount(); ++line) {
         const FormatFileConfig &fileConfig =
             document->configAt(document->lineStart(line));
         const int limit = fileConfig.wrapMax;
         const int first = document->firstSymbolOfLine(line);
+        // Leave empty lines, directives, and lines within the width alone.
         if (first < 0 || document->isDirectiveLine(line)
             || textWidth(document->lineText(line)) <= limit
         ) {
             continue;
         }
         const int last = document->lastSymbolOfLine(line);
+        // Find an eligible parameter list on this line.
         for (int i = first; i < last; ++i) {
             const int close = document->match(i);
+            // Leave other parentheses and lists containing comments alone.
             if (document->token(i) != LPAREN || close < 0 || close > last
                 || document->token(i + 1) == RPAREN || ! isDeclarationParen(
                     document,
@@ -73,17 +78,21 @@ void FormatParamWrapRule::run(FormatDocument *document) const
             // Leaves a line that is long for its one-line body, and
             // not for its parameters.
             bool hasBody = false;
+            // Look for a body after the parameter list on the same line.
             for (int k = close + 1; k <= last && ! hasBody; ++k) {
                 hasBody = document->token(k) == LBRACE;
             }
             if (hasBody) {
                 break;
             }
-            const QList<QByteArray > items = this->parameters(
+            const QList<QPair<int, int > > items = splitArguments(
                 document,
                 i,
                 close
             );
+            if (items.isEmpty()) {
+                continue;
+            }
             const int start = document->lineStart(line);
             const int end = contentEnd(document, line);
             const QByteArray prefix = document->text().mid(
@@ -95,11 +104,13 @@ void FormatParamWrapRule::run(FormatDocument *document) const
                 end - document->symbols().at(close).from
             );
 
-            // Gives each of more than 3 parameters a line of its own, from
-            // the next line; fills fewer under the first parameter, or else
-            // from the next line, which `wrapSignatureAt` may ask for too.
+            // Starts a long parameter list on the next line; shorter lists
+            // may start under the first parameter or on the next line.
             QList<QByteArray > lines;
-            const QByteArray head = prefix + items.first()
+            FormatExpressionLayout layout(document, &conditions, 0);
+            const QByteArray head = prefix + sourceText(
+                document, items.first().first, items.first().second
+            )
                 + (items.size() == 1 ? suffix : ",");
             const bool breaksAfterOpen = conditions.holds(
                 QString(QLL("structure.wrapSignatureAt")),
@@ -107,36 +118,30 @@ void FormatParamWrapRule::run(FormatDocument *document) const
                 i,
                 FormatFileConfig::defaultWrapSignatureAt()
             );
+            // Choose the layout from the argument count and available width.
             if (conditions.argsOver(i, items.size())) {
                 const QByteArray pad = document->indentOf(line) + "        ";
-                lines << prefix;
-                for (int k = 0; k < items.size(); ++k) {
-                    lines << pad + items.at(k)
-                        + (k + 1 < items.size() ? QByteArray(",") : suffix);
-                }
+                bool fits = false;
+                lines = layout.layoutDeclaration(
+                    i, prefix, suffix, true, true, pad, limit, &fits
+                );
             } else if (textWidth(head) <= limit && ! breaksAfterOpen) {
-                lines = this->fill(
-                    prefix + items.first(),
-                    QByteArray(textWidth(prefix), ' '),
-                    items.mid(1),
-                    suffix,
-                    limit
+                bool fits = false;
+                lines = layout.layoutDeclaration(
+                    i, prefix, suffix, false, false,
+                    QByteArray(textWidth(prefix), ' '), limit, &fits
                 );
             } else {
                 const QByteArray pad = document->indentOf(line) + "        ";
-                lines << prefix;
-                lines
-                    << this->fill(
-                        pad + items.first(),
-                        pad,
-                        items.mid(1),
-                        suffix,
-                        limit
-                    );
+                bool fits = false;
+                lines = layout.layoutDeclaration(
+                    i, prefix, suffix, true, false, pad, limit, &fits
+                );
             }
             const QByteArray newline = document->text().mid(end, 1) == "\r"
                 ? "\r\n" : "\n";
             QByteArray wrapped;
+            // Assemble the replacement using the original newline style.
             for (int k = 0; k < lines.size(); ++k) {
                 wrapped += (k > 0 ? newline : QByteArray()) + lines.at(k);
             }
@@ -156,8 +161,8 @@ void FormatParamWrapRule::run(FormatDocument *document) const
     they are. Otherwise the list breaks at its `(`, each group on a line of
     its own two steps past the declaration's line, when every group fits
     that way; when one does not, the groups stay under the first parameter,
-    and the last parameters of a group that does not fit go on to further
-    lines. Where `[Structure] wrapSignatureAt` holds at the `(` (as
+    and the parameters from the first group that does not fit follow
+    `[Structure] joinArgs`. Where `[Structure] wrapSignatureAt` holds at the `(` (as
     @a conditions evaluates it), the list breaks at its `(` in every case.
 
     It leaves alone a declaration with fewer than 2 parameters, a parameter
@@ -167,11 +172,13 @@ void FormatParamWrapRule::regroup(
         FormatDocument *document,
         FormatScopeConditions *conditions) const
 {
+    // Find declarations whose parameter lists already span lines.
     for (int i = 1; i < document->symbols().size(); ++i) {
         const FormatFileConfig &fileConfig =
             document->configAt(document->symbols().at(i).from);
         const int limit = fileConfig.wrapMax;
         const int close = document->match(i);
+        // Leave ineligible lists and lists containing comments alone.
         if (document->token(i) != LPAREN || close <= i + 1
             || document->symbolLine(close) == document->symbolLine(i)
             || document->token(close + 1) == COLON
@@ -191,25 +198,15 @@ void FormatParamWrapRule::regroup(
             close
         );
         bool isWhole = items.size() >= 2;
-        QList<QByteArray > texts;
-        QList<int > lines;
+        // Reject parameters that span lines.
         for (int k = 0; k < items.size() && isWhole; ++k) {
             const QPair<int, int > & item = items.at(k);
             isWhole = document->symbolLine(item.first)
                 == document->symbolEndLine(item.second);
-            texts << sourceText(document, item.first, item.second);
-            lines << document->symbolLine(item.first);
         }
         if ( ! isWhole) {
             i = close;
             continue;
-        }
-        QList<QList<QByteArray > > groups;
-        for (int k = 0; k < texts.size(); ++k) {
-            if (k == 0 || lines.at(k) != lines.at(k - 1)) {
-                groups << QList<QByteArray >();
-            }
-            groups.last() << texts.at(k);
         }
 
         // Finds the declaration's head and tail around its parameters.
@@ -233,20 +230,20 @@ void FormatParamWrapRule::regroup(
 
         // Keeps the groups under the first parameter when they fit there and
         // stand right; else breaks at the `(` when the groups fit that way;
-        // else moves the last parameters of a group that does not fit to a
-        // line of their own, under the first parameter (or, where
-        // `wrapSignatureAt` holds, from the next line).
+        // else lays out the parameters from the first group that does not fit
+        // using `joinArgs`.
         const QByteArray breakPad = document->indentOf(line) + "        ";
         bool fitsUnder = false;
         bool fitsBroken = false;
-        const QList<QByteArray > under = this->groupedLines(
-            prefix, groups, suffix, false,
-            breakPad, limit, &fitsUnder
+        FormatExpressionLayout layout(document, conditions, 0);
+        const QList<QByteArray > under = layout.layoutDeclaration(
+            i, prefix, suffix, false, false,
+            QByteArray(textWidth(prefix), ' '), limit, &fitsUnder
         );
-        const QList<QByteArray > broken = this->groupedLines(
-            prefix, groups, suffix, true,
-            breakPad, limit, &fitsBroken
+        const QList<QByteArray > broken = layout.layoutDeclaration(
+            i, prefix, suffix, true, false, breakPad, limit, &fitsBroken
         );
+        // Leave an already aligned layout unchanged when it fits.
         if ( ! mustBreak && fitsUnder
             && under.join("\n") == document->text().mid(start, end - start)
         ) {
@@ -258,6 +255,7 @@ void FormatParamWrapRule::regroup(
         const QByteArray newline = document->text().mid(end, 1) == "\r"
             ? "\r\n" : "\n";
         QByteArray wrapped;
+        // Assemble the selected layout using the original newline style.
         for (int k = 0; k < out.size(); ++k) {
             wrapped += (k > 0 ? newline : QByteArray()) + out.at(k);
         }
@@ -266,116 +264,4 @@ void FormatParamWrapRule::regroup(
         }
         i = close;
     }
-}
-
-/*!
-    Builds the lines of a parameter list whose line groups are @p groups,
-    between the declaration's @p prefix (up to its `(`) and @p suffix (from
-    its `)`): with @p breaksAfterOpen, the `(` ends the first line and each
-    group takes a line of its own at @p breakPad; else the first group
-    follows the `(`, and the others line up under it. A group whose line
-    passes @p limit keeps as many parameters as fit, and its last ones go on
-    to further lines at the same padding. Sets @p fits when every group fits
-    on one line of its own.
-*/
-QList<QByteArray > FormatParamWrapRule::groupedLines(
-        const QByteArray & prefix, const QList<QList<QByteArray > > & groups,
-        const QByteArray & suffix, bool breaksAfterOpen,
-        const QByteArray & breakPad,
-        int limit, bool *fits) const
-{
-    const QByteArray pad = breaksAfterOpen
-        ? breakPad : QByteArray(textWidth(prefix), ' ');
-    QList<QByteArray > lines;
-    if (breaksAfterOpen) {
-        lines << prefix;
-    }
-    *fits = true;
-    for (int g = 0; g < groups.size(); ++g) {
-        const bool isLastGroup = g + 1 == groups.size();
-        const QByteArray lead = (g == 0 && ! breaksAfterOpen)
-            ? prefix : pad;
-        const QList<QByteArray > filled = this->fill(
-            lead + groups.at(g).first(),
-            pad,
-            groups.at(g).mid(1),
-            isLastGroup ? suffix : QByteArray(","),
-            limit
-        );
-        *fits = *fits
-            && filled.size() == 1
-            && textWidth(filled.first()) <= limit;
-        lines << filled;
-    }
-    return lines;
-}
-
-/*!
-    Builds the text of each parameter between the brackets at @a open and
-    @a close of @a document, split at the commas outside of nested brackets
-    and template arguments.
-*/
-QList<QByteArray > FormatParamWrapRule::parameters(
-        const FormatDocument *document, int open,
-        int close) const
-{
-    QList<QByteArray > items;
-    int from = open + 1;
-    int depth = 0;
-    for (int i = open + 1; i <= close; ++i) {
-        const Token token = document->token(i);
-        if ((token == LPAREN
-                || token == LBRACK
-                || token == LBRACE)
-            && i != close
-        ) {
-            i = qMax(i, document->match(i));
-            continue;
-        }
-        depth += token == LANGLE
-            ? 1 : (token == RANGLE ? -1 : (token == GTGT ? -2 : 0));
-        if ((token != COMMA || depth > 0) && i != close) {
-            continue;
-        }
-        const int start = document->symbols().at(from).from;
-        items
-            << document->text().mid(
-                start,
-                document->symbolEnd(i - 1)
-                    - start
-            );
-        from = i + 1;
-    }
-    return items;
-}
-
-/*!
-    Builds the lines of a wrapped list that starts with @a first, followed by
-    @a items, each continuation line starting with @a pad, and the last one
-    ending with @a suffix; a line takes the next item for as long as it
-    stays within @a limit columns.
-*/
-QList<QByteArray > FormatParamWrapRule::fill(
-        const QByteArray & first, const QByteArray & pad,
-        const QList<QByteArray > & items,
-        const QByteArray & suffix, int limit) const
-{
-    QList<QByteArray > lines;
-    QByteArray current = first;
-    for (int i = 0; i < items.size(); ++i) {
-        const QByteArray tail = i + 1 == items.size()
-            ? suffix : QByteArray(",");
-        const QByteArray candidate = current + ", " + items.at(i);
-        if (textWidth(candidate + tail) <= limit) {
-            current = candidate;
-            continue;
-        }
-        lines << current + ",";
-        current = pad + items.at(i);
-    }
-    lines << current + (items.isEmpty() ? suffix : QByteArray());
-    if ( ! items.isEmpty()) {
-        lines.last() += suffix;
-    }
-    return lines;
 }
