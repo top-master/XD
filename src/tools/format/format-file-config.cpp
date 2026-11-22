@@ -111,6 +111,8 @@
       argument that ends such a line (see FormatDocument::joinArgsAt()),
       may instead give the number, as in `hasMoreArgs() ? 2 : 1`; 1 without
       a `.formatrc`;
+    * `operatorExtraPad` (`[Structure]`): extra indentation steps for a
+      wrapped call in an operator chain, defaulting to 0;
     * `wrapSubChain` (`[Structure]`): how a member after one joined to a
       closing-bracket line breaks: `always`, `wrap-begin`, `wrap-end`, or
       `never`; `always` without a `.formatrc`;
@@ -572,6 +574,9 @@ Config::Schema FormatFileConfig::schema()
                              Config::Condition::ResultNumber
                          ),
                      QString(QLL("1")));
+    structure.addKey(QString(QLL("operatorExtraPad")),
+                     Config::Matchers() << Config::Numbers::create(0, std::numeric_limits<int >::max() / 4),
+                     QString(QLL("0")));
     structure.addKey(QString(QLL("operatorPlacement")),
                      QStringList() << QString(QLL("begining")) << QString(QLL("middle")),
                      QString(QLL("begining")));
@@ -1202,6 +1207,7 @@ bool FormatFileConfig::fromParser(
     if ( ! counted) {
         return false;
     }
+    fileConfig->operatorExtraPad = parser.value(QString(QLL("structure.operatorExtraPad"))).toInt();
     fileConfig->operatorsInMiddle =
         parser.value(QString(QLL("structure.operatorPlacement")))
         == QLL("middle");

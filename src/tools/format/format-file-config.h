@@ -48,6 +48,7 @@ public:
         typedefSuper = FormatFileConfig::defaultTypedefSuper();
         replaceSuperSites = FormatFileConfig::defaultReplaceSuperSites();
         operatorsInMiddle = false;
+        operatorExtraPad = 0;
         wrapSubChain = QString::fromLatin1("always");
         wrapConditionsPer = QString::fromLatin1("pair-bundle");
         replaceTypesTarget = QString::fromLatin1("isNew");
@@ -108,6 +109,7 @@ public:
     int joinArgs;
     QStringList joinArgsCondition;
     bool operatorsInMiddle;
+    int operatorExtraPad;
     QString wrapSubChain;
     QList<int > commentWrapBegin;
     int commentWrapMax;

@@ -25,13 +25,15 @@
     FormatConditionLayout that every rule breaking a condition shares (see
     FormatConditionLayout::layoutHead()); an `if` condition's own `?` is
     laid out by FormatConditionWrapRule.
-    The rule leaves alone a control statement's head, a statement with a
-    comment, and a preprocessor line.
+    A statement whose conditional branch already spans lines puts the `?`
+    and `:` at the same continuation indentation. The rule leaves alone a
+    control statement's head, a statement with a comment, and a preprocessor
+    line.
 */
 
 /*!
-    Breaks the conditional expression of each long one-line statement of
-    @a document.
+    Breaks long conditional expressions and aligns the operators of a
+    conditional with a multiline branch in @a document.
 */
 void FormatTernaryWrapRule::run(FormatDocument *document) const
 {
@@ -40,6 +42,53 @@ void FormatTernaryWrapRule::run(FormatDocument *document) const
     for (int line = 1; line <= document->lineCount(); ++line) {
         const int first = document->firstSymbolOfLine(line);
         const int last = document->lastSymbolOfLine(line);
+        // Align a conditional whose branch already spans multiple lines.
+        if (first >= 0 && (first == 0
+                || document->token(first - 1) == SEMIC
+                || document->token(first - 1) == LBRACE
+                || document->token(first - 1) == RBRACE
+                || document->token(first - 1) == COLON)
+            && ! document->isDirectiveLine(line)
+            && document->token(first) != IF
+            && document->token(first) != WHILE
+            && document->token(first) != FOR
+            && document->token(first) != SWITCH
+            && document->token(first) != DO
+            && document->token(first) != ELSE
+            && document->token(first) != CASE
+        ) {
+            const int end = statementEnd(document, first);
+            int question = -1;
+            int colon = -1;
+            if (end > last && findTernary(
+                    document, first, end - 1, &question, &colon
+                ) && document->symbolLine(question) < document->symbolLine(colon)
+                && ! document->hasCommentBetween(
+                    document->symbols().at(first).from, document->symbolEnd(end)
+                ) && ! document->spansDirective(
+                    document->symbols().at(first).from, document->symbolEnd(end)
+                )
+            ) {
+                const QByteArray pad = document->indentOf(line) + "    ";
+                const int endOfLine = document->lineEnd(line);
+                const QByteArray newline = document->text().mid(endOfLine - 1, 1) == "\r"
+                    ? "\r\n" : "\n";
+                const QByteArray gap = newline + pad;
+                const int beforeQuestion = document->symbolEnd(question - 1);
+                const int questionFrom = document->symbols().at(question).from;
+                const int beforeColon = document->symbolEnd(colon - 1);
+                const int colonFrom = document->symbols().at(colon).from;
+                if (document->text().mid(beforeQuestion, questionFrom - beforeQuestion) != gap
+                    || document->text().mid(beforeColon, colonFrom - beforeColon) != gap
+                ) {
+                    document->replace(
+                        beforeQuestion, questionFrom - beforeQuestion, gap,
+                        beforeColon, colonFrom - beforeColon, gap
+                    );
+                }
+                continue;
+            }
+        }
         if (first < 0
             || last <= first
             || document->token(last) != SEMIC

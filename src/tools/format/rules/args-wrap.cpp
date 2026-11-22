@@ -350,6 +350,15 @@ void FormatArgsWrapRule::run(FormatDocument *document) const
         if (isHeadLine && ! hugsHead) {
             indent += 4;
         }
+        const int previousOperator = precedingChainOperator(document, close + 1, false);
+        const bool inlineOperator = previousOperator >= 0
+            && document->token(previousOperator) != QUESTION
+            && document->firstSymbolOfLine(document->symbolLine(previousOperator))
+                != previousOperator;
+        const int extraPad = inlineOperator
+            ? qMax(fileConfig.operatorsInMiddle ? 0 : 1,
+                   fileConfig.operatorExtraPad)
+            : 0;
         FormatExpressionLayout layout(document, &conditions, indent);
         const int column = textWidth(
             document->text().mid(lineStart, from - lineStart)
@@ -380,7 +389,8 @@ void FormatArgsWrapRule::run(FormatDocument *document) const
             document,
             i,
             close,
-            indent
+            indent,
+            extraPad
         );
         if ( ! needsBreak && ! (mayBreak && isMisplaced)) {
             continue;
@@ -446,7 +456,8 @@ void FormatArgsWrapRule::run(FormatDocument *document) const
             close,
             column,
             keepsLines,
-            joinCount
+            joinCount,
+            extraPad
         );
         const int length = (hugsHead
             ? document->symbols().at(headClose).from

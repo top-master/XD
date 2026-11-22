@@ -74,9 +74,9 @@ static QList<FormatRule * > formatCreateCodeRules()
         << new FormatOperatorWrapRule
         << new FormatConditionWrapRule << new FormatTernaryWrapRule
         << new FormatChainMembersFirstRule
-        << new FormatContinuationIndentRule
         << new FormatInitListRule << new FormatParamWrapRule << new FormatArgsWrapRule
         << new FormatOperatorFirstRule
+        << new FormatContinuationIndentRule
         << new FormatConditionCloseRule
         << new FormatTemplateCloseRule << new FormatReferenceSpaceRule
         << new FormatOneStatementRule;

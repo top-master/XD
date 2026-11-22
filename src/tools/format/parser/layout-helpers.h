@@ -15,12 +15,14 @@ int wrapMaxAt(const FormatDocument *document, int offset);
 int continuationIndent(int indent, int steps = 1);
 QByteArray continuationPad(int indent, int steps = 1);
 bool isBinaryOperator(Token token);
-int precedingChainOperator(const FormatDocument *document, int next);
+bool isControlHead(const FormatDocument *document, int index);
+int precedingChainOperator(const FormatDocument *document, int next,
+                           bool respectPlacement = true);
 bool isClosingLine(const QByteArray & text);
 int comparisonRank(Token token);
 bool closesEarlierLine(const FormatDocument *document, int bracket);
 bool hasMisplacedLines(const FormatDocument *document, int open, int close,
-                       int indent);
+                       int indent, int extraPad = 0);
 bool startsWithStringLiteral(const FormatDocument *document, int token);
 QByteArray sourceText(const FormatDocument *document, int first, int last);
 bool findTernary(const FormatDocument *document, int first, int last,

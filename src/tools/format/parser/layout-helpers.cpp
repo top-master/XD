@@ -64,11 +64,43 @@ bool isBinaryOperator(Token token)
 }
 
 /*!
+    Tells whether the token at @a index of @a document is inside the
+    parentheses of a control statement.
+*/
+bool isControlHead(const FormatDocument *document, int index)
+{
+    for (int i = index - 1; i >= 0; --i) {
+        const Token token = document->token(i);
+        if (token == RBRACE && document->match(i) >= 0
+            && document->braceScope(document->match(i)) == FormatDocument::InitScope
+        ) {
+            i = document->match(i);
+            continue;
+        }
+        if (token == LBRACE || token == RBRACE) {
+            break;
+        }
+        if ((token == RPAREN || token == RBRACK) && document->match(i) >= 0) {
+            i = document->match(i);
+            continue;
+        }
+        if (token == LPAREN && document->match(i) >= index) {
+            const Token keyword = document->token(i - 1);
+            if (keyword == IF || keyword == WHILE || keyword == FOR) {
+                return true;
+            }
+        }
+    }
+    return false;
+}
+
+/*!
     Finds the preceding operator when the operand before @a next in
     @a document is a call or parenthesized group in the same binary or
     conditional chain.
 */
-int precedingChainOperator(const FormatDocument *document, int next)
+int precedingChainOperator(
+        const FormatDocument *document, int next, bool respectPlacement)
 {
     const Token token = document->token(next);
     const int close = next - 1;
@@ -82,7 +114,8 @@ int precedingChainOperator(const FormatDocument *document, int next)
         --first;
         while ((document->token(first - 1) == DOT || document->token(first - 1) == ARROW
                 || document->token(first - 1) == SCOPE)
-            && document->token(first - 2) == IDENTIFIER
+            && (document->token(first - 2) == IDENTIFIER
+                || document->token(first - 2) == THIS)
         ) {
             first -= 2;
         }
@@ -91,8 +124,12 @@ int precedingChainOperator(const FormatDocument *document, int next)
     const Token lead = document->token(previous);
     const bool conditional = lead == QUESTION && token == COLON;
     const int rank = operatorPrecedence(token);
-    const bool binary = rank > 0 && operatorPrecedence(lead) == rank
-        && ! document->configAt(document->symbols().at(next).from).operatorsInMiddle
+    const bool controlHead = isControlHead(document, next);
+    const bool binary = rank > 0
+        && ! (controlHead && (token == ANDAND || token == OROR))
+        && operatorPrecedence(lead) == rank
+        && ( ! respectPlacement
+            || ! document->configAt(document->symbols().at(next).from).operatorsInMiddle)
         && isOperandEnd(document->token(previous - 1));
     return conditional || binary ? previous : -1;
 }
@@ -138,6 +175,7 @@ bool closesEarlierLine(const FormatDocument *document, int bracket)
     The padding of a line counts one step (4 spaces)
     per bracket that a line above it left open, and taken away by the
     bracket's closing one on a later line, from that closing line on.
+    @a extraPad adds steps while the outer bracket remains open.
     Inside such a bracket, an argument that goes on past the end of its
     line adds one more step to its next lines, until the `,` that ends it,
     unless that line left a bracket open, closes a bracket opened on an
@@ -149,7 +187,7 @@ bool closesEarlierLine(const FormatDocument *document, int bracket)
     line's indent; hence the operator lines of one chain line up.
 */
 bool hasMisplacedLines(const FormatDocument *document, int open, int close,
-                       int indent)
+                       int indent, int extraPad)
 {
     const int firstLine = document->symbolLine(open);
     const int lastLine = document->symbolLine(close);
@@ -180,7 +218,7 @@ bool hasMisplacedLines(const FormatDocument *document, int open, int close,
                 || ! aboveLeadsWithOperator
                 || aboveIndent < 0
             ) {
-                int steps = 0;
+                int steps = ranges.isEmpty() ? 0 : extraPad;
                 for (int r = 0; r < ranges.size(); ++r) {
                     steps += ranges.at(r).second ? 2 : 1;
                 }

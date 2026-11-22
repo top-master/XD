@@ -16,12 +16,13 @@ class FormatExpressionLayout
 public:
     FormatExpressionLayout(
             const FormatDocument *document, FormatScopeConditions *conditions,
-            int indent);
+            int indent, bool stepRoot = true);
 
     QByteArray layout(int first, int last, int column, int trailing,
                       bool forceMath = false);
     QByteArray layoutList(int first, int open, int close, int column,
-                          bool keepsLines = false, int joinCount = 0);
+                          bool keepsLines = false, int joinCount = 0,
+                          int extraPad = 0);
     QList<QByteArray > layoutDeclaration(
             int open, const QByteArray & prefix, const QByteArray & suffix,
             bool breaksAfterOpen, bool wrapping, const QByteArray & pad,
@@ -78,6 +79,7 @@ private:
     FormatScopeConditions *m_conditions;
     int m_indent;
     int m_paddingLevel;
+    bool m_stepRoot;
     bool m_brokeUngrouped;
 };
 

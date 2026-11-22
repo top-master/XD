@@ -286,6 +286,8 @@ moveSuffix = " "
   ; Only the base members of templates (found through `this->` alone).
   thisMode = (is-base-member & is-template) | already-existing
   ```
+- `operatorExtraPad` (in `[Structure]`): additional indentation steps for
+  a wrapped call in an operator chain. The default is `0`.
 - `operatorPlacement` (in `[Structure]`): `begining` (the default) keeps an
   early binary operator with the call it introduces and starts the next
   continuation with its operator. `middle` allows the next operator on the

@@ -16,7 +16,7 @@
     @internal
 
     Breaks a long expression before its operator, never after it: each `&&`,
-    `||`, `<<`, `+`, `-`, `|`, `^` or `?` that ends a line moves to the
+    `||`, `<<`, `+`, `-`, `|`, `^`, `==`, `!=` or `?` that ends a line moves to the
     start of the line after it. After a line of only closing brackets, an
     operator and its operand join that line when they fit, except for `&&`
     and `||`, which keep their own lines.
@@ -98,7 +98,10 @@ static bool layoutChainOperand(
         const int limit = conditional ? wrapMaxAt(document, from)
                                       : wrapColumn(document, from);
         if (column + textWidth(flat) > limit) {
-            operand = layout.layoutList(first, open, close, column, true);
+            const int extraPad = conditional ? 0 : qMax(
+                0, document->configAt(from).operatorExtraPad - 1
+            );
+            operand = layout.layoutList(first, open, close, column, true, 0, extraPad);
             if (newline == "\r\n") {
                 operand.replace("\r\n", "\n");
                 operand.replace("\n", newline);
@@ -240,6 +243,8 @@ void FormatOperatorFirstRule::run(FormatDocument *document) const
             && token != MINUS
             && token != OR
             && token != HAT
+            && token != EQEQ
+            && token != NE
             && token != QUESTION
         ) {
             continue;

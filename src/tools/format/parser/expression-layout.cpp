@@ -126,12 +126,15 @@ static bool endsWithClosingLine(const QByteArray & text)
 /*!
     Builds a layout of expressions of @p document whose first line has
     @p indent columns of indent; @p conditions decides, through
-    `[Structure] wrapArgsAt`, which argument lists may break.
+    `[Structure] wrapArgsAt`, which argument lists may break. @p stepRoot
+    adds a continuation step to an operator chain at the top level.
 */
-FormatExpressionLayout::FormatExpressionLayout(const FormatDocument *document, FormatScopeConditions *conditions, int indent)
+FormatExpressionLayout::FormatExpressionLayout(
+        const FormatDocument *document, FormatScopeConditions *conditions,
+        int indent, bool stepRoot)
     : m_document(document), m_conditions(conditions)
     , m_indent(indent), m_paddingLevel(0)
-    , m_brokeUngrouped(false)
+    , m_stepRoot(stepRoot), m_brokeUngrouped(false)
 {
 }
 
@@ -338,7 +341,7 @@ QByteArray FormatExpressionLayout::layout(
         ) {
             const QByteArray belowPad = continuationPad(textWidth(this->pad()));
             FormatExpressionLayout below(
-                m_document, m_conditions, textWidth(belowPad)
+                m_document, m_conditions, textWidth(belowPad), false
             );
             const QByteArray moved = below.layout(
                 assignment + 1,
@@ -629,6 +632,7 @@ QByteArray FormatExpressionLayout::layout(
     keeps the items that share a line together where they fit, wherever its
     first item starts. A positive @p joinCount lets that many items share a
     line, where `[Structure] joinArgs` would decide (see layoutArray()).
+    A positive @p extraPad adds that many indentation steps to the items.
 */
 QByteArray FormatExpressionLayout::layoutList(
         int first,
@@ -636,7 +640,8 @@ QByteArray FormatExpressionLayout::layoutList(
         int close,
         int column,
         bool keepsLines,
-        int joinCount)
+        int joinCount,
+        int extraPad)
 {
     const int wrap = wrapColumn(m_document, m_document->symbols().at(first).from);
     const QList<QPair<int, int > > items =
@@ -672,6 +677,7 @@ QByteArray FormatExpressionLayout::layoutList(
             )
         ) <= wrap
     ) {
+        m_paddingLevel += extraPad;
         if (items.size() > 1) {
             ++m_paddingLevel;
         }
@@ -699,8 +705,10 @@ QByteArray FormatExpressionLayout::layoutList(
                     0
                 );
             }
+            m_paddingLevel -= extraPad;
             return text + '\n' + this->pad() + closer;
         }
+        m_paddingLevel -= extraPad;
     }
 
     // Breaks after the opening, keeping the user's line groups when every
@@ -718,6 +726,7 @@ QByteArray FormatExpressionLayout::layoutList(
                 item.second
             );
     }
+    m_paddingLevel += extraPad;
     const QByteArray body = head + this->layoutArray(
         open,
         close,
@@ -726,6 +735,7 @@ QByteArray FormatExpressionLayout::layoutList(
         0,
         joinCount
     );
+    m_paddingLevel -= extraPad;
     if (precedingChainOperator(m_document, close + 1) >= 0
         && lastLineWidth(body) + textWidth(closer)
             <= wrapColumn(m_document, m_document->symbols().at(open).from)
@@ -1022,20 +1032,21 @@ QByteArray FormatExpressionLayout::layoutChain(
             first
         )
     ) {
-        const bool continues = operators.size() > 1
-            && ! m_document->configAt(offset).operatorsInMiddle;
-        if (continues) {
-            ++m_paddingLevel;
-        }
+        const FormatFileConfig &config = m_document->configAt(offset);
+        const Token chainOperator = m_document->token(firstOperator);
+        const bool controlHead = isControlHead(m_document, firstOperator);
+        const bool logical = chainOperator == ANDAND || chainOperator == OROR;
+        const int extraPad = operators.size() > 1 && ! (controlHead && logical)
+            ? qMax(config.operatorsInMiddle ? 0 : 1, config.operatorExtraPad) : 0;
         const QByteArray head = this->layoutList(
             first,
             callOpen,
             firstOperandLast,
-            column
+            column,
+            false,
+            0,
+            extraPad
         );
-        if (continues) {
-            --m_paddingLevel;
-        }
         if (operators.size() == 1) {
             return head;
         }
@@ -1442,7 +1453,7 @@ bool FormatExpressionLayout::chainStepsIn(
         return false;
     }
     if (m_paddingLevel == 0) {
-        return true;
+        return m_stepRoot;
     }
     const Token last = m_document->token(headLast);
     return ! closesEarlierLine(m_document, headLast)
