@@ -110,6 +110,7 @@ public:
     QStringList joinArgsCondition;
     bool operatorsInMiddle;
     int operatorExtraPad;
+    QStringList operatorExtraPadCondition;
     QString wrapSubChain;
     QList<int > commentWrapBegin;
     int commentWrapMax;

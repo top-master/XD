@@ -575,7 +575,12 @@ Config::Schema FormatFileConfig::schema()
                          ),
                      QString(QLL("1")));
     structure.addKey(QString(QLL("operatorExtraPad")),
-                     Config::Matchers() << Config::Numbers::create(0, std::numeric_limits<int >::max() / 4),
+                     Config::Matchers() << Config::Numbers::create(0, std::numeric_limits<int >::max() / 4)
+                         << Config::Condition::create(
+                             FormatScopeConditions::names(), true,
+                             &FormatConditionContext::setCountObjects,
+                             Config::Condition::ResultNumber
+                         ),
                      QString(QLL("0")));
     structure.addKey(QString(QLL("operatorPlacement")),
                      QStringList() << QString(QLL("begining")) << QString(QLL("middle")),
@@ -1199,6 +1204,11 @@ bool FormatFileConfig::fromParser(
             &fileConfig->wrapConditionsOver,
             &fileConfig->wrapConditionsOverCondition, mismatch, error)
         && readCountOrCondition(
+            parser, QString(QLL("structure.operatorExtraPad")),
+            &fileConfig->operatorExtraPad, &fileConfig->operatorExtraPadCondition,
+            mismatch, error
+        )
+        && readCountOrCondition(
             parser, QString(QLL("structure.joinArgs")),
             &fileConfig->joinArgs, &fileConfig->joinArgsCondition, mismatch,
             error
@@ -1207,7 +1217,6 @@ bool FormatFileConfig::fromParser(
     if ( ! counted) {
         return false;
     }
-    fileConfig->operatorExtraPad = parser.value(QString(QLL("structure.operatorExtraPad"))).toInt();
     fileConfig->operatorsInMiddle =
         parser.value(QString(QLL("structure.operatorPlacement")))
         == QLL("middle");

@@ -287,7 +287,8 @@ moveSuffix = " "
   thisMode = (is-base-member & is-template) | already-existing
   ```
 - `operatorExtraPad` (in `[Structure]`): additional indentation steps for
-  a wrapped call in an operator chain. The default is `0`.
+  a wrapped call in an operator chain. The default is `0`. It can be a
+  condition, such as `cfg.operatorPlacement == "middle" ? 0 : 1`.
 - `operatorPlacement` (in `[Structure]`): `begining` (the default) keeps an
   early binary operator with the call it introduces and starts the next
   continuation with its operator. `middle` allows the next operator on the
@@ -411,7 +412,7 @@ moveSuffix = " "
   the rules that wrap arguments.
 
   Any condition of the tool may read another `[Structure]` setting as
-  `cfg.<key>`: the number that `wrapMax`, `wrapArgsOver`,
+  `cfg.<key>`: `operatorPlacement`, or the number that `wrapMax`, `wrapArgsOver`,
   `wrapConditionsOver`, or `joinArgs` gives at that place, or the percent
   past which `wrapChainAt`, `wrapArgsAt`, or `wrapSignatureAt` holds there.
   Hence

@@ -4820,6 +4820,24 @@ void tst_FormatRules::testScopeConditions_shouldReadSettingsThroughCfg()
     document.setConfig(config);
     QCOMPARE(conditions.conditionsLimit(open, 3, 50), 1);
 
+    // A padding condition reads the operator placement at the current place.
+    QVERIFY2(parser.readData(
+        "[Structure]\noperatorPlacement=middle\n"
+        "operatorExtraPad=cfg.operatorPlacement == \"middle\" ? 0 : 1\n",
+        QLL("inline"), &error
+    ), qPrintable(error));
+    QVERIFY(readSettings(parser, &config));
+    document.setConfig(config);
+    qExpect(conditions.operatorExtraPad(open))->toEqual(0);
+    QVERIFY2(parser.readData(
+        "[Structure]\noperatorPlacement=begining\n"
+        "operatorExtraPad=cfg.operatorPlacement == \"middle\" ? 0 : 1\n",
+        QLL("inline"), &error
+    ), qPrintable(error));
+    QVERIFY(readSettings(parser, &config));
+    document.setConfig(config);
+    qExpect(conditions.operatorExtraPad(open))->toEqual(1);
+
     // A key that `cfg` lacks is no condition.
     QVERIFY( ! parser.readData(
         "[Structure]\nwrapConditionsOver=cfg.missing\n", QLL("inline"),

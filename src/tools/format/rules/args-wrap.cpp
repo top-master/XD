@@ -356,8 +356,7 @@ void FormatArgsWrapRule::run(FormatDocument *document) const
             && document->firstSymbolOfLine(document->symbolLine(previousOperator))
                 != previousOperator;
         const int extraPad = inlineOperator
-            ? qMax(fileConfig.operatorsInMiddle ? 0 : 1,
-                   fileConfig.operatorExtraPad)
+            ? conditions.operatorExtraPad(previousOperator)
             : 0;
         FormatExpressionLayout layout(document, &conditions, indent);
         const int column = textWidth(

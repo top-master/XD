@@ -916,6 +916,21 @@ QVariant FormatScopeConditions::resolveAt(
     return resolveOf(key, program, &context);
 }
 
+int FormatScopeConditions::operatorExtraPad(int token)
+{
+    const FormatFileConfig &config = m_document->configAt(
+        m_document->symbols().at(token).from
+    );
+    if (config.operatorExtraPadCondition.isEmpty()) {
+        return config.operatorExtraPad;
+    }
+    const QVariant value = this->resolveAt(
+        QString(QLL("structure.operatorExtraPad")),
+        config.operatorExtraPadCondition, token
+    );
+    return value.isValid() ? qMax(0, FormatFileConfig::countOf(value)) : 0;
+}
+
 bool FormatScopeConditions::countOver(
         int token, int count,
         const qreal *spaceRemaining,

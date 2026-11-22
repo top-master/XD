@@ -1032,12 +1032,11 @@ QByteArray FormatExpressionLayout::layoutChain(
             first
         )
     ) {
-        const FormatFileConfig &config = m_document->configAt(offset);
         const Token chainOperator = m_document->token(firstOperator);
         const bool controlHead = isControlHead(m_document, firstOperator);
         const bool logical = chainOperator == ANDAND || chainOperator == OROR;
         const int extraPad = operators.size() > 1 && ! (controlHead && logical)
-            ? qMax(config.operatorsInMiddle ? 0 : 1, config.operatorExtraPad) : 0;
+            ? m_conditions->operatorExtraPad(firstOperator) : 0;
         const QByteArray head = this->layoutList(
             first,
             callOpen,

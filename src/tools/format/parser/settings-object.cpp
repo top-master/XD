@@ -103,12 +103,13 @@ FormatSettingsObject::FormatSettingsObject(QObject *parent)
 }
 
 /*!
-    Builds the `[Structure]` keys that `cfg` offers: each of them names a
-    setting that gives a number, or a percent.
+    Builds the `[Structure]` keys that `cfg` offers, including count,
+    percent, and operator-placement settings.
 */
 QStringList FormatSettingsObject::keys()
 {
-    return QStringList() << QString(QLL("wrapMax"))
+    return QStringList() << QString(QLL("operatorPlacement"))
+        << QString(QLL("wrapMax"))
         << QString(QLL("wrapArgsOver")) << QString(QLL("wrapConditionsOver"))
         << QString(QLL("joinArgs")) << QString(QLL("wrapChainAt"))
         << QString(QLL("wrapArgsAt")) << QString(QLL("wrapSignatureAt"));
@@ -129,6 +130,10 @@ QVariant FormatSettingsObject::dynamicValue(const QByteArray & name) const
                                                 : Q_NULLPTR;
     if ( ! fileConfig) {
         return QVariant();
+    }
+    if (name == "operatorPlacement") {
+        return fileConfig->operatorsInMiddle ? QString(QLL("middle"))
+                                             : QString(QLL("begining"));
     }
     if (name == "wrapMax") {
         return fileConfig->wrapMax;

@@ -83,9 +83,11 @@ static bool layoutChainOperand(
     const QByteArray gap = newline + pad;
     const int closeEnd = document->symbolEnd(close);
     if (first < open) {
-        FormatExpressionLayout layout(document, conditions, textWidth(pad));
         const bool conditional = document->token(previous) == QUESTION;
         const bool keepInline = ! startsLine && ! conditional;
+        const int layoutIndent = keepInline ? textWidth(document->indentOf(line))
+                                            : textWidth(pad);
+        FormatExpressionLayout layout(document, conditions, layoutIndent);
         const int lineStart = document->lineStart(line);
         const int operatorColumn = keepInline
             ? textWidth(document->text().mid(lineStart, from - lineStart)) + 1
@@ -98,9 +100,7 @@ static bool layoutChainOperand(
         const int limit = conditional ? wrapMaxAt(document, from)
                                       : wrapColumn(document, from);
         if (column + textWidth(flat) > limit) {
-            const int extraPad = conditional ? 0 : qMax(
-                0, document->configAt(from).operatorExtraPad - 1
-            );
+            const int extraPad = conditional ? 0 : conditions->operatorExtraPad(previous);
             operand = layout.layoutList(first, open, close, column, true, 0, extraPad);
             if (newline == "\r\n") {
                 operand.replace("\r\n", "\n");
