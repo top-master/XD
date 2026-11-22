@@ -1487,10 +1487,9 @@ void tst_FormatRules::testFix_shouldRewrite_data()
                       "    );\n}\n")
         << QByteArray("// @formatter:\n// ```\n// [Structure]\n// wrapMax = 72\n// joinArgs = 2\n// ```\n"
                       "void f()\n{\n    const Config::Evaluator::CompileContext context(\n"
-                      "        FirstArg(), SecondArg(),\n"
-                      "        FormatReplaceTypesContext().names(), &words,\n"
-                      "        Config::NameMismatchError\n"
-                      "    );\n}\n");
+                      "            FirstArg(), SecondArg(),\n"
+                      "            FormatReplaceTypesContext().names(), &words,\n"
+                      "            Config::NameMismatchError);\n}\n");
     QTest::newRow("param-wrap gives each parameter of a one-line list of more than 3 a line")
         << QString(QLL("param-wrap"))
         << QByteArray("bool Config::Condition::compile(const QString & text, const QStringList & names, QStringList *program, QString *error, bool takesPercents);\n")
@@ -1918,6 +1917,67 @@ void tst_FormatRules::testFix_shouldRewrite_data()
         << QByteArray("void f()\n{\n    registryForSynchronizationAcrossIndependentClientsAndServices.publishMessageForEachObserver(item);\n}\n")
         << QByteArray("void f()\n{\n    registryForSynchronizationAcrossIndependentClientsAndServices\n"
                       "        .publishMessageForEachObserver(item);\n}\n");
+    const QByteArray chainWidths =
+        "// @formatter:\n// ```\n// [Structure]\n// wrapBegin = 60\n// wrapMax = 110\n// ```\n";
+    QTest::newRow("operator-first wraps a middle call at wrapBegin")
+        << QString(QLL("operator-first"))
+        << (chainWidths + "void f()\n{\n    result = prefix + read(\n"
+            "        document, entries.first().first,\n"
+            "        entries.first().second\n    ) + suffix;\n}\n")
+        << (chainWidths + "void f()\n{\n    result = prefix\n        + read(\n"
+            "            document, entries.first().first,\n"
+            "            entries.first().second)\n        + suffix;\n}\n");
+    QTest::newRow("operator-first keeps a fitting middle call together")
+        << QString(QLL("operator-first"))
+        << (chainWidths + "void f()\n{\n    result = prefix + read(\n"
+            "        document, index\n    ) + suffix;\n}\n")
+        << (chainWidths + "void f()\n{\n    result = prefix\n"
+            "        + read(document, index)\n        + suffix;\n}\n");
+    QTest::newRow("operator-first keeps nested conditional and additive chains aligned")
+        << QString(QLL("operator-first"))
+        << QByteArray("void f()\n"
+                      "{\n"
+                      "    result += prefix\n"
+                      "        + (first\n"
+                      "            ? read(\n"
+                      "                firstLengthyParameterName,\n"
+                      "                secondLengthyParameterName,\n"
+                      "                thirdLengthyParameterName\n"
+                      "            ) : write(\n"
+                      "                input,\n"
+                      "                options\n"
+                      "            )) + (second\n"
+                      "            ? read(\n"
+                      "                firstLengthyParameterName,\n"
+                      "                secondLengthyParameterName,\n"
+                      "                thirdLengthyParameterName\n"
+                      "            ) : write(\n"
+                      "                input,\n"
+                      "                options\n"
+                      "            ));\n"
+                      "}\n")
+        << QByteArray("void f()\n"
+                      "{\n"
+                      "    result += prefix\n"
+                      "        + (first\n"
+                      "            ? read(\n"
+                      "                firstLengthyParameterName,\n"
+                      "                secondLengthyParameterName,\n"
+                      "                thirdLengthyParameterName)\n"
+                      "            : write(\n"
+                      "                input,\n"
+                      "                options\n"
+                      "            ))\n"
+                      "        + (second\n"
+                      "            ? read(\n"
+                      "                firstLengthyParameterName,\n"
+                      "                secondLengthyParameterName,\n"
+                      "                thirdLengthyParameterName)\n"
+                      "            : write(\n"
+                      "                input,\n"
+                      "                options\n"
+                      "            ));\n"
+                      "}\n");
     QTest::newRow("operator-first keeps logical operators below closing brackets")
         << QString(QLL("operator-first"))
         << QByteArray("void f()\n{\n    if ((check(\n        item\n    ))\n"
@@ -2425,17 +2485,24 @@ void tst_FormatRules::testFix_shouldRewrite_data()
         << QString(QLL("operator-wrap"))
         << QByteArray("void f()\n{\n    deflateInit2(&zs, Z_DEFAULT_COMPRESSION, Z_DEFLATED, 15 + 16, 8, Z_DEFAULT_STRATEGY, more);\n}\n")
         << QByteArray("void f()\n{\n    deflateInit2(&zs, Z_DEFAULT_COMPRESSION, Z_DEFLATED, 15 + 16, 8, Z_DEFAULT_STRATEGY, more);\n}\n");
+    const QByteArray nestedBreaks =
+        "void f()\n{\n"
+        "                const QString end = QLatin1Char(')') + inner.mid(\n"
+        "                    k + 2,\n"
+        "                    open - k - 2\n"
+        "                ) + QLatin1Char('\"');\n}\n";
+    const QByteArray anyCode =
+        "// @formatter:\n// ```\n// [Structure]\n// target = any\n// ```\n";
+    QTest::newRow("operator-wrap keeps nested argument breaks within the limit")
+        << QString(QLL("operator-wrap")) << nestedBreaks << nestedBreaks;
     QTest::newRow("operator-wrap moves nested argument breaks to the outer operators")
         << QString(QLL("operator-wrap"))
-        << QByteArray("void f()\n{\n"
-                      "                const QString end = QLatin1Char(')') + inner.mid(\n"
-                      "                    k + 2,\n"
-                      "                    open - k - 2\n"
-                      "                ) + QLatin1Char('\"');\n}\n")
-        << QByteArray("void f()\n{\n"
-                      "                const QString end = QLatin1Char(')')\n"
-                      "                    + inner.mid(k + 2, open - k - 2)\n"
-                      "                    + QLatin1Char('\"');\n}\n");
+        << (anyCode + nestedBreaks)
+        << (anyCode
+            + "void f()\n{\n"
+              "                const QString end = QLatin1Char(')')\n"
+              "                    + inner.mid(k + 2, open - k - 2)\n"
+              "                    + QLatin1Char('\"');\n}\n");
     QTest::newRow("operator-wrap leaves a conditional expression")
         << QString(QLL("operator-wrap"))
         << QByteArray("void f()\n{\n    QString ftp = p.startsWith(QLatin1Char(\x27/\x27)) ? p : cwd + QLatin1Char(\x27/\x27) + p + more;\n}\n")
@@ -2473,7 +2540,7 @@ void tst_FormatRules::testFix_shouldRewrite()
     QFETCH(QByteArray, output);
     const FormatResult result = qMove(this->formatWith(rule, input));
     qExpect(result.error)->toBeEmpty();
-    QCOMPARE(result.text, output);
+    qExpect(result.text)->toEqual(output);
 
     // Formats the result again, which changes nothing.
     const FormatResult again = qMove(this->formatWith(rule, result.text));
@@ -5330,7 +5397,7 @@ void tst_FormatRules::testFixtures_shouldMatchAfter()
         config
     ));
     QVERIFY2(result.error.isEmpty(), qPrintable(result.error));
-    QCOMPARE(QString::fromUtf8(result.text), QString::fromUtf8(expected));
+    qExpect(QString::fromUtf8(result.text))->toEqual(QString::fromUtf8(expected));
     if (name == QLL("member-chain-arguments.cpp")
         || name == QLL("member-chain-literals.cpp")
         || name == QLL("member-chain-ternary.cpp")

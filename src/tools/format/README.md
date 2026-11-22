@@ -713,7 +713,12 @@ The code rules lay out a few constructs on their own:
   further in. A chain of one operator whose right operand is a
   parenthesized group stays on its line up to the group's `(`, the group's
   chain breaking inside it; a group that follows the `)` of another one
-  joins that line. A member can follow a line of closing brackets; subsequent
+  joins that line. A wrapped call between two operators of a chain
+  closes beside its last argument when the closing parenthesis fits the wrap
+  column. The next operator starts its own line, aligned with the preceding
+  operator. This also applies to the call between `?` and `:`. At the end
+  of a parenthesized operand, its closing parentheses can share a closing
+  line before the next outer operator. A member can follow a line of closing brackets; subsequent
   members follow `wrapSubChain`. Logical operators keep their own lines after
   a line of closing brackets. A single member call breaks its
   arguments before its member access when the call head fits `wrapMax` at

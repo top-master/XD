@@ -110,8 +110,7 @@ void FormatParamWrapRule::run(FormatDocument *document) const
             FormatExpressionLayout layout(document, &conditions, 0);
             const QByteArray head = prefix + sourceText(
                 document, items.first().first, items.first().second
-            )
-                + (items.size() == 1 ? suffix : ",");
+            ) + (items.size() == 1 ? suffix : ",");
             const bool breaksAfterOpen = conditions.holds(
                 QString(QLL("structure.wrapSignatureAt")),
                 fileConfig.wrapSignatureAt,
@@ -156,13 +155,13 @@ void FormatParamWrapRule::run(FormatDocument *document) const
 
 /*!
     Lays out again each declaration of @a document whose parameter list the
-    user broke over lines, keeping the parameters that share a line on one
-    line. Groups that fit under the first parameter, lined up right, stay as
-    they are. Otherwise the list breaks at its `(`, each group on a line of
-    its own two steps past the declaration's line, when every group fits
-    that way; when one does not, the groups stay under the first parameter,
-    and the parameters from the first group that does not fit follow
-    `[Structure] joinArgs`. Where `[Structure] wrapSignatureAt` holds at the `(` (as
+    user broke over lines, keeping the parameters that share a line on one line.
+    Groups that fit under the first parameter, lined up right, stay as they are.
+    Otherwise the list breaks at its `(`, each group on a line of its own
+    two steps past the declaration's line, when every group fits that way;
+    when one does not, the groups stay under the first parameter, and the
+    parameters from the first group that does not fit follow `[Structure] joinArgs`.
+    Where `[Structure] wrapSignatureAt` holds at the `(` (as
     @a conditions evaluates it), the list breaks at its `(` in every case.
 
     It leaves alone a declaration with fewer than 2 parameters, a parameter
@@ -237,17 +236,13 @@ void FormatParamWrapRule::regroup(
         bool fitsBroken = false;
         FormatExpressionLayout layout(document, conditions, 0);
         const int firstItemLine = document->symbolLine(items.first().first);
-        const int lastItemLine = document->symbolLine(items.last().second);
         QList<QByteArray > out;
-        // Preserve the framing of a list explicitly grouped between brackets.
-        if (line < firstItemLine && firstItemLine < lastItemLine
-            && lastItemLine < closeLine
-        ) {
+        // Keep the break after the opening regardless of how
+        // many groups follow.
+        if (line < firstItemLine) {
             out = layout.layoutDeclaration(
-                i, prefix, QByteArray(), true, false,
-                document->indentOf(firstItemLine), limit, &fitsBroken
+                i, prefix, suffix, true, false, breakPad, limit, &fitsBroken
             );
-            out << document->indentOf(closeLine) + suffix;
         } else {
             const QList<QByteArray > under = layout.layoutDeclaration(
                 i, prefix, suffix, false, false,
@@ -258,7 +253,10 @@ void FormatParamWrapRule::regroup(
             );
             // Leave an already aligned layout unchanged when it fits.
             if ( ! mustBreak && fitsUnder
-                && under.join("\n") == document->text().mid(start, end - start)
+                && under.join("\n") == document->text().mid(
+                    start,
+                    end - start
+                )
             ) {
                 i = close;
                 continue;

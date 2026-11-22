@@ -6,6 +6,7 @@
 #include "../format-document.h"
 #include "../parser/code-helpers.h"
 #include "../parser/expression-layout.h"
+#include "../parser/layout-helpers.h"
 #include "../parser/scope-conditions.h"
 
 #include <QtCore/QByteArray>
@@ -24,7 +25,8 @@
     continuation line led by its operator one step past the line it breaks
     from; a call whose last argument is the chain keeps the chain's head on
     the call's line, and closes on a line of its own. A statement with
-    existing argument breaks can move those breaks to its outer operators.
+    existing argument breaks can move those breaks to its outer operators
+    when a line exceeds the limit or the target is `any`.
 
     Only the width decides those breaks, while the rule for a long operator
     chain asks to break between groups of operands that belong together;
@@ -77,7 +79,8 @@ bool FormatOperatorWrapRule::wholeStatement(
             i = document->match(i);
             if (i > *last) {
                 if (token == LBRACE
-                    && document->braceScope(document->match(i)) != FormatDocument::InitScope
+                    && document->braceScope(document->match(i))
+                        != FormatDocument::InitScope
                 ) {
                     return false;
                 }
@@ -108,15 +111,32 @@ void FormatOperatorWrapRule::run(FormatDocument *document) const
 {
     FormatScopeConditions conditions(document);
     for (int line = 1; line <= document->lineCount(); ++line) {
-        const int limit = document
-            ->configAt(document->lineStart(line))
-            .wrapMax;
+        const FormatFileConfig &config = document->configAt(
+            document->lineStart(line)
+        );
+        const int limit = config.wrapMax;
         int first = -1;
         int last = -1;
         if (document->isDirectiveLine(line)
             || ! this->wholeStatement(document, line, &first, &last)
         ) {
             continue;
+        }
+        if (config.codeTarget == FormatFileConfig::CodeTargetLong) {
+            // Keep existing breaks when each physical line
+            // fits its wrap column.
+            const int endLine = document->symbolEndLine(last);
+            int current = line;
+            while (current <= endLine
+                && textWidth(document->lineText(current)) <= wrapColumn(
+                    document, document->lineStart(current)
+                )
+            ) {
+                ++current;
+            }
+            if (current > endLine) {
+                continue;
+            }
         }
         const QByteArray indent = document->indentOf(line);
         FormatExpressionLayout layout(
@@ -125,7 +145,8 @@ void FormatOperatorWrapRule::run(FormatDocument *document) const
             textWidth(indent)
         );
         if (textWidth(indent + layout.oneLine(first, last)) <= limit
-            || ! layout.hasOuterChain(first, last - 1)) {
+            || ! layout.hasOuterChain(first, last - 1)
+        ) {
             continue;
         }
         const QByteArray laidOut = layout.layout(

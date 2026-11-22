@@ -15,6 +15,7 @@ int wrapMaxAt(const FormatDocument *document, int offset);
 int continuationIndent(int indent, int steps = 1);
 QByteArray continuationPad(int indent, int steps = 1);
 bool isBinaryOperator(Token token);
+int precedingChainOperator(const FormatDocument *document, int next);
 bool isClosingLine(const QByteArray & text);
 int comparisonRank(Token token);
 bool closesEarlierLine(const FormatDocument *document, int bracket);

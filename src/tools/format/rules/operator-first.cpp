@@ -6,6 +6,8 @@
 #include "../format-document.h"
 #include "../parser/code-helpers.h"
 #include "../parser/layout-helpers.h"
+#include "../parser/expression-layout.h"
+#include "../parser/scope-conditions.h"
 
 #include <QtCore/QByteArray>
 
@@ -42,6 +44,59 @@ static bool isTernaryColon(const FormatDocument *document, int index)
         }
     }
     return false;
+}
+
+/*!
+    Places the operators on either side of a multiline operand at the same
+    indentation. A call closes on its last argument. A parenthesized
+    operand keeps its own closing layout.
+*/
+static bool layoutChainOperand(
+        FormatDocument *document, FormatScopeConditions *conditions, int next)
+{
+    const int close = next - 1;
+    if ( ! closesEarlierLine(document, close)) {
+        return false;
+    }
+    const int previous = precedingChainOperator(document, next);
+    if (previous < 1) {
+        return false;
+    }
+    const int first = previous + 1;
+    const int open = document->match(close);
+    const int from = document->symbolEnd(previous - 1);
+    const int end = document->symbols().at(next).from;
+    if (document->hasCommentBetween(from, end) || document->spansDirective(from, end)) {
+        return false;
+    }
+    const int line = document->symbolLine(previous);
+    const bool startsLine = document->firstSymbolOfLine(line) == previous;
+    const QByteArray pad = startsLine ? document->indentOf(line)
+        : continuationPad(textWidth(document->indentOf(line)));
+    const QByteArray newline = document->text().mid(document->lineEnd(line) - 1, 1) == "\r"
+        ? "\r\n" : "\n";
+    const QByteArray gap = newline + pad;
+    const int closeEnd = document->symbolEnd(close);
+    if (first < open) {
+        FormatExpressionLayout layout(document, conditions, textWidth(pad));
+        const int column = textWidth(pad) + document->lexem(previous).size() + 1;
+        const QByteArray flat = layout.oneLine(first, close);
+        QByteArray operand = flat;
+        if (column + textWidth(flat) > wrapColumn(document, from)) {
+            operand = layout.layoutList(first, open, close, column, true);
+            if (newline == "\r\n") {
+                operand.replace("\r\n", "\n");
+                operand.replace("\n", newline);
+            }
+        }
+        const QByteArray replacement = gap + document->lexem(previous) + ' ' + operand + gap;
+        if (replacement != document->text().mid(from, end - from)) {
+            document->replace(from, end - from, replacement);
+        }
+    } else if (document->text().mid(closeEnd, end - closeEnd) != gap) {
+        document->replace(closeEnd, end - closeEnd, gap);
+    }
+    return true;
 }
 
 /*!
@@ -144,6 +199,7 @@ static bool joinsClosingLine(FormatDocument *document, int index)
 */
 void FormatOperatorFirstRule::run(FormatDocument *document) const
 {
+    FormatScopeConditions conditions(document);
     const bool members = this->forMembers();
     for (int i = 1; i + 1 < document->symbols().size(); ++i) {
         const Token token = document->token(i);
@@ -152,7 +208,7 @@ void FormatOperatorFirstRule::run(FormatDocument *document) const
         if (memberAccess != members) {
             continue;
         }
-        if (joinsClosingLine(document, i)) {
+        if (layoutChainOperand(document, &conditions, i) || joinsClosingLine(document, i)) {
             continue;
         }
         if (token != ANDAND

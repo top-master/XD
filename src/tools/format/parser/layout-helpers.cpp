@@ -64,6 +64,39 @@ bool isBinaryOperator(Token token)
 }
 
 /*!
+    Finds the preceding operator when the operand before @a next in
+    @a document is a call or parenthesized group in the same binary or
+    conditional chain.
+*/
+int precedingChainOperator(const FormatDocument *document, int next)
+{
+    const Token token = document->token(next);
+    const int close = next - 1;
+    if ( ! isBinaryOperator(token) || document->token(close) != RPAREN) {
+        return -1;
+    }
+    const int open = document->match(close);
+    int first = open;
+    // Include the qualified name of a call in the operand.
+    if (document->token(first - 1) == IDENTIFIER) {
+        --first;
+        while ((document->token(first - 1) == DOT || document->token(first - 1) == ARROW
+                || document->token(first - 1) == SCOPE)
+            && document->token(first - 2) == IDENTIFIER
+        ) {
+            first -= 2;
+        }
+    }
+    const int previous = first - 1;
+    const Token lead = document->token(previous);
+    const bool conditional = lead == QUESTION && token == COLON;
+    const int rank = operatorPrecedence(token);
+    const bool binary = rank > 0 && operatorPrecedence(lead) == rank
+        && isOperandEnd(document->token(previous - 1));
+    return conditional || binary ? previous : -1;
+}
+
+/*!
     Tells whether @a text holds only closing brackets and whitespace.
 */
 bool isClosingLine(const QByteArray & text)
