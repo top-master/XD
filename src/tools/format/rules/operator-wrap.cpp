@@ -124,7 +124,6 @@ void FormatOperatorWrapRule::run(FormatDocument *document) const
             &conditions,
             textWidth(indent)
         );
-        const bool nestedBreak = document->symbolLine(last) != line;
         if (textWidth(indent + layout.oneLine(first, last)) <= limit
             || ! layout.hasOuterChain(first, last - 1)) {
             continue;
@@ -137,10 +136,6 @@ void FormatOperatorWrapRule::run(FormatDocument *document) const
         );
         const int from = document->symbols().at(first).from;
         const int length = document->symbolEnd(last - 1) - from;
-        // Prefer the outer breaks even when both layouts take as many lines.
-        if (nestedBreak && laidOut.count('\n') > document->symbolLine(last) - line) {
-            continue;
-        }
         if (laidOut == document->text().mid(from, length)
             || ! document->replace(from, length, laidOut)
         ) {
