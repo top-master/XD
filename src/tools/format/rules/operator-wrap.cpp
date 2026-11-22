@@ -46,12 +46,7 @@ bool FormatOperatorWrapRule::wholeStatement(
 {
     *first = document->firstSymbolOfLine(line);
     *last = document->lastSymbolOfLine(line);
-    if (*first < 0 || document->token(*last) != SEMIC
-        || document->hasCommentBetween(
-            document->lineStart(line),
-            document->lineEnd(line)
-        )
-    ) {
+    if (*first < 0) {
         return false;
     }
 
@@ -72,6 +67,7 @@ bool FormatOperatorWrapRule::wholeStatement(
     ) {
         return false;
     }
+    bool hasBinaryOperator = false;
     // Skip nested expressions while checking the statement boundary.
     for (int i = *first; i <= *last; ++i) {
         const Token token = document->token(i);
@@ -79,13 +75,28 @@ bool FormatOperatorWrapRule::wholeStatement(
             && document->match(i) > i
         ) {
             i = document->match(i);
+            if (i > *last) {
+                if (token == LBRACE
+                    && document->braceScope(document->match(i)) != FormatDocument::InitScope
+                ) {
+                    return false;
+                }
+                *last = document->lastSymbolOfLine(document->symbolEndLine(i));
+            }
             continue;
         }
+        hasBinaryOperator |= operatorPrecedence(token) > 0 && i > *first
+            && isOperandEnd(document->token(i - 1));
         if ((token == SEMIC && i < *last) || token == RBRACE) {
             return false;
         }
     }
-    return true;
+    const int from = document->lineStart(line);
+    const int to = document->lineEnd(document->symbolEndLine(*last));
+    return (hasBinaryOperator || document->symbolLine(*last) == line)
+        && document->token(*last) == SEMIC
+        && ! document->hasCommentBetween(from, to)
+        && ! document->spansDirective(from, to);
 }
 
 /*!
@@ -100,10 +111,9 @@ void FormatOperatorWrapRule::run(FormatDocument *document) const
         const int limit = document
             ->configAt(document->lineStart(line))
             .wrapMax;
-        const QByteArray text = document->lineText(line);
         int first = -1;
         int last = -1;
-        if (textWidth(text) <= limit || document->isDirectiveLine(line)
+        if (document->isDirectiveLine(line)
             || ! this->wholeStatement(document, line, &first, &last)
         ) {
             continue;
@@ -114,7 +124,9 @@ void FormatOperatorWrapRule::run(FormatDocument *document) const
             &conditions,
             textWidth(indent)
         );
-        if ( ! layout.hasOuterChain(first, last - 1)) {
+        const bool nestedBreak = document->symbolLine(last) != line;
+        if (textWidth(indent + layout.oneLine(first, last)) <= limit
+            || ! layout.hasOuterChain(first, last - 1)) {
             continue;
         }
         const QByteArray laidOut = layout.layout(
@@ -125,6 +137,11 @@ void FormatOperatorWrapRule::run(FormatDocument *document) const
         );
         const int from = document->symbols().at(first).from;
         const int length = document->symbolEnd(last - 1) - from;
+        // Reconsider existing argument breaks only when moving the breaks
+        // to operators actually shortens the layout.
+        if (nestedBreak && laidOut.count('\n') >= document->symbolLine(last) - line) {
+            continue;
+        }
         if (laidOut == document->text().mid(from, length)
             || ! document->replace(from, length, laidOut)
         ) {

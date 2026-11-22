@@ -2425,6 +2425,17 @@ void tst_FormatRules::testFix_shouldRewrite_data()
         << QString(QLL("operator-wrap"))
         << QByteArray("void f()\n{\n    deflateInit2(&zs, Z_DEFAULT_COMPRESSION, Z_DEFLATED, 15 + 16, 8, Z_DEFAULT_STRATEGY, more);\n}\n")
         << QByteArray("void f()\n{\n    deflateInit2(&zs, Z_DEFAULT_COMPRESSION, Z_DEFLATED, 15 + 16, 8, Z_DEFAULT_STRATEGY, more);\n}\n");
+    QTest::newRow("operator-wrap moves nested argument breaks to the outer operators")
+        << QString(QLL("operator-wrap"))
+        << QByteArray("void f()\n{\n"
+                      "                const QString end = QLatin1Char(')') + inner.mid(\n"
+                      "                    k + 2,\n"
+                      "                    open - k - 2\n"
+                      "                ) + QLatin1Char('\"');\n}\n")
+        << QByteArray("void f()\n{\n"
+                      "                const QString end = QLatin1Char(')')\n"
+                      "                    + inner.mid(k + 2, open - k - 2)\n"
+                      "                    + QLatin1Char('\"');\n}\n");
     QTest::newRow("operator-wrap leaves a conditional expression")
         << QString(QLL("operator-wrap"))
         << QByteArray("void f()\n{\n    QString ftp = p.startsWith(QLatin1Char(\x27/\x27)) ? p : cwd + QLatin1Char(\x27/\x27) + p + more;\n}\n")

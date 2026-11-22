@@ -503,10 +503,9 @@ static QStringList splitArguments(const QString & inner)
         ) {
             const int open = inner.indexOf(QLatin1Char('('), k + 2);
             if (open >= 0) {
-                const QString end = QLatin1Char(')') + inner.mid(
-                    k + 2,
-                    open - k - 2
-                ) + QLatin1Char('"');
+                const QString end = QLatin1Char(')')
+                    + inner.mid(k + 2, open - k - 2)
+                    + QLatin1Char('"');
                 const int close = inner.indexOf(end, open + 1);
                 if (close >= 0) {
                     k = close + end.size() - 1;

@@ -291,10 +291,19 @@ QByteArray FormatExpressionLayout::layout(
                 && endColumn + 1 + textWidth(firstLine) <= wrap;
         }
 
+        // Keep the assignment head when the value fits by breaking solely
+        // at its own operators. Moving the value would undo that layout.
+        const bool operatorBreaksFit = firstBreak >= 0 && ! valueOperators.isEmpty()
+            && ! isMemberAccess(m_document->token(valueOperators.first()))
+            && right.operatorLinesFit(
+                assignment + 1, last, valueOperators, endColumn + 1, trailing
+            );
+
         // Moves the value one step below an `=` that stands at or past
         // `wrapArgsAt`, when it does not fit after the `=` and takes fewer
         // lines below it; an `=` before `wrapArgsAt` keeps its value.
         if ( ! isHeadBroken
+            && ! operatorBreaksFit
             && ! keepsChainedCall
             && (value.contains('\n')
                 || ! this->fits(endColumn + 1, value, trailing, first))
@@ -849,6 +858,52 @@ QList<int > FormatExpressionLayout::chainOperators(int first, int last) const
 }
 
 /*!
+    Finds the opening parenthesis when the entire operand is a call, including
+    calls through a member, so that its arguments can wrap at this level.
+*/
+int FormatExpressionLayout::operandCall(int first, int last) const
+{
+    const int open = m_document->match(last);
+    if (m_document->token(last) != RPAREN || open <= first
+        || ! this->isListOpen(open)
+    ) {
+        return -1;
+    }
+    const QList<int > operators = this->chainOperators(first, last);
+    return operators.isEmpty() || isMemberAccess(m_document->token(operators.first()))
+        ? open : -1;
+}
+
+/*!
+    Checks the width of each operand with its operator on a continuation
+    line and the first operand at the original column.
+*/
+bool FormatExpressionLayout::operatorLinesFit(
+        int first, int last, const QList<int > & operators,
+        int column, int trailing) const
+{
+    const int firstOperator = operators.first();
+    bool breaksFit = this->fits(
+        column,
+        this->oneLine(first, firstOperator - 1),
+        0,
+        first
+    );
+    const int stepColumn = continuationIndent(textWidth(this->pad()));
+    for (int k = 0; k < operators.size() && breaksFit; ++k) {
+        const int operandLast = k + 1 < operators.size()
+            ? operators.at(k + 1) - 1 : last;
+        breaksFit = this->fits(
+            stepColumn,
+            this->oneLine(operators.at(k), operandLast),
+            k + 1 == operators.size() ? trailing : 0,
+            first
+        );
+    }
+    return breaksFit;
+}
+
+/*!
     Builds the text of the chain from the token @p first up to @p last,
     whose loosest operators are @p operators, written from the column
     @p column with @p trailing more columns after it, when it does not fit
@@ -902,26 +957,8 @@ QByteArray FormatExpressionLayout::layoutChain(
         }
     }
 
-    // Checks whether breaking before the operators fits every line: the
-    // first operand here, and each operator with its operand a step in.
     const int firstOperator = operators.first();
-    bool breaksFit = this->fits(
-        column,
-        this->oneLine(first, firstOperator - 1),
-        0,
-        first
-    );
-    const int stepColumn = continuationIndent(textWidth(this->pad()));
-    for (int k = 0; k < operators.size() && breaksFit; ++k) {
-        const int operandLast = k + 1 < operators.size()
-            ? operators.at(k + 1) - 1 : last;
-        breaksFit = this->fits(
-            stepColumn,
-            this->oneLine(operators.at(k), operandLast),
-            k + 1 == operators.size() ? trailing : 0,
-            first
-        );
-    }
+    const bool breaksFit = this->operatorLinesFit(first, last, operators, column, trailing);
 
     // Keeps an early first operator with the call it introduces, where
     // breaking before the operators leaves a line too long. Its argument
@@ -976,7 +1013,7 @@ QByteArray FormatExpressionLayout::layoutChain(
     const int right = operators.first() + 1;
     const bool isBroken = m_document->symbolLine(first)
         != m_document->symbolEndLine(last);
-    if ( ! forceMath && operators.size() == 1
+    if ( ! breaksFit && ! forceMath && operators.size() == 1
         && ! isBroken
         && m_document->token(right) == LPAREN
         && m_document->match(right) == last
@@ -999,7 +1036,7 @@ QByteArray FormatExpressionLayout::layoutChain(
         }
     }
 
-    if ( ! isMemberAccess(m_document->token(firstOperator))
+    if ( ! breaksFit && ! isMemberAccess(m_document->token(firstOperator))
         && ! (forceMath && isMathOperator(m_document->token(firstOperator)))
         && isNumberMathChain(m_document, firstOperator + 1, firstOperandLast)
     ) {
@@ -1028,13 +1065,12 @@ QByteArray FormatExpressionLayout::layoutChain(
     }
 
     // Breaks before the operators, the first operand on this line.
-    const QByteArray lead = this->layout(
-        first,
-        operators.first() - 1,
-        column,
-        0,
-        forceMath
-    );
+    const int headLast = operators.first() - 1;
+    const int headOpen = this->operandCall(first, headLast);
+    const QByteArray lead = headOpen >= 0
+        && ! this->fits(column, this->oneLine(first, headLast), 0, first)
+        ? this->layoutList(first, headOpen, headLast, column)
+        : this->layout(first, headLast, column, 0, forceMath);
     return lead + this->layoutChainRest(
         first,
         last,
@@ -1307,11 +1343,25 @@ QByteArray FormatExpressionLayout::layoutChainRest(
                     operandLast
                 );
                 QByteArray operand;
-                if (member
-                    && ! isBroken
+                const int open = this->operandCall(op + 1, operandLast);
+                if (( ! forceMath || member)
                     && operandColumn + textWidth(oneLine) + extra <= wrapMax
                 ) {
                     operand = oneLine;
+                } else if ( ! member && open >= 0) {
+                    // Keep the operator with the preceding operand when the
+                    // call needs argument breaks even on a line of its own.
+                    const int previousWidth = text.contains('\n') || head.contains('\n')
+                        ? lastLineWidth(head + text) : column + textWidth(head + text);
+                    const int attached = previousWidth + space.size() + textWidth(lead);
+                    if (this->fits(attached, this->oneLine(op + 1, open), 0, first)) {
+                        text += space + lead + this->layoutList(
+                            op + 1, open, operandLast, attached
+                        );
+                        afterClosingLine = endsWithClosingLine(text);
+                        continue;
+                    }
+                    operand = this->layoutList(op + 1, open, operandLast, operandColumn);
                 } else {
                     operand = this->layout(
                         op + 1,

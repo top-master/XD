@@ -41,6 +41,9 @@ private:
         bool wrapItems;
     };
     QList<int > chainOperators(int first, int last) const;
+    int operandCall(int first, int last) const;
+    bool operatorLinesFit(int first, int last, const QList<int > & operators,
+                          int column, int trailing) const;
     QByteArray layoutChain(
             int first, int last, const QList<int > & operators, int column,
             int trailing, bool forceMath);
