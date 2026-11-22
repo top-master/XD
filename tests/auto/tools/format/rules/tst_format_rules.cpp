@@ -1478,6 +1478,19 @@ void tst_FormatRules::testFix_shouldRewrite_data()
                       "    const Config::Evaluator::CompileContext context(\n"
                       "            FormatReplaceTypesContext().names(), &words,\n"
                       "            Config::NameMismatchError);\n}\n");
+    QTest::newRow("param-wrap retains custom groups before an overflowing group")
+        << QString(QLL("param-wrap"))
+        << QByteArray("// @formatter:\n// ```\n// [Structure]\n// wrapMax = 72\n// joinArgs = 2\n// ```\n"
+                      "void f()\n{\n    const Config::Evaluator::CompileContext context(\n"
+                      "        FirstArg(), SecondArg(),\n"
+                      "        FormatReplaceTypesContext().names(), &words, Config::NameMismatchError\n"
+                      "    );\n}\n")
+        << QByteArray("// @formatter:\n// ```\n// [Structure]\n// wrapMax = 72\n// joinArgs = 2\n// ```\n"
+                      "void f()\n{\n    const Config::Evaluator::CompileContext context(\n"
+                      "        FirstArg(), SecondArg(),\n"
+                      "        FormatReplaceTypesContext().names(), &words,\n"
+                      "        Config::NameMismatchError\n"
+                      "    );\n}\n");
     QTest::newRow("param-wrap gives each parameter of a one-line list of more than 3 a line")
         << QString(QLL("param-wrap"))
         << QByteArray("bool Config::Condition::compile(const QString & text, const QStringList & names, QStringList *program, QString *error, bool takesPercents);\n")

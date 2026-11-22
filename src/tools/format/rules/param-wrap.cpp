@@ -236,22 +236,36 @@ void FormatParamWrapRule::regroup(
         bool fitsUnder = false;
         bool fitsBroken = false;
         FormatExpressionLayout layout(document, conditions, 0);
-        const QList<QByteArray > under = layout.layoutDeclaration(
-            i, prefix, suffix, false, false,
-            QByteArray(textWidth(prefix), ' '), limit, &fitsUnder
-        );
-        const QList<QByteArray > broken = layout.layoutDeclaration(
-            i, prefix, suffix, true, false, breakPad, limit, &fitsBroken
-        );
-        // Leave an already aligned layout unchanged when it fits.
-        if ( ! mustBreak && fitsUnder
-            && under.join("\n") == document->text().mid(start, end - start)
+        const int firstItemLine = document->symbolLine(items.first().first);
+        const int lastItemLine = document->symbolLine(items.last().second);
+        QList<QByteArray > out;
+        // Preserve the framing of a list explicitly grouped between brackets.
+        if (line < firstItemLine && firstItemLine < lastItemLine
+            && lastItemLine < closeLine
         ) {
-            i = close;
-            continue;
+            out = layout.layoutDeclaration(
+                i, prefix, QByteArray(), true, false,
+                document->indentOf(firstItemLine), limit, &fitsBroken
+            );
+            out << document->indentOf(closeLine) + suffix;
+        } else {
+            const QList<QByteArray > under = layout.layoutDeclaration(
+                i, prefix, suffix, false, false,
+                QByteArray(textWidth(prefix), ' '), limit, &fitsUnder
+            );
+            const QList<QByteArray > broken = layout.layoutDeclaration(
+                i, prefix, suffix, true, false, breakPad, limit, &fitsBroken
+            );
+            // Leave an already aligned layout unchanged when it fits.
+            if ( ! mustBreak && fitsUnder
+                && under.join("\n") == document->text().mid(start, end - start)
+            ) {
+                i = close;
+                continue;
+            }
+            out = fitsBroken || mustBreak
+                ? broken : under;
         }
-        const QList<QByteArray > out = fitsBroken || mustBreak
-            ? broken : under;
         const QByteArray newline = document->text().mid(end, 1) == "\r"
             ? "\r\n" : "\n";
         QByteArray wrapped;
