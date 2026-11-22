@@ -66,30 +66,50 @@ static bool layoutChainOperand(
     const int open = document->match(close);
     const int from = document->symbolEnd(previous - 1);
     const int end = document->symbols().at(next).from;
-    if (document->hasCommentBetween(from, end) || document->spansDirective(from, end)) {
+    if (document->hasCommentBetween(from, end)
+        || document->spansDirective(from, end)
+    ) {
         return false;
     }
     const int line = document->symbolLine(previous);
     const bool startsLine = document->firstSymbolOfLine(line) == previous;
     const QByteArray pad = startsLine ? document->indentOf(line)
         : continuationPad(textWidth(document->indentOf(line)));
-    const QByteArray newline = document->text().mid(document->lineEnd(line) - 1, 1) == "\r"
+    const QByteArray newline = document->text().mid(
+        document->lineEnd(line) - 1,
+        1
+    ) == "\r"
         ? "\r\n" : "\n";
     const QByteArray gap = newline + pad;
     const int closeEnd = document->symbolEnd(close);
     if (first < open) {
         FormatExpressionLayout layout(document, conditions, textWidth(pad));
-        const int column = textWidth(pad) + document->lexem(previous).size() + 1;
+        const bool conditional = document->token(previous) == QUESTION;
+        const bool keepInline = ! startsLine && ! conditional;
+        const int lineStart = document->lineStart(line);
+        const int operatorColumn = keepInline
+            ? textWidth(document->text().mid(lineStart, from - lineStart)) + 1
+            : textWidth(pad);
+        const int column = operatorColumn
+            + document->lexem(previous).size()
+            + 1;
         const QByteArray flat = layout.oneLine(first, close);
         QByteArray operand = flat;
-        if (column + textWidth(flat) > wrapColumn(document, from)) {
+        const int limit = conditional ? wrapMaxAt(document, from)
+                                      : wrapColumn(document, from);
+        if (column + textWidth(flat) > limit) {
             operand = layout.layoutList(first, open, close, column, true);
             if (newline == "\r\n") {
                 operand.replace("\r\n", "\n");
                 operand.replace("\n", newline);
             }
         }
-        const QByteArray replacement = gap + document->lexem(previous) + ' ' + operand + gap;
+        const QByteArray leadGap = keepInline ? QByteArray(" ") : gap;
+        const QByteArray replacement = leadGap
+            + document->lexem(previous)
+            + ' '
+            + operand
+            + gap;
         if (replacement != document->text().mid(from, end - from)) {
             document->replace(from, end - from, replacement);
         }
@@ -208,7 +228,9 @@ void FormatOperatorFirstRule::run(FormatDocument *document) const
         if (memberAccess != members) {
             continue;
         }
-        if (layoutChainOperand(document, &conditions, i) || joinsClosingLine(document, i)) {
+        if (layoutChainOperand(document, &conditions, i)
+            || joinsClosingLine(document, i)
+        ) {
             continue;
         }
         if (token != ANDAND

@@ -1000,8 +1000,7 @@ void FormatSuperTypedefRule::replaceSites(FormatDocument *document) const
             decisions.insert(decisionKey, replace.toBool()
                 && context.predicate(
                     QString(QLL("hasSuperTypedef")),
-                    &available
-                )
+                    &available)
                 && available);
         }
         if (decisions.value(decisionKey)) {

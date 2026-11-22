@@ -533,26 +533,26 @@ Config::Schema FormatFileConfig::schema()
                      QString::fromLatin1(defaultWrapSignatureAtText));
     structure.addKey(QString(QLL("wrapArgsOver")),
                      Config::Matchers() << Config::Numbers::create(
-                         1,
-                         std::numeric_limits<qint64 >::max(),
-                         1
-                     ) << Config::Condition::create(
-                         FormatScopeConditions::names(),
-                         true,
-                         &FormatConditionContext::setCountObjects
-                     ),
+                             1,
+                             std::numeric_limits<qint64 >::max(),
+                             1)
+                         << Config::Condition::create(
+                             FormatScopeConditions::names(),
+                             true,
+                             &FormatConditionContext::setCountObjects
+                         ),
                      QString(QLL("3")));
     structure.addKey(QString(QLL("wrapConditionsOver")),
                      Config::Matchers() << Config::Numbers::create(
-                         1,
-                         std::numeric_limits<qint64 >::max(),
-                         1
-                     ) << Config::Condition::create(
-                         FormatScopeConditions::names(),
-                         true,
-                         &FormatConditionContext::setCountObjects,
-                         Config::Condition::ResultNumber
-                     ),
+                             1,
+                             std::numeric_limits<qint64 >::max(),
+                             1)
+                         << Config::Condition::create(
+                             FormatScopeConditions::names(),
+                             true,
+                             &FormatConditionContext::setCountObjects,
+                             Config::Condition::ResultNumber
+                         ),
                      QString::fromLatin1(defaultWrapConditionsOverText));
     structure.addKey(QString(QLL("wrapConditionsPer")),
                      QStringList() << QString(QLL("line"))
@@ -562,16 +562,19 @@ Config::Schema FormatFileConfig::schema()
                      QString(QLL("pair-bundle")));
     structure.addKey(QString(QLL("joinArgs")),
                      Config::Matchers() << Config::Numbers::create(
-                         1,
-                         std::numeric_limits<qint64 >::max(),
-                         1
-                     ) << Config::Condition::create(
-                         FormatScopeConditions::names(),
-                         true,
-                         &FormatConditionContext::setCountObjects,
-                         Config::Condition::ResultNumber
-                     ),
+                             1,
+                             std::numeric_limits<qint64 >::max(),
+                             1)
+                         << Config::Condition::create(
+                             FormatScopeConditions::names(),
+                             true,
+                             &FormatConditionContext::setCountObjects,
+                             Config::Condition::ResultNumber
+                         ),
                      QString(QLL("1")));
+    structure.addKey(QString(QLL("operatorPlacement")),
+                     QStringList() << QString(QLL("begining")) << QString(QLL("middle")),
+                     QString(QLL("begining")));
     structure.addKey(QString(QLL("wrapSubChain")),
                      QStringList() << QString(QLL("always"))
                          << QString(QLL("wrap-begin"))
@@ -1189,8 +1192,7 @@ bool FormatFileConfig::fromParser(
         && readCountOrCondition(
             parser, QString(QLL("structure.wrapConditionsOver")),
             &fileConfig->wrapConditionsOver,
-            &fileConfig->wrapConditionsOverCondition, mismatch, error
-        )
+            &fileConfig->wrapConditionsOverCondition, mismatch, error)
         && readCountOrCondition(
             parser, QString(QLL("structure.joinArgs")),
             &fileConfig->joinArgs, &fileConfig->joinArgsCondition, mismatch,
@@ -1200,6 +1202,9 @@ bool FormatFileConfig::fromParser(
     if ( ! counted) {
         return false;
     }
+    fileConfig->operatorsInMiddle =
+        parser.value(QString(QLL("structure.operatorPlacement")))
+        == QLL("middle");
     fileConfig->wrapSubChain = parser.value(
         QString(QLL("structure.wrapSubChain"))
     );
@@ -1238,29 +1243,25 @@ bool FormatFileConfig::fromParser(
             &fileConfig->thisMode,
             false,
             mismatch,
-            error
-        )
+            error)
         && compileCondition(
             parser.value(QString(QLL("structure.wrapChainAt"))),
             &fileConfig->wrapChainAt,
             true,
             mismatch,
-            error
-        )
+            error)
         && compileCondition(
             parser.value(QString(QLL("structure.wrapArgsAt"))),
             &fileConfig->wrapArgsAt,
             true,
             mismatch,
-            error
-        )
+            error)
         && compileCondition(
             parser.value(QString(QLL("structure.wrapSignatureAt"))),
             &fileConfig->wrapSignatureAt,
             true,
             mismatch,
-            error
-        )
+            error)
         && compileCondition(
             parser.value(QString(QLL("structure.wrapMistakes"))),
             &fileConfig->wrapMistakes,

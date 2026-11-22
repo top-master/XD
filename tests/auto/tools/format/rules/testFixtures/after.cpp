@@ -917,9 +917,9 @@ void operators()
     target = predicate(
         value
     ) ? first : second;
-    target = condition ? calculate(
-        value
-    ) : other;
+    target = condition
+        ? calculate(value)
+        : other;
 }
 
 // CASE	operator-wrap-arrow.cpp
@@ -1586,9 +1586,9 @@ void append()
 void appendMore()
 {
     output << Packet(
-        message.convertToInteger(),
-        message.beginsWith(Text("sample"))
-    ) << finalItem;
+            message.convertToInteger(),
+            message.beginsWith(Text("sample")))
+        << finalItem;
 }
 
 // CASE	operator-wrap-first-call-condition.cpp

@@ -1401,6 +1401,7 @@ void inspect()
 // @formatter:
 // ```
 // [Structure]
+// operatorPlacement = begining
 // wrapArgsAt = never
 // wrapArgsOver = 3
 // ```
@@ -1418,6 +1419,7 @@ void appendMore()
 // @formatter:
 // ```
 // [Structure]
+// operatorPlacement = middle
 // wrapArgsAt = never
 // wrapArgsOver = argCount(0) > 20
 // ```

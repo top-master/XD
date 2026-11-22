@@ -50,11 +50,11 @@ void FormatConnectLayoutRule::run(FormatDocument *document) const
         const int close = document->match(open);
         if (close < 0 || document->hasCommentBetween(
                 document->symbols().at(open).from,
-                document->symbols().at(close).from
-            ) || document->spansDirective(
-                document->symbols().at(open).from,
-                document->symbols().at(close).from
-            )
+                document->symbols().at(close).from)
+            || document->spansDirective(
+                    document->symbols().at(open).from,
+                    document->symbols().at(close).from
+                )
         ) {
             continue;
         }

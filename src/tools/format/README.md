@@ -286,6 +286,10 @@ moveSuffix = " "
   ; Only the base members of templates (found through `this->` alone).
   thisMode = (is-base-member & is-template) | already-existing
   ```
+- `operatorPlacement` (in `[Structure]`): `begining` (the default) keeps an
+  early binary operator with the call it introduces and starts the next
+  continuation with its operator. `middle` allows the next operator on the
+  closing line. A wrapped conditional aligns its `?` and `:` in both modes.
 - `wrapChainAt` (in `[Structure]`): where an operator chain that does not
   fit one line breaks before its operators (see `operator-wrap` under
   "Laying out code" below): a condition of the same names, which may

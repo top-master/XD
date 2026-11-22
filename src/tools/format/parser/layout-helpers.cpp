@@ -92,6 +92,7 @@ int precedingChainOperator(const FormatDocument *document, int next)
     const bool conditional = lead == QUESTION && token == COLON;
     const int rank = operatorPrecedence(token);
     const bool binary = rank > 0 && operatorPrecedence(lead) == rank
+        && ! document->configAt(document->symbols().at(next).from).operatorsInMiddle
         && isOperandEnd(document->token(previous - 1));
     return conditional || binary ? previous : -1;
 }

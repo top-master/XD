@@ -1632,7 +1632,8 @@ void tst_FormatRules::testFix_shouldRewrite_data()
                       "        << (QStringList()\n"
                       "            << QString(QLL(\"--runner=process\"))\n"
                       "            << QString(QLL(\"--config\"))\n"
-                      "        ) << (QStringList()\n"
+                      "        )\n"
+                      "        << (QStringList()\n"
                       "            << QString(QLL(\"--runner=thread\"))\n"
                       "            << QString(QLL(\"--config\"))\n"
                       "        );\n"
@@ -1924,15 +1925,22 @@ void tst_FormatRules::testFix_shouldRewrite_data()
         << (chainWidths + "void f()\n{\n    result = prefix + read(\n"
             "        document, entries.first().first,\n"
             "        entries.first().second\n    ) + suffix;\n}\n")
-        << (chainWidths + "void f()\n{\n    result = prefix\n        + read(\n"
+        << (chainWidths + "void f()\n{\n    result = prefix + read(\n"
             "            document, entries.first().first,\n"
             "            entries.first().second)\n        + suffix;\n}\n");
     QTest::newRow("operator-first keeps a fitting middle call together")
         << QString(QLL("operator-first"))
         << (chainWidths + "void f()\n{\n    result = prefix + read(\n"
             "        document, index\n    ) + suffix;\n}\n")
-        << (chainWidths + "void f()\n{\n    result = prefix\n"
-            "        + read(document, index)\n        + suffix;\n}\n");
+        << (chainWidths + "void f()\n{\n    result = prefix + read(document, index)\n        + suffix;\n}\n");
+    QTest::newRow("operator-first keeps ternary branches aligned with middle placement")
+        << QString(QLL("operator-first"))
+        << QByteArray("// Format rule: structure.operatorPlacement=middle\n"
+                      "void f()\n{\n    result = condition ? read(\n"
+                      "        value\n    ) : other;\n}\n")
+        << QByteArray("// Format rule: structure.operatorPlacement=middle\n"
+                      "void f()\n{\n    result = condition\n"
+                      "        ? read(value)\n        : other;\n}\n");
     QTest::newRow("operator-first keeps nested conditional and additive chains aligned")
         << QString(QLL("operator-first"))
         << QByteArray("void f()\n"

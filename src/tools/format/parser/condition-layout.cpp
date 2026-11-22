@@ -391,11 +391,12 @@ QByteArray FormatConditionLayout::group(
             const int currentWidth = text.size() - lineStart;
 
             // Asks `wrapConditionsOver` at the operand that may end the line.
-            const int limit = isPerLine ? m_conditions->conditionsLimit(
-                open,
-                ops.size() + 1,
-                100.0 * (maximum - currentWidth) / maximum
-            ) : 0;
+            const int limit = isPerLine
+                ? m_conditions->conditionsLimit(
+                    open,
+                    ops.size() + 1,
+                    100.0 * (maximum - currentWidth) / maximum)
+                : 0;
             const bool joins = ! forced.contains(ops.at(k - 1))
                 && ! endsLine && (limit == 0 || onLine < limit)
                 && ! isClosingLine(text.mid(text.lastIndexOf('\n') + 1))
