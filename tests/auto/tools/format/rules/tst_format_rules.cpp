@@ -1941,6 +1941,33 @@ void tst_FormatRules::testFix_shouldRewrite_data()
         << QByteArray("// Format rule: structure.operatorPlacement=middle\n"
                       "void f()\n{\n    result = condition\n"
                       "        ? read(value)\n        : other;\n}\n");
+    QTest::newRow("operator-first keeps arguments without extra padding when operator starts line")
+        << QString(QLL("operator-first"))
+        << QByteArray(
+            "void f()\n"
+                "{\n"
+                "    const bool counted = firstCall(\n"
+                "        first, second\n"
+                "    )\n"
+                "        && readCountOrCondition(\n"
+                "                parser, QString(QLL(\"structure.wrapConditionsOver\")),\n"
+                "                &fileConfig->wrapConditionsOver,\n"
+                "                &fileConfig->wrapConditionsOverCondition, mismatch, error)\n"
+                "        && otherCall();\n"
+                "}\n")
+        << QByteArray(
+            "void f()\n"
+                "{\n"
+                "    const bool counted = firstCall(\n"
+                "        first, second\n"
+                "    )\n"
+                "        && readCountOrCondition(\n"
+                "            parser, QString(QLL(\"structure.wrapConditionsOver\")),\n"
+                "            &fileConfig->wrapConditionsOver,\n"
+                "            &fileConfig->wrapConditionsOverCondition, mismatch, error)\n"
+                "        && otherCall();\n"
+                "}\n"
+        );
     QTest::newRow("operator-first keeps nested conditional and additive chains aligned")
         << QString(QLL("operator-first"))
         << QByteArray("void f()\n"

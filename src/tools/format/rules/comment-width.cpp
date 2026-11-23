@@ -177,7 +177,8 @@ QStringList FormatCommentWidthRule::wrap(
             }
             wordStart = i + 1;
         }
-        int at = punctuation >= 0 ? punctuation
+        int at = punctuation >= 0
+            ? punctuation
             : pointing >= 0 ? pointing : plainBefore >= 0 ? plainBefore : plainAfter;
 
         // Gives a word too long for any line (such as a long code keyword)

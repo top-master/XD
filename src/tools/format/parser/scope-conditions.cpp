@@ -116,8 +116,9 @@ bool ArgumentContext::predicate(const QString &name, bool *value) const
 
 bool ArgumentContext::value(qreal *value) const
 {
-    *value = this->m_count ? *this->m_count
-                           : this->m_scope->argumentCount(this->m_token, 0);
+    *value = this->m_count
+        ? *this->m_count
+        : this->m_scope->argumentCount(this->m_token, 0);
     return true;
 }
 
@@ -126,11 +127,12 @@ bool ArgumentContext::argumentCount(
         qreal *count) const
 {
     *count = this->m_condition
-        ? this->m_scope->conditionArgumentCount(
+        ? this->m_scope->conditionArgumentCount(this->m_token, depth, argument)
+        : this->m_scope->argumentCount(
             this->m_token,
             depth,
             argument
-        ) : this->m_scope->argumentCount(this->m_token, depth, argument);
+        );
     return true;
 }
 
@@ -761,8 +763,9 @@ int FormatScopeConditions::countTargets(
         return -1;
     }
     while (depth < 0) {
-        target = condition ? enclosingConditionTarget(m_document, target)
-                           : enclosingArgumentTarget(m_document, target);
+        target = condition
+            ? enclosingConditionTarget(m_document, target)
+            : enclosingArgumentTarget(m_document, target);
         if (target < 0) {
             return -1;
         }
@@ -894,8 +897,9 @@ int FormatScopeConditions::limitOf(
         fileConfig.wrapConditionsOverCondition,
         &context
     );
-    return limit.isValid() ? qMax(0, FormatFileConfig::countOf(limit))
-                           : fallback;
+    return limit.isValid()
+        ? qMax(0, FormatFileConfig::countOf(limit))
+        : fallback;
 }
 
 /*!
@@ -939,10 +943,12 @@ bool FormatScopeConditions::countOver(
     const FormatFileConfig &fileConfig = m_document->configAt(
         m_document->symbols().at(token).from
     );
-    const QStringList &program = condition ? fileConfig.wrapConditionsOverCondition
-                                           : fileConfig.wrapArgsOverCondition;
-    const int limit = condition ? fileConfig.wrapConditionsOver
-                                : fileConfig.wrapArgsOver;
+    const QStringList &program = condition
+        ? fileConfig.wrapConditionsOverCondition
+        : fileConfig.wrapArgsOverCondition;
+    const int limit = condition
+        ? fileConfig.wrapConditionsOver
+        : fileConfig.wrapArgsOver;
     if (program.isEmpty()) {
         return count > limit;
     }

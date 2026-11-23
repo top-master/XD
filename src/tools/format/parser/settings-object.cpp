@@ -126,14 +126,16 @@ QVariant FormatSettingsObject::dynamicValue(const QByteArray & name) const
 {
     const FormatConditionContext *format =
         static_cast<const FormatConditionContext * >(this->context());
-    const FormatFileConfig *fileConfig = format ? format->fileConfig()
-                                                : Q_NULLPTR;
+    const FormatFileConfig *fileConfig = format
+        ? format->fileConfig()
+        : Q_NULLPTR;
     if ( ! fileConfig) {
         return QVariant();
     }
     if (name == "operatorPlacement") {
-        return fileConfig->operatorsInMiddle ? QString(QLL("middle"))
-                                             : QString(QLL("start"));
+        return fileConfig->operatorsInMiddle
+            ? QString(QLL("middle"))
+            : QString(QLL("start"));
     }
     if (name == "wrapMax") {
         return fileConfig->wrapMax;

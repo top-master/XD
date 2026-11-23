@@ -16,10 +16,10 @@
     @internal
 
     Breaks a long expression before its operator, never after it: each `&&`,
-    `||`, `<<`, `+`, `-`, `|`, `^`, `==`, `!=` or `?` that ends a line moves to the
-    start of the line after it. After a line of only closing brackets, an
-    operator and its operand join that line when they fit, except for `&&`
-    and `||`, which keep their own lines.
+    `||`, `<<`, `+`, `-`, `|`, `^`, `==`, `!=` or `?` that ends a line
+    moves to the start of the line after it. After a line of only closing
+    brackets, an operator and its operand join that line when they fit,
+    except for `&&` and `||`, which keep their own lines.
 */
 
 /*!
@@ -73,7 +73,8 @@ static bool layoutChainOperand(
     }
     const int line = document->symbolLine(previous);
     const bool startsLine = document->firstSymbolOfLine(line) == previous;
-    const QByteArray pad = startsLine ? document->indentOf(line)
+    const QByteArray pad = startsLine
+        ? document->indentOf(line)
         : continuationPad(textWidth(document->indentOf(line)));
     const QByteArray newline = document->text().mid(
         document->lineEnd(line) - 1,
@@ -85,8 +86,8 @@ static bool layoutChainOperand(
     if (first < open) {
         const bool conditional = document->token(previous) == QUESTION;
         const bool keepInline = ! startsLine && ! conditional;
-        const int layoutIndent = keepInline ? textWidth(document->indentOf(line))
-                                            : textWidth(pad);
+        const int layoutIndent = keepInline
+            ? textWidth(document->indentOf(line)) : textWidth(pad);
         FormatExpressionLayout layout(document, conditions, layoutIndent);
         const int lineStart = document->lineStart(line);
         const int operatorColumn = keepInline
@@ -97,11 +98,21 @@ static bool layoutChainOperand(
             + 1;
         const QByteArray flat = layout.oneLine(first, close);
         QByteArray operand = flat;
-        const int limit = conditional ? wrapMaxAt(document, from)
-                                      : wrapColumn(document, from);
+        const int limit = conditional
+            ? wrapMaxAt(document, from)
+            : wrapColumn(document, from);
         if (column + textWidth(flat) > limit) {
-            const int extraPad = conditional ? 0 : conditions->operatorPadding(previous);
-            operand = layout.layoutList(first, open, close, column, true, 0, extraPad);
+            const int extraPad = keepInline
+                ? conditions->operatorPadding(previous) : 0;
+            operand = layout.layoutList(
+                first,
+                open,
+                close,
+                column,
+                true,
+                0,
+                extraPad
+            );
             if (newline == "\r\n") {
                 operand.replace("\r\n", "\n");
                 operand.replace("\n", newline);

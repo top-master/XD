@@ -171,7 +171,8 @@ static QStringList visibleScopes(const FormatDocument *document, int index)
             const QString name = document->token(k + 1) == IDENTIFIER
                 ? readName(document, k + 1, &end) : QString();
             if (end + 1 < index && document->token(end + 1) == LBRACE) {
-                pending = name.isEmpty() ? names.last()
+                pending = name.isEmpty()
+                    ? names.last()
                     : (names.last().isEmpty() ? name : names.last() + QLL("::") + name);
                 hasPending = true;
                 k = end;
@@ -254,8 +255,8 @@ static bool bindArguments(const QString & key, const QStringList & arguments,
         return false;
     }
     const QString inner = key.mid(open + 1, key.size() - open - 2).trimmed();
-    const QStringList parameters = inner.isEmpty() ? QStringList()
-        : inner.split(QLatin1Char(','));
+    const QStringList parameters = inner.isEmpty()
+        ? QStringList() : inner.split(QLatin1Char(','));
     if (parameters.size() != arguments.size()) {
         return false;
     }
@@ -478,8 +479,9 @@ static QStringList splitArguments(const QString & inner)
     QChar quote;
     int first = 0;
     for (int k = 0; k <= inner.size(); ++k) {
-        const QChar c = k < inner.size() ? inner.at(k)
-                                         : QChar(QLatin1Char(','));
+        const QChar c = k < inner.size()
+            ? inner.at(k)
+            : QChar(QLatin1Char(','));
         if ( ! quote.isNull()) {
             if (c == QLatin1Char('\\')) {
                 ++k;

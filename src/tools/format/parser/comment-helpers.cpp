@@ -358,8 +358,9 @@ QList<FormatConfigDirective > configDirectives(const FormatDocument *document)
                 if (formatterAlias) {
                     normalized.appendCompact(body);
                 }
-                const QByteArray command = formatterAlias ? normalized.text()
-                                                          : QByteArray();
+                const QByteArray command = formatterAlias
+                    ? normalized.text()
+                    : QByteArray();
                 if (formatterAlias
                     && directive.kind == FormatConfigDirective::Add
                     && (command == "off" || command == "on")

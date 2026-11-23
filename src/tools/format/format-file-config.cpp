@@ -202,7 +202,8 @@ static const char defaultOperatorPaddingText[] =
     brace list takes the average count of items per line, any other list
     keeps the user's lines.
 */
-static const char defaultWrapMistakesText[] = "is(array) ? \"average\" : \"never\"";
+static const char defaultWrapMistakesText[] =
+    "is(array) ? \"average\" : \"never\"";
 
 /*!
     Spells the default `[Lint] byRefVariable` (see FormatFileConfig): a
@@ -590,7 +591,9 @@ Config::Schema FormatFileConfig::buildSchema()
                          ),
                      QString(QLL("1")));
     structure.addKey(QString(QLL("operatorPadding")),
-                     Config::Matchers() << Config::Numbers::create(0, std::numeric_limits<int >::max() / 4)
+                     Config::Matchers() << Config::Numbers::create(
+                             0,
+                             std::numeric_limits<int >::max() / 4)
                          << Config::Condition::create(
                              FormatScopeConditions::names(), true,
                              &FormatConditionContext::setCountObjects,
@@ -1208,14 +1211,15 @@ bool FormatFileConfig::fromParser(
             &fileConfig->wrapConditionsOverCondition, mismatch, error)
         && readCountOrCondition(
             parser, QString(QLL("structure.operatorPadding")),
-            &fileConfig->operatorPadding, &fileConfig->operatorPaddingCondition,
-            mismatch, error
-        )
+            &fileConfig->operatorPadding,
+            &fileConfig->operatorPaddingCondition,
+            mismatch,
+            error)
         && readCountOrCondition(
-            parser, QString(QLL("structure.joinArgs")),
-            &fileConfig->joinArgs, &fileConfig->joinArgsCondition, mismatch,
-            error
-        );
+                parser, QString(QLL("structure.joinArgs")),
+                &fileConfig->joinArgs, &fileConfig->joinArgsCondition, mismatch,
+                error
+            );
     Config::Scopes::popUntil(scopes);
     if ( ! counted) {
         return false;
@@ -1254,8 +1258,12 @@ bool FormatFileConfig::fromParser(
         &fileConfig->bodyBraces, false, mismatch, error
     )
         && readProgram(
-            parser, QString(QLL("relations.thisMode")),
-            &fileConfig->thisMode, false, mismatch, error)
+            parser,
+            QString(QLL("relations.thisMode")),
+            &fileConfig->thisMode,
+            false,
+            mismatch,
+            error)
         && readProgram(
             parser, QString(QLL("structure.wrapChainAt")),
             &fileConfig->wrapChainAt, true, mismatch, error)
@@ -1267,7 +1275,8 @@ bool FormatFileConfig::fromParser(
             &fileConfig->wrapSignatureAt, true, mismatch, error)
         && readProgram(
             parser, QString(QLL("structure.wrapMistakes")),
-            &fileConfig->wrapMistakes, false, mismatch, error, &words);
+            &fileConfig->wrapMistakes, false, mismatch, error, &words
+        );
 }
 
 namespace {
