@@ -4316,7 +4316,7 @@ void tst_FormatRules::testThisMode_shouldDefaultToBaseExistingAndHeaderOutline()
 {
     const Config::Evaluator::Context testContext(false);
     const QStringList program = FormatFileConfig().thisMode;
-    qExpect(program)->toEqual(FormatFileConfig::defaultProgram(
+    qExpect(program)->toEqual(FormatFileConfig::schema().programFor(
         QString(QLL("relations.thisMode"))));
     const QString outline = QString(QLL("is-outline"));
     QSet<QString > holding;
@@ -4732,7 +4732,7 @@ void tst_FormatRules::testScopeConditions_shouldPlaceSignaturesByWrapArgsAt()
     );
     const int open = symbolIndex(document, "isReady") + 1;
     FormatScopeConditions conditions(&document);
-    const QStringList fallback = FormatFileConfig::defaultProgram(
+    const QStringList fallback = FormatFileConfig::schema().programFor(
         QString(QLL("structure.wrapSignatureAt")));
     Config::Parser parser(FormatFileConfig::schema());
     FormatFileConfig config;

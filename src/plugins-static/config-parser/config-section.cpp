@@ -50,7 +50,7 @@ void Config::Section::addKey(
 /*!
     Adds the setting @a name, whose default @a defaultValue is code: it takes
     each value one of @a matchers matches, and starts as @a defaultValue,
-    whose program the key's defaultProgram() compiles once (see
+    whose program the key's programFor() compiles once (see
     Config::Code); @a aliases maps another spelling of a value to the value
     it stands for.
 */

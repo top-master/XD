@@ -19,7 +19,7 @@ namespace Config {
     Describes one setting a tool supports: its name (`<section>.<key>`, in
     lower case), the matchers of the values it takes (see
     Config::ValueMatcher), the value it has when nothing sets it, the program
-    that value runs when it is code (see Config::Code and defaultProgram()),
+    that value runs when it is code (see Config::Code and programFor()),
     and the other spellings of a value (such as `none` for an empty one).
 
     A key that extends another one (see Config::Section::extend()) names it
@@ -37,17 +37,20 @@ public:
     inline bool isNull() const { return name.isEmpty(); }
 
     /*!
-        Answers the program that the default of this key runs, when it is code
-        (see Config::Code): the first call compiles it, and each later call
-        answers the same program. Answers an empty list for a default that
-        stands for a value as it reads.
+        Answers the program that the default of this key runs, over
+        @a context, when it is code (see Config::Code); an empty list for a
+        default that stands for a value as it reads.
     */
-    inline QStringList defaultProgram() const { return this->code.program(); }
+    inline QStringList programFor(
+            const Evaluator::CompileContext *context) const
+    {
+        return this->code.program(context);
+    }
 
     QString name;
     Matchers matchers;
     QString defaultValue;
-    /// The code of a default that is one, which defaultProgram() compiles;
+    /// The code of a default that is one, which programFor() compiles;
     /// empty for a default that stands for a value as it reads.
     Code code;
     QHash<QString, QString > aliases;

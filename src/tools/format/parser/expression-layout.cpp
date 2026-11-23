@@ -1203,7 +1203,7 @@ QByteArray FormatExpressionLayout::layoutChainRest(
                     ).wrapChainAt,
                     operators.at(end),
                     percentUsed,
-                    FormatFileConfig::defaultProgram(
+                    FormatFileConfig::schema().programFor(
                         QString(QLL("structure.wrapChainAt"))
                     )
                 )
@@ -1821,7 +1821,7 @@ bool FormatExpressionLayout::mayBreakList(int open, int itemCount) const
         QString(QLL("structure.wrapArgsAt")),
         fileConfig.wrapArgsAt,
         open,
-        FormatFileConfig::defaultProgram(
+        FormatFileConfig::schema().programFor(
             QString(QLL("structure.wrapChainAt"))
         )
     );

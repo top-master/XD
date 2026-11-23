@@ -36,25 +36,25 @@ public:
     {
         wrapBegin << 75;
         commentWrapBegin << 75;
-        thisMode = FormatFileConfig::defaultProgram(
+        thisMode = FormatFileConfig::schema().programFor(
             QString::fromLatin1("relations.thisMode"));
-        wrapChainAt = FormatFileConfig::defaultProgram(
+        wrapChainAt = FormatFileConfig::schema().programFor(
             QString::fromLatin1("structure.wrapChainAt"));
-        wrapArgsAt = FormatFileConfig::defaultProgram(
+        wrapArgsAt = FormatFileConfig::schema().programFor(
             QString::fromLatin1("structure.wrapChainAt"));
-        wrapSignatureAt = FormatFileConfig::defaultProgram(
+        wrapSignatureAt = FormatFileConfig::schema().programFor(
             QString::fromLatin1("structure.wrapSignatureAt"));
-        wrapConditionsOverCondition = FormatFileConfig::defaultProgram(
+        wrapConditionsOverCondition = FormatFileConfig::schema().programFor(
             QString::fromLatin1("structure.wrapConditionsOver"));
         bodyBraces << QString::fromLatin1("always");
-        wrapMistakes = FormatFileConfig::defaultProgram(
+        wrapMistakes = FormatFileConfig::schema().programFor(
             QString::fromLatin1("structure.wrapMistakes"));
         extensions = FormatFileConfig::defaultExtensions();
         typedefSuper = FormatFileConfig::defaultTypedefSuper();
         replaceSuperSites = FormatFileConfig::defaultReplaceSuperSites();
         operatorsInMiddle = false;
         operatorPadding = 0;
-        operatorPaddingCondition = FormatFileConfig::defaultProgram(
+        operatorPaddingCondition = FormatFileConfig::schema().programFor(
             QString::fromLatin1("structure.operatorPadding"));
         wrapSubChain = QString::fromLatin1("always");
         wrapConditionsPer = QString::fromLatin1("pair-bundle");
@@ -77,7 +77,8 @@ public:
             const QString & value,
             const FormatFileConfig & config);
     bool acceptsFile(const QString &path) const;
-    static Config::Schema schema();
+    static const Config::Schema &schema();
+    static Config::Schema buildSchema();
     static QVariant resolve(
             const QString & key, const QStringList & program,
             const Config::Evaluator::Context *context);
@@ -87,7 +88,6 @@ public:
             const Config::Evaluator::Context *context) const;
     static QString defaultTypedefSuper();
     static QString defaultReplaceSuperSites();
-    static QStringList defaultProgram(const QString & key);
     static bool readConfig(Config::Parser *parser, const FormatConfig & config,
                            QString *error);
     static bool load(const QString & path, const FormatConfig & config,

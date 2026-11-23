@@ -116,6 +116,16 @@ QVariant Config::Schema::resolve(
 }
 
 /*!
+    Answers the program of the default of @a name, when it is code (see
+    Config::Code), which it compiles over the context the schema took; an
+    empty list for a default that stands for a value as it reads.
+*/
+QStringList Config::Schema::programFor(const QString & name) const
+{
+    return this->key(name).programFor(&this->m_context);
+}
+
+/*!
     Converts @a resolved, what a compiled program of the setting @a name
     resolves to (see Config::Condition::resolve()),
     into the value of the type that setting takes: the first of

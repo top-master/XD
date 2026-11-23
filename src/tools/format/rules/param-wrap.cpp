@@ -115,7 +115,7 @@ void FormatParamWrapRule::run(FormatDocument *document) const
                 QString(QLL("structure.wrapSignatureAt")),
                 fileConfig.wrapSignatureAt,
                 i,
-                FormatFileConfig::defaultProgram(
+                FormatFileConfig::schema().programFor(
                     QString(QLL("structure.wrapSignatureAt"))
                 )
             );
@@ -226,7 +226,7 @@ void FormatParamWrapRule::regroup(
         const bool mustBreak = conditions->holds(
             QString(QLL("structure.wrapSignatureAt")),
             fileConfig.wrapSignatureAt, i,
-            FormatFileConfig::defaultProgram(
+            FormatFileConfig::schema().programFor(
                 QString(QLL("structure.wrapSignatureAt"))
             )
         );

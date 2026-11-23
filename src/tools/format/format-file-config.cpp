@@ -202,7 +202,7 @@ static const char defaultOperatorPaddingText[] =
     brace list takes the average count of items per line, any other list
     keeps the user's lines.
 */
-static const char defaultWrapMistakesText[] = "is(array) ? average : never";
+static const char defaultWrapMistakesText[] = "is(array) ? \"average\" : \"never\"";
 
 /*!
     Spells the default `[Lint] byRefVariable` (see FormatFileConfig): a
@@ -477,10 +477,15 @@ QString FormatReplacementMatcher::explain(const QString & value) const
 }
 
 /*!
-    Builds the schema of the settings the tool takes, each at its default.
+    Builds the schema of the settings the tool takes, each at its default,
+    which its code compiles over the names of the tool's conditions (see
+    Config::Code); a choice spells its word in double quotes, and the matcher
+    of its key checks it afterwards (see Config::Choice).
 */
-Config::Schema FormatFileConfig::schema()
+Config::Schema FormatFileConfig::buildSchema()
 {
+    const Config::Evaluator::CompileContext context(
+        FormatScopeConditions::names());
     const Config::Matchers spacings = Config::Matchers()
         << Config::AnySpace::create() << Config::Word::create(QString(QLL("keep-as-is")))
         << Config::RegExp::create();
@@ -499,7 +504,7 @@ Config::Schema FormatFileConfig::schema()
         QString(QLL("keep-as-is")),
         aliases
     );
-    Config::Schema schema;
+    Config::Schema schema(context);
     Config::Section general(QString(QLL("General")));
     general.addKey(QString(QLL("extensions")),
                    Config::Matchers() << QSharedPointer<const Config::ValueMatcher >(
@@ -533,11 +538,7 @@ Config::Schema FormatFileConfig::schema()
                              FormatScopeConditions::names(),
                              true
                          ),
-                     Config::Code(
-                         FormatScopeConditions::names(),
-                         QString::fromLatin1(defaultWrapChainAtText),
-                         true
-                     ));
+                     Config::Code(defaultWrapChainAtText));
     structure
         .addFollower(QString(QLL("wrapArgsAt")), QString(QLL("wrapChainAt")));
     structure.addKey(QString(QLL("wrapSignatureAt")),
@@ -546,11 +547,7 @@ Config::Schema FormatFileConfig::schema()
                              FormatScopeConditions::names(),
                              true
                          ),
-                     Config::Code(
-                         FormatScopeConditions::names(),
-                         QString::fromLatin1(defaultWrapSignatureAtText),
-                         true
-                     ));
+                     Config::Code(defaultWrapSignatureAtText));
     structure.addKey(QString(QLL("wrapArgsOver")),
                      Config::Matchers() << Config::Numbers::create(
                              1,
@@ -573,11 +570,7 @@ Config::Schema FormatFileConfig::schema()
                              &FormatConditionContext::setCountObjects,
                              Config::Condition::ResultNumber
                          ),
-                     Config::Code(
-                         FormatScopeConditions::names(),
-                         QString::fromLatin1(defaultWrapConditionsOverText),
-                         true
-                     ));
+                     Config::Code(defaultWrapConditionsOverText));
     structure.addKey(QString(QLL("wrapConditionsPer")),
                      QStringList() << QString(QLL("line"))
                          << QString(QLL("pair"))
@@ -603,11 +596,7 @@ Config::Schema FormatFileConfig::schema()
                              &FormatConditionContext::setCountObjects,
                              Config::Condition::ResultNumber
                          ),
-                     Config::Code(
-                         FormatScopeConditions::names(),
-                         QString::fromLatin1(defaultOperatorPaddingText),
-                         true
-                     ));
+                     Config::Code(defaultOperatorPaddingText));
     structure.addKey(QString(QLL("operatorPlacement")),
                      QStringList() << QString(QLL("start")) << QString(QLL("middle")),
                      QString(QLL("start")));
@@ -629,10 +618,7 @@ Config::Schema FormatFileConfig::schema()
                              FormatScopeConditions::names(),
                              FormatFileConfig::wrapMistakesWords()
                          )),
-                     Config::Code(
-                         FormatScopeConditions::names(),
-                         QString::fromLatin1(defaultWrapMistakesText)
-                     ));
+                     Config::Code(defaultWrapMistakesText));
     structure.addKey(QString(QLL("bodyBraces")),
                      Config::Matchers() << Config::Condition::create(
                          FormatScopeConditions::names()
@@ -670,10 +656,7 @@ Config::Schema FormatFileConfig::schema()
     Config::Section relations(QString(QLL("Relations")));
     relations.addKey(QString(QLL("thisMode")),
                      Config::Matchers() << Config::Condition::create(FormatScopeConditions::names()),
-                     Config::Code(
-                         FormatScopeConditions::names(),
-                         QString::fromLatin1(defaultThisModeText)
-                     ));
+                     Config::Code(defaultThisModeText));
     schema.addSection(relations);
     schema.addSection(structure);
     Config::Section replaceTypes(QString(QLL("Replace.types")));
@@ -730,11 +713,20 @@ Config::Schema FormatFileConfig::schema()
 }
 
 /*!
-    Builds the schema of the settings once, for resolve() to convert with,
-    while each load builds its own (see schema()).
+    Builds the schema of the settings once, which schema() answers and the
+    pieces that resolve() converts with ask (see buildSchema()).
 */
-Q_GLOBAL_STATIC_WITH_ARGS(Config::Schema, settingsSchema,
-                          (FormatFileConfig::schema()))
+Q_GLOBAL_STATIC_WITH_ARGS(Config::Schema, sharedSchema,
+                          (FormatFileConfig::buildSchema()))
+
+/*!
+    Answers the schema of the settings, which it builds at the first call and
+    every later call answers (see buildSchema()).
+*/
+const Config::Schema &FormatFileConfig::schema()
+{
+    return *sharedSchema();
+}
 
 /*!
     Resolves @a program, which a setting @a key (`<section>.<key>`) compiled,
@@ -749,7 +741,7 @@ QVariant FormatFileConfig::resolve(
         const QString & key, const QStringList & program,
         const Config::Evaluator::Context *context)
 {
-    return settingsSchema()->resolve(key, program, context);
+    return FormatFileConfig::schema().resolve(key, program, context);
 }
 
 /*!
@@ -778,7 +770,7 @@ QVariant FormatFileConfig::resolveCached(
     if (found) {
         return value;
     }
-    value = settingsSchema()->resolve(key, program, context);
+    value = FormatFileConfig::schema().resolve(key, program, context);
     this->m_cache.add(key, program, value);
     return value;
 }
@@ -849,7 +841,7 @@ static bool readProgram(const Config::Parser & parser, const QString & key,
 {
     const Config::Key schemaKey = parser.schema().key(key);
     const QString value = parser.value(key);
-    const QStringList defaultProgram = schemaKey.defaultProgram();
+    const QStringList defaultProgram = parser.schema().programFor(key);
     if ( ! defaultProgram.isEmpty()
         && value == schemaKey.defaultValue
     ) {
@@ -876,18 +868,6 @@ QString FormatFileConfig::defaultTypedefSuper()
 QString FormatFileConfig::defaultReplaceSuperSites()
 {
     return QString::fromLatin1(defaultReplaceSuperSitesText);
-}
-
-/*!
-    Answers the program of the default of @a key, which schema() compiled
-    when it built its keys (see Config::Code), for a setting that no
-    `.formatrc` set, and where a condition misses a value. Builds the schema
-    on the first call, and keeps it for these programs alone.
-*/
-QStringList FormatFileConfig::defaultProgram(const QString & key)
-{
-    static const Config::Schema schema = FormatFileConfig::schema();
-    return schema.key(key).defaultProgram();
 }
 
 /*!
@@ -1014,7 +994,7 @@ static bool readCountOrCondition(
 {
     const Config::Key schemaKey = parser.schema().key(key);
     const QString value = parser.value(key);
-    const QStringList defaultProgram = schemaKey.defaultProgram();
+    const QStringList defaultProgram = parser.schema().programFor(key);
     if ( ! defaultProgram.isEmpty()
         && value == schemaKey.defaultValue
     ) {
