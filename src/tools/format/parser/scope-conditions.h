@@ -40,6 +40,7 @@ public:
     QVariant resolveAt(
             const QString & key, const QStringList & program,
             int token);
+    QVariant settingAt(const QString & key, int token);
     int argumentCount(int token, int depth, int argument = 0) const;
     int conditionArgumentCount(int token, int depth, int argument = 0) const;
     void reserve(int token, int column);

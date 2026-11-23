@@ -24,7 +24,8 @@ public:
     inline const QList<Key > &keys() const { return m_keys; }
     void addKey(const QString & name, const Matchers & matchers,
                 const QString & defaultValue,
-                const QHash<QString, QString > & aliases = QHash<QString, QString >());
+                const QHash<QString, QString > & aliases = QHash<QString, QString >(),
+                Key::Setup setup = Q_NULLPTR, bool referenceThreshold = false);
     void addKey(const QString & name,
                 const QStringList & words,
                 const QString & defaultValue,

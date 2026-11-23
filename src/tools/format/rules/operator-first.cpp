@@ -212,7 +212,7 @@ static bool joinsClosingLine(FormatDocument *document, int index)
     ) + space + text;
     // Keeps the break when the joined line would exceed `wrapMax`.
     if (textWidth(joined)
-            > document->configAt(document->lineStart(line)).wrapMax
+            > wrapMaxAt(document, document->lineStart(line))
     ) {
         return false;
     }

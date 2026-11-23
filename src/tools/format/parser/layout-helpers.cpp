@@ -8,6 +8,8 @@
 #include "./scope-conditions.h"
 #include "../format-file-config.h"
 
+#include "config-numbers.h"
+
 /*!
     Builds the column the code wrap rules break a line at: the first
     `[Structure] wrapBegin` column, never past `[Structure] wrapMax`; a line
@@ -16,9 +18,22 @@
 int wrapColumn(const FormatDocument *document, int offset)
 {
     const FormatFileConfig & fileConfig = document->configAt(offset);
-    const int begin = fileConfig.wrapBegin.isEmpty()
-        ? fileConfig.wrapMax : fileConfig.wrapBegin.first();
-    return qMin(begin, fileConfig.wrapMax);
+    const int maximum = wrapMaxAt(document, offset);
+    int begin = fileConfig.wrapBegin.isEmpty()
+        ? maximum : fileConfig.wrapBegin.first();
+    const QString key = QString(QLL("structure.wrapBegin"));
+    const QString text = fileConfig.settings.values.value(key.toLower());
+    const int token = document->symbolAfter(offset);
+    if ( ! text.isEmpty() && Config::Numbers::parse(text).isEmpty()
+        && token < document->symbols().size()
+    ) {
+        FormatScopeConditions conditions(document);
+        const QVariant value = conditions.settingAt(key, token);
+        if (value.isValid()) {
+            begin = FormatFileConfig::countOf(value);
+        }
+    }
+    return qMin(begin, maximum);
 }
 
 /*!
@@ -27,7 +42,21 @@ int wrapColumn(const FormatDocument *document, int offset)
 */
 int wrapMaxAt(const FormatDocument *document, int offset)
 {
-    return qMax(1, document->configAt(offset).wrapMax);
+    const FormatFileConfig &config = document->configAt(offset);
+    int maximum = config.wrapMax;
+    const QString key = QString(QLL("structure.wrapMax"));
+    const QString text = config.settings.values.value(key.toLower());
+    const int token = document->symbolAfter(offset);
+    if ( ! text.isEmpty() && Config::Numbers::parse(text).isEmpty()
+        && token < document->symbols().size()
+    ) {
+        FormatScopeConditions conditions(document);
+        const QVariant value = conditions.settingAt(key, token);
+        if (value.isValid()) {
+            maximum = FormatFileConfig::countOf(value);
+        }
+    }
+    return qMax(1, maximum);
 }
 
 /*!
@@ -511,7 +540,7 @@ QList<QByteArray > comparisonLines(
         document, first, last, &comparisonRank, 0, Q_NULLPTR
     );
     if (column + textWidth(text)
-        <= document->configAt(document->symbols().at(first).from).wrapMax
+        <= wrapMaxAt(document, document->symbols().at(first).from)
         || operators.isEmpty()
     ) {
         return QList<QByteArray >() << text;

@@ -88,7 +88,7 @@ void FormatConditionWrapRule::run(FormatDocument *document) const
         const QList<int > operators = layout.operators(open, close);
         if (operators.isEmpty()) {
             const bool isLong = document->symbolEndLine(close) == line
-                && textWidth(document->lineText(line)) > fileConfig.wrapMax;
+                && textWidth(document->lineText(line)) > wrapMaxAt(document, document->lineStart(line));
             const QByteArray text = isLong
                 ? layout.layoutPlain(open, close) : QByteArray();
             if ( ! text.isEmpty()) {
@@ -116,7 +116,7 @@ void FormatConditionWrapRule::run(FormatDocument *document) const
         } else if ( ! this->isSplitTooLong(document, layout, open, close)) {
             continue;
         } else if (document->agentMode()) {
-            const int limit = fileConfig.wrapMax;
+            const int limit = wrapMaxAt(document, document->lineStart(line));
             document->request(
                 document->symbols().at(i).from,
                 "condition-wrap",
@@ -162,8 +162,7 @@ bool FormatConditionWrapRule::isSplitTooLong(
         const FormatDocument *document, const FormatConditionLayout & layout,
         int open, int close) const
 {
-    const int max = document->configAt(document->symbols().at(open).from)
-        .wrapMax;
+    const int max = wrapMaxAt(document, document->symbols().at(open).from);
     bool tooLong = false;
     for (int l = document->symbolLine(open); l <= document->symbolEndLine(close); ++l) {
         tooLong = tooLong || textWidth(document->lineText(l)) > max;

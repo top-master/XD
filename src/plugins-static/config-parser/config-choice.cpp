@@ -2,6 +2,8 @@
 // SPDX-License-Identifier: Apache-2.0
 
 #include "./config-choice.h"
+#include "./config-escape.h"
+#include "./config-name.h"
 
 
 /*!
@@ -25,6 +27,12 @@ Config::Choice::Choice(const QStringList &names, const QStringList &values)
 {
 }
 
+QStringList Config::Choice::enumKeys() const
+{
+    return this->m_values.isEmpty() ? Evaluator::CompileContext::anyEnumKeys()
+                                    : this->m_values;
+}
+
 /*!
     Validates @a value and preserves it in @a matched.
 */
@@ -37,6 +45,33 @@ bool Config::Choice::match(const QString &value, QString *matched) const
         return false;
     }
     *matched = value.trimmed();
+    return true;
+}
+
+bool Config::Choice::matchLiteral(const QString & value, QString *matched) const
+{
+    *matched = QString();
+    const QString text = value.trimmed();
+    QString literal;
+    QString error;
+    if (Config::Escape::isQuoted(text)) {
+        if ( ! Config::Escape::unquote(text, &literal, &error)) {
+            return false;
+        }
+    } else if (this->m_values.isEmpty()) {
+        if ( ! Config::Name().match(text, &literal)) {
+            return false;
+        }
+    } else {
+        literal = text;
+    }
+    bool number = false;
+    const double numeric = literal.toDouble(&number);
+    const QVariant converted = this->convert(number ? QVariant(numeric) : QVariant(literal));
+    if ( ! converted.isValid()) {
+        return false;
+    }
+    *matched = text;
     return true;
 }
 

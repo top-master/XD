@@ -33,13 +33,16 @@ Config::Section::Section(const QString & name)
 */
 void Config::Section::addKey(
         const QString & name, const Config::Matchers & matchers,
-        const QString & defaultValue, const QHash<QString, QString > & aliases)
+        const QString & defaultValue, const QHash<QString, QString > & aliases,
+        Config::Key::Setup setup, bool referenceThreshold)
 {
     Config::Key key;
     key.name = (this->m_name + QLatin1Char('.') + name).toLower();
     key.displayName = name;
     key.matchers = matchers;
     key.defaultValue = defaultValue;
+    key.setup = setup;
+    key.referenceThreshold = referenceThreshold;
     QHash<QString, QString >::const_iterator alias = aliases.constBegin();
     for (; alias != aliases.constEnd(); ++alias) {
         key.aliases.insert(alias.key().toLower(), alias.value());

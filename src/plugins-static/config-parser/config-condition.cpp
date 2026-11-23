@@ -954,6 +954,11 @@ QVariant Config::Condition::settingValue(
     known one in case alone matches too: the tool that reads the setting
     reports it, as its own mode of name mismatches says (see NameMismatch).
 */
+bool Config::Condition::matchLiteral(const QString &, QString *) const
+{
+    return false;
+}
+
 bool Config::Condition::match(const QString & value, QString *matched) const
 {
     QString normalized = value;

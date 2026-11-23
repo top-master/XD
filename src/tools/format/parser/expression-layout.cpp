@@ -671,11 +671,11 @@ QByteArray FormatExpressionLayout::layoutList(
             &colon
         )
         && question > firstItem.first && column + textWidth(head) + textWidth(
-                this->oneLine(
-                    firstItem.first,
-                    question - 1
-                )
-            ) <= wrap
+            this->oneLine(
+                firstItem.first,
+                question - 1
+            )
+        ) <= wrap
     ) {
         m_paddingLevel += extraPad;
         if (items.size() > 1) {

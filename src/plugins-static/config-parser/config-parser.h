@@ -52,6 +52,8 @@ public:
                     QString *error);
     bool assign(const QString & assignment, QString *error);
     QString value(const QString & name) const;
+    QString rawValue(const QString & name) const;
+    const Evaluator::Context *setContext(const Evaluator::Context *context) const;
     inline bool hasValue(const QString &name) const
     { return m_settings.values.contains(name.toLower()); }
     inline const Schema &schema() const { return m_schema; }
@@ -73,10 +75,11 @@ private:
                   const QString & origin, QString *error);
     bool set(const QString & name, const QString & shown, const QString & value,
              QString *error);
-    static bool matchValue(const Key & key, const QString & value,
-                           QString *matched);
+    bool matchValue(const Key & key, const QString & value,
+                    QString *matched) const;
 
     Schema m_schema;
+    mutable const Evaluator::Context *m_context;
 };
 
 class LayeredParser : public Parser

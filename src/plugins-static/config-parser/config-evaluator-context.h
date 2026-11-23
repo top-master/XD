@@ -76,6 +76,7 @@ protected:
 
 private:
     friend class ::Config::Condition;
+    friend class ::Config::Schema;
     friend class ::ExpressionCompiler;
     mutable int m_mismatchMode;
     mutable CompileRes m_lastCompile;

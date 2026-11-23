@@ -18,6 +18,7 @@ public:
 
     bool match(const QString & value, QString *matched) const Q_DECL_OVERRIDE;
     QString describe() const Q_DECL_OVERRIDE;
+    QStringList enumKeys() const Q_DECL_OVERRIDE;
 
 private:
     QString m_word;

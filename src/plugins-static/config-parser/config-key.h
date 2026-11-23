@@ -11,6 +11,8 @@
 
 namespace Config {
 
+namespace Scopes { class Scope; }
+
 /*!
     @internal
 
@@ -29,9 +31,19 @@ namespace Config {
 class Key
 {
 public:
-    inline Key() : open(false) {}
+    typedef void (*Setup)(Scopes::Scope *scope);
+    inline Key() : setup(Q_NULLPTR), referenceThreshold(false), open(false) {}
 
     inline bool isNull() const { return name.isEmpty(); }
+    inline bool allowsCode() const
+    {
+        for (int i = 0; i < matchers.size(); ++i) {
+            if ( ! matchers.at(i)->allowsCode()) {
+                return false;
+            }
+        }
+        return true;
+    }
 
     QString name;
     /// Gives the key's spelling within its section, as the schema declared it.
@@ -39,6 +51,8 @@ public:
     Matchers matchers;
     QString defaultValue;
     QHash<QString, QString > aliases;
+    Setup setup;
+    bool referenceThreshold;
     /// Lets the key follow the key it extends, `<section>.<key>` in lower
     /// case, until it is overridden; empty for a key of its own.
     QString extends;

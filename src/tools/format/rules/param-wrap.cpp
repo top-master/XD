@@ -45,7 +45,7 @@ void FormatParamWrapRule::run(FormatDocument *document) const
     for (int line = 1; line <= document->lineCount(); ++line) {
         const FormatFileConfig &fileConfig =
             document->configAt(document->lineStart(line));
-        const int limit = fileConfig.wrapMax;
+        const int limit = wrapMaxAt(document, document->lineStart(line));
         const int first = document->firstSymbolOfLine(line);
         // Leave empty lines, directives, and lines within the width alone.
         if (first < 0 || document->isDirectiveLine(line)
@@ -175,7 +175,7 @@ void FormatParamWrapRule::regroup(
     for (int i = 1; i < document->symbols().size(); ++i) {
         const FormatFileConfig &fileConfig =
             document->configAt(document->symbols().at(i).from);
-        const int limit = fileConfig.wrapMax;
+        const int limit = wrapMaxAt(document, document->symbols().at(i).from);
         const int close = document->match(i);
         // Leave ineligible lists and lists containing comments alone.
         if (document->token(i) != LPAREN || close <= i + 1

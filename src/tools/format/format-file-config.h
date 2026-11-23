@@ -79,6 +79,8 @@ public:
     QVariant resolveCached(
             const QString & key, const QStringList & program,
             const Config::Evaluator::Context *context) const;
+    QVariant resolveSetting(
+            const QString & key, const Config::Evaluator::Context *context) const;
     static QString defaultTypedefSuper();
     static QString defaultReplaceSuperSites();
     static QStringList defaultThisMode();

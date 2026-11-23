@@ -468,7 +468,7 @@ void FormatArgsWrapRule::run(FormatDocument *document) const
         ) {
             // Asks the agent to put the arguments that belong together on one
             // line (see FormatAgentGuides for the prompt it gets).
-            const int wrapMax = qMax(1, fileConfig.wrapMax);
+            const int wrapMax = wrapMaxAt(document, from);
             document->request(
                 from,
                 "args-wrap",

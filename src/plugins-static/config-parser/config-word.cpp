@@ -28,6 +28,11 @@ QSharedPointer<const Config::ValueMatcher > Config::Word::create(
     return QSharedPointer<const Config::ValueMatcher >(new Config::Word(word));
 }
 
+QStringList Config::Word::enumKeys() const
+{
+    return QStringList() << this->m_word;
+}
+
 /*!
     Matches @a value when it is the word, in any case.
 */

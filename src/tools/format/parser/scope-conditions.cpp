@@ -916,6 +916,17 @@ QVariant FormatScopeConditions::resolveAt(
     return resolveOf(key, program, &context);
 }
 
+QVariant FormatScopeConditions::settingAt(const QString & key, int token)
+{
+    const ArgumentContext context(
+        this, token, this->argumentTarget(token), false, Q_NULLPTR, Q_NULLPTR
+    );
+    const FormatFileConfig &config = m_document->configAt(
+        m_document->symbols().at(token).from
+    );
+    return config.resolveSetting(key, &context);
+}
+
 int FormatScopeConditions::operatorExtraPad(int token)
 {
     const FormatFileConfig &config = m_document->configAt(

@@ -34,6 +34,7 @@ public:
             const QStringList & names, bool takesPercents = false,
             Scopes::Setup setup = Q_NULLPTR, Result result = ResultHolds);
     bool match(const QString & value, QString *matched) const Q_DECL_OVERRIDE;
+    bool matchLiteral(const QString & value, QString *matched) const Q_DECL_OVERRIDE;
     QString describe() const Q_DECL_OVERRIDE;
     QVariant convert(const QVariant & resolved) const Q_DECL_OVERRIDE;
     QVariant settingValue(const QString & value, const Evaluator::Context *context) const Q_DECL_OVERRIDE;

@@ -19,6 +19,7 @@
 
 #include <QtCore/QFileInfo>
 #include <QtCore/QRegularExpression>
+#include <QtCore/qfunction.h>
 
 #include <limits>
 
@@ -490,6 +491,9 @@ Config::Schema FormatFileConfig::schema()
         aliases
     );
     Config::Schema schema;
+    schema.setNames(FormatScopeConditions::names()
+        + FormatFileConfig::superConditionNames()
+        + FormatReplaceTypesContext().names());
     Config::Section general(QString(QLL("General")));
     general.addKey(QString(QLL("extensions")),
                    Config::Matchers() << QSharedPointer<const Config::ValueMatcher >(
@@ -506,8 +510,7 @@ Config::Schema FormatFileConfig::schema()
                          )),
                      FormatFileConfig::defaultTypedefSuper());
     structure.addKey(QString(QLL("replaceSuperSites")),
-                     Config::Matchers() << Config::Condition::create(
-                         FormatFileConfig::superConditionNames()),
+                     Config::Matchers() << Config::Boolean::create(),
                      FormatFileConfig::defaultReplaceSuperSites());
     structure.addKey(QString(QLL("wrapBegin")),
                      Config::Matchers() << Config::Numbers::create(20, 200), QString(QLL("75")));
@@ -518,44 +521,30 @@ Config::Schema FormatFileConfig::schema()
                          1
                      ), QString(QLL("80")));
     structure.addKey(QString(QLL("wrapChainAt")),
-                     Config::Matchers()
-                         << Config::Condition::create(
-                             FormatScopeConditions::names(),
-                             true, Q_NULLPTR, Config::Condition::ResultThreshold
-                         ),
-                     QString::fromLatin1(defaultWrapChainAtText));
+                     Config::Matchers() << Config::Boolean::create(),
+                     QString::fromLatin1(defaultWrapChainAtText),
+                     QHash<QString, QString >(), Q_NULLPTR, true);
     structure
         .addFollower(QString(QLL("wrapArgsAt")), QString(QLL("wrapChainAt")));
     structure.addKey(QString(QLL("wrapSignatureAt")),
-                     Config::Matchers()
-                         << Config::Condition::create(
-                             FormatScopeConditions::names(),
-                             true, Q_NULLPTR, Config::Condition::ResultThreshold
-                         ),
-                     QString::fromLatin1(defaultWrapSignatureAtText));
+                     Config::Matchers() << Config::Boolean::create(),
+                     QString::fromLatin1(defaultWrapSignatureAtText),
+                     QHash<QString, QString >(), Q_NULLPTR, true);
     structure.addKey(QString(QLL("wrapArgsOver")),
                      Config::Matchers() << Config::Numbers::create(
                          1,
                          std::numeric_limits<qint64 >::max(),
                          1)
-                     << Config::Condition::create(
-                             FormatScopeConditions::names(),
-                             true,
-                             &FormatConditionContext::setCountObjects
-                         ),
-                     QString(QLL("3")));
+                     << Config::Boolean::create(),
+                     QString(QLL("3")), QHash<QString, QString >(),
+                     &FormatConditionContext::setCountObjects);
     structure.addKey(QString(QLL("wrapConditionsOver")),
                      Config::Matchers() << Config::Numbers::create(
-                         1,
+                         0,
                          std::numeric_limits<qint64 >::max(),
-                         1)
-                     << Config::Condition::create(
-                             FormatScopeConditions::names(),
-                             true,
-                             &FormatConditionContext::setCountObjects,
-                             Config::Condition::ResultNumber
-                         ),
-                     QString::fromLatin1(defaultWrapConditionsOverText));
+                         1),
+                     QString::fromLatin1(defaultWrapConditionsOverText),
+                     QHash<QString, QString >(), &FormatConditionContext::setCountObjects);
     structure.addKey(QString(QLL("wrapConditionsPer")),
                      QStringList() << QString(QLL("line"))
                          << QString(QLL("pair"))
@@ -564,26 +553,17 @@ Config::Schema FormatFileConfig::schema()
                      QString(QLL("pair-bundle")));
     structure.addKey(QString(QLL("joinArgs")),
                      Config::Matchers() << Config::Numbers::create(
-                         1,
+                         0,
                          std::numeric_limits<qint64 >::max(),
-                         1)
-                     << Config::Condition::create(
-                             FormatScopeConditions::names(),
-                             true,
-                             &FormatConditionContext::setCountObjects,
-                             Config::Condition::ResultNumber
-                         ),
-                     QString(QLL("1")));
+                         1),
+                     QString(QLL("1")), QHash<QString, QString >(),
+                     &FormatConditionContext::setCountObjects);
     structure.addKey(QString(QLL("operatorExtraPad")),
                      Config::Matchers() << Config::Numbers::create(
                          0,
-                         std::numeric_limits<int >::max() / 4)
-                     << Config::Condition::create(
-                             FormatScopeConditions::names(), true,
-                             &FormatConditionContext::setCountObjects,
-                             Config::Condition::ResultNumber
-                         ),
-                     QString(QLL("0")));
+                         std::numeric_limits<qint64 >::max(), 1),
+                     QString(QLL("0")), QHash<QString, QString >(),
+                     &FormatConditionContext::setCountObjects);
     structure.addKey(QString(QLL("operatorPlacement")),
                      QStringList() << QString(QLL("begining")) << QString(QLL("middle")),
                      QString(QLL("begining")));
@@ -607,9 +587,7 @@ Config::Schema FormatFileConfig::schema()
                          )),
                      QString::fromLatin1(defaultWrapMistakesText));
     structure.addKey(QString(QLL("bodyBraces")),
-                     Config::Matchers() << Config::Condition::create(
-                         FormatScopeConditions::names()
-                     ),
+                     Config::Matchers() << Config::Boolean::create(),
                      QString(QLL("true")));
     Config::Section comments(QString(QLL("Comments")));
     comments.extendPrefixed(structure, QString(QLL("wrap")));
@@ -642,14 +620,13 @@ Config::Schema FormatFileConfig::schema()
     schema.addSection(comments);
     Config::Section relations(QString(QLL("Relations")));
     relations.addKey(QString(QLL("thisMode")),
-                     Config::Matchers() << Config::Condition::create(FormatScopeConditions::names()),
+                     Config::Matchers() << Config::Boolean::create(),
                      QString::fromLatin1(defaultThisModeText));
     schema.addSection(relations);
     schema.addSection(structure);
     Config::Section replaceTypes(QString(QLL("Replace.types")));
     replaceTypes.addKey(QString(QLL("target")),
-                        Config::Matchers() << Config::Condition::create(
-                            FormatReplaceTypesContext().names()),
+                        Config::Matchers() << Config::Boolean::create(),
                         QString(QLL("isNew")));
     replaceTypes.addKey(QString(QLL("action")),
                         QStringList() << QString(QLL("replace")) << QString(QLL("report")),
@@ -751,6 +728,28 @@ QVariant FormatFileConfig::resolveCached(
     value = settingsSchema()->resolve(key, program, context);
     this->m_cache.add(key, program, value);
     return value;
+}
+
+/*!
+    Resolves @a key from these settings at @a context.
+*/
+QVariant FormatFileConfig::resolveSetting(
+        const QString & key, const Config::Evaluator::Context *context) const
+{
+    const QRef<Config::Schema > schema = settingsSchema();
+    const Config::Key field = schema->key(key);
+    const QString text = settings.value(*schema, key);
+    for (int i = 0; i < field.matchers.size(); ++i) {
+        QString matched;
+        if (field.matchers.at(i)->matchLiteral(text, &matched)) {
+            return field.matchers.at(i)->settingValue(matched, context);
+        }
+    }
+    const QStringList program = schema->compile(key, text, context);
+    if ( ! context->lastCompiled()) {
+        return QVariant();
+    }
+    return this->resolveCached(key, program, context);
 }
 
 /*!
@@ -999,7 +998,7 @@ static bool readCountOrCondition(
         QStringList *program,
         Config::NameMismatch mismatch, QString *error)
 {
-    const QString value = parser.value(key);
+    const QString value = parser.rawValue(key);
     bool isNumber = false;
     const qint64 number = value.toLongLong(&isNumber);
     if (isNumber) {
@@ -1089,6 +1088,17 @@ static bool checkCondition(QString *text, const QStringList & names,
     return true;
 }
 
+class FormatSettingsContext : public FormatConditionContext
+{
+public:
+    inline explicit FormatSettingsContext(const FormatFileConfig *config)
+        : m_config(config) {}
+    inline const FormatFileConfig *fileConfig() const Q_DECL_OVERRIDE_IL
+    { return m_config; }
+private:
+    const FormatFileConfig *m_config;
+};
+
 /*!
     Converts the validated values in @a parser to @a fileConfig. The
     conditions handle a name that differs from a known one in case alone as
@@ -1099,6 +1109,10 @@ bool FormatFileConfig::fromParser(
         const Config::Parser &parser,
         FormatFileConfig *fileConfig, QString *error)
 {
+    fileConfig->settings = parser.settings();
+    const FormatSettingsContext settingsContext(fileConfig);
+    const Config::Evaluator::Context *previousContext = parser.setContext(&settingsContext);
+    Q_DEFER { parser.setContext(previousContext); };
     const QStringList words = FormatFileConfig::wrapMistakesWords();
     const Config::NameMismatch mismatch =
         Config::Condition::nameMismatch(parser.value(QString(QLL("code.nameMismatch"))));
@@ -1110,21 +1124,21 @@ bool FormatFileConfig::fromParser(
         QString(QLL("code.compilers"))
     ));
     fileConfig->inlineOverride = FormatFileConfig::inlineMarker(
-        parser.value(QString(QLL("lint.inlineOverride"))),
+        parser.rawValue(QString(QLL("lint.inlineOverride"))),
         *fileConfig
     );
     fileConfig->byRefVariable = FormatFileConfig::lintLevel(
-        parser.value(QString(QLL("lint.byRefVariable"))),
+        parser.rawValue(QString(QLL("lint.byRefVariable"))),
         *fileConfig
     );
     fileConfig->extensions = parser.value(QString(QLL("general.extensions")));
-    fileConfig->typedefSuper = parser.value(
+    fileConfig->typedefSuper = parser.rawValue(
         QString(QLL("structure.typedefSuper"))
     );
-    fileConfig->replaceSuperSites = parser.value(
+    fileConfig->replaceSuperSites = parser.rawValue(
         QString(QLL("structure.replaceSuperSites"))
     );
-    fileConfig->replaceTypesTarget = parser.value(
+    fileConfig->replaceTypesTarget = parser.rawValue(
         QString(QLL("replace.types.target"))
     );
 
@@ -1178,7 +1192,6 @@ bool FormatFileConfig::fromParser(
     );
     fileConfig->replaceTypes = FormatFileConfig::expandPrevious(
         parser.openEntries(QString(QLL("replace.types"))));
-    fileConfig->settings = parser.settings();
     const Config::Schema &schema = parser.schema();
     const QString refSuffix = QString(QLL("types.refSuffix"));
     const QString moveSuffix = QString(QLL("types.moveSuffix"));
@@ -1251,38 +1264,38 @@ bool FormatFileConfig::fromParser(
     fileConfig->docTagSign = parser.value(QString(QLL("comments.docTagSign"))) == QLL("\\")
         ? '\\' : '@';
     return compileCondition(
-        parser.value(QString(QLL("structure.bodyBraces"))),
+        parser.rawValue(QString(QLL("structure.bodyBraces"))),
         &fileConfig->bodyBraces,
         false,
         mismatch,
         error
     )
         && compileCondition(
-            parser.value(QString(QLL("relations.thisMode"))),
+            parser.rawValue(QString(QLL("relations.thisMode"))),
             &fileConfig->thisMode,
             false,
             mismatch,
             error)
         && compileCondition(
-            parser.value(QString(QLL("structure.wrapChainAt"))),
+            parser.rawValue(QString(QLL("structure.wrapChainAt"))),
             &fileConfig->wrapChainAt,
             true,
             mismatch,
             error)
         && compileCondition(
-            parser.value(QString(QLL("structure.wrapArgsAt"))),
+            parser.rawValue(QString(QLL("structure.wrapArgsAt"))),
             &fileConfig->wrapArgsAt,
             true,
             mismatch,
             error)
         && compileCondition(
-            parser.value(QString(QLL("structure.wrapSignatureAt"))),
+            parser.rawValue(QString(QLL("structure.wrapSignatureAt"))),
             &fileConfig->wrapSignatureAt,
             true,
             mismatch,
             error)
         && compileCondition(
-            parser.value(QString(QLL("structure.wrapMistakes"))),
+            parser.rawValue(QString(QLL("structure.wrapMistakes"))),
             &fileConfig->wrapMistakes,
             false,
             mismatch,

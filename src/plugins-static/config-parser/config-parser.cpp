@@ -3,6 +3,7 @@
 
 #include "./config-parser.h"
 
+#include "./config-condition.h"
 #include "./config-escape.h"
 #include "./config-regexp.h"
 #include "./config-scanner.h"
@@ -36,7 +37,7 @@
     and each key that extends another one following that key.
 */
 Config::Parser::Parser(const Config::Schema & schema)
-    : m_schema(schema)
+    : m_schema(schema), m_context(Q_NULLPTR)
 {
     for (int s = 0; s < schema.sections().size(); ++s) {
         const QList<Config::Key > & keys = schema.sections().at(s).keys();
@@ -653,7 +654,34 @@ bool Config::Parser::assign(const QString & assignment, QString *error)
 */
 QString Config::Parser::value(const QString & name) const
 {
-    return this->m_settings.value(this->m_schema, name);
+    const Config::Evaluator::Context empty(false);
+    const Config::Evaluator::Context *context = m_context ? m_context : &empty;
+    const QString value = this->m_settings.value(this->m_schema, name);
+    const Config::Key key = this->m_schema.key(name);
+    QString matched;
+    for (int i = 0; i < key.matchers.size(); ++i) {
+        if (key.matchers.at(i)->matchLiteral(value, &matched)) {
+            return value;
+        }
+    }
+    const QVariant resolved = this->m_schema.eval(name, value, context);
+    if (context->lastResolvePassed()) {
+        return resolved.toString();
+    }
+    return context->hasPlace() ? key.defaultValue : value;
+}
+
+QString Config::Parser::rawValue(const QString & name) const
+{
+    return m_settings.value(m_schema, name);
+}
+
+const Config::Evaluator::Context *Config::Parser::setContext(
+        const Config::Evaluator::Context *context) const
+{
+    const Config::Evaluator::Context *previous = m_context;
+    m_context = context;
+    return previous;
 }
 
 /*!
@@ -726,7 +754,7 @@ bool Config::Parser::set(
         return false;
     }
     QString matched;
-    if (Config::Parser::matchValue(key, value, &matched)) {
+    if (this->matchValue(key, value, &matched)) {
         QString section;
         if (key.open) {
             section = this->m_schema.sectionOf(name).name().toLower();
@@ -737,7 +765,10 @@ bool Config::Parser::set(
     QStringList choices;
     QString reason;
     for (int i = 0; i < key.matchers.size(); ++i) {
-        choices << key.matchers.at(i)->describe();
+        const QString description = key.matchers.at(i)->describe();
+        if ( ! description.isEmpty()) {
+            choices << description;
+        }
         if (reason.isEmpty()) {
             reason = key.matchers.at(i)->explain(value);
         }
@@ -759,7 +790,7 @@ bool Config::Parser::set(
     and may be no `regexp/` itself).
 */
 bool Config::Parser::matchValue(const Config::Key & key, const QString & value,
-                                QString *matched)
+                                QString *matched) const
 {
     const QString resolved = key.aliases.value(value.toLower(), value);
     QString head;
@@ -779,8 +810,8 @@ bool Config::Parser::matchValue(const Config::Key & key, const QString & value,
                 &nestedFallback,
                 &nested
             )
-            || ! Config::Parser::matchValue(key, head, &matchedHead)
-            || ! Config::Parser::matchValue(
+            || ! this->matchValue(key, head, &matchedHead)
+            || ! this->matchValue(
                 key,
                 fallback,
                 &matchedFallback
@@ -796,8 +827,35 @@ bool Config::Parser::matchValue(const Config::Key & key, const QString & value,
         return true;
     }
     for (int i = 0; i < key.matchers.size(); ++i) {
-        if (key.matchers.at(i)->match(resolved, matched)) {
+        if (key.allowsCode() ? key.matchers.at(i)->match(resolved, matched)
+                             : key.matchers.at(i)->matchLiteral(resolved, matched)) {
             return true;
+        }
+    }
+    if ( ! key.allowsCode()) {
+        *matched = QString();
+        return false;
+    }
+    const Config::Evaluator::Context context(false);
+    const QStringList program = this->m_schema.compile(key.name, resolved, &context);
+    if (context.lastCompiled()) {
+        const QVariant result = Config::Condition::resolve(program, QSet<QString >(), &context);
+        if (context.lastResolvePassed()) {
+            for (int i = 0; i < key.matchers.size(); ++i) {
+                if (key.matchers.at(i)->convert(result).isValid()) {
+                    *matched = resolved;
+                    return true;
+                }
+            }
+        } else {
+            for (int i = 0; i < program.size(); ++i) {
+                if (program.at(i).startsWith(QLL("r:"))
+                    || program.at(i).startsWith(QLL("f:"))
+                ) {
+                    *matched = resolved;
+                    return true;
+                }
+            }
         }
     }
     *matched = QString();

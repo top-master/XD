@@ -86,6 +86,84 @@ Config::Key Config::Schema::key(const QString & name) const
 }
 
 /*!
+    Compiles @a text for @a name, using its matchers' choice words and the
+    names at @a context.
+*/
+QStringList Config::Schema::compile(
+        const QString & name, const QString & text,
+        const Evaluator::CompileContext *context) const
+{
+    Q_ASSERT(context);
+    const Config::Key found = this->key(name);
+    if ( ! found.allowsCode()) {
+        context->m_lastCompile = CompileRes();
+        context->m_lastCE = QString(QLL("code is forbidden for %1")).arg(name);
+        return QStringList();
+    }
+    QSharedPointer<Scopes::Scope > scope;
+    if (found.setup) {
+        scope = Scopes::push();
+        found.setup(scope.data());
+    }
+    QStringList words;
+    for (int i = 0; i < found.matchers.size(); ++i) {
+        words += found.matchers.at(i)->enumKeys();
+    }
+    const Evaluator::CompileContext compiler(
+        context->names() + m_names,
+        words.isEmpty() ? Q_NULLPTR : &words, context->mismatchMode()
+    );
+    const QStringList program = Condition::compile(text, &compiler, true);
+    context->m_lastCompile = compiler.m_lastCompile;
+    context->m_lastCE = compiler.m_lastCE;
+    return program;
+}
+
+/*!
+    Compiles and resolves the setting @a name's expression @a text at
+    @a context, converting the result as the setting's matchers require.
+*/
+QVariant Config::Schema::eval(
+        const QString & name, const QString & text,
+        const Evaluator::Context *context) const
+{
+    Q_ASSERT(context);
+    const QStringList program = this->compile(name, text, context);
+    if ( ! context->lastCompiled()) {
+        context->m_lastResolvePassed = false;
+        context->m_lastError = context->lastErrorForCompile();
+        return QVariant();
+    }
+    return this->resolve(name, program, context);
+}
+
+/*!
+    Resolves @a text when another setting references @a name at @a context.
+*/
+QVariant Config::Schema::reference(
+        const QString & name, const QString & text,
+        const Evaluator::Context *context) const
+{
+    if ( ! this->key(name).referenceThreshold) {
+        return this->eval(name, text, context);
+    }
+    const QStringList program = this->compile(name, text, context);
+    if ( ! context->lastCompiled()) {
+        return QVariant();
+    }
+    for (int percent = 0; percent <= 100; ++percent) {
+        const QVariant holds = context->resolveAtPercent(program, percent);
+        if ( ! holds.isValid()) {
+            return QVariant();
+        }
+        if (holds.toBool()) {
+            return QVariant(QString(QString::number(percent - 1) + QLatin1Char('%')));
+        }
+    }
+    return QString(QLL("100%"));
+}
+
+/*!
     Resolves the setting @a name's compiled @a program at @a context and
     converts its result. The context records whether resolution and
     conversion passed.
@@ -101,8 +179,13 @@ QVariant Config::Schema::resolve(
         context->m_lastError = QString(QLL("unknown setting %1")).arg(name);
         return QVariant();
     }
-    const CacheScope scope(found.name);
-    Q_UNUSED(scope);
+    QSharedPointer<Scopes::Scope > scope;
+    if (found.setup) {
+        scope = Scopes::push();
+        found.setup(scope.data());
+    }
+    const CacheScope cacheScope(found.name);
+    Q_UNUSED(cacheScope);
     const QVariant resolved = Condition::resolve(program, QSet<QString >(), context);
     if ( ! context->lastResolvePassed()) {
         return QVariant();

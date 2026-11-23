@@ -149,10 +149,14 @@ QVariant Config::CfgObject::dynamicValue(const QByteArray & name) const
     }
     active->insert(keyName);
     Q_DEFER { active->remove(keyName); };
+    if (key.referenceThreshold) {
+        return m_schema.reference(keyName, value, place);
+    }
     for (int i = 0; i < key.matchers.size(); ++i) {
         QString matched;
         const Config::ValueMatcher *matcher = key.matchers.at(i).data();
-        if (matcher->match(value, &matched)) {
+        if (key.allowsCode() ? matcher->match(value, &matched)
+                             : matcher->matchLiteral(value, &matched)) {
             const QVariant resolved = matcher->settingValue(matched, place);
             if ( ! resolved.isValid()) {
                 return QVariant();
@@ -167,7 +171,7 @@ QVariant Config::CfgObject::dynamicValue(const QByteArray & name) const
             return resolved;
         }
     }
-    return QVariant();
+    return m_schema.reference(keyName, value, place);
 }
 
 /*!

@@ -16,8 +16,10 @@ class Choice : public ValueMatcher
 public:
     Choice(const QStringList &names, const QStringList &values);
     bool match(const QString &value, QString *matched) const Q_DECL_OVERRIDE;
+    bool matchLiteral(const QString & value, QString *matched) const Q_DECL_OVERRIDE;
     QString describe() const Q_DECL_OVERRIDE;
     QString explain(const QString & value) const Q_DECL_OVERRIDE;
+    QStringList enumKeys() const Q_DECL_OVERRIDE;
     QVariant convert(const QVariant & resolved) const Q_DECL_OVERRIDE;
     QVariant settingValue(const QString & value, const Evaluator::Context *context) const Q_DECL_OVERRIDE;
     static QVariant resolve(const QString & expression,

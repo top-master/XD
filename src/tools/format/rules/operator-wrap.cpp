@@ -114,7 +114,7 @@ void FormatOperatorWrapRule::run(FormatDocument *document) const
         const FormatFileConfig &config = document->configAt(
             document->lineStart(line)
         );
-        const int limit = config.wrapMax;
+        const int limit = wrapMaxAt(document, document->lineStart(line));
         int first = -1;
         int last = -1;
         if (document->isDirectiveLine(line)
