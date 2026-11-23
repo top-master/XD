@@ -11,6 +11,8 @@
 
 namespace Config {
 
+class Schema;
+
 /*!
     @class Config::Settings
     @internal
@@ -23,6 +25,8 @@ namespace Config {
 class Settings
 {
 public:
+    QString value(const Schema & schema, const QString & name) const;
+
     /*!
         Gives each setting (`<section>.<key>`, lower-cased) the value that
         the latest file or assignment set.

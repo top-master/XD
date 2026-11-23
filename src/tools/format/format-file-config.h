@@ -109,6 +109,7 @@ public:
     int joinArgs;
     QStringList joinArgsCondition;
     bool operatorsInMiddle;
+    Config::Settings settings;
     int operatorExtraPad;
     QStringList operatorExtraPadCondition;
     QString wrapSubChain;

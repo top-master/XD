@@ -19,6 +19,7 @@ public:
     QString describe() const Q_DECL_OVERRIDE;
     QString explain(const QString & value) const Q_DECL_OVERRIDE;
     QVariant convert(const QVariant & resolved) const Q_DECL_OVERRIDE;
+    QVariant settingValue(const QString & value, const Evaluator::Context *context) const Q_DECL_OVERRIDE;
     static QVariant resolve(const QString & expression,
                             const Evaluator::Context *context);
 

@@ -102,6 +102,16 @@ QVariant Config::Numbers::convert(const QVariant & resolved) const
 }
 
 /*!
+    Builds a number, or the original list when the setting holds several.
+*/
+QVariant Config::Numbers::settingValue(
+        const QString & value, const Evaluator::Context *) const
+{
+    const QList<qint64 > numbers = Config::Numbers::parse(value);
+    return numbers.size() == 1 ? QVariant(double(numbers.first())) : QVariant(value);
+}
+
+/*!
     Builds the description of the numbers this matcher takes.
 */
 QString Config::Numbers::describe() const

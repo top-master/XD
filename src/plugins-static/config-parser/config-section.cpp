@@ -37,6 +37,7 @@ void Config::Section::addKey(
 {
     Config::Key key;
     key.name = (this->m_name + QLatin1Char('.') + name).toLower();
+    key.displayName = name;
     key.matchers = matchers;
     key.defaultValue = defaultValue;
     QHash<QString, QString >::const_iterator alias = aliases.constBegin();
@@ -90,6 +91,7 @@ void Config::Section::addFollower(
         }
         Config::Key key = this->m_keys.at(k);
         key.name = (this->m_name + QLatin1Char('.') + name).toLower();
+        key.displayName = name;
         key.extends = base;
         this->m_keys.append(key);
         return;

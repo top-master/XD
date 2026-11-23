@@ -4838,6 +4838,15 @@ void tst_FormatRules::testScopeConditions_shouldReadSettingsThroughCfg()
     document.setConfig(config);
     qExpect(conditions.operatorExtraPad(open))->toEqual(1);
 
+    // A schema key is available to cfg without a tool-maintained key list.
+    QVERIFY2(parser.readData(
+        "[Structure]\nwrapBegin=60\nwrapConditionsOver=cfg.wrapBegin / 20\n",
+        QLL("inline"), &error
+    ), qPrintable(error));
+    QVERIFY(readSettings(parser, &config));
+    document.setConfig(config);
+    qExpect(conditions.conditionsLimit(open, 3, 50))->toEqual(3);
+
     // A key that `cfg` lacks is no condition.
     QVERIFY( ! parser.readData(
         "[Structure]\nwrapConditionsOver=cfg.missing\n", QLL("inline"),

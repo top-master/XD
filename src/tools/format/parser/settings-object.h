@@ -11,21 +11,11 @@
 
 class FormatConditionContext;
 
-class FormatSettingsObject : public Config::Object
+class FormatPercentResolver
 {
-    Q_OBJECT
-    typedef Config::Object super;
 public:
-    explicit FormatSettingsObject(QObject *parent = Q_NULLPTR);
-
-    static QStringList keys();
-    QVariant dynamicValue(const QByteArray & name) const Q_DECL_OVERRIDE;
-
-private:
-    static QVariant threshold(
-            const QByteArray & name,
-            const QStringList & program,
-            const FormatConditionContext *place);
+    static QVariant resolve(const QStringList & program,
+                            const FormatConditionContext *place, int percent);
 };
 
 #endif // PARSER_SETTINGS_OBJECT_H

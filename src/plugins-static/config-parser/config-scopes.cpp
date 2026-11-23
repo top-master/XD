@@ -147,6 +147,13 @@ static Config::Scopes::Member memberOf(
                                         : count;
         found = true;
     }
+    if ( ! found && object->hasDynamicValue(name.toLatin1())) {
+        member.object = object;
+        member.name = name;
+        member.isProperty = true;
+        member.minimumArguments = 0;
+        member.maximumArguments = 0;
+    }
     return member;
 }
 
@@ -585,6 +592,12 @@ QVariant Config::Scopes::invoke(
         ) {
             return invokeSlot(object, meta->method(item.index), arguments, invoked);
         }
+    }
+    if (arguments.isEmpty() && object->hasDynamicValue(canonical.toLatin1())) {
+        if (invoked) {
+            *invoked = true;
+        }
+        return liveResult(object->dynamicValue(canonical.toLatin1()));
     }
     return QVariant();
 }

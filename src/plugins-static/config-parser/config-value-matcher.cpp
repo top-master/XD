@@ -40,3 +40,12 @@ QVariant Config::ValueMatcher::convert(const QVariant &) const
 {
     return QVariant();
 }
+
+/*!
+    Builds the value a setting exposes to another condition.
+*/
+QVariant Config::ValueMatcher::settingValue(
+        const QString & value, const Evaluator::Context *) const
+{
+    return value;
+}

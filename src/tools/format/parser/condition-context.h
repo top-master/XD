@@ -26,6 +26,8 @@ public:
     virtual bool hasCompiler(const QString & compiler, bool *value) const;
     virtual bool isTarget(const QString & kind, bool *value) const;
     virtual const FormatFileConfig *fileConfig() const;
+    const Config::Settings *settings() const Q_DECL_OVERRIDE;
+    QVariant resolveAtPercent(const QStringList & program, int percent) const Q_DECL_OVERRIDE;
     static void registerObjects();
     static void setGlobalObjects(Config::Scopes::Scope *scope);
     static void setCountObjects(Config::Scopes::Scope *scope);

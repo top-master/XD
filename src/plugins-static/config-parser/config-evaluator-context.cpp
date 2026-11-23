@@ -68,3 +68,18 @@ bool Config::Evaluator::Context::predicate(const QString &, bool *) const
 {
     return false;
 }
+
+/*! Builds the effective settings at this place, when available. */
+const Config::Settings *Config::Evaluator::Context::settings() const
+{
+    return Q_NULLPTR;
+}
+
+/*!
+    Resolves a threshold program at a given percentage, when the place
+    supports measuring one; an invalid value means it cannot be resolved.
+*/
+QVariant Config::Evaluator::Context::resolveAtPercent(const QStringList &, int) const
+{
+    return QVariant();
+}

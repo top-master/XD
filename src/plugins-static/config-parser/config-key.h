@@ -34,6 +34,8 @@ public:
     inline bool isNull() const { return name.isEmpty(); }
 
     QString name;
+    /// Gives the key's spelling within its section, as the schema declared it.
+    QString displayName;
     Matchers matchers;
     QString defaultValue;
     QHash<QString, QString > aliases;

@@ -4,6 +4,8 @@
 #ifndef CONFIG_EVALUATOR_CONTEXT_H
 #define CONFIG_EVALUATOR_CONTEXT_H
 
+#include <QtCore/QVariant>
+#include <QtCore/QByteArray>
 #include <QtCore/QString>
 #include <QtCore/QStringList>
 #include <QtCore/QFlags>
@@ -39,6 +41,7 @@ Q_DECLARE_OPERATORS_FOR_FLAGS(CompileRes)
 class Condition;
 class Choice;
 class Schema;
+class Settings;
 
 namespace Evaluator {
 
@@ -121,6 +124,8 @@ public:
     inline QString lastError() const { return m_lastError; }
     inline bool hasPlace() const { return m_hasPlace; }
     virtual bool predicate(const QString &name, bool *value) const;
+    virtual const Settings *settings() const;
+    virtual QVariant resolveAtPercent(const QStringList & program, int percent) const;
 
 private:
     friend class ::Config::Condition;

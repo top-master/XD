@@ -23,7 +23,8 @@ class Condition : public ValueMatcher
 public:
     enum Result {
         ResultHolds,
-        ResultNumber
+        ResultNumber,
+        ResultThreshold
     };
 
     explicit Condition(const QStringList & names, bool takesPercents = false,
@@ -35,6 +36,7 @@ public:
     bool match(const QString & value, QString *matched) const Q_DECL_OVERRIDE;
     QString describe() const Q_DECL_OVERRIDE;
     QVariant convert(const QVariant & resolved) const Q_DECL_OVERRIDE;
+    QVariant settingValue(const QString & value, const Evaluator::Context *context) const Q_DECL_OVERRIDE;
 
     static QStringList compile(const QString & text,
                         const Evaluator::CompileContext *context,

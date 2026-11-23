@@ -653,17 +653,21 @@ bool Config::Parser::assign(const QString & assignment, QString *error)
 */
 QString Config::Parser::value(const QString & name) const
 {
-    const QString lower = name.toLower();
-    QHash<QString, QString >::const_iterator found =
-        this->m_settings.values.constFind(lower);
-    if (found != this->m_settings.values.constEnd()) {
-        return found.value();
+    return this->m_settings.value(this->m_schema, name);
+}
+
+/*!
+    Builds @a name from these settings, following schema defaults and keys.
+*/
+QString Config::Settings::value(const Config::Schema & schema, const QString & name) const
+{
+    Config::Key key = schema.key(name);
+    QHash<QString, QString >::const_iterator found = values.constFind(name.toLower());
+    while (found == values.constEnd() && ! key.extends.isEmpty()) {
+        key = schema.key(key.extends);
+        found = values.constFind(key.name);
     }
-    const Config::Key key = this->m_schema.key(lower);
-    if ( ! key.extends.isEmpty()) {
-        return this->value(key.extends);
-    }
-    return QString();
+    return found == values.constEnd() ? key.defaultValue : found.value();
 }
 
 /*!

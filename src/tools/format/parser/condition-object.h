@@ -9,7 +9,6 @@
 #include <QtCore/QVariant>
 
 class FormatConditionContext;
-class FormatSettingsObject;
 
 class FormatConditionObject : public Config::Object
 {
@@ -19,11 +18,7 @@ class FormatConditionObject : public Config::Object
     Q_PROPERTY(QVariant spaceUsed READ spaceUsed)
     Q_PROPERTY(QVariant hasMoreArgs READ hasMoreArgs)
     Q_PROPERTY(QVariant isWrapping READ isWrapping)
-    Q_PROPERTY(QObject *cfg READ cfg)
 public:
-    FormatConditionObject();
-
-    QObject *cfg() const;
     QVariant spaceRemaining() const;
     QVariant spaceUsed() const;
     QVariant hasMoreArgs() const;
@@ -40,8 +35,6 @@ private:
             const QString & name, bool *value) const;
 
     QVariant ask(Question question, const QString & name) const;
-
-    FormatSettingsObject *m_settings;
 };
 
 #endif // PARSER_CONDITION_OBJECT_H

@@ -94,6 +94,21 @@ QString Config::Choice::describe() const
 }
 
 /*!
+    Resolves a choice referenced by another setting.
+*/
+QVariant Config::Choice::settingValue(
+        const QString & value, const Evaluator::Context *context) const
+{
+    const Evaluator::CompileContext compiler(m_names, &m_values, context->mismatchMode());
+    const QStringList program = Config::Condition::compile(value, &compiler);
+    if ( ! compiler.lastCompiled()) {
+        return QVariant();
+    }
+    const QVariant resolved = Config::Condition::resolve(program, QSet<QString >(), context);
+    return context->lastResolvePassed() ? this->convert(resolved) : QVariant();
+}
+
+/*!
     Resolves @a expression at @a context: a word as a QString or a number
     as a qreal. The context records whether resolution passed and any error.
 */

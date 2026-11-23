@@ -521,7 +521,7 @@ Config::Schema FormatFileConfig::schema()
                      Config::Matchers()
                          << Config::Condition::create(
                              FormatScopeConditions::names(),
-                             true
+                             true, Q_NULLPTR, Config::Condition::ResultThreshold
                          ),
                      QString::fromLatin1(defaultWrapChainAtText));
     structure
@@ -530,7 +530,7 @@ Config::Schema FormatFileConfig::schema()
                      Config::Matchers()
                          << Config::Condition::create(
                              FormatScopeConditions::names(),
-                             true
+                             true, Q_NULLPTR, Config::Condition::ResultThreshold
                          ),
                      QString::fromLatin1(defaultWrapSignatureAtText));
     structure.addKey(QString(QLL("wrapArgsOver")),
@@ -1176,6 +1176,7 @@ bool FormatFileConfig::fromParser(
     );
     fileConfig->replaceTypes = FormatFileConfig::expandPrevious(
         parser.openEntries(QString(QLL("replace.types"))));
+    fileConfig->settings = parser.settings();
     const Config::Schema &schema = parser.schema();
     const QString refSuffix = QString(QLL("types.refSuffix"));
     const QString moveSuffix = QString(QLL("types.moveSuffix"));

@@ -4,8 +4,14 @@
 #include "./config-object.h"
 
 #include "./config-types.h"
+#include "./config-schema.h"
+#include "./config-condition.h"
+#include "./config-settings.h"
+#include "./config-cache.h"
 
+#include <QtCore/qfunction.h>
 #include <QtCore/QThreadStorage>
+#include <QtCore/QSet>
 
 /*!
     @class Config::Object
@@ -51,6 +57,7 @@ public:
     threads that format files at once see each its own place.
 */
 Q_GLOBAL_STATIC(QThreadStorage<CurrentContext >, currentContexts)
+Q_GLOBAL_STATIC(QThreadStorage<QSet<QString > >, settingsInProgress)
 
 } // namespace
 
@@ -82,14 +89,16 @@ const Config::Evaluator::Context *Config::Object::context() const
 }
 
 /*!
-    Builds what the dynamic property @a name answers at the place context()
-    gives: by default the value `QObject::setProperty()` stored, which a
-    subclass may replace with one that depends on the place, keeping the
-    stored value as the property's default.
+    Builds the stored value of the dynamic property @a name.
 */
 QVariant Config::Object::dynamicValue(const QByteArray & name) const
 {
     return this->property(name.constData());
+}
+
+bool Config::Object::hasDynamicValue(const QByteArray & name) const
+{
+    return ! this->dynamicValue(name).isNull();
 }
 
 /*!
@@ -104,4 +113,73 @@ const Config::Evaluator::Context *Config::Object::setContext(
     const Config::Evaluator::Context *previous = current.context;
     current.context = context;
     return previous;
+}
+
+/*!
+    Builds a settings object whose properties come from @a schema.
+*/
+Config::CfgObject::CfgObject(const Config::Schema & schema)
+    : m_schema(schema), m_section(QLL("structure"))
+{
+}
+
+bool Config::CfgObject::hasDynamicValue(const QByteArray & name) const
+{
+    return ! m_schema.key(m_section + QLatin1Char('.')
+        + QString::fromLatin1(name)).isNull();
+}
+
+/*!
+    Resolves @a name from the effective settings of the current place.
+*/
+QVariant Config::CfgObject::dynamicValue(const QByteArray & name) const
+{
+    Config::Cache::skip();
+    const Config::Evaluator::Context *place = this->context();
+    const Config::Settings *settings = place ? place->settings() : Q_NULLPTR;
+    if ( ! settings) {
+        return QVariant();
+    }
+    const QString keyName = m_section + QLatin1Char('.') + QString::fromLatin1(name).toLower();
+    const Config::Key key = m_schema.key(keyName);
+    const QString value = settings->value(m_schema, keyName);
+    QSet<QString > *active = &(settingsInProgress()->localData());
+    if (active->contains(keyName)) {
+        return QVariant();
+    }
+    active->insert(keyName);
+    Q_DEFER { active->remove(keyName); };
+    for (int i = 0; i < key.matchers.size(); ++i) {
+        QString matched;
+        const Config::ValueMatcher *matcher = key.matchers.at(i).data();
+        if (matcher->match(value, &matched)) {
+            const QVariant resolved = matcher->settingValue(matched, place);
+            if ( ! resolved.isValid()) {
+                return QVariant();
+            }
+            const QVariant converted = m_schema.convert(keyName, resolved);
+            if (converted.isValid()) {
+                if (converted.type() == QVariant::LongLong || converted.type() == QVariant::Int) {
+                    return converted.toDouble();
+                }
+                return converted;
+            }
+            return resolved;
+        }
+    }
+    return QVariant();
+}
+
+/*!
+    Offers @a settings to conditions as `cfg`.
+*/
+Config::GlobalObject::GlobalObject(const Config::Schema & schema)
+    : m_settings(new Config::CfgObject(schema))
+{
+    m_settings->setParent(this);
+}
+
+QObject *Config::GlobalObject::cfg() const
+{
+    return m_settings;
 }

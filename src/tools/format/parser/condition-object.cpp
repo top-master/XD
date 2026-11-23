@@ -4,7 +4,6 @@
 #include "./condition-object.h"
 
 #include "./condition-context.h"
-#include "./settings-object.h"
 
 #include "config-cache.h"
 
@@ -36,31 +35,13 @@
     * `is(<kind>)`: the list at the place is of that kind: `array`, a brace
       initializer list; `call`, a call's arguments; or `condition`, the
       condition of an `if` or a `while` (see FormatScopeConditions::targetIs());
-    * `cfg.<key>`: the number that the `[Structure]` setting `<key>` gives
-      at the place, such as `cfg.wrapArgsOver` (see FormatSettingsObject).
+    * `cfg.<key>`: the value that the `[Structure]` setting `<key>` gives
+      at the place, such as `cfg.wrapArgsOver` (see Config::CfgObject).
 
     FormatConditionContext::registerObjects() adds it to the global scope of
     Config::Scopes once, as the tool starts. A name the place cannot answer
     makes the condition miss a value; hence its setting's default decides.
 */
-
-/*!
-    Builds the object of the expressions of settings, with the settings
-    object that `cfg` answers as its child.
-*/
-FormatConditionObject::FormatConditionObject()
-    : m_settings(new FormatSettingsObject(this))
-{
-}
-
-/*!
-    Builds the settings of the place, whose keys a condition reads as
-    `cfg.<key>` (see FormatSettingsObject).
-*/
-QObject *FormatConditionObject::cfg() const
-{
-    return this->m_settings;
-}
 
 /*!
     Builds the share of `[Structure] wrapMax`, from 0 to 1, that is left on

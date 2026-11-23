@@ -878,6 +878,46 @@ QSharedPointer<const Config::ValueMatcher > Config::Condition::create(
 }
 
 /*!
+    Resolves a condition as the value of a referenced setting.
+*/
+QVariant Config::Condition::settingValue(
+        const QString & value, const Evaluator::Context *context) const
+{
+    QSharedPointer<Scopes::Scope > scope;
+    if (m_setup) {
+        scope = Config::Scopes::push();
+        m_setup(scope.data());
+    }
+    const Evaluator::CompileContext compiler(m_names, Q_NULLPTR, context->mismatchMode());
+    const QStringList program = Config::Condition::compile(value, &compiler, m_takesPercents);
+    if ( ! compiler.lastCompiled()) {
+        return QVariant();
+    }
+    if (m_result == ResultThreshold) {
+        int holdsFrom = 101;
+        // Finds the first whole percentage at which the condition holds.
+        for (int percent = 0; percent <= 100; ++percent) {
+            const QVariant holds = context->resolveAtPercent(program, percent);
+            if ( ! holds.isValid()) {
+                return QVariant();
+            }
+            if (holds.toBool()) {
+                holdsFrom = percent;
+                break;
+            }
+        }
+        return QVariant(
+            QString(QString::number(qMin(holdsFrom - 1, 100)) + QLatin1Char('%'))
+        );
+    }
+    const QVariant result = Config::Condition::resolve(program, QSet<QString >(), context);
+    if ( ! context->lastResolvePassed()) {
+        return QVariant();
+    }
+    return result;
+}
+
+/*!
     Matches @a value when it is a condition over the names; @a matched gets
     it with a space on each side of every sign. A name that differs from a
     known one in case alone matches too: the tool that reads the setting
@@ -934,8 +974,8 @@ QVariant Config::Condition::convert(const QVariant & resolved) const
     if (resolved.type() != QVariant::Double) {
         return QVariant();
     }
-    return this->m_result == ResultHolds ? QVariant(resolved.toDouble() != 0)
-                                         : resolved;
+    return this->m_result == ResultNumber ? resolved
+                                          : QVariant(resolved.toDouble() != 0);
 }
 
 /*!
@@ -1209,6 +1249,7 @@ QString Config::Condition::canonicalName(const QString & name)
         decides where a rule applies.
     @value ResultNumber The number the condition gives, such as for a key
         that counts, as in `hasMoreArgs() ? 2 : 1`.
+    @value ResultThreshold A condition whose referenced value is its threshold.
 */
 
 /*!

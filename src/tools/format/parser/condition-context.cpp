@@ -6,6 +6,7 @@
 #include "../format-file-config.h"
 #include "../format-document.h"
 #include "./condition-object.h"
+#include "./settings-object.h"
 #include "./count-object.h"
 #include "../rules/template-object.h"
 #include "config-cache.h"
@@ -158,11 +159,25 @@ bool FormatConditionContext::isTarget(const QString &, bool *) const
 
 /*!
     Builds the settings that hold at the place, which `cfg` answers from
-    (see FormatSettingsObject), or null when the place names none.
+    (see Config::CfgObject), or null when the place names none.
 */
 const FormatFileConfig *FormatConditionContext::fileConfig() const
 {
     return Q_NULLPTR;
+}
+
+/*!
+    Builds the effective settings at the place of the condition.
+*/
+const Config::Settings *FormatConditionContext::settings() const
+{
+    const FormatFileConfig *config = this->fileConfig();
+    return config ? &config->settings : Q_NULLPTR;
+}
+
+QVariant FormatConditionContext::resolveAtPercent(const QStringList & program, int percent) const
+{
+    return FormatPercentResolver::resolve(program, this, percent);
 }
 
 /*!
@@ -192,6 +207,7 @@ void FormatConditionContext::registerObjects()
 */
 void FormatConditionContext::setGlobalObjects(Config::Scopes::Scope *scope)
 {
+    scope->add(new Config::GlobalObject(FormatFileConfig::schema()));
     scope->add(new FormatConditionObject);
     scope->add(new FormatTemplateObject);
 }

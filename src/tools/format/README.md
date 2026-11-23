@@ -412,9 +412,9 @@ moveSuffix = " "
   the rules that wrap arguments.
 
   Any condition of the tool may read another `[Structure]` setting as
-  `cfg.<key>`: `operatorPlacement`, or the number that `wrapMax`, `wrapArgsOver`,
-  `wrapConditionsOver`, or `joinArgs` gives at that place, or the percent
-  past which `wrapChainAt`, `wrapArgsAt`, or `wrapSignatureAt` holds there.
+  `cfg.<key>`. The keys come from the schema, and each gives the value at
+  that place. A threshold such as `wrapChainAt`, `wrapArgsAt`, or
+  `wrapSignatureAt` gives the percent past which it holds.
   Hence
   `wrapConditionsOver = cfg.wrapArgsOver` follows `wrapArgsOver`. A setting
   that reaches itself through `cfg` misses that value, just like a name

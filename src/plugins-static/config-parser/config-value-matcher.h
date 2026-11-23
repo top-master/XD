@@ -11,6 +11,8 @@
 
 namespace Config {
 
+namespace Evaluator { class Context; }
+
 class ValueMatcher
 {
 public:
@@ -30,6 +32,7 @@ public:
 
     virtual QString explain(const QString & value) const;
     virtual QVariant convert(const QVariant & resolved) const;
+    virtual QVariant settingValue(const QString & value, const Evaluator::Context *context) const;
 };
 
 typedef QList<QSharedPointer<const ValueMatcher > > Matchers;

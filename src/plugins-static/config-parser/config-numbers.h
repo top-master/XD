@@ -25,6 +25,7 @@ public:
     bool match(const QString & value, QString *matched) const Q_DECL_OVERRIDE;
     QString describe() const Q_DECL_OVERRIDE;
     QVariant convert(const QVariant & resolved) const Q_DECL_OVERRIDE;
+    QVariant settingValue(const QString & value, const Evaluator::Context *context) const Q_DECL_OVERRIDE;
 
 private:
     QString range() const;

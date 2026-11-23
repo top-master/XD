@@ -5,6 +5,7 @@
 #define CONFIG_OBJECT_H
 
 #include "./config-evaluator-context.h"
+#include "./config-schema.h"
 
 #include <QtCore/QObject>
 #include <QtCore/QVariant>
@@ -21,9 +22,35 @@ public:
 
     const Evaluator::Context *context() const;
     virtual QVariant dynamicValue(const QByteArray & name) const;
+    virtual bool hasDynamicValue(const QByteArray & name) const;
     static const Evaluator::Context *setContext(
         const Evaluator::Context *context
     );
+
+};
+
+class CfgObject : public Object
+{
+public:
+    explicit CfgObject(const Schema & schema);
+    QVariant dynamicValue(const QByteArray & name) const Q_DECL_OVERRIDE;
+    bool hasDynamicValue(const QByteArray & name) const Q_DECL_OVERRIDE;
+
+private:
+    Schema m_schema;
+    QString m_section;
+};
+
+class GlobalObject : public Object
+{
+    Q_OBJECT
+    Q_PROPERTY(QObject *cfg READ cfg)
+public:
+    explicit GlobalObject(const Schema & schema);
+    QObject *cfg() const;
+
+private:
+    Object *m_settings;
 };
 
 } // Namespace `Config`.
