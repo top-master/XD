@@ -2636,6 +2636,22 @@ void tst_ConfigParser::testCondition_shouldResolveTextAndNull()
     QString error;
     QVariant result;
     QVERIFY2(compileConditionForTest(
+        QString(QLL("3 + \"2tail7\" == 5")), QStringList(),
+        &program, &error
+    ), qPrintable(error));
+    result = Config::Condition::resolve(program, QSet<QString >(), &testContext);
+    QVERIFY(testContext.lastResolvePassed());
+    QVERIFY(result.toBool());
+
+    QVERIFY2(compileConditionForTest(
+        QString(QLL("2 * \"25%tail\" == 0.5")), QStringList(),
+        &program, &error
+    ), qPrintable(error));
+    result = Config::Condition::resolve(program, QSet<QString >(), &testContext);
+    QVERIFY(testContext.lastResolvePassed());
+    QVERIFY(result.toBool());
+
+    QVERIFY2(compileConditionForTest(
         QString(QLL("true ? \"one\" + \"two\" : null")), QStringList(),
         &program, &error, false, Config::NameMismatchError,
         Q_NULLPTR, &words

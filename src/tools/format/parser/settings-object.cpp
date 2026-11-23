@@ -45,7 +45,8 @@ public:
     inline bool value(qreal *value) const Q_DECL_OVERRIDE_IL
     { return m_place->value(value); }
 
-    inline bool argumentCount(int depth, int argument, qreal *count) const Q_DECL_OVERRIDE_IL
+    inline bool argumentCount(
+            int depth, int argument, qreal *count) const Q_DECL_OVERRIDE_IL
     { return m_place->argumentCount(depth, argument, count); }
 
     inline bool hasMoreArgs(bool *value) const Q_DECL_OVERRIDE_IL
@@ -57,10 +58,12 @@ public:
     inline FormatArgsArray *callArguments() const Q_DECL_OVERRIDE_IL
     { return m_place->callArguments(); }
 
-    inline bool hasStandard(const QString & standard, bool *value) const Q_DECL_OVERRIDE_IL
+    inline bool hasStandard(const QString & standard,
+                            bool *value) const Q_DECL_OVERRIDE_IL
     { return m_place->hasStandard(standard, value); }
 
-    inline bool hasCompiler(const QString & compiler, bool *value) const Q_DECL_OVERRIDE_IL
+    inline bool hasCompiler(const QString & compiler,
+                            bool *value) const Q_DECL_OVERRIDE_IL
     { return m_place->hasCompiler(compiler, value); }
 
     inline bool spaceRemaining(qreal *percent) const Q_DECL_OVERRIDE_IL
@@ -92,9 +95,15 @@ private:
     Builds an invalid value where the condition misses a value.
 */
 QVariant FormatPercentResolver::resolve(
-        const QStringList & program, const FormatConditionContext *place, int percent)
+        const QStringList & program,
+        const FormatConditionContext *place,
+        int percent)
 {
     const PercentContext context(place, percent);
-    const QVariant holds = Config::Condition::resolve(program, QSet<QString >(), &context);
+    const QVariant holds = Config::Condition::resolve(
+        program,
+        QSet<QString >(),
+        &context
+    );
     return context.lastResolvePassed() ? holds : QVariant();
 }

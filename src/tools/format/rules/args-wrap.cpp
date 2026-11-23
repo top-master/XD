@@ -350,7 +350,8 @@ void FormatArgsWrapRule::run(FormatDocument *document) const
         if (isHeadLine && ! hugsHead) {
             indent += 4;
         }
-        const int previousOperator = precedingChainOperator(document, close + 1, false);
+        const int previousOperator =
+            precedingChainOperator(document, close + 1, false);
         const bool inlineOperator = previousOperator >= 0
             && document->token(previousOperator) != QUESTION
             && document->firstSymbolOfLine(document->symbolLine(previousOperator))

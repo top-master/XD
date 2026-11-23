@@ -382,8 +382,9 @@ QByteArray FormatConditionLayout::group(
         // line, its `) {`, since the condition then closes there.
         int after = 0;
         if (k == ops.size()) {
-            after = ! isCondition ? trailing + 1
-                                  : (text.contains('\n') ? 0 : 3);
+            after = ! isCondition
+                ? trailing + 1
+                : (text.contains('\n') ? 0 : 3);
         }
         int operandIndent = continuationIndent(indent);
         if (k > 0) {

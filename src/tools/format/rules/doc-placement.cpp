@@ -199,7 +199,8 @@ void FormatDocPlacementRule::runGroup(
         && document->comments().at(nextComment).isDoc()
         && document->isOnlyWhitespace(
             end,
-            document->comments().at(nextComment).offset)
+            document->comments().at(nextComment).offset
+        )
         && document->comments().at(nextComment).offset < document->symbols().at(next).from
     ) {
         document->report(first.offset, "doc-placement",

@@ -71,8 +71,10 @@ bool isControlHead(const FormatDocument *document, int index)
 {
     for (int i = index - 1; i >= 0; --i) {
         const Token token = document->token(i);
-        if (token == RBRACE && document->match(i) >= 0
-            && document->braceScope(document->match(i)) == FormatDocument::InitScope
+        if (token == RBRACE
+            && document->match(i) >= 0
+            && document->braceScope(document->match(i))
+                == FormatDocument::InitScope
         ) {
             i = document->match(i);
             continue;
@@ -80,7 +82,10 @@ bool isControlHead(const FormatDocument *document, int index)
         if (token == LBRACE || token == RBRACE) {
             break;
         }
-        if ((token == RPAREN || token == RBRACK) && document->match(i) >= 0) {
+        if ((token == RPAREN
+                || token == RBRACK)
+            && document->match(i) >= 0
+        ) {
             i = document->match(i);
             continue;
         }

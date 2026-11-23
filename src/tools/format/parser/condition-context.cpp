@@ -175,7 +175,8 @@ const Config::Settings *FormatConditionContext::settings() const
     return config ? &config->settings : Q_NULLPTR;
 }
 
-QVariant FormatConditionContext::resolveAtPercent(const QStringList & program, int percent) const
+QVariant FormatConditionContext::resolveAtPercent(
+        const QStringList & program, int percent) const
 {
     return FormatPercentResolver::resolve(program, this, percent);
 }

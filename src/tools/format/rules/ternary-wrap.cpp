@@ -16,8 +16,8 @@
     @class FormatTernaryWrapRule
     @internal
 
-    Breaks a one-line statement that passes the wrap column (see
-    wrapColumn()) and holds one conditional expression outside of every
+    Breaks a one-line statement that passes `wrapMax` and holds one
+    conditional expression outside of every
     bracket pair, such as `Type value = test ? yes : no;`: first before its
     `:`, then before its `?`, then before both when needed (see
     ternaryLines()). When the line before the `?`
@@ -71,15 +71,24 @@ void FormatTernaryWrapRule::run(FormatDocument *document) const
             ) {
                 const QByteArray pad = document->indentOf(line) + "    ";
                 const int endOfLine = document->lineEnd(line);
-                const QByteArray newline = document->text().mid(endOfLine - 1, 1) == "\r"
+                const QByteArray newline = document->text().mid(
+                    endOfLine - 1,
+                    1
+                ) == "\r"
                     ? "\r\n" : "\n";
                 const QByteArray gap = newline + pad;
                 const int beforeQuestion = document->symbolEnd(question - 1);
                 const int questionFrom = document->symbols().at(question).from;
                 const int beforeColon = document->symbolEnd(colon - 1);
                 const int colonFrom = document->symbols().at(colon).from;
-                if (document->text().mid(beforeQuestion, questionFrom - beforeQuestion) != gap
-                    || document->text().mid(beforeColon, colonFrom - beforeColon) != gap
+                if (document->text().mid(
+                        beforeQuestion,
+                        questionFrom - beforeQuestion
+                    ) != gap
+                    || document->text().mid(
+                        beforeColon,
+                        colonFrom - beforeColon
+                    ) != gap
                 ) {
                     document->replace(
                         beforeQuestion, questionFrom - beforeQuestion, gap,
@@ -93,7 +102,7 @@ void FormatTernaryWrapRule::run(FormatDocument *document) const
             || last <= first
             || document->token(last) != SEMIC
             || document->isDirectiveLine(line)
-            || textWidth(document->lineText(line)) <= wrapColumn(
+            || textWidth(document->lineText(line)) <= wrapMaxAt(
                 document,
                 document->lineStart(line)
             )

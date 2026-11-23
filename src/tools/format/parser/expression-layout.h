@@ -51,10 +51,10 @@ private:
     QByteArray layoutChainRest(
             int first, int last, const QList<int > & operators,
             int column, int trailing, bool keepsLeading,
-            bool stepsIn, bool byLine, const QByteArray & head,
+            int stepsIn, bool byLine, const QByteArray & head,
             bool forceMath = false);
-    bool chainStepsIn(int headFirst, int headLast,
-                      const QByteArray & head) const;
+    int chainStepsIn(int headFirst, int headLast,
+                     const QByteArray & head) const;
     QByteArray layoutGroup(int open, int close, int column, int trailing);
     QByteArray layoutArray(
             int open, int close, const QList<QPair<int, int > > & items,

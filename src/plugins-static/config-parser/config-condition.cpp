@@ -6,8 +6,6 @@
 #include "./config-scopes.h"
 #include "./config-types.h"
 
-#include <QtCore/QRegExp>
-
 
 namespace {
 
@@ -622,13 +620,46 @@ QString ExpressionCompiler::wordAt() const
     }
 
     // Reads identifiers joined by `::`, with or without a leading one.
-    const QRegExp name(QString(QLL("(::)?[A-Za-z_][A-Za-z0-9_]*(::[A-Za-z_][A-Za-z0-9_]*)*")));
-    if (name.indexIn(this->m_text, this->m_at) != this->m_at
-        || ! name.cap(0).contains(QLL("::"))
-    ) {
-        return QString();
+    int end = this->m_at;
+    bool scoped = this->m_text.mid(end, 2) == QLL("::");
+    if (scoped) {
+        end += 2;
     }
-    return name.cap(0);
+    while (end < this->m_text.size()) {
+        const QChar first = this->m_text.at(end);
+        if ( ! ((first >= QLatin1Char('A') && first <= QLatin1Char('Z'))
+                || (first >= QLatin1Char('a') && first <= QLatin1Char('z'))
+                || first == QLatin1Char('_'))
+        ) {
+            break;
+        }
+        ++end;
+        while (end < this->m_text.size()) {
+            const QChar c = this->m_text.at(end);
+            if ( ! ((c >= QLatin1Char('A') && c <= QLatin1Char('Z'))
+                    || (c >= QLatin1Char('a') && c <= QLatin1Char('z'))
+                    || (c >= QLatin1Char('0') && c <= QLatin1Char('9'))
+                    || c == QLatin1Char('_'))
+            ) {
+                break;
+            }
+            ++end;
+        }
+        if (this->m_text.mid(end, 2) != QLL("::") || end + 2 >= this->m_text.size()) {
+            break;
+        }
+        const QChar next = this->m_text.at(end + 2);
+        if ( ! ((next >= QLatin1Char('A') && next <= QLatin1Char('Z'))
+                || (next >= QLatin1Char('a') && next <= QLatin1Char('z'))
+                || next == QLatin1Char('_'))
+        ) {
+            break;
+        }
+        scoped = true;
+        end += 2;
+    }
+    return scoped && end > this->m_at + 2
+        ? this->m_text.mid(this->m_at, end - this->m_at) : QString();
 }
 
 /*!
@@ -1296,8 +1327,8 @@ public:
 };
 
 /*!
-    Builds into @a result the number @a operand stands for; returns false,
-    with no number, for a text.
+    Builds into @a result the number @a operand starts with; returns false
+    when it has no numeric prefix.
 */
 static bool operandNumber(const Operand &operand, qreal *result)
 {
@@ -1305,14 +1336,51 @@ static bool operandNumber(const Operand &operand, qreal *result)
         return false;
     }
     if (operand.isText) {
-        QString text = operand.text.trimmed();
-        const bool percent = text.endsWith(QLatin1Char('%'));
-        if (percent) {
-            text.chop(1);
+        const QString text = operand.text.trimmed();
+        int length = 0;
+        if (length < text.size()
+            && (text.at(length) == QLatin1Char('+') || text.at(length) == QLatin1Char('-'))
+        ) {
+            ++length;
+        }
+        bool hasDigits = false;
+        while (length < text.size() && text.at(length) >= QLatin1Char('0')
+               && text.at(length) <= QLatin1Char('9')) {
+            hasDigits = true;
+            ++length;
+        }
+        if (length < text.size() && text.at(length) == QLatin1Char('.')) {
+            ++length;
+            while (length < text.size() && text.at(length) >= QLatin1Char('0')
+                   && text.at(length) <= QLatin1Char('9')) {
+                hasDigits = true;
+                ++length;
+            }
+        }
+        if ( ! hasDigits) {
+            return false;
+        }
+        if (length < text.size()
+            && (text.at(length) == QLatin1Char('e') || text.at(length) == QLatin1Char('E'))
+        ) {
+            int exponent = length + 1;
+            if (exponent < text.size()
+                && (text.at(exponent) == QLatin1Char('+') || text.at(exponent) == QLatin1Char('-'))
+            ) {
+                ++exponent;
+            }
+            const int digits = exponent;
+            while (exponent < text.size() && text.at(exponent) >= QLatin1Char('0')
+                   && text.at(exponent) <= QLatin1Char('9')) {
+                ++exponent;
+            }
+            if (exponent > digits) {
+                length = exponent;
+            }
         }
         bool valid = false;
-        *result = text.toDouble(&valid);
-        if (percent) {
+        *result = text.left(length).toDouble(&valid);
+        if (length < text.size() && text.at(length) == QLatin1Char('%')) {
             *result /= 100;
         }
         return valid;
@@ -1492,9 +1560,6 @@ bool calculate(const QStringList &program, Lookup *lookup, Operand *result)
                     continue;
                 }
             }
-            if ( ! operandNumber(right, &right.number)) {
-                return false;
-            }
             if (op == QLL("!")) {
                 bool value = false;
                 if ( ! operandHolds(right, &value)) {
@@ -1504,6 +1569,9 @@ bool calculate(const QStringList &program, Lookup *lookup, Operand *result)
                 continue;
             }
             if (op == QLL("neg")) {
+                if ( ! operandNumber(right, &right.number)) {
+                    return false;
+                }
                 stack << Operand(-right.number);
                 continue;
             }
@@ -1511,7 +1579,15 @@ bool calculate(const QStringList &program, Lookup *lookup, Operand *result)
                 return false;
             }
             Operand left = stack.takeLast();
-            if ( ! operandNumber(left, &left.number)) {
+            const bool comparison = op == QLL("<") || op == QLL("<=")
+                || op == QLL(">") || op == QLL(">=")
+                || op == QLL("==") || op == QLL("!=");
+            const bool textComparison = comparison && left.isText && right.isText;
+            const int order = textComparison ? QString::compare(left.text, right.text) : 0;
+            if ( ! textComparison
+                && ( ! operandNumber(left, &left.number)
+                    || ! operandNumber(right, &right.number))
+            ) {
                 return false;
             }
             if (op == QLL("&")
@@ -1539,17 +1615,17 @@ bool calculate(const QStringList &program, Lookup *lookup, Operand *result)
             } else if (op == QLL("/") && right.number != 0) {
                 stack << Operand(left.number / right.number);
             } else if (op == QLL("<")) {
-                stack << Operand(left.number < right.number);
+                stack << Operand(textComparison ? order < 0 : left.number < right.number);
             } else if (op == QLL("<=")) {
-                stack << Operand(left.number <= right.number);
+                stack << Operand(textComparison ? order <= 0 : left.number <= right.number);
             } else if (op == QLL(">")) {
-                stack << Operand(left.number > right.number);
+                stack << Operand(textComparison ? order > 0 : left.number > right.number);
             } else if (op == QLL(">=")) {
-                stack << Operand(left.number >= right.number);
+                stack << Operand(textComparison ? order >= 0 : left.number >= right.number);
             } else if (op == QLL("==")) {
-                stack << Operand(left.number == right.number);
+                stack << Operand(textComparison ? order == 0 : left.number == right.number);
             } else if (op == QLL("!=")) {
-                stack << Operand(left.number != right.number);
+                stack << Operand(textComparison ? order != 0 : left.number != right.number);
             } else {
                 return false;
             }

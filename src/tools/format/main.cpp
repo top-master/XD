@@ -1109,8 +1109,9 @@ int main(int argc, char *argv[])
     options.lineSpecs = parser.isSet(snapshotOption)
         ? config.lineSpecs : parser.values(lineOption);
     options.git = parser.value(gitOption);
-    options.fileLineSpecs = parser.isSet(snapshotOption) ? config.fileLineSpecs
-                                                         : gitLineSpecs;
+    options.fileLineSpecs = parser.isSet(snapshotOption)
+        ? config.fileLineSpecs
+        : gitLineSpecs;
     options.rules = rules;
     options.config = config;
     options.config.verbose = parser.isSet(verboseOption);

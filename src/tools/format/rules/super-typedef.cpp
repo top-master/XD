@@ -337,7 +337,7 @@ void FormatSuperTypedefRule::run(FormatDocument *document) const
             || token == PROTECTED || token == RBRACE;
         const QByteArray indent = isAccess
             ? document->indentOf(document->symbolLine(i)) + "    "
-                : document->indentOf(firstLine);
+            : document->indentOf(firstLine);
         document->replace(
             document->lineStart(firstLine),
             0,
@@ -764,8 +764,9 @@ static bool isShadowed(
             }
         }
     }
-    const int start = scope.body >= 0 ? scope.body + 1
-                                      : document->headStart(token);
+    const int start = scope.body >= 0
+        ? scope.body + 1
+        : document->headStart(token);
     for (int i = start; i < token; ++i) {
         if (document->token(i) != IDENTIFIER
             || document->lexem(i) != name
@@ -977,7 +978,8 @@ void FormatSuperTypedefRule::replaceSites(FormatDocument *document) const
             ? owners.value(key).data() : document;
         bool isStruct = false;
         const QByteArray base = this->baseName(owner, brace, &isStruct);
-        const int scopeToken = base.isEmpty() ? -1
+        const int scopeToken = base.isEmpty()
+            ? -1
             : matchBase(document, i, base, ! className.contains("::"));
         if (scopeToken < 0 || isShadowed(document, &scopes, i, base)) {
             continue;

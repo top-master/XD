@@ -1402,6 +1402,7 @@ void inspect()
 // ```
 // [Structure]
 // operatorPlacement = begining
+// operatorExtraPad = 1
 // wrapArgsAt = never
 // wrapArgsOver = 3
 // ```

@@ -109,7 +109,7 @@ void FormatParamWrapRule::run(FormatDocument *document) const
             QList<QByteArray > lines;
             FormatExpressionLayout layout(document, &conditions, 0);
             const QByteArray head = prefix + sourceText(
-                    document, items.first().first, items.first().second)
+                document, items.first().first, items.first().second)
                 + (items.size() == 1 ? suffix : ",");
             const bool breaksAfterOpen = conditions.holds(
                 QString(QLL("structure.wrapSignatureAt")),

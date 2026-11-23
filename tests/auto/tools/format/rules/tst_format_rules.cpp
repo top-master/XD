@@ -1919,20 +1919,51 @@ void tst_FormatRules::testFix_shouldRewrite_data()
         << QByteArray("void f()\n{\n    registryForSynchronizationAcrossIndependentClientsAndServices\n"
                       "        .publishMessageForEachObserver(item);\n}\n");
     const QByteArray chainWidths =
-        "// @formatter:\n// ```\n// [Structure]\n// wrapBegin = 60\n// wrapMax = 110\n// ```\n";
+        "// @formatter:\n// ```\n// [Structure]\n// wrapBegin = 60\n// wrapMax = 110\n// operatorPlacement = begining\n// operatorExtraPad = 0\n// ```\n";
     QTest::newRow("operator-first wraps a middle call at wrapBegin")
         << QString(QLL("operator-first"))
         << (chainWidths + "void f()\n{\n    result = prefix + read(\n"
             "        document, entries.first().first,\n"
             "        entries.first().second\n    ) + suffix;\n}\n")
         << (chainWidths + "void f()\n{\n    result = prefix + read(\n"
+            "        document, entries.first().first,\n"
+            "        entries.first().second)\n    + suffix;\n}\n");
+    const QByteArray paddedChainWidths =
+        "// @formatter:\n// ```\n// [Structure]\n// wrapBegin = 60\n// wrapMax = 110\n// operatorPlacement = begining\n// operatorExtraPad = 1\n// ```\n";
+    QTest::newRow("operator-first wraps a middle call with extra operator padding")
+        << QString(QLL("operator-first"))
+        << (paddedChainWidths + "void f()\n{\n    result = prefix + read(\n"
+            "        document, entries.first().first,\n"
+            "        entries.first().second\n    ) + suffix;\n}\n")
+        << (paddedChainWidths + "void f()\n{\n    result = prefix + read(\n"
             "            document, entries.first().first,\n"
             "            entries.first().second)\n        + suffix;\n}\n");
     QTest::newRow("operator-first keeps a fitting middle call together")
         << QString(QLL("operator-first"))
         << (chainWidths + "void f()\n{\n    result = prefix + read(\n"
             "        document, index\n    ) + suffix;\n}\n")
-        << (chainWidths + "void f()\n{\n    result = prefix + read(document, index)\n        + suffix;\n}\n");
+        << (chainWidths + "void f()\n{\n    result = prefix + read(document, index)\n    + suffix;\n}\n");
+    QTest::newRow("operator-first keeps a fitting middle call with extra operator padding")
+        << QString(QLL("operator-first"))
+        << (paddedChainWidths + "void f()\n{\n    result = prefix + read(\n"
+            "        document, index\n    ) + suffix;\n}\n")
+        << (paddedChainWidths + "void f()\n{\n    result = prefix + read(document, index)\n        + suffix;\n}\n");
+    QTest::newRow("operator-first aligns a stream chain after a multiline call")
+        << QString(QLL("operator-first"))
+        << (chainWidths + "void f()\n{\n    stream << Record(\n"
+            "        firstLongArgumentName,\n        secondLongArgumentName)\n"
+            "        << end;\n}\n")
+        << (chainWidths + "void f()\n{\n    stream << Record(\n"
+            "        firstLongArgumentName,\n        secondLongArgumentName)\n"
+            "    << end;\n}\n");
+    QTest::newRow("operator-first pads a stream chain after a multiline call")
+        << QString(QLL("operator-first"))
+        << (paddedChainWidths + "void f()\n{\n    stream << Record(\n"
+            "        firstLongArgumentName,\n        secondLongArgumentName)\n"
+            "    << end;\n}\n")
+        << (paddedChainWidths + "void f()\n{\n    stream << Record(\n"
+            "            firstLongArgumentName,\n            secondLongArgumentName)\n"
+            "        << end;\n}\n");
     QTest::newRow("operator-first keeps ternary branches aligned with middle placement")
         << QString(QLL("operator-first"))
         << QByteArray("// Format rule: structure.operatorPlacement=middle\n"

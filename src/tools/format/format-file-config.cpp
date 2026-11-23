@@ -535,10 +535,10 @@ Config::Schema FormatFileConfig::schema()
                      QString::fromLatin1(defaultWrapSignatureAtText));
     structure.addKey(QString(QLL("wrapArgsOver")),
                      Config::Matchers() << Config::Numbers::create(
-                             1,
-                             std::numeric_limits<qint64 >::max(),
-                             1)
-                         << Config::Condition::create(
+                         1,
+                         std::numeric_limits<qint64 >::max(),
+                         1)
+                     << Config::Condition::create(
                              FormatScopeConditions::names(),
                              true,
                              &FormatConditionContext::setCountObjects
@@ -546,10 +546,10 @@ Config::Schema FormatFileConfig::schema()
                      QString(QLL("3")));
     structure.addKey(QString(QLL("wrapConditionsOver")),
                      Config::Matchers() << Config::Numbers::create(
-                             1,
-                             std::numeric_limits<qint64 >::max(),
-                             1)
-                         << Config::Condition::create(
+                         1,
+                         std::numeric_limits<qint64 >::max(),
+                         1)
+                     << Config::Condition::create(
                              FormatScopeConditions::names(),
                              true,
                              &FormatConditionContext::setCountObjects,
@@ -564,10 +564,10 @@ Config::Schema FormatFileConfig::schema()
                      QString(QLL("pair-bundle")));
     structure.addKey(QString(QLL("joinArgs")),
                      Config::Matchers() << Config::Numbers::create(
-                             1,
-                             std::numeric_limits<qint64 >::max(),
-                             1)
-                         << Config::Condition::create(
+                         1,
+                         std::numeric_limits<qint64 >::max(),
+                         1)
+                     << Config::Condition::create(
                              FormatScopeConditions::names(),
                              true,
                              &FormatConditionContext::setCountObjects,
@@ -575,8 +575,10 @@ Config::Schema FormatFileConfig::schema()
                          ),
                      QString(QLL("1")));
     structure.addKey(QString(QLL("operatorExtraPad")),
-                     Config::Matchers() << Config::Numbers::create(0, std::numeric_limits<int >::max() / 4)
-                         << Config::Condition::create(
+                     Config::Matchers() << Config::Numbers::create(
+                         0,
+                         std::numeric_limits<int >::max() / 4)
+                     << Config::Condition::create(
                              FormatScopeConditions::names(), true,
                              &FormatConditionContext::setCountObjects,
                              Config::Condition::ResultNumber
@@ -1206,9 +1208,10 @@ bool FormatFileConfig::fromParser(
             &fileConfig->wrapConditionsOverCondition, mismatch, error)
         && readCountOrCondition(
             parser, QString(QLL("structure.operatorExtraPad")),
-            &fileConfig->operatorExtraPad, &fileConfig->operatorExtraPadCondition,
-            mismatch, error
-        )
+            &fileConfig->operatorExtraPad,
+            &fileConfig->operatorExtraPadCondition,
+            mismatch,
+            error)
         && readCountOrCondition(
             parser, QString(QLL("structure.joinArgs")),
             &fileConfig->joinArgs, &fileConfig->joinArgsCondition, mismatch,
