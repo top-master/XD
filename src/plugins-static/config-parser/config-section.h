@@ -5,6 +5,7 @@
 #define CONFIG_SECTION_H
 
 #include "./config-key.h"
+#include "./config-code.h"
 
 #include <QtCore/QHash>
 #include <QtCore/QList>
@@ -24,6 +25,9 @@ public:
     inline const QList<Key > &keys() const { return m_keys; }
     void addKey(const QString & name, const Matchers & matchers,
                 const QString & defaultValue,
+                const QHash<QString, QString > & aliases = QHash<QString, QString >());
+    void addKey(const QString & name, const Matchers & matchers,
+                const Code & defaultValue,
                 const QHash<QString, QString > & aliases = QHash<QString, QString >());
     void addKey(const QString & name,
                 const QStringList & words,

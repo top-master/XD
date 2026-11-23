@@ -4316,7 +4316,8 @@ void tst_FormatRules::testThisMode_shouldDefaultToBaseExistingAndHeaderOutline()
 {
     const Config::Evaluator::Context testContext(false);
     const QStringList program = FormatFileConfig().thisMode;
-    qExpect(program)->toEqual(FormatFileConfig::defaultThisMode());
+    qExpect(program)->toEqual(FormatFileConfig::defaultProgram(
+        QString(QLL("relations.thisMode"))));
     const QString outline = QString(QLL("is-outline"));
     QSet<QString > holding;
     holding << QString(QLL("is-base-member"));
@@ -4731,7 +4732,8 @@ void tst_FormatRules::testScopeConditions_shouldPlaceSignaturesByWrapArgsAt()
     );
     const int open = symbolIndex(document, "isReady") + 1;
     FormatScopeConditions conditions(&document);
-    const QStringList fallback = FormatFileConfig::defaultWrapSignatureAt();
+    const QStringList fallback = FormatFileConfig::defaultProgram(
+        QString(QLL("structure.wrapSignatureAt")));
     Config::Parser parser(FormatFileConfig::schema());
     FormatFileConfig config;
     QVERIFY(readSettings(parser, &config));
@@ -4823,20 +4825,20 @@ void tst_FormatRules::testScopeConditions_shouldReadSettingsThroughCfg()
     // A padding condition reads the operator placement at the current place.
     QVERIFY2(parser.readData(
         "[Structure]\noperatorPlacement=middle\n"
-        "operatorExtraPad=cfg.operatorPlacement == \"middle\" ? 0 : 1\n",
+        "operatorPadding=cfg.operatorPlacement == \"middle\" ? 0 : 1\n",
         QLL("inline"), &error
     ), qPrintable(error));
     QVERIFY(readSettings(parser, &config));
     document.setConfig(config);
-    qExpect(conditions.operatorExtraPad(open))->toEqual(0);
+    qExpect(conditions.operatorPadding(open))->toEqual(0);
     QVERIFY2(parser.readData(
-        "[Structure]\noperatorPlacement=begining\n"
-        "operatorExtraPad=cfg.operatorPlacement == \"middle\" ? 0 : 1\n",
+        "[Structure]\noperatorPlacement=start\n"
+        "operatorPadding=cfg.operatorPlacement == \"middle\" ? 0 : 1\n",
         QLL("inline"), &error
     ), qPrintable(error));
     QVERIFY(readSettings(parser, &config));
     document.setConfig(config);
-    qExpect(conditions.operatorExtraPad(open))->toEqual(1);
+    qExpect(conditions.operatorPadding(open))->toEqual(1);
 
     // A key that `cfg` lacks is no condition.
     QVERIFY( ! parser.readData(

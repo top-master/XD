@@ -133,7 +133,7 @@ QVariant FormatSettingsObject::dynamicValue(const QByteArray & name) const
     }
     if (name == "operatorPlacement") {
         return fileConfig->operatorsInMiddle ? QString(QLL("middle"))
-                                             : QString(QLL("begining"));
+                                             : QString(QLL("start"));
     }
     if (name == "wrapMax") {
         return fileConfig->wrapMax;

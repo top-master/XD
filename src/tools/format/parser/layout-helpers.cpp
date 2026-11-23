@@ -465,7 +465,9 @@ bool reachesWrapArgsAt(const FormatDocument *document,
     return conditions->holds(
         QString(QLL("structure.wrapArgsAt")),
         fileConfig.wrapArgsAt, token,
-        FormatFileConfig::defaultWrapChainAt()
+        FormatFileConfig::defaultProgram(
+            QString(QLL("structure.wrapChainAt"))
+        )
     );
 }
 

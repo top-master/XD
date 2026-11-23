@@ -1036,7 +1036,7 @@ QByteArray FormatExpressionLayout::layoutChain(
         const bool controlHead = isControlHead(m_document, firstOperator);
         const bool logical = chainOperator == ANDAND || chainOperator == OROR;
         const int extraPad = operators.size() > 1 && ! (controlHead && logical)
-            ? m_conditions->operatorExtraPad(firstOperator) : 0;
+            ? m_conditions->operatorPadding(firstOperator) : 0;
         const QByteArray head = this->layoutList(
             first,
             callOpen,
@@ -1203,7 +1203,9 @@ QByteArray FormatExpressionLayout::layoutChainRest(
                     ).wrapChainAt,
                     operators.at(end),
                     percentUsed,
-                    FormatFileConfig::defaultWrapChainAt()
+                    FormatFileConfig::defaultProgram(
+                        QString(QLL("structure.wrapChainAt"))
+                    )
                 )
                 || ! this->fits(
                     column,
@@ -1819,7 +1821,9 @@ bool FormatExpressionLayout::mayBreakList(int open, int itemCount) const
         QString(QLL("structure.wrapArgsAt")),
         fileConfig.wrapArgsAt,
         open,
-        FormatFileConfig::defaultWrapChainAt()
+        FormatFileConfig::defaultProgram(
+            QString(QLL("structure.wrapChainAt"))
+        )
     );
 }
 

@@ -30,7 +30,7 @@ public:
                const QStringList & fallback);
     bool holds(const QString & key, const QStringList & program, int token,
                qreal percentUsed, const QStringList & fallback);
-    int operatorExtraPad(int token);
+    int operatorPadding(int token);
     bool argsOver(int token, int count);
     bool argsOver(int token, int count, qreal spaceRemaining);
     bool conditionsOver(int token, int count);

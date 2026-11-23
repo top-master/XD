@@ -10,6 +10,7 @@
 #include "config-any-space.h"
 #include "config-cache.h"
 #include "config-choice.h"
+#include "config-code.h"
 #include "config-condition.h"
 #include "config-scopes.h"
 #include "config-name.h"
@@ -111,8 +112,9 @@
       argument that ends such a line (see FormatDocument::joinArgsAt()),
       may instead give the number, as in `hasMoreArgs() ? 2 : 1`; 1 without
       a `.formatrc`;
-    * `operatorExtraPad` (`[Structure]`): extra indentation steps for a
-      wrapped call in an operator chain, defaulting to 0;
+    * `operatorPadding` (`[Structure]`): extra indentation steps for a
+      wrapped call in an operator chain; every placement but `middle`
+      takes one step without a `.formatrc`;
     * `wrapSubChain` (`[Structure]`): how a member after one joined to a
       closing-bracket line breaks: `always`, `wrap-begin`, `wrap-end`, or
       `never`; `always` without a `.formatrc`;
@@ -186,6 +188,14 @@ static const char defaultWrapSignatureAtText[] =
 */
 static const char defaultWrapConditionsOverText[] =
     "spaceRemaining < 20% ? 1 : 2";
+
+/*!
+    Spells the default `[Structure] operatorPadding` (see
+    FormatFileConfig): a step for a call wrapped at the start of an
+    operator chain, and none where the line puts the operator in the middle.
+*/
+static const char defaultOperatorPaddingText[] =
+    "cfg.operatorPlacement == \"middle\" ? 0 : 1";
 
 /*!
     Spells the default `[Structure] wrapMistakes` (see FormatFileConfig): a
@@ -523,7 +533,11 @@ Config::Schema FormatFileConfig::schema()
                              FormatScopeConditions::names(),
                              true
                          ),
-                     QString::fromLatin1(defaultWrapChainAtText));
+                     Config::Code(
+                         FormatScopeConditions::names(),
+                         QString::fromLatin1(defaultWrapChainAtText),
+                         true
+                     ));
     structure
         .addFollower(QString(QLL("wrapArgsAt")), QString(QLL("wrapChainAt")));
     structure.addKey(QString(QLL("wrapSignatureAt")),
@@ -532,7 +546,11 @@ Config::Schema FormatFileConfig::schema()
                              FormatScopeConditions::names(),
                              true
                          ),
-                     QString::fromLatin1(defaultWrapSignatureAtText));
+                     Config::Code(
+                         FormatScopeConditions::names(),
+                         QString::fromLatin1(defaultWrapSignatureAtText),
+                         true
+                     ));
     structure.addKey(QString(QLL("wrapArgsOver")),
                      Config::Matchers() << Config::Numbers::create(
                              1,
@@ -555,7 +573,11 @@ Config::Schema FormatFileConfig::schema()
                              &FormatConditionContext::setCountObjects,
                              Config::Condition::ResultNumber
                          ),
-                     QString::fromLatin1(defaultWrapConditionsOverText));
+                     Config::Code(
+                         FormatScopeConditions::names(),
+                         QString::fromLatin1(defaultWrapConditionsOverText),
+                         true
+                     ));
     structure.addKey(QString(QLL("wrapConditionsPer")),
                      QStringList() << QString(QLL("line"))
                          << QString(QLL("pair"))
@@ -574,17 +596,21 @@ Config::Schema FormatFileConfig::schema()
                              Config::Condition::ResultNumber
                          ),
                      QString(QLL("1")));
-    structure.addKey(QString(QLL("operatorExtraPad")),
+    structure.addKey(QString(QLL("operatorPadding")),
                      Config::Matchers() << Config::Numbers::create(0, std::numeric_limits<int >::max() / 4)
                          << Config::Condition::create(
                              FormatScopeConditions::names(), true,
                              &FormatConditionContext::setCountObjects,
                              Config::Condition::ResultNumber
                          ),
-                     QString(QLL("0")));
+                     Config::Code(
+                         FormatScopeConditions::names(),
+                         QString::fromLatin1(defaultOperatorPaddingText),
+                         true
+                     ));
     structure.addKey(QString(QLL("operatorPlacement")),
-                     QStringList() << QString(QLL("begining")) << QString(QLL("middle")),
-                     QString(QLL("begining")));
+                     QStringList() << QString(QLL("start")) << QString(QLL("middle")),
+                     QString(QLL("start")));
     structure.addKey(QString(QLL("wrapSubChain")),
                      QStringList() << QString(QLL("always"))
                          << QString(QLL("wrap-begin"))
@@ -603,7 +629,10 @@ Config::Schema FormatFileConfig::schema()
                              FormatScopeConditions::names(),
                              FormatFileConfig::wrapMistakesWords()
                          )),
-                     QString::fromLatin1(defaultWrapMistakesText));
+                     Config::Code(
+                         FormatScopeConditions::names(),
+                         QString::fromLatin1(defaultWrapMistakesText)
+                     ));
     structure.addKey(QString(QLL("bodyBraces")),
                      Config::Matchers() << Config::Condition::create(
                          FormatScopeConditions::names()
@@ -641,7 +670,10 @@ Config::Schema FormatFileConfig::schema()
     Config::Section relations(QString(QLL("Relations")));
     relations.addKey(QString(QLL("thisMode")),
                      Config::Matchers() << Config::Condition::create(FormatScopeConditions::names()),
-                     QString::fromLatin1(defaultThisModeText));
+                     Config::Code(
+                         FormatScopeConditions::names(),
+                         QString::fromLatin1(defaultThisModeText)
+                     ));
     schema.addSection(relations);
     schema.addSection(structure);
     Config::Section replaceTypes(QString(QLL("Replace.types")));
@@ -805,6 +837,30 @@ static bool compileCondition(const QString & text, QStringList *program,
 }
 
 /*!
+    Compiles the setting @a key of @a parser into @a program: the program
+    that schema() compiled for the key's default, which is the key's value
+    when no file sets it (see Config::Code), else the condition the value
+    holds (see compileCondition()).
+*/
+static bool readProgram(const Config::Parser & parser, const QString & key,
+                        QStringList * program, bool takesPercents,
+                        Config::NameMismatch mismatch, QString * error,
+                        const QStringList * words = Q_NULLPTR)
+{
+    const Config::Key schemaKey = parser.schema().key(key);
+    const QString value = parser.value(key);
+    const QStringList defaultProgram = schemaKey.defaultProgram();
+    if ( ! defaultProgram.isEmpty()
+        && value == schemaKey.defaultValue
+    ) {
+        *program = defaultProgram;
+        return true;
+    }
+    return compileCondition(value, program, takesPercents, mismatch, error,
+                            words);
+}
+
+/*!
     Builds the default `[Structure] typedefSuper`, for a file whose
     `.formatrc` files leave it unset.
 */
@@ -823,56 +879,15 @@ QString FormatFileConfig::defaultReplaceSuperSites()
 }
 
 /*!
-    Builds the program of the default `[Relations] thisMode`, for settings
-    that no `.formatrc` set.
+    Answers the program of the default of @a key, which schema() compiled
+    when it built its keys (see Config::Code), for a setting that no
+    `.formatrc` set, and where a condition misses a value. Builds the schema
+    on the first call, and keeps it for these programs alone.
 */
-QStringList FormatFileConfig::defaultThisMode()
+QStringList FormatFileConfig::defaultProgram(const QString & key)
 {
-    QStringList program;
-    compileCondition(QString::fromLatin1(defaultThisModeText), &program);
-    return program;
-}
-
-/*!
-    Builds the program of the default `[Structure] wrapChainAt`, which
-    `[Structure] wrapArgsAt` follows, for settings that no `.formatrc` set,
-    and for a use site that sets no percent.
-*/
-QStringList FormatFileConfig::defaultWrapChainAt()
-{
-    QStringList program;
-    compileCondition(QString::fromLatin1(defaultWrapChainAtText), &program, true);
-    return program;
-}
-
-/*!
-    Builds the program of the default `[Structure] wrapSignatureAt`, for
-    settings that no `.formatrc` set, and where a condition misses a value.
-*/
-QStringList FormatFileConfig::defaultWrapSignatureAt()
-{
-    QStringList program;
-    compileCondition(
-        QString::fromLatin1(defaultWrapSignatureAtText),
-        &program,
-        true
-    );
-    return program;
-}
-
-/*!
-    Builds the program of the default `[Structure] wrapConditionsOver`, for
-    settings that no `.formatrc` set.
-*/
-QStringList FormatFileConfig::defaultWrapConditionsOver()
-{
-    QStringList program;
-    compileCondition(
-        QString::fromLatin1(defaultWrapConditionsOverText),
-        &program,
-        true
-    );
-    return program;
+    static const Config::Schema schema = FormatFileConfig::schema();
+    return schema.key(key).defaultProgram();
 }
 
 /*!
@@ -997,7 +1012,15 @@ static bool readCountOrCondition(
         QStringList *program,
         Config::NameMismatch mismatch, QString *error)
 {
+    const Config::Key schemaKey = parser.schema().key(key);
     const QString value = parser.value(key);
+    const QStringList defaultProgram = schemaKey.defaultProgram();
+    if ( ! defaultProgram.isEmpty()
+        && value == schemaKey.defaultValue
+    ) {
+        *program = defaultProgram;
+        return true;
+    }
     bool isNumber = false;
     const qint64 number = value.toLongLong(&isNumber);
     if (isNumber) {
@@ -1204,8 +1227,8 @@ bool FormatFileConfig::fromParser(
             &fileConfig->wrapConditionsOver,
             &fileConfig->wrapConditionsOverCondition, mismatch, error)
         && readCountOrCondition(
-            parser, QString(QLL("structure.operatorExtraPad")),
-            &fileConfig->operatorExtraPad, &fileConfig->operatorExtraPadCondition,
+            parser, QString(QLL("structure.operatorPadding")),
+            &fileConfig->operatorPadding, &fileConfig->operatorPaddingCondition,
             mismatch, error
         )
         && readCountOrCondition(
@@ -1246,45 +1269,25 @@ bool FormatFileConfig::fromParser(
         ? CompactAlways : CompactNever;
     fileConfig->docTagSign = parser.value(QString(QLL("comments.docTagSign"))) == QLL("\\")
         ? '\\' : '@';
-    return compileCondition(
-        parser.value(QString(QLL("structure.bodyBraces"))),
-        &fileConfig->bodyBraces,
-        false,
-        mismatch,
-        error
+    return readProgram(
+        parser, QString(QLL("structure.bodyBraces")),
+        &fileConfig->bodyBraces, false, mismatch, error
     )
-        && compileCondition(
-            parser.value(QString(QLL("relations.thisMode"))),
-            &fileConfig->thisMode,
-            false,
-            mismatch,
-            error)
-        && compileCondition(
-            parser.value(QString(QLL("structure.wrapChainAt"))),
-            &fileConfig->wrapChainAt,
-            true,
-            mismatch,
-            error)
-        && compileCondition(
-            parser.value(QString(QLL("structure.wrapArgsAt"))),
-            &fileConfig->wrapArgsAt,
-            true,
-            mismatch,
-            error)
-        && compileCondition(
-            parser.value(QString(QLL("structure.wrapSignatureAt"))),
-            &fileConfig->wrapSignatureAt,
-            true,
-            mismatch,
-            error)
-        && compileCondition(
-            parser.value(QString(QLL("structure.wrapMistakes"))),
-            &fileConfig->wrapMistakes,
-            false,
-            mismatch,
-            error,
-            &words
-        );
+        && readProgram(
+            parser, QString(QLL("relations.thisMode")),
+            &fileConfig->thisMode, false, mismatch, error)
+        && readProgram(
+            parser, QString(QLL("structure.wrapChainAt")),
+            &fileConfig->wrapChainAt, true, mismatch, error)
+        && readProgram(
+            parser, QString(QLL("structure.wrapArgsAt")),
+            &fileConfig->wrapArgsAt, true, mismatch, error)
+        && readProgram(
+            parser, QString(QLL("structure.wrapSignatureAt")),
+            &fileConfig->wrapSignatureAt, true, mismatch, error)
+        && readProgram(
+            parser, QString(QLL("structure.wrapMistakes")),
+            &fileConfig->wrapMistakes, false, mismatch, error, &words);
 }
 
 namespace {
@@ -1373,25 +1376,6 @@ QString FormatFileConfig::inlineMarker(
         return QString(QLL("override"));
     }
     return marker.trimmed();
-}
-
-/*!
-    Builds the default `[Structure] wrapMistakes` choice (see
-    FormatFileConfig), compiled.
-*/
-QStringList FormatFileConfig::defaultWrapMistakes()
-{
-    const QStringList words = FormatFileConfig::wrapMistakesWords();
-    QStringList program;
-    compileCondition(
-        QString::fromLatin1(defaultWrapMistakesText),
-        &program,
-        false,
-        Config::NameMismatchWarn,
-        Q_NULLPTR,
-        &words
-    );
-    return program;
 }
 
 /*!

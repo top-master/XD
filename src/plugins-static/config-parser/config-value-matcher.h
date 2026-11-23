@@ -8,6 +8,7 @@
 #include <QtCore/QSharedPointer>
 #include <QtCore/QVariant>
 #include <QtCore/QString>
+#include <QtCore/QStringList>
 
 namespace Config {
 

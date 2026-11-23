@@ -36,19 +36,26 @@ public:
     {
         wrapBegin << 75;
         commentWrapBegin << 75;
-        thisMode = FormatFileConfig::defaultThisMode();
-        wrapChainAt = FormatFileConfig::defaultWrapChainAt();
-        wrapArgsAt = FormatFileConfig::defaultWrapChainAt();
-        wrapSignatureAt = FormatFileConfig::defaultWrapSignatureAt();
-        wrapConditionsOverCondition =
-            FormatFileConfig::defaultWrapConditionsOver();
+        thisMode = FormatFileConfig::defaultProgram(
+            QString::fromLatin1("relations.thisMode"));
+        wrapChainAt = FormatFileConfig::defaultProgram(
+            QString::fromLatin1("structure.wrapChainAt"));
+        wrapArgsAt = FormatFileConfig::defaultProgram(
+            QString::fromLatin1("structure.wrapChainAt"));
+        wrapSignatureAt = FormatFileConfig::defaultProgram(
+            QString::fromLatin1("structure.wrapSignatureAt"));
+        wrapConditionsOverCondition = FormatFileConfig::defaultProgram(
+            QString::fromLatin1("structure.wrapConditionsOver"));
         bodyBraces << QString::fromLatin1("always");
-        wrapMistakes = FormatFileConfig::defaultWrapMistakes();
+        wrapMistakes = FormatFileConfig::defaultProgram(
+            QString::fromLatin1("structure.wrapMistakes"));
         extensions = FormatFileConfig::defaultExtensions();
         typedefSuper = FormatFileConfig::defaultTypedefSuper();
         replaceSuperSites = FormatFileConfig::defaultReplaceSuperSites();
         operatorsInMiddle = false;
-        operatorExtraPad = 0;
+        operatorPadding = 0;
+        operatorPaddingCondition = FormatFileConfig::defaultProgram(
+            QString::fromLatin1("structure.operatorPadding"));
         wrapSubChain = QString::fromLatin1("always");
         wrapConditionsPer = QString::fromLatin1("pair-bundle");
         replaceTypesTarget = QString::fromLatin1("isNew");
@@ -62,7 +69,6 @@ public:
     static QStringList superConditionNames();
     static QStringList superChoices();
     static QStringList lintLevels();
-    static QStringList defaultWrapMistakes();
     static QStringList wrapMistakesWords();
     static LintLevel lintLevel(
             const QString & value,
@@ -81,10 +87,7 @@ public:
             const Config::Evaluator::Context *context) const;
     static QString defaultTypedefSuper();
     static QString defaultReplaceSuperSites();
-    static QStringList defaultThisMode();
-    static QStringList defaultWrapChainAt();
-    static QStringList defaultWrapSignatureAt();
-    static QStringList defaultWrapConditionsOver();
+    static QStringList defaultProgram(const QString & key);
     static bool readConfig(Config::Parser *parser, const FormatConfig & config,
                            QString *error);
     static bool load(const QString & path, const FormatConfig & config,
@@ -109,8 +112,8 @@ public:
     int joinArgs;
     QStringList joinArgsCondition;
     bool operatorsInMiddle;
-    int operatorExtraPad;
-    QStringList operatorExtraPadCondition;
+    int operatorPadding;
+    QStringList operatorPaddingCondition;
     QString wrapSubChain;
     QList<int > commentWrapBegin;
     int commentWrapMax;

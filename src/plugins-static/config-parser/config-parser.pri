@@ -8,6 +8,7 @@ PLUGIN_HEADERS = \
     config-array-obj.h \
     config-cache.h \
     config-choice.h \
+    config-code.h \
     config-condition.h \
     config-escape.h \
     config-evaluator-context.h \

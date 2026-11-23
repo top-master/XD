@@ -916,17 +916,17 @@ QVariant FormatScopeConditions::resolveAt(
     return resolveOf(key, program, &context);
 }
 
-int FormatScopeConditions::operatorExtraPad(int token)
+int FormatScopeConditions::operatorPadding(int token)
 {
     const FormatFileConfig &config = m_document->configAt(
         m_document->symbols().at(token).from
     );
-    if (config.operatorExtraPadCondition.isEmpty()) {
-        return config.operatorExtraPad;
+    if (config.operatorPaddingCondition.isEmpty()) {
+        return config.operatorPadding;
     }
     const QVariant value = this->resolveAt(
-        QString(QLL("structure.operatorExtraPad")),
-        config.operatorExtraPadCondition, token
+        QString(QLL("structure.operatorPadding")),
+        config.operatorPaddingCondition, token
     );
     return value.isValid() ? qMax(0, FormatFileConfig::countOf(value)) : 0;
 }

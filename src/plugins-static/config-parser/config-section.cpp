@@ -28,8 +28,9 @@ Config::Section::Section(const QString & name)
 /*!
     Adds the setting @a name (the key within the section, in any case),
     which takes each value one of @a matchers matches, and starts as
-    @a defaultValue; @a aliases maps another spelling of a value to the
-    value it stands for.
+    @a defaultValue, a value as it reads; @a aliases maps another spelling
+    of a value to the value it stands for. A default that is code takes
+    Config::Code instead (see the overload).
 */
 void Config::Section::addKey(
         const QString & name, const Config::Matchers & matchers,
@@ -44,6 +45,22 @@ void Config::Section::addKey(
         key.aliases.insert(alias.key().toLower(), alias.value());
     }
     this->m_keys.append(key);
+}
+
+/*!
+    Adds the setting @a name, whose default @a defaultValue is code: it takes
+    each value one of @a matchers matches, and starts as @a defaultValue,
+    whose program the key's defaultProgram() compiles once (see
+    Config::Code); @a aliases maps another spelling of a value to the value
+    it stands for.
+*/
+void Config::Section::addKey(
+        const QString & name, const Config::Matchers & matchers,
+        const Config::Code & defaultValue,
+        const QHash<QString, QString > & aliases)
+{
+    this->addKey(name, matchers, QString(defaultValue), aliases);
+    this->m_keys.last().code = defaultValue;
 }
 
 /*!

@@ -100,7 +100,7 @@ static bool layoutChainOperand(
         const int limit = conditional ? wrapMaxAt(document, from)
                                       : wrapColumn(document, from);
         if (column + textWidth(flat) > limit) {
-            const int extraPad = conditional ? 0 : conditions->operatorExtraPad(previous);
+            const int extraPad = conditional ? 0 : conditions->operatorPadding(previous);
             operand = layout.layoutList(first, open, close, column, true, 0, extraPad);
             if (newline == "\r\n") {
                 operand.replace("\r\n", "\n");

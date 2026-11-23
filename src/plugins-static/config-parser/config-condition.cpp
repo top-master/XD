@@ -1248,6 +1248,14 @@ public:
     {
     }
 
+    /*!
+        Tells whether this operand and @a other stand for the same value:
+        the same number when each stands for one (see operandNumber()), else
+        the same text. A text stands for no number where it reads as one,
+        hence it differs from every number.
+    */
+    bool equals(const Operand & other) const;
+
     qreal number;
     bool isText;
     bool isNull;
@@ -1278,6 +1286,18 @@ static bool operandNumber(const Operand &operand, qreal *result)
     }
     *result = operand.number;
     return true;
+}
+
+bool Operand::equals(const Operand & other) const
+{
+    qreal number = 0;
+    qreal otherNumber = 0;
+    if (operandNumber(*this, &number)
+        && operandNumber(other, &otherNumber)
+    ) {
+        return number == otherNumber;
+    }
+    return this->isText && other.isText && this->text == other.text;
 }
 
 /*!
@@ -1440,6 +1460,18 @@ bool calculate(const QStringList &program, Lookup *lookup, Operand *result)
             i = item.mid(5).toInt() - 1;
         } else if (item.startsWith(QLL("op:"))) {
             const QString op = item.mid(3);
+            // Compares two texts as they read, since one side may be a word
+            // that no number stands for.
+            if (op == QLL("==") || op == QLL("!=")) {
+                if (stack.size() < 2) {
+                    return false;
+                }
+                const Operand right = stack.takeLast();
+                const Operand left = stack.takeLast();
+                const bool same = left.equals(right);
+                stack << Operand(op == QLL("==") ? same : ! same);
+                continue;
+            }
             if (stack.isEmpty()) {
                 return false;
             }
@@ -1505,10 +1537,6 @@ bool calculate(const QStringList &program, Lookup *lookup, Operand *result)
                 stack << Operand(left.number > right.number);
             } else if (op == QLL(">=")) {
                 stack << Operand(left.number >= right.number);
-            } else if (op == QLL("==")) {
-                stack << Operand(left.number == right.number);
-            } else if (op == QLL("!=")) {
-                stack << Operand(left.number != right.number);
             } else {
                 return false;
             }

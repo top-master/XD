@@ -1401,7 +1401,7 @@ void inspect()
 // @formatter:
 // ```
 // [Structure]
-// operatorPlacement = begining
+// operatorPlacement = start
 // wrapArgsAt = never
 // wrapArgsOver = 3
 // ```

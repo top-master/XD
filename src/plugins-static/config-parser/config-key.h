@@ -5,9 +5,11 @@
 #define CONFIG_KEY_H
 
 #include "./config-value-matcher.h"
+#include "./config-code.h"
 
 #include <QtCore/QHash>
 #include <QtCore/QString>
+#include <QtCore/QStringList>
 
 namespace Config {
 
@@ -16,8 +18,9 @@ namespace Config {
 
     Describes one setting a tool supports: its name (`<section>.<key>`, in
     lower case), the matchers of the values it takes (see
-    Config::ValueMatcher), the value it has when nothing sets it, and the other
-    spellings of a value (such as `none` for an empty one).
+    Config::ValueMatcher), the value it has when nothing sets it, the program
+    that value runs when it is code (see Config::Code and defaultProgram()),
+    and the other spellings of a value (such as `none` for an empty one).
 
     A key that extends another one (see Config::Section::extend()) names it
     in `extends`: until a file or an assignment overrides the key itself, its
@@ -33,9 +36,20 @@ public:
 
     inline bool isNull() const { return name.isEmpty(); }
 
+    /*!
+        Answers the program that the default of this key runs, when it is code
+        (see Config::Code): the first call compiles it, and each later call
+        answers the same program. Answers an empty list for a default that
+        stands for a value as it reads.
+    */
+    inline QStringList defaultProgram() const { return this->code.program(); }
+
     QString name;
     Matchers matchers;
     QString defaultValue;
+    /// The code of a default that is one, which defaultProgram() compiles;
+    /// empty for a default that stands for a value as it reads.
+    Code code;
     QHash<QString, QString > aliases;
     /// Lets the key follow the key it extends, `<section>.<key>` in lower
     /// case, until it is overridden; empty for a key of its own.
