@@ -69,7 +69,7 @@ void FormatLineJoinRule::run(FormatDocument *document) const
         const FormatFileConfig &fileConfig = document->configAt(
             document->symbols().at(i).from
         );
-        if (fileConfig.codeTarget != FormatFileConfig::CodeTargetAny
+        if ( ! codeTargetAnyAt(document, document->symbols().at(i).from)
             || document->symbolEndLine(i) >= document->symbolLine(i + 1)
             || ! this->mayJoin(document, i, brackets, questions)
         ) {

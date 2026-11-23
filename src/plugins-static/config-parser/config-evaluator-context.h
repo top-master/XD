@@ -123,6 +123,9 @@ public:
     inline EvalRes lastEvalResult() const { return m_lastEvalResult; }
     inline bool lastResolvePassed() const { return m_lastResolvePassed; }
     inline QString lastError() const { return m_lastError; }
+    inline void markResolved() const { m_lastResolvePassed = true; m_lastError.clear(); }
+    inline void markResolveFailed(const QString & error) const
+    { m_lastResolvePassed = false; m_lastError = error; }
     inline bool hasPlace() const { return m_hasPlace; }
     virtual bool predicate(const QString &name, bool *value) const;
     virtual const Settings *settings() const;

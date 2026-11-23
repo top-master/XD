@@ -116,9 +116,11 @@ static bool opensCall(const FormatDocument *document, int open)
 QSet<int > FormatConditionLayout::forcedOperators(int open, int close) const
 {
     QSet<int > forced;
-    const QString per = m_document->configAt(
-        m_document->symbols().at(open).from
-    ).wrapConditionsPer;
+    const int offset = m_document->symbols().at(open).from;
+    const QString per = settingValueAt(
+        m_document, offset, QString(QLL("structure.wrapConditionsPer")),
+        m_document->configAt(offset).wrapConditionsPer
+    ).toString();
     if (per == QLL("line")) {
         return forced;
     }
@@ -246,7 +248,7 @@ QByteArray FormatConditionLayout::layoutPlain(int open, int close) const
     }
     const int line = m_document->symbolLine(open);
     const int offset = m_document->symbols().at(open).from;
-    const FormatFileConfig &fileConfig = m_document->configAt(offset);
+    const int maximum = wrapMaxAt(m_document, offset);
     const int indent = m_document->indentOf(line).size();
     const int rank = conditionRank(m_document->token(found.first()));
     const int start = m_document->lineStart(line);
@@ -273,7 +275,7 @@ QByteArray FormatConditionLayout::layoutPlain(int open, int close) const
                     m_document->symbols().at(tighter.first()).from - start
                 )
             );
-            bool fits = firstWidth <= fileConfig.wrapMax;
+            bool fits = firstWidth <= maximum;
             for (int k = 0; k < tighter.size() && fits; ++k) {
                 const int end = k + 1 < tighter.size()
                     ? tighter.at(k + 1) - 1 : close - 1;
@@ -281,7 +283,7 @@ QByteArray FormatConditionLayout::layoutPlain(int open, int close) const
                     m_document,
                     tighter.at(k),
                     end
-                )) <= fileConfig.wrapMax;
+                )) <= maximum;
             }
             if (fits) {
                 found = tighter;
@@ -368,8 +370,11 @@ QByteArray FormatConditionLayout::group(
     const FormatFileConfig &fileConfig = m_document->configAt(
         m_document->symbols().at(open).from
     );
-    const int maximum = qMax(1, fileConfig.wrapMax);
-    const bool isPerLine = fileConfig.wrapConditionsPer == QLL("line");
+    const int maximum = wrapMaxAt(m_document, m_document->symbols().at(open).from);
+    const bool isPerLine = settingValueAt(
+        m_document, m_document->symbols().at(open).from,
+        QString(QLL("structure.wrapConditionsPer")), fileConfig.wrapConditionsPer
+    ).toString() == QLL("line");
     // Counts the operands that the current line holds; an operand that
     // takes more than one line ends its last line.
     int onLine = 0;
@@ -521,7 +526,7 @@ QByteArray FormatConditionLayout::atom(
             && conditionRank(m_document->token(comparisons.first())) <= 4
             && continuationIndent(indent) + textWidth(sourceText(
                 m_document, comparisons.first(), last
-            )) > m_document->configAt(offset).wrapMax
+            )) > wrapMaxAt(m_document, offset)
         ) {
             const int comparison = comparisons.first();
             const QByteArray head =
@@ -533,7 +538,7 @@ QByteArray FormatConditionLayout::atom(
             const int split = right.indexOf('\n');
             if (split >= 0
                 && column + textWidth(head) + textWidth(right.left(split))
-                    <= m_document->configAt(offset).wrapMax
+                    <= wrapMaxAt(m_document, offset)
             ) {
                 *isComplex = true;
                 return head + right;

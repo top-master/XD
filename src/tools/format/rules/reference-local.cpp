@@ -6,6 +6,7 @@
 #include "../format-document.h"
 #include "../format-file-config.h"
 #include "../parser/code-helpers.h"
+#include "../parser/layout-helpers.h"
 
 #include <QtCore/QByteArray>
 #include <QtCore/QString>
@@ -41,8 +42,15 @@ void FormatReferenceLocalRule::run(FormatDocument *document) const
         ) {
             continue;
         }
-        const FormatFileConfig::LintLevel level =
-            document->configAt(document->symbols().at(i).from).byRefVariable;
+        const int offset = document->symbols().at(i).from;
+        const FormatFileConfig &config = document->configAt(offset);
+        const QString fallback = config.byRefVariable == FormatFileConfig::LintIgnore
+            ? QString(QLL("ignore")) : config.byRefVariable == FormatFileConfig::LintError
+            ? QString(QLL("error")) : QString(QLL("warn"));
+        const QString value = settingValueAt(
+            document, offset, QString(QLL("lint.byRefVariable")), fallback
+        ).toString();
+        const FormatFileConfig::LintLevel level = FormatFileConfig::lintLevel(value, config);
         if (level == FormatFileConfig::LintIgnore) {
             continue;
         }

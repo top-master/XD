@@ -5,10 +5,54 @@
 
 #include "../format-document.h"
 #include "../parser/comment-helpers.h"
+#include "../parser/layout-helpers.h"
+
+#include "config-numbers.h"
 
 #include <QtCore/QRegularExpression>
 #include <QtCore/QSet>
 #include <QtCore/QVector>
+
+/*!
+    Builds the comment settings at @a offset in @a document.
+*/
+static FormatFileConfig commentSettingsAt(const FormatDocument *document, int offset)
+{
+    FormatFileConfig config = document->configAt(offset);
+    const QVariant begin = settingValueAt(
+        document, offset, QString(QLL("comments.wrapBegin")), QVariant()
+    );
+    if (begin.isValid()) {
+        config.commentWrapBegin.clear();
+        const QList<qint64 > columns = Config::Numbers::parse(begin.toString());
+        for (int i = 0; i < columns.size(); ++i) {
+            config.commentWrapBegin << FormatFileConfig::countOf(columns.at(i));
+        }
+    }
+    config.commentWrapMax = FormatFileConfig::countOf(settingValueAt(
+        document, offset, QString(QLL("comments.wrapMax")), config.commentWrapMax
+    ));
+    config.wrapExtendsForKeywords = FormatFileConfig::countOf(settingValueAt(
+        document, offset, QString(QLL("comments.wrapExtendsForKeywords")),
+        config.wrapExtendsForKeywords
+    ));
+    config.wrapEmptyLimit = FormatFileConfig::countOf(settingValueAt(
+        document, offset, QString(QLL("comments.wrapEmptyLimit")), config.wrapEmptyLimit
+    ));
+    const QString comma = settingValueAt(
+        document, offset, QString(QLL("comments.wrapComma")),
+        QString(config.wrapComma == FormatFileConfig::WrapCommaHard ? QLL("hard") : QLL("soft"))
+    ).toString();
+    config.wrapComma = comma == QLL("hard") ? FormatFileConfig::WrapCommaHard
+                                             : FormatFileConfig::WrapCommaSoft;
+    const QString target = settingValueAt(
+        document, offset, QString(QLL("comments.target")),
+        QString(config.commentTarget == FormatFileConfig::CommentTargetAny ? QLL("any") : QLL("long"))
+    ).toString();
+    config.commentTarget = target == QLL("any") ? FormatFileConfig::CommentTargetAny
+                                                  : FormatFileConfig::CommentTargetLong;
+    return config;
+}
 
 /*!
     Matches the marker that opens a list item of a comment (`*`, `-`, or a
@@ -346,8 +390,8 @@ void FormatCommentWidthRule::runGroup(
                 continue;
             }
             const QString text = QString::fromUtf8(document->lineText(line));
-            const FormatFileConfig &fileConfig =
-                document->configAt(document->lineStart(line));
+            const FormatFileConfig fileConfig =
+                commentSettingsAt(document, document->lineStart(line));
             if ( ! FormatCommentWidthRule::fits(text, fileConfig)) {
                 document->report(
                     document->lineStart(line),
@@ -375,8 +419,7 @@ bool FormatCommentWidthRule::rewrap(
         int first, int count, const QByteArray & nextPrefix) const
 {
     // Checks for a line past the column limit.
-    const FormatFileConfig & fileConfig =
-        document->configAt(lines.at(first).offset);
+    const FormatFileConfig fileConfig = commentSettingsAt(document, lines.at(first).offset);
     const int firstLine = document->lineOf(lines.at(first).offset);
     bool tooLong = false;
     for (int k = 0; k < count && ! tooLong; ++k) {

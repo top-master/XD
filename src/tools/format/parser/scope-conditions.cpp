@@ -55,6 +55,7 @@ FormatScopeConditions::FormatScopeConditions(const FormatDocument *document)
 QStringList FormatScopeConditions::names()
 {
     return QStringList() << QString(QLL("always")) << QString(QLL("never"))
+        << QString(QLL("is-new"))
         << QString(QLL("already-existing")) << QString(QLL("is-base-member"))
         << QString(QLL("is-template")) << QString(QLL("is-outline"))
         << QString(QLL("is-header")) << QString(QLL("is-non-header"))
@@ -244,6 +245,10 @@ bool FormatScopeConditions::nameHolds(
 {
     if (name == QLL("always") || name == QLL("never")) {
         *value = name == QLL("always");
+        return true;
+    }
+    if (name == QLL("isNew")) {
+        *value = this->m_document->isLineSelected(this->m_document->symbolLine(token));
         return true;
     }
     if (name == QLL("isHeader") || name == QLL("isNonHeader")) {
@@ -653,9 +658,7 @@ qreal FormatScopeConditions::remainingSpace(int token, bool direct) const
         m_document->lineStart(line),
         m_document->symbolEnd(open) - m_document->lineStart(line)
     );
-    const int maximum = qMax(1, m_document->configAt(
-        m_document->symbols().at(open).from
-    ).wrapMax);
+    const int maximum = wrapMaxAt(m_document, m_document->symbols().at(open).from);
     return 100.0 * (maximum - textWidth(head)) / maximum;
 }
 
@@ -685,12 +688,7 @@ qreal FormatScopeConditions::spaceRemaining(int token) const
     if (m_reservedLine >= 0
         && m_document->symbolLine(token) == m_reservedLine
     ) {
-        const int maximum = qMax(
-            1,
-            m_document->configAt(
-                m_document->symbols().at(token).from
-            ).wrapMax
-        );
+        const int maximum = wrapMaxAt(m_document, m_document->symbols().at(token).from);
         return 100.0 * (maximum - m_reservedColumn) / maximum;
     }
     return this->remainingSpace(token, true);

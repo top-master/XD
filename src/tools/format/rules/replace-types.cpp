@@ -87,6 +87,15 @@ public:
         return m_place && m_place->predicate(name, value);
     }
 
+    inline bool argumentCount(int depth, int argument, qreal *count) const Q_DECL_OVERRIDE_IL
+    { return m_place && m_place->argumentCount(depth, argument, count); }
+
+    inline bool spaceRemaining(qreal *percent) const Q_DECL_OVERRIDE_IL
+    { return m_place && m_place->spaceRemaining(percent); }
+
+    inline bool isTarget(const QString & kind, bool *value) const Q_DECL_OVERRIDE_IL
+    { return m_place && m_place->isTarget(kind, value); }
+
 private:
     FormatArgsArray *m_arguments;
     const FormatConditionContext *m_place;
@@ -1017,7 +1026,7 @@ void FormatReplaceTypesRule::run(FormatDocument *document) const
         // Checks `target` for this line.
         const FormatReplaceTypesContext context(
             document,
-            document->symbolLine(i),
+            i,
             &config
         );
         QStringList *program = &(programs[config.replaceTypesTarget]);
@@ -1027,7 +1036,8 @@ void FormatReplaceTypesRule::run(FormatDocument *document) const
             );
             *program = Config::Condition::compile(
                 config.replaceTypesTarget,
-                &context
+                &context,
+                true
             );
             scope.close();
             if ( ! context.lastCompiled()) {
@@ -1067,7 +1077,11 @@ void FormatReplaceTypesRule::run(FormatDocument *document) const
         }
         const QString shortest = shortestName(head, scopes);
         const int to = document->symbolEnd(close);
-        if (config.replaceTypesAction == QLL("replace")
+        const QString actionKey = QString(QLL("replace.types.action"));
+        const QVariant action = config.hasExpression(actionKey)
+            ? config.resolveSetting(actionKey, &context) : QVariant();
+        const QString mode = action.isValid() ? action.toString() : config.replaceTypesAction;
+        if (mode == QLL("replace")
             && document->replace(
                 from,
                 to - from,

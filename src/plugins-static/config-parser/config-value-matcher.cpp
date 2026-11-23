@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: Apache-2.0
 
 #include "./config-value-matcher.h"
+#include "./config-evaluator-context.h"
 
 /*!
     @class Config::ValueMatcher
@@ -63,7 +64,7 @@ QSharedPointer<const Config::ValueMatcher > Config::forbidCode()
 
 QStringList Config::ValueMatcher::enumKeys() const
 {
-    return QStringList();
+    return Evaluator::CompileContext::anyEnumKeys();
 }
 
 /*!
@@ -73,11 +74,18 @@ QStringList Config::ValueMatcher::enumKeys() const
 */
 QVariant Config::ValueMatcher::convert(const QVariant & resolved) const
 {
-    if (resolved.type() != QVariant::String) {
+    if (resolved.type() != QVariant::String
+        && resolved.type() != QVariant::Bool
+        && resolved.type() != QVariant::Int
+        && resolved.type() != QVariant::UInt
+        && resolved.type() != QVariant::LongLong
+        && resolved.type() != QVariant::ULongLong
+        && resolved.type() != QVariant::Double
+    ) {
         return QVariant();
     }
     QString matched;
-    return this->match(resolved.toString(), &matched) ? QVariant(matched) : QVariant();
+    return this->matchLiteral(resolved.toString(), &matched) ? QVariant(matched) : QVariant();
 }
 
 /*!
@@ -115,6 +123,9 @@ QString Config::Boolean::describe() const
 
 QVariant Config::Boolean::convert(const QVariant & resolved) const
 {
+    if (resolved.type() == QVariant::Bool) {
+        return resolved;
+    }
     if (resolved.type() == QVariant::Double) {
         return QVariant(resolved.toDouble() != 0);
     }

@@ -7,6 +7,8 @@
 #include "./format-project-reader.h"
 #include "./format-runner.h"
 #include "./format-file-config.h"
+#include "./format-document.h"
+#include "./parser/condition-context.h"
 #include "./formatter.h"
 
 #include "config-scanner.h"
@@ -107,24 +109,61 @@ static QStringList logicalPaths(const QStringList & paths)
     return resolved;
 }
 
+class FileSelectionContext : public FormatConditionContext
+{
+public:
+    inline FileSelectionContext(const QString & path, const FormatFileConfig *config)
+        : m_document(QByteArray(), path), m_config(config) {}
+
+    inline const FormatFileConfig *fileConfig() const Q_DECL_OVERRIDE_IL
+    { return m_config; }
+
+    inline bool predicate(const QString & name, bool *value) const Q_DECL_OVERRIDE_IL
+    {
+        if (name == QLL("always") || name == QLL("never")) {
+            *value = name == QLL("always");
+            return true;
+        }
+        if (name == QLL("isHeader") || name == QLL("isNonHeader")) {
+            Config::Cache::skip();
+            *value = m_document.isHeader() == (name == QLL("isHeader"));
+            return true;
+        }
+        return false;
+    }
+
+private:
+    FormatDocument m_document;
+    const FormatFileConfig *m_config;
+};
+
 static bool matchesSource(const QString &path, const FormatConfig &config,
                           QHash<QString, FormatFileConfig > *cache,
                           bool *matches, QString *error)
 {
     const QString directory = QFileInfo(path).absolutePath();
     if ( ! cache->contains(directory)) {
-        // Reads the settings, and takes only the extensions out of them.
+        // Reads the settings used to choose source files.
         Config::Parser parser(FormatFileConfig::schema());
         if ( ! FormatFileConfig::readParser(path, config, &parser, error)) {
             return false;
         }
         FormatFileConfig fileConfig;
-        fileConfig.extensions = parser.value(
-            QString(QLL("general.extensions"))
-        );
+        if ( ! FormatFileConfig::fromParser(parser, &fileConfig, error)) {
+            return false;
+        }
         cache->insert(directory, fileConfig);
     }
-    *matches = cache->value(directory).acceptsFile(path);
+    FormatFileConfig fileConfig = cache->value(directory);
+    const QString key = QString(QLL("general.extensions"));
+    if (fileConfig.hasExpression(key)) {
+        const FileSelectionContext context(path, &fileConfig);
+        const QVariant extensions = fileConfig.resolveSetting(key, &context);
+        if (extensions.isValid()) {
+            fileConfig.extensions = extensions.toString();
+        }
+    }
+    *matches = fileConfig.acceptsFile(path);
     return true;
 }
 

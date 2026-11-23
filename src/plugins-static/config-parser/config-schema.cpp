@@ -4,6 +4,8 @@
 #include "./config-schema.h"
 #include "./config-cache.h"
 #include "./config-condition.h"
+#include "./config-numbers.h"
+#include "./config-regexp.h"
 
 /*!
     @class Config::Schema
@@ -86,6 +88,46 @@ Config::Key Config::Schema::key(const QString & name) const
 }
 
 /*!
+    Tells whether @a text for @a name is a quoted value, an expression, or
+    a context-dependent value, using the names at @a context.
+*/
+bool Config::Schema::isExpression(
+        const QString & name, const QString & text,
+        const Evaluator::CompileContext *context) const
+{
+    const Config::Key field = this->key(name);
+    if ( ! field.allowsCode()) {
+        return false;
+    }
+    if (Config::Numbers::parse(text).size() > 1) {
+        for (int i = 0; i < field.matchers.size(); ++i) {
+            QString matched;
+            if (field.matchers.at(i)->matchLiteral(text, &matched)) {
+                return false;
+            }
+        }
+    }
+    const QStringList program = this->compile(name, text, context);
+    if ( ! context->lastCompiled()) {
+        return false;
+    }
+    if (text.trimmed().startsWith(QLatin1Char('"'))) {
+        return true;
+    }
+    for (int i = 1; i < program.size(); ++i) {
+        const QString item = program.at(i);
+        if (item.startsWith(QLL("r:")) || item.startsWith(QLL("f:"))
+            || item.startsWith(QLL("op:")) || item.startsWith(QLL("jelse:"))
+            || (item.startsWith(QLL("v:")) && item != QLL("v:true")
+                && item != QLL("v:false"))
+        ) {
+            return true;
+        }
+    }
+    return false;
+}
+
+/*!
     Compiles @a text for @a name, using its matchers' choice words and the
     names at @a context.
 */
@@ -105,7 +147,7 @@ QStringList Config::Schema::compile(
         scope = Scopes::push();
         found.setup(scope.data());
     }
-    QStringList words;
+    QStringList words = found.aliases.keys();
     for (int i = 0; i < found.matchers.size(); ++i) {
         words += found.matchers.at(i)->enumKeys();
     }
@@ -149,17 +191,23 @@ QVariant Config::Schema::reference(
     }
     const QStringList program = this->compile(name, text, context);
     if ( ! context->lastCompiled()) {
+        context->markResolveFailed(context->lastErrorForCompile());
         return QVariant();
     }
+    const CacheScope scope(name);
+    Q_UNUSED(scope);
     for (int percent = 0; percent <= 100; ++percent) {
         const QVariant holds = context->resolveAtPercent(program, percent);
         if ( ! holds.isValid()) {
+            context->markResolveFailed(QString(QLL("cannot resolve setting %1")).arg(name));
             return QVariant();
         }
         if (holds.toBool()) {
+            context->markResolved();
             return QVariant(QString(QString::number(percent - 1) + QLatin1Char('%')));
         }
     }
+    context->markResolved();
     return QString(QLL("100%"));
 }
 
@@ -210,8 +258,37 @@ QVariant Config::Schema::convert(
         const QString & name, const QVariant & resolved) const
 {
     const Config::Key found = this->key(name);
+    QVariant canonical = resolved;
+    if (canonical.type() == QVariant::String) {
+        const QHash<QString, QString >::const_iterator alias =
+            found.aliases.constFind(canonical.toString().toLower());
+        if (alias != found.aliases.constEnd()) {
+            canonical = *alias;
+        }
+        QString head;
+        QString fallback;
+        bool hasFallback = false;
+        if (Config::RegExp::split(canonical.toString(), &head, &fallback, &hasFallback)
+            && hasFallback
+        ) {
+            QString nestedHead;
+            QString nestedFallback;
+            bool nested = false;
+            if (Config::RegExp::split(fallback, &nestedHead, &nestedFallback, &nested)) {
+                return QVariant();
+            }
+            const QVariant convertedHead = this->convert(name, head);
+            const QVariant convertedFallback = this->convert(name, fallback);
+            if ( ! convertedHead.isValid() || ! convertedFallback.isValid()) {
+                return QVariant();
+            }
+            const QString tail = convertedFallback.toString();
+            return convertedHead.toString() + QLL(" |")
+                + (tail.isEmpty() ? QString() : QLatin1Char(' ') + tail);
+        }
+    }
     for (int i = 0; i < found.matchers.size(); ++i) {
-        const QVariant value = found.matchers.at(i)->convert(resolved);
+        const QVariant value = found.matchers.at(i)->convert(canonical);
         if (value.isValid()) {
             return value;
         }

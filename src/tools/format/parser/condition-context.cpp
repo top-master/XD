@@ -7,6 +7,7 @@
 #include "../format-document.h"
 #include "./condition-object.h"
 #include "./settings-object.h"
+#include "./scope-conditions.h"
 #include "./count-object.h"
 #include "../rules/template-object.h"
 #include "config-cache.h"
@@ -16,23 +17,50 @@
 */
 QStringList FormatReplaceTypesContext::onNames() const
 {
-    return QStringList() << QString(QLL("isNew"));
+    return FormatScopeConditions::names();
 }
 
 /*!
-    Answers whether the current line is selected.
+    Answers the conditions at the replacement's token.
 */
 bool FormatReplaceTypesContext::predicate(
         const QString & name, bool *value) const
 {
-    if (name.compare(QLL("isNew"), Qt::CaseInsensitive) != 0
-        || ! this->m_document
-    ) {
+    if ( ! m_document || m_token < 0 || m_token >= m_document->symbols().size()) {
         return false;
     }
     Config::Cache::skip();
-    *value = this->m_document->isLineSelected(this->m_line);
+    FormatScopeConditions conditions(m_document);
+    return conditions.nameHolds(m_token, name, value);
+}
+
+bool FormatReplaceTypesContext::argumentCount(int depth, int argument, qreal *count) const
+{
+    if ( ! m_document || m_token < 0 || m_token >= m_document->symbols().size()) {
+        return false;
+    }
+    FormatScopeConditions conditions(m_document);
+    *count = conditions.argumentCount(m_token, depth, argument);
     return true;
+}
+
+bool FormatReplaceTypesContext::spaceRemaining(qreal *percent) const
+{
+    if ( ! m_document || m_token < 0 || m_token >= m_document->symbols().size()) {
+        return false;
+    }
+    FormatScopeConditions conditions(m_document);
+    *percent = conditions.spaceRemaining(m_token);
+    return true;
+}
+
+bool FormatReplaceTypesContext::isTarget(const QString & kind, bool *value) const
+{
+    if ( ! m_document || m_token < 0 || m_token >= m_document->symbols().size()) {
+        return false;
+    }
+    FormatScopeConditions conditions(m_document);
+    return conditions.targetIs(m_token, kind, value);
 }
 
 /*!
@@ -98,15 +126,26 @@ bool FormatConditionContext::isWrapping(bool *) const
 }
 
 /*!
-    Tells in @a value whether the list @a list of @a config holds @a name,
-    in any case; returns false without @a config.
+    Tells in @a value whether @a context's setting @a key holds @a name,
+    in any case; @a list is its loaded fallback. Returns false without settings.
 */
-static bool listsName(const FormatFileConfig *config,
+static bool listsName(const FormatConditionContext *context,
                       QStringList FormatFileConfig::*list,
+                      const QString & key,
                       const QString & name, bool *value)
 {
+    const FormatFileConfig *config = context->fileConfig();
     if ( ! config) {
         return false;
+    }
+    Config::Cache::skip();
+    if ( ! config->settings.values.isEmpty()) {
+        const QVariant resolved = config->resolveSetting(key, context);
+        if (resolved.isValid()) {
+            *value = FormatFileConfig::listItems(resolved.toString())
+                .contains(name, Qt::CaseInsensitive);
+            return true;
+        }
     }
     *value = (config->*list).contains(name, Qt::CaseInsensitive);
     return true;
@@ -122,8 +161,9 @@ bool FormatConditionContext::hasStandard(
         const QString & standard, bool *value) const
 {
     return listsName(
-        this->fileConfig(),
+        this,
         &FormatFileConfig::standards,
+        QString(QLL("lint.standards")),
         standard,
         value
     );
@@ -139,8 +179,9 @@ bool FormatConditionContext::hasCompiler(
         const QString & compiler, bool *value) const
 {
     return listsName(
-        this->fileConfig(),
+        this,
         &FormatFileConfig::compilers,
+        QString(QLL("code.compilers")),
         compiler,
         value
     );

@@ -1184,7 +1184,10 @@ QByteArray FormatExpressionLayout::layoutChainRest(
     QByteArray text;
     bool afterClosingLine = endsWithClosingLine(head);
     bool subChain = false;
-    const QString subChainMode = m_document->configAt(offset).wrapSubChain;
+    const QString subChainMode = settingValueAt(
+        m_document, offset, QString(QLL("structure.wrapSubChain")),
+        m_document->configAt(offset).wrapSubChain
+    ).toString();
     int at = 0;
 
     // Keeps the leading operators of a chain written on one line on its
@@ -1315,7 +1318,7 @@ QByteArray FormatExpressionLayout::layoutChainRest(
                 const int width = lastLineWidth(head + text);
                 if (afterClosingLine
                     && (operators.size() == 1
-                        || m_document->configAt(offset).operatorsInMiddle)
+                        || operatorsInMiddleAt(m_document, offset))
                     && m_document->token(group.first()) != ANDAND
                     && m_document->token(group.first()) != OROR
                     && width + space.size() + textWidth(line) + tail <= wrapMax
@@ -1349,7 +1352,7 @@ QByteArray FormatExpressionLayout::layoutChainRest(
                 && m_document->token(op - 1) == RPAREN
                 && previousOpen >= operators.first()
                 && this->isListOpen(previousOpen);
-            if (((afterClosingLine && ! followsCall && (member || operators.size() == 1 || m_document->configAt(offset).operatorsInMiddle)) || (subChain && member
+            if (((afterClosingLine && ! followsCall && (member || operators.size() == 1 || operatorsInMiddleAt(m_document, offset))) || (subChain && member
                         && subChainMode != QLL("always")))
                 && m_document->token(op) != ANDAND
                 && m_document->token(op) != OROR

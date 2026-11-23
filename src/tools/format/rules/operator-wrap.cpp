@@ -111,9 +111,6 @@ void FormatOperatorWrapRule::run(FormatDocument *document) const
 {
     FormatScopeConditions conditions(document);
     for (int line = 1; line <= document->lineCount(); ++line) {
-        const FormatFileConfig &config = document->configAt(
-            document->lineStart(line)
-        );
         const int limit = wrapMaxAt(document, document->lineStart(line));
         int first = -1;
         int last = -1;
@@ -122,7 +119,7 @@ void FormatOperatorWrapRule::run(FormatDocument *document) const
         ) {
             continue;
         }
-        if (config.codeTarget == FormatFileConfig::CodeTargetLong) {
+        if ( ! codeTargetAnyAt(document, document->lineStart(line))) {
             // Keep existing breaks when each physical line
             // fits its wrap column.
             const int endLine = document->symbolEndLine(last);

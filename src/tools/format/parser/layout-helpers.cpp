@@ -5,10 +5,83 @@
 
 #include "../format-document.h"
 #include "./code-helpers.h"
+#include "./condition-context.h"
 #include "./scope-conditions.h"
 #include "../format-file-config.h"
 
-#include "config-numbers.h"
+class FormatOffsetContext : public FormatConditionContext
+{
+public:
+    inline FormatOffsetContext(const FormatDocument *document, int offset, int token)
+        : m_document(document), m_offset(offset), m_token(token) {}
+
+    inline QStringList onNames() const Q_DECL_OVERRIDE_IL
+    { return FormatScopeConditions::names(); }
+
+    inline const FormatFileConfig *fileConfig() const Q_DECL_OVERRIDE_IL
+    { return &m_document->configAt(m_offset); }
+
+    bool predicate(const QString & name, bool *value) const Q_DECL_OVERRIDE
+    {
+        Config::Cache::skip();
+        if (name == QLL("isNew")) {
+            *value = m_document->isLineSelected(m_document->lineOf(m_offset));
+            return true;
+        }
+        if (name == QLL("isHeader") || name == QLL("isNonHeader")) {
+            *value = m_document->isHeader() == (name == QLL("isHeader"));
+            return true;
+        }
+        if (name == QLL("always") || name == QLL("never")) {
+            *value = name == QLL("always");
+            return true;
+        }
+        if (m_token >= m_document->symbols().size()) {
+            return false;
+        }
+        FormatScopeConditions conditions(m_document);
+        return conditions.nameHolds(m_token, name, value);
+    }
+
+    bool argumentCount(int depth, int argument, qreal *count) const Q_DECL_OVERRIDE
+    {
+        if (m_token >= m_document->symbols().size()) {
+            return false;
+        }
+        FormatScopeConditions conditions(m_document);
+        *count = conditions.argumentCount(m_token, depth, argument);
+        return true;
+    }
+
+    bool value(qreal *count) const Q_DECL_OVERRIDE
+    {
+        return this->argumentCount(0, 0, count);
+    }
+
+    bool spaceRemaining(qreal *percent) const Q_DECL_OVERRIDE
+    {
+        if (m_token >= m_document->symbols().size()) {
+            return false;
+        }
+        FormatScopeConditions conditions(m_document);
+        *percent = conditions.spaceRemaining(m_token);
+        return true;
+    }
+
+    bool isTarget(const QString & kind, bool *value) const Q_DECL_OVERRIDE
+    {
+        if (m_token >= m_document->symbols().size()) {
+            return false;
+        }
+        FormatScopeConditions conditions(m_document);
+        return conditions.targetIs(m_token, kind, value);
+    }
+
+private:
+    const FormatDocument *m_document;
+    int m_offset;
+    int m_token;
+};
 
 /*!
     Builds the column the code wrap rules break a line at: the first
@@ -22,17 +95,7 @@ int wrapColumn(const FormatDocument *document, int offset)
     int begin = fileConfig.wrapBegin.isEmpty()
         ? maximum : fileConfig.wrapBegin.first();
     const QString key = QString(QLL("structure.wrapBegin"));
-    const QString text = fileConfig.settings.values.value(key.toLower());
-    const int token = document->symbolAfter(offset);
-    if ( ! text.isEmpty() && Config::Numbers::parse(text).isEmpty()
-        && token < document->symbols().size()
-    ) {
-        FormatScopeConditions conditions(document);
-        const QVariant value = conditions.settingAt(key, token);
-        if (value.isValid()) {
-            begin = FormatFileConfig::countOf(value);
-        }
-    }
+    begin = FormatFileConfig::countOf(settingValueAt(document, offset, key, begin));
     return qMin(begin, maximum);
 }
 
@@ -43,20 +106,56 @@ int wrapColumn(const FormatDocument *document, int offset)
 int wrapMaxAt(const FormatDocument *document, int offset)
 {
     const FormatFileConfig &config = document->configAt(offset);
-    int maximum = config.wrapMax;
     const QString key = QString(QLL("structure.wrapMax"));
-    const QString text = config.settings.values.value(key.toLower());
+    const QVariant value = settingValueAt(document, offset, key, config.wrapMax);
+    return qMax(1, FormatFileConfig::countOf(value));
+}
+
+QVariant settingValueAt(const FormatDocument *document, int offset,
+                        const QString & key, const QVariant & fallback)
+{
+    const FormatFileConfig &config = document->configAt(offset);
+    if ( ! config.hasExpression(key)) {
+        return fallback;
+    }
     const int token = document->symbolAfter(offset);
-    if ( ! text.isEmpty() && Config::Numbers::parse(text).isEmpty()
-        && token < document->symbols().size()
+    if (token < document->symbols().size()
+        && document->symbols().at(token).from == offset
     ) {
         FormatScopeConditions conditions(document);
         const QVariant value = conditions.settingAt(key, token);
         if (value.isValid()) {
-            maximum = FormatFileConfig::countOf(value);
+            return value;
+        }
+    } else {
+        const FormatOffsetContext context(document, offset, token);
+        const QVariant value = config.resolveSetting(key, &context);
+        if (value.isValid()) {
+            return value;
         }
     }
-    return qMax(1, maximum);
+    return fallback;
+}
+
+bool operatorsInMiddleAt(const FormatDocument *document, int offset)
+{
+    const bool middle = document->configAt(offset).operatorsInMiddle;
+    return settingValueAt(document, offset, QString(QLL("structure.operatorPlacement")),
+        QString(middle ? QLL("middle") : QLL("begining"))).toString() == QLL("middle");
+}
+
+bool codeTargetAnyAt(const FormatDocument *document, int offset)
+{
+    const bool any = document->configAt(offset).codeTarget == FormatFileConfig::CodeTargetAny;
+    return settingValueAt(document, offset, QString(QLL("structure.target")),
+        QString(any ? QLL("any") : QLL("long"))).toString() == QLL("any");
+}
+
+bool compactAlwaysAt(const FormatDocument *document, int offset)
+{
+    const bool always = document->configAt(offset).compact == FormatFileConfig::CompactAlways;
+    return settingValueAt(document, offset, QString(QLL("structure.compact")),
+        QString(always ? QLL("always") : QLL("never"))).toString() == QLL("always");
 }
 
 /*!
@@ -163,7 +262,7 @@ int precedingChainOperator(
         && ! (controlHead && (token == ANDAND || token == OROR))
         && operatorPrecedence(lead) == rank
         && ( ! respectPlacement
-            || ! document->configAt(document->symbols().at(next).from).operatorsInMiddle)
+            || ! operatorsInMiddleAt(document, document->symbols().at(next).from))
         && isOperandEnd(document->token(previous - 1));
     return conditional || binary ? previous : -1;
 }

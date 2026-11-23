@@ -40,18 +40,21 @@ class FormatReplaceTypesContext : public FormatConditionContext
     typedef FormatConditionContext super;
 public:
     inline FormatReplaceTypesContext(const FormatDocument *document = Q_NULLPTR,
-                                     int line = 0,
+                                     int token = -1,
                                      const FormatFileConfig *config = Q_NULLPTR)
-        : m_document(document), m_line(line), m_config(config) {}
+        : m_document(document), m_token(token), m_config(config) {}
 
     QStringList onNames() const Q_DECL_OVERRIDE;
     bool predicate(const QString & name, bool *value) const Q_DECL_OVERRIDE;
+    bool argumentCount(int depth, int argument, qreal *count) const Q_DECL_OVERRIDE;
+    bool spaceRemaining(qreal *percent) const Q_DECL_OVERRIDE;
+    bool isTarget(const QString & kind, bool *value) const Q_DECL_OVERRIDE;
     inline const FormatFileConfig *fileConfig() const Q_DECL_OVERRIDE_IL
     { return this->m_config; }
 
 private:
     const FormatDocument *m_document;
-    int m_line;
+    int m_token;
     const FormatFileConfig *m_config;
 };
 

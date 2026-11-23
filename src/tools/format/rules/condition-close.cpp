@@ -5,6 +5,7 @@
 
 #include "../format-document.h"
 #include "../parser/code-helpers.h"
+#include "../parser/layout-helpers.h"
 
 #include <QtCore/QByteArray>
 
@@ -52,9 +53,7 @@ void FormatConditionCloseRule::run(FormatDocument *document) const
         const int last = close - 1;
         const int closeLine = document->symbolLine(close);
         const Token lastToken = document->token(last);
-        const bool hugsGroup = document->configAt(
-                document->symbols().at(i).from
-            ).compact == FormatFileConfig::CompactAlways
+        const bool hugsGroup = compactAlwaysAt(document, document->symbols().at(i).from)
             && (lastToken == RPAREN || lastToken == RBRACK)
             && document->match(last) >= 0
             && document->symbolLine(document->match(last))

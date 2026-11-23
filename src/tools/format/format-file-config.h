@@ -59,6 +59,7 @@ public:
 
     static QString fileName();
     static QString defaultExtensions();
+    static QStringList listItems(const QString & text);
     static QStringList superConditionNames();
     static QStringList superChoices();
     static QStringList lintLevels();
@@ -70,6 +71,9 @@ public:
     static QString inlineMarker(
             const QString & value,
             const FormatFileConfig & config);
+    static FormatSpacing toSpacing(
+            const QString & value,
+            const QString & defaultValue);
     bool acceptsFile(const QString &path) const;
     static Config::Schema schema();
     static QVariant resolve(
@@ -81,6 +85,7 @@ public:
             const Config::Evaluator::Context *context) const;
     QVariant resolveSetting(
             const QString & key, const Config::Evaluator::Context *context) const;
+    bool hasExpression(const QString & key) const;
     static QString defaultTypedefSuper();
     static QString defaultReplaceSuperSites();
     static QStringList defaultThisMode();
@@ -145,10 +150,6 @@ public:
     QString inlineOverride;
 
 private:
-    static FormatSpacing toSpacing(
-            const QString & value,
-            const QString & defaultValue);
-
     mutable Config::Cache m_cache;
 };
 

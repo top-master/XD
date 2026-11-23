@@ -21,6 +21,8 @@ public:
     Section sectionOf(const QString & name) const;
     inline const QList<Section > &sections() const { return m_sections; }
     Key key(const QString & name) const;
+    bool isExpression(const QString & name, const QString & text,
+                      const Evaluator::CompileContext *context) const;
     QStringList compile(const QString & name, const QString & text,
                         const Evaluator::CompileContext *context) const;
     QVariant eval(const QString & name, const QString & text,

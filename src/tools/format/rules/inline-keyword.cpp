@@ -6,6 +6,7 @@
 #include "../format-document.h"
 #include "../parser/class-helpers.h"
 #include "../parser/code-helpers.h"
+#include "../parser/layout-helpers.h"
 
 #include <QtCore/QByteArray>
 #include <QtCore/QList>
@@ -47,11 +48,6 @@ void FormatInlineKeywordRule::run(FormatDocument *document) const
         }
         QList<int > lacking;
         bool anyInline = false;
-        const QString marker = document->configAt(
-            document->symbols().at(brace).from
-        ).inlineOverride;
-        const bool keepsMarker = marker == QLL("override")
-            || marker == QLL("Q_DECL_OVERRIDE");
         // Lists the overrides that lack `inline`, with their markers.
         QList<QPair<int, int > > lackingOverrides;
         const QList<int > tokens = classBodyTokens(document, brace);
@@ -74,14 +70,23 @@ void FormatInlineKeywordRule::run(FormatDocument *document) const
             );
 
             // Gives an inline override the marker of `[Lint] inlineOverride`.
-            if (overrideToken >= 0 && ! keepsMarker) {
-                if (hasInline) {
-                    this->respell(document, overrideToken, marker);
-                    anyInline = true;
-                } else if ( ! marker.isEmpty() && ! exempt && start >= 0) {
-                    lackingOverrides.append(qMakePair(start, overrideToken));
+            if (overrideToken >= 0) {
+                const int offset = document->symbols().at(overrideToken).from;
+                const QString marker = settingValueAt(
+                    document, offset, QString(QLL("lint.inlineOverride")),
+                    document->configAt(offset).inlineOverride
+                ).toString();
+                const bool keepsMarker = marker == QLL("override")
+                    || marker == QLL("Q_DECL_OVERRIDE");
+                if ( ! keepsMarker) {
+                    if (hasInline) {
+                        this->respell(document, overrideToken, marker);
+                        anyInline = true;
+                    } else if ( ! marker.isEmpty() && ! exempt && start >= 0) {
+                        lackingOverrides.append(qMakePair(start, overrideToken));
+                    }
+                    continue;
                 }
-                continue;
             }
             anyInline = anyInline || hasInline;
             if ( ! hasInline && ! exempt && start >= 0) {
@@ -96,6 +101,11 @@ void FormatInlineKeywordRule::run(FormatDocument *document) const
         }
         for (int i = 0; i < lackingOverrides.size(); ++i) {
             const QPair<int, int > item = lackingOverrides.at(i);
+            const int offset = document->symbols().at(item.second).from;
+            const QString marker = settingValueAt(
+                document, offset, QString(QLL("lint.inlineOverride")),
+                document->configAt(offset).inlineOverride
+            ).toString();
             this->addInline(document, item.first);
             this->respell(document, item.second, marker);
         }

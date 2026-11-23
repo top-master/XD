@@ -5,6 +5,7 @@
 
 #include "../format-document.h"
 #include "../parser/code-helpers.h"
+#include "../parser/layout-helpers.h"
 
 #include <QtCore/QByteArray>
 #include <QtCore/QString>
@@ -59,8 +60,18 @@ void FormatReferenceSpaceRule::run(FormatDocument *document) const
         // pattern matches the line replaces it instead.
         const FormatFileConfig &fileConfig =
             document->configAt(document->symbols().at(i).from);
-        const FormatSpacing & setting = token == AND
+        FormatSpacing setting = token == AND
             ? fileConfig.refSuffix : fileConfig.moveSuffix;
+        const QVariant resolved = settingValueAt(
+            document, document->symbols().at(i).from,
+            QString(token == AND ? QLL("types.refSuffix") : QLL("types.moveSuffix")),
+            QVariant()
+        );
+        if (resolved.isValid()) {
+            setting = FormatFileConfig::toSpacing(
+                resolved.toString(), QString(token == AND ? QLL(" ") : QLL("keep-as-is"))
+            );
+        }
         const FormatSpacing spacing = document->onSetting(setting, i);
         if (spacing.isNull()) {
             continue;

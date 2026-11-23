@@ -89,7 +89,7 @@ static bool keepsUserLines(
     *joinCount = 0;
     const int firstLine = document->symbolLine(open);
     const int lastLine = document->symbolLine(close);
-    if (fileConfig.codeTarget != FormatFileConfig::CodeTargetLong) {
+    if (codeTargetAnyAt(document, document->symbols().at(open).from)) {
         return false;
     }
 
@@ -337,7 +337,7 @@ void FormatArgsWrapRule::run(FormatDocument *document) const
         // it, as `)) {` (see FormatConditionCloseRule).
         const int headClose = keyword >= 0
             ? document->match(keyword + 1) : -1;
-        const bool hugsHead = fileConfig.compact == FormatFileConfig::CompactAlways
+        const bool hugsHead = compactAlwaysAt(document, document->symbols().at(i).from)
             && isCall
             && isHeadLine
             && (document->token(keyword) == IF

@@ -8,6 +8,7 @@
 #include "../parser/class-helpers.h"
 #include "../parser/code-helpers.h"
 #include "../parser/condition-context.h"
+#include "../parser/layout-helpers.h"
 #include "../parser/scope-conditions.h"
 
 #include "config-cache.h"
@@ -28,12 +29,37 @@ class FormatSuperContext : public FormatConditionContext
 public:
     inline FormatSuperContext(const FormatSuperTypedefRule *rule, const FormatDocument *document,
                               int brace, const QByteArray &base,
-                              const FormatConfig *runConfig = Q_NULLPTR)
+                              const FormatConfig *runConfig = Q_NULLPTR,
+                              const FormatDocument *place = Q_NULLPTR, int token = -1)
         : m_rule(rule), m_document(document), m_brace(brace), m_base(base)
-        , m_runConfig(runConfig) {}
+        , m_runConfig(runConfig), m_place(place ? place : document)
+        , m_token(token >= 0 ? token : brace) {}
 
     inline QStringList onNames() const Q_DECL_OVERRIDE_IL
-    { return FormatFileConfig::superConditionNames(); }
+    { return FormatFileConfig::superConditionNames() + FormatScopeConditions::names(); }
+
+    inline const FormatFileConfig *fileConfig() const Q_DECL_OVERRIDE_IL
+    { return &m_place->configAt(m_place->symbols().at(m_token).from); }
+
+    inline bool argumentCount(int depth, int argument, qreal *count) const Q_DECL_OVERRIDE_IL
+    {
+        FormatScopeConditions conditions(m_place);
+        *count = conditions.argumentCount(m_token, depth, argument);
+        return true;
+    }
+
+    inline bool spaceRemaining(qreal *percent) const Q_DECL_OVERRIDE_IL
+    {
+        FormatScopeConditions conditions(m_place);
+        *percent = conditions.spaceRemaining(m_token);
+        return true;
+    }
+
+    inline bool isTarget(const QString & kind, bool *value) const Q_DECL_OVERRIDE_IL
+    {
+        FormatScopeConditions conditions(m_place);
+        return conditions.targetIs(m_token, kind, value);
+    }
 
     inline bool predicate(const QString &name,
                           bool *value) const Q_DECL_OVERRIDE_IL
@@ -54,7 +80,8 @@ public:
                 );
             }
         } else {
-            return false;
+            FormatScopeConditions conditions(m_place);
+            return conditions.nameHolds(m_token, name, value);
         }
         return true;
     }
@@ -65,6 +92,8 @@ private:
     int m_brace;
     QByteArray m_base;
     const FormatConfig *m_runConfig;
+    const FormatDocument *m_place;
+    int m_token;
 };
 
 static QString cleanPath(const QString &path)
@@ -848,9 +877,11 @@ bool FormatSuperTypedefRule::isNeeded(
     if (usesBase(document, className, base)) {
         return true;
     }
-    const FormatFileConfig &fileConfig = document->configAt(
-        document->symbols().at(brace).from
-    );
+    const int offset = document->symbols().at(brace).from;
+    FormatFileConfig fileConfig = document->configAt(offset);
+    fileConfig.extensions = settingValueAt(
+        document, offset, QString(QLL("general.extensions")), fileConfig.extensions
+    ).toString();
     const QStringList paths = relatedFiles(document, fileConfig);
     for (int i = 0; i < paths.size(); ++i) {
         QScopedPointer<FormatDocument > related(
@@ -926,7 +957,6 @@ void FormatSuperTypedefRule::replaceSites(FormatDocument *document) const
     QHash<QString, QStringList > pathsByExtensions;
     QHash<QString, QSharedPointer<FormatDocument > > owners;
     QHash<QString, int > classBraces;
-    QHash<QString, bool > decisions;
     for (int i = 0; i + 1 < document->symbols().size(); ++i) {
         if ((document->token(i) != IDENTIFIER && document->token(i) != SCOPE)
             || (document->token(i) == IDENTIFIER
@@ -943,19 +973,29 @@ void FormatSuperTypedefRule::replaceSites(FormatDocument *document) const
         const FormatFileConfig &fileConfig = document->configAt(
             document->symbols().at(i).from
         );
-        if ( ! pathsByExtensions.contains(fileConfig.extensions)) {
+        QString extensions = fileConfig.extensions;
+        const QString extensionsKey = QString(QLL("general.extensions"));
+        if (fileConfig.hasExpression(extensionsKey)) {
+            const QVariant resolved = scopes.settingAt(extensionsKey, i);
+            if (resolved.isValid()) {
+                extensions = resolved.toString();
+            }
+        }
+        if ( ! pathsByExtensions.contains(extensions)) {
+            FormatFileConfig effectiveConfig = fileConfig;
+            effectiveConfig.extensions = extensions;
             pathsByExtensions.insert(
-                fileConfig.extensions,
-                relatedFiles(document, fileConfig)
+                extensions,
+                relatedFiles(document, effectiveConfig)
             );
         }
-        const QString key = fileConfig.extensions
+        const QString key = extensions
             + QLatin1Char('\n')
             + QString::fromUtf8(className);
         if ( ! classBraces.contains(key)) {
             int found = findQualifiedClass(document, className);
             const QStringList paths = pathsByExtensions.value(
-                fileConfig.extensions
+                extensions
             );
             for (int p = 0; found < 0 && p < paths.size(); ++p) {
                 QSharedPointer<FormatDocument > related(
@@ -984,28 +1024,18 @@ void FormatSuperTypedefRule::replaceSites(FormatDocument *document) const
         if (scopeToken < 0 || isShadowed(document, &scopes, i, base)) {
             continue;
         }
-        const QString decisionKey =
-            key + QLatin1Char('\n') + fileConfig.replaceSuperSites;
-        if ( ! decisions.contains(decisionKey)) {
-            bool available = false;
-            const FormatSuperContext context(
-                this,
-                owner,
-                brace,
-                base,
-                &document->formatConfig()
-            );
-            const QVariant replace = fileConfig.resolveCached(
-                QString(QLL("structure.replaceSuperSites")),
-                fileConfig.replaceSuperSitesProgram, &context
-            );
-            decisions.insert(decisionKey, replace.toBool()
-                && context.predicate(
-                    QString(QLL("hasSuperTypedef")),
-                    &available)
-                && available);
-        }
-        if (decisions.value(decisionKey)) {
+        bool available = false;
+        const FormatSuperContext context(
+            this, owner, brace, base, &document->formatConfig(), document, i
+        );
+        const QVariant replace = fileConfig.resolveCached(
+            QString(QLL("structure.replaceSuperSites")),
+            fileConfig.replaceSuperSitesProgram, &context
+        );
+        if (replace.toBool()
+            && context.predicate(QString(QLL("hasSuperTypedef")), &available)
+            && available
+        ) {
             const int from = document->symbols().at(i).from;
             if (i > 0 && document->token(i - 1) == USING
                 && scopeToken + 1 < document->symbols().size()

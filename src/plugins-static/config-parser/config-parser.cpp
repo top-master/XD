@@ -659,9 +659,17 @@ QString Config::Parser::value(const QString & name) const
     const QString value = this->m_settings.value(this->m_schema, name);
     const Config::Key key = this->m_schema.key(name);
     QString matched;
-    for (int i = 0; i < key.matchers.size(); ++i) {
-        if (key.matchers.at(i)->matchLiteral(value, &matched)) {
-            return value;
+    if ( ! m_schema.isExpression(name, value, context)) {
+        for (int i = 0; i < key.matchers.size(); ++i) {
+            if (key.matchers.at(i)->matchLiteral(value, &matched)) {
+                context->markResolved();
+                return value;
+            }
+        }
+        const QVariant literal = m_schema.convert(name, value);
+        if (literal.isValid()) {
+            context->markResolved();
+            return literal.toString();
         }
     }
     const QVariant resolved = this->m_schema.eval(name, value, context);
@@ -826,32 +834,35 @@ bool Config::Parser::matchValue(const Config::Key & key, const QString & value,
         }
         return true;
     }
-    for (int i = 0; i < key.matchers.size(); ++i) {
-        if (key.allowsCode() ? key.matchers.at(i)->match(resolved, matched)
-                             : key.matchers.at(i)->matchLiteral(resolved, matched)) {
-            return true;
+    const Config::Evaluator::Context context(false);
+    if ( ! m_schema.isExpression(key.name, resolved, &context)) {
+        for (int i = 0; i < key.matchers.size(); ++i) {
+            if (key.matchers.at(i)->matchLiteral(resolved, matched)) {
+                return true;
+            }
         }
     }
     if ( ! key.allowsCode()) {
         *matched = QString();
         return false;
     }
-    const Config::Evaluator::Context context(false);
     const QStringList program = this->m_schema.compile(key.name, resolved, &context);
     if (context.lastCompiled()) {
+        for (int i = 0; i < program.size(); ++i) {
+            if (program.at(i).startsWith(QLL("r:"))
+                || program.at(i).startsWith(QLL("f:"))
+                || (program.at(i).startsWith(QLL("v:"))
+                    && program.at(i) != QLL("v:true")
+                    && program.at(i) != QLL("v:false"))
+            ) {
+                *matched = resolved;
+                return true;
+            }
+        }
         const QVariant result = Config::Condition::resolve(program, QSet<QString >(), &context);
         if (context.lastResolvePassed()) {
             for (int i = 0; i < key.matchers.size(); ++i) {
                 if (key.matchers.at(i)->convert(result).isValid()) {
-                    *matched = resolved;
-                    return true;
-                }
-            }
-        } else {
-            for (int i = 0; i < program.size(); ++i) {
-                if (program.at(i).startsWith(QLL("r:"))
-                    || program.at(i).startsWith(QLL("f:"))
-                ) {
                     *matched = resolved;
                     return true;
                 }

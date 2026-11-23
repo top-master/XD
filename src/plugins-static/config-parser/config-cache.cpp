@@ -116,6 +116,21 @@ void Config::Cache::skip()
 }
 
 /*!
+    Tells whether @a key is being resolved in this thread.
+*/
+bool Config::Cache::isResolving(const QString & key)
+{
+    const CacheState *state = &(cacheState()->localData());
+    const CacheScope *entry = state->active;
+    for (; entry; entry = entry->m_parent) {
+        if (entry->m_target.compare(key, Qt::CaseInsensitive) == 0) {
+            return true;
+        }
+    }
+    return false;
+}
+
+/*!
     Tells whether the last setting evaluated in this thread was @a key and
     read its place.
 */

@@ -149,26 +149,31 @@ QVariant Config::CfgObject::dynamicValue(const QByteArray & name) const
     }
     active->insert(keyName);
     Q_DEFER { active->remove(keyName); };
-    if (key.referenceThreshold) {
+    if (key.referenceThreshold && key.allowsCode()) {
         return m_schema.reference(keyName, value, place);
     }
-    for (int i = 0; i < key.matchers.size(); ++i) {
-        QString matched;
-        const Config::ValueMatcher *matcher = key.matchers.at(i).data();
-        if (key.allowsCode() ? matcher->match(value, &matched)
-                             : matcher->matchLiteral(value, &matched)) {
-            const QVariant resolved = matcher->settingValue(matched, place);
-            if ( ! resolved.isValid()) {
-                return QVariant();
-            }
-            const QVariant converted = m_schema.convert(keyName, resolved);
-            if (converted.isValid()) {
-                if (converted.type() == QVariant::LongLong || converted.type() == QVariant::Int) {
-                    return converted.toDouble();
+    if ( ! m_schema.isExpression(keyName, value, place)) {
+        for (int i = 0; i < key.matchers.size(); ++i) {
+            QString matched;
+            const Config::ValueMatcher *matcher = key.matchers.at(i).data();
+            if (matcher->matchLiteral(value, &matched)) {
+                const QVariant resolved = matcher->settingValue(matched, place);
+                if ( ! resolved.isValid()) {
+                    return QVariant();
                 }
-                return converted;
+                const QVariant converted = m_schema.convert(keyName, resolved);
+                if (converted.isValid()) {
+                    if (converted.type() == QVariant::LongLong || converted.type() == QVariant::Int) {
+                        return converted.toDouble();
+                    }
+                    return converted;
+                }
+                return resolved;
             }
-            return resolved;
+        }
+        const QVariant literal = m_schema.convert(keyName, value);
+        if (literal.isValid()) {
+            return literal;
         }
     }
     return m_schema.reference(keyName, value, place);

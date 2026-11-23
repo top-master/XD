@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: Apache-2.0
 
 #include "./config-condition.h"
+#include "./config-cache.h"
 #include "./config-escape.h"
 #include "./config-scopes.h"
 #include "./config-types.h"
@@ -692,7 +693,7 @@ bool ExpressionCompiler::valueWord(const QString &token)
     const QChar lead = token.isEmpty() ? QChar() : token.at(0);
     const bool isName = lead.isLetter() || lead == QLatin1Char('_')
         || lead == QLatin1Char(':');
-    if (words != Config::Evaluator::CompileContext::anyEnumKeys()) {
+    if ( ! words.contains(QString())) {
         if (isQuoted || (isName && ! this->isDefined(token))) {
             this->m_context->m_lastCE = QString(QLL("%1 is no choice of %2")).arg(
                 token,
@@ -1063,7 +1064,7 @@ QStringList Config::Condition::compile(
     ExpressionCompiler compiler(input, context);
     if (compiler.compile(&program)
         && Config::Condition::checkPercents(program,
-                                            takesPercents && context->enumKeys().isEmpty(),
+                                            takesPercents,
                                             &context->m_lastCE)
     ) {
         context->m_lastCompile |= Compiled;
@@ -1212,7 +1213,7 @@ QVariant Config::Condition::eval(
 {
     Q_ASSERT(context);
     Evaluator::MismatchScope scope(context, NameMismatchError);
-    const QStringList program = Condition::compile(text, context);
+    const QStringList program = Condition::compile(text, context, true);
     scope.close();
     if ( ! context->lastCompiled()) {
         QString matched;
@@ -1462,9 +1463,11 @@ bool calculate(const QStringList &program, Lookup *lookup, Operand *result)
             } else if (name == QLL("false")) {
                 stack << Operand(0);
             } else {
+                Config::Cache::skip();
                 stack << Operand(lookup->holds(name) ? 1 : 0);
             }
         } else if (item.startsWith(QLL("r:"))) {
+            Config::Cache::skip();
             // Calls a member of an object of `Config::Scopes`.
             const int split = item.lastIndexOf(QLatin1Char(':'));
             const QStringList path = item.mid(2, split - 2)
@@ -1519,6 +1522,7 @@ bool calculate(const QStringList &program, Lookup *lookup, Operand *result)
                 stack << Operand(number);
             }
         } else if (item.startsWith(QLL("f:"))) {
+            Config::Cache::skip();
             bool value = false;
             if ( ! context->hasPlace() || ! context->predicate(item.mid(2), &value)) {
                 return false;

@@ -5,6 +5,7 @@
 
 #include "../format-document.h"
 #include "../parser/class-helpers.h"
+#include "../parser/layout-helpers.h"
 
 #include <QtCore/QByteArray>
 #include <QtCore/QList>
@@ -113,9 +114,7 @@ void FormatConnectLayoutRule::run(FormatDocument *document) const
         );
         QByteArray layout = arguments.at(0) + ", " + arguments.at(1) + ", " + arguments.at(2) + ", "
             + arguments.at(3);
-        const int limit = document
-            ->configAt(document->symbols().at(open).from)
-            .wrapMax;
+        const int limit = wrapMaxAt(document, document->symbols().at(open).from);
         if (hasType || column + layout.size() + 1 + rest.size() > limit) {
             // Ends each pair with a comma and the line break that ends the
             // call's first line, `\r\n` in a file of CRLF line endings.

@@ -35,6 +35,7 @@ public:
              const QVariant & value);
     void clear();
     static void skip();
+    static bool isResolving(const QString & key);
     static bool skipsFor(const QString & key);
 
 private:

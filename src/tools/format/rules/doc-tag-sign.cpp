@@ -4,6 +4,7 @@
 #include "./doc-tag-sign.h"
 
 #include "../format-document.h"
+#include "../parser/layout-helpers.h"
 
 #include <QtCore/QByteArray>
 #include <QtCore/QList>
@@ -144,9 +145,13 @@ void FormatDocTagSignRule::runGroup(
     for (int line = 1; line <= document->lineCount() && ! isRanged; ++line) {
         isRanged = ! document->isLineSelected(line);
     }
-    const char setting = document
-        ->configAt(comments.at(group.first()).offset)
-        .docTagSign;
+    const int offset = comments.at(group.first()).offset;
+    const char fallback = document->configAt(offset).docTagSign;
+    const QString configured = settingValueAt(
+        document, offset, QString(QLL("comments.docTagSign")),
+        QString(QLatin1Char(fallback))
+    ).toString();
+    const char setting = configured.isEmpty() ? fallback : configured.at(0).toLatin1();
     const char sign = isNew && isRanged
         ? setting : this->fileSign(document, setting);
 

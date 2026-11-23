@@ -12,6 +12,11 @@
 
 int wrapColumn(const FormatDocument *document, int offset);
 int wrapMaxAt(const FormatDocument *document, int offset);
+QVariant settingValueAt(const FormatDocument *document, int offset,
+                        const QString & key, const QVariant & fallback);
+bool operatorsInMiddleAt(const FormatDocument *document, int offset);
+bool codeTargetAnyAt(const FormatDocument *document, int offset);
+bool compactAlwaysAt(const FormatDocument *document, int offset);
 int continuationIndent(int indent, int steps = 1);
 QByteArray continuationPad(int indent, int steps = 1);
 bool isBinaryOperator(Token token);
