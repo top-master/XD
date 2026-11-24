@@ -4,6 +4,7 @@
 #include "./config-numbers.h"
 
 #include <QtCore/QStringList>
+#include <QtCore/qmath.h>
 
 #include <limits>
 
@@ -102,9 +103,15 @@ QVariant Config::Numbers::convert(const QVariant & resolved) const
     if (resolved.type() != QVariant::Double) {
         return QVariant();
     }
-    const qreal number = resolved.toDouble();
-    if (number < qreal(this->m_minimum) || number > qreal(this->m_maximum)) {
-        return QVariant();
+    // Removes the fractional part, such as from percent numbers, hence a
+    // key of numbers takes whole ones.
+    const qreal number = floor(resolved.toDouble());
+    // Caps the number to the allowed range.
+    if (number < qreal(this->m_minimum)) {
+        return QVariant(this->m_minimum);
+    }
+    if (number > qreal(this->m_maximum)) {
+        return QVariant(this->m_maximum);
     }
     return QVariant(qint64(number));
 }

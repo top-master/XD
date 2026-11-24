@@ -115,7 +115,8 @@ void FormatParamWrapRule::run(FormatDocument *document) const
                 QString(QLL("structure.wrapSignatureAt")),
                 fileConfig.wrapSignatureAt,
                 i,
-                FormatFileConfig::defaultWrapSignatureAt()
+                FormatFileConfig::schema()
+                    ->programFor(QString(QLL("structure.wrapSignatureAt")))
             );
             // Choose the layout from the argument count and available width.
             if (conditions.argsOver(i, items.size())) {
@@ -223,8 +224,10 @@ void FormatParamWrapRule::regroup(
         );
         const bool mustBreak = conditions->holds(
             QString(QLL("structure.wrapSignatureAt")),
-            fileConfig.wrapSignatureAt, i,
-            FormatFileConfig::defaultWrapSignatureAt()
+            fileConfig.wrapSignatureAt,
+            i,
+            FormatFileConfig::schema()
+                ->programFor(QString(QLL("structure.wrapSignatureAt")))
         );
 
         // Keeps the groups under the first parameter when they fit there and

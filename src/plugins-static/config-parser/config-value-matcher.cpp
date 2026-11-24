@@ -62,9 +62,27 @@ QSharedPointer<const Config::ValueMatcher > Config::forbidCode()
     return QSharedPointer<const Config::ValueMatcher >(new NoCode);
 }
 
+/*!
+    Lists the words this matcher takes; a matcher that takes none lists
+    none, hence a value of the key is an expression or a value as it reads
+    (see Config::Choice::enumKeys()).
+*/
 QStringList Config::ValueMatcher::enumKeys() const
 {
-    return Evaluator::CompileContext::anyEnumKeys();
+    return QStringList();
+}
+
+/*!
+    Tells whether @a program uses a percent term, `p:<number>`.
+*/
+bool Config::ValueMatcher::usesPercents(const QStringList & program)
+{
+    for (int i = 0; i < program.size(); ++i) {
+        if (program.at(i).startsWith(QLL("p:"))) {
+            return true;
+        }
+    }
+    return false;
 }
 
 /*!
@@ -121,13 +139,20 @@ QString Config::Boolean::describe() const
     return QString(QLL("true or false"));
 }
 
+/*!
+    Converts @a resolved, what a key's program resolves to, into whether a
+    condition holds: a number 1 or 0, as a condition, or a true or false.
+    Builds an invalid value for a share, such as the 0.5 that `50%` reads as,
+    since a yes-or-no key takes no percent.
+*/
 QVariant Config::Boolean::convert(const QVariant & resolved) const
 {
     if (resolved.type() == QVariant::Bool) {
         return resolved;
     }
     if (resolved.type() == QVariant::Double) {
-        return QVariant(resolved.toDouble() != 0);
+        const double number = resolved.toDouble();
+        return number == 0 || number == 1 ? QVariant(number != 0) : QVariant();
     }
     QString matched;
     if (resolved.type() == QVariant::String && this->match(resolved.toString(), &matched)) {

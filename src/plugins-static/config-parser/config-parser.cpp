@@ -36,11 +36,19 @@
     Builds the parser of the settings @a schema lists, each at its default,
     and each key that extends another one following that key.
 */
-Config::Parser::Parser(const Config::Schema & schema)
+Config::Parser::Parser(const QRef<const Config::Schema> & schema)
     : m_schema(schema), m_context(Q_NULLPTR)
 {
-    for (int s = 0; s < schema.sections().size(); ++s) {
-        const QList<Config::Key > & keys = schema.sections().at(s).keys();
+    this->init();
+}
+
+void Config::Parser::init()
+{
+    if (this->m_schema.isNull()) {
+        return;
+    }
+    for (int s = 0; s < this->m_schema->sections().size(); ++s) {
+        const QList<Config::Key > & keys = this->m_schema->sections().at(s).keys();
         for (int k = 0; k < keys.size(); ++k) {
             if (keys.at(k).extends.isEmpty()) {
                 this->m_settings.values.insert(
@@ -57,6 +65,24 @@ Config::Parser::Parser(const Config::Schema & schema)
 */
 Config::Parser::~Parser()
 {
+}
+
+namespace {
+
+/*!
+    Builds a fallback schema when a parser has none.
+*/
+Q_GLOBAL_STATIC(Config::Schema, emptySchema)
+
+} // namespace
+
+/*!
+    Builds the schema this parser checks against, or an empty schema when none
+    was given.
+*/
+const Config::Schema &Config::Parser::schema() const
+{
+    return this->m_schema ? *this->m_schema : *emptySchema();
 }
 
 namespace {
@@ -409,7 +435,7 @@ bool Config::Parser::readLine(const QByteArray & line, QString *section,
     const QString name = sectionName + QLatin1Char('.') + key;
     const QString shown = QString(QLL("[%1] %2")).arg(sectionName, key);
     const QByteArray valueText = text.mid(equals + 1, end - equals - 1);
-    QString value = this->m_schema.key(name).open
+    QString value = this->m_schema->key(name).open
         ? QString::fromUtf8(valueText).trimmed()
         : iniValue(valueText);
 
@@ -657,22 +683,22 @@ QString Config::Parser::value(const QString & name) const
     const Config::Evaluator::Context empty(false);
     const Config::Evaluator::Context *context = m_context ? m_context : &empty;
     const QString value = this->m_settings.value(this->m_schema, name);
-    const Config::Key key = this->m_schema.key(name);
+    const Config::Key key = this->m_schema->key(name);
     QString matched;
-    if ( ! m_schema.isExpression(name, value, context)) {
+    if ( ! m_schema->isExpression(name, value, context)) {
         for (int i = 0; i < key.matchers.size(); ++i) {
             if (key.matchers.at(i)->matchLiteral(value, &matched)) {
                 context->markResolved();
                 return value;
             }
         }
-        const QVariant literal = m_schema.convert(name, value);
+        const QVariant literal = m_schema->convert(name, value);
         if (literal.isValid()) {
             context->markResolved();
             return literal.toString();
         }
     }
-    const QVariant resolved = this->m_schema.eval(name, value, context);
+    const QVariant resolved = this->m_schema->eval(name, value, context);
     if (context->lastResolvePassed()) {
         return resolved.toString();
     }
@@ -704,6 +730,12 @@ QString Config::Settings::value(const Config::Schema & schema, const QString & n
         found = values.constFind(key.name);
     }
     return found == values.constEnd() ? key.defaultValue : found.value();
+}
+
+QString Config::Settings::value(
+        const QRef<const Config::Schema> & schema, const QString & name) const
+{
+    return schema ? this->value(*schema, name) : QString();
 }
 
 /*!
@@ -752,9 +784,9 @@ bool Config::Parser::set(
         const QString & name, const QString & shown, const QString & value,
         QString *error)
 {
-    const Config::Key key = this->m_schema.key(name);
+    const Config::Key key = this->m_schema->key(name);
     if (key.isNull()) {
-        if (this->m_schema.sectionOf(name).isNull()) {
+        if (this->m_schema->sectionOf(name).isNull()) {
             *error = QString(QLL("unknown section of setting %1")).arg(shown);
         } else {
             *error = QString(QLL("unknown setting %1")).arg(shown);
@@ -765,7 +797,7 @@ bool Config::Parser::set(
     if (this->matchValue(key, value, &matched)) {
         QString section;
         if (key.open) {
-            section = this->m_schema.sectionOf(name).name().toLower();
+            section = this->m_schema->sectionOf(name).name().toLower();
         }
         this->store(key.name, section, name.mid(section.size() + 1), matched);
         return true;
@@ -835,7 +867,7 @@ bool Config::Parser::matchValue(const Config::Key & key, const QString & value,
         return true;
     }
     const Config::Evaluator::Context context(false);
-    if ( ! m_schema.isExpression(key.name, resolved, &context)) {
+    if ( ! m_schema->isExpression(key.name, resolved, &context)) {
         for (int i = 0; i < key.matchers.size(); ++i) {
             if (key.matchers.at(i)->matchLiteral(resolved, matched)) {
                 return true;
@@ -846,7 +878,7 @@ bool Config::Parser::matchValue(const Config::Key & key, const QString & value,
         *matched = QString();
         return false;
     }
-    const QStringList program = this->m_schema.compile(key.name, resolved, &context);
+    const QStringList program = this->m_schema->compile(key.name, resolved, &context);
     if (context.lastCompiled()) {
         for (int i = 0; i < program.size(); ++i) {
             if (program.at(i).startsWith(QLL("r:"))

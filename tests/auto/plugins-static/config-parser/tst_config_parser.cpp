@@ -2488,8 +2488,10 @@ void tst_ConfigParser::testOutputs_shouldBeClearedOnFailure()
     qExpect(numbers.match(QString(QLL("9")), &text))->toBeFalsy();
     qExpect(text)->toBeEmpty();
     value = QVariant(7);
-    value = numbers.convert(QVariant(9.0));
+    value = numbers.convert(QVariant(QString(QLL("9"))));
     qExpect(value.isValid())->toBeFalsy();
+    value = numbers.convert(QVariant(10.0));
+    qExpect(value.toLongLong())->toEqual(Q_INT64_C(3));
 
     value = QVariant(7);
     value = Config::Scopes::resolve(Config::Scopes::Member(), Q_NULLPTR,
@@ -2624,7 +2626,8 @@ void tst_ConfigParser::testNumbers_shouldTakeQint64()
     const QVariant value = numbers.convert(QVariant(5000000000.0));
     qExpect(value.isValid())->toBeTruthy();
     qExpect(value.toLongLong())->toEqual(Q_INT64_C(5000000000));
-    qExpect(numbers.convert(QVariant(0.0)).isValid())->toBeFalsy();
+    qExpect(numbers.convert(QVariant(0.0)).toLongLong())
+        ->toEqual(Q_INT64_C(1));
     qExpect(numbers.describe())->toEqual(QString(QLL("a number of 1 or more")));
 }
 

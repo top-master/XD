@@ -10,6 +10,7 @@
 #include "config-any-space.h"
 #include "config-cache.h"
 #include "config-choice.h"
+#include "config-code.h"
 #include "config-condition.h"
 #include "config-scopes.h"
 #include "config-name.h"
@@ -112,8 +113,9 @@
       argument that ends such a line (see FormatDocument::joinArgsAt()),
       may instead give the number, as in `hasMoreArgs() ? 2 : 1`; 1 without
       a `.formatrc`;
-    * `operatorExtraPad` (`[Structure]`): extra indentation steps for a
-      wrapped call in an operator chain, defaulting to 0;
+    * `operatorPadding` (`[Structure]`): extra indentation steps for a
+      wrapped call in an operator chain; every placement but `middle`
+      takes one step without a `.formatrc`;
     * `wrapSubChain` (`[Structure]`): how a member after one joined to a
       closing-bracket line breaks: `always`, `wrap-begin`, `wrap-end`, or
       `never`; `always` without a `.formatrc`;
@@ -189,11 +191,20 @@ static const char defaultWrapConditionsOverText[] =
     "spaceRemaining < 20% ? 1 : 2";
 
 /*!
+    Spells the default `[Structure] operatorPadding` (see
+    FormatFileConfig): a step for a call wrapped at the start of an
+    operator chain, and none where the line puts the operator in the middle.
+*/
+static const char defaultOperatorPaddingText[] =
+    "cfg.operatorPlacement == \"middle\" ? 0 : 1";
+
+/*!
     Spells the default `[Structure] wrapMistakes` (see FormatFileConfig): a
     brace list takes the average count of items per line, any other list
     keeps the user's lines.
 */
-static const char defaultWrapMistakesText[] = "is(array) ? average : never";
+static const char defaultWrapMistakesText[] =
+    "is(array) ? \"average\" : \"never\"";
 
 /*!
     Spells the default `[Lint] byRefVariable` (see FormatFileConfig): a
@@ -456,7 +467,7 @@ QString FormatReplacementMatcher::explain(const QString & value) const
         FormatReplaceTypesContext().names(), &words,
         Config::NameMismatchError
     );
-    Config::Condition::compile(value, &context, true);
+    Config::Condition::compile(value, &context);
     if (context.lastCompiled()) {
         return QString();
     }
@@ -467,10 +478,20 @@ QString FormatReplacementMatcher::explain(const QString & value) const
     return context.lastErrorForCompile();
 }
 
+class FormatSchema : public Config::Schema
+{
+    Q_DISABLE_COPY(FormatSchema)
+public:
+    FormatSchema();
+};
+
 /*!
-    Builds the schema of the settings the tool takes, each at its default.
+    Builds the schema of the settings the tool takes, each at its default,
+    which its code compiles over the names of the tool's conditions (see
+    Config::Code); a choice spells its word in double quotes, and the matcher
+    of its key checks it afterwards (see Config::Choice).
 */
-Config::Schema FormatFileConfig::schema()
+FormatSchema::FormatSchema()
 {
     const Config::Matchers spacings = Config::Matchers()
         << Config::AnySpace::create() << Config::Word::create(QString(QLL("keep-as-is")))
@@ -490,16 +511,15 @@ Config::Schema FormatFileConfig::schema()
         QString(QLL("keep-as-is")),
         aliases
     );
-    Config::Schema schema;
-    schema.setNames(FormatScopeConditions::names()
+    this->setNames(FormatScopeConditions::names()
         + FormatFileConfig::superConditionNames());
     Config::Section general(QString(QLL("General")));
     general.addKey(QString(QLL("extensions")),
                    Config::Matchers() << QSharedPointer<const Config::ValueMatcher >(
                        new FormatExtensionsMatcher),
                    FormatFileConfig::defaultExtensions());
-    schema.addSection(general);
-    schema.addSection(types);
+    this->addSection(general);
+    this->addSection(types);
     Config::Section structure(QString(QLL("Structure")));
     structure.addKey(QString(QLL("typedefSuper")),
                      Config::Matchers() << QSharedPointer<const Config::ValueMatcher >(
@@ -521,13 +541,13 @@ Config::Schema FormatFileConfig::schema()
                      ), QString(QLL("80")));
     structure.addKey(QString(QLL("wrapChainAt")),
                      Config::Matchers() << Config::Boolean::create(),
-                     QString::fromLatin1(defaultWrapChainAtText),
+                     Config::Code(defaultWrapChainAtText),
                      QHash<QString, QString >(), Q_NULLPTR, true);
     structure
         .addFollower(QString(QLL("wrapArgsAt")), QString(QLL("wrapChainAt")));
     structure.addKey(QString(QLL("wrapSignatureAt")),
                      Config::Matchers() << Config::Boolean::create(),
-                     QString::fromLatin1(defaultWrapSignatureAtText),
+                     Config::Code(defaultWrapSignatureAtText),
                      QHash<QString, QString >(), Q_NULLPTR, true);
     structure.addKey(QString(QLL("wrapArgsOver")),
                      Config::Matchers() << Config::Numbers::create(
@@ -542,8 +562,9 @@ Config::Schema FormatFileConfig::schema()
                          0,
                          std::numeric_limits<qint64 >::max(),
                          1),
-                     QString::fromLatin1(defaultWrapConditionsOverText),
-                     QHash<QString, QString >(), &FormatConditionContext::setCountObjects);
+                     Config::Code(defaultWrapConditionsOverText),
+                     QHash<QString, QString >(),
+                     &FormatConditionContext::setCountObjects);
     structure.addKey(QString(QLL("wrapConditionsPer")),
                      QStringList() << QString(QLL("line"))
                          << QString(QLL("pair"))
@@ -552,20 +573,21 @@ Config::Schema FormatFileConfig::schema()
                      QString(QLL("pair-bundle")));
     structure.addKey(QString(QLL("joinArgs")),
                      Config::Matchers() << Config::Numbers::create(
-                         0,
+                         1,
                          std::numeric_limits<qint64 >::max(),
                          1),
                      QString(QLL("1")), QHash<QString, QString >(),
                      &FormatConditionContext::setCountObjects);
-    structure.addKey(QString(QLL("operatorExtraPad")),
+    structure.addKey(QString(QLL("operatorPadding")),
                      Config::Matchers() << Config::Numbers::create(
                          0,
                          std::numeric_limits<qint64 >::max(), 1),
-                     QString(QLL("0")), QHash<QString, QString >(),
+                     Config::Code(defaultOperatorPaddingText),
+                     QHash<QString, QString >(),
                      &FormatConditionContext::setCountObjects);
     structure.addKey(QString(QLL("operatorPlacement")),
-                     QStringList() << QString(QLL("begining")) << QString(QLL("middle")),
-                     QString(QLL("begining")));
+                     QStringList() << QString(QLL("start")) << QString(QLL("middle")),
+                     QString(QLL("start")));
     structure.addKey(QString(QLL("wrapSubChain")),
                      QStringList() << QString(QLL("always"))
                          << QString(QLL("wrap-begin"))
@@ -584,7 +606,7 @@ Config::Schema FormatFileConfig::schema()
                              FormatScopeConditions::names(),
                              FormatFileConfig::wrapMistakesWords()
                          )),
-                     QString::fromLatin1(defaultWrapMistakesText));
+                     Config::Code(defaultWrapMistakesText));
     structure.addKey(QString(QLL("bodyBraces")),
                      Config::Matchers() << Config::Boolean::create(),
                      QString(QLL("true")));
@@ -616,13 +638,13 @@ Config::Schema FormatFileConfig::schema()
         QStringList() << QString(QLL("@")) << QString(QLL("\\")),
         QString(QLL("@")), signs
     );
-    schema.addSection(comments);
+    this->addSection(comments);
     Config::Section relations(QString(QLL("Relations")));
     relations.addKey(QString(QLL("thisMode")),
                      Config::Matchers() << Config::Boolean::create(),
-                     QString::fromLatin1(defaultThisModeText));
-    schema.addSection(relations);
-    schema.addSection(structure);
+                     Config::Code(defaultThisModeText));
+    this->addSection(relations);
+    this->addSection(structure);
     Config::Section replaceTypes(QString(QLL("Replace.types")));
     replaceTypes.addKey(QString(QLL("target")),
                         Config::Matchers() << Config::Boolean::create(),
@@ -634,7 +656,7 @@ Config::Schema FormatFileConfig::schema()
         << QSharedPointer<const Config::ValueMatcher >(
             new FormatReplacementMatcher)
         << Config::Word::create(QString(QLL("keep-as-is"))));
-    schema.addSection(replaceTypes);
+    this->addSection(replaceTypes);
     Config::Section code(QString(QLL("Code")));
     code.addKey(QString(QLL("nameMismatch")),
                 QStringList() << QString(QLL("warn")) << QString(QLL("error"))
@@ -648,7 +670,7 @@ Config::Schema FormatFileConfig::schema()
                         true
                     )),
                 QString());
-    schema.addSection(code);
+    this->addSection(code);
     Config::Section lint(QString(QLL("Lint")));
     lint.addKey(QString(QLL("standards")),
                 Config::Matchers() << QSharedPointer<const Config::ValueMatcher >(
@@ -664,23 +686,30 @@ Config::Schema FormatFileConfig::schema()
                         QStringList(),
                         FormatFileConfig::lintLevels()
                     )),
-                QString::fromLatin1(defaultByRefVariableText));
+                Config::Code(defaultByRefVariableText));
     lint.addKey(QString(QLL("inlineOverride")),
                 Config::Matchers() << Config::Name::create()
                     << Config::Word::create(QString())
                     << QSharedPointer<const Config::ValueMatcher >(
                         new Config::Choice(QStringList(), QStringList())),
                 QString(QLL("override")));
-    schema.addSection(lint);
-    return schema;
+    this->addSection(lint);
 }
 
 /*!
-    Builds the schema of the settings once, for resolve() to convert with,
-    while each load builds its own (see schema()).
+    Builds the schema of the settings once, which schema() answers and the
+    pieces that resolve() converts with ask (see FormatSchema).
 */
-Q_GLOBAL_STATIC_WITH_ARGS(Config::Schema, settingsSchema,
-                          (FormatFileConfig::schema()))
+Q_GLOBAL_STATIC(FormatSchema, sharedSchema)
+
+/*!
+    Answers the schema of the settings, which it builds at the first call and
+    every later call answers (see FormatSchema).
+*/
+QRef<const Config::Schema> FormatFileConfig::schema()
+{
+    return sharedSchema();
+}
 
 /*!
     Resolves @a program, which a setting @a key (`<section>.<key>`) compiled,
@@ -695,7 +724,7 @@ QVariant FormatFileConfig::resolve(
         const QString & key, const QStringList & program,
         const Config::Evaluator::Context *context)
 {
-    return settingsSchema()->resolve(key, program, context);
+    return FormatFileConfig::schema()->resolve(key, program, context);
 }
 
 /*!
@@ -734,7 +763,7 @@ QVariant FormatFileConfig::resolveCached(
     }
     const Config::CacheScope scope(key);
     Q_UNUSED(scope);
-    value = settingsSchema()->resolve(key, program, context);
+    value = FormatFileConfig::schema()->resolve(key, program, context);
     if (value.isValid()) {
         this->m_cache.add(key, program, value);
     }
@@ -751,9 +780,9 @@ QVariant FormatFileConfig::resolveSetting(
         context->markResolveFailed(QString(QLL("recursive setting %1")).arg(key));
         return QVariant();
     }
-    const QRef<Config::Schema > schema = settingsSchema();
+    const QRef<const Config::Schema> schema = FormatFileConfig::schema();
     const Config::Key field = schema->key(key);
-    const QString text = settings.value(*schema, key);
+    const QString text = settings.value(schema, key);
     if ( ! schema->isExpression(key, text, context)) {
         for (int i = 0; i < field.matchers.size(); ++i) {
             QString matched;
@@ -786,7 +815,7 @@ bool FormatFileConfig::hasExpression(const QString & key) const
     if (settings.values.isEmpty()) {
         return false;
     }
-    const QRef<Config::Schema > schema = settingsSchema();
+    const QRef<const Config::Schema> schema = FormatFileConfig::schema();
     const Config::Key field = schema->key(key);
     const QString text = settings.value(*schema, key);
     const Config::Evaluator::CompileContext context;
@@ -822,15 +851,14 @@ static void reportCondition(const QString & error, bool mismatched)
 
 /*!
     Compiles the condition @a text into @a program, over the names of
-    FormatScopeConditions, and over percents when @a takesPercents is set,
-    or, when @a words is given, the choice of those words (see
-    Config::Condition::compile()); a text that does not compile leaves
+    FormatScopeConditions or, when @a words is given, the choice of those
+    words (see Config::Condition::compile()); a text that does not compile
+    leaves
     @a program at its default, and is logged. A name that differs from a
     known one in case alone is handled as @a mismatch says; for `critical`,
     returns false with @a error, and the file keeps its text.
 */
 static bool compileCondition(const QString & text, QStringList *program,
-                             bool takesPercents = false,
                              Config::NameMismatch mismatch
                                  = Config::NameMismatchWarn,
                              QString *error = Q_NULLPTR,
@@ -841,8 +869,7 @@ static bool compileCondition(const QString & text, QStringList *program,
     );
     const QStringList compiled = Config::Condition::compile(
         text,
-        &context,
-        takesPercents
+        &context
     );
     if ( ! context.lastCompiled()) {
         if (context.mismatched()
@@ -861,6 +888,29 @@ static bool compileCondition(const QString & text, QStringList *program,
 }
 
 /*!
+    Compiles the setting @a key of @a parser into @a program: the program
+    that schema() compiled for the key's default, which is the key's value
+    when no file sets it (see Config::Code), else the condition the value
+    holds (see compileCondition()).
+*/
+static bool readProgram(const Config::Parser & parser, const QString & key,
+                        QStringList * program,
+                        Config::NameMismatch mismatch, QString * error,
+                        const QStringList * words = Q_NULLPTR)
+{
+    const Config::Key schemaKey = parser.schema().key(key);
+    const QString value = parser.rawValue(key);
+    const QStringList defaultProgram = parser.schema().programFor(key);
+    if ( ! defaultProgram.isEmpty()
+        && value == schemaKey.defaultValue
+    ) {
+        *program = defaultProgram;
+        return true;
+    }
+    return compileCondition(value, program, mismatch, error, words);
+}
+
+/*!
     Builds the default `[Structure] typedefSuper`, for a file whose
     `.formatrc` files leave it unset.
 */
@@ -876,59 +926,6 @@ QString FormatFileConfig::defaultTypedefSuper()
 QString FormatFileConfig::defaultReplaceSuperSites()
 {
     return QString::fromLatin1(defaultReplaceSuperSitesText);
-}
-
-/*!
-    Builds the program of the default `[Relations] thisMode`, for settings
-    that no `.formatrc` set.
-*/
-QStringList FormatFileConfig::defaultThisMode()
-{
-    QStringList program;
-    compileCondition(QString::fromLatin1(defaultThisModeText), &program);
-    return program;
-}
-
-/*!
-    Builds the program of the default `[Structure] wrapChainAt`, which
-    `[Structure] wrapArgsAt` follows, for settings that no `.formatrc` set,
-    and for a use site that sets no percent.
-*/
-QStringList FormatFileConfig::defaultWrapChainAt()
-{
-    QStringList program;
-    compileCondition(QString::fromLatin1(defaultWrapChainAtText), &program, true);
-    return program;
-}
-
-/*!
-    Builds the program of the default `[Structure] wrapSignatureAt`, for
-    settings that no `.formatrc` set, and where a condition misses a value.
-*/
-QStringList FormatFileConfig::defaultWrapSignatureAt()
-{
-    QStringList program;
-    compileCondition(
-        QString::fromLatin1(defaultWrapSignatureAtText),
-        &program,
-        true
-    );
-    return program;
-}
-
-/*!
-    Builds the program of the default `[Structure] wrapConditionsOver`, for
-    settings that no `.formatrc` set.
-*/
-QStringList FormatFileConfig::defaultWrapConditionsOver()
-{
-    QStringList program;
-    compileCondition(
-        QString::fromLatin1(defaultWrapConditionsOverText),
-        &program,
-        true
-    );
-    return program;
 }
 
 /*!
@@ -1078,7 +1075,15 @@ static bool readCountOrCondition(
         QStringList *program,
         Config::NameMismatch mismatch, QString *error)
 {
+    const Config::Key schemaKey = parser.schema().key(key);
     const QString value = parser.rawValue(key);
+    const QStringList defaultProgram = parser.schema().programFor(key);
+    if ( ! defaultProgram.isEmpty()
+        && value == schemaKey.defaultValue
+    ) {
+        *program = defaultProgram;
+        return true;
+    }
     bool isNumber = false;
     const qint64 number = value.toLongLong(&isNumber);
     if (isNumber) {
@@ -1151,7 +1156,7 @@ static bool checkCondition(QString *text, const QStringList & names,
         Q_NULLPTR,
         mismatch
     );
-    Config::Condition::compile(*text, &context, true);
+    Config::Condition::compile(*text, &context);
     if (context.lastCompiled()
         || ! context.mismatched()
     ) {
@@ -1227,7 +1232,7 @@ bool FormatFileConfig::fromParser(
     const Config::Evaluator::CompileContext superContext(
         superNames, &superChoices, mismatch
     );
-    Config::Condition::compile(fileConfig->typedefSuper, &superContext, true);
+    Config::Condition::compile(fileConfig->typedefSuper, &superContext);
     if ( ! superContext.lastCompiled()
         && superContext.mismatched()
     ) {
@@ -1258,11 +1263,11 @@ bool FormatFileConfig::fromParser(
     }
     superContext.setMismatchMode(Config::NameMismatchIgnore);
     fileConfig->typedefSuperProgram = Config::Condition::compile(
-        fileConfig->typedefSuper, &superContext, true
+        fileConfig->typedefSuper, &superContext
     );
     const Config::Evaluator::CompileContext sitesContext(superNames);
     fileConfig->replaceSuperSitesProgram = Config::Condition::compile(
-        fileConfig->replaceSuperSites, &sitesContext, true
+        fileConfig->replaceSuperSites, &sitesContext
     );
     fileConfig->replaceTypesAction = parser.value(
         QString(QLL("replace.types.action"))
@@ -1297,16 +1302,16 @@ bool FormatFileConfig::fromParser(
             &fileConfig->wrapConditionsOver,
             &fileConfig->wrapConditionsOverCondition, mismatch, error)
         && readCountOrCondition(
-            parser, QString(QLL("structure.operatorExtraPad")),
-            &fileConfig->operatorExtraPad,
-            &fileConfig->operatorExtraPadCondition,
+            parser, QString(QLL("structure.operatorPadding")),
+            &fileConfig->operatorPadding,
+            &fileConfig->operatorPaddingCondition,
             mismatch,
             error)
         && readCountOrCondition(
-            parser, QString(QLL("structure.joinArgs")),
-            &fileConfig->joinArgs, &fileConfig->joinArgsCondition, mismatch,
-            error
-        );
+                parser, QString(QLL("structure.joinArgs")),
+                &fileConfig->joinArgs, &fileConfig->joinArgsCondition, mismatch,
+                error
+            );
     Config::Scopes::popUntil(scopes);
     if ( ! counted) {
         return false;
@@ -1340,31 +1345,29 @@ bool FormatFileConfig::fromParser(
         ? CompactAlways : CompactNever;
     fileConfig->docTagSign = parser.value(QString(QLL("comments.docTagSign"))) == QLL("\\")
         ? '\\' : '@';
-    return compileSetting(
-        parser, QString(QLL("structure.bodyBraces")), &fileConfig->bodyBraces,
-        mismatch,
-        error
+    const QStringList words = FormatFileConfig::wrapMistakesWords();
+    return readProgram(
+        parser, QString(QLL("structure.bodyBraces")),
+        &fileConfig->bodyBraces, mismatch, error
     )
-        && compileSetting(
-            parser, QString(QLL("relations.thisMode")), &fileConfig->thisMode,
+        && readProgram(
+            parser,
+            QString(QLL("relations.thisMode")),
+            &fileConfig->thisMode,
             mismatch,
             error)
-        && compileSetting(
-            parser, QString(QLL("structure.wrapChainAt")), &fileConfig->wrapChainAt,
-            mismatch,
-            error)
-        && compileSetting(
-            parser, QString(QLL("structure.wrapArgsAt")), &fileConfig->wrapArgsAt,
-            mismatch,
-            error)
-        && compileSetting(
-            parser, QString(QLL("structure.wrapSignatureAt")), &fileConfig->wrapSignatureAt,
-            mismatch,
-            error)
-        && compileSetting(
-            parser, QString(QLL("structure.wrapMistakes")), &fileConfig->wrapMistakes,
-            mismatch,
-            error
+        && readProgram(
+            parser, QString(QLL("structure.wrapChainAt")),
+            &fileConfig->wrapChainAt, mismatch, error)
+        && readProgram(
+            parser, QString(QLL("structure.wrapArgsAt")),
+            &fileConfig->wrapArgsAt, mismatch, error)
+        && readProgram(
+            parser, QString(QLL("structure.wrapSignatureAt")),
+            &fileConfig->wrapSignatureAt, mismatch, error)
+        && readProgram(
+            parser, QString(QLL("structure.wrapMistakes")),
+            &fileConfig->wrapMistakes, mismatch, error, &words
         );
 }
 
@@ -1404,7 +1407,8 @@ static bool resolveLintChoice(
     const FormatLintContext context(&config);
     context.setMismatchMode(Config::NameMismatchWarn);
     QString error;
-    const QStringList program = settingsSchema()->compile(key, value, &context);
+    const QStringList program = FormatFileConfig::schema()->compile(
+        key, value, &context);
     if (context.lastCompiled()) {
         const QVariant resolved =
             FormatFileConfig::resolve(key, program, &context);
@@ -1447,25 +1451,6 @@ QString FormatFileConfig::inlineMarker(
         return QString(QLL("override"));
     }
     return marker.trimmed();
-}
-
-/*!
-    Builds the default `[Structure] wrapMistakes` choice (see
-    FormatFileConfig), compiled.
-*/
-QStringList FormatFileConfig::defaultWrapMistakes()
-{
-    const QStringList words = FormatFileConfig::wrapMistakesWords();
-    QStringList program;
-    compileCondition(
-        QString::fromLatin1(defaultWrapMistakesText),
-        &program,
-        false,
-        Config::NameMismatchWarn,
-        Q_NULLPTR,
-        &words
-    );
-    return program;
 }
 
 /*!

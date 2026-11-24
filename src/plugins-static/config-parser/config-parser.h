@@ -8,10 +8,11 @@
 #include "./config-schema.h"
 #include "./config-settings.h"
 
-#include <QtCore/QHash>
 #include <QtCore/QByteArray>
+#include <QtCore/QHash>
 #include <QtCore/QList>
 #include <QtCore/QPair>
+#include <QtCore/QSharedPointer>
 #include <QtCore/QString>
 #include <QtCore/QStringList>
 
@@ -39,7 +40,7 @@ private:
 class Parser
 {
 public:
-    explicit Parser(const Schema & schema);
+    explicit Parser(const QRef<const Schema> & schema);
     virtual ~Parser();
 
     bool readFile(const QString & file, QString *error);
@@ -56,7 +57,8 @@ public:
     const Evaluator::Context *setContext(const Evaluator::Context *context) const;
     inline bool hasValue(const QString &name) const
     { return m_settings.values.contains(name.toLower()); }
-    inline const Schema &schema() const { return m_schema; }
+    const Schema &schema() const;
+    inline QRef<const Schema> schemaRef() const { return m_schema; }
     inline const Settings &settings() const { return m_settings; }
     QList<QPair<QString, QString > > openEntries(const QString & section) const;
 
@@ -71,6 +73,7 @@ protected:
     Settings m_settings;
 
 private:
+    void init();
     bool readLine(const QByteArray & line, QString *section,
                   const QString & origin, QString *error);
     bool set(const QString & name, const QString & shown, const QString & value,
@@ -78,7 +81,7 @@ private:
     bool matchValue(const Key & key, const QString & value,
                     QString *matched) const;
 
-    Schema m_schema;
+    QRef<const Schema> m_schema;
     mutable const Evaluator::Context *m_context;
 };
 

@@ -155,7 +155,7 @@ QStringList Config::Schema::compile(
         context->names() + m_names,
         words.isEmpty() ? Q_NULLPTR : &words, context->mismatchMode()
     );
-    const QStringList program = Condition::compile(text, &compiler, true);
+    const QStringList program = Condition::compile(text, &compiler);
     context->m_lastCompile = compiler.m_lastCompile;
     context->m_lastCE = compiler.m_lastCE;
     return program;
@@ -244,6 +244,16 @@ QVariant Config::Schema::resolve(
         context->m_lastError = QString(QLL("cannot convert setting %1")).arg(name);
     }
     return value;
+}
+
+/*!
+    Answers the program of the default of @a name, when it is code (see
+    Config::Code), which it compiles over the context the schema took; an
+    empty list for a default that stands for a value as it reads.
+*/
+QStringList Config::Schema::programFor(const QString & name) const
+{
+    return this->key(name).programFor(&this->m_context);
 }
 
 /*!

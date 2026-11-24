@@ -39,8 +39,10 @@ QStringList Config::Choice::enumKeys() const
 bool Config::Choice::match(const QString &value, QString *matched) const
 {
     const Evaluator::CompileContext context(this->m_names, &this->m_values);
-    Condition::compile(value, &context);
-    if ( ! context.lastCompiled()) {
+    const QStringList program = Condition::compile(value, &context);
+    if ( ! context.lastCompiled()
+        || Config::ValueMatcher::usesPercents(program)
+    ) {
         *matched = QString();
         return false;
     }
@@ -94,11 +96,16 @@ QString Config::Choice::explain(const QString & value) const
 /*!
     Converts @a resolved, what the choice resolves to (see resolve()), to a
     listed word in its own spelling, any text when no word is listed, or a
-    number as a qreal. Builds an invalid value for any other result.
+    number as a qreal. Builds an invalid value for any other result, such as
+    the 0.5 that `50%` reads as, since a choice of words takes no percent.
 */
 QVariant Config::Choice::convert(const QVariant & resolved) const
 {
     if (resolved.type() == QVariant::Double) {
+        const qreal number = resolved.toDouble();
+        if (number != qreal(qint64(number))) {
+            return QVariant();
+        }
         return resolved;
     }
     const QString word = resolved.toString();
@@ -136,7 +143,9 @@ QVariant Config::Choice::settingValue(
 {
     const Evaluator::CompileContext compiler(m_names, &m_values, context->mismatchMode());
     const QStringList program = Config::Condition::compile(value, &compiler);
-    if ( ! compiler.lastCompiled()) {
+    if ( ! compiler.lastCompiled()
+        || Config::ValueMatcher::usesPercents(program)
+    ) {
         return QVariant();
     }
     const QVariant resolved = Config::Condition::resolve(program, QSet<QString >(), context);

@@ -8,6 +8,7 @@
 #include "./config-schema.h"
 
 #include <QtCore/QObject>
+#include <QtCore/QSharedPointer>
 #include <QtCore/QVariant>
 
 namespace Config {
@@ -32,12 +33,12 @@ public:
 class CfgObject : public Object
 {
 public:
-    explicit CfgObject(const Schema & schema);
+    explicit CfgObject(const QRef<const Schema> & schema);
     QVariant dynamicValue(const QByteArray & name) const Q_DECL_OVERRIDE;
     bool hasDynamicValue(const QByteArray & name) const Q_DECL_OVERRIDE;
 
 private:
-    Schema m_schema;
+    QRef<const Schema> m_schema;
     QString m_section;
 };
 
@@ -46,7 +47,7 @@ class GlobalObject : public Object
     Q_OBJECT
     Q_PROPERTY(QObject *cfg READ cfg)
 public:
-    explicit GlobalObject(const Schema & schema);
+    explicit GlobalObject(const QRef<const Schema> & schema);
     QObject *cfg() const;
 
 private:

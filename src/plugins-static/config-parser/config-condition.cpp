@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: Apache-2.0
 
 #include "./config-condition.h"
+#include "./config-code.h"
 #include "./config-cache.h"
 #include "./config-escape.h"
 #include "./config-scopes.h"
@@ -921,8 +922,11 @@ QVariant Config::Condition::settingValue(
         m_setup(scope.data());
     }
     const Evaluator::CompileContext compiler(m_names, Q_NULLPTR, context->mismatchMode());
-    const QStringList program = Config::Condition::compile(value, &compiler, m_takesPercents);
-    if ( ! compiler.lastCompiled()) {
+    const QStringList program = Config::Condition::compile(value, &compiler);
+    QString error;
+    if ( ! compiler.lastCompiled()
+        || ! Config::Condition::checkPercents(program, m_takesPercents, &error)
+    ) {
         return QVariant();
     }
     if (m_result == ResultThreshold) {
@@ -971,8 +975,11 @@ bool Config::Condition::match(const QString & value, QString *matched) const
         this->m_setup(scope.data());
     }
     const Evaluator::CompileContext context(this->m_names);
-    Config::Condition::compile(normalized, &context, this->m_takesPercents);
-    if ( ! context.lastCompiled()) {
+    const QStringList program = Config::Condition::compile(normalized, &context);
+    QString error;
+    if ( ! context.lastCompiled()
+        || ! Config::Condition::checkPercents(program, this->m_takesPercents, &error)
+    ) {
         *matched = QString();
         return false;
     }
@@ -1033,9 +1040,10 @@ QString Config::Condition::describe() const
 
 /*!
     Compiles @a input over the names of @a context into @a program, which
-    resolve() runs: a condition, for a key that takes percent terms when
-    @a takesPercents is set (see checkPercents()), or a choice of the
-    context's enum keys, which takes no percent terms. Returns an empty list
+    resolve() runs: a condition, whose percent terms it takes from 0% to
+    100% (see checkPercents()), or a choice of the context's enum keys;
+    a key that takes no percent has its matcher reject one. Returns an
+    empty list
     and records the compile error in @a context for an invalid text.
 
     In a choice, each whole value is one of the words, a number, or an
@@ -1054,8 +1062,7 @@ QString Config::Condition::describe() const
     from a known one in case alone (see NameMismatch), and records failure.
 */
 QStringList Config::Condition::compile(
-        const QString & input, const Evaluator::CompileContext *context,
-        bool takesPercents)
+        const QString & input, const Evaluator::CompileContext *context)
 {
     Q_ASSERT(context);
     context->m_lastCE.clear();
@@ -1064,7 +1071,7 @@ QStringList Config::Condition::compile(
     ExpressionCompiler compiler(input, context);
     if (compiler.compile(&program)
         && Config::Condition::checkPercents(program,
-                                            takesPercents,
+                                            true,
                                             &context->m_lastCE)
     ) {
         context->m_lastCompile |= Compiled;
@@ -1213,7 +1220,7 @@ QVariant Config::Condition::eval(
 {
     Q_ASSERT(context);
     Evaluator::MismatchScope scope(context, NameMismatchError);
-    const QStringList program = Condition::compile(text, context, true);
+    const QStringList program = Condition::compile(text, context);
     scope.close();
     if ( ! context->lastCompiled()) {
         QString matched;
@@ -1326,6 +1333,14 @@ public:
     {
     }
 
+    /*!
+        Tells whether this operand and @a other stand for the same value:
+        the same number when each stands for one (see operandNumber()), else
+        the same text. A text stands for no number where it reads as one,
+        hence it differs from every number.
+    */
+    bool equals(const Operand & other) const;
+
     qreal number;
     bool isText;
     bool isNull;
@@ -1393,6 +1408,18 @@ static bool operandNumber(const Operand &operand, qreal *result)
     }
     *result = operand.number;
     return true;
+}
+
+bool Operand::equals(const Operand & other) const
+{
+    qreal number = 0;
+    qreal otherNumber = 0;
+    if (operandNumber(*this, &number)
+        && operandNumber(other, &otherNumber)
+    ) {
+        return number == otherNumber;
+    }
+    return this->isText && other.isText && this->text == other.text;
 }
 
 /*!
@@ -1558,6 +1585,18 @@ bool calculate(const QStringList &program, Lookup *lookup, Operand *result)
             i = item.mid(5).toInt() - 1;
         } else if (item.startsWith(QLL("op:"))) {
             const QString op = item.mid(3);
+            // Compares two texts as they read, since one side may be a word
+            // that no number stands for.
+            if (op == QLL("==") || op == QLL("!=")) {
+                if (stack.size() < 2) {
+                    return false;
+                }
+                const Operand right = stack.takeLast();
+                const Operand left = stack.takeLast();
+                const bool same = left.equals(right);
+                stack << Operand(op == QLL("==") ? same : ! same);
+                continue;
+            }
             if (stack.isEmpty()) {
                 return false;
             }
@@ -1656,3 +1695,18 @@ bool calculate(const QStringList &program, Lookup *lookup, Operand *result)
 } // namespace
 } // Namespace `Evaluator`.
 } // Namespace `Config`.
+
+QStringList Config::Code::program(
+        const Config::Evaluator::CompileContext *context) const
+{
+    if (this->isEmpty() || ! context) {
+        return QStringList();
+    }
+    const QStringList program = Config::Condition::compile(*this, context);
+    if (program.isEmpty()) {
+        qWarning("The default %s does not compile: %s",
+                 qPrintable(*this),
+                 qPrintable(context->lastErrorForCompile()));
+    }
+    return program;
+}

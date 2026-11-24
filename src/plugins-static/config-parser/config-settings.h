@@ -7,6 +7,7 @@
 #include <QtCore/QHash>
 #include <QtCore/QList>
 #include <QtCore/QPair>
+#include <QtCore/QSharedPointer>
 #include <QtCore/QString>
 
 namespace Config {
@@ -26,6 +27,7 @@ class Settings
 {
 public:
     QString value(const Schema & schema, const QString & name) const;
+    QString value(const QRef<const Schema> & schema, const QString & name) const;
 
     /*!
         Gives each setting (`<section>.<key>`, lower-cased) the value that

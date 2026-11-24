@@ -141,7 +141,7 @@ bool operatorsInMiddleAt(const FormatDocument *document, int offset)
 {
     const bool middle = document->configAt(offset).operatorsInMiddle;
     return settingValueAt(document, offset, QString(QLL("structure.operatorPlacement")),
-        QString(middle ? QLL("middle") : QLL("begining"))).toString() == QLL("middle");
+        QString(middle ? QLL("middle") : QLL("start"))).toString() == QLL("middle");
 }
 
 bool codeTargetAnyAt(const FormatDocument *document, int offset)
@@ -597,8 +597,10 @@ bool reachesWrapArgsAt(const FormatDocument *document,
         document->configAt(document->symbols().at(token).from);
     return conditions->holds(
         QString(QLL("structure.wrapArgsAt")),
-        fileConfig.wrapArgsAt, token,
-        FormatFileConfig::defaultWrapChainAt()
+        fileConfig.wrapArgsAt,
+        token,
+        FormatFileConfig::schema()
+            ->programFor(QString(QLL("structure.wrapChainAt")))
     );
 }
 

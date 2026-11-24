@@ -77,7 +77,7 @@ static bool layoutChainOperand(
     const QByteArray pad = startsLine
         ? document->indentOf(line)
         : continuationPad(textWidth(document->indentOf(line)),
-                          conditional ? 1 : conditions->operatorExtraPad(previous));
+                          conditional ? 1 : conditions->operatorPadding(previous));
     const QByteArray newline = document->text().mid(
         document->lineEnd(line) - 1,
         1
@@ -104,8 +104,8 @@ static bool layoutChainOperand(
             ? wrapMaxAt(document, from)
             : wrapColumn(document, from);
         if (column + textWidth(flat) > limit) {
-            const int extraPad = conditional
-                ? 0 : conditions->operatorExtraPad(previous);
+            const int extraPad = keepInline
+                ? conditions->operatorPadding(previous) : 0;
             operand = layout.layoutList(
                 first,
                 open,

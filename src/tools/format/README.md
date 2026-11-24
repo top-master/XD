@@ -286,10 +286,11 @@ moveSuffix = " "
   ; Only the base members of templates (found through `this->` alone).
   thisMode = (is-base-member & is-template) | already-existing
   ```
-- `operatorExtraPad` (in `[Structure]`): additional indentation steps for
-  a wrapped call in an operator chain. The default is `0`. It can be a
-  condition, such as `cfg.operatorPlacement == "middle" ? 0 : 1`.
-- `operatorPlacement` (in `[Structure]`): `begining` (the default) keeps an
+- `operatorPadding` (in `[Structure]`): additional indentation steps for
+  a wrapped call in an operator chain. It can be a condition, such as
+  `cfg.operatorPlacement == "middle" ? 0 : 1`, which is the default: a
+  chain that keeps its operator at the start takes the step.
+- `operatorPlacement` (in `[Structure]`): `start` (the default) keeps an
   early binary operator with the call it introduces and starts the next
   continuation with its operator. `middle` allows the next operator on the
   closing line. A wrapped conditional aligns its `?` and `:` in both modes.

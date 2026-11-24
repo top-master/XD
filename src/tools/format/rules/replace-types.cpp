@@ -1036,8 +1036,7 @@ void FormatReplaceTypesRule::run(FormatDocument *document) const
             );
             *program = Config::Condition::compile(
                 config.replaceTypesTarget,
-                &context,
-                true
+                &context
             );
             scope.close();
             if ( ! context.lastCompiled()) {

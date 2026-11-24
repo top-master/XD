@@ -118,14 +118,14 @@ const Config::Evaluator::Context *Config::Object::setContext(
 /*!
     Builds a settings object whose properties come from @a schema.
 */
-Config::CfgObject::CfgObject(const Config::Schema & schema)
+Config::CfgObject::CfgObject(const QRef<const Config::Schema> & schema)
     : m_schema(schema), m_section(QLL("structure"))
 {
 }
 
 bool Config::CfgObject::hasDynamicValue(const QByteArray & name) const
 {
-    return ! m_schema.key(m_section + QLatin1Char('.')
+    return m_schema && ! m_schema->key(m_section + QLatin1Char('.')
         + QString::fromLatin1(name)).isNull();
 }
 
@@ -137,11 +137,11 @@ QVariant Config::CfgObject::dynamicValue(const QByteArray & name) const
     Config::Cache::skip();
     const Config::Evaluator::Context *place = this->context();
     const Config::Settings *settings = place ? place->settings() : Q_NULLPTR;
-    if ( ! settings) {
+    if ( ! settings || ! m_schema) {
         return QVariant();
     }
     const QString keyName = m_section + QLatin1Char('.') + QString::fromLatin1(name).toLower();
-    const Config::Key key = m_schema.key(keyName);
+    const Config::Key key = m_schema->key(keyName);
     const QString value = settings->value(m_schema, keyName);
     QSet<QString > *active = &(settingsInProgress()->localData());
     if (active->contains(keyName)) {
@@ -150,9 +150,9 @@ QVariant Config::CfgObject::dynamicValue(const QByteArray & name) const
     active->insert(keyName);
     Q_DEFER { active->remove(keyName); };
     if (key.referenceThreshold && key.allowsCode()) {
-        return m_schema.reference(keyName, value, place);
+        return m_schema->reference(keyName, value, place);
     }
-    if ( ! m_schema.isExpression(keyName, value, place)) {
+    if ( ! m_schema->isExpression(keyName, value, place)) {
         for (int i = 0; i < key.matchers.size(); ++i) {
             QString matched;
             const Config::ValueMatcher *matcher = key.matchers.at(i).data();
@@ -161,7 +161,7 @@ QVariant Config::CfgObject::dynamicValue(const QByteArray & name) const
                 if ( ! resolved.isValid()) {
                     return QVariant();
                 }
-                const QVariant converted = m_schema.convert(keyName, resolved);
+                const QVariant converted = m_schema->convert(keyName, resolved);
                 if (converted.isValid()) {
                     if (converted.type() == QVariant::LongLong || converted.type() == QVariant::Int) {
                         return converted.toDouble();
@@ -171,18 +171,18 @@ QVariant Config::CfgObject::dynamicValue(const QByteArray & name) const
                 return resolved;
             }
         }
-        const QVariant literal = m_schema.convert(keyName, value);
+        const QVariant literal = m_schema->convert(keyName, value);
         if (literal.isValid()) {
             return literal;
         }
     }
-    return m_schema.reference(keyName, value, place);
+    return m_schema->reference(keyName, value, place);
 }
 
 /*!
     Offers @a settings to conditions as `cfg`.
 */
-Config::GlobalObject::GlobalObject(const Config::Schema & schema)
+Config::GlobalObject::GlobalObject(const QRef<const Config::Schema> & schema)
     : m_settings(new Config::CfgObject(schema))
 {
     m_settings->setParent(this);

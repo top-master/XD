@@ -521,9 +521,9 @@ QByteArray FormatExpressionLayout::layout(
                     nestedItems.last().first,
                     nestedItems.last().second)
                 && ! this->hasChain(
-                    nestedItems.first().first,
-                    nestedItems.first().second
-                );
+                        nestedItems.first().first,
+                        nestedItems.first().second
+                    );
             if (isMemberChain && ! endsWithChain) {
                 const QByteArray head = this->oneLine(first, open);
                 const QByteArray nested = this->layout(
@@ -1038,7 +1038,7 @@ QByteArray FormatExpressionLayout::layoutChain(
         const bool controlHead = isControlHead(m_document, firstOperator);
         const bool logical = chainOperator == ANDAND || chainOperator == OROR;
         const int extraPad = operators.size() > 1 && ! (controlHead && logical)
-            ? m_conditions->operatorExtraPad(firstOperator) : 0;
+            ? m_conditions->operatorPadding(firstOperator) : 0;
         const QByteArray head = this->layoutList(
             first,
             callOpen,
@@ -1209,7 +1209,8 @@ QByteArray FormatExpressionLayout::layoutChainRest(
                     ).wrapChainAt,
                     operators.at(end),
                     percentUsed,
-                    FormatFileConfig::defaultWrapChainAt()
+                    FormatFileConfig::schema()
+                        ->programFor(QString(QLL("structure.wrapChainAt")))
                 )
                 || ! this->fits(
                     column,
@@ -1460,7 +1461,7 @@ int FormatExpressionLayout::chainStepsIn(
             && m_document->firstSymbolOfLine(m_document->symbolLine(previous))
                 != previous
         ) {
-            return m_conditions->operatorExtraPad(previous);
+            return m_conditions->operatorPadding(previous);
         }
     }
     if (endsWithClosingLine(head)) {
@@ -1835,7 +1836,8 @@ bool FormatExpressionLayout::mayBreakList(int open, int itemCount) const
         QString(QLL("structure.wrapArgsAt")),
         fileConfig.wrapArgsAt,
         open,
-        FormatFileConfig::defaultWrapChainAt()
+        FormatFileConfig::schema()
+            ->programFor(QString(QLL("structure.wrapChainAt")))
     );
 }
 

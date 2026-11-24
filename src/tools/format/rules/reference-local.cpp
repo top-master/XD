@@ -108,7 +108,6 @@ void FormatReferenceLocalRule::run(FormatDocument *document) const
             QString::fromUtf8(type),
             QString::fromUtf8(document->lexem(i + 1))
         );
-        const int offset = document->symbols().at(i).from;
         if (document->agentMode()) {
             document->request(offset, "reference-local", message, 1, 0);
         } else {

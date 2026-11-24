@@ -14,6 +14,7 @@
 #include <QtCore/QHash>
 #include <QtCore/QList>
 #include <QtCore/QPair>
+#include <QtCore/QSharedPointer>
 #include <QtCore/QString>
 #include <QtCore/QVariant>
 
@@ -36,19 +37,26 @@ public:
     {
         wrapBegin << 75;
         commentWrapBegin << 75;
-        thisMode = FormatFileConfig::defaultThisMode();
-        wrapChainAt = FormatFileConfig::defaultWrapChainAt();
-        wrapArgsAt = FormatFileConfig::defaultWrapChainAt();
-        wrapSignatureAt = FormatFileConfig::defaultWrapSignatureAt();
-        wrapConditionsOverCondition =
-            FormatFileConfig::defaultWrapConditionsOver();
+        thisMode = FormatFileConfig::schema()->programFor(
+            QString::fromLatin1("relations.thisMode"));
+        wrapChainAt = FormatFileConfig::schema()->programFor(
+            QString::fromLatin1("structure.wrapChainAt"));
+        wrapArgsAt = FormatFileConfig::schema()->programFor(
+            QString::fromLatin1("structure.wrapChainAt"));
+        wrapSignatureAt = FormatFileConfig::schema()->programFor(
+            QString::fromLatin1("structure.wrapSignatureAt"));
+        wrapConditionsOverCondition = FormatFileConfig::schema()->programFor(
+            QString::fromLatin1("structure.wrapConditionsOver"));
         bodyBraces << QString::fromLatin1("always");
-        wrapMistakes = FormatFileConfig::defaultWrapMistakes();
+        wrapMistakes = FormatFileConfig::schema()->programFor(
+            QString::fromLatin1("structure.wrapMistakes"));
         extensions = FormatFileConfig::defaultExtensions();
         typedefSuper = FormatFileConfig::defaultTypedefSuper();
         replaceSuperSites = FormatFileConfig::defaultReplaceSuperSites();
         operatorsInMiddle = false;
-        operatorExtraPad = 0;
+        operatorPadding = 0;
+        operatorPaddingCondition = FormatFileConfig::schema()->programFor(
+            QString::fromLatin1("structure.operatorPadding"));
         wrapSubChain = QString::fromLatin1("always");
         wrapConditionsPer = QString::fromLatin1("pair-bundle");
         replaceTypesTarget = QString::fromLatin1("isNew");
@@ -63,7 +71,6 @@ public:
     static QStringList superConditionNames();
     static QStringList superChoices();
     static QStringList lintLevels();
-    static QStringList defaultWrapMistakes();
     static QStringList wrapMistakesWords();
     static LintLevel lintLevel(
             const QString & value,
@@ -75,7 +82,7 @@ public:
             const QString & value,
             const QString & defaultValue);
     bool acceptsFile(const QString &path) const;
-    static Config::Schema schema();
+    static QRef<const Config::Schema> schema();
     static QVariant resolve(
             const QString & key, const QStringList & program,
             const Config::Evaluator::Context *context);
@@ -88,10 +95,6 @@ public:
     bool hasExpression(const QString & key) const;
     static QString defaultTypedefSuper();
     static QString defaultReplaceSuperSites();
-    static QStringList defaultThisMode();
-    static QStringList defaultWrapChainAt();
-    static QStringList defaultWrapSignatureAt();
-    static QStringList defaultWrapConditionsOver();
     static bool readConfig(Config::Parser *parser, const FormatConfig & config,
                            QString *error);
     static bool load(const QString & path, const FormatConfig & config,
@@ -117,8 +120,8 @@ public:
     QStringList joinArgsCondition;
     bool operatorsInMiddle;
     Config::Settings settings;
-    int operatorExtraPad;
-    QStringList operatorExtraPadCondition;
+    int operatorPadding;
+    QStringList operatorPaddingCondition;
     QString wrapSubChain;
     QList<int > commentWrapBegin;
     int commentWrapMax;

@@ -29,12 +29,12 @@
 /*! Compiles a test expression and exposes the result and diagnostics. */
 static bool compileConditionForTest(
         const QString & text, const QStringList & names, QStringList *program,
-        QString *error, bool takesPercents = false,
+        QString *error,
         Config::NameMismatch mismatch = Config::NameMismatchWarn,
         bool *mismatched = Q_NULLPTR, const QStringList *words = Q_NULLPTR)
 {
     const Config::Evaluator::CompileContext context(names, words, mismatch);
-    *program = Config::Condition::compile(text, &context, takesPercents);
+    *program = Config::Condition::compile(text, &context);
     *error = context.lastErrorForCompile();
     if (mismatched) {
         *mismatched = context.mismatched();
@@ -1919,7 +1919,7 @@ void tst_FormatRules::testFix_shouldRewrite_data()
         << QByteArray("void f()\n{\n    registryForSynchronizationAcrossIndependentClientsAndServices\n"
                       "        .publishMessageForEachObserver(item);\n}\n");
     const QByteArray chainWidths =
-        "// @formatter:\n// ```\n// [Structure]\n// wrapBegin = 60\n// wrapMax = 110\n// operatorPlacement = begining\n// operatorExtraPad = 0\n// ```\n";
+        "// @formatter:\n// ```\n// [Structure]\n// wrapBegin = 60\n// wrapMax = 110\n// operatorPlacement = start\n// operatorPadding = 0\n// ```\n";
     QTest::newRow("operator-first wraps a middle call at wrapBegin")
         << QString(QLL("operator-first"))
         << (chainWidths + "void f()\n{\n    result = prefix + read(\n"
@@ -1929,7 +1929,7 @@ void tst_FormatRules::testFix_shouldRewrite_data()
             "        document, entries.first().first,\n"
             "        entries.first().second)\n    + suffix;\n}\n");
     const QByteArray paddedChainWidths =
-        "// @formatter:\n// ```\n// [Structure]\n// wrapBegin = 60\n// wrapMax = 110\n// operatorPlacement = begining\n// operatorExtraPad = 1\n// ```\n";
+        "// @formatter:\n// ```\n// [Structure]\n// wrapBegin = 60\n// wrapMax = 110\n// operatorPlacement = start\n// operatorPadding = 1\n// ```\n";
     QTest::newRow("operator-first wraps a middle call with extra operator padding")
         << QString(QLL("operator-first"))
         << (paddedChainWidths + "void f()\n{\n    result = prefix + read(\n"
@@ -1972,6 +1972,33 @@ void tst_FormatRules::testFix_shouldRewrite_data()
         << QByteArray("// Format rule: structure.operatorPlacement=middle\n"
                       "void f()\n{\n    result = condition\n"
                       "        ? read(value)\n        : other;\n}\n");
+    QTest::newRow("operator-first keeps arguments without extra padding when operator starts line")
+        << QString(QLL("operator-first"))
+        << QByteArray(
+            "void f()\n"
+                "{\n"
+                "    const bool counted = firstCall(\n"
+                "        first, second\n"
+                "    )\n"
+                "        && readCountOrCondition(\n"
+                "                parser, QString(QLL(\"structure.wrapConditionsOver\")),\n"
+                "                &fileConfig->wrapConditionsOver,\n"
+                "                &fileConfig->wrapConditionsOverCondition, mismatch, error)\n"
+                "        && otherCall();\n"
+                "}\n")
+        << QByteArray(
+            "void f()\n"
+                "{\n"
+                "    const bool counted = firstCall(\n"
+                "        first, second\n"
+                "    )\n"
+                "        && readCountOrCondition(\n"
+                "            parser, QString(QLL(\"structure.wrapConditionsOver\")),\n"
+                "            &fileConfig->wrapConditionsOver,\n"
+                "            &fileConfig->wrapConditionsOverCondition, mismatch, error)\n"
+                "        && otherCall();\n"
+                "}\n"
+        );
     QTest::newRow("operator-first keeps nested conditional and additive chains aligned")
         << QString(QLL("operator-first"))
         << QByteArray("void f()\n"
@@ -3397,7 +3424,7 @@ void tst_FormatRules::testWrapMistakes_shouldTakeItsValues()
     QStringList program;
     QVERIFY2(compileConditionForTest(
         QString(QLL("is(array) ? average : never")),
-        FormatScopeConditions::names(), &program, &error, false,
+        FormatScopeConditions::names(), &program, &error,
         Config::NameMismatchWarn, Q_NULLPTR, &words
     ), qPrintable(error));
     qExpect(FormatFileConfig().wrapMistakes)->toEqual(program);
@@ -3413,7 +3440,7 @@ void tst_FormatRules::testWrapMistakes_shouldTakeItsValues()
         ->toBeTruthy();
     QVERIFY2(compileConditionForTest(
         QString(QLL("is(call) ? cfg.joinArgs : never")),
-        FormatScopeConditions::names(), &program, &error, false,
+        FormatScopeConditions::names(), &program, &error,
         Config::NameMismatchWarn, Q_NULLPTR, &words
     ), qPrintable(error));
     qExpect(settings.wrapMistakes)->toEqual(program);
@@ -4347,7 +4374,8 @@ void tst_FormatRules::testThisMode_shouldDefaultToBaseExistingAndHeaderOutline()
 {
     const Config::Evaluator::Context testContext(false);
     const QStringList program = FormatFileConfig().thisMode;
-    qExpect(program)->toEqual(FormatFileConfig::defaultThisMode());
+    qExpect(program)->toEqual(FormatFileConfig::schema()->programFor(
+        QString(QLL("relations.thisMode"))));
     const QString outline = QString(QLL("is-outline"));
     QSet<QString > holding;
     holding << QString(QLL("is-base-member"));
@@ -4437,37 +4465,38 @@ void tst_FormatRules::testScopeConditions_shouldNameScopeOfToken()
     const QString templated = QString(QLL("is-template"));
     const QString base = QString(QLL("is-base-member"));
     const QString existing = QString(QLL("already-existing"));
+    const QString isNew = QString(QLL("is-new"));
 
     // A file-scope token is in no class.
     qExpect(conditions.holding(symbolIndex(document, "class")))
-        ->toEqual(QSet<QString >() << always << header);
+        ->toEqual(QSet<QString >() << always << header << isNew);
     // The class template's own field, in its class body.
     qExpect(conditions.holding(symbolIndex(document, "m_v")))
-        ->toEqual(QSet<QString >() << always << header << templated);
+        ->toEqual(QSet<QString >() << always << header << templated << isNew);
     // The inline body of `W::get()`: an own member, then a base member.
     qExpect(conditions.holding(symbolIndex(document, "m_x", 0)))
-        ->toEqual(QSet<QString >() << always << header);
+        ->toEqual(QSet<QString >() << always << header << isNew);
     qExpect(conditions.holding(symbolIndex(document, "m_b", 1)))
-        ->toEqual(QSet<QString >() << always << header << base << existing);
+        ->toEqual(QSet<QString >() << always << header << base << existing << isNew);
     // The outline body of `W::run()`.
     qExpect(conditions.holding(symbolIndex(document, "m_x", 2)))
-        ->toEqual(QSet<QString >() << always << header << outline);
+        ->toEqual(QSet<QString >() << always << header << outline << isNew);
     qExpect(conditions.holding(symbolIndex(document, "m_b", 2)))
-        ->toEqual(QSet<QString >() << always << header << outline << base << existing);
+        ->toEqual(QSet<QString >() << always << header << outline << base << existing << isNew);
     // A block inside the outline body of `W::run()`.
     qExpect(conditions.holding(symbolIndex(document, "m_x", 4)))
-        ->toEqual(QSet<QString >() << always << header << outline << existing);
+        ->toEqual(QSet<QString >() << always << header << outline << existing << isNew);
     qExpect(conditions.holding(symbolIndex(document, "m_b", 3)))
-        ->toEqual(QSet<QString >() << always << header << outline << base);
+        ->toEqual(QSet<QString >() << always << header << outline << base << isNew);
     // The outline body of `V<T>::run()`.
     qExpect(conditions.holding(symbolIndex(document, "m_v", 1)))
-        ->toEqual(QSet<QString >() << always << header << outline << templated);
+        ->toEqual(QSet<QString >() << always << header << outline << templated << isNew);
 
     // The same code in a source file.
     const FormatDocument source(text, QString(QLL("a.cpp")));
     FormatScopeConditions sourceConditions(&source);
     qExpect(sourceConditions.holding(symbolIndex(source, "m_x", 2)))
-        ->toEqual(QSet<QString >() << always << QString(QLL("is-non-header")) << outline);
+        ->toEqual(QSet<QString >() << always << QString(QLL("is-non-header")) << outline << isNew);
 }
 
 /// Asks for a condition whose term misses a value, such as `is()` of an
@@ -4488,22 +4517,19 @@ void tst_FormatRules::testScopeConditions_shouldFallBackWithoutValue()
         QString(QLL("spaceUsed > 40% | never")),
         names,
         &program,
-        &error,
-        true
+        &error
     ))->toBeTruthy();
     qExpect(compileConditionForTest(
         QString(QLL("is(other) | never")),
         names,
         &missing,
-        &error,
-        true
+        &error
     ))->toBeTruthy();
     qExpect(compileConditionForTest(
         QString(QLL("is-header")),
         names,
         &fallback,
-        &error,
-        true
+        &error
     ))->toBeTruthy();
     const int token = symbolIndex(document, "run");
     const QString key = QString(QLL("structure.wrapArgsAt"));
@@ -4544,7 +4570,7 @@ void tst_FormatRules::testScopeConditions_shouldTellTargetKinds()
     QString error;
     QVERIFY2(compileConditionForTest(
         QString(QLL("is(condition)")), FormatScopeConditions::names(),
-        &program, &error, true
+        &program, &error
     ), qPrintable(error));
     const QString key = QString(QLL("structure.wrapArgsAt"));
     QVERIFY(conditions.holds(key, program, condition));
@@ -4576,11 +4602,11 @@ void tst_FormatRules::testScopeConditions_shouldCountOverWithGivenSpace()
     QString error;
     QVERIFY2(compileConditionForTest(
         QString(QLL("spaceRemaining < 30%")), FormatScopeConditions::names(),
-        &config.wrapArgsOverCondition, &error, true
+        &config.wrapArgsOverCondition, &error
     ), qPrintable(error));
     QVERIFY2(compileConditionForTest(
         QString(QLL("spaceRemaining < 30%")), FormatScopeConditions::names(),
-        &config.wrapConditionsOverCondition, &error, true
+        &config.wrapConditionsOverCondition, &error
     ), qPrintable(error));
     document.setConfig(config);
     QVERIFY(conditions.argsOver(call, 1, 20));
@@ -4715,7 +4741,7 @@ void tst_FormatRules::testScopeConditions_shouldCountConditionOperands()
     QVERIFY(compileConditionForTest(
         QString(QLL("argCount(0) > 2 && spaceRemaining <= 20%")),
         FormatScopeConditions::names(), &config.wrapConditionsOverCondition,
-        &error, true
+        &error
     ));
     document.setConfig(config);
     QVERIFY(conditions.conditionsOver(open, 3, 20));
@@ -4741,7 +4767,7 @@ void tst_FormatRules::testScopeConditions_shouldLimitConditionRanges()
         FormatConditionContext::pushCountScope();
     QVERIFY2(compileConditionForTest(
         QString(QLL("value > 2")), FormatScopeConditions::names(),
-        &config.wrapConditionsOverCondition, &error, true
+        &config.wrapConditionsOverCondition, &error
     ), qPrintable(error));
     document.setConfig(config);
     QCOMPARE(conditions.conditionsLimit(open, 3, 50), 1);
@@ -4762,7 +4788,8 @@ void tst_FormatRules::testScopeConditions_shouldPlaceSignaturesByWrapArgsAt()
     );
     const int open = symbolIndex(document, "isReady") + 1;
     FormatScopeConditions conditions(&document);
-    const QStringList fallback = FormatFileConfig::defaultWrapSignatureAt();
+    const QStringList fallback = FormatFileConfig::schema()->programFor(
+        QString(QLL("structure.wrapSignatureAt")));
     Config::Parser parser(FormatFileConfig::schema());
     FormatFileConfig config;
     QVERIFY(readSettings(parser, &config));
@@ -4854,20 +4881,20 @@ void tst_FormatRules::testScopeConditions_shouldReadSettingsThroughCfg()
     // A padding condition reads the operator placement at the current place.
     QVERIFY2(parser.readData(
         "[Structure]\noperatorPlacement=middle\n"
-        "operatorExtraPad=cfg.operatorPlacement == \"middle\" ? 0 : 1\n",
+        "operatorPadding=cfg.operatorPlacement == \"middle\" ? 0 : 1\n",
         QLL("inline"), &error
     ), qPrintable(error));
     QVERIFY(readSettings(parser, &config));
     document.setConfig(config);
-    qExpect(conditions.operatorExtraPad(open))->toEqual(0);
+    qExpect(conditions.operatorPadding(open))->toEqual(0);
     QVERIFY2(parser.readData(
-        "[Structure]\noperatorPlacement=begining\n"
-        "operatorExtraPad=cfg.operatorPlacement == \"middle\" ? 0 : 1\n",
+        "[Structure]\noperatorPlacement=start\n"
+        "operatorPadding=cfg.operatorPlacement == \"middle\" ? 0 : 1\n",
         QLL("inline"), &error
     ), qPrintable(error));
     QVERIFY(readSettings(parser, &config));
     document.setConfig(config);
-    qExpect(conditions.operatorExtraPad(open))->toEqual(1);
+    qExpect(conditions.operatorPadding(open))->toEqual(1);
 
     // A schema key is available to cfg without a tool-maintained key list.
     QVERIFY2(parser.readData(
@@ -4893,19 +4920,19 @@ void tst_FormatRules::testScopeConditions_shouldOfferValueToCountSettingsOnly()
     QString error;
     QVERIFY( ! compileConditionForTest(
         QString(QLL("value > 1")), FormatScopeConditions::names(),
-        &program, &error, true
+        &program, &error
     ));
     {
         const QSharedPointer<Config::Scopes::Scope > scope =
             FormatConditionContext::pushCountScope();
         QVERIFY2(compileConditionForTest(
             QString(QLL("value > 1")), FormatScopeConditions::names(),
-            &program, &error, true
+            &program, &error
         ), qPrintable(error));
     }
     QVERIFY( ! compileConditionForTest(
         QString(QLL("value > 1")), FormatScopeConditions::names(),
-        &program, &error, true
+        &program, &error
     ));
 }
 
@@ -4985,8 +5012,7 @@ void tst_FormatRules::testScopeConditions_shouldEvaluateArgumentExpressions()
         QString(QLL("argCount(0) > 3 && (space_remaining <= 18.75% || is_signature)")),
         FormatScopeConditions::names(),
         &settings.wrapArgsOverCondition,
-        &error,
-        true
+        &error
     ));
     document.setConfig(settings);
     QVERIFY(conditions.argsOver(outer, 4, 18.75));
@@ -4998,8 +5024,7 @@ void tst_FormatRules::testScopeConditions_shouldEvaluateArgumentExpressions()
         QString(QLL("argCount(-1) == 4 && argCount(1, 2) - 1 == 1")),
         FormatScopeConditions::names(),
         &settings.wrapArgsOverCondition,
-        &error,
-        true
+        &error
     ));
     document.setConfig(settings);
     QVERIFY(conditions.argsOver(inner, 2, 0));
@@ -5019,8 +5044,7 @@ void tst_FormatRules::testScopeConditions_shouldEvaluateArgumentExpressions()
         QString(QLL("value - 1 == 3 && isSignature")),
         FormatScopeConditions::names(),
         &settings.wrapArgsOverCondition,
-        &error,
-        true
+        &error
     ));
     document.setConfig(settings);
     QVERIFY(conditions.argsOver(declaration, 4, 70));
@@ -5028,8 +5052,7 @@ void tst_FormatRules::testScopeConditions_shouldEvaluateArgumentExpressions()
         QString(QLL("argCount(0) > 3 && spaceUsed > 40%")),
         FormatScopeConditions::names(),
         &settings.wrapArgsOverCondition,
-        &error,
-        true
+        &error
     ));
     const QStringList fallback = QStringList() << QString(QLL("never"));
     QVERIFY( ! conditions.holds(
@@ -5048,7 +5071,7 @@ void tst_FormatRules::testScopeConditions_shouldEvaluateArgumentExpressions()
     ));
     QVERIFY( ! compileConditionForTest(
         QString(QLL("space-remaining < 20%")), FormatScopeConditions::names(),
-        &settings.wrapArgsOverCondition, &error, true
+        &settings.wrapArgsOverCondition, &error
     ));
 }
 

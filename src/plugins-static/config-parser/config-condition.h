@@ -40,8 +40,7 @@ public:
     QVariant settingValue(const QString & value, const Evaluator::Context *context) const Q_DECL_OVERRIDE;
 
     static QStringList compile(const QString & text,
-                        const Evaluator::CompileContext *context,
-                        bool takesPercents = false);
+                        const Evaluator::CompileContext *context);
     static QVariant resolve(const QStringList & program,
                             const QSet<QString > & holding,
                             const Evaluator::Context *context);

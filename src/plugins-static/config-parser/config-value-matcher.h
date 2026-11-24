@@ -34,7 +34,22 @@ public:
 
     virtual QString explain(const QString & value) const;
     virtual bool allowsCode() const;
+
+    /*!
+        Lists the words this matcher takes, which a value of the key may be
+        on its own (see Config::Choice); a matcher that takes no word lists
+        none, and the key's value is an expression or a value as it reads.
+    */
     virtual QStringList enumKeys() const;
+
+    /*!
+        Tells whether @a program, which a key's condition compiled (see
+        Config::Condition::compile()), uses a percent term, as in
+        `spaceUsed > 40%`, which a matcher of words or of a yes-or-no
+        rejects.
+    */
+    static bool usesPercents(const QStringList & program);
+
     virtual QVariant convert(const QVariant & resolved) const;
     virtual QVariant settingValue(const QString & value, const Evaluator::Context *context) const;
 };
