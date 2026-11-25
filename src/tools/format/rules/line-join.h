@@ -20,8 +20,11 @@ public:
     void run(FormatDocument *document) const Q_DECL_OVERRIDE;
 
 private:
-    bool mayJoin(const FormatDocument *document, int before,
-                 const QList<int > & brackets, int questions) const;
+    bool mayJoin(
+            const FormatDocument *document,
+            int before,
+            const QList<int > & brackets,
+            int questions) const;
 };
 
 #endif // RULES_LINE_JOIN_H

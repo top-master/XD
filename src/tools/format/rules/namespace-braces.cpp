@@ -10,10 +10,7 @@
 #include <QtCore/QGlobalStatic>
 #include <QtCore/QRegularExpression>
 
-Q_GLOBAL_STATIC_WITH_ARGS(QRegularExpression, knownLabelPattern, (
-    QString(QLL("^//\\s*(end\\s+(of\\s+)?)?namespace(\\s+[`'\"]?[\\w:]*[`'\"]?)?\\s*\\.?$")),
-    QRegularExpression::CaseInsensitiveOption
-))
+Q_GLOBAL_STATIC_WITH_ARGS(QRegularExpression, knownLabelPattern, (QString(QLL("^//\\s*(end\\s+(of\\s+)?)?namespace(\\s+[`'\"]?[\\w:]*[`'\"]?)?\\s*\\.?$")), QRegularExpression::CaseInsensitiveOption))
 
 /*!
     @class FormatNamespaceBracesRule
@@ -63,7 +60,8 @@ void FormatNamespaceBracesRule::run(FormatDocument *document) const
 {
     for (int i = 0; i + 1 < document->symbols().size(); ++i) {
         if (document->token(i) != NAMESPACE
-            || (i > 0 && document->token(i - 1) == USING)
+            || (i > 0
+                && document->token(i - 1) == USING)
         ) {
             continue;
         }
@@ -83,10 +81,12 @@ void FormatNamespaceBracesRule::run(FormatDocument *document) const
             continue;
         }
         const int close = document->match(open);
-        if (close < 0 || document->spansDirective(
-            document->symbols().at(open).from,
-            document->symbolEnd(close)
-        )) {
+        if (close < 0
+            || document->spansDirective(
+                document->symbols().at(open).from,
+                document->symbolEnd(close)
+            )
+        ) {
             continue;
         }
         const QByteArray name = open > i + 1
@@ -96,7 +96,8 @@ void FormatNamespaceBracesRule::run(FormatDocument *document) const
         const int closeLine = document->symbolLine(close);
 
         // Ends the opening line at the `{`.
-        if (open + 1 <= close && document->symbolLine(open + 1) == document->symbolLine(open)
+        if (open + 1 <= close
+            && document->symbolLine(open + 1) == document->symbolLine(open)
             && ! document->hasCommentBetween(
                 document->symbolEnd(open),
                 document->symbols().at(open + 1).from
@@ -133,8 +134,8 @@ void FormatNamespaceBracesRule::run(FormatDocument *document) const
             continue;
         }
         const int from = document->symbolEnd(close);
-        const int to = hasNext
-            ? document->symbols().at(close + 1).from : document->lineEnd(closeLine);
+        const int to = hasNext ? document->symbols().at(close + 1).from
+                               : document->lineEnd(closeLine);
         const QByteArray rest = document->text().mid(from, to - from);
         const QByteArray comment = rest.trimmed();
         if ( ! comment.isEmpty() && ! comment.startsWith("//")) {
@@ -147,11 +148,13 @@ void FormatNamespaceBracesRule::run(FormatDocument *document) const
         const QByteArray lastName = scope < 0 ? name : name.mid(scope + 2);
         const QByteArray above = closeLine > 1
             ? document->lineText(closeLine - 1).trimmed() : QByteArray();
-        const bool namesAfter = ! comment.isEmpty() && ! isKnownLabel(comment)
+        const bool namesAfter = ! comment.isEmpty()
+            && ! isKnownLabel(comment)
             && namesNamespace(comment, lastName);
         const bool namesAbove = comment.isEmpty()
             && document->firstSymbolOfLine(closeLine) == close
-            && above.startsWith("//") && namesNamespace(above, lastName);
+            && above.startsWith("//")
+            && namesNamespace(above, lastName);
         if ( ! name.isEmpty() && (namesAfter || namesAbove)) {
             continue;
         }

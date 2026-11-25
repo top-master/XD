@@ -93,8 +93,9 @@ void FormatThread::run()
         while (this->m_queue->told < this->m_queue->files.size()
             && this->m_queue->done.at(this->m_queue->told)
         ) {
-            this->m_runner
-                ->tellFinished(this->m_queue->results.at(this->m_queue->told));
+            this->m_runner->tellFinished(
+                this->m_queue->results.at(this->m_queue->told)
+            );
             ++this->m_queue->told;
         }
     }
@@ -110,7 +111,8 @@ void FormatThread::run()
 /*!
     Builds the runner that formats with @a formatter as @a options say.
 */
-FormatThreadRunner::FormatThreadRunner(const Formatter *formatter, const FormatOptions & options)
+FormatThreadRunner::FormatThreadRunner(
+        const Formatter *formatter, const FormatOptions & options)
     : super(formatter, options)
 {
 }

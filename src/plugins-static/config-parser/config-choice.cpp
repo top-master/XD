@@ -69,7 +69,8 @@ bool Config::Choice::matchLiteral(const QString & value, QString *matched) const
     }
     bool number = false;
     const double numeric = literal.toDouble(&number);
-    const QVariant converted = this->convert(number ? QVariant(numeric) : QVariant(literal));
+    const QVariant converted = this->convert(number ? QVariant(numeric)
+                                                    : QVariant(literal));
     if ( ! converted.isValid()) {
         return false;
     }

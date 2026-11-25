@@ -873,6 +873,8 @@ bool Config::Parser::matchValue(const Config::Key & key, const QString & value,
                 return true;
             }
         }
+        *matched = QString();
+        return false;
     }
     if ( ! key.allowsCode()) {
         *matched = QString();

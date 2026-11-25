@@ -85,14 +85,19 @@ class JoinArgsContext : public FormatConditionContext
 {
     typedef FormatConditionContext super;
 public:
-    inline JoinArgsContext(FormatScopeConditions *conditions, int open,
-                           int argument, int last, bool isWrapping)
+    inline JoinArgsContext(
+            FormatScopeConditions *conditions,
+            int open,
+            int argument,
+            int last,
+            bool isWrapping)
         : m_conditions(conditions), m_open(open), m_argument(argument)
         , m_last(last), m_isWrapping(isWrapping)
     {
     }
 
-    bool argumentCount(int depth, int argument,
+    bool argumentCount(int depth,
+                       int argument,
                        qreal *count) const Q_DECL_OVERRIDE;
 
     inline QStringList onNames() const Q_DECL_OVERRIDE_IL
@@ -108,26 +113,22 @@ public:
     }
 
     inline bool value(qreal *value) const Q_DECL_OVERRIDE_IL
-    {
-        *value = this->count();
+    { *value = this->count();
         return true;
     }
 
     inline bool spaceRemaining(qreal *percent) const Q_DECL_OVERRIDE_IL
-    {
-        *percent = m_conditions->spaceRemaining(m_last);
+    { *percent = m_conditions->spaceRemaining(m_last);
         return true;
     }
 
     inline bool hasMoreArgs(bool *value) const Q_DECL_OVERRIDE_IL
-    {
-        *value = m_argument + 1 < this->count();
+    { *value = m_argument + 1 < this->count();
         return true;
     }
 
     inline bool isWrapping(bool *value) const Q_DECL_OVERRIDE_IL
-    {
-        *value = m_isWrapping;
+    { *value = m_isWrapping;
         return true;
     }
 
@@ -171,9 +172,7 @@ int JoinArgsContext::count() const
     positive depth without an argument selects the argument in question; at
     depth 1, an argument that holds no call takes no arguments.
 */
-bool JoinArgsContext::argumentCount(
-        int depth, int argument,
-        qreal *count) const
+bool JoinArgsContext::argumentCount(int depth, int argument, qreal *count) const
 {
     if (depth > 0 && argument == 0) {
         argument = this->m_argument + 1;
@@ -207,7 +206,9 @@ bool JoinArgsContext::argumentCount(
     `,`. A condition that misses a value gives 1.
 */
 int FormatDocument::joinArgsAt(
-        int open, int argument, int column,
+        int open,
+        int argument,
+        int column,
         bool isWrapping) const
 {
     const FormatFileConfig &fileConfig = this->configAt(
@@ -216,11 +217,8 @@ int FormatDocument::joinArgsAt(
     if (fileConfig.joinArgsCondition.isEmpty()) {
         return isWrapping ? qMax(1, fileConfig.joinArgs) : 1;
     }
-    const QList<QPair<int, int > > items = splitArguments(
-        this,
-        open,
-        this->match(open)
-    );
+    const QList<QPair<int, int > > items =
+        splitArguments(this, open, this->match(open));
     if (argument < 0 || argument >= items.size()) {
         return 1;
     }
@@ -232,8 +230,11 @@ int FormatDocument::joinArgsAt(
     conditions.reserve(last, column + (hasComma ? 1 : 0));
 
     const JoinArgsContext context(
-        &conditions, open, argument,
-        last, isWrapping
+        &conditions,
+        open,
+        argument,
+        last,
+        isWrapping
     );
     const QSharedPointer<Config::Scopes::Scope > scope =
         FormatConditionContext::pushCountScope();
@@ -253,8 +254,7 @@ int FormatDocument::joinArgsAt(
     @a error.
 */
 bool FormatDocument::setInlineConfiguration(
-        const FormatConfig &config,
-        QString *error)
+        const FormatConfig &config, QString *error)
 {
     const QList<FormatConfigDirective > directives = configDirectives(this);
     if (directives.isEmpty()) {
@@ -379,9 +379,7 @@ bool FormatDocument::setInlineConfiguration(
         }
         FormatFileConfig resolved;
         QString reason;
-        if ( ! FormatFileConfig::fromParser(layers, &resolved, &reason)) {
-            *error = QString(QLL("Format rule: [Code] nameMismatch = critical: %1"))
-                .arg(reason);
+        if ( ! FormatFileConfig::fromParser(layers, &resolved, &reason)) { *error = QString(QLL("Format rule: [Code] nameMismatch = critical: %1")).arg(reason);
             return false;
         }
         regions.append(qMakePair(directive.endOffset, resolved));
@@ -411,13 +409,15 @@ QList<FormatIssue > FormatDocument::inlineWarnings(bool verbose) const
                 || directive.kind == FormatConfigDirective::Begin
             ) {
                 const int line = this->lineOf(directive.offset);
-                warnings.append(FormatIssue(
-                    line,
-                    "format-warning",
-                    QString(
-                        QLL("#: format warning: configuration applied inside an off region at line %1.")
-                    ).arg(line)
-                ));
+                warnings.append(
+                    FormatIssue(
+                        line,
+                        "format-warning",
+                        QString(QLL(
+                            "#: format warning: configuration applied inside an off region at line %1."
+                        )).arg(line)
+                    )
+                );
             }
         }
         if (directive.kind == FormatConfigDirective::Invalid) {
@@ -433,13 +433,15 @@ QList<FormatIssue > FormatDocument::inlineWarnings(bool verbose) const
         } else if (directive.kind == FormatConfigDirective::End) {
             if (openings.isEmpty()) {
                 const int line = this->lineOf(directive.offset);
-                warnings.append(FormatIssue(
-                    line,
-                    "format-warning",
-                    QString(
-                        QLL("#: format warning: unmatched \"Format rule end.\" at line %1")
-                    ).arg(line)
-                ));
+                warnings.append(
+                    FormatIssue(
+                        line,
+                        "format-warning",
+                        QString(QLL(
+                            "#: format warning: unmatched \"Format rule end.\" at line %1"
+                        )).arg(line)
+                    )
+                );
             } else {
                 openings.removeLast();
             }
@@ -452,8 +454,7 @@ QList<FormatIssue > FormatDocument::inlineWarnings(bool verbose) const
                 line,
                 "format-warning",
                 QString(QLL("#: format warning: consider replacing \"Format rule begin:\" with "
-                    "\"Format rule:\" at line %1 (since it has no \"Format rule end.\" comment)."))
-                .arg(line)
+                    "\"Format rule:\" at line %1 (since it has no \"Format rule end.\" comment).")).arg(line)
             ));
         }
     }
@@ -519,12 +520,12 @@ void FormatDocument::appendComment(const Symbol & symbol, int previousCodeLine)
     const QByteArray head = this->m_text.mid(symbol.from, 4);
     if (symbol.token == CPP_COMMENT) {
         const bool doc = head.startsWith("///") || head.startsWith("//!");
-        comment.kind = doc && ! head.startsWith("////")
-            ? FormatComment::LineDoc : FormatComment::Line;
+        comment.kind = doc && ! head.startsWith("////") ? FormatComment::LineDoc
+                                                        : FormatComment::Line;
     } else {
         const bool doc = head.startsWith("/**") || head.startsWith("/*!");
-        comment.kind = doc && head != "/**/"
-            ? FormatComment::BlockDoc : FormatComment::Block;
+        comment.kind = doc && head != "/**/" ? FormatComment::BlockDoc
+                                             : FormatComment::Block;
     }
     comment.trailing = previousCodeLine > 0
         && this->lineOf(symbol.from) == previousCodeLine;
@@ -577,8 +578,7 @@ void FormatDocument::analyzeBrackets()
     QVector<int > scopes;
     for (int i = 0; i < count; ++i) {
         const Token token = this->m_symbols.at(i).token;
-        this->m_scopes[i] = scopes.isEmpty()
-            ? int(FileScope) : scopes.last();
+        this->m_scopes[i] = scopes.isEmpty() ? int(FileScope) : scopes.last();
         if (this->isDirectiveLine(this->symbolLine(i))) {
             continue;
         }
@@ -617,8 +617,7 @@ void FormatDocument::analyzeBrackets()
             }
             open.removeLast();
         }
-        this->m_scopes[i] = scopes.isEmpty()
-            ? int(FileScope) : scopes.last();
+        this->m_scopes[i] = scopes.isEmpty() ? int(FileScope) : scopes.last();
     }
 }
 
@@ -640,14 +639,18 @@ int FormatDocument::headStart(int index) const
                 continue;
             }
         }
-        if (before == SEMIC || before == LBRACE || before == RBRACE
+        if (before == SEMIC
+            || before == LBRACE
+            || before == RBRACE
             || this->isAccessLabel(start - 1)
             || this->isDirectiveLine(this->symbolLine(start - 1))
         ) {
             break;
         }
         const int opener = this->match(start - 1);
-        start = (before == RPAREN || before == RBRACK) && opener >= 0
+        start = (before == RPAREN
+                || before == RBRACK)
+            && opener >= 0
             ? opener : start - 1;
     }
     return start;
@@ -683,8 +686,7 @@ bool FormatDocument::isAccessLabel(int colon) const
     statement before them.
 */
 FormatDocument::Scope FormatDocument::classifyBrace(
-        int index,
-        Scope enclosing) const
+        int index, Scope enclosing) const
 {
     if (enclosing == EnumScope || enclosing == InitScope) {
         return InitScope;
@@ -711,8 +713,7 @@ FormatDocument::Scope FormatDocument::classifyBrace(
             for (++i; i < index; ++i) {
                 const Token inner = this->token(i);
                 depth += inner == LANGLE
-                    ? 1
-                    : (inner == RANGLE ? -1 : (inner == GTGT ? -2 : 0));
+                    ? 1 : (inner == RANGLE ? -1 : (inner == GTGT ? -2 : 0));
                 if (depth <= 0) {
                     break;
                 }
@@ -1041,8 +1042,10 @@ bool FormatDocument::isProtectedComment(int index) const
         return true;
     }
     const QByteArray text = this->commentText(index);
-    return text.contains("TRACE/") || text.contains("$QT_BEGIN_LICENSE")
-        || text.contains("SPDX-License-Identifier:") || text.startsWith("/****");
+    return text.contains("TRACE/")
+        || text.contains("$QT_BEGIN_LICENSE")
+        || text.contains("SPDX-License-Identifier:")
+        || text.startsWith("/****");
 }
 
 /*!
@@ -1139,8 +1142,11 @@ bool FormatDocument::replace(int offset, int length, const QByteArray & text)
     either would be dropped (see the one-edit replace()), or when they overlap.
 */
 bool FormatDocument::replace(
-        int offset, int length, const QByteArray & text,
-        int otherOffset, int otherLength,
+        int offset,
+        int length,
+        const QByteArray & text,
+        int otherOffset,
+        int otherLength,
         const QByteArray & otherText)
 {
     const bool apart = offset + length <= otherOffset
@@ -1178,7 +1184,9 @@ bool FormatDocument::canReplace(int offset, int length) const
     }
     if (low < m_inlineRanges.size()) {
         const QPair<int, int > &range = m_inlineRanges.at(low);
-        if ((length == 0 && offset > range.first && offset < range.second)
+        if ((length == 0
+                && offset > range.first
+                && offset < range.second)
             || (length > 0
                 && offset < range.second
                 && offset + length > range.first)
@@ -1188,9 +1196,10 @@ bool FormatDocument::canReplace(int offset, int length) const
     }
     for (int i = 0; i < this->m_edits.size(); ++i) {
         const Edit & edit = this->m_edits.at(i);
-        const bool apart = offset + length <= edit.offset || edit.offset
-            + edit.length <= offset;
-        const bool sameInsertion = length == 0 && edit.length == 0
+        const bool apart = offset + length <= edit.offset
+            || edit.offset + edit.length <= offset;
+        const bool sameInsertion = length == 0
+            && edit.length == 0
             && offset == edit.offset;
         if ( ! apart || sameInsertion) {
             return false;
@@ -1204,8 +1213,11 @@ bool FormatDocument::canReplace(int offset, int length) const
     own, with @a message, which prints to the error output when @a isError
     is set; an issue on a line that is not selected is dropped.
 */
-void FormatDocument::report(int offset, const char *rule,
-                            const QString & message, bool isError)
+void FormatDocument::report(
+        int offset,
+        const char *rule,
+        const QString & message,
+        bool isError)
 {
     const int line = this->lineOf(offset);
     if (this->isFormattingDisabled(offset)
@@ -1230,11 +1242,15 @@ void FormatDocument::report(int offset, const char *rule,
     later rules make (see applyEdits()).
 */
 void FormatDocument::request(
-        int offset, const char *rule, const QString & message,
-        int lineCount, int columnLimit)
+        int offset,
+        const char *rule,
+        const QString & message,
+        int lineCount,
+        int columnLimit)
 {
     const int line = this->lineOf(offset);
-    if ( ! this->m_agentMode || this->isFormattingDisabled(offset)
+    if ( ! this->m_agentMode
+        || this->isFormattingDisabled(offset)
         || ! this->isLineSelected(line)
     ) {
         return;
@@ -1248,7 +1264,8 @@ void FormatDocument::request(
     );
     for (int i = 0; i < this->m_requests.size(); ++i) {
         const FormatIssue & other = this->m_requests.at(i);
-        if (other.line == asked.line && other.rule == asked.rule
+        if (other.line == asked.line
+            && other.rule == asked.rule
             && other.message == asked.message
         ) {
             return;
@@ -1339,8 +1356,7 @@ void FormatDocument::moveInlineConfiguration(const QList<Edit > & edits)
         *offset = FormatDocument::movedOffset(*offset, false, edits);
     }
     QVector<QPair<int, int > > *ranges[] = {
-        &m_inlineRanges,
-        &m_disabledRanges
+        &m_inlineRanges, &m_disabledRanges
     };
     for (int k = 0; k < 2; ++k) {
         for (int i = 0; i < ranges[k]->size(); ++i) {
@@ -1412,8 +1428,7 @@ void FormatDocument::setPass(int pass)
     a pattern that matches its own result runs once.
 */
 FormatSpacing FormatDocument::onSetting(
-        const FormatSpacing & setting,
-        int index)
+        const FormatSpacing & setting, int index)
 {
     if ( ! setting.isRegExp()) {
         return setting;
@@ -1450,8 +1465,7 @@ FormatSpacing FormatDocument::onSetting(
     or shrinks with it.
 */
 void FormatDocument::shiftIssues(
-        QList<FormatIssue > *issues, int line,
-        int delta)
+        QList<FormatIssue > *issues, int line, int delta)
 {
     for (int k = 0; k < issues->size(); ++k) {
         FormatIssue *issue = &((*issues)[k]);
@@ -1472,8 +1486,11 @@ void FormatDocument::shiftIssues(
 bool FormatDocument::isHeader() const
 {
     const QString suffix = QFileInfo(this->m_path).suffix().toLower();
-    return suffix.isEmpty() || suffix == QLL("h") || suffix == QLL("hh") || suffix == QLL("hpp")
-        || suffix == QLL("hxx") || suffix == QLL("h++");
+    return suffix.isEmpty() || suffix == QLL("h")
+        || suffix == QLL("hh")
+        || suffix == QLL("hpp")
+        || suffix == QLL("hxx")
+        || suffix == QLL("h++");
 }
 
 /*!
@@ -1508,8 +1525,9 @@ QStringList FormatDocument::quotedIncludes() const
         QString(QLL("^\\s*#\\s*include\\s*\"([^\"]+)\"")),
         QRegularExpression::MultilineOption
     );
-    QRegularExpressionMatchIterator found =
-        include.globalMatch(QString::fromUtf8(this->m_text));
+    QRegularExpressionMatchIterator found = include.globalMatch(
+        QString::fromUtf8(this->m_text)
+    );
     while (found.hasNext()) {
         names << found.next().captured(1);
     }

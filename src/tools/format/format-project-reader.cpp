@@ -19,9 +19,11 @@
     Builds a reader of @a projects, through @a qmake, for each of @a specs,
     whose readings go to @a files.
 */
-FormatProjectReader::FormatProjectReader(FormatProjectFiles *files,
-                                         const QStringList & projects,
-                                         const QString & qmake, const QStringList & specs)
+FormatProjectReader::FormatProjectReader(
+        FormatProjectFiles *files,
+        const QStringList & projects,
+        const QString & qmake,
+        const QStringList & specs)
     : m_files(files), m_projects(projects), m_qmake(qmake), m_specs(specs)
 {
 }
@@ -32,7 +34,8 @@ FormatProjectReader::FormatProjectReader(FormatProjectFiles *files,
 */
 bool FormatProjectReader::readSpec(int index, QString *error)
 {
-    const QStringList arguments = QStringList() << QString(QLL("-spec"))
+    const QStringList arguments = QStringList()
+        << QString(QLL("-spec"))
         << this->m_specs.at(index);
     for (int i = 0; i < this->m_projects.size(); ++i) {
         Project::Parser parser;

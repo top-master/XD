@@ -14,8 +14,7 @@ class FormatDocPlacementRule : public FormatCommentRule
     typedef FormatCommentRule super;
 public:
     inline FormatDocPlacementRule()
-        : super("doc-placement",
-                "Reports misplaced docs: // on symbols, header docs, orphans.")
+        : super("doc-placement", "Reports misplaced docs: // on symbols, header docs, orphans.")
     {
     }
 

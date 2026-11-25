@@ -13,7 +13,8 @@ class FormatProseRule : public FormatCommentRule
 {
     typedef FormatCommentRule super;
 public:
-    inline FormatProseRule(const char *name, const char *summary,
+    inline FormatProseRule(const char *name,
+                           const char *summary,
                            QString (*map)(const QString &, const void *))
         : super(name, summary), m_map(map)
     {

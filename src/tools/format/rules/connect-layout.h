@@ -11,8 +11,7 @@ class FormatConnectLayoutRule : public FormatNamedRule
     typedef FormatNamedRule super;
 public:
     inline FormatConnectLayoutRule()
-        : super("connect-layout",
-                "Lays connect() calls out by pairs, the type on its own line.")
+        : super("connect-layout", "Lays connect() calls out by pairs, the type on its own line.")
     {
     }
 

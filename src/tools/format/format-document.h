@@ -35,8 +35,9 @@ public:
         InitScope
     };
 
-    explicit FormatDocument(const QByteArray & text,
-                            const QString & path = QString());
+    explicit FormatDocument(
+            const QByteArray & text,
+            const QString & path = QString());
 
     inline const QByteArray &text() const { return m_text; }
     inline const QString &path() const { return m_path; }
@@ -63,13 +64,13 @@ public:
         m_ruleCaches.clear();
     }
     inline QVariant ruleCache(
-            const FormatRule *rule,
-            const QByteArray &key) const
+            const FormatRule *rule, const QByteArray &key) const
     {
         return m_ruleCaches.value(rule).value(key);
     }
     inline void setRuleCache(
-            const FormatRule *rule, const QByteArray &key,
+            const FormatRule *rule,
+            const QByteArray &key,
             const QVariant &value)
     {
         m_ruleCaches[rule].insert(key, value);
@@ -124,15 +125,23 @@ public:
     inline bool canInsert(int offset) const
     { return this->canReplace(offset, 0); }
     bool replace(
-            int offset, int length, const QByteArray & text,
-            int otherOffset, int otherLength, const QByteArray & otherText);
-    void report(int offset, const char *rule, const QString & message,
-                bool isError = false);
-    void request(int offset,
-                 const char *rule,
-                 const QString & message,
-                 int lineCount = 1,
-                 int columnLimit = 0);
+            int offset,
+            int length,
+            const QByteArray & text,
+            int otherOffset,
+            int otherLength,
+            const QByteArray & otherText);
+    void report(
+            int offset,
+            const char *rule,
+            const QString & message,
+            bool isError = false);
+    void request(
+            int offset,
+            const char *rule,
+            const QString & message,
+            int lineCount = 1,
+            int columnLimit = 0);
     inline const QList<FormatIssue > &requests() const { return m_requests; }
     void truncateIssues(int count);
     bool applyEdits();
@@ -156,7 +165,8 @@ private:
     };
 
     void moveInlineConfiguration(const QList<Edit > & edits);
-    static int movedOffset(int offset, bool isStart,
+    static int movedOffset(int offset,
+                           bool isStart,
                            const QList<Edit > & edits);
     void analyze();
     void appendComment(const Symbol & symbol, int previousCodeLine);

@@ -45,7 +45,9 @@ QVariant FormatTemplateObject::dynamicValue(const QByteArray & name) const
     bool valid = false;
     const int index = name.mid(1).toInt(&valid) - 1;
     FormatArgsArray *arguments = this->args();
-    if ( ! valid || index < 0 || ! arguments
+    if ( ! valid
+        || index < 0
+        || ! arguments
         || index >= arguments->items().size()
         || arguments->items().at(index).isNull()
     ) {

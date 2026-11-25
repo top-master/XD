@@ -161,8 +161,7 @@ QVariant FormatConditionObject::is(const QString & kind)
     the context does not know the answer.
 */
 QVariant FormatConditionObject::ask(
-        Question question,
-        const QString & name) const
+        Question question, const QString & name) const
 {
     const FormatConditionContext *format =
         static_cast<const FormatConditionContext * >(this->context());

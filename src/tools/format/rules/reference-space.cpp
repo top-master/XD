@@ -28,7 +28,8 @@ void FormatReferenceSpaceRule::run(FormatDocument *document) const
 {
     for (int i = 1; i + 2 < document->symbols().size(); ++i) {
         const Token token = document->token(i);
-        if ((token != AND && token != ANDAND)
+        if ((token != AND
+                && token != ANDAND)
             || document->token(i + 1) != IDENTIFIER
             || ! isTypeEnd(document->token(i - 1))
             || document->isDirectiveLine(document->symbolLine(i))
@@ -46,11 +47,8 @@ void FormatReferenceSpaceRule::run(FormatDocument *document) const
             continue;
         }
         if ( ! this->isDeclaration(document, i)
-            || ! isSameLineGap(document, i - 1, i) || ! isSameLineGap(
-                document,
-                i,
-                i + 1
-            )
+            || ! isSameLineGap(document, i - 1, i)
+            || ! isSameLineGap(document, i, i + 1)
         ) {
             continue;
         }
@@ -58,18 +56,22 @@ void FormatReferenceSpaceRule::run(FormatDocument *document) const
         // Puts one space before the operator, and after it what the
         // project's setting asks for; a setting by regular expression whose
         // pattern matches the line replaces it instead.
-        const FormatFileConfig &fileConfig =
-            document->configAt(document->symbols().at(i).from);
-        FormatSpacing setting = token == AND
-            ? fileConfig.refSuffix : fileConfig.moveSuffix;
+        const FormatFileConfig &fileConfig = document->configAt(
+            document->symbols().at(i).from
+        );
+        FormatSpacing setting = token == AND ? fileConfig.refSuffix
+                                             : fileConfig.moveSuffix;
         const QVariant resolved = settingValueAt(
-            document, document->symbols().at(i).from,
-            QString(token == AND ? QLL("types.refSuffix") : QLL("types.moveSuffix")),
+            document,
+            document->symbols().at(i).from,
+            QString(token == AND ? QLL("types.refSuffix")
+                                 : QLL("types.moveSuffix")),
             QVariant()
         );
         if (resolved.isValid()) {
             setting = FormatFileConfig::toSpacing(
-                resolved.toString(), QString(token == AND ? QLL(" ") : QLL("keep-as-is"))
+                resolved.toString(),
+                QString(token == AND ? QLL(" ") : QLL("keep-as-is"))
             );
         }
         const FormatSpacing spacing = document->onSetting(setting, i);
@@ -80,7 +82,8 @@ void FormatReferenceSpaceRule::run(FormatDocument *document) const
         const int to = document->symbols().at(i + 1).from;
         const int afterOperator = document->symbolEnd(i);
         const QByteArray suffix = spacing.keepAsIs
-            ? document->text().mid(afterOperator, to - afterOperator) : spacing.text;
+            ? document->text().mid(afterOperator, to - afterOperator)
+            : spacing.text;
         const QByteArray wanted = " " + document->lexem(i) + suffix;
         if (document->text().mid(from, to - from) != wanted) {
             document->replace(from, to - from, wanted);
@@ -95,8 +98,7 @@ void FormatReferenceSpaceRule::run(FormatDocument *document) const
     name follows a type, or a constructor's own class name).
 */
 bool FormatReferenceSpaceRule::isDeclaration(
-        const FormatDocument *document,
-        int ampersand) const
+        const FormatDocument *document, int ampersand) const
 {
     // Walks back over the type's tokens.
     int start = ampersand - 1;
@@ -187,7 +189,6 @@ bool FormatReferenceSpaceRule::isDeclaration(
     if (name < paren - 1) {
         return document->lexem(paren - 1) == document->lexem(paren - 3);
     }
-    return (typeEnd == SEMIC || typeEnd == LBRACE || typeEnd == RBRACE || typeEnd == COLON
-        || typeEnd == EXPLICIT || typeEnd == INLINE)
+    return (typeEnd == SEMIC || typeEnd == LBRACE || typeEnd == RBRACE || typeEnd == COLON || typeEnd == EXPLICIT || typeEnd == INLINE)
         && document->scopeOf(paren) == FormatDocument::ClassScope;
 }

@@ -62,27 +62,41 @@
     the one the condition closes next to; and the operator breaks of a long
     line before the condition layout too, since a condition they break then
     closes in the same way. Member-access joins run before argument wrapping;
-    the other operator joins run after it.
+    the other operator joins run after it. An operator-led line takes its
+    indent before a list steps from the level of its line, such as the
+    arguments of a call that follows an operator.
 */
 static QList<FormatRule * > formatCreateCodeRules()
 {
     QList<FormatRule * > rules;
-    rules << new FormatMocRunRule << new FormatReplaceTypesRule << new FormatRelativeIncludeRule
+    rules << new FormatMocRunRule
+        << new FormatReplaceTypesRule
+        << new FormatRelativeIncludeRule
         << new FormatInlineKeywordRule
-        << new FormatNotSpaceRule << new FormatLineJoinRule
-        << new FormatControlBracesRule << new FormatNamespaceBracesRule
+        << new FormatNotSpaceRule
+        << new FormatLineJoinRule
+        << new FormatControlBracesRule
+        << new FormatNamespaceBracesRule
         << new FormatOperatorWrapRule
-        << new FormatConditionWrapRule << new FormatTernaryWrapRule
+        << new FormatConditionWrapRule
+        << new FormatTernaryWrapRule
         << new FormatChainMembersFirstRule
-        << new FormatInitListRule << new FormatParamWrapRule << new FormatArgsWrapRule
-        << new FormatOperatorFirstRule
         << new FormatContinuationIndentRule
+        << new FormatInitListRule
+        << new FormatParamWrapRule
+        << new FormatArgsWrapRule
+        << new FormatOperatorFirstRule
         << new FormatConditionCloseRule
-        << new FormatTemplateCloseRule << new FormatReferenceSpaceRule
+        << new FormatTemplateCloseRule
+        << new FormatReferenceSpaceRule
         << new FormatOneStatementRule;
     rules << new FormatSuperTypedefRule;
-    rules << new FormatNoLambdaRule << new FormatMemberInitRule << new FormatGlobalStaticRule
-        << new FormatPrivateAccessRule << new FormatExcludesRule << new FormatCodeShapeRule
+    rules << new FormatNoLambdaRule
+        << new FormatMemberInitRule
+        << new FormatGlobalStaticRule
+        << new FormatPrivateAccessRule
+        << new FormatExcludesRule
+        << new FormatCodeShapeRule
         << new FormatReferenceLocalRule;
     return rules;
 }
@@ -108,9 +122,12 @@ static QList<FormatRule * > formatCreateCommentRules()
     QList<FormatRule * > rules;
     rules << new FormatMarkBannerRule << new FormatTrailingCommentRule;
     rules << new FormatAsWithRule << new FormatUsSpellingRule;
-    rules << new FormatCodeBackticksRule << new FormatCommentCaseRule
-        << new FormatCommentPeriodRule << new FormatDocTagSignRule;
-    rules << new FormatCommentWidthRule << new FormatStubLineRule
+    rules << new FormatCodeBackticksRule
+        << new FormatCommentCaseRule
+        << new FormatCommentPeriodRule
+        << new FormatDocTagSignRule;
+    rules << new FormatCommentWidthRule
+        << new FormatStubLineRule
         << new FormatDocPlacementRule;
     rules << new FormatPatternReportRule(
         "so-hence",
@@ -219,8 +236,7 @@ bool formatIsInXdTree(const QString & path)
     indent, or taken from it.
 */
 void formatShiftContinuations(
-        FormatDocument *document,
-        const QList<FormatGrowth > & growths)
+        FormatDocument *document, const QList<FormatGrowth > & growths)
 {
     QMap<int, QList<FormatGrowth > > byLine;
     for (int i = 0; i < growths.size(); ++i) {
@@ -238,7 +254,8 @@ void formatShiftContinuations(
             const Token token = document->token(k);
             depth += token == LPAREN || token == LBRACK ? 1 : 0;
             depth -= token == RPAREN || token == RBRACK ? 1 : 0;
-            const bool ends = token == SEMIC || token == LBRACE
+            const bool ends = token == SEMIC
+                || token == LBRACE
                 || token == RBRACE;
             if (depth < 0 || (ends && depth == 0)) {
                 endLine = document->symbolLine(k);

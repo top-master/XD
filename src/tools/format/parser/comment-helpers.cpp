@@ -17,15 +17,16 @@
     least one (an empty one for an empty comment).
 */
 QList<FormatCommentLine > commentLines(
-        const FormatDocument *document,
-        int index)
+        const FormatDocument *document, int index)
 {
     QList<FormatCommentLine > lines;
     const FormatComment & comment = document->comments().at(index);
     const QByteArray text = document->commentText(index);
     if (comment.isLine()) {
         int start = 2;
-        while (start < text.size() && (text.at(start) == '/' || text.at(start) == '!'
+        while (start < text.size()
+            && (text.at(start) == '/'
+                || text.at(start) == '!'
                 || text.at(start) == '<')
             && start < 4
         ) {
@@ -71,8 +72,11 @@ QList<FormatCommentLine > commentLines(
         ) {
             ++start;
         }
-        if (from != open && start < end && text.at(start) == '*'
-            && (start + 1 >= end || text.at(start + 1) == ' ')
+        if (from != open
+            && start < end
+            && text.at(start) == '*'
+            && (start + 1 >= end
+                || text.at(start + 1) == ' ')
         ) {
             ++start;
             while (start < end && text.at(start) == ' ') {
@@ -101,8 +105,7 @@ QList<FormatCommentLine > commentLines(
     Builds the content lines of the comment group @a group of @a document.
 */
 QList<FormatCommentLine > groupLines(
-        const FormatDocument *document,
-        const QList<int > & group)
+        const FormatDocument *document, const QList<int > & group)
 {
     QList<FormatCommentLine > lines;
     for (int i = 0; i < group.size(); ++i) {
@@ -143,7 +146,9 @@ bool looksLikeCode(const QList<FormatCommentLine > & lines)
 {
     for (int i = 0; i < lines.size(); ++i) {
         const QByteArray & text = lines.at(i).text;
-        if (text.startsWith('#') || text.endsWith('{') || text.endsWith('}')
+        if (text.startsWith('#')
+            || text.endsWith('{')
+            || text.endsWith('}')
             || text.endsWith("*/")
         ) {
             return true;
@@ -153,10 +158,14 @@ bool looksLikeCode(const QList<FormatCommentLine > & lines)
         }
 
         // Reads a `;` that the next line's sentence goes on from as prose.
-        const QByteArray next = i + 1 < lines.size()
-            ? lines.at(i + 1).text : QByteArray();
-        const bool goesOn = ! next.isEmpty() && next.at(0) >= 'a' && next.at(0) <= 'z'
-            && ! next.endsWith(';') && ! next.endsWith('{') && ! next.endsWith('}');
+        const QByteArray next = i + 1 < lines.size() ? lines.at(i + 1).text
+                                                     : QByteArray();
+        const bool goesOn = ! next.isEmpty()
+            && next.at(0) >= 'a'
+            && next.at(0) <= 'z'
+            && ! next.endsWith(';')
+            && ! next.endsWith('{')
+            && ! next.endsWith('}');
         if ( ! goesOn) {
             return true;
         }
@@ -186,9 +195,9 @@ QVector<bool > fencedLines(const QList<FormatCommentLine > & lines)
     Builds @a text with @a map applied to each part outside of backticks; the
     parts in backticks (inline code) stay as they are.
 */
-QString mapProse(
-        const QString & text, QString (*map)(const QString &, const void *),
-        const void *context)
+QString mapProse(const QString & text,
+                 QString (*map)(const QString &, const void *),
+                 const void *context)
 {
     QString result;
     int from = 0;
@@ -229,9 +238,13 @@ QList<QList<int > > commentGroups(
             const int previous = groups.last().last();
             const FormatComment & before = document->comments().at(previous);
             const int line = document->commentLine(i);
-            if (before.isLine() && ! before.trailing && before.kind == comment.kind
-                && ( ! splitProtected || ( ! document->isInlineConfigComment(i)
-                    && ! document->isInlineConfigComment(previous)))
+            if (before.isLine()
+                && ! before.trailing
+                && before.kind == comment.kind
+                && ( ! splitProtected
+                    || ( ! document->isInlineConfigComment(i)
+                        && ! document->isInlineConfigComment(previous))
+                )
                 && document->commentLine(previous) == line - 1
                 && comment.offset - document->lineStart(line)
                     == before.offset - document->lineStart(line - 1)
@@ -258,18 +271,18 @@ QList<FormatConfigDirective > configDirectives(const FormatDocument *document)
         const bool lineComments =
             document->comments().at(group.first()).isLine();
         for (int lineIndex = 0; lineIndex < lines.size(); ++lineIndex) {
-            if ( ! lineComments && lineIndex > 0
+            if ( ! lineComments
+                && lineIndex > 0
                 && ! lines.at(lineIndex - 1).text.trimmed().isEmpty()
             ) {
                 break;
             }
-            const QByteArray text = QString::fromUtf8(lines.at(lineIndex).text)
-                .trimmed()
-                .toUtf8();
+            const QByteArray text =
+                QString::fromUtf8(lines.at(lineIndex).text).trimmed().toUtf8();
             FormatConfigDirective directive;
             directive.offset = lines.at(lineIndex).offset;
-            directive.endOffset =
-                directive.offset + lines.at(lineIndex).text.size();
+            directive.endOffset = directive.offset
+                + lines.at(lineIndex).text.size();
             int prefix = 0;
             bool formatterAlias = false;
             if (text.startsWith("Format rule begin:")) {
@@ -340,8 +353,8 @@ QList<FormatConfigDirective > configDirectives(const FormatDocument *document)
                     ++end;
                 }
                 if (end < lines.size()) {
-                    directive.endOffset =
-                        lines.at(end).offset + lines.at(end).text.size();
+                    directive.endOffset = lines.at(end).offset
+                        + lines.at(end).text.size();
                     lineIndex = end;
                 } else {
                     directive.lines.clear();
@@ -358,15 +371,16 @@ QList<FormatConfigDirective > configDirectives(const FormatDocument *document)
                 if (formatterAlias) {
                     normalized.appendCompact(body);
                 }
-                const QByteArray command = formatterAlias
-                    ? normalized.text()
-                    : QByteArray();
+                const QByteArray command = formatterAlias ? normalized.text()
+                                                          : QByteArray();
                 if (formatterAlias
                     && directive.kind == FormatConfigDirective::Add
-                    && (command == "off" || command == "on")
+                    && (command == "off"
+                        || command == "on")
                 ) {
                     directive.kind = command == "off"
-                        ? FormatConfigDirective::Off : FormatConfigDirective::On;
+                        ? FormatConfigDirective::Off
+                        : FormatConfigDirective::On;
                 } else if (formatterAlias && ! command.contains('=')) {
                     directive.kind = FormatConfigDirective::Invalid;
                     directive.lines = normalized;
@@ -394,10 +408,12 @@ bool isClosingLabel(const FormatDocument *document, int index)
         return false;
     }
     const int line = document->commentLine(index);
-    const QByteArray code = document->text().mid(
-        document->lineStart(line),
-        comment.offset - document->lineStart(line)
-    ).trimmed();
+    const QByteArray code = document
+        ->text()
+        .mid(
+            document->lineStart(line),
+            comment.offset - document->lineStart(line)
+        ).trimmed();
     if (code.startsWith('#')) {
         const QByteArray directive = code.mid(1).trimmed();
         return directive.startsWith("endif") || directive.startsWith("else");
@@ -420,11 +436,10 @@ bool isInlineLabel(const FormatDocument *document, int index)
 {
     const FormatComment & comment = document->comments().at(index);
     const int end = comment.offset + comment.length;
-    return comment.trailing
-        && ! document->isOnlyWhitespace(
-            end,
-            document->lineEnd(document->commentEndLine(index))
-        );
+    return comment.trailing && ! document->isOnlyWhitespace(
+        end,
+        document->lineEnd(document->commentEndLine(index))
+    );
 }
 
 /*!
@@ -440,10 +455,7 @@ QList<QPair<int, int > > tableRanges(const FormatDocument *document)
             continue;
         }
         const FormatComment & comment = document->comments().at(i);
-        for (int k = document->symbolAfter(comment.offset + comment.length);
-             k < document->symbols().size();
-             ++k
-        ) {
+        for (int k = document->symbolAfter(comment.offset + comment.length); k < document->symbols().size(); ++k) {
             const Token token = document->token(k);
             if (token == SEMIC) {
                 break;
@@ -483,8 +495,7 @@ QString proseOnly(const QString & text)
     Matches the marks of a code name in a word: `::`, `->`, `()`, an
     underscore, or a lower-case letter followed by an upper-case one.
 */
-Q_GLOBAL_STATIC_WITH_ARGS(QRegularExpression, codeWordPattern,
-                          (QString(QLL("::|->|\\(\\)|_|[a-z][A-Z]"))))
+Q_GLOBAL_STATIC_WITH_ARGS(QRegularExpression, codeWordPattern, (QString(QLL("::|->|\\(\\)|_|[a-z][A-Z]"))))
 
 /*!
     Tells whether @a word of a comment (with any punctuation around it) is a
@@ -519,7 +530,9 @@ bool pointsAhead(const QString & word)
         "which",
         "that",
         "when",
-        "while", "whose", "whom"
+        "while",
+        "whose",
+        "whom"
     };
     const QString lower = word.toLower();
     for (size_t i = 0; i < sizeof(words) / sizeof(words[0]); ++i) {
@@ -536,8 +549,7 @@ bool pointsAhead(const QString & word)
     declaration of `@fn`, or the `<word>` and `[optional]` ones of a block
     command, such as `@class <name> [<header-file>]`.
 */
-Q_GLOBAL_STATIC_WITH_ARGS(QRegularExpression, docLineCommandPattern, (QString(QLL(
-        "^[\\\\@](fn|var|variable|typedef|property|overload|macro|def"
+Q_GLOBAL_STATIC_WITH_ARGS(QRegularExpression, docLineCommandPattern, (QString(QLL("^[\\\\@](fn|var|variable|typedef|property|overload|macro|def"
         "|class|struct|union|record|enum|namespace|concept|interface|protocol"
         "|category|package|module|inmodule|file|dir|headerfile|idlexcept"
         "|memberof|relates|related|relatesalso|relatedalso|extends|implements"
@@ -555,8 +567,7 @@ Q_GLOBAL_STATIC_WITH_ARGS(QRegularExpression, docLineCommandPattern, (QString(QL
     Matches a Doxygen or QDoc command that takes the one word after it, such
     as `@a <word>`, at the end of a text.
 */
-Q_GLOBAL_STATIC_WITH_ARGS(QRegularExpression, docWordCommandPattern, (QString(QLL(
-        "(?:^|\\s)[\\\\@](a|b|c|e|em|p|anchor|ref|link|l|copydoc|copybrief"
+Q_GLOBAL_STATIC_WITH_ARGS(QRegularExpression, docWordCommandPattern, (QString(QLL("(?:^|\\s)[\\\\@](a|b|c|e|em|p|anchor|ref|link|l|copydoc|copybrief"
         "|copydetails|emoji|refitem)$"))))
 
 /*!

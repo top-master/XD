@@ -14,8 +14,7 @@ class FormatDocTagSignRule : public FormatCommentRule
     typedef FormatCommentRule super;
 public:
     inline FormatDocTagSignRule()
-        : super("doc-tag-sign",
-                "Writes the commands of doc-comments with one sign.")
+        : super("doc-tag-sign", "Writes the commands of doc-comments with one sign.")
     {
     }
 

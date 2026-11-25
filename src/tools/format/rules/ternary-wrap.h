@@ -11,8 +11,7 @@ class FormatTernaryWrapRule : public FormatNamedRule
     typedef FormatNamedRule super;
 public:
     inline FormatTernaryWrapRule()
-        : super("ternary-wrap",
-                "Breaks a long conditional expression before ?, then before :.")
+        : super("ternary-wrap", "Breaks a long conditional expression before ?, then before :.")
     {
     }
 

@@ -48,7 +48,9 @@ static bool capturesThis(const FormatDocument *document, int bracket)
     const Token first = document->token(bracket + 1);
     if (first == EQ
         || (first == AND
-            && (bracket + 2 == close || document->token(bracket + 2) == COMMA))
+            && (bracket + 2 == close
+                || document->token(bracket + 2) == COMMA)
+        )
     ) {
         return true;
     }
@@ -124,9 +126,15 @@ void FormatOutlineThisRule::run(FormatDocument *document) const
             const bool hasThis = before == ARROW
                 && document->token(i - 2) == THIS;
             if (( ! hasThis
-                    && (before == DOT || before == ARROW || before == SCOPE || before == TILDE
-                        || before == GOTO))
-                || after == SCOPE || (after == COLON && before == SEMIC)
+                    && (before == DOT
+                        || before == ARROW
+                        || before == SCOPE
+                        || before == TILDE
+                        || before == GOTO)
+                )
+                || after == SCOPE
+                || (after == COLON
+                    && before == SEMIC)
                 || isMacroArgument(document, i)
             ) {
                 continue;
@@ -164,8 +172,7 @@ void FormatOutlineThisRule::run(FormatDocument *document) const
     the names that declaration lists after commas.
 */
 QSet<QByteArray > FormatOutlineThisRule::localNames(
-        const FormatDocument *document, int from,
-        int to) const
+        const FormatDocument *document, int from, int to) const
 {
     QSet<QByteArray > names;
     for (int i = from; i < to; ++i) {

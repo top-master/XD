@@ -30,14 +30,18 @@ void FormatConditionCloseRule::run(FormatDocument *document) const
 {
     for (int i = 0; i + 1 < document->symbols().size(); ++i) {
         const Token token = document->token(i);
-        if ((token != IF && token != WHILE && token != FOR && token != SWITCH)
+        if ((token != IF
+                && token != WHILE
+                && token != FOR
+                && token != SWITCH)
             || document->token(i + 1) != LPAREN
             || document->isDirectiveLine(document->symbolLine(i))
         ) {
             continue;
         }
         const int close = document->match(i + 1);
-        if (close < 0 || document->symbolLine(close) == document->symbolLine(i)
+        if (close < 0
+            || document->symbolLine(close) == document->symbolLine(i)
             || document->token(close + 1) != LBRACE
             || document->spansDirective(
                 document->symbols().at(i).from,
@@ -53,7 +57,10 @@ void FormatConditionCloseRule::run(FormatDocument *document) const
         const int last = close - 1;
         const int closeLine = document->symbolLine(close);
         const Token lastToken = document->token(last);
-        const bool hugsGroup = compactAlwaysAt(document, document->symbols().at(i).from)
+        const bool hugsGroup = compactAlwaysAt(
+            document,
+            document->symbols().at(i).from
+        )
             && (lastToken == RPAREN || lastToken == RBRACK)
             && document->match(last) >= 0
             && document->symbolLine(document->match(last))
@@ -72,8 +79,11 @@ void FormatConditionCloseRule::run(FormatDocument *document) const
             }
         } else if (document->indentOf(closeLine) != indent) {
             const int start = document->lineStart(closeLine);
-            document
-                ->replace(start, document->indentOf(closeLine).size(), indent);
+            document->replace(
+                start,
+                document->indentOf(closeLine).size(),
+                indent
+            );
         }
 
         // Puts the `{` right after it.

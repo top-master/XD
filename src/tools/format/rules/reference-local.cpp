@@ -44,13 +44,19 @@ void FormatReferenceLocalRule::run(FormatDocument *document) const
         }
         const int offset = document->symbols().at(i).from;
         const FormatFileConfig &config = document->configAt(offset);
-        const QString fallback = config.byRefVariable == FormatFileConfig::LintIgnore
-            ? QString(QLL("ignore")) : config.byRefVariable == FormatFileConfig::LintError
-            ? QString(QLL("error")) : QString(QLL("warn"));
+        const QString fallback = config.byRefVariable
+            == FormatFileConfig::LintIgnore
+            ? QString(QLL("ignore"))
+            : config.byRefVariable == FormatFileConfig::LintError
+                ? QString(QLL("error")) : QString(QLL("warn"));
         const QString value = settingValueAt(
-            document, offset, QString(QLL("lint.byRefVariable")), fallback
+            document,
+            offset,
+            QString(QLL("lint.byRefVariable")),
+            fallback
         ).toString();
-        const FormatFileConfig::LintLevel level = FormatFileConfig::lintLevel(value, config);
+        const FormatFileConfig::LintLevel level =
+            FormatFileConfig::lintLevel(value, config);
         if (level == FormatFileConfig::LintIgnore) {
             continue;
         }
@@ -82,8 +88,12 @@ void FormatReferenceLocalRule::run(FormatDocument *document) const
             }
             if (token == CONST) {
                 isConst = true;
-            } else if (token != IDENTIFIER && token != SCOPE && token != STAR
-                && token != VOLATILE && token != AUTO && token != STATIC
+            } else if (token != IDENTIFIER
+                && token != SCOPE
+                && token != STAR
+                && token != VOLATILE
+                && token != AUTO
+                && token != STATIC
                 && ! isBuiltinType(token)
             ) {
                 break;
@@ -91,28 +101,35 @@ void FormatReferenceLocalRule::run(FormatDocument *document) const
             --start;
         }
         const Token before = start >= 0 ? document->token(start) : SEMIC;
-        if (isConst || start == i - 1
-            || (before != SEMIC && before != LBRACE && before != RBRACE)
+        if (isConst
+            || start == i - 1
+            || (before != SEMIC
+                && before != LBRACE
+                && before != RBRACE)
         ) {
             continue;
         }
 
         // Names the pointer that replaces the reference.
         const int typeFrom = document->symbols().at(start + 1).from;
-        const QByteArray type = document->text()
-            .mid(typeFrom, document->symbolEnd(i - 1) - typeFrom).simplified();
-        const QString message = QString(QLL(
-            "name the local through a pointer, `%1 *%2 = &(...);`, then use "
-            "`*%2`, in place of a non-const reference"
-        )).arg(
-            QString::fromUtf8(type),
-            QString::fromUtf8(document->lexem(i + 1))
-        );
+        const QByteArray type = document
+            ->text()
+            .mid(typeFrom, document->symbolEnd(i - 1) - typeFrom)
+            .simplified();
+        const QString message = QString(QLL("name the local through a pointer, `%1 *%2 = &(...);`, then use "
+            "`*%2`, in place of a non-const reference")).arg(
+                QString::fromUtf8(type),
+                QString::fromUtf8(document->lexem(i + 1))
+            );
         if (document->agentMode()) {
             document->request(offset, "reference-local", message, 1, 0);
         } else {
-            document->report(offset, "reference-local", message,
-                             level == FormatFileConfig::LintError);
+            document->report(
+                offset,
+                "reference-local",
+                message,
+                level == FormatFileConfig::LintError
+            );
         }
     }
 }

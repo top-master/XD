@@ -6,6 +6,7 @@
 
 #include <QtCore/QByteArray>
 #include <QtCore/QList>
+#include <QtCore/QHash>
 #include <QtCore/QSet>
 
 class FormatDocument;
@@ -14,28 +15,52 @@ class FormatScopeConditions;
 class FormatConditionLayout
 {
 public:
-    FormatConditionLayout(const FormatDocument *document,
-                          FormatScopeConditions *conditions);
+    FormatConditionLayout(
+            const FormatDocument *document,
+            FormatScopeConditions *conditions);
 
     QByteArray layoutCondition(
             int open,
             int close,
             int indent,
-            int column) const;
+            int column,
+            const QHash<int, QByteArray > & comments) const;
+    bool operatorComments(
+            int open,
+            int close,
+            const QList<int > & ops,
+            const QByteArray & pad,
+            QHash<int, QByteArray > *comments) const;
     QByteArray layoutPlain(int open, int close) const;
     QList<QByteArray > layoutHead(int first, int last, int indent) const;
     QList<int > operators(int open, int close) const;
 
 private:
     QSet<int > forcedOperators(int open, int close) const;
-    QByteArray group(int open, int close, int indent, int column,
-                     bool isCondition, const QSet<int > & forced,
-                     int trailing) const;
-    QByteArray atom(int first, int last, int indent, int column,
-                    bool *isComplex) const;
+    QByteArray group(
+            int open,
+            int close,
+            int indent,
+            int column,
+            bool isCondition,
+            const QSet<int > & forced,
+            int trailing,
+            const QHash<int, QByteArray > & comments = QHash<int, QByteArray >()) const;
+    QByteArray atom(
+            int first,
+            int last,
+            int indent,
+            int column,
+            int comparisonLimit,
+            bool *isComplex) const;
     QList<QByteArray > headLines(
-            int first, int last, int column, int indent,
-            int wrap, int tier, bool startsStatement) const;
+            int first,
+            int last,
+            int column,
+            int indent,
+            int wrap,
+            int tier,
+            bool startsStatement) const;
 
     const FormatDocument *m_document;
     FormatScopeConditions *m_conditions;

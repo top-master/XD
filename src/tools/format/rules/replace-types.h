@@ -13,8 +13,7 @@ class FormatReplaceTypesRule : public FormatNamedRule
     typedef FormatNamedRule super;
 public:
     inline FormatReplaceTypesRule()
-        : super("replace-types",
-                "Writes the types that [Replace.types] maps as their new names.")
+        : super("replace-types", "Writes the types that [Replace.types] maps as their new names.")
     {
     }
 

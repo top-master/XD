@@ -11,8 +11,7 @@ class FormatPrivateAccessRule : public FormatNamedRule
     typedef FormatNamedRule super;
 public:
     inline FormatPrivateAccessRule()
-        : super("q-d-macro",
-                "Reports d_func() and q_func() calls where Q_D or Q_Q fit.")
+        : super("q-d-macro", "Reports d_func() and q_func() calls where Q_D or Q_Q fit.")
     {
     }
 

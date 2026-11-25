@@ -13,8 +13,7 @@ class FormatCommentCaseRule : public FormatCommentRule
     typedef FormatCommentRule super;
 public:
     inline FormatCommentCaseRule()
-        : super("comment-case",
-                "Starts each comment with an upper-case letter.")
+        : super("comment-case", "Starts each comment with an upper-case letter.")
     {
     }
 

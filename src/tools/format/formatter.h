@@ -22,10 +22,12 @@ public:
     inline const QList<const FormatRule * > &selectedRules() const { return m_selected; }
     QList<const FormatRule * > rules() const;
     bool selectRules(const QStringList & names, QString *error);
-    FormatResult format(const QByteArray & text, const QString & path,
-                        const QStringList & lineSpecs,
-                        const FormatConfig & config = FormatConfig(),
-                        bool agentMode = false) const;
+    FormatResult format(
+            const QByteArray & text,
+            const QString & path,
+            const QStringList & lineSpecs,
+            const FormatConfig & config = FormatConfig(),
+            bool agentMode = false) const;
 
 private:
     Q_DISABLE_COPY(Formatter)

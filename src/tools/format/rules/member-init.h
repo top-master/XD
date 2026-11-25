@@ -11,8 +11,7 @@ class FormatMemberInitRule : public FormatNamedRule
     typedef FormatNamedRule super;
 public:
     inline FormatMemberInitRule()
-        : super("member-init",
-                "Reports data members initialized in the class body.")
+        : super("member-init", "Reports data members initialized in the class body.")
     {
     }
 

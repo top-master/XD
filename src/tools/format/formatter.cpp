@@ -70,10 +70,10 @@ bool Formatter::selectRules(const QStringList & names, QString *error)
         bool found = false;
         for (int i = 0; i < this->m_rules.size(); ++i) {
             found = found
-                || QString::fromLatin1(this->m_rules.at(i)->name()) == names.at(n);
+                || QString::fromLatin1(this->m_rules.at(i)->name())
+                    == names.at(n);
         }
-        if ( ! found) {
-            *error = QString(QLL("unknown rule: %1")).arg(names.at(n));
+        if ( ! found) { *error = QString(QLL("unknown rule: %1")).arg(names.at(n));
             return false;
         }
     }
@@ -98,7 +98,8 @@ bool Formatter::selectRules(const QStringList & names, QString *error)
     `if`) gets it on the next pass.
 */
 FormatResult Formatter::format(
-        const QByteArray & text, const QString & path,
+        const QByteArray & text,
+        const QString & path,
         const QStringList & lineSpecs,
         const FormatConfig & config,
         bool agentMode) const
@@ -119,7 +120,8 @@ FormatResult Formatter::format(
         return result;
     }
     document.setConfig(fileConfig);
-    if ((text.contains("Format rule") || text.contains('@'))
+    if ((text.contains("Format rule")
+            || text.contains('@'))
         && ! document.setInlineConfiguration(config, &result.error)
     ) {
         return result;

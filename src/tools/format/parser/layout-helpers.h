@@ -12,8 +12,11 @@
 
 int wrapColumn(const FormatDocument *document, int offset);
 int wrapMaxAt(const FormatDocument *document, int offset);
-QVariant settingValueAt(const FormatDocument *document, int offset,
-                        const QString & key, const QVariant & fallback);
+QVariant settingValueAt(
+        const FormatDocument *document,
+        int offset,
+        const QString & key,
+        const QVariant & fallback);
 bool operatorsInMiddleAt(const FormatDocument *document, int offset);
 bool codeTargetAnyAt(const FormatDocument *document, int offset);
 bool compactAlwaysAt(const FormatDocument *document, int offset);
@@ -21,35 +24,58 @@ int continuationIndent(int indent, int steps = 1);
 QByteArray continuationPad(int indent, int steps = 1);
 bool isBinaryOperator(Token token);
 bool isControlHead(const FormatDocument *document, int index);
-int precedingChainOperator(const FormatDocument *document, int next,
+int callOrGroupStart(const FormatDocument *document, int close);
+int precedingChainOperator(const FormatDocument *document,
+                           int next,
                            bool respectPlacement = true);
 bool isClosingLine(const QByteArray & text);
 int comparisonRank(Token token);
 bool closesEarlierLine(const FormatDocument *document, int bracket);
-bool hasMisplacedLines(const FormatDocument *document, int open, int close,
-                       int indent, int extraPad = 0);
+bool hasMisplacedLines(
+        const FormatDocument *document,
+        int open,
+        int close,
+        int indent,
+        int extraPad = 0);
 bool startsWithStringLiteral(const FormatDocument *document, int token);
 QByteArray sourceText(const FormatDocument *document, int first, int last);
-bool findTernary(const FormatDocument *document, int first, int last,
-                 int *question, int *colon);
+bool findTernary(
+        const FormatDocument *document,
+        int first,
+        int last,
+        int *question,
+        int *colon);
 bool isDeclarationParen(const FormatDocument *document, int paren);
 class FormatScopeConditions;
 
 bool reachesWrapArgsAt(const FormatDocument *document,
-                       FormatScopeConditions *conditions, int token);
+                       FormatScopeConditions *conditions,
+                       int token);
 QList<QByteArray > comparisonLines(
-        const FormatDocument *document, int first,
-        int last, int column, int indent, int step);
+        const FormatDocument *document,
+        int first,
+        int last,
+        int column,
+        int indent,
+        int step,
+        int limit = 0);
 QList<int > loosestOperators(
-        const FormatDocument *document, int first, int last,
-        int (*rankOf)(Token), int fromRank, int *rank);
+        const FormatDocument *document,
+        int first,
+        int last,
+        int (*rankOf)(Token),
+        int fromRank,
+        int *rank);
 int templateClose(const FormatDocument *document, int angle, int end);
 QList<QPair<int, int > > splitArguments(
-        const FormatDocument *document,
-        int open, int close);
+        const FormatDocument *document, int open, int close);
 QList<QByteArray > ternaryLines(
-        const QByteArray & head, const QByteArray & middle,
-        const QByteArray & tail, int indent, int column, int trailing,
+        const QByteArray & head,
+        const QByteArray & middle,
+        const QByteArray & tail,
+        int indent,
+        int column,
+        int trailing,
         int wrap);
 
 #endif // PARSER_LAYOUT_HELPERS_H

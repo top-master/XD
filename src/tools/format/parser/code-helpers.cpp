@@ -41,9 +41,16 @@ bool isTypeEnd(Token token)
 */
 bool isBuiltinType(Token token)
 {
-    return token == CHAR || token == WCHAR || token == BOOL || token == SHORT || token == INT
-        || token == LONG || token == SIGNED || token == UNSIGNED || token == FLOAT
-        || token == DOUBLE || token == VOID;
+    return token == CHAR || token == WCHAR
+        || token == BOOL
+        || token == SHORT
+        || token == INT
+        || token == LONG
+        || token == SIGNED
+        || token == UNSIGNED
+        || token == FLOAT
+        || token == DOUBLE
+        || token == VOID;
 }
 
 /*!
@@ -122,8 +129,12 @@ int lambdaBody(const FormatDocument *document, int bracket)
         return -1;
     }
     const Token before = document->token(bracket - 1);
-    if (before != EQ && before != LPAREN && before != COMMA && before != RETURN
-        && before != LBRACE && before != SEMIC
+    if (before != EQ
+        && before != LPAREN
+        && before != COMMA
+        && before != RETURN
+        && before != LBRACE
+        && before != SEMIC
     ) {
         return -1;
     }
@@ -131,8 +142,10 @@ int lambdaBody(const FormatDocument *document, int bracket)
     if (document->token(body) == LPAREN && document->match(body) >= 0) {
         body = document->match(body) + 1;
     }
-    while (body < document->symbols().size() && document->token(body) != LBRACE
-        && document->token(body) != SEMIC && document->token(body) != RPAREN
+    while (body < document->symbols().size()
+        && document->token(body) != LBRACE
+        && document->token(body) != SEMIC
+        && document->token(body) != RPAREN
     ) {
         ++body;
     }
@@ -148,9 +161,18 @@ int lambdaBody(const FormatDocument *document, int bracket)
 */
 bool isLeadingOperator(Token token)
 {
-    return token == ANDAND || token == OROR || token == LTLT || token == PLUS || token == MINUS
-        || token == OR || token == HAT || token == QUESTION || token == STAR
-        || token == SLASH || token == PERCENT || token == EQEQ || token == NE;
+    return token == ANDAND || token == OROR
+        || token == LTLT
+        || token == PLUS
+        || token == MINUS
+        || token == OR
+        || token == HAT
+        || token == QUESTION
+        || token == STAR
+        || token == SLASH
+        || token == PERCENT
+        || token == EQEQ
+        || token == NE;
 }
 
 /*!
@@ -158,10 +180,16 @@ bool isLeadingOperator(Token token)
 */
 bool isAssignmentOperator(Token token)
 {
-    return token == EQ || token == PLUS_EQ || token == MINUS_EQ
-        || token == STAR_EQ || token == SLASH_EQ || token == PERCENT_EQ
-        || token == AND_EQ || token == OR_EQ || token == HAT_EQ
-        || token == LTLT_EQ || token == GTGT_EQ;
+    return token == EQ || token == PLUS_EQ
+        || token == MINUS_EQ
+        || token == STAR_EQ
+        || token == SLASH_EQ
+        || token == PERCENT_EQ
+        || token == AND_EQ
+        || token == OR_EQ
+        || token == HAT_EQ
+        || token == LTLT_EQ
+        || token == GTGT_EQ;
 }
 
 /*!
@@ -170,9 +198,14 @@ bool isAssignmentOperator(Token token)
 */
 bool isOperandEnd(Token token)
 {
-    return token == IDENTIFIER || token == INTEGER_LITERAL || token == FLOATING_LITERAL
-        || token == CHARACTER_LITERAL || token == STRING_LITERAL || token == BOOLEAN_LITERAL
-        || token == RPAREN || token == RBRACK || token == THIS;
+    return token == IDENTIFIER || token == INTEGER_LITERAL
+        || token == FLOATING_LITERAL
+        || token == CHARACTER_LITERAL
+        || token == STRING_LITERAL
+        || token == BOOLEAN_LITERAL
+        || token == RPAREN
+        || token == RBRACK
+        || token == THIS;
 }
 
 /*!

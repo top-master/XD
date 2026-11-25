@@ -17,8 +17,7 @@
     Matches a word of a comment that may name code: an access chain (such as
     `watcher()->load()`), a qualified name, a call, or a plain name.
 */
-Q_GLOBAL_STATIC_WITH_ARGS(QRegularExpression, codeNamePattern, (QString(QLL(
-        "(?<![\\w`:./<>#@\\\\-])((?:[A-Za-z_]\\w*(?:\\(\\))?->)+[A-Za-z_]\\w*(?:\\(\\))?"
+Q_GLOBAL_STATIC_WITH_ARGS(QRegularExpression, codeNamePattern, (QString(QLL("(?<![\\w`:./<>#@\\\\-])((?:[A-Za-z_]\\w*(?:\\(\\))?->)+[A-Za-z_]\\w*(?:\\(\\))?"
         "|(?:[A-Za-z_]\\w*::)+~?[A-Za-z_]\\w*(?:\\(\\))?"
         "|[A-Za-z_]\\w*\\(\\)|[A-Za-z_]\\w*)(?![\\w`:/(<-])"))))
 
@@ -37,8 +36,7 @@ Q_GLOBAL_STATIC_WITH_ARGS(QRegularExpression, codeLikePattern, (QString(QLL("_|[
     only the access chains.
 */
 static QString backtickNames(
-        const QString & text, const QSet<QString > *names,
-        bool chainsOnly)
+        const QString & text, const QSet<QString > *names, bool chainsOnly)
 {
     QString result;
     int from = 0;
@@ -63,7 +61,8 @@ static QString backtickNames(
         int chunkEnd = text.indexOf(QLatin1Char(' '), found.capturedEnd());
         chunkEnd = chunkEnd < 0 ? text.size() : chunkEnd;
         const QString chunk = text.mid(chunkStart, chunkEnd - chunkStart);
-        if (chunk.contains(QLL("://")) || chunk.contains(QLatin1Char('/'))
+        if (chunk.contains(QLL("://"))
+            || chunk.contains(QLatin1Char('/'))
             || chunk.contains(QLatin1Char('\\'))
         ) {
             continue;
@@ -114,8 +113,7 @@ static QString mapAccessChains(const QString & text, const void *context)
     a doc-comment), when it does not read as code put out of use.
 */
 void FormatCodeBackticksRule::runGroup(
-        FormatDocument *document,
-        const QList<int > & group) const
+        FormatDocument *document, const QList<int > & group) const
 {
     const bool isDoc = document->comments().at(group.first()).isDoc();
     const QList<FormatCommentLine > lines = groupLines(document, group);
@@ -139,8 +137,8 @@ void FormatCodeBackticksRule::runGroup(
         // reaches, which only the meaning tells.
         if (isDoc && document->agentMode()) {
             const QString prose = proseOnly(text);
-            QRegularExpressionMatchIterator chains =
-                codeNamePattern()->globalMatch(prose);
+            QRegularExpressionMatchIterator chains = codeNamePattern()
+                ->globalMatch(prose);
             while (chains.hasNext()) {
                 const QString chain = chains.next().captured(1);
                 if (chain.contains(QLL("->"))) {
@@ -151,8 +149,7 @@ void FormatCodeBackticksRule::runGroup(
                             "class (such as `Class::member()`), which "
                             "Doxygen links; keep the chain, in "
                             "backticks, only when it shows an "
-                            "expression as an example"))
-                        .arg(chain)
+                            "expression as an example")).arg(chain)
                     );
                 }
             }
@@ -164,8 +161,11 @@ void FormatCodeBackticksRule::runGroup(
             &names
         );
         if (mapped != text) {
-            document
-                ->replace(lines.at(i).offset, lines.at(i).text.size(), mapped.toUtf8());
+            document->replace(
+                lines.at(i).offset,
+                lines.at(i).text.size(),
+                mapped.toUtf8()
+            );
         }
     }
 }

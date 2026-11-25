@@ -11,8 +11,7 @@ class FormatReferenceSpaceRule : public FormatNamedRule
     typedef FormatNamedRule super;
 public:
     inline FormatReferenceSpaceRule()
-        : super("reference-space",
-                "Writes a named reference declaration as Type & name.")
+        : super("reference-space", "Writes a named reference declaration as Type & name.")
     {
     }
 

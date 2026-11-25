@@ -12,7 +12,8 @@
 class FormatOffsetContext : public FormatConditionContext
 {
 public:
-    inline FormatOffsetContext(const FormatDocument *document, int offset, int token)
+    inline FormatOffsetContext(
+            const FormatDocument *document, int offset, int token)
         : m_document(document), m_offset(offset), m_token(token) {}
 
     inline QStringList onNames() const Q_DECL_OVERRIDE_IL
@@ -21,19 +22,21 @@ public:
     inline const FormatFileConfig *fileConfig() const Q_DECL_OVERRIDE_IL
     { return &m_document->configAt(m_offset); }
 
-    bool predicate(const QString & name, bool *value) const Q_DECL_OVERRIDE
+    inline bool predicate(const QString & name,
+                          bool *value) const Q_DECL_OVERRIDE_IL
     {
         Config::Cache::skip();
-        if (name == QLL("isNew")) {
-            *value = m_document->isLineSelected(m_document->lineOf(m_offset));
+        if (name
+                == QLL("isNew")
+        ) { *value = m_document->isLineSelected(m_document->lineOf(m_offset));
             return true;
         }
-        if (name == QLL("isHeader") || name == QLL("isNonHeader")) {
-            *value = m_document->isHeader() == (name == QLL("isHeader"));
+        if (name == QLL("isHeader") || name == QLL("isNonHeader")
+        ) { *value = m_document->isHeader() == (name == QLL("isHeader"));
             return true;
         }
-        if (name == QLL("always") || name == QLL("never")) {
-            *value = name == QLL("always");
+        if (name == QLL("always") || name == QLL("never")
+        ) { *value = name == QLL("always");
             return true;
         }
         if (m_token >= m_document->symbols().size()) {
@@ -43,7 +46,8 @@ public:
         return conditions.nameHolds(m_token, name, value);
     }
 
-    bool argumentCount(int depth, int argument, qreal *count) const Q_DECL_OVERRIDE
+    inline bool argumentCount(
+            int depth, int argument, qreal *count) const Q_DECL_OVERRIDE_IL
     {
         if (m_token >= m_document->symbols().size()) {
             return false;
@@ -53,12 +57,12 @@ public:
         return true;
     }
 
-    bool value(qreal *count) const Q_DECL_OVERRIDE
+    inline bool value(qreal *count) const Q_DECL_OVERRIDE_IL
     {
         return this->argumentCount(0, 0, count);
     }
 
-    bool spaceRemaining(qreal *percent) const Q_DECL_OVERRIDE
+    inline bool spaceRemaining(qreal *percent) const Q_DECL_OVERRIDE_IL
     {
         if (m_token >= m_document->symbols().size()) {
             return false;
@@ -68,7 +72,8 @@ public:
         return true;
     }
 
-    bool isTarget(const QString & kind, bool *value) const Q_DECL_OVERRIDE
+    inline bool isTarget(const QString & kind,
+                         bool *value) const Q_DECL_OVERRIDE_IL
     {
         if (m_token >= m_document->symbols().size()) {
             return false;
@@ -92,10 +97,15 @@ int wrapColumn(const FormatDocument *document, int offset)
 {
     const FormatFileConfig & fileConfig = document->configAt(offset);
     const int maximum = wrapMaxAt(document, offset);
-    int begin = fileConfig.wrapBegin.isEmpty()
-        ? maximum : fileConfig.wrapBegin.first();
+    int begin = fileConfig.wrapBegin.isEmpty() ? maximum
+                                               : fileConfig.wrapBegin.first();
     const QString key = QString(QLL("structure.wrapBegin"));
-    begin = FormatFileConfig::countOf(settingValueAt(document, offset, key, begin));
+    begin = FormatFileConfig::countOf(settingValueAt(
+        document,
+        offset,
+        key,
+        begin
+    ));
     return qMin(begin, maximum);
 }
 
@@ -107,12 +117,20 @@ int wrapMaxAt(const FormatDocument *document, int offset)
 {
     const FormatFileConfig &config = document->configAt(offset);
     const QString key = QString(QLL("structure.wrapMax"));
-    const QVariant value = settingValueAt(document, offset, key, config.wrapMax);
+    const QVariant value = settingValueAt(
+        document,
+        offset,
+        key,
+        config.wrapMax
+    );
     return qMax(1, FormatFileConfig::countOf(value));
 }
 
-QVariant settingValueAt(const FormatDocument *document, int offset,
-                        const QString & key, const QVariant & fallback)
+QVariant settingValueAt(
+        const FormatDocument *document,
+        int offset,
+        const QString & key,
+        const QVariant & fallback)
 {
     const FormatFileConfig &config = document->configAt(offset);
     if ( ! config.hasExpression(key)) {
@@ -140,22 +158,39 @@ QVariant settingValueAt(const FormatDocument *document, int offset,
 bool operatorsInMiddleAt(const FormatDocument *document, int offset)
 {
     const bool middle = document->configAt(offset).operatorsInMiddle;
-    return settingValueAt(document, offset, QString(QLL("structure.operatorPlacement")),
-        QString(middle ? QLL("middle") : QLL("start"))).toString() == QLL("middle");
+    return settingValueAt(
+        document,
+        offset,
+        QString(QLL("structure.operatorPlacement")),
+        QString(middle ? QLL("middle") : QLL("start"))
+    ).toString()
+        == QLL("middle");
 }
 
 bool codeTargetAnyAt(const FormatDocument *document, int offset)
 {
-    const bool any = document->configAt(offset).codeTarget == FormatFileConfig::CodeTargetAny;
-    return settingValueAt(document, offset, QString(QLL("structure.target")),
-        QString(any ? QLL("any") : QLL("long"))).toString() == QLL("any");
+    const bool any = document->configAt(offset).codeTarget
+        == FormatFileConfig::CodeTargetAny;
+    return settingValueAt(
+        document,
+        offset,
+        QString(QLL("structure.target")),
+        QString(any ? QLL("any") : QLL("long"))
+    ).toString()
+        == QLL("any");
 }
 
 bool compactAlwaysAt(const FormatDocument *document, int offset)
 {
-    const bool always = document->configAt(offset).compact == FormatFileConfig::CompactAlways;
-    return settingValueAt(document, offset, QString(QLL("structure.compact")),
-        QString(always ? QLL("always") : QLL("never"))).toString() == QLL("always");
+    const bool always = document->configAt(offset).compact
+        == FormatFileConfig::CompactAlways;
+    return settingValueAt(
+        document,
+        offset,
+        QString(QLL("structure.compact")),
+        QString(always ? QLL("always") : QLL("never"))
+    ).toString()
+        == QLL("always");
 }
 
 /*!
@@ -228,30 +263,46 @@ bool isControlHead(const FormatDocument *document, int index)
 }
 
 /*!
-    Finds the preceding operator when the operand before @a next in
-    @a document is a call or parenthesized group in the same binary or
-    conditional chain.
+    Finds the start of the group or qualified call ending at @a close.
 */
-int precedingChainOperator(
-        const FormatDocument *document, int next, bool respectPlacement)
+int callOrGroupStart(const FormatDocument *document, int close)
 {
-    const Token token = document->token(next);
-    const int close = next - 1;
-    if ( ! isBinaryOperator(token) || document->token(close) != RPAREN) {
+    if (document->token(close) != RPAREN || document->match(close) < 0) {
         return -1;
     }
-    const int open = document->match(close);
-    int first = open;
+    int first = document->match(close);
     // Include the qualified name of a call in the operand.
     if (document->token(first - 1) == IDENTIFIER) {
         --first;
-        while ((document->token(first - 1) == DOT || document->token(first - 1) == ARROW
+        while ((document->token(first - 1) == DOT
+                || document->token(first - 1) == ARROW
                 || document->token(first - 1) == SCOPE)
             && (document->token(first - 2) == IDENTIFIER
                 || document->token(first - 2) == THIS)
         ) {
             first -= 2;
         }
+    }
+    return first;
+}
+
+/*!
+    Finds the preceding operator when the operand before @a next in
+    @a document is a call or parenthesized group in the same binary or
+    conditional chain.
+*/
+int precedingChainOperator(const FormatDocument *document,
+                           int next,
+                           bool respectPlacement)
+{
+    const Token token = document->token(next);
+    const int close = next - 1;
+    if ( ! isBinaryOperator(token) || document->token(close) != RPAREN) {
+        return -1;
+    }
+    const int first = callOrGroupStart(document, close);
+    if (first < 1) {
+        return -1;
     }
     const int previous = first - 1;
     const Token lead = document->token(previous);
@@ -261,8 +312,11 @@ int precedingChainOperator(
     const bool binary = rank > 0
         && ! (controlHead && (token == ANDAND || token == OROR))
         && operatorPrecedence(lead) == rank
-        && ( ! respectPlacement
-            || ! operatorsInMiddleAt(document, document->symbols().at(next).from))
+        && (! respectPlacement
+            || ! operatorsInMiddleAt(
+                document,
+                document->symbols().at(next).from
+            ))
         && isOperandEnd(document->token(previous - 1));
     return conditional || binary ? previous : -1;
 }
@@ -278,8 +332,11 @@ bool isClosingLine(const QByteArray & text)
     }
     for (int i = 0; i < line.size(); ++i) {
         const char character = line.at(i);
-        if (character != ')' && character != ']' && character != '}'
-            && character != ' ' && character != '\t'
+        if (character != ')'
+            && character != ']'
+            && character != '}'
+            && character != ' '
+            && character != '\t'
         ) {
             return false;
         }
@@ -319,8 +376,12 @@ bool closesEarlierLine(const FormatDocument *document, int bracket)
     binary operator, right below another one that does, sits at that
     line's indent; hence the operator lines of one chain line up.
 */
-bool hasMisplacedLines(const FormatDocument *document, int open, int close,
-                       int indent, int extraPad)
+bool hasMisplacedLines(
+        const FormatDocument *document,
+        int open,
+        int close,
+        int indent,
+        int extraPad)
 {
     const int firstLine = document->symbolLine(open);
     const int lastLine = document->symbolLine(close);
@@ -333,8 +394,10 @@ bool hasMisplacedLines(const FormatDocument *document, int open, int close,
     int aboveIndent = -1;
     for (int l = firstLine; l <= lastLine; ++l) {
         // Closes the ranges whose closing brackets lead the line.
-        while (k <= close && document->symbolLine(k) == l
-            && ! ranges.isEmpty() && ranges.last().first == k
+        while (k <= close
+            && document->symbolLine(k) == l
+            && ! ranges.isEmpty()
+            && ranges.last().first == k
         ) {
             ranges.removeLast();
             ++k;
@@ -371,8 +434,11 @@ bool hasMisplacedLines(const FormatDocument *document, int open, int close,
             const Token token = document->token(k);
             const int other = document->match(k);
             last = k;
-            if ((token == LPAREN || token == LBRACK || token == LBRACE)
-                && other > k && document->symbolLine(other) > l
+            if ((token == LPAREN
+                    || token == LBRACK
+                    || token == LBRACE)
+                && other > k
+                && document->symbolLine(other) > l
             ) {
                 ranges.append(qMakePair(other, false));
                 opened = true;
@@ -393,9 +459,11 @@ bool hasMisplacedLines(const FormatDocument *document, int open, int close,
             && startsWithStringLiteral(document, last + 1)
         ) {
             ranges.last().second = true;
-        } else if ( ! opened && ! closesEarlierLine(document, last)
+        } else if ( ! opened
+            && ! closesEarlierLine(document, last)
             && end != STRING_LITERAL
-            && lead >= 0 && ! startsWithStringLiteral(document, lead)
+            && lead >= 0
+            && ! startsWithStringLiteral(document, lead)
         ) {
             ranges.last().second = true;
         }
@@ -454,11 +522,13 @@ QByteArray sourceText(const FormatDocument *document, int first, int last)
     @a first up to @a last of @a document, outside of every bracket pair,
     and its matching `:`. Returns false when either token is absent.
 */
-bool findTernary(const FormatDocument *document, int first, int last,
-                 int *question, int *colon)
-{
-    *question = -1;
-    *colon = -1;
+bool findTernary(
+        const FormatDocument *document,
+        int first,
+        int last,
+        int *question,
+        int *colon)
+{ *question = -1; *colon = -1;
     int depth = 0;
     // Match the outer conditional while skipping nested brackets.
     for (int k = first; k <= last; ++k) {
@@ -470,12 +540,13 @@ bool findTernary(const FormatDocument *document, int first, int last,
         ) {
             k = document->match(k);
         } else if (token == QUESTION) {
-            if (*question < 0) {
-                *question = k;
+            if (*question < 0) { *question = k;
             }
             ++depth;
-        } else if (token == COLON && depth > 0 && --depth == 0) {
-            *colon = k;
+        } else if (token == COLON
+            && depth > 0
+            && --depth == 0
+        ) { *colon = k;
             return true;
         }
     }
@@ -488,8 +559,11 @@ bool findTernary(const FormatDocument *document, int first, int last,
 */
 static bool opensTemplate(Token token)
 {
-    return token == IDENTIFIER || token == STATIC_CAST || token == DYNAMIC_CAST
-        || token == CONST_CAST || token == REINTERPRET_CAST || token == TEMPLATE;
+    return token == IDENTIFIER || token == STATIC_CAST
+        || token == DYNAMIC_CAST
+        || token == CONST_CAST
+        || token == REINTERPRET_CAST
+        || token == TEMPLATE;
 }
 
 /*!
@@ -538,8 +612,12 @@ int templateClose(const FormatDocument *document, int angle, int end)
     hold together least.
 */
 QList<int > loosestOperators(
-        const FormatDocument *document, int first, int last,
-        int (*rankOf)(Token), int fromRank, int *rank)
+        const FormatDocument *document,
+        int first,
+        int last,
+        int (*rankOf)(Token),
+        int fromRank,
+        int *rank)
 {
     QList<int > found;
     int best = -1;
@@ -548,13 +626,15 @@ QList<int > loosestOperators(
         if (token == LBRACE) {
             return QList<int >();
         }
-        if ((token == LPAREN || token == LBRACK)
+        if ((token == LPAREN
+                || token == LBRACK)
             && document->match(k) > k
         ) {
             k = document->match(k);
             continue;
         }
-        if (token == LANGLE && k > first
+        if (token == LANGLE
+            && k > first
             && opensTemplate(document->token(k - 1))
         ) {
             const int close = templateClose(document, k, last + 1);
@@ -565,7 +645,8 @@ QList<int > loosestOperators(
         }
         const int tokenRank = rankOf(token);
         if (tokenRank < fromRank
-            || (best >= 0 && tokenRank > best)
+            || (best >= 0
+                && tokenRank > best)
             || k == first
             || ! isOperandEnd(document->token(k - 1))
         ) {
@@ -577,8 +658,7 @@ QList<int > loosestOperators(
         }
         found << k;
     }
-    if (rank) {
-        *rank = best;
+    if (rank) { *rank = best;
     }
     return found;
 }
@@ -591,10 +671,12 @@ QList<int > loosestOperators(
     A list may break after such a `(`; a value may move below such an `=`.
 */
 bool reachesWrapArgsAt(const FormatDocument *document,
-                       FormatScopeConditions *conditions, int token)
+                       FormatScopeConditions *conditions,
+                       int token)
 {
-    const FormatFileConfig &fileConfig =
-        document->configAt(document->symbols().at(token).from);
+    const FormatFileConfig &fileConfig = document->configAt(
+        document->symbols().at(token).from
+    );
     return conditions->holds(
         QString(QLL("structure.wrapArgsAt")),
         fileConfig.wrapArgsAt,
@@ -633,25 +715,36 @@ int comparisonRank(Token token)
     @a step columns past @a indent.
 */
 QList<QByteArray > comparisonLines(
-        const FormatDocument *document, int first,
-        int last, int column, int indent, int step)
+        const FormatDocument *document,
+        int first,
+        int last,
+        int column,
+        int indent,
+        int step,
+        int limit)
 {
     const QByteArray text = sourceText(document, first, last);
-    const QList<int > operators = loosestOperators(
-        document, first, last, &comparisonRank, 0, Q_NULLPTR
-    );
-    if (column + textWidth(text)
-        <= wrapMaxAt(document, document->symbols().at(first).from)
-        || operators.isEmpty()
-    ) {
+    const QList<int > operators =
+        loosestOperators(
+            document,
+            first,
+            last,
+            &comparisonRank,
+            0,
+            Q_NULLPTR
+        );
+    if (limit == 0) {
+        limit = wrapMaxAt(document, document->symbols().at(first).from);
+    }
+    if (column + textWidth(text) <= limit || operators.isEmpty()) {
         return QList<QByteArray >() << text;
     }
     const QByteArray pad(indent + step, ' ');
     QList<QByteArray > lines;
     lines << sourceText(document, first, operators.first() - 1);
     for (int k = 0; k < operators.size(); ++k) {
-        const int end = k + 1 < operators.size()
-            ? operators.at(k + 1) - 1 : last;
+        const int end = k + 1 < operators.size() ? operators.at(k + 1) - 1
+                                                 : last;
         lines << pad + sourceText(document, operators.at(k), end);
     }
     return lines;
@@ -666,8 +759,7 @@ QList<QByteArray > comparisonLines(
     argument, and adds no empty one.
 */
 QList<QPair<int, int > > splitArguments(
-        const FormatDocument *document,
-        int open, int close)
+        const FormatDocument *document, int open, int close)
 {
     QList<QPair<int, int > > arguments;
     if (close <= open + 1) {
@@ -676,7 +768,9 @@ QList<QPair<int, int > > splitArguments(
     int from = open + 1;
     for (int i = open + 1; i < close; ++i) {
         const Token token = document->token(i);
-        if ((token == LPAREN || token == LBRACK || token == LBRACE)
+        if ((token == LPAREN
+                || token == LBRACK
+                || token == LBRACE)
             && document->match(i) > i
         ) {
             i = document->match(i);
@@ -708,8 +802,12 @@ QList<QPair<int, int > > splitArguments(
     then at `?`, then at both signs on continuation lines.
 */
 QList<QByteArray > ternaryLines(
-        const QByteArray & head, const QByteArray & middle,
-        const QByteArray & tail, int indent, int column, int trailing,
+        const QByteArray & head,
+        const QByteArray & middle,
+        const QByteArray & tail,
+        int indent,
+        int column,
+        int trailing,
         int wrap)
 {
     const QByteArray oneLine = head + ' ' + middle + ' ' + tail;
@@ -737,9 +835,7 @@ QList<QByteArray > ternaryLines(
     a destructor, or an operator, such as `operator==`, `operator()`,
     or a conversion (`operator bool`, `operator QString`).
 */
-bool isDeclarationParen(
-        const FormatDocument *document,
-        int paren)
+bool isDeclarationParen(const FormatDocument *document, int paren)
 {
     const FormatDocument::Scope scope = document->scopeOf(paren);
     if (scope != FormatDocument::FileScope
@@ -768,7 +864,9 @@ bool isDeclarationParen(
             || token == LBRACE
             || token == RBRACE
             || token == COLON
-            || ((token == LPAREN || token == RPAREN) && k < paren - 2)
+            || ((token == LPAREN
+                    || token == RPAREN)
+                && k < paren - 2)
         ) {
             break;
         }
@@ -798,7 +896,10 @@ bool isDeclarationParen(
             || document->lexem(paren - 1) == document->lexem(paren - 3);
     }
     const bool afterAccess = document->isAccessLabel(name - 1);
-    return scope == FormatDocument::ClassScope
-        && (typeEnd == SEMIC || typeEnd == LBRACE || typeEnd == RBRACE || afterAccess
-            || typeEnd == EXPLICIT || typeEnd == INLINE);
+    return scope == FormatDocument::ClassScope && (typeEnd == SEMIC
+        || typeEnd == LBRACE
+        || typeEnd == RBRACE
+        || afterAccess
+        || typeEnd == EXPLICIT
+        || typeEnd == INLINE);
 }

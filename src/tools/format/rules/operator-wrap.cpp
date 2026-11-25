@@ -37,19 +37,52 @@
 
 /*!
     Finds a statement starting on @a line of @a document and gives
-    its first token to @a first and its `;` to @a last. Returns false unless
-    the statement ends with its only top-level `;` on the same line or
-    the closing line of a nested expression,
-    holds no comment, and is no control statement.
+    its first token to @a first and the `;` that ends it to @a last, which
+    follows the statement past every nested expression it spans. Returns
+    false unless the statement ends with its only top-level `;`, which the
+    rest of its line does not pass, holds no comment, and is no control
+    statement.
 */
 bool FormatOperatorWrapRule::wholeStatement(
-        const FormatDocument *document, int line,
-        int *first, int *last) const
-{
-    *first = document->firstSymbolOfLine(line);
-    *last = document->lastSymbolOfLine(line);
+        const FormatDocument *document,
+        int line,
+        int *first,
+        int *last) const
+{ *first = document->firstSymbolOfLine(line); *last = document->lastSymbolOfLine(line);
     if (*first < 0) {
         return false;
+    }
+
+    const Token lead = document->token(*first);
+    if ((lead == COLON
+            || lead == COMMA)
+        && *first + 2 <= *last
+        && document->token(*first + 1) == IDENTIFIER
+    ) {
+        const Token openToken = document->token(*first + 2);
+        if (openToken == LPAREN
+            || (openToken == LBRACE
+                && document->braceScope(*first + 2) == FormatDocument::InitScope)
+        ) {
+            const int close = document->match(*first + 2);
+            if (close > *first + 2) {
+                if (close > *last) {
+                    *last = document->lastSymbolOfLine(
+                        document->symbolEndLine(close)
+                    );
+                }
+                const int exprFirst = *first + 1;
+                const int from = document->symbols().at(exprFirst).from;
+                const int to = document->symbolEnd(close);
+                if ( ! document->hasCommentBetween(from, to)
+                    && ! document->spansDirective(from, to)
+                ) {
+                    *first = exprFirst;
+                    *last = close + 1;
+                    return true;
+                }
+            }
+        }
     }
 
     // Takes only a statement that starts the line and ends on it.
@@ -63,41 +96,57 @@ bool FormatOperatorWrapRule::wholeStatement(
             return false;
         }
     }
-    const Token lead = document->token(*first);
-    if (lead == IF || lead == ELSE || lead == WHILE || lead == FOR || lead == DO
-        || lead == SWITCH || lead == CASE
+    if (lead == IF
+        || lead == ELSE
+        || lead == WHILE
+        || lead == FOR
+        || lead == DO
+        || lead == SWITCH
+        || lead == CASE
     ) {
         return false;
     }
     bool hasBinaryOperator = false;
-    // Skip nested expressions while checking the statement boundary.
-    for (int i = *first; i <= *last; ++i) {
+    // Follows the statement past the nested expressions it spans, up to the
+    // `;` that ends it, so that one whose first line holds a broken call and
+    // goes on after that call's `)` still gives its whole range.
+    int end = *last;
+    for (int i = *first; i < document->symbols().size(); ++i) {
         const Token token = document->token(i);
-        if ((token == LPAREN || token == LBRACK || token == LBRACE)
+        if ((token == LPAREN
+                || token == LBRACK
+                || token == LBRACE)
             && document->match(i) > i
         ) {
-            i = document->match(i);
-            if (i > *last) {
-                if (token == LBRACE
-                    && document->braceScope(document->match(i))
-                        != FormatDocument::InitScope
-                ) {
-                    return false;
-                }
-                *last = document->lastSymbolOfLine(document->symbolEndLine(i));
+            const int close = document->match(i);
+            // A body or a block ends the statement at its `}`; only an
+            // initializer list lets the statement go on, so that an inline
+            // body's `}` never joins the declaration that follows it.
+            if (token == LBRACE
+                && document->braceScope(close) != FormatDocument::InitScope
+            ) {
+                return false;
             }
+            i = close;
             continue;
         }
-        hasBinaryOperator |= operatorPrecedence(token) > 0 && i > *first
-            && isOperandEnd(document->token(i - 1));
-        if ((token == SEMIC && i < *last) || token == RBRACE) {
+        if (token == SEMIC) {
+            end = i;
+            break;
+        }
+        if (token == RBRACE) {
             return false;
         }
+        hasBinaryOperator |= operatorPrecedence(token) > 0
+            && i > *first
+            && isOperandEnd(document->token(i - 1));
     }
+    *last = end;
     const int from = document->lineStart(line);
-    const int to = document->lineEnd(document->symbolEndLine(*last));
-    return (hasBinaryOperator || document->symbolLine(*last) == line)
-        && document->token(*last) == SEMIC
+    const int to = document->lineEnd(document->symbolEndLine(end));
+    return (hasBinaryOperator || document->symbolLine(end) == line)
+        && document->token(end) == SEMIC
+        && document->lastSymbolOfLine(document->symbolEndLine(end)) == end
         && ! document->hasCommentBetween(from, to)
         && ! document->spansDirective(from, to);
 }
@@ -125,9 +174,8 @@ void FormatOperatorWrapRule::run(FormatDocument *document) const
             const int endLine = document->symbolEndLine(last);
             int current = line;
             while (current <= endLine
-                && textWidth(document->lineText(current)) <= wrapColumn(
-                    document, document->lineStart(current)
-                )
+                && textWidth(document->lineText(current))
+                    <= wrapColumn(document, document->lineStart(current))
             ) {
                 ++current;
             }
@@ -136,24 +184,32 @@ void FormatOperatorWrapRule::run(FormatDocument *document) const
             }
         }
         const QByteArray indent = document->indentOf(line);
+        const int column = document->symbols().at(first).from
+            - document->lineStart(line);
         FormatExpressionLayout layout(
             document,
             &conditions,
             textWidth(indent)
         );
-        if (textWidth(indent + layout.oneLine(first, last)) <= limit
-            || ! layout.hasOuterChain(first, last - 1)
+        const int lastSymbol = document->token(last) == SEMIC ? last : last - 1;
+        if (textWidth(indent + layout.oneLine(first, lastSymbol)) <= limit
+            || ! layout.hasOuterChain(first, lastSymbol - 1)
         ) {
             continue;
         }
+        const int exprLast = document->token(last) == SEMIC ? last - 1 : last;
+        const int trailing = (last < document->symbols().size()
+                && document->symbolLine(last)
+                    == document->symbolEndLine(exprLast)
+            ) ? 1 : 0;
         const QByteArray laidOut = layout.layout(
             first,
-            last - 1,
-            textWidth(indent),
-            1
+            exprLast,
+            column,
+            trailing
         );
         const int from = document->symbols().at(first).from;
-        const int length = document->symbolEnd(last - 1) - from;
+        const int length = document->symbolEnd(exprLast) - from;
         if (laidOut == document->text().mid(from, length)
             || ! document->replace(from, length, laidOut)
         ) {
@@ -167,8 +223,7 @@ void FormatOperatorWrapRule::run(FormatDocument *document) const
                     "by width alone; regroup its lines so that the "
                     "operands that belong together (a key and its "
                     "value, a format and its arguments) share one, "
-                    "each line within %1 columns and led by its " "operator"))
-                .arg(limit),
+                    "each line within %1 columns and led by its " "operator")).arg(limit),
                 1,
                 limit
             );

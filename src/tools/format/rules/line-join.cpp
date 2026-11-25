@@ -46,13 +46,23 @@ void FormatLineJoinRule::run(FormatDocument *document) const
     QList<int > brackets;
     FormatScopeConditions conditions(document);
     int questions = 0;
+    int templateEnd = -1;
     for (int i = 0; i + 1 < document->symbols().size(); ++i) {
         // Tracks the brackets still open, and the `?` of the statement
         // whose `:` has not come yet.
         const Token token = document->token(i);
+        if (token == LANGLE && document->token(i - 1) == IDENTIFIER) {
+            templateEnd = qMax(templateEnd, templateClose(
+                document,
+                i,
+                document->symbols().size()
+            ));
+        }
         if (token == LPAREN || token == LBRACK || token == LBRACE) {
             brackets << i;
-        } else if ((token == RPAREN || token == RBRACK || token == RBRACE)
+        } else if ((token == RPAREN
+                || token == RBRACK
+                || token == RBRACE)
             && ! brackets.isEmpty()
         ) {
             brackets.removeLast();
@@ -69,10 +79,31 @@ void FormatLineJoinRule::run(FormatDocument *document) const
         const FormatFileConfig &fileConfig = document->configAt(
             document->symbols().at(i).from
         );
-        if ( ! codeTargetAnyAt(document, document->symbols().at(i).from)
+        if (i < templateEnd
+            || ! codeTargetAnyAt(document, document->symbols().at(i).from)
             || document->symbolEndLine(i) >= document->symbolLine(i + 1)
             || ! this->mayJoin(document, i, brackets, questions)
         ) {
+            continue;
+        }
+        bool commentedArguments = false;
+        for (int b = 0; b < brackets.size(); ++b) {
+            const int open = brackets.at(b);
+            const int close = document->match(open);
+            if (document->token(open) == LPAREN
+                && close > open
+                && (isDeclarationParen(document, open)
+                    || document->token(open - 1) == IDENTIFIER)
+                && document->hasCommentBetween(
+                    document->symbolEnd(open),
+                    document->symbols().at(close).from
+                )
+            ) {
+                commentedArguments = true;
+                break;
+            }
+        }
+        if (commentedArguments) {
             continue;
         }
         // A conditional argument policy can retain an existing list rather
@@ -83,11 +114,15 @@ void FormatLineJoinRule::run(FormatDocument *document) const
             const int open = brackets.last();
             const int close = document->match(open);
             const Token beforeOpen = document->token(open - 1);
-            if (document->token(open) == LPAREN && close > open
-                && (beforeOpen == IDENTIFIER || beforeOpen == RPAREN
-                    || beforeOpen == RANGLE || beforeOpen == GTGT)
+            if (document->token(open) == LPAREN
+                && close > open
+                && (beforeOpen == IDENTIFIER
+                    || beforeOpen == RPAREN
+                    || beforeOpen == RANGLE
+                    || beforeOpen == GTGT)
                 && ! conditions.argsOver(
-                    open, splitArguments(document, open, close).size()
+                    open,
+                    splitArguments(document, open, close).size()
                 )
             ) {
                 continue;
@@ -99,19 +134,27 @@ void FormatLineJoinRule::run(FormatDocument *document) const
             const int open = brackets.last();
             const Token beforeOpen = document->token(open - 1);
             if (document->token(open) == LPAREN
-                && (beforeOpen == IF || beforeOpen == WHILE)
+                && (beforeOpen == IF
+                    || beforeOpen == WHILE)
                 && ! conditions.conditionsOver(
-                    open, conditions.conditionArgumentCount(open, 0)
+                    open,
+                    conditions.conditionArgumentCount(open, 0)
                 )
             ) {
                 continue;
             }
         }
         const Token after = document->token(i + 1);
-        const bool isTight = token == LPAREN || token == LBRACK
-            || after == RPAREN || after == RBRACK || after == COMMA
-            || after == SEMIC || token == DOT || token == ARROW
-            || after == DOT || after == ARROW;
+        const bool isTight = token == LPAREN
+            || token == LBRACK
+            || after == RPAREN
+            || after == RBRACK
+            || after == COMMA
+            || after == SEMIC
+            || token == DOT
+            || token == ARROW
+            || after == DOT
+            || after == ARROW;
         const int from = document->symbolEnd(i);
         document->replace(
             from,
@@ -129,7 +172,8 @@ void FormatLineJoinRule::run(FormatDocument *document) const
     of the statement still waiting for their `:`) tell.
 */
 bool FormatLineJoinRule::mayJoin(
-        const FormatDocument *document, int before,
+        const FormatDocument *document,
+        int before,
         const QList<int > & brackets,
         int questions) const
 {
@@ -149,20 +193,41 @@ bool FormatLineJoinRule::mayJoin(
         return false;
     }
     const Token next = document->token(after);
-    if ((next == ANDAND || next == OROR)
+    const int previousLine = document->symbolEndLine(before);
+    if ((next == DOT
+            || next == ARROW)
+        && textWidth(document->lineText(previousLine))
+            > wrapMaxAt(document, document->lineStart(previousLine))
+    ) {
+        return false;
+    }
+    if ((next == ANDAND
+            || next == OROR)
         && isClosingLine(document->lineText(document->symbolEndLine(before)))
     ) {
         return false;
     }
     const int nextLine = document->symbolLine(after);
     const int lineEnd = document->lastSymbolOfLine(nextLine);
-    if (isClosingLine(document->lineText(nextLine)) && lineEnd >= after
+    if (isClosingLine(document->lineText(nextLine))
+        && lineEnd >= after
         && (document->token(lineEnd + 1) == ANDAND
             || document->token(lineEnd + 1) == OROR)
         && document->symbolLine(lineEnd + 1) > nextLine
     ) {
         return false;
     }
+
+    const Token beforeToken = document->token(before);
+    if (beforeToken == SEMIC
+        || beforeToken == LBRACE
+        || beforeToken == RBRACE
+        || (beforeToken == COLON
+            && questions == 0)
+    ) {
+        return false;
+    }
+
 
     // Joins any break inside a `(`, a `[`, or an initializer list.
     if ( ! brackets.isEmpty()) {
@@ -178,7 +243,8 @@ bool FormatLineJoinRule::mayJoin(
     // Joins a statement's operator line, the value after its `=`, and the
     // `:` of its conditional expression.
     return isLeadingOperator(next)
-        || next == DOT || next == ARROW
-        || document->token(before) == EQ
+        || next == DOT
+        || next == ARROW
+        || beforeToken == EQ
         || (next == COLON && questions > 0);
 }

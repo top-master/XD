@@ -24,8 +24,7 @@
     plain English word and the group is more than that one word.
 */
 void FormatCommentCaseRule::runGroup(
-        FormatDocument *document,
-        const QList<int > & group) const
+        FormatDocument *document, const QList<int > & group) const
 {
     const QList<FormatCommentLine > lines = groupLines(document, group);
     if (looksLikeCode(lines) || isSingleWord(lines)) {
@@ -52,16 +51,27 @@ void FormatCommentCaseRule::runGroup(
     }
     const QByteArray word = text.left(end);
     const char next = end < text.size() ? text.at(end) : ' ';
-    bool isCode = next == '(' || next == ':' || next == '.' || next == '-' || next == '>'
-        || next == '=' || next == '/' || next == '*' || next == '[' || next == '<'
-        || next == '#' || word.contains('_');
+    bool isCode = next == '(' || next == ':'
+        || next == '.'
+        || next == '-'
+        || next == '>'
+        || next == '='
+        || next == '/'
+        || next == '*'
+        || next == '['
+        || next == '<'
+        || next == '#'
+        || word.contains('_');
     for (int i = 1; i < word.size() && ! isCode; ++i) {
         isCode = QChar::isUpper(uchar(word.at(i)))
             || QChar::isDigit(uchar(word.at(i)));
     }
     if (isCode) {
-        document->report(lines.at(first).offset, "comment-case",
-                         QString(QLL("start the comment with an upper-case word")));
+        document->report(
+            lines.at(first).offset,
+            "comment-case",
+            QString(QLL("start the comment with an upper-case word"))
+        );
         return;
     }
     document->replace(

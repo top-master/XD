@@ -13,8 +13,7 @@ class FormatStubLineRule : public FormatCommentRule
     typedef FormatCommentRule super;
 public:
     inline FormatStubLineRule()
-        : super("stub-line",
-                "Reports wrapped comment lines of 17 characters or fewer.")
+        : super("stub-line", "Reports wrapped comment lines of 17 characters or fewer.")
     {
     }
 

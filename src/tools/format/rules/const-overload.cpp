@@ -57,7 +57,8 @@ void FormatConstOverloadRule::run(FormatDocument *document) const
                     ++commas;
                 }
             }
-            const QByteArray key = document->lexem(i) + '/'
+            const QByteArray key = document->lexem(i)
+                + '/'
                 + QByteArray::number(commas);
             const bool isConst = document->token(close + 1) == CONST;
             if ( ! isConst && ! firstMutable.contains(key)) {

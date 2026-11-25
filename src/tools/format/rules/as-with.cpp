@@ -26,8 +26,11 @@ static QString mapAsWith(const QString & text, const void *)
     for (int i = 0; i < matches.size(); ++i) {
         const QRegularExpressionMatch & found = matches.at(i);
         const bool upper = found.captured(1) == QLL("A");
-        result.replace(found.capturedStart(), found.capturedLength(),
-                       upper ? QString(QLL("Just like")) : QString(QLL("just like")));
+        result.replace(
+            found.capturedStart(),
+            found.capturedLength(),
+            upper ? QString(QLL("Just like")) : QString(QLL("just like"))
+        );
     }
     return result;
 }

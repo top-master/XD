@@ -27,7 +27,8 @@ void FormatNotSpaceRule::run(FormatDocument *document) const
     for (int i = 0; i < document->symbols().size(); ++i) {
         if (document->token(i) != NOT
             || document->isDirectiveLine(document->symbolLine(i))
-            || (i > 0 && document->token(i - 1) == OPERATOR)
+            || (i > 0
+                && document->token(i - 1) == OPERATOR)
         ) {
             continue;
         }

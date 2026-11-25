@@ -11,8 +11,7 @@ class FormatReferenceLocalRule : public FormatNamedRule
     typedef FormatNamedRule super;
 public:
     inline FormatReferenceLocalRule()
-        : super("reference-local",
-                "Reports a local that a non-const reference names, which a pointer should.")
+        : super("reference-local", "Reports a local that a non-const reference names, which a pointer should.")
     {
     }
 

@@ -1667,6 +1667,26 @@ void tst_FormatRules::testFix_shouldRewrite_data()
                       "                  << QString(QLL(\"-c\")) << QString(QLL(\"commit.gpgsign=false\"))\n"
                       "                  << arguments);\n"
                       "}\n");
+    QTest::newRow("args-wrap call after an operator steps one level past its line")
+        << QString(QLL("operator-wrap,args-wrap,continuation-indent"))
+        << QByteArray("void f()\n"
+                      "{\n"
+                      "    const bool ok = first(parser)\n"
+                      "                    && read(\n"
+                      "                        parser,\n"
+                      "                        first,\n"
+                      "                        second\n"
+                      "                    );\n"
+                      "}\n")
+        << QByteArray("void f()\n"
+                      "{\n"
+                      "    const bool ok = first(parser)\n"
+                      "        && read(\n"
+                      "            parser,\n"
+                      "            first,\n"
+                      "            second\n"
+                      "        );\n"
+                      "}\n");
     QTest::newRow("args-wrap brace list gets an item per line")
         << QString(QLL("args-wrap"))
         << QByteArray("void f()\n"
@@ -2093,6 +2113,12 @@ void tst_FormatRules::testFix_shouldRewrite_data()
         << QByteArray("void f()\n{\n    const auto value = store\n"
                       "        ->measure(firstMeasurementRecord, secondMeasurementRecord)\n"
                       "        ->finish();\n}\n");
+    QTest::newRow("condition-wrap aligns comment lines with their operator")
+        << QString(QLL("condition-wrap"))
+        << QByteArray("void f()\n{\n    if (a && b\n  // First line.\n"
+                      "  // Second line.\n || c && d) {\n    }\n}\n")
+        << QByteArray("void f()\n{\n    if (a\n        && b\n        // First line.\n"
+                      "        // Second line.\n        || c\n        && d\n    ) {\n    }\n}\n");
     QTest::newRow("condition-wrap prefers arithmetic after an early comparison")
         << QString(QLL("condition-wrap"))
         << QByteArray("void f()\n{\n    if (packet.size() > limits.maximumMessageLength + limits.allowedHeaderLength) {\n    }\n}\n")
@@ -4240,6 +4266,11 @@ void tst_FormatRules::testRules_shouldRewriteFile_data()
                       "manager->override() : QSharedPointer<QHostInfoOverride >();\n}\n")
         << QByteArray("void f()\n{\n    QSharedPointer<QHostInfoOverride > ov = manager\n"
                       "        ? manager->override() : QSharedPointer<QHostInfoOverride >();\n}\n");
+    QTest::newRow("ternary-wrap breaks before the colon when only it passes wrapMax")
+        << QString(QLL("ternary-wrap")) << QString(QLL("a.cpp"))
+        << QByteArray("void f()\n{\n    x = aLongConditionNameComparingSomethingLongerr == \"x\" ? a : bSomeB(1234567);\n}\n")
+        << QByteArray("void f()\n{\n    x = aLongConditionNameComparingSomethingLongerr == \"x\" ? a\n"
+                      "                                                           : bSomeB(1234567);\n}\n");
     QTest::newRow("ternary-wrap keeps both branches within wrapMax")
         << QString(QLL("ternary-wrap")) << QString(QLL("a.cpp"))
         << QByteArray("void f()\n{\n    QSharedPointer<QHostInfoOverride > ov = theManager ? "
@@ -4250,6 +4281,13 @@ void tst_FormatRules::testRules_shouldRewriteFile_data()
         << QString(QLL("ternary-wrap")) << QString(QLL("a.cpp"))
         << QByteArray("void f()\n{\n    int a = b ? c : d;\n}\n")
         << QByteArray("void f()\n{\n    int a = b ? c : d;\n}\n");
+    QTest::newRow("ternary-wrap wraps nested condition group when exceeding wrapConditionsOver")
+        << QString(QLL("ternary-wrap")) << QString(QLL("a.cpp"))
+        << QByteArray("void f()\n{\n        start = (before == RPAREN || before == RBRACK) && opener >= 0 ? opener : start - 1;\n}\n")
+        << QByteArray("void f()\n{\n        start = (before == RPAREN\n"
+                      "                || before == RBRACK)\n"
+                      "            && opener >= 0\n"
+                      "            ? opener : start - 1;\n}\n");
 }
 
 /// Formats each row's input as the file named in the row, of a project with
@@ -5487,7 +5525,12 @@ void tst_FormatRules::testFixtures_shouldMatchAfter()
     ));
     QVERIFY2(result.error.isEmpty(), qPrintable(result.error));
     qExpect(QString::fromUtf8(result.text))->toEqual(QString::fromUtf8(expected));
-    if (name == QLL("member-chain-arguments.cpp")
+    if (name == QLL("member-chain-long-literal.cpp")
+        || name.startsWith(QLL("nested-ternary-condition"))
+        || name == QLL("ternary-call-closing.cpp")
+        || name.startsWith(QLL("call-"))
+        || name.startsWith(QLL("declaration-"))
+        || name == QLL("member-chain-arguments.cpp")
         || name == QLL("member-chain-literals.cpp")
         || name == QLL("member-chain-ternary.cpp")
         || name == QLL("short-call-adjacent-literals.cpp")
@@ -5501,6 +5544,8 @@ void tst_FormatRules::testFixtures_shouldMatchAfter()
         || name == QLL("operator-wrap-priority-assignment.cpp")
         || name == QLL("operator-wrap-priority-long-suffix.cpp")
         || name == QLL("operator-wrap-logical-call.cpp")
+        || name == QLL("operator-wrap-chain-after-broken-call.cpp")
+        || name == QLL("operator-wrap-operand-comparison.cpp")
         || name == QLL("args-wrap-logical-priority.cpp")
         || name.startsWith(QLL("subchain-"))
         || name.startsWith(QLL("numeric-operator-"))

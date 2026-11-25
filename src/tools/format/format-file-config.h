@@ -29,7 +29,7 @@ public:
 
     inline FormatFileConfig()
         : refSuffix(" "), moveSuffix(FormatSpacing::keep())
-        , wrapMax(80), wrapArgsOver(3), wrapConditionsOver(1), joinArgs(1), commentWrapMax(80), wrapExtendsForKeywords(20), wrapEmptyLimit(8)
+        , wrapMax(80), wrapArgsOver(3), wrapConditionsOver(1), wrapTernaryOver(1), joinArgs(1), commentWrapMax(80), wrapExtendsForKeywords(20), wrapEmptyLimit(8)
         , wrapComma(WrapCommaSoft), commentTarget(CommentTargetLong), codeTarget(CodeTargetLong)
         , compact(CompactNever)
         , docTagSign('@'), nameMismatch(Config::NameMismatchWarn)
@@ -37,26 +37,26 @@ public:
     {
         wrapBegin << 75;
         commentWrapBegin << 75;
-        thisMode = FormatFileConfig::schema()->programFor(
-            QString::fromLatin1("relations.thisMode"));
-        wrapChainAt = FormatFileConfig::schema()->programFor(
-            QString::fromLatin1("structure.wrapChainAt"));
-        wrapArgsAt = FormatFileConfig::schema()->programFor(
-            QString::fromLatin1("structure.wrapChainAt"));
-        wrapSignatureAt = FormatFileConfig::schema()->programFor(
-            QString::fromLatin1("structure.wrapSignatureAt"));
-        wrapConditionsOverCondition = FormatFileConfig::schema()->programFor(
-            QString::fromLatin1("structure.wrapConditionsOver"));
+        thisMode = FormatFileConfig::schema()
+            ->programFor(QString::fromLatin1("relations.thisMode"));
+        wrapChainAt = FormatFileConfig::schema()
+            ->programFor(QString::fromLatin1("structure.wrapChainAt"));
+        wrapArgsAt = FormatFileConfig::schema()
+            ->programFor(QString::fromLatin1("structure.wrapChainAt"));
+        wrapSignatureAt = FormatFileConfig::schema()
+            ->programFor(QString::fromLatin1("structure.wrapSignatureAt"));
+        wrapConditionsOverCondition = FormatFileConfig::schema()
+            ->programFor(QString::fromLatin1("structure.wrapConditionsOver"));
         bodyBraces << QString::fromLatin1("always");
-        wrapMistakes = FormatFileConfig::schema()->programFor(
-            QString::fromLatin1("structure.wrapMistakes"));
+        wrapMistakes = FormatFileConfig::schema()
+            ->programFor(QString::fromLatin1("structure.wrapMistakes"));
         extensions = FormatFileConfig::defaultExtensions();
         typedefSuper = FormatFileConfig::defaultTypedefSuper();
         replaceSuperSites = FormatFileConfig::defaultReplaceSuperSites();
         operatorsInMiddle = false;
         operatorPadding = 0;
-        operatorPaddingCondition = FormatFileConfig::schema()->programFor(
-            QString::fromLatin1("structure.operatorPadding"));
+        operatorPaddingCondition = FormatFileConfig::schema()
+            ->programFor(QString::fromLatin1("structure.operatorPadding"));
         wrapSubChain = QString::fromLatin1("always");
         wrapConditionsPer = QString::fromLatin1("pair-bundle");
         replaceTypesTarget = QString::fromLatin1("isNew");
@@ -82,28 +82,38 @@ public:
             const QString & value,
             const QString & defaultValue);
     bool acceptsFile(const QString &path) const;
-    static QRef<const Config::Schema> schema();
+    static QRef<const Config::Schema > schema();
     static QVariant resolve(
-            const QString & key, const QStringList & program,
+            const QString & key,
+            const QStringList & program,
             const Config::Evaluator::Context *context);
     static int countOf(const QVariant & count);
-    QVariant resolveCached(
-            const QString & key, const QStringList & program,
-            const Config::Evaluator::Context *context) const;
-    QVariant resolveSetting(
-            const QString & key, const Config::Evaluator::Context *context) const;
+    QVariant resolveCached(const QString & key,
+                           const QStringList & program,
+                           const Config::Evaluator::Context *context) const;
+    QVariant resolveSetting(const QString & key,
+                            const Config::Evaluator::Context *context) const;
     bool hasExpression(const QString & key) const;
     static QString defaultTypedefSuper();
     static QString defaultReplaceSuperSites();
-    static bool readConfig(Config::Parser *parser, const FormatConfig & config,
-                           QString *error);
-    static bool load(const QString & path, const FormatConfig & config,
-                     FormatFileConfig *fileConfig, QString *error);
-    static bool readParser(const QString &path, const FormatConfig &config,
-                           Config::Parser *parser, QString *error);
+    static bool readConfig(
+            Config::Parser *parser,
+            const FormatConfig & config,
+            QString *error);
+    static bool load(
+            const QString & path,
+            const FormatConfig & config,
+            FormatFileConfig *fileConfig,
+            QString *error);
+    static bool readParser(
+            const QString &path,
+            const FormatConfig &config,
+            Config::Parser *parser,
+            QString *error);
     static bool fromParser(
             const Config::Parser &parser,
-            FormatFileConfig *fileConfig, QString *error);
+            FormatFileConfig *fileConfig,
+            QString *error);
     static QList<QPair<QString, QString > > expandPrevious(
             const QList<QPair<QString, QString > > & entries);
 
@@ -115,6 +125,8 @@ public:
     QStringList wrapArgsOverCondition;
     int wrapConditionsOver;
     QStringList wrapConditionsOverCondition;
+    int wrapTernaryOver;
+    QStringList wrapTernaryOverCondition;
     QString wrapConditionsPer;
     int joinArgs;
     QStringList joinArgsCondition;

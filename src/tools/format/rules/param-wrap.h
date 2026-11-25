@@ -16,8 +16,7 @@ class FormatParamWrapRule : public FormatNamedRule
     typedef FormatNamedRule super;
 public:
     inline FormatParamWrapRule()
-        : super("param-wrap",
-                "Wraps the parameters of a declaration line past the column limit.")
+        : super("param-wrap", "Wraps the parameters of a declaration line past the column limit.")
     {
     }
 

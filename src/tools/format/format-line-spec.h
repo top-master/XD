@@ -15,16 +15,25 @@ class FormatLineSpec
 {
 public:
     static bool resolve(
-            const QString & spec, const QList<QByteArray > & lines, int anchor,
-            int *first, int *last, QString *error);
+            const QString & spec,
+            const QList<QByteArray > & lines,
+            int anchor,
+            int *first,
+            int *last,
+            QString *error);
     static bool resolveAll(
-            const QStringList & specs, const QList<QByteArray > & lines,
-            QVector<QPair<int, int > > *ranges, QString *error);
+            const QStringList & specs,
+            const QList<QByteArray > & lines,
+            QVector<QPair<int, int > > *ranges,
+            QString *error);
 
 private:
     static bool parseLine(
-            const QString & token, const QList<QByteArray > & lines, int from,
-            int *line, QString *error);
+            const QString & token,
+            const QList<QByteArray > & lines,
+            int from,
+            int *line,
+            QString *error);
     static int splitAt(const QString & spec);
     static bool isFunctionLine(const QByteArray & line);
 };

@@ -23,7 +23,8 @@
 void FormatPrivateAccessRule::run(FormatDocument *document) const
 {
     for (int i = 0; i + 1 < document->symbols().size(); ++i) {
-        if (document->token(i) != IDENTIFIER || document->token(i + 1) != LPAREN
+        if (document->token(i) != IDENTIFIER
+            || document->token(i + 1) != LPAREN
             || document->isDirectiveLine(document->symbolLine(i))
         ) {
             continue;

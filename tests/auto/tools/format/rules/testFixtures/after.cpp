@@ -1282,8 +1282,7 @@ void report()
         "notice",
         String(Text("A fictional description of the %1 and %2 fields"))
             .replace(mode == "short-format" ? Text("compact-value")
-                                            : Text("extended-value")
-            )
+                                            : Text("extended-value"))
             .replace(fieldName())
     );
 }
@@ -1867,3 +1866,203 @@ public:
     inline bool isReady() const Q_DECL_OVERRIDE { return true; }
     inline void reset() override { }
 };
+// CASE	operator-wrap-chain-after-broken-call.cpp
+void resolve()
+{
+    {
+        const bool ready = lookup(table, table->rows().at(index).name)
+            && started
+            && finished
+            && (table->stage(step) == ENTRY_STAGE
+                || table->stage(step) == EXIT_STAGE)
+            && step + 1 == total
+            && ! table->commentsBetween(
+                begin,
+                table->symbols().at(total).from
+            );
+    }
+}
+// CASE	operator-wrap-operand-comparison.cpp
+void inspect()
+{
+    {
+        const bool kept = pointer >= 0
+            && table->row(pointer) != UNUSED
+            && table->symbolAt(table->symbolLine(pointer))
+                == previousPointerValue;
+        const bool moved = pointer >= 0
+            && table->row(pointer) != UNUSED
+            && registry->symbolPositionOf(
+                registry->symbolLine(previousPointerValue)
+            ) != total;
+    }
+}
+// CASE	declaration-block-comments.cpp
+MyType<X /* The x. */, Y /* The y. */, Z /* The z. */ >
+myFunc(
+        int arg1 /* The arg1 */,
+        MyType<X /* a. */, Y /* b. */, Z /* c. */ > arg2 /* The arg2 */)
+    Q_THROWS(?) /* A good function may sometimes throw. */
+{
+}
+// CASE	declaration-mixed-comments.cpp
+MyType<X /* The x. */, Y /* The y. */, Z /* The z. */ >
+myFunc(
+        int arg1 /* The arg1 */,
+        MyType<X // a.
+            , Y // b.
+            , Z // c.
+            > arg2 // The arg2.
+    ) Q_THROWS(?) /* A good function may sometimes throw. */
+{
+}
+// CASE	declaration-comment-boundaries.cpp
+LongResultTypeName
+veryLongFunctionNameWithSeveralArguments(
+        int first /* first */,
+        /* next */ MyType<A,
+            B,
+            C > second /* second */,
+        int third // third
+    );
+// CASE	declaration-template-breaks.cpp
+void f(
+        MyType<FirstVeryLongTemplateArgumentName, SecondVeryLongTemplateArgumentName, ThirdVeryLongTemplateArgumentName > value);
+void g(MyType<FirstArgument,
+    SecondArgument,
+    ThirdArgument > value);
+// CASE	declaration-comment-after-parameter.cpp
+VeryLongReturnTypeName
+theLongFunctionNameWithLongNames(
+        int /* item */ firstParameter // After first.
+        , MyType<First, Second > /* type */ second,
+        int third /* end */);
+// CASE	declaration-comment-after-comma.cpp
+ExtremelyLongReturnType
+anotherLongFunctionName(
+        int firstArgument, // First argument.
+        MyType<First, Second > /* type */ nextArgument,
+        int lastArgument);
+// CASE	call-block-comments.cpp
+void invoke()
+{
+    MyType<X /* The x. */, Y /* The y. */, Z /* The z. */ > result = myFunc(
+        arg1 /* The arg1 */,
+        MyType<X /* a. */, Y /* b. */, Z /* c. */ >(arg2 /* The arg2 */)
+    );
+}
+// CASE	call-mixed-comments.cpp
+void invoke()
+{
+    MyType<X /* The x. */, Y /* The y. */, Z /* The z. */ > result = myFunc(
+        arg1 /* The arg1 */,
+        MyType<X // a.
+            , Y // b.
+            , Z // c.
+            >(arg2 // The arg2.
+            )
+    );
+}
+// CASE	call-comment-boundaries.cpp
+void invoke()
+{
+    veryLongFunctionNameForArguments(
+        firstArgument, // First argument.
+        MyType<A, B, C >(secondArgument /* Second argument. */),
+        /* Next. */ thirdArgument // Third argument.
+    );
+}
+// CASE	declaration-multiline-commented.cpp
+LongReturnType
+myFunction(
+        const SomeRidiculouslyLongTypeNameWithMoreThanEightyCharactersAndExtraQualifiers & /* Value. */ value,
+        int other /* Other. */);
+// CASE	ternary-call-closing.cpp
+void f()
+{
+    const QVariant converted = this->convert(number ? QVariant(numeric)
+                                                    : QVariant(literal));
+    const QVariant other = this->convert(
+        veryLongPredicateWhichCannotShareALineWithTheQuestionBranch
+            ? QVariant(numeric) : QVariant(literal)
+    );
+    const QVariant result = convert(flag ? good
+                                         : vvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvv);
+}
+void g()
+{
+    const QVariant result = convert(flag ? good
+                                         : vvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvv
+    );
+}
+// CASE	member-chain-long-literal.cpp
+void f()
+{
+    for (int i = 0; i < known.size(); ++i) {
+        const QString message = QString(QLL("failed to find the %1 %2 (maybe %3 was meant)."))
+            .arg(functions.contains(known.at(i)) ? QLL("function") : QLL("name"))
+            .arg(spelling, spelled);
+    }
+}
+// CASE	nested-ternary-conditions.cpp
+void f()
+{
+    this->m_context->m_lastCE = rest == QLL(")")
+        ? QString(QLL("a ( is missing"))
+        : lead.isLetterOrNumber()
+            || lead == QLatin1Char('_')
+            || lead == QLatin1Char('"')
+            || lead == QLatin1Char('(')
+            || lead == QLatin1Char('!')
+            ? QString(QLL("a sign is missing before %1")).arg(rest)
+            : QString(QLL("unknown sign %1")).arg(rest);
+}
+// CASE	nested-ternary-condition-limit.cpp
+void f()
+{
+    answer = firstCondition ? firstValue
+        : a
+        || b
+        || c
+        || d
+            ? secondValue
+            : thirdValue;
+}
+// CASE	nested-ternary-condition-unlimited.cpp
+void f()
+{
+    answer = firstCondition ? firstValue
+        : a || b || c || d ? secondValue : thirdValue;
+}
+// CASE	nested-ternary-condition-inline-branch.cpp
+void f()
+{
+    answer = predicateLongNameXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX
+        ? yes : a
+            || b
+            || c
+            ? ok
+            : bad;
+}
+// CASE	nested-ternary-condition-grouped.cpp
+void f()
+{
+    this->m_context->m_lastCE = rest == QLL(")")
+        ? QString(QLL("a ( is missing"))
+        : lead.isLetterOrNumber()
+            || lead == QLatin1Char('_') || lead == QLatin1Char('"')
+            || lead == QLatin1Char('(') || lead == QLatin1Char('!')
+            ? QString(QLL("a sign is missing before %1")).arg(rest)
+            : QString(QLL("unknown sign %1")).arg(rest);
+}
+// CASE	nested-ternary-condition-per-line.cpp
+void f()
+{
+    this->m_context->m_lastCE = rest == QLL(")")
+        ? QString(QLL("a ( is missing"))
+        : lead.isLetterOrNumber()
+            || lead == QLatin1Char('_') || lead == QLatin1Char('"')
+            || lead == QLatin1Char('(') || lead == QLatin1Char('!')
+            ? QString(QLL("a sign is missing before %1")).arg(rest)
+            : QString(QLL("unknown sign %1")).arg(rest);
+}

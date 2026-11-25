@@ -11,8 +11,7 @@ class FormatMocRunRule : public FormatNamedRule
     typedef FormatNamedRule super;
 public:
     inline FormatMocRunRule()
-        : super("moc-run-macro",
-                "Spells moc's macro Q_MOC_RUN, never QT_MOC_RUN.")
+        : super("moc-run-macro", "Spells moc's macro Q_MOC_RUN, never QT_MOC_RUN.")
     {
     }
 

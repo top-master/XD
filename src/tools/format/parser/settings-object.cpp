@@ -67,8 +67,7 @@ public:
     { return m_place->hasCompiler(compiler, value); }
 
     inline bool spaceRemaining(qreal *percent) const Q_DECL_OVERRIDE_IL
-    {
-        *percent = 100 - m_percent;
+    { *percent = 100 - m_percent;
         return true;
     }
 

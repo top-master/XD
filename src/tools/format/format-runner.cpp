@@ -43,7 +43,8 @@
 /*!
     Builds the runner that formats with @a formatter as @a options say.
 */
-FormatRunner::FormatRunner(const Formatter *formatter, const FormatOptions & options)
+FormatRunner::FormatRunner(const Formatter *formatter,
+                           const FormatOptions & options)
     : m_formatter(formatter), m_options(options), m_listener(0), m_prepared(false)
 {
 }
@@ -93,11 +94,11 @@ QString FormatRunner::defaultKind()
     or returns null for a kind this build lacks.
 */
 FormatRunner *FormatRunner::create(
-        const QString & kind, const Formatter *formatter,
+        const QString & kind,
+        const Formatter *formatter,
         const FormatOptions & options)
 {
-    const QString name = kind.isEmpty()
-        ? FormatRunner::defaultKind() : kind;
+    const QString name = kind.isEmpty() ? FormatRunner::defaultKind() : kind;
     if (name == QLL("serial")) {
         return new FormatRunner(formatter, options);
     }
@@ -149,9 +150,7 @@ static bool snapshotFile(const QString &original, const QString &copy)
 #elif defined(Q_OS_WIN) && !defined(Q_OS_WINRT)
         const QString sourceName = QDir::toNativeSeparators(original);
         const QString copyName = QDir::toNativeSeparators(copy);
-        if (CreateHardLinkW(reinterpret_cast<LPCWSTR >(copyName.utf16()),
-                            reinterpret_cast<LPCWSTR >(sourceName.utf16()), Q_NULLPTR)
-        ) {
+        if (CreateHardLinkW(reinterpret_cast<LPCWSTR >(copyName.utf16()), reinterpret_cast<LPCWSTR >(sourceName.utf16()), Q_NULLPTR)) {
             return true;
         }
 #endif
@@ -190,8 +189,7 @@ bool FormatRunner::prepareRun(const QStringList &files, QString *error)
         return true;
     }
     this->m_snapshotDirectory.reset(new QTemporaryDir);
-    if ( ! this->m_snapshotDirectory->isValid()) {
-        *error = QString(QLL("cannot create a temporary directory for formatting snapshots"));
+    if ( ! this->m_snapshotDirectory->isValid()) { *error = QString(QLL("cannot create a temporary directory for formatting snapshots"));
         return false;
     }
     for (int i = 0; i < config.scheduledFiles.size(); ++i) {
@@ -199,15 +197,15 @@ bool FormatRunner::prepareRun(const QStringList &files, QString *error)
                 config.scheduledFiles.at(i)
             ).absoluteFilePath()
         );
-        const QString copy = this->m_snapshotDirectory->path() + QLatin1Char('/')
+        const QString copy = this->m_snapshotDirectory->path()
+            + QLatin1Char('/')
             + QString::number(i);
         QFile input(original);
         if ( ! input.open(QIODevice::ReadOnly)) {
             continue;
         }
         input.close();
-        if ( ! snapshotFile(original, copy)) {
-            *error = QString(QLL("cannot snapshot %1")).arg(original);
+        if ( ! snapshotFile(original, copy)) { *error = QString(QLL("cannot snapshot %1")).arg(original);
             return false;
         }
         config.snapshots.insert(original, copy);
@@ -215,8 +213,7 @@ bool FormatRunner::prepareRun(const QStringList &files, QString *error)
     config.snapshotManifest = this->m_snapshotDirectory->path()
         + QLL("/manifest");
     QFile manifest(config.snapshotManifest);
-    if ( ! manifest.open(QIODevice::WriteOnly)) {
-        *error = QString(QLL("cannot write the formatting snapshot manifest"));
+    if ( ! manifest.open(QIODevice::WriteOnly)) { *error = QString(QLL("cannot write the formatting snapshot manifest"));
         return false;
     }
     QDataStream output(&manifest);
@@ -224,16 +221,16 @@ bool FormatRunner::prepareRun(const QStringList &files, QString *error)
         << config.snapshots
         << config.fileLineSpecs
         << config.lineSpecs;
-    if (output.status() != QDataStream::Ok) {
-        *error = QString(QLL("cannot write the formatting snapshot manifest"));
+    if (output.status()
+            != QDataStream::Ok
+    ) { *error = QString(QLL("cannot write the formatting snapshot manifest"));
         return false;
     }
     return true;
 }
 
 QList<FormatFileResult > FormatRunner::runFailure(
-        const QStringList &files,
-        const QString &error) const
+        const QStringList &files, const QString &error) const
 {
     QList<FormatFileResult > results;
     for (int i = 0; i < files.size(); ++i) {

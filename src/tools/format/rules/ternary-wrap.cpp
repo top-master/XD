@@ -6,6 +6,7 @@
 #include "../format-document.h"
 #include "../parser/code-helpers.h"
 #include "../parser/condition-layout.h"
+#include "../parser/expression-layout.h"
 #include "../parser/layout-helpers.h"
 #include "../parser/scope-conditions.h"
 
@@ -43,7 +44,8 @@ void FormatTernaryWrapRule::run(FormatDocument *document) const
         const int first = document->firstSymbolOfLine(line);
         const int last = document->lastSymbolOfLine(line);
         // Align a conditional whose branch already spans multiple lines.
-        if (first >= 0 && (first == 0
+        if (first >= 0
+            && (first == 0
                 || document->token(first - 1) == SEMIC
                 || document->token(first - 1) == LBRACE
                 || document->token(first - 1) == RBRACE
@@ -60,21 +62,30 @@ void FormatTernaryWrapRule::run(FormatDocument *document) const
             const int end = statementEnd(document, first);
             int question = -1;
             int colon = -1;
-            if (end > last && findTernary(
-                    document, first, end - 1, &question, &colon
-                ) && document->symbolLine(question) < document->symbolLine(colon)
+            if (end > last
+                && findTernary(
+                    document,
+                    first,
+                    end - 1,
+                    &question,
+                    &colon)
+                && document->symbolLine(question)
+                    < document->symbolLine(colon)
+                // Both signs lead lines of their own; a `?` that trails its
+                // branch keeps the break that the expression's layout chose.
+                && document->firstSymbolOfLine(document->symbolLine(question))
+                    == question
                 && ! document->hasCommentBetween(
-                    document->symbols().at(first).from, document->symbolEnd(end)
-                ) && ! document->spansDirective(
-                    document->symbols().at(first).from, document->symbolEnd(end)
-                )
+                    document->symbols().at(first).from,
+                    document->symbolEnd(end))
+                && ! document->spansDirective(
+                    document->symbols().at(first).from,
+                    document->symbolEnd(end))
             ) {
                 const QByteArray pad = document->indentOf(line) + "    ";
                 const int endOfLine = document->lineEnd(line);
-                const QByteArray newline = document->text().mid(
-                    endOfLine - 1,
-                    1
-                ) == "\r"
+                const QByteArray newline =
+                    document->text().mid(endOfLine - 1, 1) == "\r"
                     ? "\r\n" : "\n";
                 const QByteArray gap = newline + pad;
                 const int beforeQuestion = document->symbolEnd(question - 1);
@@ -91,8 +102,12 @@ void FormatTernaryWrapRule::run(FormatDocument *document) const
                     ) != gap
                 ) {
                     document->replace(
-                        beforeQuestion, questionFrom - beforeQuestion, gap,
-                        beforeColon, colonFrom - beforeColon, gap
+                        beforeQuestion,
+                        questionFrom - beforeQuestion,
+                        gap,
+                        beforeColon,
+                        colonFrom - beforeColon,
+                        gap
                     );
                 }
                 continue;
@@ -102,15 +117,12 @@ void FormatTernaryWrapRule::run(FormatDocument *document) const
             || last <= first
             || document->token(last) != SEMIC
             || document->isDirectiveLine(line)
-            || textWidth(document->lineText(line)) <= wrapMaxAt(
-                document,
-                document->lineStart(line)
-            )
+            || textWidth(document->lineText(line))
+                <= wrapMaxAt(document, document->lineStart(line))
         ) {
             continue;
         }
-        const Token before = first > 0
-            ? document->token(first - 1) : SEMIC;
+        const Token before = first > 0 ? document->token(first - 1) : SEMIC;
         if (before != SEMIC
             && before != LBRACE
             && before != RBRACE
@@ -139,7 +151,9 @@ void FormatTernaryWrapRule::run(FormatDocument *document) const
         // Skip nested expressions when looking for another statement.
         for (int k = first; k < last && isPlain; ++k) {
             const Token token = document->token(k);
-            if ((token == LPAREN || token == LBRACK || token == LBRACE)
+            if ((token == LPAREN
+                    || token == LBRACK
+                    || token == LBRACE)
                 && document->match(k) > k
             ) {
                 k = document->match(k);
@@ -179,7 +193,36 @@ void FormatTernaryWrapRule::run(FormatDocument *document) const
             text += (l > 0 ? "\n" : "") + head.at(l);
         }
         for (int l = 1; l < lines.size(); ++l) {
-            text += "\n" + lines.at(l);
+            int nestedQuestion = -1;
+            int nestedColon = -1;
+            if (l == lines.size() - 1
+                && findTernary(
+                    document,
+                    colon + 1,
+                    last - 1,
+                    &nestedQuestion,
+                    &nestedColon
+                )
+            ) {
+                const QByteArray pad = continuationPad(indent);
+                QByteArray prefix = pad;
+                if (lines.at(l).trimmed().startsWith('?')) {
+                    prefix += sourceText(document, question, colon - 1) + " ";
+                }
+                prefix += ": ";
+                FormatExpressionLayout nested(
+                    document, &conditions, textWidth(pad)
+                );
+                text += "\n" + prefix
+                    + nested.layout(
+                        colon + 1,
+                        last - 1,
+                        textWidth(prefix),
+                        1
+                    );
+            } else {
+                text += "\n" + lines.at(l);
+            }
         }
         const int from = document->symbols().at(first).from;
         document->replace(from, document->symbols().at(last).from - from, text);

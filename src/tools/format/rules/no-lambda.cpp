@@ -36,12 +36,10 @@ void FormatNoLambdaRule::run(FormatDocument *document) const
             continue;
         }
         if ( ! bodies.isEmpty()) {
-            document->report(document->symbols().at(i).from, "no-lambda",
-                             QString(QLL("move the outer lambda into a named function: "
+            document->report(document->symbols().at(i).from, "no-lambda", QString(QLL("move the outer lambda into a named function: "
                                          "a lambda never encloses another one")));
         } else if (inXd) {
-            document->report(document->symbols().at(i).from, "no-lambda",
-                             QString(QLL("replace the lambda with a named member or "
+            document->report(document->symbols().at(i).from, "no-lambda", QString(QLL("replace the lambda with a named member or "
                                          "static function")));
         }
         bodies.append(body);
