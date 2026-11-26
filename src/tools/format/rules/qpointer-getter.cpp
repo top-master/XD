@@ -26,8 +26,7 @@ void FormatQPointerGetterRule::run(FormatDocument *document) const
 {
     QSet<QByteArray > guarded;
     for (int i = 0; i + 1 < document->symbols().size(); ++i) {
-        if (document->token(i) != IDENTIFIER
-            || document->lexem(i) != "QPointer"
+        if (document->token(i) != IDENTIFIER || document->lexem(i) != "QPointer"
             || document->token(i + 1) != LANGLE
         ) {
             continue;
@@ -66,11 +65,8 @@ void FormatQPointerGetterRule::run(FormatDocument *document) const
             && document->token(k + 3) == LPAREN
             && document->token(k + 4) == RPAREN
         ) {
-            document->report(
-                document->symbols().at(i).from,
-                "qpointer-getter",
-                QString(QLL("return the QPointer itself, not its data()"))
-            );
+            document->report(document->symbols().at(i).from, "qpointer-getter",
+                             QString(QLL("return the QPointer itself, not its data()")));
         }
     }
 }

@@ -24,15 +24,17 @@ struct FormatConfigDirective
 QList<FormatConfigDirective > configDirectives(const FormatDocument *document);
 
 QList<FormatCommentLine > commentLines(
-        const FormatDocument *document, int index);
+        const FormatDocument *document,
+        int index);
 QList<FormatCommentLine > groupLines(
-        const FormatDocument *document, const QList<int > & group);
+        const FormatDocument *document,
+        const QList<int > & group);
 bool isSingleWord(const QList<FormatCommentLine > & lines);
 bool looksLikeCode(const QList<FormatCommentLine > & lines);
 QVector<bool > fencedLines(const QList<FormatCommentLine > & lines);
-QString mapProse(const QString & text,
-                 QString (*map)(const QString &, const void *),
-                 const void *context);
+QString mapProse(
+        const QString & text, QString (*map)(const QString &, const void *),
+        const void *context);
 QList<QList<int > > commentGroups(
         const FormatDocument *document,
         bool splitProtected = true);

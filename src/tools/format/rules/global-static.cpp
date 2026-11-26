@@ -37,8 +37,7 @@ void FormatGlobalStaticRule::run(FormatDocument *document) const
         ) {
             continue;
         }
-        const bool inFunction = document->scopeOf(i)
-            == FormatDocument::FunctionScope
+        const bool inFunction = document->scopeOf(i) == FormatDocument::FunctionScope
             || document->scopeOf(i) == FormatDocument::BlockScope;
         int k = i + 1;
         while (document->token(k) == CONST
@@ -52,7 +51,8 @@ void FormatGlobalStaticRule::run(FormatDocument *document) const
             || ! QChar::isUpper(document->lexem(k).at(1))
         ) {
             if (inFunction && this->isVariable(document, i)) {
-                const QString message = QString(QLL("move the static mapping out of the function, to file scope "
+                const QString message = QString(QLL(
+                    "move the static mapping out of the function, to file scope "
                     "(an unnamed namespace); a short list to loop task(s) over "
                     "each entry can stay"));
                 const int offset = document->symbols().at(i).from;
@@ -76,7 +76,8 @@ void FormatGlobalStaticRule::run(FormatDocument *document) const
             for (; k < document->symbols().size(); ++k) {
                 const Token token = document->token(k);
                 depth += token == LANGLE
-                    ? 1 : (token == RANGLE ? -1 : (token == GTGT ? -2 : 0));
+                    ? 1
+                    : (token == RANGLE ? -1 : (token == GTGT ? -2 : 0));
                 if (depth <= 0 || token == SEMIC) {
                     break;
                 }
@@ -92,11 +93,8 @@ void FormatGlobalStaticRule::run(FormatDocument *document) const
             || (inFunction
                 && after == LPAREN)
         ) {
-            document->report(
-                document->symbols().at(i).from,
-                "global-static",
-                QString(QLL("hold the static object in a Q_GLOBAL_STATIC"))
-            );
+            document->report(document->symbols().at(i).from, "global-static",
+                             QString(QLL("hold the static object in a Q_GLOBAL_STATIC")));
         }
     }
 }
@@ -107,7 +105,8 @@ void FormatGlobalStaticRule::run(FormatDocument *document) const
     `{` or `(` (which may start the variable's initializer).
 */
 bool FormatGlobalStaticRule::isVariable(
-        const FormatDocument *document, int index) const
+        const FormatDocument *document,
+        int index) const
 {
     int depth = 0;
     for (int k = index + 1; k + 1 < document->symbols().size(); ++k) {
@@ -119,21 +118,13 @@ bool FormatGlobalStaticRule::isVariable(
         } else if (depth <= 0 && token == IDENTIFIER) {
             const Token next = document->token(k + 1);
             if (k > index + 1
-                && (next == SEMIC
-                    || next == EQ
-                    || next == LBRACK
-                    || next == LBRACE
-                    || next == LPAREN)
+                && (next == SEMIC || next == EQ || next == LBRACK
+                    || next == LBRACE || next == LPAREN)
             ) {
                 return true;
             }
-        } else if (depth <= 0
-            && token != SCOPE
-            && token != STAR
-            && token != AND
-            && token != CONST
-            && token != VOLATILE
-            && ! isBuiltinType(token)
+        } else if (depth <= 0 && token != SCOPE && token != STAR && token != AND
+            && token != CONST && token != VOLATILE && ! isBuiltinType(token)
         ) {
             return false;
         }

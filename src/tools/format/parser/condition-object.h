@@ -31,7 +31,8 @@ public slots:
     QVariant is(const QString & kind);
 
 private:
-    typedef bool (FormatConditionContext::*Question)(const QString & name, bool *value) const;
+    typedef bool (FormatConditionContext::*Question)(
+            const QString & name, bool *value) const;
 
     QVariant ask(Question question, const QString & name) const;
 };

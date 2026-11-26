@@ -22,6 +22,8 @@
 */
 void FormatInitListRule::run(FormatDocument *document) const
 {
+    CodeEditor editor = document->edit(0, document->text().size());
+    document = editor.document();
     for (int i = 1; i < document->symbols().size(); ++i) {
         if (document->token(i) != COLON
             || document->token(i - 1) != RPAREN
@@ -61,9 +63,7 @@ void FormatInitListRule::run(FormatDocument *document) const
                 continue;
             }
             const int line = document->symbolLine(k);
-            if ((token != COLON
-                    && token != COMMA)
-                || document->lastSymbolOfLine(line) != k
+            if ((token != COLON && token != COMMA) || document->lastSymbolOfLine(line) != k
                 || document->symbolEndLine(k - 1) != line
                 || document->hasCommentBetween(
                     document->symbolEnd(k),
@@ -80,12 +80,8 @@ void FormatInitListRule::run(FormatDocument *document) const
                 continue;
             }
             document->replace(
-                from,
-                document->symbolEnd(k) - from,
-                QByteArray(),
-                document->symbols().at(k + 1).from,
-                0,
-                document->lexem(k) + ' '
+                from, document->symbolEnd(k) - from, QByteArray(),
+                document->symbols().at(k + 1).from, 0, document->lexem(k) + ' '
             );
         }
 

@@ -30,8 +30,7 @@ static bool isTernaryColon(const FormatDocument *document, int index)
 {
     for (int k = index - 1; k >= 0; --k) {
         const Token token = document->token(k);
-        if ((token == RPAREN
-                || token == RBRACK)
+        if ((token == RPAREN || token == RBRACK)
             && document->match(k) >= 0
         ) {
             k = document->match(k);
@@ -77,7 +76,8 @@ static bool layoutChainOperand(
     const bool conditional = document->token(previous) == QUESTION;
     const QByteArray pad = startsLine
         ? document->indentOf(line)
-        : continuationPad(textWidth(document->indentOf(line)), conditional ? 1 : conditions->operatorPadding(previous));
+        : continuationPad(textWidth(document->indentOf(line)),
+                          conditional ? 1 : conditions->operatorPadding(previous));
     const QByteArray newline = document->text().mid(
         document->lineEnd(line) - 1,
         1
@@ -88,7 +88,8 @@ static bool layoutChainOperand(
     if (first < open) {
         const bool keepInline = ! startsLine && ! conditional;
         const int layoutIndent = keepInline
-            ? textWidth(document->indentOf(line)) : textWidth(pad);
+            ? textWidth(document->indentOf(line))
+            : textWidth(pad);
         FormatExpressionLayout layout(document, conditions, layoutIndent);
         const int lineStart = document->lineStart(line);
         const int operatorColumn = keepInline
@@ -99,8 +100,9 @@ static bool layoutChainOperand(
             + 1;
         const QByteArray flat = layout.oneLine(first, close);
         QByteArray operand = flat;
-        const int limit = conditional ? wrapMaxAt(document, from)
-                                      : wrapColumn(document, from);
+        const int limit = conditional
+            ? wrapMaxAt(document, from)
+            : wrapColumn(document, from);
         if (column + textWidth(flat) > limit) {
             const int extraPad = keepInline
                 ? conditions->operatorPadding(previous) : 0;
@@ -149,22 +151,14 @@ static bool joinsClosingLine(FormatDocument *document, int index)
         return false;
     }
     const Token next = document->token(index + 1);
-    const bool isPostfix = (token == INCR || token == DECR) && (next == SEMIC
-        || next == RPAREN
-        || next == RBRACK
-        || next == COMMA);
-    const bool isTight = isPostfix
-        || token == DOT
-        || token == ARROW
-        || token == DOTSTAR
-        || token == ARROW_STAR;
+    const bool isPostfix = (token == INCR || token == DECR)
+        && (next == SEMIC || next == RPAREN || next == RBRACK || next == COMMA);
+    const bool isTight = isPostfix || token == DOT || token == ARROW
+        || token == DOTSTAR || token == ARROW_STAR;
     // Joins expression operators, leaving labels and prefix increments alone.
-    if ( ! isTight
-        && ! isAssignmentOperator(token)
+    if ( ! isTight && ! isAssignmentOperator(token)
         && ( ! isBinaryOperator(token)
-            || (token == COLON
-                && ! isTernaryColon(document, index))
-        )
+            || (token == COLON && ! isTernaryColon(document, index)))
     ) {
         return false;
     }
@@ -190,8 +184,7 @@ static bool joinsClosingLine(FormatDocument *document, int index)
     const Token closer = document->token(before);
     // Joins initializer braces, leaving block braces on their own lines.
     if (closer == RBRACE
-        && (open < 0
-            || document->braceScope(open) != FormatDocument::InitScope)
+        && (open < 0 || document->braceScope(open) != FormatDocument::InitScope)
     ) {
         return false;
     }
@@ -216,10 +209,11 @@ static bool joinsClosingLine(FormatDocument *document, int index)
     const QByteArray joined = document->text().mid(
         previousStart,
         previousEnd - previousStart
-    ) + space
-        + text;
+    ) + space + text;
     // Keeps the break when the joined line would exceed `wrapMax`.
-    if (textWidth(joined) > wrapMaxAt(document, document->lineStart(line))) {
+    if (textWidth(joined)
+            > wrapMaxAt(document, document->lineStart(line))
+    ) {
         return false;
     }
     const int from = document->lineStart(line);
@@ -229,9 +223,7 @@ static bool joinsClosingLine(FormatDocument *document, int index)
         previousEnd,
         from - previousEnd,
         space + text + (hasNewline ? "\n" : ""),
-        from,
-        lineEnd - from + (hasNewline ? 1 : 0),
-        QByteArray()
+        from, lineEnd - from + (hasNewline ? 1 : 0), QByteArray()
     );
 }
 
@@ -243,14 +235,14 @@ static bool joinsClosingLine(FormatDocument *document, int index)
 */
 void FormatOperatorFirstRule::run(FormatDocument *document) const
 {
+    CodeEditor editor = document->edit(0, document->text().size());
+    document = editor.document();
     FormatScopeConditions conditions(document);
     const bool members = this->forMembers();
     for (int i = 1; i + 1 < document->symbols().size(); ++i) {
         const Token token = document->token(i);
-        const bool memberAccess = token == DOT
-            || token == ARROW
-            || token == DOTSTAR
-            || token == ARROW_STAR;
+        const bool memberAccess = token == DOT || token == ARROW
+            || token == DOTSTAR || token == ARROW_STAR;
         if (memberAccess != members) {
             continue;
         }
@@ -273,10 +265,8 @@ void FormatOperatorFirstRule::run(FormatDocument *document) const
             continue;
         }
         const int line = document->symbolLine(i);
-        if (document->lastSymbolOfLine(line) != i
-            || document->isDirectiveLine(line)
-            || document->symbolEndLine(i - 1) != line
-            || document->token(i - 1) == OPERATOR
+        if (document->lastSymbolOfLine(line) != i || document->isDirectiveLine(line)
+            || document->symbolEndLine(i - 1) != line || document->token(i - 1) == OPERATOR
             || document->hasCommentBetween(
                 document->symbolEnd(i),
                 document->symbols().at(i + 1).from
@@ -292,12 +282,8 @@ void FormatOperatorFirstRule::run(FormatDocument *document) const
             continue;
         }
         document->replace(
-            from,
-            document->symbolEnd(i) - from,
-            QByteArray(),
-            document->symbols().at(i + 1).from,
-            0,
-            document->lexem(i) + ' '
+            from, document->symbolEnd(i) - from, QByteArray(),
+            document->symbols().at(i + 1).from, 0, document->lexem(i) + ' '
         );
     }
 }

@@ -11,9 +11,8 @@ class FormatThreadRunner : public FormatRunner
 {
     typedef FormatRunner super;
 public:
-    FormatThreadRunner(
-            const Formatter *formatter,
-            const FormatOptions & options);
+    FormatThreadRunner(const Formatter *formatter,
+                       const FormatOptions & options);
 
     QList<FormatFileResult > run(const QStringList & files) Q_DECL_OVERRIDE;
 };

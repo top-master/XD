@@ -18,7 +18,8 @@
     Matches a QDoc or Doxygen topic command, a command
     that names its symbol itself.
 */
-Q_GLOBAL_STATIC_WITH_ARGS(QRegularExpression, docTopicPattern, (QString(QLL("[\\\\@](class|fn|enum|typedef|variable|macro|namespace|page|module|headerfile"
+Q_GLOBAL_STATIC_WITH_ARGS(QRegularExpression, docTopicPattern, (QString(QLL(
+        "[\\\\@](class|fn|enum|typedef|variable|macro|namespace|page|module|headerfile"
         "|property|file|struct|union|def)\\b"))))
 
 /*!
@@ -66,11 +67,18 @@ QString FormatDocPlacementRule::headerSource(const QString & path) const
         stem.chop(2);
     }
     const char *const sources[] = {
-        "cpp", "cc", "cxx", "c++", "c", "mm", "m"
+        "cpp",
+        "cc",
+        "cxx",
+        "c++",
+        "c",
+        "mm",
+        "m"
     };
     for (size_t i = 0; i < sizeof(sources) / sizeof(sources[0]); ++i) {
         const QString candidate = info.dir().filePath(
-            stem + QLatin1Char('.') + QString::fromLatin1(sources[i])
+            stem + QLatin1Char('.')
+                + QString::fromLatin1(sources[i])
         );
         if (QFileInfo(candidate).isFile()) {
             return candidate;
@@ -83,7 +91,8 @@ QString FormatDocPlacementRule::headerSource(const QString & path) const
     Checks where @a group sits, and reports a misplaced documentation.
 */
 void FormatDocPlacementRule::runGroup(
-        FormatDocument *document, const QList<int > & group) const
+        FormatDocument *document,
+        const QList<int > & group) const
 {
     const FormatComment & first = document->comments().at(group.first());
     const int lastIndex = group.last();
@@ -92,7 +101,8 @@ void FormatDocPlacementRule::runGroup(
         return;
     }
     const QList<FormatCommentLine > lines = groupLines(document, group);
-    const QByteArray head = lines.isEmpty() ? QByteArray() : lines.first().text;
+    const QByteArray head = lines.isEmpty()
+        ? QByteArray() : lines.first().text;
     if (head.startsWith("MARK:") || looksLikeCode(lines)) {
         return;
     }
@@ -106,15 +116,10 @@ void FormatDocPlacementRule::runGroup(
     const int nextLine = document->symbolLine(next);
     const FormatDocument::Scope scope = document->scopeOf(next);
     const bool atDeclarationScope = scope == FormatDocument::FileScope
-        || scope == FormatDocument::NamespaceScope
-        || scope == FormatDocument::ClassScope;
+        || scope == FormatDocument::NamespaceScope || scope == FormatDocument::ClassScope;
     const Token token = document->token(next);
-    const bool isMember = token != PUBLIC
-        && token != PRIVATE
-        && token != PROTECTED
-        && token != SIGNALS
-        && token != SLOTS
-        && token != RBRACE
+    const bool isMember = token != PUBLIC && token != PRIVATE && token != PROTECTED
+        && token != SIGNALS && token != SLOTS && token != RBRACE
         && ! document->isDirectiveLine(nextLine);
     const bool attached = nextLine == document->commentEndLine(lastIndex) + 1;
 
@@ -158,12 +163,9 @@ void FormatDocPlacementRule::runGroup(
     ) {
         const QString source = this->headerSource(document->path());
         if ( ! source.isEmpty()) {
-            document->report(
-                first.offset,
-                "doc-placement",
-                QString(QLL("move the documentation to the definition in %1"))
-                    .arg(QFileInfo(source).fileName())
-            );
+            document->report(first.offset, "doc-placement",
+                             QString(QLL("move the documentation to the definition in %1"))
+                             .arg(QFileInfo(source).fileName()));
             return;
         }
     }
@@ -175,7 +177,8 @@ void FormatDocPlacementRule::runGroup(
         && isMember
         && attached
     ) {
-        document->report(first.offset, "doc-placement", QString(QLL("document the symbol with a /*! or /// doc-comment, "
+        document->report(first.offset, "doc-placement",
+                         QString(QLL("document the symbol with a /*! or /// doc-comment, "
                                      "not a // block")));
         return;
     }
@@ -198,22 +201,21 @@ void FormatDocPlacementRule::runGroup(
             end,
             document->comments().at(nextComment).offset
         )
-        && document->comments().at(nextComment).offset
-            < document->symbols().at(next).from
+        && document->comments().at(nextComment).offset < document->symbols().at(next).from
     ) {
-        document->report(first.offset, "doc-placement", QString(QLL("drop or move the doc-comment: another one follows it "
+        document->report(first.offset, "doc-placement",
+                         QString(QLL("drop or move the doc-comment: another one follows it "
                                      "with no code in between")));
         return;
     }
-    if (atDeclarationScope
-        && isMember
-        && ! attached
+    if (atDeclarationScope && isMember && ! attached
         && document->isOnlyWhitespace(
             end,
             document->symbols().at(next).from
         )
     ) {
-        document->report(first.offset, "doc-placement", QString(QLL("keep the doc-comment right above its symbol, "
+        document->report(first.offset, "doc-placement",
+                         QString(QLL("keep the doc-comment right above its symbol, "
                                      "with no blank line")));
         return;
     }
@@ -224,10 +226,12 @@ void FormatDocPlacementRule::runGroup(
         && atDeclarationScope
         && boxOpenerPattern()->match(opener).hasMatch()
     ) {
-        document->report(first.offset, "doc-placement", QString(QLL("say what the value is good for, not that it stores "
+        document->report(first.offset, "doc-placement",
+                         QString(QLL("say what the value is good for, not that it stores "
                                      "something")));
     } else if (vagueOpenerPattern()->match(opener).hasMatch()) {
-        document->report(first.offset, "doc-placement", QString(QLL("open with the exact action, such as Builds, not "
+        document->report(first.offset, "doc-placement",
+                         QString(QLL("open with the exact action, such as Builds, not "
                                      "Returns or Gets")));
     }
 }

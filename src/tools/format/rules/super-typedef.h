@@ -16,7 +16,8 @@ class FormatSuperTypedefRule : public FormatNamedRule
     friend class FormatSuperContext;
 public:
     inline FormatSuperTypedefRule()
-        : super("super-typedef", "Adds a configured super typedef and uses it for base qualifiers.")
+        : super("super-typedef",
+                "Adds a configured super typedef and uses it for base qualifiers.")
     {
     }
 
@@ -24,25 +25,19 @@ public:
     bool readsOtherFiles() const Q_DECL_OVERRIDE;
 
 private:
-    QByteArray baseName(const FormatDocument *document,
-                        int brace,
+    QByteArray baseName(const FormatDocument *document, int brace,
                         bool *isStruct) const;
     bool hasSuper(const FormatDocument *document, int brace) const;
-    bool superIsBase(const FormatDocument *document,
-                     int brace,
+    bool superIsBase(const FormatDocument *document, int brace,
                      const QByteArray &base) const;
     bool isNewClass(const FormatDocument *document, int brace) const;
-    bool isNeeded(const FormatDocument *document,
-                  int brace,
+    bool isNeeded(const FormatDocument *document, int brace,
                   const QByteArray &base) const;
-    bool wantsTypedef(const FormatDocument *document,
-                      int brace,
+    bool wantsTypedef(const FormatDocument *document, int brace,
                       const QByteArray &base) const;
     bool willHaveSuper(
-            const FormatDocument *document,
-            int brace,
-            const QByteArray &base,
-            const FormatConfig &config) const;
+            const FormatDocument *document, int brace,
+            const QByteArray &base, const FormatConfig &config) const;
     void replaceSites(FormatDocument *document) const;
 };
 

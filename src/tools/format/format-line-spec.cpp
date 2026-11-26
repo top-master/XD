@@ -30,10 +30,8 @@
     returns false, with @a error naming the bad spec, when one cannot resolve.
 */
 bool FormatLineSpec::resolveAll(
-        const QStringList & specs,
-        const QList<QByteArray > & lines,
-        QVector<QPair<int, int > > *ranges,
-        QString *error)
+        const QStringList & specs, const QList<QByteArray > & lines,
+        QVector<QPair<int, int > > *ranges, QString *error)
 {
     ranges->clear();
     int anchor = 1;
@@ -62,22 +60,19 @@ bool FormatLineSpec::resolveAll(
     false, with @a error saying why, when it cannot.
 */
 bool FormatLineSpec::resolve(
-        const QString & spec,
-        const QList<QByteArray > & lines,
-        int anchor,
-        int *first,
-        int *last,
-        QString *error)
+        const QString & spec, const QList<QByteArray > & lines, int anchor,
+        int *first, int *last, QString *error)
 {
     const int count = lines.size();
 
     // Resolves `:<funcname>`.
     if (spec.startsWith(QLatin1Char(':'))) {
         const QRegularExpression pattern(spec.mid(1));
-        if ( ! pattern.isValid()) { *error = QString(QLL("bad regex in -L %1: %2")).arg(
-            spec,
-            pattern.errorString()
-        );
+        if ( ! pattern.isValid()) {
+            *error = QString(QLL("bad regex in -L %1: %2")).arg(
+                spec,
+                pattern.errorString()
+            );
             return false;
         }
         for (int i = qMax(anchor, 1); i <= count; ++i) {
@@ -86,14 +81,18 @@ bool FormatLineSpec::resolve(
                 || ! pattern.match(QString::fromUtf8(line)).hasMatch()
             ) {
                 continue;
-            } *first = i; *last = count;
+            }
+            *first = i;
+            *last = count;
             for (int j = i + 1; j <= count; ++j) {
-                if (FormatLineSpec::isFunctionLine(lines.at(j - 1))) { *last = j - 1;
+                if (FormatLineSpec::isFunctionLine(lines.at(j - 1))) {
+                    *last = j - 1;
                     break;
                 }
             }
             return true;
-        } *error = QString(QLL("-L %1: no match")).arg(spec);
+        }
+        *error = QString(QLL("-L %1: no match")).arg(spec);
         return false;
     }
 
@@ -115,8 +114,10 @@ bool FormatLineSpec::resolve(
     ) {
         return false;
     }
-    if (start < 1 || start > count
-    ) { *error = QString(QLL("-L %1: file has only %2 lines")).arg(spec).arg(count);
+    if (start < 1 || start > count) {
+        *error = QString(QLL("-L %1: file has only %2 lines"))
+            .arg(spec)
+            .arg(count);
         return false;
     }
 
@@ -127,8 +128,8 @@ bool FormatLineSpec::resolve(
     ) {
         bool ok = false;
         const int amount = endToken.mid(1).toInt(&ok);
-        if ( ! ok || amount < 0
-        ) { *error = QString(QLL("-L %1: bad line count")).arg(spec);
+        if ( ! ok || amount < 0) {
+            *error = QString(QLL("-L %1: bad line count")).arg(spec);
             return false;
         }
         if (endToken.startsWith(QLatin1Char('+'))) {
@@ -152,7 +153,9 @@ bool FormatLineSpec::resolve(
     // Orders the two ends and keeps them in the file.
     if (end < start) {
         qSwap(start, end);
-    } *first = qMax(1, start); *last = qMin(count, end);
+    }
+    *first = qMax(1, start);
+    *last = qMin(count, end);
     return true;
 }
 
@@ -162,11 +165,8 @@ bool FormatLineSpec::resolve(
     returns false, with @a error saying why, when it cannot.
 */
 bool FormatLineSpec::parseLine(
-        const QString & token,
-        const QList<QByteArray > & lines,
-        int from,
-        int *line,
-        QString *error)
+        const QString & token, const QList<QByteArray > & lines, int from,
+        int *line, QString *error)
 {
     QString pattern = token;
     int searchFrom = from;
@@ -177,28 +177,32 @@ bool FormatLineSpec::parseLine(
     if ( ! pattern.startsWith(QLatin1Char('/'))) {
         bool ok = false;
         *line = token.toInt(&ok);
-        if ( ! ok) { *error = QString(QLL("-L: bad line %1")).arg(token);
+        if ( ! ok) {
+            *error = QString(QLL("-L: bad line %1")).arg(token);
         }
         return ok;
     }
 
     // Finds the first line, from `searchFrom` on, that the regex matches.
-    if (pattern.size() < 2 || ! pattern.endsWith(QLatin1Char('/'))
-    ) { *error = QString(QLL("-L: unterminated regex %1")).arg(token);
+    if (pattern.size() < 2 || ! pattern.endsWith(QLatin1Char('/'))) {
+        *error = QString(QLL("-L: unterminated regex %1")).arg(token);
         return false;
     }
     const QRegularExpression regex(pattern.mid(1, pattern.size() - 2));
-    if ( ! regex.isValid()) { *error = QString(QLL("bad regex in -L %1: %2")).arg(
-        token,
-        regex.errorString()
-    );
+    if ( ! regex.isValid()) {
+        *error = QString(QLL("bad regex in -L %1: %2")).arg(
+            token,
+            regex.errorString()
+        );
         return false;
     }
     for (int i = qMax(searchFrom, 1); i <= lines.size(); ++i) {
-        if (regex.match(QString::fromUtf8(lines.at(i - 1))).hasMatch()) { *line = i;
+        if (regex.match(QString::fromUtf8(lines.at(i - 1))).hasMatch()) {
+            *line = i;
             return true;
         }
-    } *error = QString(QLL("-L: no match for %1")).arg(token);
+    }
+    *error = QString(QLL("-L: no match for %1")).arg(token);
     return false;
 }
 
@@ -232,8 +236,6 @@ bool FormatLineSpec::isFunctionLine(const QByteArray & line)
         return false;
     }
     const char c = line.at(0);
-    return (c >= 'a' && c <= 'z')
-        || (c >= 'A' && c <= 'Z')
-        || c == '_'
+    return (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || c == '_'
         || c == '$';
 }

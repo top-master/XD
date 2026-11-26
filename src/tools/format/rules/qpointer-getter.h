@@ -11,7 +11,8 @@ class FormatQPointerGetterRule : public FormatNamedRule
     typedef FormatNamedRule super;
 public:
     inline FormatQPointerGetterRule()
-        : super("qpointer-getter", "Reports getters that return a QPointer member's raw pointer.")
+        : super("qpointer-getter",
+                "Reports getters that return a QPointer member's raw pointer.")
     {
     }
 

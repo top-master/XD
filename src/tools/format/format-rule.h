@@ -21,9 +21,9 @@ public:
     virtual bool readsOtherFiles() const;
 
 protected:
-    QVariant cache(const FormatDocument *document, const QByteArray &key) const;
-    void setCache(FormatDocument *document,
-                  const QByteArray &key,
+    QVariant cache(const FormatDocument *document,
+                   const QByteArray &key) const;
+    void setCache(FormatDocument *document, const QByteArray &key,
                   const QVariant &value) const;
 };
 

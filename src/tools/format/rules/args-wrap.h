@@ -13,7 +13,8 @@ class FormatArgsWrapRule : public FormatNamedRule
     typedef FormatNamedRule super;
 public:
     inline FormatArgsWrapRule()
-        : super("args-wrap", "Breaks a wrapped call or brace list after its opening, keeping line groups.")
+        : super("args-wrap",
+                "Breaks a wrapped call or brace list after its opening, keeping line groups.")
     {
     }
 

@@ -25,7 +25,8 @@
     one word (a label), or holds no word at all (such as a rule of dashes).
 */
 void FormatCommentPeriodRule::runGroup(
-        FormatDocument *document, const QList<int > & group) const
+        FormatDocument *document,
+        const QList<int > & group) const
 {
     const QList<FormatCommentLine > lines = groupLines(document, group);
     if (looksLikeCode(lines) || isSingleWord(lines)) {
@@ -58,11 +59,8 @@ void FormatCommentPeriodRule::runGroup(
     }
     const int space = text.lastIndexOf(' ');
     if (end == ',' || end == ';' || text.mid(space + 1).contains("://")) {
-        document->report(
-            lines.at(last).offset,
-            "comment-period",
-            QString(QLL("end the comment with a period"))
-        );
+        document->report(lines.at(last).offset, "comment-period",
+                         QString(QLL("end the comment with a period")));
         return;
     }
     document->replace(lines.at(last).offset + text.size(), 0, ".");

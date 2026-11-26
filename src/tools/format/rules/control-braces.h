@@ -11,7 +11,8 @@ class FormatControlBracesRule : public FormatNamedRule
     typedef FormatNamedRule super;
 public:
     inline FormatControlBracesRule()
-        : super("control-braces", "Wraps the body of every control statement in braces.")
+        : super("control-braces",
+                "Wraps the body of every control statement in braces.")
     {
     }
 

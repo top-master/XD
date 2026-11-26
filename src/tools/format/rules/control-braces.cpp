@@ -29,20 +29,18 @@
 */
 void FormatControlBracesRule::run(FormatDocument *document) const
 {
+    CodeEditor editor = document->edit(0, document->text().size());
+    document = editor.document();
     for (int i = 0; i < document->symbols().size(); ++i) {
         if (document->isDirectiveLine(document->symbolLine(i))) {
             continue;
         }
-        if (document->token(i) == ELSE
-            && document->token(i - 1) == RBRACE
+        if (document->token(i) == ELSE && document->token(i - 1) == RBRACE
             && document->symbolEndLine(i - 1) < document->symbolLine(i)
             && ! document->hasCommentBetween(
-                document->symbolEnd(i - 1),
-                document->symbols().at(i).from
-            )
-            && ! document->spansDirective(
-                document->symbolEnd(i - 1),
-                document->symbols().at(i).from
+                document->symbolEnd(i - 1), document->symbols().at(i).from
+            ) && ! document->spansDirective(
+                document->symbolEnd(i - 1), document->symbols().at(i).from
             )
         ) {
             const int from = document->symbolEnd(i - 1);
@@ -73,11 +71,8 @@ void FormatControlBracesRule::run(FormatDocument *document) const
             || token == SWITCH
             || token == TRY
         ) {
-            document->report(
-                document->symbols().at(i).from,
-                "control-braces",
-                QString(QLL("wrap the nested control statement in braces"))
-            );
+            document->report(document->symbols().at(i).from, "control-braces",
+                             QString(QLL("wrap the nested control statement in braces")));
             continue;
         }
         this->brace(document, i, body - 1, body);
@@ -94,12 +89,12 @@ void FormatControlBracesRule::run(FormatDocument *document) const
     comment of its own.
 */
 bool FormatControlBracesRule::unfold(
-        FormatDocument *document, int keyword, int brace) const
+        FormatDocument *document, int keyword,
+        int brace) const
 {
     const int close = document->match(brace);
     const int line = document->symbolLine(brace);
-    if (close <= brace + 1
-        || document->symbolLine(close) != line
+    if (close <= brace + 1 || document->symbolLine(close) != line
         || document->symbolLine(keyword) != line
         || document->hasCommentBetween(
             document->symbolEnd(brace),
@@ -117,12 +112,9 @@ bool FormatControlBracesRule::unfold(
     const int from = document->symbolEnd(brace);
     const int last = document->symbolEnd(close - 1);
     return document->replace(
-        from,
-        document->symbols().at(brace + 1).from - from,
+        from, document->symbols().at(brace + 1).from - from,
         "\n" + continuationPad(indent.size()),
-        last,
-        document->symbols().at(close).from - last,
-        "\n" + indent
+        last, document->symbols().at(close).from - last, "\n" + indent
     );
 }
 
@@ -133,7 +125,8 @@ bool FormatControlBracesRule::unfold(
     `while` of a `do` loop do not).
 */
 int FormatControlBracesRule::bodyStart(
-        const FormatDocument *document, int keyword) const
+        const FormatDocument *document,
+        int keyword) const
 {
     const Token token = document->token(keyword);
     if (token == ELSE) {
@@ -173,10 +166,8 @@ int FormatControlBracesRule::bodyStart(
     whose head ends at the token @a head.
 */
 void FormatControlBracesRule::brace(
-        FormatDocument *document,
-        int keyword,
-        int head,
-        int body) const
+        FormatDocument *document, int keyword,
+        int head, int body) const
 {
     const int end = statementEnd(document, body);
     if (end < 0) {
@@ -186,11 +177,8 @@ void FormatControlBracesRule::brace(
     const int endLine = document->symbolEndLine(end);
     for (int line = headLine; line <= endLine; ++line) {
         if (document->isDirectiveLine(line)) {
-            document->report(
-                document->symbols().at(keyword).from,
-                "control-braces",
-                QString(QLL("brace the body by hand: a directive splits it"))
-            );
+            document->report(document->symbols().at(keyword).from, "control-braces",
+                             QString(QLL("brace the body by hand: a directive splits it")));
             return;
         }
     }
@@ -200,33 +188,24 @@ void FormatControlBracesRule::brace(
     const bool followedOnLine = end + 1 < document->symbols().size()
         && document->symbolLine(end + 1) == endLine;
     if (document->symbolLine(body) == headLine) {
-        if (followedOnLine
-            && after != ELSE
-            && after != WHILE
-            && (document->isHeader()
-                || document->hasCommentBetween(
-                    document->symbolEnd(end),
-                    document->symbols().at(end + 1).from
-                ))
+        if (followedOnLine && after != ELSE && after != WHILE
+            && (document->isHeader() || document->hasCommentBetween(
+                document->symbolEnd(end), document->symbols().at(end + 1).from
+            ))
         ) {
             return;
         }
         if (document->isHeader()) {
             document->replace(
-                document->symbolEnd(head),
-                0,
-                " {",
-                document->symbolEnd(end),
-                0,
-                " }"
+                document->symbolEnd(head), 0, " {",
+                document->symbolEnd(end), 0, " }"
             );
             return;
         }
 
         // Moves the body to a line of its own, and closes it on the next.
-        const QByteArray indent = document->indentOf(
-            document->symbolLine(keyword)
-        );
+        const QByteArray indent =
+            document->indentOf(document->symbolLine(keyword));
         const int from = document->symbolEnd(head);
         const int endFrom = document->symbolEnd(end);
         const bool movesNext = followedOnLine
@@ -234,17 +213,12 @@ void FormatControlBracesRule::brace(
             && after != WHILE;
         const int endLength = movesNext
             ? document->symbols().at(end + 1).from - endFrom : 0;
-        const QByteArray endText = "\n"
-            + indent
-            + "}"
+        const QByteArray endText = "\n" + indent + "}"
             + (movesNext ? "\n" + indent : QByteArray());
         document->replace(
-            from,
-            document->symbols().at(body).from - from,
+            from, document->symbols().at(body).from - from,
             " {\n" + continuationPad(indent.size()),
-            endFrom,
-            endLength,
-            endText
+            endFrom, endLength, endText
         );
         return;
     }
@@ -255,13 +229,11 @@ void FormatControlBracesRule::brace(
         return;
     }
     const QByteArray indent = document->indentOf(document->symbolLine(keyword));
-    const bool joins = (after == ELSE
-            || (after == WHILE && document->token(keyword) == DO))
+    const bool joins = (after == ELSE || (after == WHILE && document->token(keyword) == DO))
         && ! document->hasCommentBetween(
             document->symbolEnd(end),
             document->symbols().at(end + 1).from
-        )
-        && ! document->spansDirective(
+        ) && ! document->spansDirective(
             document->symbolEnd(end),
             document->symbols().at(end + 1).from
         );
@@ -274,11 +246,7 @@ void FormatControlBracesRule::brace(
         closeText += ' ';
     }
     document->replace(
-        document->symbolEnd(head),
-        0,
-        " {",
-        closeFrom,
-        closeLength,
-        closeText
+        document->symbolEnd(head), 0, " {",
+        closeFrom, closeLength, closeText
     );
 }

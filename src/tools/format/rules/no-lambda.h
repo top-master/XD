@@ -11,7 +11,8 @@ class FormatNoLambdaRule : public FormatNamedRule
     typedef FormatNamedRule super;
 public:
     inline FormatNoLambdaRule()
-        : super("no-lambda", "Reports lambdas in XD's tree, and nested lambdas elsewhere.")
+        : super("no-lambda",
+                "Reports lambdas in XD's tree, and nested lambdas elsewhere.")
     {
     }
 

@@ -14,7 +14,8 @@ class FormatOutlineThisRule : public FormatNamedRule
     typedef FormatNamedRule super;
 public:
     inline FormatOutlineThisRule()
-        : super("outline-this", "Reaches members with this-> where [Relations] thisMode asks.")
+        : super("outline-this",
+                "Reaches members with this-> where [Relations] thisMode asks.")
     {
     }
 
@@ -22,7 +23,8 @@ public:
 
 private:
     QSet<QByteArray > localNames(
-            const FormatDocument *document, int from, int to) const;
+            const FormatDocument *document, int from,
+            int to) const;
 };
 
 #endif // RULES_OUTLINE_THIS_H

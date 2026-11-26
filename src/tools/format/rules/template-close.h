@@ -11,7 +11,8 @@ class FormatTemplateCloseRule : public FormatNamedRule
     typedef FormatNamedRule super;
 public:
     inline FormatTemplateCloseRule()
-        : super("template-close-space", "Puts a space before each > that closes a template or a cast.")
+        : super("template-close-space",
+                "Puts a space before each > that closes a template or a cast.")
     {
     }
 

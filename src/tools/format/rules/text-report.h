@@ -13,11 +13,8 @@ class FormatTextReportRule : public FormatNamedRule
 {
     typedef FormatNamedRule super;
 public:
-    inline FormatTextReportRule(
-            const char *name,
-            const char *summary,
-            const char *pattern,
-            const char *message)
+    inline FormatTextReportRule(const char *name, const char *summary, const char *pattern,
+                                const char *message)
         : super(name, summary), m_pattern(QString::fromUtf8(pattern))
         , m_message(QString::fromLatin1(message))
     {

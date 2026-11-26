@@ -96,6 +96,8 @@ private slots:
     void testTokenize_shouldKeepRawStringWhole();
 
     /// Document.
+    void testEditor_shouldPublishOnApplyAndScopeExit();
+    void testEditor_shouldPreserveCommentsAndRange();
     void testComments_shouldTellEachKind_data();
     void testComments_shouldTellEachKind();
     void testComments_shouldTellTrailingFromOwnLine();
@@ -5568,3 +5570,45 @@ void tst_FormatRules::testFixtures_shouldMatchAfter()
 QTEST_APPLESS_MAIN(tst_FormatRules)
 
 #include "tst_format_rules.moc"
+
+
+/// Keeps the document unchanged until publication, including moved editors.
+void tst_FormatRules::testEditor_shouldPublishOnApplyAndScopeExit()
+{
+    FormatDocument document("int value = 1;\n");
+    {
+        CodeEditor editor = document.edit(0, document.text().size());
+        QVERIFY(editor.replace(12, 1, "2"));
+        QCOMPARE(document.text(), QByteArray("int value = 1;\n"));
+        CodeEditor moved(qMove(editor));
+        QVERIFY(moved.apply());
+        QCOMPARE(document.text(), QByteArray("int value = 2;\n"));
+        QVERIFY( ! moved.apply());
+    }
+    QVERIFY(document.applyEdits());
+    QVERIFY( ! document.applyEdits());
+    {
+        CodeEditor editor = document.edit(12, 13);
+        QVERIFY( ! editor.replace(0, 3, "long"));
+        QVERIFY(editor.replace(12, 1, "3"));
+    }
+    QCOMPARE(document.text(), QByteArray("int value = 3;\n"));
+}
+
+/// Moves comments with code while protecting text outside the selected range.
+void tst_FormatRules::testEditor_shouldPreserveCommentsAndRange()
+{
+    const QByteArray original("before();\ncall(first, // Keep.\n  second);\nafter();\n");
+    FormatDocument document(original);
+    const int start = original.indexOf("call");
+    const int end = original.indexOf("after");
+    {
+        CodeEditor editor = document.edit(start, end);
+        QVERIFY( ! editor.hasCommentBetween(start, end));
+        QVERIFY(editor.replace(start, end - start,
+                               "call(\n    first,\n    second\n);\n"));
+        QCOMPARE(document.text(), original);
+    }
+    QCOMPARE(document.text(), QByteArray(
+        "before();\ncall(\n    first, // Keep.\n    second\n);\nafter();\n"));
+}

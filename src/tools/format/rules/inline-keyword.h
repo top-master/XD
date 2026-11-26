@@ -11,7 +11,8 @@ class FormatInlineKeywordRule : public FormatNamedRule
     typedef FormatNamedRule super;
 public:
     inline FormatInlineKeywordRule()
-        : super("inline-keyword", "Spells out inline on in-class definitions, as the class does.")
+        : super("inline-keyword",
+                "Spells out inline on in-class definitions, as the class does.")
     {
     }
 
@@ -19,15 +20,11 @@ public:
 
 private:
     void addInline(FormatDocument *document, int start) const;
-    void respell(FormatDocument *document,
-                 int overrideToken,
+    void respell(FormatDocument *document, int overrideToken,
                  const QString & marker) const;
     int declarationStart(
-            const FormatDocument *document,
-            int body,
-            bool *hasInline,
-            bool *exempt,
-            int *overrideToken) const;
+            const FormatDocument *document, int body, bool *hasInline,
+            bool *exempt, int *overrideToken) const;
 };
 
 #endif // RULES_INLINE_KEYWORD_H

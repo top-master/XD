@@ -88,8 +88,7 @@ QList<int > classBodyTokens(const FormatDocument *document, int brace)
     qualifiers and without its template arguments (`QHash` of
     `public QHash<K, V >`).
 */
-static void readClassHead(const FormatDocument *document,
-                          int brace,
+static void readClassHead(const FormatDocument *document, int brace,
                           FormatClassMembers *members)
 {
     const int start = document->headStart(brace);
@@ -140,7 +139,8 @@ static void readClassHead(const FormatDocument *document,
     template (see FormatClassMembers).
 */
 FormatClassMembers collectMembers(
-        const FormatDocument *document, int brace, const QByteArray & className)
+        const FormatDocument *document, int brace,
+        const QByteArray & className)
 {
     FormatClassMembers members;
     readClassHead(document, brace, &members);
@@ -177,12 +177,8 @@ FormatClassMembers collectMembers(
         }
         const QByteArray name = document->lexem(i);
         const Token after = document->token(i + 1);
-        const bool declares = after == LPAREN
-            || after == SEMIC
-            || after == EQ
-            || after == LBRACK
-            || after == COLON
-            || after == COMMA;
+        const bool declares = after == LPAREN || after == SEMIC || after == EQ || after == LBRACK
+            || after == COLON || after == COMMA;
         if ( ! declares
             || name == className
             || isMacroName(name)
@@ -242,7 +238,8 @@ bool isMacroArgument(const FormatDocument *document, int index)
     Finds the body of the class named @a className in @a document, and builds
     the index of its `{`, or -1 when the document defines no such class.
 */
-int findClassBody(const FormatDocument *document, const QByteArray & className)
+int findClassBody(const FormatDocument *document,
+                  const QByteArray & className)
 {
     for (int i = 0; i < document->symbols().size(); ++i) {
         if (document->token(i) == LBRACE
@@ -293,8 +290,7 @@ QByteArray classNameOf(const FormatDocument *document, int brace)
             --templateDepth;
         } else if (token == GTGT) {
             templateDepth -= 2;
-        } else if (templateDepth == 0
-            && (token == CLASS
+        } else if (templateDepth == 0 && (token == CLASS
                 || token == STRUCT)
             && document->token(k + 1) == IDENTIFIER
         ) {

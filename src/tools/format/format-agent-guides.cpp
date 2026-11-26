@@ -56,7 +56,8 @@ static const char folderPrefixText[] = "qt-format-";
     write() has written a file.
 */
 FormatAgentGuides::FormatAgentGuides()
-    : m_folder(QDir::tempPath() + QLatin1Char('/') + FormatAgentGuides::folderPrefix() + QString::number(QCoreApplication::applicationPid()))
+    : m_folder(QDir::tempPath() + QLatin1Char('/') + FormatAgentGuides::folderPrefix()
+               + QString::number(QCoreApplication::applicationPid()))
     , m_count(0)
 {
 }
@@ -92,10 +93,12 @@ FormatAgentGuides::~FormatAgentGuides()
     rule has no template, or when the file cannot be written.
 */
 QString FormatAgentGuides::write(
-        const QString & path, const FormatIssue & request)
+        const QString & path,
+        const FormatIssue & request)
 {
     QFile source(
-        QLL(":/assets/") + FormatAgentGuides::templateName(request.rule)
+        QLL(":/assets/")
+            + FormatAgentGuides::templateName(request.rule)
     );
     if ( ! source.open(QIODevice::ReadOnly)) {
         return QString();
@@ -117,10 +120,8 @@ QString FormatAgentGuides::write(
         return QString();
     }
     ++this->m_count;
-    const QString name = QString::fromLatin1(request.rule)
-        + QLatin1Char('-')
-        + QString::number(this->m_count)
-        + QLL(".md");
+    const QString name = QString::fromLatin1(request.rule) + QLatin1Char('-')
+        + QString::number(this->m_count) + QLL(".md");
     QFile target(this->m_folder + QLatin1Char('/') + name);
     if ( ! target.open(QIODevice::WriteOnly)
         || target.write(text.toUtf8()) < 0
@@ -163,7 +164,8 @@ QString FormatAgentGuides::targetOf(const QByteArray & rule)
     blocks go, and so do the lines that open and close each block.
 */
 QString FormatAgentGuides::keepTarget(
-        const QString & text, const QString & target)
+        const QString & text,
+        const QString & target)
 {
     const QStringList lines = text.split(QLatin1Char('\n'));
     QStringList kept;
@@ -215,7 +217,9 @@ QString FormatAgentGuides::writeUsage()
         return QString();
     }
     QFile target(
-        this->m_folder + QLatin1Char('/') + FormatAgentGuides::usageName()
+        this->m_folder
+            + QLatin1Char('/')
+            + FormatAgentGuides::usageName()
     );
     if ( ! target.open(QIODevice::WriteOnly)
         || target.write(text.toUtf8()) < 0
@@ -328,8 +332,7 @@ void FormatAgentGuides::removeLeftovers() const
 */
 bool FormatAgentGuides::isOwnFile(const QString & name)
 {
-    if (name == FormatAgentGuides::usageName()
-        || name == QLL(".lock")
+    if (name == FormatAgentGuides::usageName() || name == QLL(".lock")
         || name.startsWith(QLL(".lock."))
     ) {
         return true;
@@ -340,6 +343,7 @@ bool FormatAgentGuides::isOwnFile(const QString & name)
     }
     const QByteArray rule = prompt.cap(1).toLatin1();
     return QFile::exists(
-        QLL(":/assets/") + FormatAgentGuides::templateName(rule)
+        QLL(":/assets/")
+            + FormatAgentGuides::templateName(rule)
     );
 }

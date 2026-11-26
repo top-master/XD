@@ -18,15 +18,13 @@ class FormatCommentWidthRule : public FormatCommentRule
     typedef FormatCommentRule super;
 public:
     inline FormatCommentWidthRule()
-        : super("comment-width", "Wraps comment lines past the column limit at the break nearest the wrap column.")
+        : super("comment-width",
+                "Wraps comment lines past the column limit at the break nearest the wrap column.")
     {
     }
 
     static QStringList wrap(
-            const QString & text,
-            int firstWidth,
-            int nextWidth,
-            int column,
+            const QString & text, int firstWidth, int nextWidth, int column,
             const FormatFileConfig & fileConfig);
     static bool fits(const QString & line, const FormatFileConfig & fileConfig);
 
@@ -36,11 +34,8 @@ protected:
 
 private:
     bool rewrap(
-            FormatDocument *document,
-            const QList<FormatCommentLine > & lines,
-            int first,
-            int count,
-            const QByteArray & nextPrefix) const;
+            FormatDocument *document, const QList<FormatCommentLine > & lines,
+            int first, int count, const QByteArray & nextPrefix) const;
 };
 
 #endif // RULES_COMMENT_WIDTH_H

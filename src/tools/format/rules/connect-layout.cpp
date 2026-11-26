@@ -28,8 +28,7 @@
 void FormatConnectLayoutRule::run(FormatDocument *document) const
 {
     for (int i = 0; i + 1 < document->symbols().size(); ++i) {
-        if (document->token(i) != IDENTIFIER
-            || document->token(i + 1) != LPAREN
+        if (document->token(i) != IDENTIFIER || document->token(i + 1) != LPAREN
             || document->isDirectiveLine(document->symbolLine(i))
         ) {
             continue;
@@ -41,9 +40,7 @@ void FormatConnectLayoutRule::run(FormatDocument *document) const
 
         // Leaves out a declaration or a definition of such a function.
         const Token before = document->token(i - 1);
-        if ((before == SCOPE
-                && endsType(document->token(i - 3)))
-            || (before != SCOPE
+        if ((before == SCOPE && endsType(document->token(i - 3))) || (before != SCOPE
                 && before != DOT
                 && before != ARROW
                 && endsType(before))
@@ -52,8 +49,7 @@ void FormatConnectLayoutRule::run(FormatDocument *document) const
         }
         const int open = i + 1;
         const int close = document->match(open);
-        if (close < 0
-            || document->hasCommentBetween(
+        if (close < 0 || document->hasCommentBetween(
                 document->symbols().at(open).from,
                 document->symbols().at(close).from
             )
@@ -90,7 +86,8 @@ void FormatConnectLayoutRule::run(FormatDocument *document) const
             const int end = document->symbolEnd(k - 1);
             const QByteArray argument = document->text().mid(
                 start,
-                end - start
+                end
+                    - start
             );
             singleLines = singleLines && ! argument.contains('\n');
             arguments.append(argument);
@@ -115,30 +112,18 @@ void FormatConnectLayoutRule::run(FormatDocument *document) const
             document->symbolEnd(close),
             contentEndOf(document, close) - document->symbolEnd(close)
         );
-        QByteArray layout = arguments.at(0)
-            + ", "
-            + arguments.at(1)
-            + ", "
-            + arguments.at(2)
-            + ", "
+        QByteArray layout = arguments.at(0) + ", " + arguments.at(1) + ", " + arguments.at(2) + ", "
             + arguments.at(3);
-        const int limit = wrapMaxAt(
-            document,
-            document->symbols().at(open).from
-        );
+        const int limit = wrapMaxAt(document, document->symbols().at(open).from);
         if (hasType || column + layout.size() + 1 + rest.size() > limit) {
             // Ends each pair with a comma and the line break that ends the
             // call's first line, `\r\n` in a file of CRLF line endings.
-            const QByteArray pairEnd =
-                document->text().mid(contentEndOf(document, open), 1) == "\r"
+            const QByteArray pairEnd = document->text().mid(
+                contentEndOf(document, open),
+                1
+            ) == "\r"
                 ? QByteArray(",\r\n") : QByteArray(",\n");
-            layout = arguments.at(0)
-                + ", "
-                + arguments.at(1)
-                + pairEnd
-                + pad
-                + arguments.at(2)
-                + ", "
+            layout = arguments.at(0) + ", " + arguments.at(1) + pairEnd + pad + arguments.at(2) + ", "
                 + arguments.at(3);
             if (hasType) {
                 layout += pairEnd + pad + arguments.at(4);

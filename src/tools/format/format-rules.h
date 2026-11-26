@@ -13,7 +13,8 @@
 
 QList<FormatRule * > formatCreateRules();
 void formatShiftContinuations(
-        FormatDocument *document, const QList<FormatGrowth > & growths);
+        FormatDocument *document,
+        const QList<FormatGrowth > & growths);
 bool formatIsInXdTree(const QString & path);
 
 #endif // FORMAT_RULES_H

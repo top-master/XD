@@ -13,7 +13,8 @@ class FormatTrailingCommentRule : public FormatCommentRule
     typedef FormatCommentRule super;
 public:
     inline FormatTrailingCommentRule()
-        : super("trailing-comment", "Moves a comment at the end of a code line above that line.")
+        : super("trailing-comment",
+                "Moves a comment at the end of a code line above that line.")
     {
     }
 

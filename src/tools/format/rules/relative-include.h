@@ -11,7 +11,8 @@ class FormatRelativeIncludeRule : public FormatNamedRule
     typedef FormatNamedRule super;
 public:
     inline FormatRelativeIncludeRule()
-        : super("relative-include", "Writes #include \"./name\" for a header next to the file.")
+        : super("relative-include",
+                "Writes #include \"./name\" for a header next to the file.")
     {
     }
 

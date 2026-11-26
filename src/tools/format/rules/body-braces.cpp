@@ -64,11 +64,12 @@ static bool closesChain(const FormatDocument *document, int close)
 */
 void FormatBodyBracesRule::run(FormatDocument *document) const
 {
+    CodeEditor editor = document->edit(0, document->text().size());
+    document = editor.document();
     FormatScopeConditions conditions(document);
     for (int close = 1; close < document->symbols().size(); ++close) {
         const int open = document->match(close);
-        if (document->token(close) != RBRACE
-            || open < 0
+        if (document->token(close) != RBRACE || open < 0
             || ! closesChain(document, close)
             || ! conditions.holds(
                 QString(QLL("structure.bodyBraces")),
@@ -104,15 +105,12 @@ void FormatBodyBracesRule::run(FormatDocument *document) const
         // Takes the body's lines, the last one up to the `}` that closes it.
         const int openLine = document->symbolLine(open);
         const QByteArray indent = document->indentOf(openLine);
-        const QByteArray bodyIndent =
-            scope == FormatDocument::NamespaceScope
+        const QByteArray bodyIndent = scope == FormatDocument::NamespaceScope
             ? indent : indent + continuationPad(0);
-        QList<QByteArray > lines =
-            document->text()
-            .mid(
-                document->symbolEnd(open),
-                document->symbols().at(close).from - document->symbolEnd(open)
-            ).split('\n');
+        QList<QByteArray > lines = document->text().mid(
+            document->symbolEnd(open),
+            document->symbols().at(close).from - document->symbolEnd(open)
+        ).split('\n');
         const QByteArray first = lines.takeFirst().trimmed();
         if ( ! lines.isEmpty()) {
             lines.last() = document->indentOf(document->symbolLine(close))
@@ -130,16 +128,13 @@ void FormatBodyBracesRule::run(FormatDocument *document) const
             // Counts the line's leading spaces and tabs.
             int width = 0;
             while (width < line.size()
-                && (line.at(width) == ' '
-                    || line.at(width) == '\t')
+                && (line.at(width) == ' ' || line.at(width) == '\t')
             ) {
                 ++width;
             }
             if (width < line.size()) {
-                shallowest = shallowest < 0 ? width : qMin(
-                    shallowest,
-                    width
-                );
+                shallowest = shallowest < 0
+                    ? width : qMin(shallowest, width);
             }
         }
         const int shift = shallowest < 0

@@ -73,9 +73,7 @@ void FormatInlineKeywordRule::run(FormatDocument *document) const
             if (overrideToken >= 0) {
                 const int offset = document->symbols().at(overrideToken).from;
                 const QString marker = settingValueAt(
-                    document,
-                    offset,
-                    QString(QLL("lint.inlineOverride")),
+                    document, offset, QString(QLL("lint.inlineOverride")),
                     document->configAt(offset).inlineOverride
                 ).toString();
                 const bool keepsMarker = marker == QLL("override")
@@ -84,13 +82,8 @@ void FormatInlineKeywordRule::run(FormatDocument *document) const
                     if (hasInline) {
                         this->respell(document, overrideToken, marker);
                         anyInline = true;
-                    } else if ( ! marker.isEmpty()
-                        && ! exempt
-                        && start >= 0
-                    ) {
-                        lackingOverrides.append(
-                            qMakePair(start, overrideToken)
-                        );
+                    } else if ( ! marker.isEmpty() && ! exempt && start >= 0) {
+                        lackingOverrides.append(qMakePair(start, overrideToken));
                     }
                     continue;
                 }
@@ -110,9 +103,7 @@ void FormatInlineKeywordRule::run(FormatDocument *document) const
             const QPair<int, int > item = lackingOverrides.at(i);
             const int offset = document->symbols().at(item.second).from;
             const QString marker = settingValueAt(
-                document,
-                offset,
-                QString(QLL("lint.inlineOverride")),
+                document, offset, QString(QLL("lint.inlineOverride")),
                 document->configAt(offset).inlineOverride
             ).toString();
             this->addInline(document, item.first);
@@ -128,7 +119,8 @@ void FormatInlineKeywordRule::run(FormatDocument *document) const
     lined up under the `(`.
 */
 void FormatInlineKeywordRule::addInline(
-        FormatDocument *document, int start) const
+        FormatDocument *document,
+        int start) const
 {
     const QByteArray keyword("inline ");
     document->replace(document->symbols().at(start).from, 0, keyword);
@@ -139,17 +131,15 @@ void FormatInlineKeywordRule::addInline(
     ) {
         ++open;
     }
-    const int close = open < document->symbols().size() ? document->match(open)
-                                                        : -1;
+    const int close = open < document->symbols().size()
+        ? document->match(open) : -1;
     const int last = close >= 0 ? document->symbolLine(close) : line;
     const int indent = textWidth(document->indentOf(line));
     for (int l = line + 1; l <= last; ++l) {
         if (textWidth(document->indentOf(l)) > indent) {
-            document->replace(
-                document->lineStart(l),
-                0,
-                QByteArray(keyword.size(), ' ')
-            );
+            document->replace(document->lineStart(l), 0, QByteArray(
+                keyword.size(), ' '
+            ));
         }
     }
 }
@@ -161,8 +151,7 @@ void FormatInlineKeywordRule::addInline(
 */
 void FormatInlineKeywordRule::respell(
         FormatDocument *document,
-        int overrideToken,
-        const QString & marker) const
+        int overrideToken, const QString & marker) const
 {
     const int end = document->symbolEnd(overrideToken);
     if (marker.isEmpty()) {
@@ -184,11 +173,8 @@ void FormatInlineKeywordRule::respell(
     after its parameters.
 */
 int FormatInlineKeywordRule::declarationStart(
-        const FormatDocument *document,
-        int body,
-        bool *hasInline,
-        bool *exempt,
-        int *overrideToken) const
+        const FormatDocument *document, int body,
+        bool *hasInline, bool *exempt, int *overrideToken) const
 {
     int start = document->headStart(body);
 
@@ -204,8 +190,7 @@ int FormatInlineKeywordRule::declarationStart(
         const int before = start;
         for (;;) {
             const Token token = document->token(start);
-            const bool isAccess = token == PUBLIC
-                || token == PRIVATE
+            const bool isAccess = token == PUBLIC || token == PRIVATE
                 || token == PROTECTED;
             int label = start + (isAccess ? 1 : 0);
             const Token kind = document->token(label);
@@ -225,7 +210,8 @@ int FormatInlineKeywordRule::declarationStart(
                 for (++start; start < body; ++start) {
                     const Token inner = document->token(start);
                     depth += inner == LANGLE
-                        ? 1 : (inner == RANGLE ? -1 : (inner == GTGT ? -2 : 0));
+                        ? 1
+                        : (inner == RANGLE ? -1 : (inner == GTGT ? -2 : 0));
                     if (depth <= 0) {
                         break;
                     }
@@ -239,8 +225,7 @@ int FormatInlineKeywordRule::declarationStart(
         // them tokens of their own): one that expands to a template head, and a
         // statement-like macro call that ends its line (such as
         // `Q_DECLARE_FLAGS(...)`, which takes no `;`).
-        while (start < body
-            && isMacroName(document->lexem(start))
+        while (start < body && isMacroName(document->lexem(start))
             && document->token(start + 1) != SCOPE
         ) {
             const QByteArray name = document->lexem(start);
@@ -256,7 +241,8 @@ int FormatInlineKeywordRule::declarationStart(
                 start = close + 1;
                 continue;
             }
-            if (name.contains("INLINE")) { *hasInline = true;
+            if (name.contains("INLINE")) {
+                *hasInline = true;
             }
             ++start;
         }
@@ -271,16 +257,15 @@ int FormatInlineKeywordRule::declarationStart(
             parameters = i;
             break;
         }
-        const QByteArray name = token == IDENTIFIER ? document->lexem(i)
-                                                    : QByteArray();
-        if (token == INLINE || name.contains("INLINE")
-        ) { *hasInline = true;
+        const QByteArray name = token == IDENTIFIER
+            ? document->lexem(i) : QByteArray();
+        if (token == INLINE || name.contains("INLINE")) {
+            *hasInline = true;
         }
-        if (token == FRIEND
-            || name == "constexpr"
-            || name == "Q_DECL_CONSTEXPR"
+        if (token == FRIEND || name == "constexpr" || name == "Q_DECL_CONSTEXPR"
             || name == "Q_DECL_RELAXED_CONSTEXPR"
-        ) { *exempt = true;
+        ) {
+            *exempt = true;
         }
     }
 
@@ -288,8 +273,8 @@ int FormatInlineKeywordRule::declarationStart(
     const int close = parameters >= 0 ? document->match(parameters) : -1;
     for (int i = close + 1; close > 0 && i < body; ++i) {
         const QByteArray name = document->lexem(i);
-        if (name == "override" || name == "Q_DECL_OVERRIDE"
-        ) { *overrideToken = i;
+        if (name == "override" || name == "Q_DECL_OVERRIDE") {
+            *overrideToken = i;
         }
     }
     return start < body ? start : -1;

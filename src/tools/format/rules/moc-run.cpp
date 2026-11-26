@@ -22,11 +22,8 @@ void FormatMocRunRule::run(FormatDocument *document) const
         if (document->token(i) == IDENTIFIER
             && document->lexem(i) == "QT_MOC_RUN"
         ) {
-            document->replace(
-                document->symbols().at(i).from,
-                document->symbols().at(i).len,
-                "Q_MOC_RUN"
-            );
+            document->replace(document->symbols().at(i).from, document->symbols().at(i).len,
+                              "Q_MOC_RUN");
         }
     }
 }

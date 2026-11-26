@@ -14,7 +14,8 @@
     Matches a divider comment: a rule of dashes, equal signs, or stars
     around an optional label.
 */
-Q_GLOBAL_STATIC_WITH_ARGS(QRegularExpression, bannerPattern, (QString(QLL("^[-=*#~_+/]{3,}\\s*(.*?)\\s*[-=*#~_+/]*$"))))
+Q_GLOBAL_STATIC_WITH_ARGS(QRegularExpression, bannerPattern, (QString(QLL(
+        "^[-=*#~_+/]{3,}\\s*(.*?)\\s*[-=*#~_+/]*$"))))
 
 /*!
     @class FormatMarkBannerRule
@@ -29,22 +30,22 @@ Q_GLOBAL_STATIC_WITH_ARGS(QRegularExpression, bannerPattern, (QString(QLL("^[-=*
     line, and reports one with no label.
 */
 void FormatMarkBannerRule::runGroup(
-        FormatDocument *document, const QList<int > & group) const
+        FormatDocument *document,
+        const QList<int > & group) const
 {
     if (group.size() != 1) {
         return;
     }
     const int index = group.first();
     const FormatComment & comment = document->comments().at(index);
-    if (comment.trailing
-        || comment.isDoc()
+    if (comment.trailing || comment.isDoc()
         || document->commentLine(index) != document->commentEndLine(index)
     ) {
         return;
     }
-    const QString text = QString::fromUtf8(commentLines(document, index)
-        .first()
-        .text);
+    const QString text = QString::fromUtf8(
+        commentLines(document, index).first().text
+    );
     if (text.contains(QLL("-*-"))) {
         return;
     }
@@ -54,13 +55,8 @@ void FormatMarkBannerRule::runGroup(
     }
     QString label = found.captured(1);
     if (label.isEmpty()) {
-        document->report(
-            comment.offset,
-            "mark-banner",
-            QString(QLL(
-                "drop the decorative rule, or label it as // MARK: <label>."
-            ))
-        );
+        document->report(comment.offset, "mark-banner",
+                         QString(QLL("drop the decorative rule, or label it as // MARK: <label>.")));
         return;
     }
     while (label.endsWith(QLatin1Char('.'))
@@ -71,6 +67,8 @@ void FormatMarkBannerRule::runGroup(
     document->replace(
         comment.offset,
         comment.length,
-        "// MARK: " + label.toUtf8() + '.'
+        "// MARK: "
+        + label.toUtf8()
+        + '.'
     );
 }

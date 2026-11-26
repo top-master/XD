@@ -11,7 +11,8 @@ class FormatGlobalStaticRule : public FormatNamedRule
     typedef FormatNamedRule super;
 public:
     inline FormatGlobalStaticRule()
-        : super("global-static", "Reports static Qt objects that Q_GLOBAL_STATIC should hold, and other "
+        : super("global-static",
+                "Reports static Qt objects that Q_GLOBAL_STATIC should hold, and other "
                 "statics a function declares.")
     {
     }

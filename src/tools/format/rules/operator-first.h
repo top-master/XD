@@ -11,7 +11,8 @@ class FormatOperatorFirstRule : public FormatNamedRule
     typedef FormatNamedRule super;
 public:
     inline FormatOperatorFirstRule()
-        : super("operator-first", "Breaks a long expression before an operator, not after it.") {}
+        : super("operator-first",
+                "Breaks a long expression before an operator, not after it.") {}
     void run(FormatDocument *document) const Q_DECL_OVERRIDE;
 
 protected:

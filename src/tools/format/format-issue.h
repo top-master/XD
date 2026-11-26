@@ -24,12 +24,8 @@ class FormatIssue
 {
 public:
     inline FormatIssue() : line(0), endLine(0), columnLimit(0), isError(false) {}
-    inline FormatIssue(
-            int line,
-            const QByteArray & rule,
-            const QString & message,
-            int endLine = 0,
-            int columnLimit = 0)
+    inline FormatIssue(int line, const QByteArray & rule, const QString & message,
+                       int endLine = 0, int columnLimit = 0)
         : line(line), endLine(endLine > line ? endLine : line), columnLimit(columnLimit)
         , isError(false), rule(rule), message(message)
     {

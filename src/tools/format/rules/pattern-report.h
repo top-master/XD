@@ -14,12 +14,8 @@ class FormatPatternReportRule : public FormatCommentRule
 {
     typedef FormatCommentRule super;
 public:
-    inline FormatPatternReportRule(
-            const char *name,
-            const char *summary,
-            const char *pattern,
-            const char *message,
-            bool docOnly = false)
+    inline FormatPatternReportRule(const char *name, const char *summary, const char *pattern,
+                                   const char *message, bool docOnly = false)
         : super(name, summary)
         , m_pattern(QString::fromLatin1(pattern), QRegularExpression::CaseInsensitiveOption)
         , m_message(QString::fromLatin1(message)), m_docOnly(docOnly)

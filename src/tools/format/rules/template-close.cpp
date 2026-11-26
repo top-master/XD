@@ -24,6 +24,8 @@
 */
 void FormatTemplateCloseRule::run(FormatDocument *document) const
 {
+    CodeEditor editor = document->edit(0, document->text().size());
+    document = editor.document();
     for (int i = 1; i < document->symbols().size(); ++i) {
         if (document->token(i) != LANGLE
             || document->isDirectiveLine(document->symbolLine(i))
@@ -31,10 +33,8 @@ void FormatTemplateCloseRule::run(FormatDocument *document) const
             continue;
         }
         const Token before = document->token(i - 1);
-        const bool isCast = before == STATIC_CAST
-            || before == DYNAMIC_CAST
-            || before == REINTERPRET_CAST
-            || before == CONST_CAST;
+        const bool isCast = before == STATIC_CAST || before == DYNAMIC_CAST
+            || before == REINTERPRET_CAST || before == CONST_CAST;
         if ( ! isCast
             && (before != IDENTIFIER
                 || document->token(i - 2) == OPERATOR)
@@ -55,7 +55,8 @@ void FormatTemplateCloseRule::run(FormatDocument *document) const
     token that no type name has.
 */
 bool FormatTemplateCloseRule::spaceArguments(
-        FormatDocument *document, int open, int *end) const
+        FormatDocument *document, int open,
+        int *end) const
 {
     QList<int > closers;
     int depth = 0;
@@ -131,6 +132,7 @@ bool FormatTemplateCloseRule::spaceArguments(
         } else if ( ! spaced) {
             document->replace(from, 0, " ");
         }
-    } *end = i;
+    }
+    *end = i;
     return true;
 }

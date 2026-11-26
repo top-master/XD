@@ -497,15 +497,12 @@ bool ExpressionCompiler::endsWhole()
         return true;
     }
     const QChar lead = rest.at(0);
-    this->m_context->m_lastCE = rest == QLL(")")
-        ? QString(QLL("a ( is missing"))
-        : lead.isLetterOrNumber()
-            || lead == QLatin1Char('_')
-            || lead == QLatin1Char('"')
-            || lead == QLatin1Char('(')
-            || lead == QLatin1Char('!')
-            ? QString(QLL("a sign is missing before %1")).arg(rest)
-            : QString(QLL("unknown sign %1")).arg(rest);
+    this->m_context->m_lastCE = rest == QLL(")") ? QString(QLL("a ( is missing"))
+        : lead.isLetterOrNumber() || lead == QLatin1Char('_')
+        || lead == QLatin1Char('"') || lead == QLatin1Char('(')
+        || lead == QLatin1Char('!')
+        ? QString(QLL("a sign is missing before %1")).arg(rest)
+        : QString(QLL("unknown sign %1")).arg(rest);
     return false;
 }
 

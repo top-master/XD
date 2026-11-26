@@ -11,7 +11,8 @@ class FormatConstOverloadRule : public FormatNamedRule
     typedef FormatNamedRule super;
 public:
     inline FormatConstOverloadRule()
-        : super("const-overload-order", "Reports a non-const overload declared before its const twin.")
+        : super("const-overload-order",
+                "Reports a non-const overload declared before its const twin.")
     {
     }
 

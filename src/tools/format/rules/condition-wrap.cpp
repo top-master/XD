@@ -24,9 +24,7 @@
     `{` after it. A one-line condition without a `&&` or `||` of its own
     breaks before its loosest operator instead, once its line passes
     `wrapMax` (see FormatConditionLayout::layoutPlain()). A condition with a
-    brace or directive in it is left as it is. Standalone comment lines
-    before a logical operator share its indent. Other comments preserve
-    their surrounding layout, as does a comment-free condition
+    comment, a brace, or a directive in it is left as it is, and so is one
     that spans several lines with an operand that does.
 
     In agent mode (`--ai`), a condition that spans several lines keeps them:
@@ -40,19 +38,13 @@
     right after it when that `{` shares the line of the `)`.
 */
 static void replaceCondition(
-        FormatDocument *document,
-        int open,
-        int close,
+        FormatDocument *document, int open, int close,
         QByteArray text)
 {
     const int from = document->symbols().at(open).from;
     int to = document->symbolEnd(close);
     if (document->token(close + 1) == LBRACE
         && document->symbolLine(close + 1) == document->symbolEndLine(close)
-        && ! document->hasCommentBetween(
-            to,
-            document->symbols().at(close + 1).from
-        )
     ) {
         to = document->symbolEnd(close + 1);
         text += " {";
@@ -65,6 +57,8 @@ static void replaceCondition(
 */
 void FormatConditionWrapRule::run(FormatDocument *document) const
 {
+    CodeEditor editor = document->edit(0, document->text().size());
+    document = editor.document();
     FormatScopeConditions conditions(document);
     const FormatConditionLayout layout(document, &conditions);
     for (int i = 0; i + 1 < document->symbols().size(); ++i) {
@@ -78,12 +72,11 @@ void FormatConditionWrapRule::run(FormatDocument *document) const
         const int open = i + 1;
         const int close = document->match(open);
         const int line = document->symbolLine(i);
-        const FormatFileConfig &fileConfig = document->configAt(
-            document->symbols().at(i).from
-        );
-        if (close < 0
-            || document->spansDirective(
-                document->symbols().at(i).from,
+        const FormatFileConfig &fileConfig =
+            document->configAt(document->symbols().at(i).from);
+        if (close < 0 || document->isDirectiveLine(line)
+            || document->hasCommentBetween(
+                document->symbols().at(open).from,
                 document->symbolEnd(close)
             )
         ) {
@@ -95,26 +88,11 @@ void FormatConditionWrapRule::run(FormatDocument *document) const
         // once its line passes `wrapMax`: such a break splits a single
         // comparison, hence it waits for the hard limit.
         const QList<int > operators = layout.operators(open, close);
-        const int indent = document->indentOf(line).size();
-        QHash<int, QByteArray > comments;
-        if ( ! layout.operatorComments(
-            open,
-            close,
-            operators,
-            continuationPad(indent),
-            &comments
-        )) {
-            continue;
-        }
         if (operators.isEmpty()) {
             const bool isLong = document->symbolEndLine(close) == line
-                && textWidth(document->lineText(line)) > wrapMaxAt(
-                    document,
-                    document->lineStart(line)
-                );
+                && textWidth(document->lineText(line)) > wrapMaxAt(document, document->lineStart(line));
             const QByteArray text = isLong
-                ? layout.layoutPlain(open, close)
-                : QByteArray();
+                ? layout.layoutPlain(open, close) : QByteArray();
             if ( ! text.isEmpty()) {
                 replaceCondition(document, open, close, text);
             }
@@ -137,15 +115,13 @@ void FormatConditionWrapRule::run(FormatDocument *document) const
             ) {
                 continue;
             }
-        } else if (comments.isEmpty()
-            && ! this->isSplitTooLong(document, layout, open, close)
-        ) {
+        } else if ( ! this->isSplitTooLong(document, layout, open, close)
+            && ! hasMisplacedLines(document, open, close,
+                                   document->indentOf(line).size()))
+        {
             continue;
-        } else if (comments.isEmpty() && document->agentMode()) {
-            const int limit = wrapMaxAt(
-                document,
-                document->lineStart(line)
-            );
+        } else if (document->agentMode()) {
+            const int limit = wrapMaxAt(document, document->lineStart(line));
             document->request(
                 document->symbols().at(i).from,
                 "condition-wrap",
@@ -168,13 +144,14 @@ void FormatConditionWrapRule::run(FormatDocument *document) const
         }
 
         // Lays the condition out, and puts the body's `{` right after it.
+        const int indent = document->indentOf(line).size();
         const int column = document->symbols().at(open).from
             - document->lineStart(line);
         replaceCondition(
             document,
             open,
             close,
-            layout.layoutCondition(open, close, indent, column, comments)
+            layout.layoutCondition(open, close, indent, column)
         );
         i = close;
     }
@@ -187,10 +164,8 @@ void FormatConditionWrapRule::run(FormatDocument *document) const
     operators()); people lay out a condition whose operand spans lines.
 */
 bool FormatConditionWrapRule::isSplitTooLong(
-        const FormatDocument *document,
-        const FormatConditionLayout & layout,
-        int open,
-        int close) const
+        const FormatDocument *document, const FormatConditionLayout & layout,
+        int open, int close) const
 {
     const int max = wrapMaxAt(document, document->symbols().at(open).from);
     bool tooLong = false;
@@ -199,9 +174,6 @@ bool FormatConditionWrapRule::isSplitTooLong(
     }
     if ( ! tooLong) {
         return false;
-    }
-    if (codeTargetAnyAt(document, document->symbols().at(open).from)) {
-        return true;
     }
     const QList<int > ops = layout.operators(open, close);
     for (int k = 0; k <= ops.size(); ++k) {

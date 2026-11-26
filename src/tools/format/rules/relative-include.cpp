@@ -38,9 +38,8 @@ void FormatRelativeIncludeRule::run(FormatDocument *document) const
             continue;
         }
         const QByteArray text = document->lineText(line);
-        const QRegularExpressionMatch found = include.match(
-            QString::fromUtf8(text)
-        );
+        const QRegularExpressionMatch found =
+            include.match(QString::fromUtf8(text));
         if ( ! found.hasMatch()) {
             continue;
         }

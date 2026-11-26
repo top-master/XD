@@ -11,7 +11,8 @@ class FormatConditionCloseRule : public FormatNamedRule
     typedef FormatNamedRule super;
 public:
     inline FormatConditionCloseRule()
-        : super("condition-close", "Closes a multi-line condition with \") {\" on its own line.")
+        : super("condition-close",
+                "Closes a multi-line condition with \") {\" on its own line.")
     {
     }
 

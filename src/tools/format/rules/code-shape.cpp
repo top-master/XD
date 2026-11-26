@@ -57,7 +57,8 @@ void FormatCodeShapeRule::run(FormatDocument *document) const
     statement that starts at the token @a start of @a document.
 */
 void FormatCodeShapeRule::checkStatement(
-        FormatDocument *document, int start) const
+        FormatDocument *document,
+        int start) const
 {
     const FormatDocument::Scope scope = document->scopeOf(start);
     if (scope != FormatDocument::FunctionScope
@@ -75,8 +76,7 @@ void FormatCodeShapeRule::checkStatement(
         ) {
             k += 2;
         }
-        if (document->token(k) == IDENTIFIER
-            && document->token(k + 1) == LPAREN
+        if (document->token(k) == IDENTIFIER && document->token(k + 1) == LPAREN
             && document->match(k + 1) > 0
         ) {
             const Token after = document->token(document->match(k + 1) + 1);
@@ -139,11 +139,7 @@ void FormatCodeShapeRule::checkStatement(
     // and leaves out the types that cannot be copied, and the ones built
     // from a path or a pattern.
     static const char *const uncopyable[] = {
-        "QFile",
-        "QSaveFile",
-        "QScopedPointer",
-        "QMutexLocker",
-        "QReadLocker",
+        "QFile", "QSaveFile", "QScopedPointer", "QMutexLocker", "QReadLocker",
         "QWriteLocker",
         "QDirIterator",
         "QTextStream",
@@ -183,8 +179,10 @@ void FormatCodeShapeRule::checkStatement(
     if (isMemberCall
         && document->token(document->match(last) - 1) == IDENTIFIER
     ) {
-        document->report(document->symbols().at(start).from, "code-shape", QString(QLL("when the call returns the local's type, copy-initialize "
-                                     "it: <Type> %1 = qMove(...);")).arg(QString::fromLatin1(document->lexem(k))));
+        document->report(document->symbols().at(start).from, "code-shape",
+                         QString(QLL("when the call returns the local's type, copy-initialize "
+                                     "it: <Type> %1 = qMove(...);"))
+                         .arg(QString::fromLatin1(document->lexem(k))));
     }
 }
 
@@ -198,8 +196,7 @@ void FormatCodeShapeRule::checkBody(FormatDocument *document, int brace) const
     bool isInline = document->scopeOf(brace) == FormatDocument::ClassScope;
     for (int i = document->headStart(brace); i < brace && ! isInline; ++i) {
         isInline = document->token(i) == INLINE
-            || (document->token(i) == IDENTIFIER
-                && document->lexem(i) == "Q_ALWAYS_INLINE");
+            || (document->token(i) == IDENTIFIER && document->lexem(i) == "Q_ALWAYS_INLINE");
     }
     const int close = document->match(brace);
     if ( ! isInline || close < 0) {
@@ -212,7 +209,8 @@ void FormatCodeShapeRule::checkBody(FormatDocument *document, int brace) const
         }
     }
     if (lines > 5) {
-        document->report(document->symbols().at(brace).from, "code-shape", QString(QLL("define the function in its source file: the inline "
+        document->report(document->symbols().at(brace).from, "code-shape",
+                         QString(QLL("define the function in its source file: the inline "
                                      "body has %1 lines (at most 5)")).arg(lines));
     }
 }

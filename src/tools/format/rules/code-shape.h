@@ -11,7 +11,8 @@ class FormatCodeShapeRule : public FormatNamedRule
     typedef FormatNamedRule super;
 public:
     inline FormatCodeShapeRule()
-        : super("code-shape", "Reports call derefs, direct-init, big inlines and init lists.")
+        : super("code-shape",
+                "Reports call derefs, direct-init, big inlines and init lists.")
     {
     }
 

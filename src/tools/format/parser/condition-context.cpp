@@ -26,10 +26,7 @@ QStringList FormatReplaceTypesContext::onNames() const
 bool FormatReplaceTypesContext::predicate(
         const QString & name, bool *value) const
 {
-    if ( ! m_document
-        || m_token < 0
-        || m_token >= m_document->symbols().size()
-    ) {
+    if ( ! m_document || m_token < 0 || m_token >= m_document->symbols().size()) {
         return false;
     }
     Config::Cache::skip();
@@ -37,13 +34,9 @@ bool FormatReplaceTypesContext::predicate(
     return conditions.nameHolds(m_token, name, value);
 }
 
-bool FormatReplaceTypesContext::argumentCount(
-        int depth, int argument, qreal *count) const
+bool FormatReplaceTypesContext::argumentCount(int depth, int argument, qreal *count) const
 {
-    if ( ! m_document
-        || m_token < 0
-        || m_token >= m_document->symbols().size()
-    ) {
+    if ( ! m_document || m_token < 0 || m_token >= m_document->symbols().size()) {
         return false;
     }
     FormatScopeConditions conditions(m_document);
@@ -53,10 +46,7 @@ bool FormatReplaceTypesContext::argumentCount(
 
 bool FormatReplaceTypesContext::spaceRemaining(qreal *percent) const
 {
-    if ( ! m_document
-        || m_token < 0
-        || m_token >= m_document->symbols().size()
-    ) {
+    if ( ! m_document || m_token < 0 || m_token >= m_document->symbols().size()) {
         return false;
     }
     FormatScopeConditions conditions(m_document);
@@ -64,13 +54,9 @@ bool FormatReplaceTypesContext::spaceRemaining(qreal *percent) const
     return true;
 }
 
-bool FormatReplaceTypesContext::isTarget(
-        const QString & kind, bool *value) const
+bool FormatReplaceTypesContext::isTarget(const QString & kind, bool *value) const
 {
-    if ( ! m_document
-        || m_token < 0
-        || m_token >= m_document->symbols().size()
-    ) {
+    if ( ! m_document || m_token < 0 || m_token >= m_document->symbols().size()) {
         return false;
     }
     FormatScopeConditions conditions(m_document);
@@ -143,12 +129,10 @@ bool FormatConditionContext::isWrapping(bool *) const
     Tells in @a value whether @a context's setting @a key holds @a name,
     in any case; @a list is its loaded fallback. Returns false without settings.
 */
-static bool listsName(
-        const FormatConditionContext *context,
-        QStringList FormatFileConfig::*list,
-        const QString & key,
-        const QString & name,
-        bool *value)
+static bool listsName(const FormatConditionContext *context,
+                      QStringList FormatFileConfig::*list,
+                      const QString & key,
+                      const QString & name, bool *value)
 {
     const FormatFileConfig *config = context->fileConfig();
     if ( ! config) {
@@ -157,13 +141,13 @@ static bool listsName(
     Config::Cache::skip();
     if ( ! config->settings.values.isEmpty()) {
         const QVariant resolved = config->resolveSetting(key, context);
-        if (resolved.isValid()) { *value = FormatFileConfig::listItems(resolved.toString()).contains(
-            name,
-            Qt::CaseInsensitive
-        );
+        if (resolved.isValid()) {
+            *value = FormatFileConfig::listItems(resolved.toString())
+                .contains(name, Qt::CaseInsensitive);
             return true;
         }
-    } *value = (config->*list).contains(name, Qt::CaseInsensitive);
+    }
+    *value = (config->*list).contains(name, Qt::CaseInsensitive);
     return true;
 }
 
@@ -278,7 +262,8 @@ void FormatConditionContext::setGlobalObjects(Config::Scopes::Scope *scope)
 */
 QSharedPointer<Config::Scopes::Scope > FormatConditionContext::pushCountScope()
 {
-    const QSharedPointer<Config::Scopes::Scope > scope = Config::Scopes::push();
+    const QSharedPointer<Config::Scopes::Scope > scope =
+        Config::Scopes::push();
     FormatConditionContext::setCountObjects(scope.data());
     return scope;
 }

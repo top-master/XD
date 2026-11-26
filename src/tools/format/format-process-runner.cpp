@@ -20,8 +20,7 @@
 /*!
     Builds the runner that formats with @a formatter as @a options say.
 */
-FormatProcessRunner::FormatProcessRunner(
-        const Formatter *formatter, const FormatOptions & options)
+FormatProcessRunner::FormatProcessRunner(const Formatter *formatter, const FormatOptions & options)
     : super(formatter, options)
 {
 }
@@ -131,8 +130,7 @@ QList<FormatFileResult > FormatProcessRunner::run(const QStringList & files)
             if (finished) {
                 ended[i] = true;
                 --running;
-                const bool failed =
-                    process->exitStatus() != QProcess::NormalExit
+                const bool failed = process->exitStatus() != QProcess::NormalExit
                     || process->error() == QProcess::FailedToStart;
                 const QStringList & slice = slices.at(i);
                 for (int f = 0; f < slice.size(); ++f) {
@@ -174,9 +172,8 @@ QStringList FormatProcessRunner::workerArguments() const
         arguments << QString(QLL("--git")) << this->m_options.git;
     }
     if ( ! this->m_options.rules.isEmpty()) {
-        arguments << QString(QLL("--rules=")) + this->m_options.rules.join(
-            QLatin1Char(',')
-        );
+        arguments << QString(QLL("--rules="))
+            + this->m_options.rules.join(QLatin1Char(','));
     }
     if (this->m_options.check) {
         arguments << QString(QLL("--check"));
@@ -218,12 +215,8 @@ QStringList FormatProcessRunner::workerArguments() const
 QByteArray FormatProcessRunner::encode(const FormatFileResult & result)
 {
     const QByteArray path = result.path.toUtf8().toPercentEncoding();
-    QByteArray text = "file\t" + path
-        + '\t'
-        + (result.changed ? '1' : '0')
-        + '\t'
-        + result.error.toUtf8().toPercentEncoding()
-        + '\n';
+    QByteArray text = "file\t" + path + '\t' + (result.changed ? '1' : '0') + '\t'
+        + result.error.toUtf8().toPercentEncoding() + '\n';
     for (int i = 0; i < result.issues.size(); ++i) {
         text += FormatProcessRunner::encodeIssue(
             result.issues.at(i).isError ? "error" : "issue",
@@ -259,7 +252,8 @@ bool FormatProcessRunner::decodeEnd(const QByteArray & line, QString *path)
     if (fields.size() != 2 || fields.at(0) != "end") {
         path->clear();
         return false;
-    } *path = QString::fromUtf8(QByteArray::fromPercentEncoding(fields.at(1)));
+    }
+    *path = QString::fromUtf8(QByteArray::fromPercentEncoding(fields.at(1)));
     return true;
 }
 
@@ -269,7 +263,8 @@ bool FormatProcessRunner::decodeEnd(const QByteArray & line, QString *path)
     result of its file; returns false for a line of neither kind.
 */
 bool FormatProcessRunner::decode(
-        const QByteArray & line, QList<FormatFileResult > *results)
+        const QByteArray & line,
+        QList<FormatFileResult > *results)
 {
     const QList<QByteArray > fields = line.split('\t');
     if (fields.size() == 4 && fields.at(0) == "file") {
@@ -284,12 +279,9 @@ bool FormatProcessRunner::decode(
         results->append(result);
         return true;
     }
-    if ((fields.size() == 6
-            || fields.size() == 7)
-        && (fields.at(0) == "issue"
-            || fields.at(0) == "error"
-            || fields.at(0) == "request"
-            || fields.at(0) == "warning")
+    if ((fields.size() == 6 || fields.size() == 7)
+        && (fields.at(0) == "issue" || fields.at(0) == "error"
+            || fields.at(0) == "request" || fields.at(0) == "warning")
     ) {
         const QString path = QString::fromUtf8(
             QByteArray::fromPercentEncoding(fields.at(1))
@@ -327,21 +319,13 @@ bool FormatProcessRunner::decode(
     path, first and last line, rule, message, and column limit.
 */
 QByteArray FormatProcessRunner::encodeIssue(
-        const char *kind, const QByteArray & path, const FormatIssue & issue)
+        const char *kind, const QByteArray & path,
+        const FormatIssue & issue)
 {
-    return QByteArray(kind) + '\t'
-        + path
-        + '\t'
-        + QByteArray::number(issue.line)
-        + '\t'
-        + QByteArray::number(issue.endLine)
-        + '\t'
-        + issue.rule.toPercentEncoding()
-        + '\t'
-        + issue.message.toUtf8().toPercentEncoding()
-        + '\t'
-        + QByteArray::number(issue.columnLimit)
-        + '\n';
+    return QByteArray(kind) + '\t' + path + '\t' + QByteArray::number(issue.line) + '\t'
+        + QByteArray::number(issue.endLine) + '\t' + issue.rule.toPercentEncoding() + '\t'
+        + issue.message.toUtf8().toPercentEncoding() + '\t'
+        + QByteArray::number(issue.columnLimit) + '\n';
 }
 
 #endif // QT_NO_PROCESS

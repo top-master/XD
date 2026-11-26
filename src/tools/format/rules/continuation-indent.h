@@ -11,7 +11,8 @@ class FormatContinuationIndentRule : public FormatNamedRule
     typedef FormatNamedRule super;
 public:
     inline FormatContinuationIndentRule()
-        : super("continuation-indent", "Indents operator-led lines 4 spaces past the line of their group.")
+        : super("continuation-indent",
+                "Indents operator-led lines 4 spaces past the line of their group.")
     {
     }
 

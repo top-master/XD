@@ -23,7 +23,8 @@
     Reports the first match on each prose line of @a group.
 */
 void FormatPatternReportRule::runGroup(
-        FormatDocument *document, const QList<int > & group) const
+        FormatDocument *document,
+        const QList<int > & group) const
 {
     if (this->m_docOnly
         && ! document->comments().at(group.first()).isDoc()
@@ -39,11 +40,8 @@ void FormatPatternReportRule::runGroup(
         const QString prose = proseOnly(QString::fromUtf8(lines.at(i).text));
         const QRegularExpressionMatch found = this->m_pattern.match(prose);
         if (found.hasMatch()) {
-            document->report(
-                lines.at(i).offset,
-                this->name().constData(),
-                this->m_message
-            );
+            document
+                ->report(lines.at(i).offset, this->name().constData(), this->m_message);
         }
     }
 }

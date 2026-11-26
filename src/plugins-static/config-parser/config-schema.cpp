@@ -99,9 +99,13 @@ bool Config::Schema::isExpression(
     if ( ! field.allowsCode()) {
         return false;
     }
-    // Pipe-separated numbers are a list of numbers rather than an expression.
     if (Config::Numbers::parse(text).size() > 1) {
-        return false;
+        for (int i = 0; i < field.matchers.size(); ++i) {
+            QString matched;
+            if (field.matchers.at(i)->matchLiteral(text, &matched)) {
+                return false;
+            }
+        }
     }
     const QStringList program = this->compile(name, text, context);
     if ( ! context->lastCompiled()) {
@@ -289,9 +293,8 @@ QVariant Config::Schema::convert(
                 return QVariant();
             }
             const QString tail = convertedFallback.toString();
-            const QString result = convertedHead.toString() + QLL(" |")
+            return convertedHead.toString() + QLL(" |")
                 + (tail.isEmpty() ? QString() : QLatin1Char(' ') + tail);
-            return result;
         }
     }
     for (int i = 0; i < found.matchers.size(); ++i) {

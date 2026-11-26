@@ -11,7 +11,8 @@ class FormatInitListRule : public FormatNamedRule
     typedef FormatNamedRule super;
 public:
     inline FormatInitListRule()
-        : super("init-list-lead", "Leads member-initializer lines with their colon or comma.")
+        : super("init-list-lead",
+                "Leads member-initializer lines with their colon or comma.")
     {
     }
 

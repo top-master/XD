@@ -13,9 +13,8 @@ class FormatProcessRunner : public FormatRunner
 {
     typedef FormatRunner super;
 public:
-    FormatProcessRunner(
-            const Formatter *formatter,
-            const FormatOptions & options);
+    FormatProcessRunner(const Formatter *formatter,
+                        const FormatOptions & options);
 
     QList<FormatFileResult > run(const QStringList & files) Q_DECL_OVERRIDE;
 
@@ -27,8 +26,7 @@ public:
 private:
     QStringList workerArguments() const;
     static QByteArray encodeIssue(
-            const char *kind,
-            const QByteArray & path,
+            const char *kind, const QByteArray & path,
             const FormatIssue & issue);
 };
 #endif // QT_NO_PROCESS

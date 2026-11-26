@@ -41,11 +41,8 @@ static bool groupKeepsIndent(const FormatDocument *document, int group)
         return true;
     }
     const Token opener = document->token(group - 1);
-    return opener == IDENTIFIER || opener == RANGLE
-        || opener == GTGT
-        || opener == RBRACK
-        || opener == RPAREN
-        || opener == STATIC_CAST
+    return opener == IDENTIFIER || opener == RANGLE || opener == GTGT
+        || opener == RBRACK || opener == RPAREN || opener == STATIC_CAST
         || opener == SIZEOF;
 }
 
@@ -63,8 +60,7 @@ static int statementLine(const FormatDocument *document, int from)
             continue;
         }
         const Token token = document->token(k);
-        if ((token == RPAREN
-                || token == RBRACK)
+        if ((token == RPAREN || token == RBRACK)
             && document->match(k) >= 0
         ) {
             k = document->match(k);
@@ -93,12 +89,11 @@ static int statementLine(const FormatDocument *document, int from)
     and gives the line that opened the group to @a base; sets
     @a keepsIndent for a group whose lines align under its first item.
 */
-static int groupOf(
-        const FormatDocument *document,
-        int index,
-        int *base,
-        bool *keepsIndent)
-{ *base = -1; *keepsIndent = false;
+static int groupOf(const FormatDocument *document, int index, int *base,
+                   bool *keepsIndent)
+{
+    *base = -1;
+    *keepsIndent = false;
     int k = index - 1;
     for (; k >= 0; --k) {
         const Token token = document->token(k);
@@ -112,13 +107,15 @@ static int groupOf(
                         || groupToken == LBRACK
                         || groupToken == LBRACE)
                     && document->match(group) >= index
-                ) { *keepsIndent = groupKeepsIndent(document, group);
-                    if (groupToken != LBRACE || *keepsIndent
-                    ) { *base = document->symbolLine(group);
+                ) {
+                    *keepsIndent = groupKeepsIndent(document, group);
+                    if (groupToken != LBRACE || *keepsIndent) {
+                        *base = document->symbolLine(group);
                         return group;
                     }
                 }
-            } *base = statementLine(document, k);
+            }
+            *base = statementLine(document, k);
             return -1;
         }
         if ((token == RPAREN
@@ -128,22 +125,23 @@ static int groupOf(
             k = document->match(k);
             continue;
         }
-        if (token == LPAREN || token == LBRACK
-        ) { *keepsIndent = groupKeepsIndent(document, k); *base = document->symbolLine(k);
+        if (token == LPAREN || token == LBRACK) {
+            *keepsIndent = groupKeepsIndent(document, k);
+            *base = document->symbolLine(k);
             return k;
         }
         if (token == LBRACE
             && document->braceScope(k) != FormatDocument::FunctionScope
             && document->braceScope(k) != FormatDocument::BlockScope
-        ) { *keepsIndent = groupKeepsIndent(document, k);
+        ) {
+            *keepsIndent = groupKeepsIndent(document, k);
         }
-        if (token == SEMIC
-            || token == LBRACE
-            || token == RBRACE
-        ) { *base = document->symbolLine(k + 1);
+        if (token == SEMIC || token == LBRACE || token == RBRACE) {
+            *base = document->symbolLine(k + 1);
             return -1;
         }
-    } *base = document->symbolLine(0);
+    }
+    *base = document->symbolLine(0);
     return -1;
 }
 
@@ -158,9 +156,7 @@ static bool isForCondition(const FormatDocument *document, int group, int index)
             continue;
         }
         const Token token = document->token(k);
-        if ((token == LPAREN
-                || token == LBRACK
-                || token == LBRACE)
+        if ((token == LPAREN || token == LBRACK || token == LBRACE)
             && document->match(k) > k
         ) {
             k = document->match(k);
@@ -171,11 +167,8 @@ static bool isForCondition(const FormatDocument *document, int group, int index)
     return semicolons == 1;
 }
 
-static int conditionSteps(
-        const FormatDocument *document,
-        int group,
-        int base,
-        int index)
+static int conditionSteps(const FormatDocument *document, int group, int base,
+                          int index)
 {
     int steps = 0;
     int bracket = group;
@@ -184,17 +177,12 @@ static int conditionSteps(
             ++steps;
         }
         const Token opener = document->token(bracket - 1);
-        if (opener == IF
-            || opener == WHILE
-            || (opener == FOR
-                && isForCondition(document, bracket, index))
+        if (opener == IF || opener == WHILE
+            || (opener == FOR && isForCondition(document, bracket, index))
         ) {
             if (bracket != group
                 && document->symbolLine(bracket) != base
                 && steps > 0
-                && (group < 1
-                    || document->token(group - 1) != LPAREN
-                    || document->symbolLine(group - 1) != base)
             ) {
                 --steps;
             }
@@ -227,6 +215,8 @@ static int leadRank(Token token)
 */
 void FormatContinuationIndentRule::run(FormatDocument *document) const
 {
+    CodeEditor editor = document->edit(0, document->text().size());
+    document = editor.document();
     for (int line = 2; line <= document->lineCount(); ++line) {
         const int first = document->firstSymbolOfLine(line);
         if (first < 1
@@ -235,36 +225,6 @@ void FormatContinuationIndentRule::run(FormatDocument *document) const
             || document->symbolEndLine(first - 1) >= line
         ) {
             continue;
-        }
-        if (document->token(first) == QUESTION) {
-            bool nested = false;
-            for (int k = document->headStart(first); k < first; ++k) {
-                const Token token = document->token(k);
-                const int templateEnd = token == LANGLE
-                    && document->token(k - 1) == IDENTIFIER
-                    ? templateClose(document, k, first) : -1;
-                if (templateEnd > k) {
-                    k = templateEnd;
-                } else if ((token == LPAREN
-                        || token == LBRACK
-                        || token == LBRACE)
-                    && document->match(k) > k
-                    && document->match(k) < first
-                ) {
-                    k = document->match(k);
-                } else if (token == QUESTION) {
-                    nested = true;
-                } else if (token == COMMA
-                    || token == LPAREN
-                    || token == LBRACK
-                    || token == LBRACE
-                ) {
-                    nested = false;
-                }
-            }
-            if (nested) {
-                continue;
-            }
         }
         // Leaves out a statement's start, and a sign (`-1` after a comma).
         const Token before = document->token(first - 1);
@@ -278,28 +238,6 @@ void FormatContinuationIndentRule::run(FormatDocument *document) const
             || before == RETURN
             || isLeadingOperator(before)
         ) {
-            if (before == SEMIC || before == LBRACE || before == RBRACE) {
-                const int beforeLine = document->symbolLine(first - 1);
-                QByteArray baseIndent;
-                if (before == LBRACE) {
-                    baseIndent = document->indentOf(beforeLine)
-                        + continuationPad(0);
-                } else if (before == RBRACE) {
-                    baseIndent = document->indentOf(beforeLine);
-                } else {
-                    const int stmtLine = first > 1
-                        ? statementLine(document, first - 2) : beforeLine;
-                    baseIndent = document->indentOf(stmtLine);
-                }
-                const QByteArray current = document->indentOf(line);
-                if (current != baseIndent) {
-                    document->replace(
-                        document->lineStart(line),
-                        current.size(),
-                        baseIndent
-                    );
-                }
-            }
             continue;
         }
 
@@ -310,10 +248,10 @@ void FormatContinuationIndentRule::run(FormatDocument *document) const
         if (keepsIndent || base < 1 || base >= line) {
             continue;
         }
-        const Token opener = group >= 1 ? document->token(group - 1) : NOTOKEN;
+        const Token opener = group >= 1
+            ? document->token(group - 1) : NOTOKEN;
         const Token leading = document->token(first);
-        const bool isCondition = opener == IF
-            || opener == WHILE
+        const bool isCondition = opener == IF || opener == WHILE
             || (opener == FOR && isForCondition(document, group, first));
         const bool isOperand = isCondition
             && leading != ANDAND
@@ -321,22 +259,15 @@ void FormatContinuationIndentRule::run(FormatDocument *document) const
         QByteArray indent = document->indentOf(base)
             + continuationPad(0, isOperand ? 2 : 1);
 
-        // A grouped operand followed by a member access or an operator on
-        // the statement line has one step for its parentheses and another
-        // for the binary continuation.
+        // A grouped operand followed by a member access has one step for
+        // its parentheses and another for the binary continuation.
         const int close = group >= 0 ? document->match(group) : -1;
-        const Token afterGroup = close >= 0 ? document->token(close + 1)
-                                            : NOTOKEN;
-        if (group >= 0
-            && document->token(group) == LPAREN
-            && ! isCondition
-            && document->symbolLine(group) == base
-            && (afterGroup == DOT
-                || afterGroup == ARROW
-                || ((isLeadingOperator(afterGroup)
-                        || operatorPrecedence(afterGroup) > 0)
-                    && statementLine(document, group) == base)
-            )
+        const Token afterGroup = close >= 0
+            ? document->token(close + 1)
+            : NOTOKEN;
+        if (group >= 0 && document->token(group) == LPAREN
+            && ! isCondition && document->symbolLine(group) == base
+            && (afterGroup == DOT || afterGroup == ARROW)
         ) {
             indent = document->indentOf(base) + continuationPad(0, 2);
         }
@@ -355,8 +286,7 @@ void FormatContinuationIndentRule::run(FormatDocument *document) const
             const int lead = document->firstSymbolOfLine(earlier);
             int earlierBase = -1;
             bool earlierKeeps = false;
-            if (lead < 0
-                || ! isLeadingOperator(document->token(lead))
+            if (lead < 0 || ! isLeadingOperator(document->token(lead))
                 || groupOf(document, lead, &earlierBase, &earlierKeeps) != group
                 || earlierBase != base
             ) {
@@ -374,11 +304,8 @@ void FormatContinuationIndentRule::run(FormatDocument *document) const
         }
         const QByteArray current = document->indentOf(line);
         if (current != indent) {
-            document->replace(
-                document->lineStart(line),
-                current.size(),
-                indent
-            );
+            document
+                ->replace(document->lineStart(line), current.size(), indent);
         }
     }
 }

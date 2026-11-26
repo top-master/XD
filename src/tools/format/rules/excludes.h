@@ -11,7 +11,8 @@ class FormatExcludesRule : public FormatNamedRule
     typedef FormatNamedRule super;
 public:
     inline FormatExcludesRule()
-        : super("excludes", "Reports !flags.includes(...) checks that excludes() states.")
+        : super("excludes",
+                "Reports !flags.includes(...) checks that excludes() states.")
     {
     }
 

@@ -21,6 +21,7 @@
 #include <QtCore/QVariant>
 
 class FormatRule;
+class CodeEditor;
 
 class FormatDocument
 {
@@ -35,9 +36,8 @@ public:
         InitScope
     };
 
-    explicit FormatDocument(
-            const QByteArray & text,
-            const QString & path = QString());
+    explicit FormatDocument(const QByteArray & text,
+                            const QString & path = QString());
 
     inline const QByteArray &text() const { return m_text; }
     inline const QString &path() const { return m_path; }
@@ -64,13 +64,13 @@ public:
         m_ruleCaches.clear();
     }
     inline QVariant ruleCache(
-            const FormatRule *rule, const QByteArray &key) const
+            const FormatRule *rule,
+            const QByteArray &key) const
     {
         return m_ruleCaches.value(rule).value(key);
     }
     inline void setRuleCache(
-            const FormatRule *rule,
-            const QByteArray &key,
+            const FormatRule *rule, const QByteArray &key,
             const QVariant &value)
     {
         m_ruleCaches[rule].insert(key, value);
@@ -121,32 +121,26 @@ public:
     void setLineRanges(const QVector<QPair<int, int > > & ranges);
     bool isLineSelected(int line) const;
 
+    CodeEditor edit(int start, int end);
     bool replace(int offset, int length, const QByteArray & text);
     inline bool canInsert(int offset) const
     { return this->canReplace(offset, 0); }
     bool replace(
-            int offset,
-            int length,
-            const QByteArray & text,
-            int otherOffset,
-            int otherLength,
-            const QByteArray & otherText);
-    void report(
-            int offset,
-            const char *rule,
-            const QString & message,
-            bool isError = false);
-    void request(
-            int offset,
-            const char *rule,
-            const QString & message,
-            int lineCount = 1,
-            int columnLimit = 0);
+            int offset, int length, const QByteArray & text,
+            int otherOffset, int otherLength, const QByteArray & otherText);
+    void report(int offset, const char *rule, const QString & message,
+                bool isError = false);
+    void request(int offset,
+                 const char *rule,
+                 const QString & message,
+                 int lineCount = 1,
+                 int columnLimit = 0);
     inline const QList<FormatIssue > &requests() const { return m_requests; }
     void truncateIssues(int count);
     bool applyEdits();
 
 private:
+    friend class CodeEditor;
     static void shiftIssues(QList<FormatIssue > *issues, int line, int delta);
     bool canReplace(int offset, int length) const;
 
@@ -165,8 +159,7 @@ private:
     };
 
     void moveInlineConfiguration(const QList<Edit > & edits);
-    static int movedOffset(int offset,
-                           bool isStart,
+    static int movedOffset(int offset, bool isStart,
                            const QList<Edit > & edits);
     void analyze();
     void appendComment(const Symbol & symbol, int previousCodeLine);
@@ -174,6 +167,7 @@ private:
     void analyzeLines();
     Scope classifyBrace(int index, Scope enclosing) const;
 
+    bool m_editorChanged = false;
     QByteArray m_text;
     QString m_path;
     FormatFileConfig m_fileConfig;
@@ -201,6 +195,99 @@ private:
     QVector<QPair<int, int > > m_ranges;
     QList<Edit > m_edits;
     QList<FormatIssue > m_issues;
+};
+
+
+class CodeEditor
+{
+    FormatDocument *m_target;
+    FormatDocument m_backup;
+    QByteArray m_original;
+    QList<FormatComment > m_comments;
+    int m_start;
+    int m_end;
+
+public:
+    CodeEditor(FormatDocument *document, int start, int end);
+    CodeEditor(CodeEditor &&other);
+    ~CodeEditor();
+    CodeEditor(const CodeEditor &) = delete;
+    CodeEditor &operator=(const CodeEditor &) = delete;
+    CodeEditor &operator=(CodeEditor &&) = delete;
+
+    bool apply();
+    inline FormatDocument *document() { return &m_backup; }
+    inline const FormatDocument *document() const { return &m_backup; }
+    inline const QByteArray &text() const { return m_backup.text(); }
+    inline const Symbols &symbols() const { return m_backup.symbols(); }
+    inline const FormatFileConfig &configAt(int offset) const
+    { return m_backup.configAt(offset); }
+    inline int lineCount() const { return m_backup.lineCount(); }
+    inline int lineOf(int offset) const { return m_backup.lineOf(offset); }
+    inline int lineStart(int line) const { return m_backup.lineStart(line); }
+    inline int lineEnd(int line) const { return m_backup.lineEnd(line); }
+    inline QByteArray lineText(int line) const { return m_backup.lineText(line); }
+    inline QByteArray indentOf(int line) const { return m_backup.indentOf(line); }
+    inline int symbolEnd(int index) const { return m_backup.symbolEnd(index); }
+    inline int symbolLine(int index) const { return m_backup.symbolLine(index); }
+    inline int symbolEndLine(int index) const
+    { return m_backup.symbolEndLine(index); }
+    inline QByteArray lexem(int index) const { return m_backup.lexem(index); }
+    inline Token token(int index) const { return m_backup.token(index); }
+    inline int match(int index) const { return m_backup.match(index); }
+    inline int symbolAfter(int offset) const
+    { return m_backup.symbolAfter(offset); }
+    inline int headStart(int index) const { return m_backup.headStart(index); }
+    inline FormatDocument::Scope scopeOf(int index) const
+    { return m_backup.scopeOf(index); }
+    inline FormatDocument::Scope braceScope(int index) const
+    { return m_backup.braceScope(index); }
+    inline int firstSymbolOfLine(int line) const
+    { return m_backup.firstSymbolOfLine(line); }
+    inline int lastSymbolOfLine(int line) const
+    { return m_backup.lastSymbolOfLine(line); }
+    inline bool isDirectiveLine(int line) const
+    { return m_backup.isDirectiveLine(line); }
+    inline bool spansDirective(int start, int end) const
+    { return m_backup.spansDirective(start, end); }
+    inline bool hasCommentBetween(int start, int end) const
+    { return m_backup.hasCommentBetween(start, end); }
+    inline bool isOnlyWhitespace(int start, int end) const
+    { return m_backup.isOnlyWhitespace(start, end); }
+    inline QByteArray sourceText(int first, int last) const
+    {
+        if (last < first) {
+            return QByteArray();
+        }
+        const int start = m_backup.symbols().at(first).from;
+        return m_backup.text().mid(start, m_backup.symbolEnd(last) - start);
+    }
+    inline QByteArray get(int start, int end) const
+    { return m_backup.text().mid(start, end - start); }
+    inline bool add(int offset, const QByteArray &text)
+    { return this->replace(offset, 0, text); }
+    inline bool set(int start, int end, const QByteArray &text)
+    { return this->replace(start, end - start, text); }
+    inline bool replace(int offset, int length, const QByteArray &text)
+    {
+        return m_target && offset >= m_start && length >= 0
+            && offset <= m_end - length
+            && m_backup.replace(offset, length, text);
+    }
+    inline bool replace(int offset, int length, const QByteArray &text,
+                        int otherOffset, int otherLength,
+                        const QByteArray &otherText)
+    {
+        return m_target && offset >= m_start && length >= 0
+            && offset <= m_end - length
+            && otherOffset >= m_start && otherLength >= 0
+            && otherOffset <= m_end - otherLength
+            && m_backup.replace(offset, length, text,
+                                otherOffset, otherLength, otherText);
+    }
+
+private:
+    QByteArray restore(int offset, int length, const QByteArray &text) const;
 };
 
 #endif // FORMAT_DOCUMENT_H
