@@ -35,6 +35,29 @@ bool findTernary(const FormatDocument *document, int first, int last,
 bool isDeclarationParen(const FormatDocument *document, int paren);
 class FormatScopeConditions;
 
+bool keepsUserLines(const FormatDocument *document, int open, int close,
+                    const QList<QPair<int, int > > &arguments,
+                    FormatScopeConditions *conditions,
+                    const FormatFileConfig &fileConfig, int *joinCount);
+bool isAlignedUnderFirst(const FormatDocument *document, int open, int close,
+                         const QList<QPair<int, int > > &arguments);
+bool logicalBreakBeforeCall(const FormatDocument *document, int open,
+                            int *operatorIndex, QByteArray *indent);
+int inlineFunctionBody(const FormatDocument *document, int paren);
+bool isFunctionCallParen(const FormatDocument *document, int paren);
+int controlKeywordFor(const FormatDocument *document, int paren);
+int controlBodyStart(const FormatDocument *document, int keyword);
+bool expandInlineBody(FormatDocument *document, int keyword, int brace);
+void braceStatementBody(FormatDocument *document, int keyword, int head, int body);
+int continuationGroup(const FormatDocument *document, int index, int *base, bool *keepsIndent);
+bool isForCondition(const FormatDocument *document, int group, int index);
+int conditionSteps(const FormatDocument *document, int group, int base, int index);
+int leadRank(Token token);
+bool closesBracketChain(const FormatDocument *document, int close);
+bool findWholeStatement(const FormatDocument *document, int line, int *first, int *last);
+bool layoutChainOperand(FormatDocument *document, FormatScopeConditions *conditions, int next);
+bool joinsClosingLine(FormatDocument *document, int index);
+
 bool reachesWrapArgsAt(const FormatDocument *document,
                        FormatScopeConditions *conditions, int token);
 QList<QByteArray > comparisonLines(

@@ -293,8 +293,8 @@ QVariant Config::Schema::convert(
                 return QVariant();
             }
             const QString tail = convertedFallback.toString();
-            return convertedHead.toString() + QLL(" |")
-                + (tail.isEmpty() ? QString() : QLatin1Char(' ') + tail);
+            return QString(convertedHead.toString() + QLL(" |")
+                + (tail.isEmpty() ? QString() : QLatin1Char(' ') + tail));
         }
     }
     for (int i = 0; i < found.matchers.size(); ++i) {

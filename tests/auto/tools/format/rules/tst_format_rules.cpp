@@ -294,45 +294,37 @@ void tst_FormatRules::testInlineSettings_shouldFollowNestedRegions()
 void tst_FormatRules::testInlineSettings_shouldApplyAtRuleLocation()
 {
     Formatter formatter;
-    QString error;
-    QVERIFY(formatter.selectRules(
-        QStringList() << QLL("line-join"),
-        &error
-    ));
+    FormatConfig config;
+    config.checks << QLL("line-join");
     const QByteArray text(
         "int first = (one\n    + two);\n"
         "// Format rule: structure.target=any\n"
         "int second = (three\n    + four);\n"
     );
-    FormatDocument document(text);
-    QVERIFY2(document.setInlineConfiguration(FormatConfig(), &error), qPrintable(error));
-    formatter.selectedRules().first()->run(&document);
-    QVERIFY(document.applyEdits());
-    QVERIFY(document.text().contains("int first = (one\n    + two);"));
-    QVERIFY(document.text().contains("int second = (three + four);"));
     const FormatResult result = formatter.format(
         text,
         QString(),
-        QStringList()
+        QStringList(),
+        config
     );
     QVERIFY2(result.error.isEmpty(), qPrintable(result.error));
-    QCOMPARE(result.text, document.text());
+    QCOMPARE(result.text, QByteArray(
+        "int first = (one\n    + two);\n"
+        "// Format rule: structure.target=any\n"
+        "int second = (three + four);\n"
+    ));
 }
 
 void tst_FormatRules::testInlineSettings_shouldWarnAboutUnmatchedMarkers()
 {
     Formatter formatter;
-    QString error;
-    QVERIFY(formatter.selectRules(
-        QStringList() << QLL("line-join"),
-        &error
-    ));
     const QByteArray text(
         "// Format rule end.\n"
         "// Format rule begin: structure.wrapMax=40\n"
         "int example;\n"
     );
     FormatConfig config;
+    config.checks << QLL("line-join");
     const FormatResult ordinary =
         formatter.format(text, QString(), QStringList(), config);
     QVERIFY(ordinary.error.isEmpty());
@@ -355,11 +347,8 @@ void tst_FormatRules::testInlineSettings_shouldWarnAboutUnmatchedMarkers()
 void tst_FormatRules::testInlineSettings_shouldWrapOnlyInConfiguredRegion()
 {
     Formatter formatter;
-    QString error;
-    QVERIFY(formatter.selectRules(
-        QStringList() << QLL("args-wrap"),
-        &error
-    ));
+    FormatConfig config;
+    config.checks << QLL("args-wrap");
     const QByteArray call(
             "    sendValues(firstName, secondName, thirdName, fourthName);\n");
     const QByteArray text = "void run()\n{\n" + call
@@ -368,7 +357,7 @@ void tst_FormatRules::testInlineSettings_shouldWrapOnlyInConfiguredRegion()
     const FormatResult result = formatter.format(
         text,
         QString(),
-        QStringList()
+        QStringList(), config
     );
     QVERIFY2(result.error.isEmpty(), qPrintable(result.error));
     QCOMPARE(result.text.count(call), 1);
@@ -376,7 +365,7 @@ void tst_FormatRules::testInlineSettings_shouldWrapOnlyInConfiguredRegion()
     const FormatResult again = formatter.format(
         result.text,
         QString(),
-        QStringList()
+        QStringList(), config
     );
     QVERIFY2(again.error.isEmpty(), qPrintable(again.error));
     QCOMPARE(again.text, result.text);
@@ -411,12 +400,8 @@ void tst_FormatRules::testInlineSettings_shouldIsolateConcurrentFiles()
     QVERIFY(second.write("// Format rule: structure.target=long\n" + code) > 0);
     second.close();
     Formatter formatter;
-    QString error;
-    QVERIFY(formatter.selectRules(
-        QStringList() << QLL("line-join"),
-        &error
-    ));
     FormatOptions options;
+    options.config.checks << QLL("line-join");
     options.check = true;
     options.jobs = 2;
     QScopedPointer<FormatRunner > runner(
@@ -460,10 +445,8 @@ void tst_FormatRules::testInlineWarnings_shouldRoundTripThroughWorker()
 void tst_FormatRules::testInlineSettings_shouldPreserveAdjacentCommentFormatting()
 {
     Formatter formatter;
-    QString error;
-    QVERIFY(
-        formatter.selectRules(QStringList() << QLL("comment-case"), &error)
-    );
+    FormatConfig config;
+    config.checks << QLL("comment-case");
     const QByteArray text(
         "// ordinary sentence.\n"
         "// Format rule: structure.wrapMax=70\n"
@@ -473,7 +456,7 @@ void tst_FormatRules::testInlineSettings_shouldPreserveAdjacentCommentFormatting
     const FormatResult result = formatter.format(
         text,
         QString(),
-        QStringList()
+        QStringList(), config
     );
     QVERIFY2(result.error.isEmpty(), qPrintable(result.error));
     QVERIFY(result.text.contains("// Ordinary sentence.\n"));
@@ -484,17 +467,14 @@ void tst_FormatRules::testInlineSettings_shouldPreserveAdjacentCommentFormatting
 void tst_FormatRules::testInlineSettings_shouldRespectSelectedLines()
 {
     Formatter formatter;
-    QString error;
-    QVERIFY(formatter.selectRules(
-        QStringList() << QLL("args-wrap"),
-        &error
-    ));
+    FormatConfig config;
+    config.checks << QLL("args-wrap");
     const QByteArray call(
             "    sendValues(firstName, secondName, thirdName, fourthName);\n");
     const QByteArray text = "void run()\n{\n// Format rule: structure.wrapMax=40\n"
         + call + call + "}\n";
     const FormatResult result = formatter.format(
-        text, QString(), QStringList() << QLL("5,5")
+        text, QString(), QStringList() << QLL("5,5"), config
     );
     QVERIFY2(result.error.isEmpty(), qPrintable(result.error));
     QCOMPARE(result.text.count(call), 1);
@@ -542,10 +522,8 @@ void tst_FormatRules::testFormatterAliases_shouldProtectDisabledText()
 {
     Formatter formatter;
     QString error;
-    QVERIFY(
-        formatter
-            .selectRules(QStringList() << QLL("line-join") << QLL("comment-case"), &error)
-    );
+    FormatConfig config;
+    config.checks << QLL("line-join") << QLL("comment-case");
     const QByteArray text(
         "void run()\n{\n"
         "// @formater: off\n"
@@ -565,11 +543,12 @@ void tst_FormatRules::testFormatterAliases_shouldProtectDisabledText()
     const FormatResult result = formatter.format(
         text,
         QString(),
-        QStringList()
+        QStringList(),
+        config
     );
     QVERIFY2(result.error.isEmpty(), qPrintable(result.error));
     QVERIFY(result.warnings.isEmpty());
-    FormatConfig verboseConfig;
+    FormatConfig verboseConfig = config;
     verboseConfig.verbose = true;
     const FormatResult verbose = formatter.format(
         text,
@@ -599,7 +578,8 @@ void tst_FormatRules::testFormatterAliases_shouldProtectDisabledText()
     const FormatResult again = formatter.format(
         result.text,
         QString(),
-        QStringList()
+        QStringList(),
+        config
     );
     QVERIFY2(again.error.isEmpty(), qPrintable(again.error));
     QCOMPARE(again.text, result.text);
@@ -608,15 +588,14 @@ void tst_FormatRules::testFormatterAliases_shouldProtectDisabledText()
 void tst_FormatRules::testFormatterAliases_shouldDisableThroughEndOfFile()
 {
     Formatter formatter;
-    QString error;
-    QVERIFY(
-        formatter.selectRules(QStringList() << QLL("comment-case"), &error)
-    );
+    FormatConfig config;
+    config.checks = QStringList() << QLL("comment-case");
     const QByteArray text("// @formatter: off\n// keep lowercase.\n");
     const FormatResult result = formatter.format(
         text,
         QString(),
-        QStringList()
+        QStringList(),
+        config
     );
     QVERIFY2(result.error.isEmpty(), qPrintable(result.error));
     QCOMPARE(result.text, text);
@@ -625,8 +604,8 @@ void tst_FormatRules::testFormatterAliases_shouldDisableThroughEndOfFile()
 void tst_FormatRules::testFormatterAliases_shouldSuppressReportsWhileOff()
 {
     Formatter formatter;
-    QString error;
-    QVERIFY(formatter.selectRules(QStringList() << QLL("em-dash"), &error));
+    FormatConfig config;
+    config.checks = QStringList() << QLL("em-dash");
     const QByteArray text(
         "// @formatter: off\n"
         "// ignored \xe2\x80\x94 text.\n"
@@ -636,7 +615,8 @@ void tst_FormatRules::testFormatterAliases_shouldSuppressReportsWhileOff()
     const FormatResult result = formatter.format(
         text,
         QString(),
-        QStringList()
+        QStringList(),
+        config
     );
     QVERIFY2(result.error.isEmpty(), qPrintable(result.error));
     QCOMPARE(result.issues.size(), 1);
@@ -646,16 +626,14 @@ void tst_FormatRules::testFormatterAliases_shouldSuppressReportsWhileOff()
 void tst_FormatRules::testFormatterAliases_shouldWarnForInvalidCommand()
 {
     Formatter formatter;
-    QString error;
-    QVERIFY(formatter.selectRules(
-        QStringList() << QLL("line-join"),
-        &error
-    ));
+    FormatConfig config;
+    config.checks = QStringList() << QLL("line-join");
     const QByteArray text("// @formatter: disable\nint value;\n");
     const FormatResult result = formatter.format(
         text,
         QString(),
-        QStringList()
+        QStringList(),
+        config
     );
     QVERIFY2(result.error.isEmpty(), qPrintable(result.error));
     QCOMPARE(result.text, text);
@@ -668,8 +646,8 @@ void tst_FormatRules::testFormatterAliases_shouldWarnForInvalidCommand()
 void tst_FormatRules::testFormatterAliases_shouldReportAfterInlineEnable()
 {
     Formatter formatter;
-    QString error;
-    QVERIFY(formatter.selectRules(QStringList() << QLL("em-dash"), &error));
+    FormatConfig config;
+    config.checks = QStringList() << QLL("em-dash");
     const QByteArray text(
         "// @formatter: off\n"
         "const char *first = \"\xe2\x80\x94\"; /* @formatter: on */ "
@@ -678,7 +656,8 @@ void tst_FormatRules::testFormatterAliases_shouldReportAfterInlineEnable()
     const FormatResult result = formatter.format(
         text,
         QString(),
-        QStringList()
+        QStringList(),
+        config
     );
     QVERIFY2(result.error.isEmpty(), qPrintable(result.error));
     QCOMPARE(result.issues.size(), 1);
@@ -688,11 +667,8 @@ void tst_FormatRules::testFormatterAliases_shouldReportAfterInlineEnable()
 void tst_FormatRules::testFormatterAliases_shouldFormatAfterInlineEnable()
 {
     Formatter formatter;
-    QString error;
-    QVERIFY(formatter.selectRules(
-        QStringList() << QLL("line-join"),
-        &error
-    ));
+    FormatConfig config;
+    config.checks = QStringList() << QLL("line-join");
     const QByteArray text(
         "// @formatter: off\n"
         "// @formatter: structure.target=any\n"
@@ -701,7 +677,8 @@ void tst_FormatRules::testFormatterAliases_shouldFormatAfterInlineEnable()
     const FormatResult result = formatter.format(
         text,
         QString(),
-        QStringList()
+        QStringList(),
+        config
     );
     QVERIFY2(result.error.isEmpty(), qPrintable(result.error));
     QVERIFY(result.text.contains("/* @formatter: on */ int value = (first + second);"));
@@ -802,17 +779,8 @@ FormatResult tst_FormatRules::formatWith(
         const QString & path) const
 {
     Formatter formatter;
-    QString error;
-    const QStringList names = rule.split(
-        QLatin1Char(','),
-        QString::SkipEmptyParts
-    );
-    if ( ! formatter.selectRules(names, &error)) {
-        FormatResult result;
-        result.error = error;
-        return result;
-    }
     FormatConfig config;
+    config.checks = rule.split(QLatin1Char(','), QString::SkipEmptyParts);
     if (rule == QLL("super-typedef")) {
         config.assignments << QString(QLL("structure.typedefSuper=always"));
     }
@@ -866,11 +834,8 @@ void tst_FormatRules::testNameMismatch_shouldFollowCodeSetting()
         "failed to find the name is-basE-member (maybe is-base-member was meant).");
     const QByteArray text("int a;\n");
     Formatter formatter;
-    QString error;
-    QVERIFY2(formatter.selectRules(
-        QStringList() << QString(QLL("moc-run-macro")), &error
-    ), qPrintable(error));
     FormatConfig config;
+    config.checks << QLL("moc-run-macro");
     config.assignments << QString(QLL("relations.thisMode=is-basE-member"));
 
     QTest::ignoreMessage(QtWarningMsg, message.constData());
@@ -904,35 +869,33 @@ void tst_FormatRules::testByRefVariable_shouldFollowLintSetting()
 {
     const QByteArray text("void f()\n{\n    int & first = list[0];\n}\n");
     Formatter formatter;
-    QString error;
-    QVERIFY2(formatter.selectRules(
-        QStringList() << QString(QLL("reference-local")), &error
-    ), qPrintable(error));
-    FormatResult result = qMove(formatter.format(text, QString(), QStringList()));
+    FormatConfig config;
+    config.checks << QLL("reference-local");
+    FormatResult result = qMove(formatter.format(text, QString(), QStringList(), config));
     qExpect(result.issues.size())->toEqual(1);
     qExpect(result.issues.at(0).isError)->toBeFalsy();
 
-    FormatConfig errors;
+    FormatConfig errors = config;
     errors.assignments << QString(QLL("lint.byRefVariable=error"));
     result = qMove(formatter.format(text, QString(), QStringList(), errors));
     qExpect(result.error)->toBeEmpty();
     qExpect(result.issues.size())->toEqual(1);
     qExpect(result.issues.at(0).isError)->toBeTruthy();
 
-    FormatConfig ignored;
+    FormatConfig ignored = config;
     ignored.assignments << QString(QLL("lint.byRefVariable=ignore"));
     result = qMove(formatter.format(text, QString(), QStringList(), ignored));
     qExpect(result.issues.size())->toEqual(0);
 
     // Without C++11, the default reports nothing.
-    FormatConfig later;
+    FormatConfig later = config;
     later.assignments << QString(QLL("lint.standards=c++17"));
     result = qMove(formatter.format(text, QString(), QStringList(), later));
     qExpect(result.error)->toBeEmpty();
     qExpect(result.issues.size())->toEqual(0);
 
     // A condition picks the level by the standards, in any case.
-    FormatConfig chosen;
+    FormatConfig chosen = config;
     chosen.assignments << QString(QLL("lint.standards=[c++11, C++17]"))
         << QString(QLL("lint.byRefVariable=hasStd(\"c++17\") ? error : ignore"));
     result = qMove(formatter.format(text, QString(), QStringList(), chosen));
@@ -1365,6 +1328,10 @@ void tst_FormatRules::testFix_shouldRewrite_data()
         << QString(QLL("not-space"))
         << QByteArray("bool b = a &&!c;\n")
         << QByteArray("bool b = a && ! c;\n");
+    QTest::newRow("not-space with block comments")
+        << QString(QLL("not-space"))
+        << QByteArray("bool ready=/* Before. */!/* After. */value;\n")
+        << QByteArray("bool ready= /* Before. */ ! /* After. */ value;\n");
     QTest::newRow("not-space keeps a run of signs together")
         << QString(QLL("not-space"))
         << QByteArray("bool b = !!x;\n")
@@ -1433,6 +1400,10 @@ void tst_FormatRules::testFix_shouldRewrite_data()
                           "void g()\n{\n    int x = a &b;\n    foo(&c);\n}\n")
         << QByteArray("void f(const QString & name, QString & out, int & count);\n"
                           "void g()\n{\n    int x = a &b;\n    foo(&c);\n}\n");
+    QTest::newRow("reference-space with block comments")
+        << QString(QLL("reference-space"))
+        << QByteArray("void f(const int/* Type. */&/* Name. */value);\n")
+        << QByteArray("void f(const int /* Type. */ & /* Name. */ value);\n");
     QTest::newRow("param-wrap")
         << QString(QLL("param-wrap"))
         << QByteArray("void Widget::reload(const QString & name, int id, const QObject *receiver, int x);\nQSharedPointer<DocumentRepositoryEntry > DocumentRepository::findEntryByName(const QString & name, int id);\n")
@@ -2454,6 +2425,10 @@ void tst_FormatRules::testFix_shouldRewrite_data()
         << QString(QLL("one-statement"))
         << QByteArray("void f()\n{\n    a(); b();\n    for (i = 0; i < n; ++i) {\n    }\n}\n")
         << QByteArray("void f()\n{\n    a();\n    b();\n    for (i = 0; i < n; ++i) {\n    }\n}\n");
+    QTest::newRow("one-statement with a block comment")
+        << QString(QLL("one-statement"))
+        << QByteArray("void f()\n{\n    a(); /* Note. */ b();\n}\n")
+        << QByteArray("void f()\n{\n    a(); /* Note. */\n    b();\n}\n");
     QTest::newRow("super-typedef access first")
         << QString(QLL("super-typedef"))
         << QByteArray("class Foo : public Bar\n{\npublic:\n    void f();\n};\n")
@@ -2665,9 +2640,8 @@ void tst_FormatRules::testReplaceTypes_shouldReadConditionalMapping()
     configFile.close();
 
     Formatter formatter;
-    QString error;
-    QVERIFY2(formatter.selectRules(QStringList() << QLL("replace-types"), &error),
-             qPrintable(error));
+    FormatConfig settings;
+    settings.checks << QLL("replace-types");
     const QByteArray input(
         "auto a = Wrap(\"text\") + Wrap(variable);\n"
         "auto b = Wrap(R\"tag(raw)tag\") + Wrap(\"a\" \"b\");\n"
@@ -2681,7 +2655,7 @@ void tst_FormatRules::testReplaceTypes_shouldReadConditionalMapping()
         "auto j = Wrap(\"same\") + Concat(\"same\");\n"
     );
     const FormatResult result = formatter.format(
-        input, dir.path() + QLL("/source.cpp"), QStringList()
+        input, dir.path() + QLL("/source.cpp"), QStringList(), settings
     );
     QVERIFY2(result.error.isEmpty(), qPrintable(result.error));
     QCOMPARE(result.text, QByteArray(
@@ -3507,11 +3481,10 @@ void tst_FormatRules::testSuperTypedef_shouldFollowPairedFiles()
     sourceFile.close();
 
     Formatter formatter;
-    QString error;
-    QVERIFY(formatter.selectRules(QStringList() << QLL("super-typedef"), &error));
-    const FormatResult existing = formatter.format(header, headerPath, QStringList());
-    QCOMPARE(existing.text, header);
     FormatConfig config;
+    config.checks << QLL("super-typedef");
+    const FormatResult existing = formatter.format(header, headerPath, QStringList(), config);
+    QCOMPARE(existing.text, header);
     config.scheduledFiles << headerPath << sourcePath;
     config.fileLineSpecs.insert(headerPath, QStringList() << QLL("1,5"));
     config.fileLineSpecs.insert(sourcePath, QStringList() << QLL("1,4"));
@@ -3617,9 +3590,8 @@ void tst_FormatRules::testSuperTypedef_shouldHandleQualifiedBases()
         "};\n"
     );
     Formatter formatter;
-    QString error;
-    QVERIFY(formatter.selectRules(QStringList() << QLL("super-typedef"), &error));
     FormatConfig config;
+    config.checks << QLL("super-typedef");
     config.assignments << QString(QLL("structure.replaceSuperSites=true"));
     const FormatResult result = formatter.format(input, QString(), QStringList(), config);
     QVERIFY2(result.error.isEmpty(), qPrintable(result.error));
@@ -3755,9 +3727,8 @@ void tst_FormatRules::testSuperTypedef_shouldUseStableRunnerInputs()
             QCOMPARE(sourceFile.write(source), qint64(source.size()));
             sourceFile.close();
             Formatter formatter;
-            QString error;
-            QVERIFY(formatter.selectRules(QStringList() << QLL("super-typedef"), &error));
             FormatOptions options;
+            options.config.checks << QLL("super-typedef");
             options.lineSpecs << QString(QLL("1,"));
             options.jobs = 2;
             QScopedPointer<FormatRunner > runner(FormatRunner::create(kinds.at(kind),
@@ -3798,9 +3769,8 @@ void tst_FormatRules::testSuperTypedef_shouldFindRelatedExtensions()
                             "    void unfold();\n};\n");
     const QByteArray source("void Fern::unfold()\n{\n    Frond::unfold();\n}\n");
     Formatter formatter;
-    QString error;
-    QVERIFY(formatter.selectRules(QStringList() << QLL("super-typedef"), &error));
     FormatConfig config;
+    config.checks << QLL("super-typedef");
     config.assignments << QString(QLL("structure.typedefSuper=if-needed"));
     for (int i = 0; i < extensions.size(); ++i) {
         QTemporaryDir dir;
@@ -3822,19 +3792,15 @@ void tst_FormatRules::testSuperTypedef_shouldFindRelatedExtensions()
 void tst_FormatRules::testAgentMode_shouldAskForOperatorGroups()
 {
     Formatter formatter;
-    QString error;
-    qExpect(formatter.selectRules(
-        QStringList() << QString(QLL("operator-wrap")),
-        &error
-    ))
-        ->toBeTruthy();
+    FormatConfig config;
+    config.checks = QStringList() << QString(QLL("operator-wrap"));
     const QByteArray input = "void f()\n{\n    out << \"label\" << firstValue << secondValue << thirdValue"
                              " << fourthValue << fifthValue << sixthValue;\n}\n";
     const FormatResult result = qMove(formatter.format(
         input,
         QString(),
         QStringList(),
-        FormatConfig(),
+        config,
         true
     ));
     qExpect(result.changed)->toBeTruthy();
@@ -3851,9 +3817,8 @@ void tst_FormatRules::testAgentMode_shouldAskForOperatorGroups()
 void tst_FormatRules::testAgentMode_shouldAskForLongSplitCondition()
 {
     Formatter formatter;
-    QString error;
-    qExpect(formatter.selectRules(QStringList() << QString(QLL("condition-wrap")), &error))
-        ->toBeTruthy();
+    FormatConfig config;
+    config.checks = QStringList() << QString(QLL("condition-wrap"));
     const QByteArray input = "void f()\n{\n    if (hasData && isBuffered && socketType == UdpSocketType"
                              " && engine->isConnected()\n        && engine->lastError() == RefusedError) {\n"
                              "        reset();\n    }\n}\n";
@@ -3861,7 +3826,7 @@ void tst_FormatRules::testAgentMode_shouldAskForLongSplitCondition()
         input,
         QString(),
         QStringList(),
-        FormatConfig(),
+        config,
         true
     ));
     qExpect(result.changed)->toBeFalsy();
@@ -3877,18 +3842,14 @@ void tst_FormatRules::testAgentMode_shouldAskForLongSplitCondition()
 void tst_FormatRules::testAgentMode_shouldAskForDocAccessChains()
 {
     Formatter formatter;
-    QString error;
-    qExpect(formatter.selectRules(
-        QStringList() << QString(QLL("code-backticks")),
-        &error
-    ))
-        ->toBeTruthy();
+    FormatConfig config;
+    config.checks = QStringList() << QString(QLL("code-backticks"));
     const QByteArray input = "/// Reads it through watcher()->load(), as run() does.\nvoid f();\n";
     const FormatResult result = qMove(formatter.format(
         input,
         QString(),
         QStringList(),
-        FormatConfig(),
+        config,
         true
     ));
     QCOMPARE(result.text, input);
@@ -3900,19 +3861,17 @@ void tst_FormatRules::testAgentMode_shouldAskForDocAccessChains()
 void tst_FormatRules::testAgentMode_shouldAskNothingWhenOff()
 {
     Formatter formatter;
-    QString error;
-    qExpect(formatter.selectRules(
-        QStringList() << QString(QLL("operator-wrap"))
-            << QString(QLL("code-backticks")),
-        &error
-    ))->toBeTruthy();
+    FormatConfig config;
+    config.checks = QStringList() << QString(QLL("operator-wrap"))
+            << QString(QLL("code-backticks"));
     const QByteArray input = "/// Reads it through watcher()->load().\nvoid f()\n{\n"
                              "    out << \"label\" << firstValue << secondValue << thirdValue"
                              " << fourthValue << fifthValue << sixthValue;\n}\n";
     const FormatResult result = qMove(formatter.format(
         input,
         QString(),
-        QStringList()
+        QStringList(),
+        config
     ));
     qExpect(result.changed)->toBeTruthy();
     qExpect(result.requests.size())->toEqual(0);
@@ -3923,19 +3882,15 @@ void tst_FormatRules::testAgentMode_shouldAskNothingWhenOff()
 void tst_FormatRules::testAgentMode_shouldAskForArgumentGroups()
 {
     Formatter formatter;
-    QString error;
-    qExpect(formatter.selectRules(
-        QStringList() << QString(QLL("args-wrap")),
-        &error
-    ))
-        ->toBeTruthy();
+    FormatConfig config;
+    config.checks = QStringList() << QString(QLL("args-wrap"));
     const QByteArray input = "void f()\n{\n    run(firstArgumentName, secondArgumentName,"
                              " thirdArgumentName, fourthArgumentName);\n}\n";
     const FormatResult result = qMove(formatter.format(
         input,
         QString(),
         QStringList(),
-        FormatConfig(),
+        config,
         true
     ));
     qExpect(result.changed)->toBeTruthy();
@@ -4013,13 +3968,11 @@ void tst_FormatRules::testAgentGuides_shouldFillTemplate()
 void tst_FormatRules::testReferenceLocal_shouldAskAgentWithAsset()
 {
     Formatter formatter;
-    QString error;
-    QVERIFY2(formatter.selectRules(
-        QStringList() << QString(QLL("reference-local")), &error
-    ), qPrintable(error));
+    FormatConfig config;
+    config.checks << QLL("reference-local");
     const QByteArray text("void f()\n{\n    int & first = list[0];\n}\n");
     const FormatResult agent = qMove(formatter.format(
-        text, QString(QLL("/src/a.cpp")), QStringList(), FormatConfig(), true
+        text, QString(QLL("/src/a.cpp")), QStringList(), config, true
     ));
     qExpect(agent.requests.size())->toEqual(1);
     qExpect(this->issueLines(agent, QString(QLL("reference-local"))))->toBeEmpty();
@@ -4034,7 +3987,7 @@ void tst_FormatRules::testReferenceLocal_shouldAskAgentWithAsset()
     guides.remove();
 
     const FormatResult plain = qMove(formatter.format(
-        text, QString(QLL("/src/a.cpp")), QStringList()
+        text, QString(QLL("/src/a.cpp")), QStringList(), config
     ));
     qExpect(plain.requests.size())->toEqual(0);
     qExpect(this->issueLines(plain, QString(QLL("reference-local"))))
@@ -4048,13 +4001,11 @@ void tst_FormatRules::testReferenceLocal_shouldAskAgentWithAsset()
 void tst_FormatRules::testGlobalStatic_shouldAskAgentWithAsset()
 {
     Formatter formatter;
-    QString error;
-    QVERIFY2(formatter.selectRules(
-        QStringList() << QString(QLL("global-static")), &error
-    ), qPrintable(error));
+    FormatConfig config;
+    config.checks << QLL("global-static");
     const QByteArray text("void f()\n{\n    static const char codes[][2] = { { 'a', 'b' } };\n}\n");
     const FormatResult agent = qMove(formatter.format(
-        text, QString(QLL("/src/a.cpp")), QStringList(), FormatConfig(), true
+        text, QString(QLL("/src/a.cpp")), QStringList(), config, true
     ));
     qExpect(agent.requests.size())->toEqual(1);
     qExpect(this->issueLines(agent, QString(QLL("global-static"))))->toBeEmpty();
@@ -4069,7 +4020,7 @@ void tst_FormatRules::testGlobalStatic_shouldAskAgentWithAsset()
     guides.remove();
 
     const FormatResult plain = qMove(formatter.format(
-        text, QString(QLL("/src/a.cpp")), QStringList()
+        text, QString(QLL("/src/a.cpp")), QStringList(), config
     ));
     qExpect(plain.requests.size())->toEqual(0);
     qExpect(this->issueLines(plain, QString(QLL("global-static"))))
@@ -5316,13 +5267,8 @@ void tst_FormatRules::testDocTagSign_shouldPickSign()
     QFETCH(QByteArray, input);
     QFETCH(QByteArray, output);
     Formatter formatter;
-    QString error;
-    qExpect(formatter.selectRules(
-        QStringList() << QString(QLL("doc-tag-sign")),
-        &error
-    ))
-        ->toBeTruthy();
     FormatConfig config;
+    config.checks << QLL("doc-tag-sign");
     if ( ! setting.isEmpty()) {
         config.assignments << QString(QLL("comments.docTagSign=")) + setting;
     }
@@ -5511,14 +5457,7 @@ void tst_FormatRules::testFixtures_shouldMatchAfter()
 
     // Formats it with those rules and settings, on those lines.
     Formatter formatter;
-    QString error;
-    QVERIFY2(
-        formatter.selectRules(rules.split(
-            QLatin1Char(','),
-            QString::SkipEmptyParts
-        ), &error),
-        qPrintable(error)
-    );
+    config.checks = rules.split(QLatin1Char(','), QString::SkipEmptyParts);
     const FormatResult result = qMove(formatter.format(
         text,
         path,
@@ -5580,10 +5519,17 @@ void tst_FormatRules::testEditor_shouldPublishOnApplyAndScopeExit()
         CodeEditor editor = document.edit(0, document.text().size());
         QVERIFY(editor.replace(12, 1, "2"));
         QCOMPARE(document.text(), QByteArray("int value = 1;\n"));
+        QCOMPARE(editor.get(0, document.text().size()), QByteArray("int value = 2;\n"));
+        QCOMPARE(editor.get(12, 13), QByteArray("2"));
         CodeEditor moved(qMove(editor));
         QVERIFY(moved.apply());
         QCOMPARE(document.text(), QByteArray("int value = 2;\n"));
         QVERIFY( ! moved.apply());
+    }
+    {
+        CodeEditor editor = document.edit(12, 13);
+        QVERIFY(editor.replace(12, 1, "2"));
+        QVERIFY( ! editor.apply());
     }
     QVERIFY(document.applyEdits());
     QVERIFY( ! document.applyEdits());
@@ -5593,6 +5539,53 @@ void tst_FormatRules::testEditor_shouldPublishOnApplyAndScopeExit()
         QVERIFY(editor.replace(12, 1, "3"));
     }
     QCOMPARE(document.text(), QByteArray("int value = 3;\n"));
+
+    for (int order = 0; order < 2; ++order) {
+        FormatDocument combined("abc");
+        {
+            CodeEditor editor = combined.edit(0, combined.text().size());
+            if (order == 0) {
+                QVERIFY(editor.add(0, "X"));
+                QVERIFY(editor.set(0, 1, "Y"));
+            } else {
+                QVERIFY(editor.set(0, 1, "Y"));
+                QVERIFY(editor.add(0, "X"));
+            }
+            QCOMPARE(editor.get(0, 3), QByteArray("XYbc"));
+            QVERIFY(editor.apply());
+        }
+        QCOMPARE(combined.text(), QByteArray("XYbc"));
+    }
+    FormatDocument appended("abc");
+    {
+        CodeEditor editor = appended.edit(0, appended.text().size());
+        QVERIFY(editor.add(3, "!"));
+        QCOMPARE(editor.get(0, 3), QByteArray("abc!"));
+    }
+    QCOMPARE(appended.text(), QByteArray("abc!"));
+
+    FormatDocument queued("first second");
+    QVERIFY(queued.replace(6, 6, "SECOND"));
+    {
+        CodeEditor editor = queued.edit(0, 5);
+        QVERIFY(editor.set(0, 5, "longer"));
+        QVERIFY(editor.apply());
+    }
+    QCOMPARE(queued.text(), QByteArray("longer second"));
+    QVERIFY(queued.applyEdits());
+    QCOMPARE(queued.text(), QByteArray("longer SECOND"));
+
+    FormatDocument adjacent("abcdef");
+    QVERIFY(adjacent.replace(2, 0, "X"));
+    QVERIFY(adjacent.replace(4, 0, "Y"));
+    {
+        CodeEditor editor = adjacent.edit(2, 4);
+        QVERIFY(editor.set(2, 4, QByteArray()));
+        QVERIFY(editor.apply());
+    }
+    QCOMPARE(adjacent.text(), QByteArray("abef"));
+    QVERIFY(adjacent.applyEdits());
+    QCOMPARE(adjacent.text(), QByteArray("abXYef"));
 }
 
 /// Moves comments with code while protecting text outside the selected range.
@@ -5605,10 +5598,97 @@ void tst_FormatRules::testEditor_shouldPreserveCommentsAndRange()
     {
         CodeEditor editor = document.edit(start, end);
         QVERIFY( ! editor.hasCommentBetween(start, end));
+        QCOMPARE(editor.get(start, end), QByteArray("call(first, \n  second);\n"));
+        QCOMPARE(editor.sourceText(document.symbolAfter(start), document.symbolAfter(end) - 1),
+                 QByteArray("call(first, \n  second);"));
         QVERIFY(editor.replace(start, end - start,
                                "call(\n    first,\n    second\n);\n"));
         QCOMPARE(document.text(), original);
     }
     QCOMPARE(document.text(), QByteArray(
         "before();\ncall(\n    first, // Keep.\n    second\n);\nafter();\n"));
+
+    const QByteArray repeated("call(x /* Keep. */ + x);\n");
+    FormatDocument changed(repeated);
+    {
+        CodeEditor editor = changed.edit(0, repeated.size());
+        QVERIFY(editor.set(0, repeated.size(), "call(y + x);\n"));
+    }
+    QCOMPARE(changed.text(), QByteArray("call(y /* Keep. */ + x);\n"));
+
+    const QByteArray leading("call(first, /* Next. */ second);\n");
+    FormatDocument arguments(leading);
+    {
+        CodeEditor editor = arguments.edit(0, leading.size());
+        QVERIFY(editor.set(0, leading.size(), "call(\n    first,\n    second\n);\n"));
+    }
+    QCOMPARE(arguments.text(), QByteArray(
+        "call(\n    first,\n    /* Next. */ second\n);\n"));
+
+    const QByteArray mixed("before();\r\ncall(first, // Keep.\n second);\n");
+    FormatDocument endings(mixed);
+    const int call = mixed.indexOf("call");
+    {
+        CodeEditor editor = endings.edit(call, mixed.size());
+        QVERIFY(editor.set(call, mixed.size(), "call(\n    first,\n    second\n);\n"));
+    }
+    QCOMPARE(endings.text(), QByteArray(
+        "before();\r\ncall(\n    first, // Keep.\n    second\n);\n"));
+
+    const QByteArray windows("call(first, // Keep.\r\n second);\r\n");
+    FormatDocument carriageReturns(windows);
+    {
+        CodeEditor editor = carriageReturns.edit(0, windows.size());
+        QVERIFY(editor.set(0, windows.size(), "call(\r\n    first,\r\n    second\r\n);\r\n"));
+    }
+    QCOMPARE(carriageReturns.text(), QByteArray(
+        "call(\r\n    first, // Keep.\r\n    second\r\n);\r\n"));
+
+    FormatDocument tokens("int/* Type. */value;\n");
+    {
+        CodeEditor editor = tokens.edit(0, tokens.text().size());
+        QCOMPARE(editor.get(0, tokens.text().size()), QByteArray("int value;\n"));
+    }
+
+    const QList<QByteArray > commentLines = QList<QByteArray >()
+        << "    // Note." << "    // Note.\n" << "    // Note.\r\n"
+        << "    /* Note. */\n";
+    for (int line = 0; line < commentLines.size(); ++line) {
+        const QByteArray onlyComment = commentLines.at(line);
+        for (int begin = 0; begin <= 4; begin += 4) {
+            FormatDocument standalone(onlyComment);
+            {
+                CodeEditor editor = standalone.edit(begin, onlyComment.size());
+                QVERIFY(editor.set(begin, onlyComment.size(), QByteArray()));
+            }
+            QCOMPARE(standalone.text(), onlyComment);
+        }
+    }
+    const QByteArray boundary("    // Note.\r\nint value;\r\n");
+    FormatDocument trailingNewline(boundary);
+    {
+        const int newline = boundary.indexOf('\n');
+        CodeEditor editor = trailingNewline.edit(4, newline);
+        QVERIFY(editor.set(4, newline, QByteArray()));
+    }
+    QCOMPARE(trailingNewline.text(), boundary);
+
+    const QByteArray blockBoundary("    /* Note. */  \r\nint value;\r\n");
+    FormatDocument trailingBlockNewline(blockBoundary);
+    {
+        const int newline = blockBoundary.indexOf('\n');
+        CodeEditor editor = trailingBlockNewline.edit(4, newline);
+        QVERIFY(editor.set(4, newline, QByteArray()));
+    }
+    QCOMPARE(trailingBlockNewline.text(), QByteArray("    /* Note. */\r\nint value;\r\n"));
+
+    const QByteArray gapText("call(first, // Keep.\n    second);\n");
+    FormatDocument gap(gapText);
+    {
+        const int from = gapText.indexOf(',') + 1;
+        const int to = gapText.indexOf("second");
+        CodeEditor editor = gap.edit(from, to);
+        QVERIFY(editor.set(from, to, " "));
+    }
+    QCOMPARE(gap.text(), gapText);
 }

@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: Apache-2.0
 
 #include "./class-helpers.h"
+#include "./code-helpers.h"
 
 #include <QtCore/QByteArray>
 #include <QtCore/QFile>
@@ -318,4 +319,286 @@ int contentEndOf(const FormatDocument *document, int index)
         --end;
     }
     return end;
+}
+
+/*!
+    Adds `inline` in front of the declaration that starts at the token
+    @a start of @a document, and moves its head's later lines right as far,
+    up to the line that closes its parameters; hence the parameters stay
+    lined up under the `(`.
+*/
+void addInlineKeyword(
+        FormatDocument *document,
+        int start)
+{
+    const QByteArray keyword("inline ");
+    document->replace(document->symbols().at(start).from, 0, keyword);
+    const int line = document->symbolLine(start);
+    int open = start;
+    while (open < document->symbols().size()
+        && document->token(open) != LPAREN
+    ) {
+        ++open;
+    }
+    const int close = open < document->symbols().size()
+        ? document->match(open) : -1;
+    const int last = close >= 0 ? document->symbolLine(close) : line;
+    const int indent = textWidth(document->indentOf(line));
+    for (int l = line + 1; l <= last; ++l) {
+        if (textWidth(document->indentOf(l)) > indent) {
+            document->replace(document->lineStart(l), 0, QByteArray(
+                keyword.size(), ' '
+            ));
+        }
+    }
+}
+
+/*!
+    Puts @a marker in place of the `override` or `Q_DECL_OVERRIDE` at
+    @a overrideToken of @a document; an empty @a marker removes that marker
+    together with the space before it.
+*/
+void setOverrideMarker(
+        FormatDocument *document,
+        int overrideToken, const QString & marker)
+{
+    const int end = document->symbolEnd(overrideToken);
+    if (marker.isEmpty()) {
+        const int from = document->symbolEnd(overrideToken - 1);
+        document->replace(from, end - from, QByteArray());
+        return;
+    }
+    const int from = document->symbols().at(overrideToken).from;
+    document->replace(from, end - from, marker.toLatin1());
+}
+
+/*!
+    Builds the index of the first token of the declaration whose body opens
+    at @a body of @a document (after an access specifier and a template
+    head, and the macros that lead it), and sets @a hasInline when it says
+    `inline` or names a macro with `INLINE` in it (such as `Q_ALWAYS_INLINE`),
+    @a exempt for a `friend` or `constexpr` one, which needs no keyword, and
+    @a overrideToken to the index of an `override` or `Q_DECL_OVERRIDE`
+    after its parameters.
+*/
+int functionDeclarationStart(
+        const FormatDocument *document, int body,
+        bool *hasInline, bool *exempt, int *overrideToken)
+{
+    int start = document->headStart(body);
+
+    // Leaves a head that a directive cuts short: its start is not known.
+    if (start > 0
+        && document->isDirectiveLine(document->symbolLine(start - 1))
+    ) {
+        return -1;
+    }
+    // Steps over what leads the declaration, in any order, until nothing
+    // more does: access specifiers, template heads, and macros.
+    for (;;) {
+        const int before = start;
+        for (;;) {
+            const Token token = document->token(start);
+            const bool isAccess = token == PUBLIC || token == PRIVATE
+                || token == PROTECTED;
+            int label = start + (isAccess ? 1 : 0);
+            const Token kind = document->token(label);
+            if (kind == SLOTS
+                || kind == SIGNALS
+                || kind == Q_SLOTS_TOKEN
+                || kind == Q_SIGNALS_TOKEN
+            ) {
+                ++label;
+            }
+            if (label > start && document->token(label) == COLON) {
+                start = label + 1;
+            } else if (token == TEMPLATE
+                && document->token(start + 1) == LANGLE
+            ) {
+                int depth = 0;
+                for (++start; start < body; ++start) {
+                    const Token inner = document->token(start);
+                    depth += inner == LANGLE
+                        ? 1
+                        : (inner == RANGLE ? -1 : (inner == GTGT ? -2 : 0));
+                    if (depth <= 0) {
+                        break;
+                    }
+                }
+                ++start;
+            } else {
+                break;
+            }
+        }
+        // Steps over the macros that lead the declaration (moc gives some of
+        // them tokens of their own): one that expands to a template head, and a
+        // statement-like macro call that ends its line (such as
+        // `Q_DECLARE_FLAGS(...)`, which takes no `;`).
+        while (start < body && isMacroName(document->lexem(start))
+            && document->token(start + 1) != SCOPE
+        ) {
+            const QByteArray name = document->lexem(start);
+            if (document->token(start + 1) == LPAREN) {
+                const int close = document->match(start + 1);
+                if (close < 0
+                    || close + 1 >= body
+                    || document->symbolLine(close + 1)
+                        == document->symbolLine(close)
+                ) {
+                    break;
+                }
+                start = close + 1;
+                continue;
+            }
+            if (name.contains("INLINE")) {
+                *hasInline = true;
+            }
+            ++start;
+        }
+        if (start == before) {
+            break;
+        }
+    }
+    int parameters = -1;
+    for (int i = start; i < body; ++i) {
+        const Token token = document->token(i);
+        if (token == LPAREN) {
+            parameters = i;
+            break;
+        }
+        const QByteArray name = token == IDENTIFIER
+            ? document->lexem(i) : QByteArray();
+        if (token == INLINE || name.contains("INLINE")) {
+            *hasInline = true;
+        }
+        if (token == FRIEND || name == "constexpr" || name == "Q_DECL_CONSTEXPR"
+            || name == "Q_DECL_RELAXED_CONSTEXPR"
+        ) {
+            *exempt = true;
+        }
+    }
+
+    // Looks for `override` between the parameters and the body.
+    const int close = parameters >= 0 ? document->match(parameters) : -1;
+    for (int i = close + 1; close > 0 && i < body; ++i) {
+        const QByteArray name = document->lexem(i);
+        if (name == "override" || name == "Q_DECL_OVERRIDE") {
+            *overrideToken = i;
+        }
+    }
+    return start < body ? start : -1;
+}
+
+/*!
+    Tells whether the lambda capture list that the `[` at \a bracket of
+    \a document opens captures `this`: it names `this` or `*this`, or it
+    starts with the default capture `=` or `&`.
+*/
+static bool capturesThis(const FormatDocument *document, int bracket)
+{
+    const int close = document->match(bracket);
+    const Token first = document->token(bracket + 1);
+    if (first == EQ
+        || (first == AND
+            && (bracket + 2 == close || document->token(bracket + 2) == COMMA))
+    ) {
+        return true;
+    }
+    for (int k = bracket + 1; k < close; ++k) {
+        if (document->token(k) != THIS) {
+            continue;
+        }
+        const int start = document->token(k - 1) == STAR ? k - 1 : k;
+        const Token before = document->token(start - 1);
+        if (before == LBRACK || before == COMMA) {
+            return true;
+        }
+    }
+    return false;
+}
+
+
+/*!
+    Tells whether a token is inside a lambda that does not capture `this`.
+*/
+bool insideUncapturedLambda(const FormatDocument *document, int body, int index)
+{
+    for (int token = body + 1; token < index; ++token) {
+        const int lambda = lambdaBody(document, token);
+        if (lambda >= 0 && ! capturesThis(document, token)) {
+            const int close = document->match(lambda);
+            if (close >= index) {
+                return true;
+            }
+            if (close > token) {
+                token = close;
+            }
+        }
+    }
+    return false;
+}
+
+/*!
+    Builds the names that the tokens from \a from up to \a to of \a document
+    declare: a name right after a type, followed by what may end a
+    declaration (`;`, `=`, `,`, `)`, `(`, `[`, or a range-for's `:`), and
+    the names that declaration lists after commas.
+*/
+QSet<QByteArray > declaredLocalNames(
+        const FormatDocument *document, int from,
+        int to)
+{
+    QSet<QByteArray > names;
+    for (int i = from; i < to; ++i) {
+        if (document->token(i) != IDENTIFIER
+            || ! endsType(document->token(i - 1))
+        ) {
+            continue;
+        }
+        const Token before = document->token(i - 2);
+        if (document->token(i - 1) == IDENTIFIER
+            && (before == DOT
+                || before == ARROW)
+        ) {
+            continue;
+        }
+        const Token after = document->token(i + 1);
+        if (after != SEMIC
+            && after != EQ
+            && after != COMMA
+            && after != RPAREN
+            && after != LPAREN
+            && after != LBRACK
+            && after != COLON
+        ) {
+            continue;
+        }
+        names.insert(document->lexem(i));
+
+        // Takes the names the same declaration lists after commas, such as
+        // `m` and `d` of `int y, m, d;`.
+        for (int k = i + 1; k < to; ++k) {
+            const Token token = document->token(k);
+            if (token == LPAREN || token == LBRACK || token == LBRACE) {
+                k = qMax(k, document->match(k));
+                continue;
+            }
+            if (token == SEMIC || token == RPAREN || token == RBRACE) {
+                break;
+            }
+            if (token != COMMA) {
+                continue;
+            }
+            int name = k + 1;
+            while (document->token(name) == STAR
+                || document->token(name) == AND
+            ) {
+                ++name;
+            }
+            if (document->token(name) == IDENTIFIER) {
+                names.insert(document->lexem(name));
+            }
+        }
+    }
+    return names;
 }

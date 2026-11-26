@@ -65,7 +65,7 @@
       Config::Condition) of the names FormatScopeConditions::names() lists,
       compiled for FormatScopeConditions::holds();
       `is-base-member | already-existing | (is-outline & is-header)` without
-      a `.formatrc` (see FormatOutlineThisRule);
+      a `.formatrc`;
     * `wrapChainAt` (`[Structure]`): where an operator chain that does not
       fit one line breaks before its operators (see FormatExpressionLayout):
       a condition of the same names, which may compare `spaceUsed` (the
@@ -76,19 +76,19 @@
       `spaceUsed > 40%` without a `.formatrc`;
     * `wrapArgsAt` (`[Structure]`): where a call whose arguments do not fit
       one line breaks after its `(`, one argument per line (see
-      FormatArgsWrapRule): a condition like `wrapChainAt`, where `spaceUsed`
+      FormatExpressionLayout): a condition like `wrapChainAt`, where `spaceUsed`
       is the share of `wrapMax` used up to the `(`. It
       follows `wrapChainAt` until a `.formatrc` sets it, since an argument
       list is a chain of commas;
     * `wrapSignatureAt` (`[Structure]`): `wrapArgsAt` for the parameter
       list of a declaration or definition (a function, a method, or a
       constructor), which past `wrapMax` starts on the next line where it
-      holds (see FormatParamWrapRule); the other `wrapArgs` keys still
+      holds (see FormatExpressionLayout); the other `wrapArgs` keys still
       apply there. `spaceUsed > cfg.wrapArgsAt * 0.875` without a
       `.formatrc`: past 87.5% of the share `wrapArgsAt` gives at the place;
     * `wrapArgsOver` (`[Structure]`): how many arguments, or parameters, a
       list holds at most before it may always break, whatever
-      `wrapArgsAt` says (see FormatArgsWrapRule and FormatParamWrapRule).
+      `wrapArgsAt` says (see FormatExpressionLayout).
       A condition can instead decide per target using its argument count,
       remaining space, and scope; 3 without a `.formatrc`;
     * `wrapConditionsOver` (`[Structure]`): how many of the `&&` and `||`
@@ -121,11 +121,11 @@
       `never`; `always` without a `.formatrc`;
     * `target` (`[Structure]`): `long` (the default) keeps the line breaks
       that the code already has where they fit, and `any` lays the code out
-      anew, as if each expression sat on one line (see FormatLineJoinRule);
+      anew, as if each expression sat on one line;
       the command line's `--any-code` sets `any`;
     * `wrapMistakes` (`[Structure]`): how a list the user broke over lines
       is laid out anew when one of its lines strays from the average count
-      of items per line (see FormatArgsWrapRule): `average`, that count per
+      of items per line (see FormatExpressionLayout): `average`, that count per
       line; a number, such as `cfg.joinArgs`, that many per line; or `never`,
       the user's lines stay. A condition picks it at each list, such as
       `is(array) ? average : never`, the default, where `is()` asks the list
@@ -133,11 +133,11 @@
     * `compact` (`[Structure]`): `always` lets a call that ends the
       condition of an `if` or a `while`, its `(` on the keyword's line, close
       the condition right after its own `)`, as `)) {` (see
-      FormatArgsWrapRule and FormatConditionCloseRule); `never` (the
+      FormatExpressionLayout); `never` (the
       default) closes the condition on a line of its own, which changes fewer
       lines of existing code;
     * `bodyBraces` (`[Structure]`): `true` (the default) lets
-      FormatBodyBracesRule give a body that closes in a chain of brackets
+      a body that closes in a chain of brackets move to
       its own lines, and `false` leaves such a body as it is; a condition
       selects the bodies where the rule applies.
 
@@ -550,11 +550,11 @@ FormatSchema::FormatSchema()
                      Config::Code(defaultWrapSignatureAtText),
                      QHash<QString, QString >(), Q_NULLPTR, true);
     structure.addKey(QString(QLL("wrapArgsOver")),
-                     Config::Matchers() << Config::Numbers::create(
+                     Config::Matchers() << Config::Boolean::create()
+                     << Config::Numbers::create(
                          1,
                          std::numeric_limits<qint64 >::max(),
-                         1)
-                     << Config::Boolean::create(),
+                         1),
                      QString(QLL("3")), QHash<QString, QString >(),
                      &FormatConditionContext::setCountObjects);
     structure.addKey(QString(QLL("wrapConditionsOver")),

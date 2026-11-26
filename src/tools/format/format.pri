@@ -35,6 +35,7 @@ HEADERS += \
     $$PWD/lang/comment-line.h \
     $$PWD/lang/member-scope.h \
     $$PWD/parser/class-helpers.h \
+    $$PWD/parser/class-relations.h \
     $$PWD/parser/code-helpers.h \
     $$PWD/parser/condition-context.h \
     $$PWD/parser/condition-object.h \
@@ -44,54 +45,22 @@ HEADERS += \
     $$PWD/parser/comment-helpers.h \
     $$PWD/parser/expression-layout.h \
     $$PWD/parser/layout-helpers.h \
+    $$PWD/parser/type-mapping.h \
     $$PWD/parser/scope-conditions.h \
-    $$PWD/rules/args-wrap.h \
     $$PWD/rules/args-array.h \
-    $$PWD/rules/body-braces.h \
+    $$PWD/rules/template-object.h \
     $$PWD/rules/as-with.h \
     $$PWD/rules/code-backticks.h \
-    $$PWD/rules/code-shape.h \
+    $$PWD/rules/comment.h \
     $$PWD/rules/comment-case.h \
     $$PWD/rules/comment-period.h \
-    $$PWD/rules/doc-tag-sign.h \
     $$PWD/rules/comment-width.h \
-    $$PWD/rules/comment.h \
-    $$PWD/rules/condition-close.h \
-    $$PWD/rules/condition-wrap.h \
-    $$PWD/rules/connect-layout.h \
-    $$PWD/rules/const-overload.h \
-    $$PWD/rules/continuation-indent.h \
-    $$PWD/rules/control-braces.h \
     $$PWD/rules/doc-placement.h \
-    $$PWD/rules/excludes.h \
-    $$PWD/rules/global-static.h \
-    $$PWD/rules/init-list.h \
-    $$PWD/rules/inline-keyword.h \
-    $$PWD/rules/line-join.h \
+    $$PWD/rules/doc-tag-sign.h \
     $$PWD/rules/mark-banner.h \
-    $$PWD/rules/namespace-braces.h \
-    $$PWD/rules/member-init.h \
-    $$PWD/rules/moc-run.h \
-    $$PWD/rules/no-lambda.h \
-    $$PWD/rules/not-space.h \
-    $$PWD/rules/one-statement.h \
-    $$PWD/rules/operator-first.h \
-    $$PWD/rules/operator-wrap.h \
-    $$PWD/rules/outline-this.h \
-    $$PWD/rules/param-wrap.h \
     $$PWD/rules/pattern-report.h \
-    $$PWD/rules/private-access.h \
     $$PWD/rules/prose.h \
-    $$PWD/rules/replace-types.h \
-    $$PWD/rules/qpointer-getter.h \
-    $$PWD/rules/reference-local.h \
-    $$PWD/rules/reference-space.h \
-    $$PWD/rules/relative-include.h \
     $$PWD/rules/stub-line.h \
-    $$PWD/rules/super-typedef.h \
-    $$PWD/rules/template-close.h \
-    $$PWD/rules/template-object.h \
-    $$PWD/rules/ternary-wrap.h \
     $$PWD/rules/text-report.h \
     $$PWD/rules/trailing-comment.h \
     $$PWD/rules/us-spelling.h
@@ -111,6 +80,7 @@ SOURCES += \
     $$PWD/format-thread-runner.cpp \
     $$PWD/formatter.cpp \
     $$PWD/parser/class-helpers.cpp \
+    $$PWD/parser/class-relations.cpp \
     $$PWD/parser/code-helpers.cpp \
     $$PWD/parser/condition-context.cpp \
     $$PWD/parser/condition-object.cpp \
@@ -120,54 +90,22 @@ SOURCES += \
     $$PWD/parser/comment-helpers.cpp \
     $$PWD/parser/expression-layout.cpp \
     $$PWD/parser/layout-helpers.cpp \
+    $$PWD/parser/type-mapping.cpp \
     $$PWD/parser/scope-conditions.cpp \
-    $$PWD/rules/args-wrap.cpp \
     $$PWD/rules/args-array.cpp \
-    $$PWD/rules/body-braces.cpp \
+    $$PWD/rules/template-object.cpp \
     $$PWD/rules/as-with.cpp \
     $$PWD/rules/code-backticks.cpp \
-    $$PWD/rules/code-shape.cpp \
+    $$PWD/rules/comment.cpp \
     $$PWD/rules/comment-case.cpp \
     $$PWD/rules/comment-period.cpp \
-    $$PWD/rules/doc-tag-sign.cpp \
     $$PWD/rules/comment-width.cpp \
-    $$PWD/rules/comment.cpp \
-    $$PWD/rules/condition-close.cpp \
-    $$PWD/rules/condition-wrap.cpp \
-    $$PWD/rules/connect-layout.cpp \
-    $$PWD/rules/const-overload.cpp \
-    $$PWD/rules/continuation-indent.cpp \
-    $$PWD/rules/control-braces.cpp \
     $$PWD/rules/doc-placement.cpp \
-    $$PWD/rules/excludes.cpp \
-    $$PWD/rules/global-static.cpp \
-    $$PWD/rules/init-list.cpp \
-    $$PWD/rules/inline-keyword.cpp \
-    $$PWD/rules/line-join.cpp \
+    $$PWD/rules/doc-tag-sign.cpp \
     $$PWD/rules/mark-banner.cpp \
-    $$PWD/rules/namespace-braces.cpp \
-    $$PWD/rules/member-init.cpp \
-    $$PWD/rules/moc-run.cpp \
-    $$PWD/rules/no-lambda.cpp \
-    $$PWD/rules/not-space.cpp \
-    $$PWD/rules/one-statement.cpp \
-    $$PWD/rules/operator-first.cpp \
-    $$PWD/rules/operator-wrap.cpp \
-    $$PWD/rules/outline-this.cpp \
-    $$PWD/rules/param-wrap.cpp \
     $$PWD/rules/pattern-report.cpp \
-    $$PWD/rules/private-access.cpp \
     $$PWD/rules/prose.cpp \
-    $$PWD/rules/replace-types.cpp \
-    $$PWD/rules/qpointer-getter.cpp \
-    $$PWD/rules/reference-local.cpp \
-    $$PWD/rules/reference-space.cpp \
-    $$PWD/rules/relative-include.cpp \
     $$PWD/rules/stub-line.cpp \
-    $$PWD/rules/super-typedef.cpp \
-    $$PWD/rules/template-close.cpp \
-    $$PWD/rules/template-object.cpp \
-    $$PWD/rules/ternary-wrap.cpp \
     $$PWD/rules/text-report.cpp \
     $$PWD/rules/trailing-comment.cpp \
     $$PWD/rules/us-spelling.cpp

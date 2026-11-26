@@ -580,3 +580,30 @@ bool endsWithDocWordCommand(const QString & text)
 {
     return docWordCommandPattern()->match(text).hasMatch();
 }
+
+Q_GLOBAL_STATIC_WITH_ARGS(QRegularExpression, knownLabelPattern, (
+    QString(QLL("^//\\s*(end\\s+(of\\s+)?)?namespace(\\s+[`'\"]?[\\w:]*[`'\"]?)?\\s*\\.?$")),
+    QRegularExpression::CaseInsensitiveOption
+))
+
+/*!
+    Tells whether @a comment is a label of a known form for the `}` of a
+    namespace: `// namespace`, `// end namespace xyz`, or
+    `// end of namespace xyz`, in any case, with the name in quotes or none,
+    and with or without a period.
+*/
+bool isNamespaceLabel(const QByteArray & comment)
+{
+    return knownLabelPattern()->match(QString::fromUtf8(comment)).hasMatch();
+}
+
+/*!
+    Tells whether @a comment names @a name as a whole word, as a comment
+    that someone wrote for the `}` of that namespace does.
+*/
+bool commentNamesNamespace(const QByteArray & comment, const QByteArray & name)
+{
+    const QString escaped = QRegularExpression::escape(QString::fromUtf8(name));
+    const QRegularExpression word(QLL("\\b") + escaped + QLL("\\b"));
+    return word.match(QString::fromUtf8(comment)).hasMatch();
+}

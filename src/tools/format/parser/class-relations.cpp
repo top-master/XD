@@ -1,15 +1,15 @@
 // Copyright (C) 2015 The XD Company Ltd.
 // SPDX-License-Identifier: Apache-2.0
 
-#include "./super-typedef.h"
+#include "./class-relations.h"
 
 #include "../format-document.h"
 #include "../format-line-spec.h"
-#include "../parser/class-helpers.h"
-#include "../parser/code-helpers.h"
-#include "../parser/condition-context.h"
-#include "../parser/layout-helpers.h"
-#include "../parser/scope-conditions.h"
+#include "./class-helpers.h"
+#include "./code-helpers.h"
+#include "./condition-context.h"
+#include "./layout-helpers.h"
+#include "./scope-conditions.h"
 
 #include "config-cache.h"
 #include "config-choice.h"
@@ -23,15 +23,23 @@
 #include <QtCore/QSharedPointer>
 #include <QtCore/QString>
 
+namespace FormatRelations {
+
+static bool superIsBase(const FormatDocument *document, int brace, const QByteArray &base);
+static bool isNewClass(const FormatDocument *document, int brace);
+static bool isNeeded(const FormatDocument *document, int brace, const QByteArray &base);
+static bool willHaveSuper(const FormatDocument *document, int brace,
+                          const QByteArray &base, const FormatConfig &config);
+
 class FormatSuperContext : public FormatConditionContext
 {
     typedef FormatConditionContext super;
 public:
-    inline FormatSuperContext(const FormatSuperTypedefRule *rule, const FormatDocument *document,
+    inline FormatSuperContext(const FormatDocument *document,
                               int brace, const QByteArray &base,
                               const FormatConfig *runConfig = Q_NULLPTR,
                               const FormatDocument *place = Q_NULLPTR, int token = -1)
-        : m_rule(rule), m_document(document), m_brace(brace), m_base(base)
+        : m_document(document), m_brace(brace), m_base(base)
         , m_runConfig(runConfig), m_place(place ? place : document)
         , m_token(token >= 0 ? token : brace) {}
 
@@ -66,13 +74,13 @@ public:
     {
         Config::Cache::skip();
         if (name == QLL("isNewClass")) {
-            *value = m_rule->isNewClass(m_document, m_brace);
+            *value = isNewClass(m_document, m_brace);
         } else if (name == QLL("isNeeded")) {
-            *value = m_rule->isNeeded(m_document, m_brace, m_base);
+            *value = isNeeded(m_document, m_brace, m_base);
         } else if (name == QLL("hasSuperTypedef")) {
-            *value = m_rule->superIsBase(m_document, m_brace, m_base);
+            *value = superIsBase(m_document, m_brace, m_base);
             if ( ! *value && m_runConfig) {
-                *value = m_rule->willHaveSuper(
+                *value = willHaveSuper(
                     m_document,
                     m_brace,
                     m_base,
@@ -87,7 +95,6 @@ public:
     }
 
 private:
-    const FormatSuperTypedefRule *m_rule;
     const FormatDocument *m_document;
     int m_brace;
     QByteArray m_base;
@@ -101,7 +108,7 @@ static QString cleanPath(const QString &path)
     return QDir::cleanPath(QFileInfo(path).absoluteFilePath());
 }
 
-static QStringList relatedFiles(
+QStringList relatedFiles(
         const FormatDocument *document, const FormatFileConfig &fileConfig)
 {
     if (document->path().isEmpty()) {
@@ -141,9 +148,9 @@ static QStringList relatedFiles(
     return paths;
 }
 
-static FormatDocument *readRelated(
+FormatDocument *readRelated(
         const QString &path, const FormatConfig &config,
-        bool withSelection = true)
+        bool withSelection)
 {
     const QString snap = config.snapshots.value(cleanPath(path), path);
     QByteArray text;
@@ -198,7 +205,7 @@ static FormatDocument *readRelated(
     return document.take();
 }
 
-static int matchBase(
+int matchBase(
         const FormatDocument *document, int first, const QByteArray &base,
         bool allowGlobal)
 {
@@ -257,7 +264,7 @@ static int matchBase(
     return -1;
 }
 
-static QByteArray baseIdentifier(const QByteArray &base)
+QByteArray baseIdentifier(const QByteArray &base)
 {
     const FormatDocument document(base);
     QByteArray name;
@@ -278,114 +285,13 @@ static QByteArray baseIdentifier(const QByteArray &base)
 }
 
 /*!
-    @class FormatSuperTypedefRule
-    @internal
-
-    Adds a private `typedef <Base> super;` according to the class's settings,
-    after an opening `Q_OBJECT` or `Q_GADGET` when present. Replaces a base
-    qualifier when the selected settings and the matching typedef allow it.
-    A `struct`, whose members start public, gets a report instead.
-*/
-
-/*!
-    Reads the related files of each class (a header and its source) to tell
-    whether the class needs the typedef.
-*/
-bool FormatSuperTypedefRule::readsOtherFiles() const
-{
-    return true;
-}
-
-/*!
-    Checks each class body and base-qualified use in @a document.
-*/
-void FormatSuperTypedefRule::run(FormatDocument *document) const
-{
-    const FormatConfig &config = document->formatConfig();
-    const FormatFileConfig &fileConfig = document->config();
-    if ( ! document->hasInlineConfiguration()
-        && ! document->hasSelectedRanges()
-        && config.fileLineSpecs.isEmpty()
-        && config.lineSpecs.isEmpty()
-        && fileConfig.typedefSuper == FormatFileConfig::defaultTypedefSuper()
-        && fileConfig.replaceSuperSites
-            == FormatFileConfig::defaultReplaceSuperSites()
-    ) {
-        return;
-    }
-    for (int i = 0; i < document->symbols().size(); ++i) {
-        if (document->token(i) != LBRACE
-            || document->braceScope(i) != FormatDocument::ClassScope
-        ) {
-            continue;
-        }
-        const int close = document->match(i);
-        bool isStruct = false;
-        const QByteArray base = this->baseName(document, i, &isStruct);
-        if (close <= i
-            || base.isEmpty()
-            || this->hasSuper(document, i)
-            || ! this->wantsTypedef(document, i, base)
-        ) {
-            continue;
-        }
-        if (isStruct) {
-            document->report(document->symbols().at(i).from, "super-typedef",
-                             QString(QLL("give the struct a private typedef %1 super;"))
-                             .arg(QString::fromUtf8(base)));
-            continue;
-        }
-
-        // Places the typedef after an opening `Q_OBJECT`, else first.
-        const int first = i + 1;
-        const int firstLine = document->symbolLine(first);
-        const QByteArray line = "typedef " + base + " super;";
-        if (firstLine == document->symbolLine(i)) {
-            const int offset = document->symbolEnd(i);
-            const bool hasSpace = offset < document->text().size()
-                && (document->text().at(offset) == ' ' || document->text().at(offset) == '\t');
-            document->replace(
-                offset,
-                0,
-                " " + line + (hasSpace ? "" : " ")
-            );
-            continue;
-        }
-        const Token token = document->token(first);
-        if (token == Q_OBJECT_TOKEN || token == Q_GADGET_TOKEN) {
-            document->replace(
-                contentEnd(document, firstLine),
-                0,
-                "\n"
-                + document->indentOf(firstLine)
-                + line
-            );
-            continue;
-        }
-        const bool isAccess = token == PUBLIC || token == PRIVATE
-            || token == PROTECTED || token == RBRACE;
-        const QByteArray indent = isAccess
-            ? document->indentOf(document->symbolLine(i)) + "    "
-            : document->indentOf(firstLine);
-        document->replace(
-            document->lineStart(firstLine),
-            0,
-            indent
-                + line
-                + "\n"
-        );
-    }
-    this->replaceSites(document);
-}
-
-/*!
     Builds the text of the first base class of the class whose body opens at
     @a brace of @a document, or an empty one when it has no base;
     @a isStruct tells whether it is a `struct`.
 */
-QByteArray FormatSuperTypedefRule::baseName(
+QByteArray baseName(
         const FormatDocument *document, int brace,
-        bool *isStruct) const
+        bool *isStruct)
 {
     // Finds the class key, then the `:` of the base list after it.
     int key = -1;
@@ -462,9 +368,9 @@ QByteArray FormatSuperTypedefRule::baseName(
     already declares `super` (with `typedef` or `using`), leaving out the
     bodies nested in it.
 */
-bool FormatSuperTypedefRule::hasSuper(
+bool hasSuper(
         const FormatDocument *document,
-        int brace) const
+        int brace)
 {
     const int close = document->match(brace);
     for (int i = brace + 1; i < close; ++i) {
@@ -496,9 +402,9 @@ static bool sameType(const FormatDocument *document, int first, int last,
     return true;
 }
 
-bool FormatSuperTypedefRule::superIsBase(
+static bool superIsBase(
         const FormatDocument *document, int brace,
-        const QByteArray &base) const
+        const QByteArray &base)
 {
     const int close = document->match(brace);
     for (int i = brace + 1; i < close; ++i) {
@@ -531,8 +437,8 @@ bool FormatSuperTypedefRule::superIsBase(
     return false;
 }
 
-bool FormatSuperTypedefRule::isNewClass(
-        const FormatDocument *document, int brace) const
+static bool isNewClass(
+        const FormatDocument *document, int brace)
 {
     if ( ! document->hasSelectedRanges()) {
         return false;
@@ -610,7 +516,7 @@ static QByteArray qualifiedClass(const FormatDocument *document, int brace)
     return joinNames(names);
 }
 
-static int findQualifiedClass(
+int findQualifiedClass(
         const FormatDocument *document, const QByteArray &name)
 {
     for (int i = 0; i < document->symbols().size(); ++i) {
@@ -679,7 +585,7 @@ static QByteArray qualifiedMemberOwner(
     return joinNames(names);
 }
 
-static QByteArray ownerOf(
+QByteArray ownerOf(
         const FormatDocument *document, FormatScopeConditions *scopes,
         int token)
 {
@@ -759,7 +665,7 @@ static QByteArray ownerOf(
         ? qualifiedMemberOwner(document, member, token) : QByteArray();
 }
 
-static bool isShadowed(
+bool isShadowed(
         const FormatDocument *document, FormatScopeConditions *scopes,
         int token, const QByteArray &base)
 {
@@ -866,9 +772,9 @@ static bool usesBase(
     return false;
 }
 
-bool FormatSuperTypedefRule::isNeeded(
+static bool isNeeded(
         const FormatDocument *document, int brace,
-        const QByteArray &base) const
+        const QByteArray &base)
 {
     const QByteArray className = qualifiedClass(document, brace);
     if (className.isEmpty()) {
@@ -893,28 +799,28 @@ bool FormatSuperTypedefRule::isNeeded(
     return false;
 }
 
-bool FormatSuperTypedefRule::wantsTypedef(
+bool wantsTypedef(
         const FormatDocument *document, int brace,
-        const QByteArray &base) const
+        const QByteArray &base)
 {
     const int offset = document->symbols().at(brace).from;
     const FormatFileConfig &fileConfig = document->configAt(offset);
-    const FormatSuperContext context(this, document, brace, base);
+    const FormatSuperContext context(document, brace, base);
     const QString choice = fileConfig.resolveCached(
         QString(QLL("structure.typedefSuper")), fileConfig.typedefSuperProgram,
         &context
     ).toString();
     return choice == QLL("always")
         || (choice == QLL("if-needed")
-            && this->isNeeded(document, brace, base));
+            && isNeeded(document, brace, base));
 }
 
-bool FormatSuperTypedefRule::willHaveSuper(
+static bool willHaveSuper(
         const FormatDocument *document, int brace,
         const QByteArray &base,
-        const FormatConfig &config) const
+        const FormatConfig &config)
 {
-    if (this->hasSuper(document, brace) || document->path().isEmpty()) {
+    if (hasSuper(document, brace) || document->path().isEmpty()) {
         return false;
     }
     bool scheduled = false;
@@ -927,7 +833,7 @@ bool FormatSuperTypedefRule::willHaveSuper(
     }
     bool isStruct = false;
     if ( ! scheduled
-        || this->baseName(document, brace, &isStruct).isEmpty()
+        || baseName(document, brace, &isStruct).isEmpty()
         || isStruct
     ) {
         return false;
@@ -948,106 +854,24 @@ bool FormatSuperTypedefRule::willHaveSuper(
     if ( ! document->canInsert(offset)) {
         return false;
     }
-    return this->wantsTypedef(document, brace, base);
+    return wantsTypedef(document, brace, base);
 }
 
-void FormatSuperTypedefRule::replaceSites(FormatDocument *document) const
+bool permitsSuperReference(const FormatDocument *owner, int brace,
+                           const QByteArray &base, const FormatDocument *place,
+                           int token)
 {
-    FormatScopeConditions scopes(document);
-    QHash<QString, QStringList > pathsByExtensions;
-    QHash<QString, QSharedPointer<FormatDocument > > owners;
-    QHash<QString, int > classBraces;
-    for (int i = 0; i + 1 < document->symbols().size(); ++i) {
-        if ((document->token(i) != IDENTIFIER && document->token(i) != SCOPE)
-            || (document->token(i) == IDENTIFIER
-                && document->token(i + 1) != SCOPE && document->token(i + 1) != LANGLE)
-            || (document->token(i) == SCOPE && document->token(i + 1) != IDENTIFIER)
-            || document->isDirectiveLine(document->symbolLine(i))
-        ) {
-            continue;
-        }
-        const QByteArray className = ownerOf(document, &scopes, i);
-        if (className.isEmpty()) {
-            continue;
-        }
-        const FormatFileConfig &fileConfig = document->configAt(
-            document->symbols().at(i).from
-        );
-        QString extensions = fileConfig.extensions;
-        const QString extensionsKey = QString(QLL("general.extensions"));
-        if (fileConfig.hasExpression(extensionsKey)) {
-            const QVariant resolved = scopes.settingAt(extensionsKey, i);
-            if (resolved.isValid()) {
-                extensions = resolved.toString();
-            }
-        }
-        if ( ! pathsByExtensions.contains(extensions)) {
-            FormatFileConfig effectiveConfig = fileConfig;
-            effectiveConfig.extensions = extensions;
-            pathsByExtensions.insert(
-                extensions,
-                relatedFiles(document, effectiveConfig)
-            );
-        }
-        const QString key = extensions
-            + QLatin1Char('\n')
-            + QString::fromUtf8(className);
-        if ( ! classBraces.contains(key)) {
-            int found = findQualifiedClass(document, className);
-            const QStringList paths = pathsByExtensions.value(
-                extensions
-            );
-            for (int p = 0; found < 0 && p < paths.size(); ++p) {
-                QSharedPointer<FormatDocument > related(
-                    readRelated(paths.at(p), document->formatConfig())
-                );
-                if (related) {
-                    found = findQualifiedClass(related.data(), className);
-                    if (found >= 0) {
-                        owners.insert(key, related);
-                    }
-                }
-            }
-            classBraces.insert(key, found);
-        }
-        const int brace = classBraces.value(key);
-        if (brace < 0) {
-            continue;
-        }
-        const FormatDocument *owner = owners.contains(key)
-            ? owners.value(key).data() : document;
-        bool isStruct = false;
-        const QByteArray base = this->baseName(owner, brace, &isStruct);
-        const int scopeToken = base.isEmpty()
-            ? -1
-            : matchBase(document, i, base, ! className.contains("::"));
-        if (scopeToken < 0 || isShadowed(document, &scopes, i, base)) {
-            continue;
-        }
-        bool available = false;
-        const FormatSuperContext context(
-            this, owner, brace, base, &document->formatConfig(), document, i
-        );
-        const QVariant replace = fileConfig.resolveCached(
-            QString(QLL("structure.replaceSuperSites")),
-            fileConfig.replaceSuperSitesProgram, &context
-        );
-        if (replace.toBool()
-            && context.predicate(QString(QLL("hasSuperTypedef")), &available)
-            && available
-        ) {
-            const int from = document->symbols().at(i).from;
-            if (i > 0 && document->token(i - 1) == USING
-                && scopeToken + 1 < document->symbols().size()
-                && document->lexem(scopeToken + 1) == baseIdentifier(base)
-            ) {
-                const int to = document->symbolEnd(scopeToken + 1);
-                document->replace(from, to - from, "super::super");
-            } else {
-                const int to = document->symbols().at(scopeToken).from;
-                document->replace(from, to - from, "super");
-            }
-        }
-        i = scopeToken;
-    }
+    const FormatFileConfig &config = place->configAt(place->symbols().at(token).from);
+    const FormatSuperContext context(
+        owner, brace, base, &place->formatConfig(), place, token
+    );
+    const QVariant replace = config.resolveCached(
+        QString(QLL("structure.replaceSuperSites")), config.replaceSuperSitesProgram, &context
+    );
+    bool available = false;
+    return replace.toBool()
+        && context.predicate(QString(QLL("hasSuperTypedef")), &available)
+        && available;
 }
+
+} // namespace FormatRelations

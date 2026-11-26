@@ -1,13 +1,13 @@
 // Copyright (C) 2015 The XD Company Ltd.
 // SPDX-License-Identifier: Apache-2.0
 
-#include "./replace-types.h"
+#include "./type-mapping.h"
 
-#include "./args-array.h"
-#include "./template-object.h"
+#include "../rules/args-array.h"
+#include "../rules/template-object.h"
 #include "../format-document.h"
 #include "../format-file-config.h"
-#include "../parser/condition-context.h"
+#include "./condition-context.h"
 
 #include "config-cache.h"
 #include "config-condition.h"
@@ -22,31 +22,7 @@
 #include <QtCore/QString>
 #include <QtCore/QStringList>
 
-/*!
-    @class FormatReplaceTypesRule
-    @internal
-
-    Turns each call, or construction, of a name that a key of
-    `[Replace.types]` matches, where `target` holds. A key is a full name from
-    the global scope, such as `::QLatin1String`, in which a `*` stands for any
-    part of a name (see FormatFileConfig::expandPrevious() for the `&` of a
-    key). A key may bind its call's arguments as `$1`, `$2`, and so on.
-    In a name or template, each `*` stands for what the key's `*` matched;
-    in an expression, a `*` in the resulting call's name stands for it:
-
-    * a name, such as `::QLL`, which renames the call and keeps all of its
-      arguments as written;
-    * a call template, such as `::MyClass::create($1)`, which turns the call
-      into that call (see fillTemplate());
-    * an expression that builds a call, or yields `null` to keep it as it
-      is (see Config::Condition::resolve()).
-
-    A result that calls a name another key matches turns again (see
-    replacement()); hence lines chain. Each name is matched and written as
-    the location sees it: the namespaces it sits in, and the ones a
-    `using namespace` before it brings in, need no qualifier (see
-    visibleScopes()). `action = report` reports every call instead.
-*/
+namespace FormatTypeMapping {
 
 /*!
     Answers `args` for the call that a call template turns (see
@@ -128,14 +104,14 @@ static QRegExp keyPattern(const QString & key)
     Tells whether the last part of the key @a key (after its last `::`) may
     match the identifier @a last.
 */
-static bool lastPartMatches(const QString & key, const QString & last)
+bool lastPartMatches(const QString & key, const QString & last)
 {
     const QString name = fullName(key).section(QLatin1Char('('), 0, 0);
     const int scope = name.lastIndexOf(QLL("::"));
     return keyPattern(name.mid(scope < 0 ? 0 : scope + 2)).exactMatch(last);
 }
 
-static QString readName(const FormatDocument *document, int from, int *end)
+QString readName(const FormatDocument *document, int from, int *end)
 {
     QString name;
     int k = from;
@@ -160,7 +136,7 @@ static QString readName(const FormatDocument *document, int from, int *end)
     }
     return name;
 }
-static QStringList visibleScopes(const FormatDocument *document, int index)
+QStringList visibleScopes(const FormatDocument *document, int index)
 {
     QStringList names;
     QList<QStringList > usings;
@@ -232,7 +208,7 @@ static QStringList visibleScopes(const FormatDocument *document, int index)
     Builds the full names that the name @a written (as the source spells it)
     may stand for in a location that sees @a scopes.
 */
-static QStringList candidates(
+QStringList candidates(
         const QString & written,
         const QStringList & scopes)
 {
@@ -299,7 +275,7 @@ static bool bindArguments(const QString & key, const QStringList & arguments,
     names @a names, and gives what its first `*` matched to @a capture; -1
     for none, and for a mapping to `keep-as-is`.
 */
-static int mappingOf(const QList<QPair<QString, QString > > & mappings,
+int mappingOf(const QList<QPair<QString, QString > > & mappings,
                      const QStringList & names, const QStringList & arguments,
                      QString *capture, QStringList *bound)
 {
@@ -326,7 +302,7 @@ static int mappingOf(const QList<QPair<QString, QString > > & mappings,
     Builds the shortest spelling of the full name @a name in a location that
     sees @a scopes: the qualifier of a scope it sees is left out.
 */
-static QString shortestName(const QString & name, const QStringList & scopes)
+QString shortestName(const QString & name, const QStringList & scopes)
 {
     const QStringList parts = fullName(name).split(QString(QLL("::")));
     for (int start = parts.size() - 1; start > 0; --start) {
@@ -396,7 +372,7 @@ static bool inFunctionBody(const FormatDocument *document, int index)
     or starts a statement in a function's body. A constructor's declaration
     and a `new` are none.
 */
-static bool isCall(const FormatDocument *document, int index)
+bool isCall(const FormatDocument *document, int index)
 {
     if (index < 1) {
         return false;
@@ -447,7 +423,7 @@ static QString sourceArgument(const QString & text)
     Builds the arguments of the call whose parentheses are the tokens
     @a open and @a close of @a document, each as the source writes it.
 */
-static QStringList callArguments(
+QStringList callArguments(
         const FormatDocument *document, int open, int close)
 {
     QStringList arguments;
@@ -848,7 +824,7 @@ static bool fillPositions(
     Returns false with @a error when an argument is missing or a replacement
     expression does not resolve.
 */
-static bool replacement(
+bool replacement(
         const QList<QPair<QString, QString > > & mappings, int m,
         QString capture, QStringList arguments, QStringList bound,
         const FormatConditionContext *place,
@@ -965,132 +941,4 @@ static bool replacement(
     return true;
 }
 
-/*!
-    Writes, or reports, each call of a name that `[Replace.types]` maps,
-    outside of preprocessor directives, where the location's `target` holds.
-*/
-void FormatReplaceTypesRule::run(FormatDocument *document) const
-{
-    QHash<QString, QStringList > programs;
-    for (int i = 0; i + 2 < document->symbols().size(); ++i) {
-        if (document->token(i) != IDENTIFIER
-            || document->token(i + 1) != LPAREN
-            || document->match(i + 1) <= i + 1
-            || document->isDirectiveLine(document->symbolLine(i))
-        ) {
-            continue;
-        }
-        const int close = document->match(i + 1);
-        const FormatFileConfig &config = document->configAt(
-            document->symbols().at(i).from
-        );
-        const QString last = QString::fromLatin1(document->lexem(i));
-        bool mayMatch = false;
-        for (int m = 0; m < config.replaceTypes.size() && ! mayMatch; ++m) {
-            mayMatch = lastPartMatches(
-                config.replaceTypes.at(m).first,
-                last
-            );
-        }
-        if ( ! mayMatch) {
-            continue;
-        }
-
-        // Finds the start of the name as written, `A::B::Name` or `::Name`.
-        int start = i;
-        while (start >= 2 && document->token(start - 1) == SCOPE
-            && document->token(start - 2) == IDENTIFIER
-        ) {
-            start -= 2;
-        }
-        if (start >= 1 && document->token(start - 1) == SCOPE) {
-            --start;
-        }
-        if ( ! isCall(document, start)) {
-            continue;
-        }
-        int end = i;
-        const QString written = readName(document, start, &end);
-        const QStringList scopes = visibleScopes(document, start);
-        QString capture;
-        const QStringList arguments = callArguments(document, i + 1, close);
-        QStringList bound;
-        const int mapping = mappingOf(
-            config.replaceTypes, candidates(written, scopes), arguments,
-            &capture, &bound
-        );
-        if (mapping < 0) {
-            continue;
-        }
-
-        // Checks `target` for this line.
-        const FormatReplaceTypesContext context(
-            document,
-            i,
-            &config
-        );
-        QStringList *program = &(programs[config.replaceTypesTarget]);
-        if (program->isEmpty()) {
-            Config::Evaluator::MismatchScope scope(
-                &context, Config::NameMismatchIgnore
-            );
-            *program = Config::Condition::compile(
-                config.replaceTypesTarget,
-                &context
-            );
-            scope.close();
-            if ( ! context.lastCompiled()) {
-                continue;
-            }
-        }
-        const QVariant wanted = FormatFileConfig::resolve(
-            QString(QLL("replace.types.target")), *program, &context
-        );
-        if ( ! context.lastResolvePassed()
-            || ! wanted.toBool()
-        ) {
-            continue;
-        }
-
-        const int from = document->symbols().at(start).from;
-        QString head;
-        QString call;
-        QString error;
-        if ( ! replacement(
-            config.replaceTypes,
-            mapping,
-            capture,
-            arguments,
-            bound,
-            &context,
-            &head,
-            &call,
-            &error
-        )) {
-            document->report(from, "replace-types",
-                             QString(QLL("%1: %2")).arg(written, error));
-            continue;
-        }
-        if (head.isEmpty()) {
-            continue;
-        }
-        const QString shortest = shortestName(head, scopes);
-        const int to = document->symbolEnd(close);
-        const QString actionKey = QString(QLL("replace.types.action"));
-        const QVariant action = config.hasExpression(actionKey)
-            ? config.resolveSetting(actionKey, &context) : QVariant();
-        const QString mode = action.isValid() ? action.toString() : config.replaceTypesAction;
-        if (mode == QLL("replace")
-            && document->replace(
-                from,
-                to - from,
-                (shortest + call).toLatin1()
-            )
-        ) {
-            i = close;
-            continue;
-        }
-        document->report(from, "replace-types",
-                         QString(QLL("write %1%2")).arg(shortest, call));
-    }
 }

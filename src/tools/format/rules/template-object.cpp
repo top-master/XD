@@ -14,9 +14,9 @@
     @class FormatTemplateObject
     @internal
 
-    Offers `args` to the call templates of `[Replace.types]` (see
-    FormatReplaceTypesRule): the arguments of the call that a template turns,
-    as a FormatArgsArray, which a template reaches on with `args[<index>]`
+    Offers `args` to the call templates of `[Replace.types]`: the arguments
+    of the call that a template turns, as a FormatArgsArray, which a template
+    reaches on with `args[<index>]`
     or `args.<name>(...)`. FormatConditionContext::registerObjects() adds it
     to the global scope of Config::Scopes once, as the tool starts. The
     `isLiteral()` slot checks a call argument for string literals.

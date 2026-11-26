@@ -5,6 +5,7 @@
 
 #include "./config-condition.h"
 #include "./config-escape.h"
+#include "./config-numbers.h"
 #include "./config-regexp.h"
 #include "./config-scanner.h"
 
@@ -867,6 +868,15 @@ bool Config::Parser::matchValue(const Config::Key & key, const QString & value,
         return true;
     }
     const Config::Evaluator::Context context(false);
+    if (Config::Numbers::parse(resolved).size() > 1) {
+        for (int i = 0; i < key.matchers.size(); ++i) {
+            if (key.matchers.at(i)->matchLiteral(resolved, matched)) {
+                return true;
+            }
+        }
+        *matched = QString();
+        return false;
+    }
     if ( ! m_schema->isExpression(key.name, resolved, &context)) {
         for (int i = 0; i < key.matchers.size(); ++i) {
             if (key.matchers.at(i)->matchLiteral(resolved, matched)) {

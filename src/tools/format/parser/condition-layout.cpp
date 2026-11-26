@@ -17,9 +17,8 @@
     @internal
 
     Lays out a condition, for every rule that breaks one: the content of the
-    parentheses of an `if` or a `while` (see FormatConditionWrapRule), and
-    the head of a conditional expression, before its `?` (see
-    FormatTernaryWrapRule). Both break first before the `||` and `&&` of
+    parentheses of an `if` or a `while`, and the head of a conditional
+    expression, before its `?`. Both forms break first before the `||` and `&&` of
     their own level, and keep a comparison whole on a line of its own while
     it fits `[Structure] wrapMax` (see comparisonLines()).
 
@@ -629,6 +628,57 @@ QList<QByteArray > FormatConditionLayout::headLines(
         bool startsStatement) const
 {
     const QByteArray text = sourceText(m_document, first, last);
+    int operands = 1;
+    for (int token = first; token <= last; ++token) {
+        const Token kind = m_document->token(token);
+        if (kind == LPAREN && isFunctionCallParen(m_document, token)
+            && m_document->match(token) <= last && m_document->match(token) > token)
+        {
+            token = m_document->match(token);
+        } else if (kind == ANDAND || kind == OROR) {
+            ++operands;
+        }
+    }
+    const int limit = m_conditions->conditionsLimit(first, operands);
+    if (operands > 1 && limit > 0 && operands > limit) {
+        const int offset = m_document->symbols().at(first).from;
+        const FormatFileConfig &config = m_document->configAt(offset);
+        const bool perLine = settingValueAt(
+            m_document, offset, QString(QLL("structure.wrapConditionsPer")),
+            config.wrapConditionsPer).toString() == QLL("line");
+        QList<QByteArray > lines;
+        QByteArray line;
+        int start = m_document->symbols().at(first).from;
+        int depth = 0;
+        int onLine = 1;
+        for (int token = first; token <= last; ++token) {
+            const Token kind = m_document->token(token);
+            if (kind == LPAREN && isFunctionCallParen(m_document, token)
+                && m_document->match(token) <= last && m_document->match(token) > token)
+            {
+                token = m_document->match(token);
+            } else if (kind == ANDAND || kind == OROR) {
+                if ( ! perLine || onLine >= limit) {
+                    line += m_document->text().mid(
+                        start, m_document->symbols().at(token).from - start).trimmed();
+                    lines << line;
+                    line = QByteArray(indent + continuationIndent(0) * (depth + 1), ' ');
+                    start = m_document->symbols().at(token).from;
+                    onLine = 1;
+                } else {
+                    ++onLine;
+                }
+            } else if (kind == LPAREN) {
+                ++depth;
+            } else if (kind == RPAREN && depth > 0) {
+                --depth;
+            }
+        }
+        line += m_document->text().mid(
+            start, m_document->symbolEnd(last) - start).trimmed();
+        lines << line;
+        return lines;
+    }
     if (column + textWidth(text) <= wrap) {
         return QList<QByteArray >() << text;
     }
@@ -712,4 +762,56 @@ QList<QByteArray > FormatConditionLayout::headLines(
         lines << partLines;
     }
     return lines;
+}
+
+/*!
+    Puts @a text, the layout of the condition from the `(` at @a open of
+    @a document to the `)` at @a close, in its place, with the body's `{`
+    right after it when that `{` shares the line of the `)`.
+*/
+void replaceCondition(
+        FormatDocument *document, int open, int close,
+        QByteArray text)
+{
+    const int from = document->symbols().at(open).from;
+    int to = document->symbolEnd(close);
+    if (document->token(close + 1) == LBRACE
+        && document->symbolLine(close + 1) == document->symbolEndLine(close)
+    ) {
+        to = document->symbolEnd(close + 1);
+        text += " {";
+    }
+    document->replace(from, to - from, text);
+}
+
+
+/*!
+    Tells whether the condition from the `(` at @a open of @a document to the
+    `)` at @a close, which spans several lines, has a line past
+    `[Structure] wrapMax`, and each of its operands sits on one line (see
+    operators()); people lay out a condition whose operand spans lines.
+*/
+bool isConditionSplitTooLong(
+        const FormatDocument *document, const FormatConditionLayout & layout,
+        int open, int close)
+{
+    const int max = wrapMaxAt(document, document->symbols().at(open).from);
+    bool tooLong = false;
+    for (int l = document->symbolLine(open); l <= document->symbolEndLine(close); ++l) {
+        tooLong = tooLong || textWidth(document->lineText(l)) > max;
+    }
+    if ( ! tooLong) {
+        return false;
+    }
+    const QList<int > ops = layout.operators(open, close);
+    for (int k = 0; k <= ops.size(); ++k) {
+        const int first = k == 0 ? open + 1 : ops.at(k - 1) + 1;
+        const int last = k == ops.size() ? close - 1 : ops.at(k) - 1;
+        if (first > last
+            || document->symbolLine(first) != document->symbolEndLine(last)
+        ) {
+            return false;
+        }
+    }
+    return true;
 }

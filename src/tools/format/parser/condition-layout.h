@@ -10,6 +10,11 @@
 
 class FormatDocument;
 class FormatScopeConditions;
+class FormatConditionLayout;
+
+void replaceCondition(FormatDocument *document, int open, int close, QByteArray text);
+bool isConditionSplitTooLong(const FormatDocument *document,
+                             const FormatConditionLayout &layout, int open, int close);
 
 class FormatConditionLayout
 {

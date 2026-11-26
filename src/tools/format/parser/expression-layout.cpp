@@ -13,7 +13,7 @@
     @internal
 
     Lays out an expression that does not fit its line, the one way the wrap
-    rules share (see FormatOperatorWrapRule and FormatArgsWrapRule):
+    rules share:
 
     * A chain of binary operators (`<<`, `+`, `&&`, and the rest that
       operatorPrecedence() ranks) breaks before the operators of its loosest
@@ -501,6 +501,11 @@ QByteArray FormatExpressionLayout::layout(
         }
         const QList<QPair<int, int > > items =
             splitArguments(m_document, open, last);
+        if (items.size() == 1 && items.first().first == items.first().second
+            && m_document->token(items.first().first) == STRING_LITERAL)
+        {
+            return text;
+        }
         if (operators.isEmpty() && items.size() == 1
             && column + textWidth(this->oneLine(first, open)) < wrap
         ) {

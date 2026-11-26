@@ -29,6 +29,8 @@ QList<FormatCommentLine > commentLines(
 QList<FormatCommentLine > groupLines(
         const FormatDocument *document,
         const QList<int > & group);
+bool isNamespaceLabel(const QByteArray &comment);
+bool commentNamesNamespace(const QByteArray &comment, const QByteArray &name);
 bool isSingleWord(const QList<FormatCommentLine > & lines);
 bool looksLikeCode(const QList<FormatCommentLine > & lines);
 QVector<bool > fencedLines(const QList<FormatCommentLine > & lines);

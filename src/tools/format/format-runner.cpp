@@ -182,9 +182,14 @@ bool FormatRunner::prepareRun(const QStringList &files, QString *error)
     config.fileLineSpecs = this->m_options.fileLineSpecs;
     config.lineSpecs = this->m_options.lineSpecs;
     bool readsOtherFiles = false;
-    const QList<const FormatRule * > rules = this->m_formatter->selectedRules();
+    const QList<const FormatRule * > rules = config.checks.isEmpty()
+        ? this->m_formatter->selectedRules() : this->m_formatter->rules();
     for (int i = 0; i < rules.size(); ++i) {
-        readsOtherFiles = readsOtherFiles || rules.at(i)->readsOtherFiles();
+        if (config.checks.isEmpty()
+            || config.checks.contains(QString::fromLatin1(rules.at(i)->name())))
+        {
+            readsOtherFiles = readsOtherFiles || rules.at(i)->readsOtherFiles();
+        }
     }
     if ( ! readsOtherFiles || config.scheduledFiles.size() < 2) {
         return true;

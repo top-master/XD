@@ -39,6 +39,9 @@
 FormatDocument::FormatDocument(const QByteArray & text, const QString & path)
     : m_text(text), m_path(path), m_inlineConfigured(false), m_pass(0), m_agentMode(false)
 {
+    static const bool tokenizerConfigured =
+        (Preprocessor::preprocessOnly = true, Preprocessor::keepComments = true, true);
+    Q_UNUSED(tokenizerConfigured);
     this->analyze();
 }
 
@@ -1146,7 +1149,7 @@ bool FormatDocument::replace(
 {
     const bool apart = offset + length <= otherOffset
         || otherOffset + otherLength <= offset;
-    if ( ! apart
+    if ( ! apart || (offset == otherOffset && length == 0 && otherLength == 0)
         || ! this->canReplace(offset, length)
         || ! this->canReplace(otherOffset, otherLength)
     ) {
@@ -1269,6 +1272,23 @@ void FormatDocument::truncateIssues(int count)
 }
 
 /*!
+    Orders @a edits from the last offset to the first, with a replacement
+    before an insertion at the same offset.
+*/
+void FormatDocument::sortEdits(QList<Edit > *edits)
+{
+    for (int i = 1; i < edits->size(); ++i) {
+        for (int j = i; j > 0
+            && (edits->at(j - 1).offset < edits->at(j).offset
+                || (edits->at(j - 1).offset == edits->at(j).offset
+                    && edits->at(j - 1).length < edits->at(j).length)); --j)
+        {
+            edits->swap(j - 1, j);
+        }
+    }
+}
+
+/*!
     Applies the queued edits, moves the selected line ranges and the issues
     along with the lines that the edits add or remove, then tokenizes the new
     text; returns whether any edit changed the text.
@@ -1285,11 +1305,7 @@ bool FormatDocument::applyEdits()
     // offset still points into the text it was found in.
     QList<Edit > edits = this->m_edits;
     this->m_edits.clear();
-    for (int i = 1; i < edits.size(); ++i) {
-        for (int j = i; j > 0 && edits.at(j - 1).offset < edits.at(j).offset; --j) {
-            edits.swap(j - 1, j);
-        }
-    }
+    FormatDocument::sortEdits(&edits);
     QByteArray text = this->m_text;
     for (int i = 0; i < edits.size(); ++i) {
         const Edit & edit = edits.at(i);
@@ -1595,7 +1611,7 @@ CodeEditor::~CodeEditor()
     of the code below them. Comment contents are copied byte for byte.
 */
 QByteArray CodeEditor::restore(
-        int offset, int length, const QByteArray &text) const
+        int offset, int length, const QByteArray &requested) const
 {
     QList<FormatComment > comments;
     for (int index = 0; index < m_comments.size(); ++index) {
@@ -1607,19 +1623,72 @@ QByteArray CodeEditor::restore(
         }
     }
     if (comments.isEmpty()) {
-        return text;
+        return requested;
+    }
+    QByteArray text = requested;
+    const FormatDocument provided(requested);
+    QList<FormatComment > unmatched = comments;
+    for (int index = provided.comments().size() - 1; index >= 0; --index) {
+        const FormatComment &candidate = provided.comments().at(index);
+        for (int original = unmatched.size() - 1; original >= 0; --original) {
+            const FormatComment &comment = unmatched.at(original);
+            if (requested.mid(candidate.offset, candidate.length)
+                == m_original.mid(comment.offset, comment.length))
+            {
+                text.remove(candidate.offset, candidate.length);
+                unmatched.removeAt(original);
+                break;
+            }
+        }
     }
     const FormatDocument before(m_backup.text().mid(offset, length));
     const FormatDocument after(text);
     QVector<int > destinations(before.symbols().size(), -1);
-    int next = 0;
+    QVector<QByteArray > beforeTokens;
+    QVector<QByteArray > afterTokens;
     for (int index = 0; index < before.symbols().size(); ++index) {
-        for (int candidate = next; candidate < after.symbols().size(); ++candidate) {
-            if (before.lexem(index) == after.lexem(candidate)) {
-                destinations[index] = candidate;
-                next = candidate + 1;
-                break;
-            }
+        beforeTokens.append(before.lexem(index));
+    }
+    for (int index = 0; index < after.symbols().size(); ++index) {
+        afterTokens.append(after.lexem(index));
+    }
+    int prefix = 0;
+    while (prefix < beforeTokens.size() && prefix < afterTokens.size()
+        && beforeTokens.at(prefix) == afterTokens.at(prefix))
+    {
+        destinations[prefix] = prefix;
+        ++prefix;
+    }
+    int beforeEnd = beforeTokens.size();
+    int afterEnd = afterTokens.size();
+    while (beforeEnd > prefix && afterEnd > prefix
+        && beforeTokens.at(beforeEnd - 1) == afterTokens.at(afterEnd - 1))
+    {
+        destinations[--beforeEnd] = --afterEnd;
+    }
+    const int beforeCount = beforeEnd - prefix;
+    const int afterCount = afterEnd - prefix;
+    QVector<QVector<int > > shared(beforeCount + 1, QVector<int >(afterCount + 1, 0));
+    for (int beforeIndex = beforeCount - 1; beforeIndex >= 0; --beforeIndex) {
+        for (int afterIndex = afterCount - 1; afterIndex >= 0; --afterIndex) {
+            shared[beforeIndex][afterIndex] = beforeTokens.at(prefix + beforeIndex)
+                == afterTokens.at(prefix + afterIndex)
+                    ? shared.at(beforeIndex + 1).at(afterIndex + 1) + 1
+                    : qMax(shared.at(beforeIndex + 1).at(afterIndex),
+                           shared.at(beforeIndex).at(afterIndex + 1));
+        }
+    }
+    int beforeIndex = 0;
+    int afterIndex = 0;
+    while (beforeIndex < beforeCount && afterIndex < afterCount) {
+        if (beforeTokens.at(prefix + beforeIndex) == afterTokens.at(prefix + afterIndex)) {
+            destinations[prefix + beforeIndex++] = prefix + afterIndex++;
+        } else if (shared.at(beforeIndex + 1).at(afterIndex)
+                   >= shared.at(beforeIndex).at(afterIndex + 1))
+        {
+            ++beforeIndex;
+        } else {
+            ++afterIndex;
         }
     }
     QMap<int, QList<FormatComment > > gaps;
@@ -1660,34 +1729,90 @@ QByteArray CodeEditor::restore(
         if (after.lineOf(afterStart) == 1 && newline < 0) {
             padding = m_target->indentOf(m_target->lineOf(offset));
         }
-        const QByteArray lineBreak = m_original.contains("\r\n") ? "\r\n" : "\n";
+        const int outside = m_backup.symbolAfter(offset + length);
+        const bool tokenAtEnd = gap.key() == after.symbols().size()
+            && outside < m_backup.symbols().size()
+            && m_backup.symbols().at(outside).from == offset + length;
+        if (tokenAtEnd && newline < 0) {
+            padding = m_target->indentOf(m_target->symbolLine(outside));
+        }
         QByteArray replacement;
         for (int index = 0; index < gap.value().size(); ++index) {
             const FormatComment &comment = gap.value().at(index);
-            const QByteArray body = m_original.mid(comment.offset, comment.length);
+            QByteArray body = m_original.mid(comment.offset, comment.length);
+            const int commentEnd = comment.offset + comment.length;
+            const bool followingContent = gap.key() < after.symbols().size()
+                || index + 1 < gap.value().size();
+            const QByteArray trailing = m_original.mid(commentEnd, offset + length - commentEnd);
+            const bool newlineOutside = ! followingContent
+                && offset + length < m_original.size()
+                && m_original.at(offset + length) == '\n'
+                && ! trailing.contains('\n') && trailing.trimmed().isEmpty();
+            if (comment.isLine() && body.endsWith('\r')
+                && ! newlineOutside && commentEnd < m_original.size()
+                && m_original.at(commentEnd) == '\n')
+            {
+                body.chop(1);
+            }
+            const int lineEnd = m_backup.lineEnd(
+                m_backup.lineOf(comment.offset + comment.length - 1));
+            const int newlineOffset = lineEnd < m_original.size()
+                ? lineEnd : m_original.lastIndexOf('\n', comment.offset - 1);
+            const bool crlf = newlineOffset > 0 && m_original.at(newlineOffset - 1) == '\r';
+            const QByteArray lineBreak = crlf && ! (comment.isLine() && body.endsWith('\r'))
+                ? "\r\n" : "\n";
             const int following = m_backup.symbolAfter(comment.offset + comment.length);
+            const int preceding = m_backup.symbolAfter(comment.offset) - 1;
             const bool alone = ! comment.trailing
                 && (following == m_backup.symbols().size()
                     || m_backup.symbolLine(following)
                         > m_backup.lineOf(comment.offset + comment.length - 1));
-            const bool leads = ! comment.trailing && ! alone;
+            const bool leads = ( ! comment.trailing && ! alone)
+                || ( ! comment.isLine() && preceding >= 0
+                    && m_backup.token(preceding) == LPAREN
+                    && m_backup.symbolEnd(preceding) == comment.offset)
+                || ( ! comment.isLine() && preceding >= 0
+                    && m_backup.token(preceding) == COMMA
+                    && following < m_backup.symbols().size()
+                    && m_backup.symbolLine(following)
+                        == m_backup.lineOf(comment.offset + comment.length - 1));
             if (leads && replacement.isEmpty()) {
-                replacement = newline >= 0 ? whitespace : QByteArray(" ");
+                const bool nextToOpen = comment.offset > 0
+                    && m_original.at(comment.offset - 1) == '('
+                    && gap.key() > 0 && after.token(gap.key() - 1) == LPAREN;
+                replacement = newline >= 0 ? whitespace
+                    : nextToOpen ? QByteArray() : QByteArray(" ");
             }
             if (alone) {
                 if (replacement.isEmpty()) {
-                    replacement = newline >= 0
-                        ? whitespace.left(newline + 1) + padding : lineBreak + padding;
+                    if (newline >= 0) {
+                        replacement = whitespace.left(newline + 1) + padding;
+                    } else if (beforeEnd == 0 && gap.key() == 0
+                        && m_backup.lineOf(offset) == m_backup.lineOf(comment.offset))
+                    {
+                        const int existing = offset - m_backup.lineStart(m_backup.lineOf(offset));
+                        replacement = padding.mid(qMin(existing, padding.size()));
+                    } else {
+                        replacement = lineBreak + padding;
+                    }
                 } else if ( ! replacement.endsWith(padding) || ! replacement.contains('\n')) {
                     replacement += lineBreak + padding;
                 }
-            } else if (replacement.isEmpty() || ! replacement.endsWith(' ')) {
+            } else if ( ! leads && (replacement.isEmpty() || ! replacement.endsWith(' '))) {
                 replacement += ' ';
             }
             replacement += body;
-            if (comment.isLine() || alone) {
-                replacement += lineBreak + padding;
-            } else {
+            if (newlineOutside && trailing.endsWith('\r') && ! body.endsWith('\r')) {
+                replacement += '\r';
+            }
+            const bool needsNewline = followingContent || newline >= 0
+                || (lineEnd < m_original.size() && m_original.at(lineEnd) == '\n');
+            if ((comment.isLine() || alone) && needsNewline && ! newlineOutside) {
+                replacement += lineBreak;
+                if (followingContent || tokenAtEnd) {
+                    replacement += padding;
+                }
+            } else if ( ! comment.isLine() && ! alone) {
                 replacement += ' ';
             }
         }
@@ -1726,6 +1851,15 @@ bool CodeEditor::apply()
         return false;
     }
     QList<FormatDocument::Edit > edits = m_backup.m_edits;
+    if (edits.isEmpty()) {
+        target->m_issues = m_backup.m_issues;
+        target->m_requests = m_backup.m_requests;
+        target->m_replacedLines = m_backup.m_replacedLines;
+        target->m_ruleCaches = m_backup.m_ruleCaches;
+        m_target = Q_NULLPTR;
+        return false;
+    }
+    bool movedComments = false;
     for (int index = 0; index < edits.size(); ++index) {
         FormatDocument::Edit &edit = edits[index];
         if (edit.offset < m_start || edit.length < 0
@@ -1737,6 +1871,11 @@ bool CodeEditor::apply()
         }
         for (int comment = 0; comment < m_comments.size(); ++comment) {
             const FormatComment &entry = m_comments.at(comment);
+            if (entry.offset >= edit.offset
+                && entry.offset + entry.length <= edit.offset + edit.length)
+            {
+                movedComments = true;
+            }
             if ((edit.offset > entry.offset
                     && edit.offset < entry.offset + entry.length)
                 || (edit.offset + edit.length > entry.offset
@@ -1749,14 +1888,24 @@ bool CodeEditor::apply()
         edit.text = this->restore(edit.offset, edit.length, edit.text);
     }
     m_target = Q_NULLPTR;
-    target->m_edits.append(edits);
+    // Keeps unrelated queued edits until the document applies them.
+    QList<FormatDocument::Edit > pending = target->m_edits;
+    FormatDocument::sortEdits(&pending);
+    target->m_edits = edits;
     target->m_issues = m_backup.m_issues;
     target->m_requests = m_backup.m_requests;
     target->m_replacedLines = m_backup.m_replacedLines;
     target->m_ruleCaches = m_backup.m_ruleCaches;
+    const bool earlierChange = target->m_editorChanged;
+    target->m_editorChanged = false;
     bool changed = target->applyEdits();
+    for (int index = 0; index < pending.size(); ++index) {
+        pending[index].offset = FormatDocument::movedOffset(
+            pending.at(index).offset, pending.at(index).length > 0, edits);
+    }
+    target->m_edits = pending;
     const int end = FormatDocument::movedOffset(m_end, false, edits);
-    for (int index = 0; index < target->comments().size(); ++index) {
+    for (int index = 0; movedComments && index < target->comments().size(); ++index) {
         const FormatComment &comment = target->comments().at(index);
         if (comment.trailing || comment.offset < m_start
             || comment.offset + comment.length > end
@@ -1771,13 +1920,20 @@ bool CodeEditor::apply()
         const int line = target->commentLine(index);
         const int start = target->lineStart(line);
         const QByteArray padding = target->indentOf(target->symbolLine(next));
-        if (target->isOnlyWhitespace(start, comment.offset)
+        if (start >= m_start && target->isOnlyWhitespace(start, comment.offset)
             && target->text().mid(start, comment.offset - start) != padding)
         {
             target->replace(start, comment.offset - start, padding);
         }
     }
+    const QList<FormatDocument::Edit > paddingEdits = target->m_edits.mid(pending.size());
+    target->m_edits = paddingEdits;
     changed = target->applyEdits() || changed;
-    target->m_editorChanged = changed;
+    for (int index = 0; index < pending.size(); ++index) {
+        pending[index].offset = FormatDocument::movedOffset(
+            pending.at(index).offset, pending.at(index).length > 0, paddingEdits);
+    }
+    target->m_edits = pending;
+    target->m_editorChanged = earlierChange || changed;
     return changed;
 }

@@ -7,8 +7,7 @@
     @class FormatNamedRule
     @internal
 
-    Carries a rule's name and summary for its subclasses, which then only
-    implement FormatRule::run().
+    Carries a check's name and summary for its subclasses.
 */
 
 /*!

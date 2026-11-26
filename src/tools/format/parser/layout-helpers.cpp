@@ -6,6 +6,7 @@
 #include "../format-document.h"
 #include "./code-helpers.h"
 #include "./condition-context.h"
+#include "./expression-layout.h"
 #include "./scope-conditions.h"
 #include "../format-file-config.h"
 
@@ -801,4 +802,967 @@ bool isDeclarationParen(
     return scope == FormatDocument::ClassScope
         && (typeEnd == SEMIC || typeEnd == LBRACE || typeEnd == RBRACE || afterAccess
             || typeEnd == EXPLICIT || typeEnd == INLINE);
+}
+
+/*!
+    Tells whether the `:` at @a index of @a document belongs to a `?` of its
+    own statement, rather than starting an initializer list or a label.
+*/
+static bool isTernaryColon(const FormatDocument *document, int index)
+{
+    for (int k = index - 1; k >= 0; --k) {
+        const Token token = document->token(k);
+        if ((token == RPAREN || token == RBRACK)
+            && document->match(k) >= 0
+        ) {
+            k = document->match(k);
+            continue;
+        }
+        if (token == QUESTION) {
+            return true;
+        }
+        if (token == SEMIC || token == LBRACE || token == RBRACE) {
+            return false;
+        }
+    }
+    return false;
+}
+
+/*!
+    Places the operators on either side of a multiline operand at the same
+    indentation. A call closes on its last argument. A parenthesized
+    operand keeps its own closing layout.
+*/
+bool layoutChainOperand(
+        FormatDocument *document, FormatScopeConditions *conditions, int next)
+{
+    const int close = next - 1;
+    if ( ! closesEarlierLine(document, close)) {
+        return false;
+    }
+    const int previous = precedingChainOperator(document, next);
+    if (previous < 1) {
+        return false;
+    }
+    const int first = previous + 1;
+    const int open = document->match(close);
+    const int from = document->symbolEnd(previous - 1);
+    const int end = document->symbols().at(next).from;
+    if (document->hasCommentBetween(from, end)
+        || document->spansDirective(from, end)
+    ) {
+        return false;
+    }
+    const int line = document->symbolLine(previous);
+    const bool startsLine = document->firstSymbolOfLine(line) == previous;
+    const bool conditional = document->token(previous) == QUESTION;
+    const QByteArray pad = startsLine
+        ? document->indentOf(line)
+        : continuationPad(textWidth(document->indentOf(line)),
+                          conditional ? 1 : conditions->operatorPadding(previous));
+    const QByteArray newline = document->text().mid(
+        document->lineEnd(line) - 1,
+        1
+    ) == "\r"
+        ? "\r\n" : "\n";
+    const QByteArray gap = newline + pad;
+    const int closeEnd = document->symbolEnd(close);
+    if (first < open) {
+        const bool keepInline = ! startsLine && ! conditional;
+        const int layoutIndent = keepInline
+            ? textWidth(document->indentOf(line))
+            : textWidth(pad);
+        FormatExpressionLayout layout(document, conditions, layoutIndent);
+        const int lineStart = document->lineStart(line);
+        const int operatorColumn = keepInline
+            ? textWidth(document->text().mid(lineStart, from - lineStart)) + 1
+            : textWidth(pad);
+        const int column = operatorColumn
+            + document->lexem(previous).size()
+            + 1;
+        const QByteArray flat = layout.oneLine(first, close);
+        QByteArray operand = flat;
+        const int limit = conditional
+            ? wrapMaxAt(document, from)
+            : wrapColumn(document, from);
+        if (column + textWidth(flat) > limit) {
+            const int extraPad = keepInline
+                ? conditions->operatorPadding(previous) : 0;
+            operand = layout.layoutList(
+                first,
+                open,
+                close,
+                column,
+                true,
+                0,
+                extraPad
+            );
+            if (newline == "\r\n") {
+                operand.replace("\r\n", "\n");
+                operand.replace("\n", newline);
+            }
+        }
+        const QByteArray leadGap = keepInline ? QByteArray(" ") : gap;
+        const QByteArray replacement = leadGap
+            + document->lexem(previous)
+            + ' '
+            + operand
+            + gap;
+        if (replacement != document->text().mid(from, end - from)) {
+            document->replace(from, end - from, replacement);
+        }
+    } else if (document->text().mid(closeEnd, end - closeEnd) != gap) {
+        document->replace(closeEnd, end - closeEnd, gap);
+    }
+    return true;
+}
+
+/*!
+    Joins the line that the operator at @a index of @a document leads to the
+    line before it, when that one holds only closing brackets and the joined
+    line fits `wrapMax`. The `&&` and `||` operators, a prefix `++` or
+    `--`, a `:` without its `?`, a block's `}`, and the head of a control
+    statement (whose body follows it) keep their lines. Returns whether the
+    edit was queued.
+*/
+bool joinsClosingLine(FormatDocument *document, int index)
+{
+    const Token token = document->token(index);
+    // Keeps logical operators on their own continuation lines.
+    if (token == ANDAND || token == OROR) {
+        return false;
+    }
+    const Token next = document->token(index + 1);
+    const bool isPostfix = (token == INCR || token == DECR)
+        && (next == SEMIC || next == RPAREN || next == RBRACK || next == COMMA);
+    const bool isTight = isPostfix || token == DOT || token == ARROW
+        || token == DOTSTAR || token == ARROW_STAR;
+    // Joins expression operators, leaving labels and prefix increments alone.
+    if ( ! isTight && ! isAssignmentOperator(token)
+        && ( ! isBinaryOperator(token)
+            || (token == COLON && ! isTernaryColon(document, index)))
+    ) {
+        return false;
+    }
+    const int line = document->symbolLine(index);
+    const int before = index - 1;
+    // Requires adjacent lines with only closing brackets on the first one,
+    // and leaves comments and directives alone.
+    if (line < 2
+        || document->firstSymbolOfLine(line) != index
+        || document->lastSymbolOfLine(line) == index
+        || document->symbolEndLine(before) != line - 1
+        || document->isDirectiveLine(line)
+        || document->isDirectiveLine(line - 1)
+        || ! isClosingLine(document->lineText(line - 1))
+        || document->hasCommentBetween(
+            document->symbolEnd(before),
+            document->lineEnd(line)
+        )
+    ) {
+        return false;
+    }
+    const int open = document->match(before);
+    const Token closer = document->token(before);
+    // Joins initializer braces, leaving block braces on their own lines.
+    if (closer == RBRACE
+        && (open < 0 || document->braceScope(open) != FormatDocument::InitScope)
+    ) {
+        return false;
+    }
+    // Keeps a control statement's body separate from its closing parenthesis.
+    if (closer == RPAREN && open > 0) {
+        const Token keyword = document->token(open - 1);
+        if (keyword == IF
+            || keyword == WHILE
+            || keyword == FOR
+            || keyword == SWITCH
+            || keyword == CATCH
+        ) {
+            return false;
+        }
+    }
+
+    // Moves the operator line's text up behind the closing brackets.
+    const QByteArray space = isTight ? QByteArray() : QByteArray(" ");
+    const QByteArray text = document->lineText(line).trimmed();
+    const int previousStart = document->lineStart(line - 1);
+    const int previousEnd = document->symbolEnd(before);
+    const QByteArray joined = document->text().mid(
+        previousStart,
+        previousEnd - previousStart
+    ) + space + text;
+    // Keeps the break when the joined line would exceed `wrapMax`.
+    if (textWidth(joined)
+            > wrapMaxAt(document, document->lineStart(line))
+    ) {
+        return false;
+    }
+    const int from = document->lineStart(line);
+    const int lineEnd = document->lineEnd(line);
+    const bool hasNewline = lineEnd < document->text().size();
+    return document->replace(
+        previousEnd,
+        from - previousEnd,
+        space + text + (hasNewline ? "\n" : ""),
+        from, lineEnd - from + (hasNewline ? 1 : 0), QByteArray()
+    );
+}
+
+/*!
+    Tells whether the layout keeps the lines the user broke the list over,
+    from the token @a open of @a document to its closing token @a close,
+    whose items are @a arguments: the settings @a fileConfig take
+    `[Structure] target` as `long`, and the lines look meant:
+
+    * each item sits whole on one line;
+    * none of them passes the wrap column (see wrapColumn());
+    * no item of a later line starts past the end of the line above, which
+      leaves room the user did not use;
+    * each line holds the average count of items per line, rounded, or the
+      last line fewer, as no more items may follow; unless
+      `[Structure] wrapMistakes`, asked at the list through @a conditions,
+      picks `never`.
+
+    For a line that strays from that average, @a joinCount gets the count of
+    items per line `wrapMistakes` lays the list out with: the average for
+    `average`, else the number it gives; 0 leaves them to `joinArgs`.
+*/
+bool keepsUserLines(
+        const FormatDocument *document,
+        int open,
+        int close,
+        const QList<QPair<int, int > > & arguments,
+        FormatScopeConditions *conditions,
+        const FormatFileConfig & fileConfig,
+        int *joinCount)
+{
+    *joinCount = 0;
+    const int firstLine = document->symbolLine(open);
+    const int lastLine = document->symbolLine(close);
+    if (codeTargetAnyAt(document, document->symbols().at(open).from)) {
+        return false;
+    }
+
+    // Takes a line past the wrap column as lines that do not fit.
+    for (int l = firstLine; l <= lastLine; ++l) {
+        if (textWidth(document->lineText(l))
+            > wrapColumn(document, document->lineStart(l))
+        ) {
+            return false;
+        }
+    }
+
+    // Counts the items of each line, and finds one past the line above.
+    QList<int > counts;
+    int line = -1;
+    for (int i = 0; i < arguments.size(); ++i) {
+        const QPair<int, int > & item = arguments.at(i);
+        const int from = document->symbols().at(item.first).from;
+        const int itemLine = document->lineOf(from);
+        if (itemLine != document->symbolEndLine(item.second)) {
+            return false;
+        }
+        const int column = textWidth(
+            document->text().mid(
+                document->lineStart(itemLine),
+                from - document->lineStart(itemLine)
+            )
+        );
+        if (itemLine > firstLine
+            && column > textWidth(document->lineText(itemLine - 1).trimmed())
+                + textWidth(document->indentOf(itemLine - 1))
+        ) {
+            return false;
+        }
+        if (itemLine == line) {
+            ++counts.last();
+        } else {
+            counts << 1;
+            line = itemLine;
+        }
+    }
+
+    // Takes a line whose count strays from the average as a mistake, which
+    // `wrapMistakes` lays out anew with its count per line.
+    const QVariant mistakes = conditions->resolveAt(
+        QString(QLL("structure.wrapMistakes")),
+        fileConfig.wrapMistakes,
+        open
+    );
+    const bool isNumber = mistakes.type() == QVariant::Double;
+    if ( ! isNumber && mistakes.toString() != QLL("average")) {
+        return true;
+    }
+    const int average = qRound(qreal(arguments.size()) / counts.size());
+    for (int i = 0; i < counts.size(); ++i) {
+        const bool isShortLast = i + 1 == counts.size()
+            && counts.at(i) < average;
+        if (counts.at(i) != average && ! isShortLast) {
+            *joinCount = isNumber
+                ? qMax(1, FormatFileConfig::countOf(mistakes))
+                : average;
+            return false;
+        }
+    }
+    return true;
+}
+
+/*!
+    Tells whether the user broke the list from the token @a open of
+    @a document to its closing token @a close, whose items are
+    @a arguments, the way the C++ rules wrap a parameter list: its first
+    item on the line of the opening, each later line starting right under
+    that item, and the closing bracket on the line of the last item.
+*/
+bool isAlignedUnderFirst(
+        const FormatDocument *document,
+        int open,
+        int close,
+        const QList<QPair<int, int > > & arguments)
+{
+    const int line = document->symbolLine(open);
+    const int first = arguments.first().first;
+    if (document->symbolLine(first) != line
+        || document->symbolLine(arguments.last().second)
+            != document->symbolLine(close)
+    ) {
+        return false;
+    }
+    const int column = textWidth(
+        document->text().mid(
+            document->lineStart(line),
+            document->symbols().at(first).from - document->lineStart(line)
+        )
+    );
+    for (int i = 1; i < arguments.size(); ++i) {
+        const int itemLine = document->symbolLine(arguments.at(i).first);
+        const bool startsLine = itemLine
+            != document->symbolLine(arguments.at(i - 1).second);
+        if (startsLine
+            && textWidth(document->indentOf(itemLine)) != column
+        ) {
+            return false;
+        }
+    }
+    return true;
+}
+
+/*!
+    Finds a logical operator before the call at @a open whose break keeps
+    both resulting lines within wrapMax. Gives its token and the indentation
+    of its continuation line; leaves comments, directives and already split
+    calls to their own layouts.
+*/
+bool logicalBreakBeforeCall(
+        const FormatDocument *document, int open,
+        int *operatorIndex, QByteArray *indent)
+{
+    *operatorIndex = -1;
+    indent->clear();
+    const int close = document->match(open);
+    const int line = document->symbolLine(open);
+    if (close <= open || document->symbolEndLine(close) != line
+        || document->isDirectiveLine(line)
+    ) {
+        return false;
+    }
+    const int lineFirst = document->firstSymbolOfLine(line);
+    int op = open - 1;
+    while (op > lineFirst) {
+        const Token token = document->token(op);
+        if (token == ANDAND || token == OROR) {
+            break;
+        }
+        if (token == RPAREN || token == RBRACK) {
+            const int match = document->match(op);
+            if (match < lineFirst) {
+                return false;
+            }
+            op = match - 1;
+            continue;
+        }
+        if (token == COMMA || token == SEMIC || token == QUESTION
+            || token == COLON || token == EQ || token == LBRACE
+            || token == RBRACE || operatorPrecedence(token) > 0
+        ) {
+            return false;
+        }
+        --op;
+    }
+    if (op <= lineFirst || (document->token(op) != ANDAND
+            && document->token(op) != OROR)
+    ) {
+        return false;
+    }
+    const int from = document->symbolEnd(op - 1);
+    const int at = document->symbols().at(op).from;
+    const int end = contentEnd(document, line);
+    if (document->hasCommentBetween(from, end)
+        || document->spansDirective(from, end)
+    ) {
+        return false;
+    }
+    const QByteArray prefix = document->text().mid(
+        document->lineStart(line), from - document->lineStart(line)
+    );
+    const QByteArray tail = document->text().mid(at, end - at);
+    const QByteArray padding = continuationPad(
+        textWidth(document->indentOf(line))
+    );
+    const int limit = wrapMaxAt(document, at);
+    if (textWidth(prefix) > limit
+        || textWidth(padding) + textWidth(tail) > limit
+    ) {
+        return false;
+    }
+    *operatorIndex = op;
+    *indent = padding;
+    return true;
+}
+
+/*!
+    Builds the `{` of the one-line function body that holds the list at
+    @a paren of @a document, when that body fits the wrap column (see
+    wrapColumn()) on a line of its own, at the indent of its head's line;
+    -1 for any other list. Such a body opens and closes on the list's line,
+    right after the function's head.
+*/
+int inlineFunctionBody(
+        const FormatDocument *document,
+        int paren)
+{
+    // Finds the brace that holds the list.
+    int brace = -1;
+    for (int k = paren - 1; k > 0 && brace < 0; --k) {
+        const Token token = document->token(k);
+        if (token == RBRACE && document->match(k) >= 0) {
+            k = document->match(k);
+        } else if (token == LBRACE && document->match(k) > paren) {
+            brace = k;
+        }
+    }
+    const int line = document->symbolLine(paren);
+    if (brace < 1
+        || document->braceScope(brace) != FormatDocument::FunctionScope
+        || document->symbolLine(brace) != line
+        || document->symbolLine(brace - 1) != line
+        || document->symbolLine(document->match(brace)) != line
+    ) {
+        return -1;
+    }
+
+    // Measures the body on a line of its own.
+    const int from = document->symbols().at(brace).from;
+    const QByteArray text = document->text().mid(
+        from, document->symbolEnd(document->match(brace)) - from
+    );
+    const int width = textWidth(document->indentOf(line)) + textWidth(text);
+    if (width > wrapColumn(document, from)) {
+        return -1;
+    }
+    return brace;
+}
+
+/*!
+    Tells whether the `(` at @a paren of @a document opens the arguments of
+    a call inside a function body: a name comes before it, other than
+    `connect` and `disconnect`.
+*/
+bool isFunctionCallParen(
+        const FormatDocument *document,
+        int paren)
+{
+    if (document->token(paren - 1) != IDENTIFIER) {
+        return false;
+    }
+    const FormatDocument::Scope scope = document->scopeOf(paren);
+    if (scope != FormatDocument::FunctionScope
+        && scope != FormatDocument::BlockScope
+        && scope != FormatDocument::InitScope
+    ) {
+        return false;
+    }
+    const QByteArray name = document->lexem(paren - 1);
+    return name != "connect" && name != "disconnect";
+}
+
+/*!
+    Builds the index of the `if`, `while`, `for`, or `switch` whose head holds
+    the `(` at @a paren of @a document, or -1 when it sits in no such head.
+*/
+int controlKeywordFor(
+        const FormatDocument *document, int paren)
+{
+    for (int k = paren - 1; k > 0; --k) {
+        const Token token = document->token(k);
+        const int match = document->match(k);
+        if ((token == RPAREN || token == RBRACK) && match >= 0) {
+            k = match;
+            continue;
+        }
+        if (token == SEMIC || token == LBRACE || token == RBRACE) {
+            return -1;
+        }
+        if (token == LPAREN) {
+            const Token keyword = document->token(k - 1);
+            if (keyword == IF || keyword == WHILE || keyword == FOR
+                || keyword == SWITCH
+            ) {
+                return k - 1;
+            }
+        }
+    }
+    return -1;
+}
+
+/*!
+    Finds a statement starting on @a line of @a document and gives
+    its first token to @a first and its `;` to @a last. Returns false unless
+    the statement ends with its only top-level `;` on the same line or
+    the closing line of a nested expression,
+    holds no comment, and is no control statement.
+*/
+bool findWholeStatement(
+        const FormatDocument *document, int line,
+        int *first, int *last)
+{
+    *first = document->firstSymbolOfLine(line);
+    *last = document->lastSymbolOfLine(line);
+    if (*first < 0) {
+        return false;
+    }
+
+    // Takes only a statement that starts the line and ends on it.
+    if (*first > 0) {
+        const Token before = document->token(*first - 1);
+        if (before != SEMIC
+            && before != LBRACE
+            && before != RBRACE
+            && before != COLON
+        ) {
+            return false;
+        }
+    }
+    const Token lead = document->token(*first);
+    if (lead == IF || lead == ELSE || lead == WHILE || lead == FOR || lead == DO
+        || lead == SWITCH || lead == CASE
+    ) {
+        return false;
+    }
+    const int end = statementEnd(document, *first);
+    if (end >= *first && document->token(end) == SEMIC
+        && end == document->lastSymbolOfLine(document->symbolLine(end)))
+    {
+        *last = end;
+    }
+    bool hasBinaryOperator = false;
+    // Skip nested expressions while checking the statement boundary.
+    for (int i = *first; i <= *last; ++i) {
+        const Token token = document->token(i);
+        if ((token == LPAREN || token == LBRACK || token == LBRACE)
+            && document->match(i) > i
+        ) {
+            i = document->match(i);
+            if (i > *last) {
+                if (token == LBRACE
+                    && document->braceScope(document->match(i))
+                        != FormatDocument::InitScope
+                ) {
+                    return false;
+                }
+                *last = document->lastSymbolOfLine(document->symbolEndLine(i));
+            }
+            continue;
+        }
+        hasBinaryOperator |= operatorPrecedence(token) > 0 && i > *first
+            && isOperandEnd(document->token(i - 1));
+        if ((token == SEMIC && i < *last) || token == RBRACE) {
+            return false;
+        }
+    }
+    const int from = document->lineStart(line);
+    const int to = document->lineEnd(document->symbolEndLine(*last));
+    return (hasBinaryOperator || document->symbolLine(*last) == line)
+        && document->token(*last) == SEMIC
+        && ! document->hasCommentBetween(from, to)
+        && ! document->spansDirective(from, to);
+}
+
+/*!
+    Moves the braced body of the control statement whose keyword is at
+    @a keyword of @a document, and whose `{` is at @a brace, off its line,
+    when it sits on that line whole (`if (x) { a(); }`): the statements go
+    one step (4 spaces) past the keyword's line, and the `}` to the line
+    after them, at the keyword's indent. An empty body stays on its line,
+    and so does one that a directive splits, or that has a brace or a
+    comment of its own.
+*/
+bool expandInlineBody(
+        FormatDocument *document, int keyword,
+        int brace)
+{
+    const int close = document->match(brace);
+    const int line = document->symbolLine(brace);
+    if (close <= brace + 1 || document->symbolLine(close) != line
+        || document->symbolLine(keyword) != line
+        || document->hasCommentBetween(
+            document->symbolEnd(brace),
+            document->symbols().at(close).from
+        )
+    ) {
+        return false;
+    }
+    for (int k = brace + 1; k < close; ++k) {
+        if (document->token(k) == LBRACE) {
+            return false;
+        }
+    }
+    const QByteArray indent = document->indentOf(line);
+    const int from = document->symbolEnd(brace);
+    const int last = document->symbolEnd(close - 1);
+    return document->replace(
+        from, document->symbols().at(brace + 1).from - from,
+        "\n" + continuationPad(indent.size()),
+        last, document->symbols().at(close).from - last, "\n" + indent
+    );
+}
+
+/*!
+    Builds the index of the first token of the body that the control keyword
+    at @a keyword of @a document governs, or -1 when that token is no control
+    keyword (or the keyword governs no body of its own, as `else if` and the
+    `while` of a `do` loop do not).
+*/
+int controlBodyStart(
+        const FormatDocument *document,
+        int keyword)
+{
+    const Token token = document->token(keyword);
+    if (token == ELSE) {
+        return document->token(keyword + 1) == IF ? -1 : keyword + 1;
+    }
+    if (token == DO) {
+        return keyword + 1;
+    }
+    bool isLoopMacro = false;
+    if (token == IDENTIFIER) {
+        const QByteArray name = document->lexem(keyword);
+        isLoopMacro = name == "foreach" || name == "Q_FOREACH";
+    }
+    if (token != IF && token != FOR && token != WHILE && ! isLoopMacro) {
+        return -1;
+    }
+    if (document->token(keyword + 1) != LPAREN
+        || document->match(keyword + 1) < 0
+    ) {
+        return -1;
+    }
+
+    // Leaves out the `while` that ends a `do` loop.
+    if (token == WHILE && document->token(keyword - 1) == RBRACE) {
+        const int opener = document->match(keyword - 1);
+        if (opener > 0 && document->token(opener - 1) == DO) {
+            return -1;
+        }
+    }
+    const int body = document->match(keyword + 1) + 1;
+    return body < document->symbols().size() ? body : -1;
+}
+
+/*!
+    Queues the braces around the one-statement body starting at the token
+    @a body of @a document, whose control statement starts at @a keyword and
+    whose head ends at the token @a head.
+*/
+void braceStatementBody(
+        FormatDocument *document, int keyword,
+        int head, int body)
+{
+    const int end = statementEnd(document, body);
+    if (end < 0) {
+        return;
+    }
+    const int headLine = document->symbolEndLine(head);
+    const int endLine = document->symbolEndLine(end);
+    for (int line = headLine; line <= endLine; ++line) {
+        if (document->isDirectiveLine(line)) {
+            document->report(document->symbols().at(keyword).from, "control-braces",
+                             QString(QLL("brace the body by hand: a directive splits it")));
+            return;
+        }
+    }
+
+    // Keeps a one-line statement on its line: `if (x) { return; }`.
+    const Token after = document->token(end + 1);
+    const bool followedOnLine = end + 1 < document->symbols().size()
+        && document->symbolLine(end + 1) == endLine;
+    if (document->symbolLine(body) == headLine) {
+        if (followedOnLine && after != ELSE && after != WHILE
+            && (document->isHeader() || document->hasCommentBetween(
+                document->symbolEnd(end), document->symbols().at(end + 1).from
+            ))
+        ) {
+            return;
+        }
+        if (document->isHeader()) {
+            document->replace(
+                document->symbolEnd(head), 0, " {",
+                document->symbolEnd(end), 0, " }"
+            );
+            return;
+        }
+
+        // Moves the body to a line of its own, and closes it on the next.
+        const QByteArray indent =
+            document->indentOf(document->symbolLine(keyword));
+        const int from = document->symbolEnd(head);
+        const int endFrom = document->symbolEnd(end);
+        const bool movesNext = followedOnLine
+            && after != ELSE
+            && after != WHILE;
+        const int endLength = movesNext
+            ? document->symbols().at(end + 1).from - endFrom : 0;
+        const QByteArray endText = "\n" + indent + "}"
+            + (movesNext ? "\n" + indent : QByteArray());
+        document->replace(
+            from, document->symbols().at(body).from - from,
+            " {\n" + continuationPad(indent.size()),
+            endFrom, endLength, endText
+        );
+        return;
+    }
+
+    // Closes a body on lines of its own with a brace at the keyword's indent;
+    // an `else` or the `while` of a `do` joins that brace's line.
+    if (followedOnLine) {
+        return;
+    }
+    const QByteArray indent = document->indentOf(document->symbolLine(keyword));
+    const bool joins = (after == ELSE || (after == WHILE && document->token(keyword) == DO))
+        && ! document->hasCommentBetween(
+            document->symbolEnd(end),
+            document->symbols().at(end + 1).from
+        ) && ! document->spansDirective(
+            document->symbolEnd(end),
+            document->symbols().at(end + 1).from
+        );
+    int closeFrom = contentEnd(document, endLine);
+    int closeLength = 0;
+    QByteArray closeText = "\n" + indent + "}";
+    if (joins) {
+        closeFrom = document->symbolEnd(end);
+        closeLength = document->symbols().at(end + 1).from - closeFrom;
+        closeText += ' ';
+    }
+    document->replace(
+        document->symbolEnd(head), 0, " {",
+        closeFrom, closeLength, closeText
+    );
+}
+
+/*!
+    Tells whether the `}` at @a close of @a document stands on a line that
+    holds only a chain of closing brackets, such as `} }`, `) }`, or
+    `); }`: another closing bracket before it, and nothing else on its line
+    but closing brackets and `;`.
+*/
+bool closesBracketChain(const FormatDocument *document, int close)
+{
+    const int line = document->symbolLine(close);
+    const int first = document->firstSymbolOfLine(line);
+    const int last = document->lastSymbolOfLine(line);
+    if (first < 0 || first >= close) {
+        return false;
+    }
+    for (int k = first; k <= last; ++k) {
+        const Token token = document->token(k);
+        if (token != RBRACE
+            && token != RPAREN
+            && token != RBRACK
+            && token != SEMIC
+        ) {
+            return false;
+        }
+    }
+    const Token start = document->token(first);
+    return start == RBRACE || start == RPAREN || start == RBRACK;
+}
+
+static bool groupKeepsIndent(const FormatDocument *document, int group)
+{
+    const Token token = document->token(group);
+    if (token == LBRACE) {
+        const FormatDocument::Scope scope = document->braceScope(group);
+        return scope == FormatDocument::InitScope
+            || scope == FormatDocument::EnumScope;
+    }
+    if (token == LBRACK) {
+        return true;
+    }
+    const Token opener = document->token(group - 1);
+    return opener == IDENTIFIER || opener == RANGLE || opener == GTGT
+        || opener == RBRACK || opener == RPAREN || opener == STATIC_CAST
+        || opener == SIZEOF;
+}
+
+/*!
+    Builds the line that starts the statement holding the token at @a from
+    of @a document: the first line after the `;`, `{` or `}` before it that
+    is no preprocessor line. Directive lines and matched brackets on the way
+    are passed over, since a directive ends no statement.
+*/
+static int statementLine(const FormatDocument *document, int from)
+{
+    int k = from;
+    for (; k >= 0; --k) {
+        if (document->isDirectiveLine(document->symbolLine(k))) {
+            continue;
+        }
+        const Token token = document->token(k);
+        if ((token == RPAREN || token == RBRACK)
+            && document->match(k) >= 0
+        ) {
+            k = document->match(k);
+            continue;
+        }
+        if (token == SEMIC || token == LBRACE || token == RBRACE) {
+            break;
+        }
+    }
+    int start = k + 1;
+    while (start + 1 < document->symbols().size()
+        && document->isDirectiveLine(document->symbolLine(start))
+    ) {
+        ++start;
+    }
+    return document->symbolLine(start);
+}
+
+/*!
+    Finds the group that the token at @a index of @a document belongs to:
+    the innermost `(` or `[` still open before it, or a braced initializer,
+    else the start of its statement. Past a preprocessor line, only a
+    matching open bracket that spans it makes a group; otherwise the
+    statement's start is found past the directive lines (see
+    statementLine()). Returns that bracket's index, or -1 for the statement,
+    and gives the line that opened the group to @a base; sets
+    @a keepsIndent for a group whose lines align under its first item.
+*/
+int continuationGroup(const FormatDocument *document, int index, int *base,
+                   bool *keepsIndent)
+{
+    *base = -1;
+    *keepsIndent = false;
+    int k = index - 1;
+    for (; k >= 0; --k) {
+        const Token token = document->token(k);
+        if (document->isDirectiveLine(document->symbolLine(k))) {
+            for (int group = k - 1; group >= 1; --group) {
+                if (document->isDirectiveLine(document->symbolLine(group))) {
+                    continue;
+                }
+                const Token groupToken = document->token(group);
+                if ((groupToken == LPAREN
+                        || groupToken == LBRACK
+                        || groupToken == LBRACE)
+                    && document->match(group) >= index
+                ) {
+                    *keepsIndent = groupKeepsIndent(document, group);
+                    if (groupToken != LBRACE || *keepsIndent) {
+                        *base = document->symbolLine(group);
+                        return group;
+                    }
+                }
+            }
+            *base = statementLine(document, k);
+            return -1;
+        }
+        if ((token == RPAREN
+                || token == RBRACK)
+            && document->match(k) >= 0
+        ) {
+            k = document->match(k);
+            continue;
+        }
+        if (token == LPAREN || token == LBRACK) {
+            *keepsIndent = groupKeepsIndent(document, k);
+            *base = document->symbolLine(k);
+            return k;
+        }
+        if (token == LBRACE
+            && document->braceScope(k) != FormatDocument::FunctionScope
+            && document->braceScope(k) != FormatDocument::BlockScope
+        ) {
+            *keepsIndent = groupKeepsIndent(document, k);
+        }
+        if (token == SEMIC || token == LBRACE || token == RBRACE) {
+            *base = document->symbolLine(k + 1);
+            return -1;
+        }
+    }
+    *base = document->symbolLine(0);
+    return -1;
+}
+
+bool isForCondition(const FormatDocument *document, int group, int index)
+{
+    if (document->token(group - 1) != FOR) {
+        return false;
+    }
+    int semicolons = 0;
+    for (int k = group + 1; k < index; ++k) {
+        if (document->isDirectiveLine(document->symbolLine(k))) {
+            continue;
+        }
+        const Token token = document->token(k);
+        if ((token == LPAREN || token == LBRACK || token == LBRACE)
+            && document->match(k) > k
+        ) {
+            k = document->match(k);
+        } else if (token == SEMIC) {
+            ++semicolons;
+        }
+    }
+    return semicolons == 1;
+}
+
+int conditionSteps(const FormatDocument *document, int group, int base,
+                          int index)
+{
+    int steps = 0;
+    int bracket = group;
+    while (bracket >= 1 && document->token(bracket) == LPAREN) {
+        if (document->symbolLine(bracket) == base) {
+            ++steps;
+        }
+        const Token opener = document->token(bracket - 1);
+        if (opener == IF || opener == WHILE
+            || (opener == FOR && isForCondition(document, bracket, index))
+        ) {
+            if (bracket != group
+                && document->symbolLine(bracket) != base
+                && steps > 0
+            ) {
+                --steps;
+            }
+            return bracket == group ? 0 : steps;
+        }
+        int outerBase = -1;
+        bool keepsIndent = false;
+        bracket = continuationGroup(document, bracket, &outerBase, &keepsIndent);
+        if (keepsIndent) {
+            return 0;
+        }
+    }
+    return 0;
+}
+
+/*!
+    Builds how tightly the operator @a token that leads a line binds: as
+    operatorPrecedence() ranks it, with a `?` loosest of all.
+*/
+int leadRank(Token token)
+{
+    return token == QUESTION ? 0 : operatorPrecedence(token);
 }

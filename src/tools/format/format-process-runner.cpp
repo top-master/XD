@@ -171,9 +171,10 @@ QStringList FormatProcessRunner::workerArguments() const
     ) {
         arguments << QString(QLL("--git")) << this->m_options.git;
     }
-    if ( ! this->m_options.rules.isEmpty()) {
-        arguments << QString(QLL("--rules="))
-            + this->m_options.rules.join(QLatin1Char(','));
+    const QStringList checks = this->m_options.config.checks.isEmpty()
+        ? this->m_options.rules : this->m_options.config.checks;
+    if ( ! checks.isEmpty()) {
+        arguments << QString(QLL("--rules=")) + checks.join(QLatin1Char(','));
     }
     if (this->m_options.check) {
         arguments << QString(QLL("--check"));

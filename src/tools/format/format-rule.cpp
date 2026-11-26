@@ -7,9 +7,8 @@
     @class FormatRule
     @internal
 
-    Finds one formatting rule's breaks in a FormatDocument, and queues the
-    fix of each one it can fix safely with FormatDocument::replace(), or
-    reports it with FormatDocument::report() otherwise.
+    Describes a formatting check for selection and reporting. Comment checks
+    also implement run() to queue their fixes and reports.
 
     @fn QByteArray FormatRule::name() const
 
@@ -21,7 +20,7 @@
 
     @fn void FormatRule::run(FormatDocument *document) const
 
-    Queues the fixes and reports the issues of this rule in @a document.
+    Queues the fixes and reports of a comment check in @a document.
 */
 
 /*!

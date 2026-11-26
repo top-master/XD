@@ -8,8 +8,8 @@
     @internal
 
     Offers the arguments of a call that `[Replace.types]` turns to its call
-    template, as `args` (see FormatReplaceTypesRule): each argument as the
-    source writes it, with the names of Config::ArrayObj, such as
+    template, as `args`: each argument as the source writes it, with the
+    names of Config::ArrayObj, such as
     `args[0]` and `args.join(", ")`.
 */
 

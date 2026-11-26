@@ -8,8 +8,12 @@
 
 #include <QtCore/QByteArray>
 
+void reportStatementShapes(FormatDocument *document, int start);
+void reportLongInlineBody(FormatDocument *document, int brace);
 bool isTypeEnd(Token token);
 bool isBuiltinType(Token token);
+bool isReferenceDeclaration(const FormatDocument *document, int ampersand);
+bool isStaticVariable(const FormatDocument *document, int index);
 bool isSameLineGap(const FormatDocument *document, int before, int after);
 int contentEnd(const FormatDocument *document, int line);
 int statementEnd(const FormatDocument *document, int index);

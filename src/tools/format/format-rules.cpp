@@ -3,87 +3,89 @@
 
 #include "./format-rules.h"
 
-#include "./rules/args-wrap.h"
 #include "./rules/as-with.h"
-#include "./rules/body-braces.h"
 #include "./rules/code-backticks.h"
-#include "./rules/code-shape.h"
 #include "./rules/comment-case.h"
 #include "./rules/comment-period.h"
-#include "./rules/doc-tag-sign.h"
 #include "./rules/comment-width.h"
-#include "./rules/condition-close.h"
-#include "./rules/condition-wrap.h"
-#include "./rules/connect-layout.h"
-#include "./rules/const-overload.h"
-#include "./rules/continuation-indent.h"
-#include "./rules/control-braces.h"
 #include "./rules/doc-placement.h"
-#include "./rules/excludes.h"
-#include "./rules/global-static.h"
-#include "./rules/init-list.h"
-#include "./rules/inline-keyword.h"
-#include "./rules/line-join.h"
+#include "./rules/doc-tag-sign.h"
 #include "./rules/mark-banner.h"
-#include "./rules/namespace-braces.h"
-#include "./rules/member-init.h"
-#include "./rules/moc-run.h"
-#include "./rules/no-lambda.h"
-#include "./rules/not-space.h"
-#include "./rules/one-statement.h"
-#include "./rules/operator-first.h"
-#include "./rules/operator-wrap.h"
-#include "./rules/outline-this.h"
-#include "./rules/param-wrap.h"
 #include "./rules/pattern-report.h"
-#include "./rules/private-access.h"
-#include "./rules/replace-types.h"
-#include "./rules/qpointer-getter.h"
-#include "./rules/reference-local.h"
-#include "./rules/reference-space.h"
-#include "./rules/relative-include.h"
 #include "./rules/stub-line.h"
-#include "./rules/super-typedef.h"
-#include "./rules/template-close.h"
-#include "./rules/ternary-wrap.h"
 #include "./rules/text-report.h"
 #include "./rules/trailing-comment.h"
 #include "./rules/us-spelling.h"
+
 
 #include <QtCore/QDir>
 #include <QtCore/QFileInfo>
 #include <QtCore/QMap>
 
 /*!
-    Builds one of each code rule, the fixes first, in the order they run:
-    type and inline marker changes before wrapping, since they affect line
-    width; the spaces of a `!` before every break for the same reason; the
-    braces before the condition layout, since a brace they add is
-    the one the condition closes next to; and the operator breaks of a long
-    line before the condition layout too, since a condition they break then
-    closes in the same way. Member-access joins run before argument wrapping;
-    the other operator joins run after it.
+    Describes the checks available to the formatter and its command line.
 */
+class FormatCheckDescription : public FormatNamedRule
+{
+public:
+    FormatCheckDescription(const char *name, const char *summary, bool readsOtherFiles = false)
+        : FormatNamedRule(name, summary), m_readsOtherFiles(readsOtherFiles) {}
+    void run(FormatDocument *) const Q_DECL_OVERRIDE {}
+    bool readsOtherFiles() const Q_DECL_OVERRIDE { return m_readsOtherFiles; }
+private:
+    bool m_readsOtherFiles;
+};
+
 static QList<FormatRule * > formatCreateCodeRules()
 {
     QList<FormatRule * > rules;
-    rules << new FormatMocRunRule << new FormatReplaceTypesRule << new FormatRelativeIncludeRule
-        << new FormatInlineKeywordRule
-        << new FormatNotSpaceRule << new FormatLineJoinRule
-        << new FormatControlBracesRule << new FormatNamespaceBracesRule
-        << new FormatOperatorWrapRule
-        << new FormatConditionWrapRule << new FormatTernaryWrapRule
-        << new FormatChainMembersFirstRule
-        << new FormatInitListRule << new FormatParamWrapRule << new FormatArgsWrapRule
-        << new FormatOperatorFirstRule
-        << new FormatContinuationIndentRule
-        << new FormatConditionCloseRule
-        << new FormatTemplateCloseRule << new FormatReferenceSpaceRule
-        << new FormatOneStatementRule;
-    rules << new FormatSuperTypedefRule;
-    rules << new FormatNoLambdaRule << new FormatMemberInitRule << new FormatGlobalStaticRule
-        << new FormatPrivateAccessRule << new FormatExcludesRule << new FormatCodeShapeRule
-        << new FormatReferenceLocalRule;
+    rules << new FormatCheckDescription("moc-run-macro",
+            "Spells moc macro Q_MOC_RUN.") << new FormatCheckDescription("replace-types",
+            "Writes mapped type names.") << new FormatCheckDescription("relative-include",
+            "Writes a relative path for a nearby quoted header.")
+        << new FormatCheckDescription("inline-keyword",
+            "Spells out inline on in-class definitions.")
+        << new FormatCheckDescription("not-space",
+            "Puts a space on each side of a logical not (!).") << new FormatCheckDescription("line-join",
+            "Joins the lines of each expression when [Structure] target is any, for the layout rules to lay it out anew.")
+        << new FormatCheckDescription("control-braces",
+            "Wraps control statement bodies in braces.") << new FormatCheckDescription("namespace-braces",
+            "Formats namespace braces and labels.")
+        << new FormatCheckDescription("operator-wrap",
+            "Breaks long expressions before their operators.")
+        << new FormatCheckDescription("condition-wrap",
+            "Breaks long conditions by nesting level.") << new FormatCheckDescription("ternary-wrap",
+            "Breaks long conditional expressions.")
+        << new FormatCheckDescription("chain-members-first",
+            "Joins member access after closing brackets when it fits.")
+        << new FormatCheckDescription("init-list-lead",
+            "Leads member-initializer lines with separators.") << new FormatCheckDescription("param-wrap",
+            "Wraps the parameters of a declaration.") << new FormatCheckDescription("args-wrap",
+            "Breaks wrapped calls and brace lists.")
+        << new FormatCheckDescription("operator-first",
+            "Breaks a long expression before an operator.")
+        << new FormatCheckDescription("continuation-indent",
+            "Indents operator-led continuation lines.")
+        << new FormatCheckDescription("condition-close",
+            "Closes multiline conditions beside the opening brace.")
+        << new FormatCheckDescription("template-close-space",
+            "Spaces closing template brackets.") << new FormatCheckDescription("reference-space",
+            "Writes a named reference declaration as Type & name.")
+        << new FormatCheckDescription("one-statement",
+            "Puts one statement on each line.");
+    rules << new FormatCheckDescription("super-typedef",
+        "Adds and uses a configured super typedef.", true);
+    rules << new FormatCheckDescription("no-lambda",
+            "Reports lambdas in XD source and nested lambdas.") << new FormatCheckDescription("member-init",
+            "Reports data members initialized in the class body.") << new FormatCheckDescription("global-static",
+            "Reports static objects and local static variables.")
+        << new FormatCheckDescription("q-d-macro",
+            "Reports d_func() and q_func() calls where Q_D or Q_Q fit.")
+        << new FormatCheckDescription("excludes",
+            "Reports negated includes checks.") << new FormatCheckDescription("code-shape",
+            "Reports code shapes that need a manual rewrite.")
+        << new FormatCheckDescription("reference-local",
+            "Reports non-const local references.");
     return rules;
 }
 
@@ -93,8 +95,12 @@ static QList<FormatRule * > formatCreateCodeRules()
 static QList<FormatRule * > formatCreateClassRules()
 {
     QList<FormatRule * > rules;
-    rules << new FormatOutlineThisRule << new FormatConnectLayoutRule;
-    rules << new FormatConstOverloadRule << new FormatQPointerGetterRule;
+    rules << new FormatCheckDescription("outline-this",
+            "Qualifies member access where configured.") << new FormatCheckDescription("connect-layout",
+            "Lays out connection arguments in pairs.");
+    rules << new FormatCheckDescription("const-overload-order",
+            "Reports mutable overloads before their const counterparts.") << new FormatCheckDescription("qpointer-getter",
+            "Reports raw pointers returned from QPointer fields.");
     return rules;
 }
 
@@ -175,10 +181,8 @@ static QList<FormatRule * > formatCreateCommentRules()
 }
 
 /*!
-    Builds one of each formatting rule, in the order the formatter runs them:
-    the code and class rules first, since they may move the code that a
-    comment rule looks at afterwards, and `body-braces` last, on what every
-    other rule leaves.
+    Builds the checks available for selection. Code checks share a traversal;
+    comment checks run afterwards on the resulting text.
 */
 QList<FormatRule * > formatCreateRules()
 {
@@ -186,7 +190,8 @@ QList<FormatRule * > formatCreateRules()
     rules << formatCreateCodeRules();
     rules << formatCreateClassRules();
     rules << formatCreateCommentRules();
-    rules << new FormatBodyBracesRule;
+    rules << new FormatCheckDescription("body-braces",
+            "Gives body braces their own lines.");
     return rules;
 }
 

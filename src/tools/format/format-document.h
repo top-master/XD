@@ -158,6 +158,7 @@ private:
         QByteArray text;
     };
 
+    static void sortEdits(QList<Edit > *edits);
     void moveInlineConfiguration(const QList<Edit > & edits);
     static int movedOffset(int offset, bool isStart,
                            const QList<Edit > & edits);
@@ -253,17 +254,89 @@ public:
     inline bool hasCommentBetween(int start, int end) const
     { return m_backup.hasCommentBetween(start, end); }
     inline bool isOnlyWhitespace(int start, int end) const
-    { return m_backup.isOnlyWhitespace(start, end); }
+    {
+        const QByteArray text = this->get(start, end);
+        for (int index = 0; index < text.size(); ++index) {
+            if (text.at(index) != ' ' && text.at(index) != '\t'
+                && text.at(index) != '\r' && text.at(index) != '\n')
+            {
+                return false;
+            }
+        }
+        return true;
+    }
     inline QByteArray sourceText(int first, int last) const
     {
         if (last < first) {
             return QByteArray();
         }
         const int start = m_backup.symbols().at(first).from;
-        return m_backup.text().mid(start, m_backup.symbolEnd(last) - start);
+        return this->get(start, m_backup.symbolEnd(last));
     }
     inline QByteArray get(int start, int end) const
-    { return m_backup.text().mid(start, end - start); }
+    {
+        start = qBound(0, start, m_backup.text().size());
+        end = qBound(start, end, m_backup.text().size());
+        QByteArray result;
+        result.reserve(end - start);
+        QList<FormatDocument::Edit > edits = m_backup.m_edits;
+        FormatDocument::sortEdits(&edits);
+        for (int index = 0; index < edits.size() / 2; ++index) {
+            edits.swap(index, edits.size() - index - 1);
+        }
+        int edit = 0;
+        int comment = 0;
+        int offset = start;
+        while (offset < end) {
+            while (edit < edits.size()
+                && (edits.at(edit).offset + edits.at(edit).length < offset
+                    || (edits.at(edit).length > 0
+                        && edits.at(edit).offset + edits.at(edit).length == offset)))
+            {
+                ++edit;
+            }
+            if (edit < edits.size() && edits.at(edit).offset <= offset) {
+                const FormatDocument::Edit &entry = edits.at(edit);
+                if (entry.offset == offset) {
+                    result += entry.text;
+                }
+                offset = qMin(end, entry.offset + entry.length);
+                ++edit;
+                continue;
+            }
+            while (comment < m_comments.size()
+                && m_comments.at(comment).offset + m_comments.at(comment).length <= offset)
+            {
+                ++comment;
+            }
+            const char character = m_backup.text().at(offset);
+            if (comment < m_comments.size() && m_comments.at(comment).offset <= offset
+                && character != '\n' && character != '\r')
+            {
+                const FormatComment &entry = m_comments.at(comment);
+                const int next = entry.offset + entry.length;
+                if (offset == entry.offset && next < end && ! result.isEmpty()
+                    && ! QByteArray(" \t\r\n").contains(result.at(result.size() - 1))
+                    && ! QByteArray(" \t\r\n").contains(m_backup.text().at(next))
+                    && ! m_backup.text().mid(entry.offset, entry.length).contains('\n'))
+                {
+                    result += ' ';
+                }
+                ++offset;
+                continue;
+            }
+            result += character;
+            ++offset;
+        }
+        if (end == m_end) {
+            for (; edit < edits.size() && edits.at(edit).offset == end; ++edit) {
+                if (edits.at(edit).length == 0) {
+                    result += edits.at(edit).text;
+                }
+            }
+        }
+        return result;
+    }
     inline bool add(int offset, const QByteArray &text)
     { return this->replace(offset, 0, text); }
     inline bool set(int start, int end, const QByteArray &text)

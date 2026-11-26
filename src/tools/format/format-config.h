@@ -14,6 +14,8 @@
     Carries the settings that the command line gives over the `.formatrc`
     files:
 
+    * `checks`: the checks to run when set; an empty list uses the
+      formatter's selection;
     * `file` (`--config-file`): the one settings file read in place of every
       `.formatrc`, when set;
     * `adds` (`--config-add`): settings files read over the `.formatrc`
@@ -33,6 +35,7 @@ class FormatConfig
 public:
     inline FormatConfig() : verbose(false) {}
 
+    QStringList checks;
     QString file;
     QStringList adds;
     QStringList assignments;
