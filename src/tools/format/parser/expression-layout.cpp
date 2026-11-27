@@ -711,6 +711,14 @@ QByteArray FormatExpressionLayout::layoutList(
                 );
             }
             m_paddingLevel -= extraPad;
+            const int suffixWidth = m_document->token(close + 1) == SEMIC
+                ? 1 : 0;
+            if (items.size() == 1
+                && lastLineWidth(text) + textWidth(closer) + suffixWidth
+                    <= wrapMaxAt(m_document, m_document->symbols().at(open).from)
+            ) {
+                return text + closer;
+            }
             return text + '\n' + this->pad() + closer;
         }
         m_paddingLevel -= extraPad;

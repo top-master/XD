@@ -964,6 +964,14 @@ bool joinsClosingLine(FormatDocument *document, int index)
     }
     const int open = document->match(before);
     const Token closer = document->token(before);
+    if ((token == DOT || token == ARROW)
+        && closer == RPAREN && open > 1
+        && document->token(open - 1) == IDENTIFIER
+        && (document->token(open - 2) == DOT
+            || document->token(open - 2) == ARROW))
+    {
+        return false;
+    }
     // Joins initializer braces, leaving block braces on their own lines.
     if (closer == RBRACE
         && (open < 0 || document->braceScope(open) != FormatDocument::InitScope)

@@ -304,10 +304,17 @@ FormatResult Formatter::format(
                 CodeEditor editor = document.edit(source->symbols().at(index).from,
                     limit + 1 < source->symbols().size()
                         ? source->symbols().at(limit + 1).from : source->text().size());
+                int templateEnd = -1;
                 for (int cursor = index; cursor < limit
                     && cursor + 1 < source->symbols().size(); ++cursor)
                 {
                     const Token token = source->token(cursor);
+                    if (token == LANGLE && templateEnd < cursor
+                        && ! brackets.isEmpty()
+                        && isDeclarationParen(source, brackets.last()))
+                    {
+                        templateEnd = templateClose(source, cursor, limit + 1);
+                    }
                     if (token == LPAREN || token == LBRACK || token == LBRACE) {
                         brackets.append(cursor);
                     } else if ((token == RPAREN || token == RBRACK || token == RBRACE)
@@ -324,6 +331,7 @@ FormatResult Formatter::format(
                     }
                     const int next = cursor + 1;
                     if ( ! codeTargetAnyAt(source, source->symbols().at(cursor).from)
+                        || cursor < templateEnd
                         || source->symbolEndLine(cursor) >= source->symbolLine(next)
                         || source->isDirectiveLine(source->symbolEndLine(cursor))
                         || source->isDirectiveLine(source->symbolLine(next))
@@ -336,6 +344,12 @@ FormatResult Formatter::format(
                     const Token after = source->token(next);
                     const int nextLine = source->symbolLine(next);
                     const int lineEnd = source->lastSymbolOfLine(nextLine);
+                    if ((after == DOT || after == ARROW)
+                        && textWidth(source->lineText(source->symbolEndLine(cursor)))
+                            > wrapMaxAt(source, source->symbols().at(cursor).from))
+                    {
+                        continue;
+                    }
                     if (((after == ANDAND || after == OROR)
                             && isClosingLine(editor.lineText(source->symbolEndLine(cursor))))
                         || (isClosingLine(editor.lineText(nextLine)) && lineEnd >= next
@@ -1190,6 +1204,17 @@ FormatResult Formatter::format(
                                 document->symbols().at(close).from - from,
                                 "\n" + indent
                             );
+                        }
+
+                        if (close + 1 < document->symbols().size()
+                            && document->token(close + 1) != SEMIC
+                            && document->symbolLine(close + 1) == closeLine)
+                        {
+                            const int from = document->symbolEnd(close);
+                            const int to = document->symbols().at(close + 1).from;
+                            if (editor.isOnlyWhitespace(from, to)) {
+                                editor.set(from, to, "\n" + indent);
+                            }
                         }
 
                     } while (false);
@@ -3278,16 +3303,14 @@ FormatResult Formatter::format(
                 ? sourceText(&document, index + 1, open - 1).simplified() : QByteArray();
             const int closeLine = document.symbolLine(close);
 
-            // Labels the `}` of a named namespace, and moves a token after it to
-            // the next line; an anonymous namespace keeps the comment it has.
+            // Labels the `}` of a named namespace.
             const bool hasNext = close + 1 < document.symbols().size()
                 && document.symbolLine(close + 1) == closeLine;
-            if (hasNext && document.token(close + 1) == SEMIC) {
+            if (hasNext) {
                 continue;
             }
             const int from = document.symbolEnd(close);
-            const int to = hasNext ? document.symbols().at(close + 1).from
-                                   : document.lineEnd(closeLine);
+            const int to = document.lineEnd(closeLine);
             const QByteArray rest = document.text().mid(from, to - from);
             const QByteArray comment = rest.trimmed();
             if ( ! comment.isEmpty() && ! comment.startsWith("//")) {
@@ -3313,9 +3336,6 @@ FormatResult Formatter::format(
                 wanted = " // Namespace `" + name + "`.";
             } else if ( ! comment.isEmpty()) {
                 wanted = " " + comment;
-            }
-            if (hasNext) {
-                wanted += "\n" + document.indentOf(document.symbolLine(open));
             }
             if (rest != wanted) {
                 document.replace(from, to - from, wanted);

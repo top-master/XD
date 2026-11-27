@@ -650,7 +650,7 @@ QList<QByteArray > FormatConditionLayout::headLines(
         QByteArray line;
         int start = m_document->symbols().at(first).from;
         int depth = 0;
-        int onLine = 1;
+        int onLine = perLine ? limit : 1;
         for (int token = first; token <= last; ++token) {
             const Token kind = m_document->token(token);
             if (kind == LPAREN && isFunctionCallParen(m_document, token)
@@ -745,6 +745,7 @@ QList<QByteArray > FormatConditionLayout::headLines(
     const QByteArray pad = continuationPad(indent);
     const int partIndent = textWidth(pad);
     QList<QByteArray > lines;
+    int grouped = 0;
     for (int p = 0; p < parts.size(); ++p) {
         const bool isFirst = p == 0;
         QList<QByteArray > partLines = this->headLines(
@@ -759,6 +760,17 @@ QList<QByteArray > FormatConditionLayout::headLines(
         if ( ! isFirst) {
             partLines.first().prepend(pad);
         }
+        const Token kind = m_document->token(parts.at(p).first);
+        if ( ! isFirst && (kind == ANDAND || kind == OROR)
+            && ! lines.isEmpty() && grouped > 0 && partLines.size() == 1
+            && (limit == 0 || grouped < limit)
+            && textWidth(lines.last()) + 1 + textWidth(partLines.first().trimmed()) <= wrap)
+        {
+            lines.last() += ' ' + partLines.first().trimmed();
+            ++grouped;
+            continue;
+        }
+        grouped = ! isFirst && (kind == ANDAND || kind == OROR) ? 1 : 0;
         lines << partLines;
     }
     return lines;
