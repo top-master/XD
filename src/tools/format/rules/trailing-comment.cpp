@@ -47,6 +47,37 @@ void FormatTrailingCommentRule::runGroup(
         return;
     }
 
+    // Keeps it in place inside a list that the wrapping rules lay out, where
+    // the line it trails is the parameter or argument line it belongs to.
+    for (int i = 0; i < document->symbols().size(); ++i) {
+        const Token token = document->token(i);
+        if (token != LPAREN && token != LBRACK) {
+            continue;
+        }
+        const int close = document->match(i);
+        if (close > i
+            && document->symbols().at(i).from < comment.offset
+            && document->symbols().at(close).from >= comment.offset + comment.length
+        ) {
+            return;
+        }
+    }
+
+    // Keeps it on a line that continues the one above it, such as the
+    // qualifier of a wrapped signature.
+    if (line > 0) {
+        const QByteArray above = document->lineText(line - 1).trimmed();
+        if ( ! above.isEmpty()
+            && ! above.endsWith(';')
+            && ! above.endsWith('{')
+            && ! above.endsWith('}')
+            && ! above.endsWith(':')
+            && ! above.startsWith('#')
+        ) {
+            return;
+        }
+    }
+
     // Turns a trailing doc marker into a leading one.
     QByteArray text = document->commentText(index);
     if (text.startsWith("///<")

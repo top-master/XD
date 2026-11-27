@@ -31,6 +31,8 @@ public:
     bool hasChain(int first, int last) const;
     bool hasOuterChain(int first, int last) const;
     inline bool brokeUngrouped() const { return m_brokeUngrouped; }
+    inline void setKeepsCommentedLines(bool keeps)
+    { m_keepsCommentedLines = keeps; }
 
 private:
     struct LineLayout {
@@ -64,6 +66,8 @@ private:
             bool keepsGroups, int firstItem, int joinCount,
             const LineLayout & layout, bool *fits);
     QByteArray itemText(int first, int last, int column, int trailing);
+    bool commaStartsNextLine(
+            const QList<QPair<int, int > > & items, int last) const;
     bool breaksOnlyBetweenLiterals(int first, int last) const;
     bool mayBreakList(int open, int itemCount) const;
     bool isListOpen(int open) const;
@@ -81,6 +85,7 @@ private:
     int m_paddingLevel;
     bool m_stepRoot;
     bool m_brokeUngrouped;
+    bool m_keepsCommentedLines;
 };
 
 #endif // PARSER_EXPRESSION_LAYOUT_H

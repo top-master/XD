@@ -5682,6 +5682,24 @@ void tst_FormatRules::testEditor_shouldPreserveCommentsAndRange()
     }
     QCOMPARE(trailingBlockNewline.text(), QByteArray("    /* Note. */\r\nint value;\r\n"));
 
+    const QList<QByteArray > trailingBlocks = QList<QByteArray >()
+        << "call(); /* Note. */\n"
+        << "call(); /* Note. */\r\n"
+        << "call(); /* Note. */";
+    for (int index = 0; index < trailingBlocks.size(); ++index) {
+        const QByteArray sample = trailingBlocks.at(index);
+        const int end = sample.endsWith('\n')
+            ? sample.size() - (sample.endsWith("\r\n") ? 2 : 1)
+            : sample.size();
+        FormatDocument trailingInlineBlock(sample);
+        {
+            CodeEditor editor = trailingInlineBlock.edit(0, end);
+            QVERIFY(editor.set(0, end, "next();"));
+        }
+        QCOMPARE(trailingInlineBlock.text(),
+                 QByteArray("next(); /* Note. */") + sample.mid(end));
+    }
+
     const QByteArray gapText("call(first, // Keep.\n    second);\n");
     FormatDocument gap(gapText);
     {

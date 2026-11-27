@@ -2245,6 +2245,46 @@ expect 'the last one'"'"'s result stays in BH_HOOK_RESULT' 'after first' "$BH_HO
 expect 'and a variable a hook sets stays set' kept "${_bh_spec_set:-}"
 unset BH_HOOKS_spec_result _bh_spec_set _bh_spec_shown
 
+# On Windows, `bh_hook_run` streams through `tail` rather than `mkfifo` so that
+# MSYS named pipes cannot crash `tee`.
+_bh_spec_win_hook=$(
+    BH_HOOKS_spec_win=
+    uname() { echo MINGW64_NT-10.0; }
+    mkfifo() { echo mkfifo-called; return 1; }
+    bh_hook spec-win <<'}'
+    echo win-ok
+}
+    bh_hook_run spec-win
+)
+expect 'bh_hook_run avoids mkfifo on Windows hosts' win-ok "$_bh_spec_win_hook"
+_bh_spec_win_exit=$(
+    (
+        BH_HOOKS_spec_exit= BH_HOOKS_pre_exit= BH_HOOKS_on_exit= BH_HOOKS_post_exit=
+        bh_hook spec-exit <<'}'
+    exit 4
+}
+        bh_strict_mode
+        bh_hook_run spec-exit
+    )
+    printf '%s' "$?"
+)
+expect 'a hook exiting early still exits with its status cleanly' 4 "$_bh_spec_win_exit"
+_bh_spec_win_loop=$(
+    BH_HOOKS_spec_win=
+    uname() { echo MINGW64_NT-10.0; }
+    bh_hook spec-win <<'}'
+    echo ok
+}
+    _bh_spec_i=0
+    while [ "$_bh_spec_i" -lt 25 ]; do
+        bh_hook_run spec-win > /dev/null
+        _bh_spec_i=$((_bh_spec_i + 1))
+    done
+    printf '%s' "$_bh_spec_i"
+)
+expect 'repeated bh_hook_run calls stop their waiter without hanging' 25 "$_bh_spec_win_loop"
+unset _bh_spec_win_hook _bh_spec_win_exit _bh_spec_win_loop
+
 
 test_section 'bh_wipe -- shows a spinner during rm -rf'
 

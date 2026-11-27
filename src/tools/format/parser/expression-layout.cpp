@@ -135,6 +135,7 @@ FormatExpressionLayout::FormatExpressionLayout(
     : m_document(document), m_conditions(conditions)
     , m_indent(indent), m_paddingLevel(0)
     , m_stepRoot(stepRoot), m_brokeUngrouped(false)
+    , m_keepsCommentedLines(false)
 {
 }
 
@@ -1636,8 +1637,13 @@ QByteArray FormatExpressionLayout::listLines(
     // user's groups: from a group too long for one line to the list's end,
     // since a user group kept after a broken one would read as one more.
     int singlesUntil = 0;
+    bool commaLeads = false;
     while (at < items.size()) {
-        const QByteArray lead = at == 0 ? layout.firstLead : layout.nextLead;
+        QByteArray lead = at == 0 ? layout.firstLead : layout.nextLead;
+        if (commaLeads) {
+            lead += ", ";
+            commaLeads = false;
+        }
         const int column = lastLineWidth(lead);
         int size = 1;
         for (int g = 0; g < groups.size() && at >= singlesUntil; ++g) {
@@ -1685,6 +1691,32 @@ QByteArray FormatExpressionLayout::listLines(
                     items.at(at).first, items.at(at).second,
                     column, isLast ? 0 : 1)
                 : sourceText(m_document, items.at(at).first, items.at(at).second);
+            // Keeps the lines of an item the user broke in a commented list,
+            // one step past the item's own column.
+            if ( ! layout.preserveText && m_keepsCommentedLines
+                && m_document->symbolLine(items.at(at).first)
+                    < m_document->symbolEndLine(items.at(at).second)
+            ) {
+                const QList<QByteArray > sourceLines = sourceText(
+                    m_document, items.at(at).first, items.at(at).second
+                ).split('\n');
+                line = sourceLines.first().trimmed();
+                for (int l = 1; l < sourceLines.size(); ++l) {
+                    line += "\n" + QByteArray(column + 4, ' ')
+                        + sourceLines.at(l).trimmed();
+                }
+            }
+        }
+
+        // Indents the later lines of an item the user broke one step past
+        // the item's own column.
+        if (layout.preserveText && line.contains('\n')) {
+            const QList<QByteArray > itemLines = line.split('\n');
+            line = itemLines.first();
+            for (int l = 1; l < itemLines.size(); ++l) {
+                line += "\n" + QByteArray(column + 4, ' ')
+                    + itemLines.at(l).trimmed();
+            }
         }
 
         // Joins the items that `joinArgs` lets share the line.
@@ -1730,7 +1762,12 @@ QByteArray FormatExpressionLayout::listLines(
             ++last;
         }
         const bool isLast = last + 1 == items.size() && ! hasTrailingComma;
-        const QByteArray tail = isLast ? layout.suffix : QByteArray(",");
+        // Keeps a comma that the user wrote at the start of the next item's
+        // line there.
+        commaLeads = ! isLast && layout.preserveText
+            && this->commaStartsNextLine(items, last);
+        const QByteArray tail = isLast ? layout.suffix
+            : commaLeads ? QByteArray() : QByteArray(",");
         *fits = *fits && ! line.contains('\n')
             && column + textWidth(line + tail) <= layout.limit;
         text += lead + line + tail;
@@ -1801,6 +1838,22 @@ QByteArray FormatExpressionLayout::itemText(
             + lines.at(l).trimmed();
     }
     return text;
+}
+
+/*!
+    Tells whether the comma after the item @p last, of @a items, starts the
+    next item's line, as a user writes a list with leading commas.
+*/
+bool FormatExpressionLayout::commaStartsNextLine(
+        const QList<QPair<int, int > > & items, int last) const
+{
+    if (last + 1 >= items.size()) {
+        return false;
+    }
+    const int comma = items.at(last + 1).first - 1;
+    return m_document->token(comma) == COMMA
+        && m_document->symbolLine(comma)
+            > m_document->symbolEndLine(items.at(last).second);
 }
 
 /*!

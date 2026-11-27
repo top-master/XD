@@ -277,6 +277,19 @@ bh_strict_mode() {
     trap '_bh_on_exit' EXIT
 }
 
+_bh_hook_stop_stream() {
+    [ -n "${_bhr_waiter:-}" ] || return 0
+    # Retries `kill` while the waiter is alive because MSYS2 can drop a signal
+    # delivered while `sleep` is still starting up after `fork`/`exec`.
+    while kill -0 "$_bhr_waiter" 2>/dev/null; do
+        kill "$_bhr_waiter" 2>/dev/null || kill -9 "$_bhr_waiter" 2>/dev/null || true
+    done
+    wait "$_bhr_waiter" 2>/dev/null || true
+    wait "${_bhr_tail:-}" 2>/dev/null || true
+    _bhr_waiter=
+    _bhr_tail=
+}
+
 # _bh_on_exit
 #
 # Runs the hooks that `bh_hook` added for the exit stages, when the script
@@ -285,6 +298,7 @@ bh_strict_mode() {
 _bh_on_exit() {
     BH_EXIT_STATUS=$?
     set +e
+    _bh_hook_stop_stream
     bh_hook_run pre-exit
     bh_hook_run on-exit
     bh_hook_run post-exit
@@ -898,17 +912,44 @@ bh_hook_run() {
     _bhr_variable=$(bh_hook_variable "$1")
     eval "_bhr_hooks=\${$_bhr_variable:-}"
     [ -n "$_bhr_hooks" ] || return 0
-    # A hook writes into a FIFO, which `tee` shows and keeps; a pipe would run
-    # the hook in a subshell instead, and lose the variables it sets.
     _bhr_dir=$(mktemp -d)
-    mkfifo "$_bhr_dir/output"
-    for _bhr_function in $_bhr_hooks; do
-        tee "$_bhr_dir/result" < "$_bhr_dir/output" &
-        _bhr_tee=$!
-        "$_bhr_function" > "$_bhr_dir/output"
-        wait "$_bhr_tee"
-        BH_HOOK_RESULT=$(cat "$_bhr_dir/result")
-    done
+    _bhr_stream=fifo
+    case "$(uname -s)" in
+        MINGW*|MSYS*|CYGWIN*)
+            bh_tail_follows_pid && _bhr_stream=tail
+            ;;
+    esac
+    if [ "$_bhr_stream" = tail ]; then
+        # Streams through a regular file instead of `mkfifo`, since MSYS named
+        # pipes can crash `tee` with an access violation.
+        for _bhr_function in $_bhr_hooks; do
+            : > "$_bhr_dir/result"
+            sleep 86400 &
+            _bhr_waiter=$!
+            tail -n +1 -f -s 0.05 --pid="$_bhr_waiter" "$_bhr_dir/result" &
+            _bhr_tail=$!
+            _bhr_status=0
+            "$_bhr_function" > "$_bhr_dir/result" || _bhr_status=$?
+            _bh_hook_stop_stream
+            BH_HOOK_RESULT=$(cat "$_bhr_dir/result")
+            if [ "$_bhr_status" -ne 0 ]; then
+                case $- in
+                    *e*) rm -rf "$_bhr_dir"; return "$_bhr_status" ;;
+                esac
+            fi
+        done
+    else
+        # A hook writes into a FIFO, which `tee` shows and keeps; a pipe would
+        # run the hook in a subshell instead, and lose the variables it sets.
+        mkfifo "$_bhr_dir/output"
+        for _bhr_function in $_bhr_hooks; do
+            tee "$_bhr_dir/result" < "$_bhr_dir/output" &
+            _bhr_tee=$!
+            "$_bhr_function" > "$_bhr_dir/output"
+            wait "$_bhr_tee"
+            BH_HOOK_RESULT=$(cat "$_bhr_dir/result")
+        done
+    fi
     rm -rf "$_bhr_dir"
 }
 

@@ -168,7 +168,7 @@ private:
     void analyzeLines();
     Scope classifyBrace(int index, Scope enclosing) const;
 
-    bool m_editorChanged = false;
+    bool m_editorChanged;
     QByteArray m_text;
     QString m_path;
     FormatFileConfig m_fileConfig;
@@ -212,9 +212,6 @@ public:
     CodeEditor(FormatDocument *document, int start, int end);
     CodeEditor(CodeEditor &&other);
     ~CodeEditor();
-    CodeEditor(const CodeEditor &) = delete;
-    CodeEditor &operator=(const CodeEditor &) = delete;
-    CodeEditor &operator=(CodeEditor &&) = delete;
 
     bool apply();
     inline FormatDocument *document() { return &m_backup; }
@@ -360,6 +357,8 @@ public:
     }
 
 private:
+    Q_DISABLE_COPY(CodeEditor)
+    CodeEditor &operator=(CodeEditor &&) Q_DECL_EQ_DELETE;
     QByteArray restore(int offset, int length, const QByteArray &text) const;
 };
 

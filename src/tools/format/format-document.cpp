@@ -37,7 +37,8 @@
     rules that look at the file's folder use, and which may be empty).
 */
 FormatDocument::FormatDocument(const QByteArray & text, const QString & path)
-    : m_text(text), m_path(path), m_inlineConfigured(false), m_pass(0), m_agentMode(false)
+    : m_editorChanged(false), m_text(text), m_path(path)
+    , m_inlineConfigured(false), m_pass(0), m_agentMode(false)
 {
     static const bool tokenizerConfigured =
         (Preprocessor::preprocessOnly = true, Preprocessor::keepComments = true, true);
@@ -1744,10 +1745,16 @@ QByteArray CodeEditor::restore(
             const bool followingContent = gap.key() < after.symbols().size()
                 || index + 1 < gap.value().size();
             const QByteArray trailing = m_original.mid(commentEnd, offset + length - commentEnd);
-            const bool newlineOutside = ! followingContent
-                && offset + length < m_original.size()
-                && m_original.at(offset + length) == '\n'
+            const bool atRangeEnd = ! followingContent
                 && ! trailing.contains('\n') && trailing.trimmed().isEmpty();
+            const bool newlineOutside = atRangeEnd
+                && offset + length < m_original.size()
+                && (m_original.at(offset + length) == '\n'
+                    || (offset + length + 1 < m_original.size()
+                        && m_original.at(offset + length) == '\r'
+                        && m_original.at(offset + length + 1) == '\n'));
+            const bool eofOutside = atRangeEnd
+                && offset + length == m_original.size();
             if (comment.isLine() && body.endsWith('\r')
                 && ! newlineOutside && commentEnd < m_original.size()
                 && m_original.at(commentEnd) == '\n')
@@ -1812,7 +1819,9 @@ QByteArray CodeEditor::restore(
                 if (followingContent || tokenAtEnd) {
                     replacement += padding;
                 }
-            } else if ( ! comment.isLine() && ! alone) {
+            } else if ( ! comment.isLine() && ! alone
+                && ! newlineOutside && ! eofOutside
+            ) {
                 replacement += ' ';
             }
         }

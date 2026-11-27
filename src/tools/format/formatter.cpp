@@ -36,6 +36,139 @@
 */
 
 /*!
+    Returns the token where the name of the declaration whose `(` is at
+    @a paren starts: its `operator` keyword, or its first name past any
+    `::`; -1 when @a paren opens no declaration.
+*/
+static int declarationName(int paren, const FormatDocument * document)
+{
+    int name = paren - 1;
+    bool isOperator = false;
+    for (int k = paren - 1; k >= qMax(1, paren - 16); --k) {
+        const Token token = document->token(k);
+        if (token == OPERATOR) {
+            name = k;
+            isOperator = true;
+            break;
+        }
+        if (token == SEMIC
+            || token == LBRACE
+            || token == RBRACE
+            || token == COLON
+            || ((token == LPAREN || token == RPAREN) && k < paren - 2)
+        ) {
+            break;
+        }
+    }
+    if ( ! isOperator && document->token(name) != IDENTIFIER) {
+        return -1;
+    }
+    if ( ! isOperator && document->token(name - 1) == TILDE) {
+        return name - 1;
+    }
+    while (name >= 2
+        && document->token(name - 1) == SCOPE
+        && document->token(name - 2) == IDENTIFIER
+    ) {
+        name -= 2;
+    }
+    return name;
+}
+
+/*!
+    Lays out the lines of a declaration whose parameter list holds comments:
+    the name starts on the line after the return type, the closing `)` joins
+    the last parameter unless a line comment trails it, and a qualifier or a
+    `{` that no longer fits takes a line of its own.
+*/
+static QList<QByteArray > commentedSignatureLines(
+        const FormatDocument * document, int paren, int close,
+        const QList<QByteArray > & lines, const QByteArray & prefix,
+        const QByteArray & suffix, const QByteArray & indent, int limit)
+{
+    QList<QByteArray > result = lines;
+    if (result.size() < 2) {
+        return result;
+    }
+
+    // Starts the name on the line after the return type.
+    const int name = declarationName(paren, document);
+    if (name > 0 && document->symbolLine(name) == document->symbolLine(paren)) {
+        const int column = document->symbols().at(name).from
+            - document->lineStart(document->symbolLine(paren));
+        if (column > 0 && column < result.first().size()
+            && result.first().startsWith(prefix)
+        ) {
+            const QByteArray head = result.first();
+            result[0] = head.left(column).trimmed();
+            result.insert(1, indent + head.mid(column));
+        }
+    }
+
+    // Ends the last parameter line at the closing `)`.
+    if (suffix.contains('\n') || ! result.last().endsWith(suffix)) {
+        return result;
+    }
+    QByteArray last = result.last();
+    last.chop(suffix.size());
+    QByteArray rest = suffix.mid(1);
+    while (rest.startsWith(' ') || rest.startsWith('\t')) {
+        rest.remove(0, 1);
+    }
+    while (rest.endsWith(' ') || rest.endsWith('\t')) {
+        rest.chop(1);
+    }
+    QByteArray brace;
+    if (rest.endsWith('{')) {
+        brace = "{";
+        rest.chop(1);
+        while (rest.endsWith(' ') || rest.endsWith('\t')) {
+            rest.chop(1);
+        }
+    }
+    bool trailsLast = false;
+    for (int index = 0; index < document->comments().size() && ! trailsLast; ++index) {
+        const FormatComment & comment = document->comments().at(index);
+        trailsLast = comment.isLine()
+            && comment.offset >= document->symbolEnd(close - 1)
+            && comment.offset < document->symbols().at(close).from
+            && document->commentLine(index) == document->symbolEndLine(close - 1);
+    }
+    const QByteArray pad = continuationPad(indent.size());
+    result.removeLast();
+    QByteArray parameterLine = last;
+    if ( ! trailsLast) {
+        parameterLine += ')';
+        const bool joins = rest.startsWith(';') || rest.startsWith(',');
+        if ( ! rest.isEmpty() && brace.isEmpty()
+            && textWidth(parameterLine) + (joins ? 0 : 1) + textWidth(rest) <= limit
+        ) {
+            parameterLine += joins ? rest : ' ' + rest;
+            rest.clear();
+        }
+        result << parameterLine;
+    } else {
+        result << parameterLine;
+        QByteArray closeLine = pad + ')';
+        const bool joins = rest.startsWith(';') || rest.startsWith(',');
+        if ( ! rest.isEmpty()
+            && textWidth(closeLine) + (joins ? 0 : 1) + textWidth(rest) <= limit
+        ) {
+            closeLine += joins ? rest : ' ' + rest;
+            rest.clear();
+        }
+        result << closeLine;
+    }
+    if ( ! rest.isEmpty()) {
+        result << pad + rest;
+    }
+    if ( ! brace.isEmpty()) {
+        result << indent + brace;
+    }
+    return result;
+}
+
+/*!
     Builds the formatter with every rule selected.
 
 */
@@ -335,7 +468,7 @@ FormatResult Formatter::format(
                         || source->symbolEndLine(cursor) >= source->symbolLine(next)
                         || source->isDirectiveLine(source->symbolEndLine(cursor))
                         || source->isDirectiveLine(source->symbolLine(next))
-                        || editor.hasCommentBetween(source->symbolEnd(cursor),
+                        || source->hasCommentBetween(source->symbolEnd(cursor),
                                                    source->symbols().at(next).from)
                         || (token == STRING_LITERAL && source->token(next) == STRING_LITERAL))
                     {
@@ -2065,6 +2198,10 @@ FormatResult Formatter::format(
                     const FormatFileConfig &fileConfig = copy->configAt(start);
                     const int limit = wrapMaxAt(copy, start);
                     const QList<QPair<int, int > > items = splitArguments(copy, index, closing);
+                    const bool commented = source->hasCommentBetween(
+                        source->symbolEnd(index),
+                        source->symbols().at(closing).from
+                    );
                     bool eligible = ! items.isEmpty()
                         && ! copy->isDirectiveLine(line)
                         && ! copy->hasCommentBetween(copy->symbolEnd(index),
@@ -2072,7 +2209,10 @@ FormatResult Formatter::format(
                     const bool alreadyBroken = closeLine != line;
                     if (alreadyBroken) {
                         eligible = eligible && items.size() >= 2;
-                        for (int item = 0; item < items.size() && eligible; ++item) {
+                        // A commented list may hold an item the user broke over
+                        // lines; laying it out again keeps those lines.
+                        for (int item = 0; item < items.size() && eligible
+                            && ! commented; ++item) {
                             eligible = copy->symbolLine(items.at(item).first)
                                 == copy->symbolEndLine(items.at(item).second);
                         }
@@ -2111,7 +2251,8 @@ FormatResult Formatter::format(
                         if (alreadyBroken) {
                             if (line < copy->symbolLine(items.first().first)) {
                                 lines = layout.layoutDeclaration(
-                                    index, prefix, suffix, true, false, pad, limit, &fits
+                                    index, prefix, suffix, true, commented, pad, limit,
+                                    &fits
                                 );
                             } else {
                                 bool fitsUnder = false;
@@ -2121,15 +2262,19 @@ FormatResult Formatter::format(
                                     QByteArray(textWidth(prefix), ' '), limit, &fitsUnder
                                 );
                                 const QList<QByteArray > broken = layout.layoutDeclaration(
-                                    index, prefix, suffix, true, false,
+                                    index, prefix, suffix, true, commented,
                                     pad, limit, &fitsBroken
                                 );
-                                if ( ! breaksAfterOpen && fitsUnder
+                                // A commented list keeps one item per line, since
+                                // an item's line comment would otherwise read
+                                // over the item after it.
+                                if ( ! commented && ! breaksAfterOpen && fitsUnder
                                     && under.join("\n") == copy->text().mid(from, to - from))
                                 {
                                     lines = under;
                                 } else {
-                                    lines = fitsBroken || breaksAfterOpen ? broken : under;
+                                    lines = fitsBroken || breaksAfterOpen || commented
+                                        ? broken : under;
                                 }
                             }
                         } else {
@@ -2140,16 +2285,27 @@ FormatResult Formatter::format(
                                 lines = layout.layoutDeclaration(
                                     index, prefix, suffix, true, true, pad, limit, &fits
                                 );
-                            } else if (textWidth(head) <= limit && ! breaksAfterOpen) {
+                            } else if (textWidth(head) <= limit && ! breaksAfterOpen
+                                && ! commented
+                            ) {
                                 lines = layout.layoutDeclaration(
                                     index, prefix, suffix, false, false,
                                     QByteArray(textWidth(prefix), ' '), limit, &fits
                                 );
                             } else {
+                                // A commented list gives every item its own line,
+                                // so a comment never reads over the next item.
                                 lines = layout.layoutDeclaration(
-                                    index, prefix, suffix, true, false, pad, limit, &fits
+                                    index, prefix, suffix, true, commented, pad, limit,
+                                    &fits
                                 );
                             }
+                        }
+                        if (commented) {
+                            lines = commentedSignatureLines(
+                                source, index, closing, lines, prefix, suffix,
+                                copy->indentOf(line), limit
+                            );
                         }
                         const QByteArray newline = copy->text().mid(to, 1) == "\r"
                             ? "\r\n" : "\n";
@@ -2202,6 +2358,12 @@ FormatResult Formatter::format(
                     }
                     CodeEditor editor = document.edit(
                         source->lineStart(firstLine), rangeEnd
+                    );
+                    // Comments are blanked out in the editor's document, so
+                    // the list has to be asked here whether it holds any.
+                    const bool commentedList = source->hasCommentBetween(
+                        source->symbols().at(index).from + 1,
+                        source->symbols().at(closing).from
                     );
                     FormatDocument *document = editor.document();
                     FormatScopeConditions conditions(document);
@@ -2286,6 +2448,7 @@ FormatResult Formatter::format(
                             ? conditions.operatorPadding(previousOperator)
                             : 0;
                         FormatExpressionLayout layout(document, &conditions, indent);
+                        layout.setKeepsCommentedLines(commentedList);
                         const int column = textWidth(
                             document->text().mid(lineStart, from - lineStart)
                         );
