@@ -17,6 +17,7 @@ QT_END_NAMESPACE
 class FormatAgentGuides
 {
 public:
+
     FormatAgentGuides();
     ~FormatAgentGuides();
 

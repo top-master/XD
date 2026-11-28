@@ -18,6 +18,7 @@
 class FormatClassMembers
 {
 public:
+
     inline FormatClassMembers() : isTemplate(false) {}
 
     QSet<QByteArray > names;

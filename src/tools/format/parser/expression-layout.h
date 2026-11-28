@@ -14,19 +14,36 @@ class FormatScopeConditions;
 class FormatExpressionLayout
 {
 public:
-    FormatExpressionLayout(
-            const FormatDocument *document, FormatScopeConditions *conditions,
-            int indent, bool stepRoot = true);
 
-    QByteArray layout(int first, int last, int column, int trailing,
-                      bool forceMath = false);
-    QByteArray layoutList(int first, int open, int close, int column,
-                          bool keepsLines = false, int joinCount = 0,
-                          int extraPad = 0);
+    FormatExpressionLayout(
+            const FormatDocument *document,
+            FormatScopeConditions *conditions,
+            int indent,
+            bool stepRoot = true);
+
+    QByteArray layout(
+            int first,
+            int last,
+            int column,
+            int trailing,
+            bool forceMath = false);
+    QByteArray layoutList(
+            int first,
+            int open,
+            int close,
+            int column,
+            bool keepsLines = false,
+            int joinCount = 0,
+            int extraPad = 0);
     QList<QByteArray > layoutDeclaration(
-            int open, const QByteArray & prefix, const QByteArray & suffix,
-            bool breaksAfterOpen, bool wrapping, const QByteArray & pad,
-            int limit, bool *fits);
+            int open,
+            const QByteArray & prefix,
+            const QByteArray & suffix,
+            bool breaksAfterOpen,
+            bool wrapping,
+            const QByteArray & pad,
+            int limit,
+            bool *fits);
     QByteArray oneLine(int first, int last) const;
     bool hasChain(int first, int last) const;
     bool hasOuterChain(int first, int last) const;
@@ -35,6 +52,7 @@ public:
     { m_keepsCommentedLines = keeps; }
 
 private:
+
     struct LineLayout {
         QByteArray firstLead;
         QByteArray nextLead;
@@ -44,27 +62,57 @@ private:
         bool wrapItems;
     };
     QList<int > chainOperators(int first, int last) const;
+    bool isBuilderMemberChain(
+            int first, int last, const QList<int > & operators) const;
+    bool logicalGroupNeedsBreak(int first, int last, int column) const;
+    int bundleForceLimit(int first,
+                         const QList<int > & operators,
+                         int column) const;
     int operandCall(int first, int last) const;
-    bool operatorLinesFit(int first, int last, const QList<int > & operators,
-                          int column, int trailing) const;
+    bool operatorLinesFit(
+            int first,
+            int last,
+            const QList<int > & operators,
+            int column,
+            int trailing) const;
     QByteArray layoutChain(
-            int first, int last, const QList<int > & operators, int column,
-            int trailing, bool forceMath);
+            int first,
+            int last,
+            const QList<int > & operators,
+            int column,
+            int trailing,
+            bool forceMath);
     QByteArray layoutChainRest(
-            int first, int last, const QList<int > & operators,
-            int column, int trailing, bool keepsLeading,
-            int stepsIn, bool byLine, const QByteArray & head,
+            int first,
+            int last,
+            const QList<int > & operators,
+            int column,
+            int trailing,
+            bool keepsLeading,
+            int stepsIn,
+            bool byLine,
+            const QByteArray & head,
             bool forceMath = false);
-    int chainStepsIn(int headFirst, int headLast,
+    int chainStepsIn(int headFirst,
+                     int headLast,
                      const QByteArray & head) const;
     QByteArray layoutGroup(int open, int close, int column, int trailing);
     QByteArray layoutArray(
-            int open, int close, const QList<QPair<int, int > > & items,
-            bool keepsGroups, int firstItem, int joinCount);
+            int open,
+            int close,
+            const QList<QPair<int, int > > & items,
+            bool keepsGroups,
+            int firstItem,
+            int joinCount);
     QByteArray listLines(
-            int open, int close, const QList<QPair<int, int > > & items,
-            bool keepsGroups, int firstItem, int joinCount,
-            const LineLayout & layout, bool *fits);
+            int open,
+            int close,
+            const QList<QPair<int, int > > & items,
+            bool keepsGroups,
+            int firstItem,
+            int joinCount,
+            const LineLayout & layout,
+            bool *fits);
     QByteArray itemText(int first, int last, int column, int trailing);
     bool commaStartsNextLine(
             const QList<QPair<int, int > > & items, int last) const;
@@ -83,6 +131,7 @@ private:
     FormatScopeConditions *m_conditions;
     int m_indent;
     int m_paddingLevel;
+    int m_logicalBundleLimit;
     bool m_stepRoot;
     bool m_brokeUngrouped;
     bool m_keepsCommentedLines;

@@ -5,6 +5,7 @@
 
 #include "../format-document.h"
 #include "./code-helpers.h"
+#include "./condition-layout.h"
 #include "./layout-helpers.h"
 #include "./scope-conditions.h"
 
@@ -56,8 +57,11 @@ static bool isMemberAccess(Token token)
 
 static bool isMathOperator(Token token)
 {
-    return token == PLUS || token == MINUS || token == STAR
-        || token == SLASH || token == PERCENT;
+    return token == PLUS
+        || token == MINUS
+        || token == STAR
+        || token == SLASH
+        || token == PERCENT;
 }
 
 /*!
@@ -72,7 +76,9 @@ static bool isNumberMathChain(
     bool hasNumber = false;
     for (int i = first + 1; i < last; ++i) {
         const Token token = document->token(i);
-        if ((token == LPAREN || token == LBRACK || token == LBRACE)
+        if ((token == LPAREN
+                || token == LBRACK
+                || token == LBRACE)
             && document->match(i) > i
         ) {
             i = document->match(i);
@@ -123,6 +129,35 @@ static bool endsWithClosingLine(const QByteArray & text)
     return lineStart > 0 && isClosingLine(text.mid(lineStart));
 }
 
+static bool isLogicalBundleOperator(Token token)
+{
+    return token == ANDAND || token == OROR;
+}
+
+static QString conditionsPerAt(const FormatDocument *document, int offset)
+{
+    return settingValueAt(
+        document,
+        offset,
+        QString(QLL("structure.wrapConditionsPer")),
+        document->configAt(offset).wrapConditionsPer
+    ).toString()
+        .trimmed()
+        .toLower();
+}
+
+struct LogicalLimitGuard
+{
+    int *target;
+    int saved;
+    inline LogicalLimitGuard(int *slot, int nextValue)
+        : target(slot), saved(*slot)
+    {
+        *target = nextValue;
+    }
+    inline ~LogicalLimitGuard() { *target = saved; }
+};
+
 /*!
     Builds a layout of expressions of @p document whose first line has
     @p indent columns of indent; @p conditions decides, through
@@ -130,10 +165,13 @@ static bool endsWithClosingLine(const QByteArray & text)
     adds a continuation step to an operator chain at the top level.
 */
 FormatExpressionLayout::FormatExpressionLayout(
-        const FormatDocument *document, FormatScopeConditions *conditions,
-        int indent, bool stepRoot)
+        const FormatDocument *document,
+        FormatScopeConditions *conditions,
+        int indent,
+        bool stepRoot)
     : m_document(document), m_conditions(conditions)
     , m_indent(indent), m_paddingLevel(0)
+    , m_logicalBundleLimit(0)
     , m_stepRoot(stepRoot), m_brokeUngrouped(false)
     , m_keepsCommentedLines(false)
 {
@@ -157,7 +195,7 @@ QByteArray FormatExpressionLayout::layout(
     const int wrap = wrapColumn(m_document, offset);
     const int wrapMax = wrapMaxAt(m_document, offset);
     const QByteArray text = this->oneLine(first, last);
-    if (m_document->hasCommentBetween(
+    if (m_document->hasProtectedCommentBetween(
         m_document->symbols().at(first).from,
         m_document->symbolEnd(last)
     )) {
@@ -177,9 +215,13 @@ QByteArray FormatExpressionLayout::layout(
     const bool isBroken = m_document->symbolLine(first)
         != m_document->symbolEndLine(last);
     if (this->fits(column, text, trailing, first)
-        && ! (forceMath && ! operators.isEmpty()
+        && ! (forceMath
+            && ! operators.isEmpty()
             && isMathOperator(m_document->token(operators.first())))
-        && (operators.isEmpty() || ! isBroken)
+        && ! (m_logicalBundleLimit == 1
+            && this->logicalGroupNeedsBreak(first, last, column))
+        && (operators.isEmpty()
+            || ! isBroken)
     ) {
         return text;
     }
@@ -193,9 +235,8 @@ QByteArray FormatExpressionLayout::layout(
         }
         // Takes a field as the first member, and brackets only as the call of
         // the last member, with neither brackets nor commas in its arguments.
-        const int firstMemberEnd = operators.size() > 1
-            ? operators.at(1) - 1
-            : last;
+        const int firstMemberEnd = operators.size() > 1 ? operators.at(1) - 1
+                                                        : last;
         isShortChain = isShortChain
             && m_document->token(firstMemberEnd) != RPAREN;
         int brackets = 0;
@@ -230,32 +271,67 @@ QByteArray FormatExpressionLayout::layout(
             trailing,
             wrapMax
         );
-        if (lines.size() == 3) {
-            ++m_paddingLevel;
-            const QByteArray pad = this->pad();
-            const int branchColumn = textWidth(pad) + 2;
-            QByteArray result = head;
-            // Lay out each conditional operand at its operator's column.
-            for (int branch = 0; branch < 2; ++branch) {
-                const bool final = branch == 1;
-                const int op = final ? colon : question;
-                const int end = final ? last : colon - 1;
-                const int extra = final ? trailing : 0;
-                const int open = this->operandCall(op + 1, end);
-                const QByteArray flat = this->oneLine(op + 1, end);
-                QByteArray operand = flat;
-                if (branchColumn + textWidth(flat) + extra > wrapMax) {
-                    operand = open >= 0
-                        ? this->layoutList(op + 1, open, end, branchColumn)
-                        : this->layout(op + 1, end, branchColumn, extra);
-                }
-                result += '\n' + pad + m_document->lexem(op) + ' ' + operand;
-            }
-            --m_paddingLevel;
-            return result;
-        }
         if (lines.size() > 1) {
-            QByteArray result = lines.first();
+            QByteArray laidHead = head;
+            if (lines.first() == head && column + textWidth(head) > wrap) {
+                const FormatConditionLayout conditionLayout(
+                    m_document, m_conditions
+                );
+                const QList<QByteArray > headLines = conditionLayout.layoutHead(
+                    first,
+                    question - 1,
+                    textWidth(this->pad()),
+                    column
+                );
+                if (headLines.size() > 1) {
+                    laidHead = headLines.first();
+                    for (int h = 1; h < headLines.size(); ++h) {
+                        laidHead += '\n' + headLines.at(h);
+                    }
+                } else if (column + textWidth(head) > wrapMax) {
+                    laidHead = this->layout(first, question - 1, column, 0);
+                }
+            }
+            if (lines.size() == 3) {
+                ++m_paddingLevel;
+                const QByteArray pad = this->pad();
+                const int branchColumn = textWidth(pad) + 2;
+                QByteArray result = laidHead;
+                // Lay out each conditional operand at its operator's column.
+                for (int branch = 0; branch < 2; ++branch) {
+                    const bool final = branch == 1;
+                    const int op = final ? colon : question;
+                    const int end = final ? last : colon - 1;
+                    const int extra = final ? trailing : 0;
+                    const int open = this->operandCall(op + 1, end);
+                    const QByteArray flat = this->oneLine(op + 1, end);
+                    QByteArray operand = flat;
+                    if (branchColumn + textWidth(flat) + extra > wrapMax
+                        || this->logicalGroupNeedsBreak(
+                            op + 1,
+                            end,
+                            branchColumn)
+                    ) {
+                        operand = open >= 0
+                            ? this->layoutList(op + 1, open, end, branchColumn)
+                            : this->layout(
+                                op + 1,
+                                end,
+                                branchColumn,
+                                extra
+                            );
+                    }
+                    result += '\n'
+                        + pad
+                        + m_document->lexem(op)
+                        + ' '
+                        + operand;
+                }
+                --m_paddingLevel;
+                return result;
+            }
+            QByteArray result = lines.first() == head ? laidHead
+                                                      : lines.first();
             for (int i = 1; i < lines.size(); ++i) {
                 result += '\n' + lines.at(i);
             }
@@ -270,9 +346,7 @@ QByteArray FormatExpressionLayout::layout(
         QByteArray head = this->oneLine(first, assignment);
         if (column + textWidth(head) >= wrap) {
             FormatExpressionLayout left(
-                m_document,
-                m_conditions,
-                textWidth(this->pad())
+                m_document, m_conditions, textWidth(this->pad())
             );
             // Makes the left side and its ` =` end before the wrap column,
             // not only before `wrapMax`.
@@ -287,9 +361,8 @@ QByteArray FormatExpressionLayout::layout(
         const int indent = isHeadBroken
             ? textWidth(lastLine) - textWidth(lastLine.trimmed())
             : textWidth(this->pad());
-        const int endColumn = isHeadBroken
-            ? lastLineWidth(head)
-            : column + textWidth(head);
+        const int endColumn = isHeadBroken ? lastLineWidth(head)
+                                           : column + textWidth(head);
         FormatExpressionLayout right(m_document, m_conditions, indent);
         const QByteArray value = right.layout(
             assignment + 1,
@@ -301,8 +374,10 @@ QByteArray FormatExpressionLayout::layout(
 
         // A member call keeps its head on the assignment line while that
         // head fits `wrapBegin`.
-        const QList<int > valueOperators =
-            right.chainOperators(assignment + 1, last);
+        const QList<int > valueOperators = right.chainOperators(
+            assignment + 1,
+            last
+        );
         const int firstBreak = value.indexOf('\n');
         bool keepsChainedCall = false;
         if (m_document->token(assignment) == EQ
@@ -323,10 +398,15 @@ QByteArray FormatExpressionLayout::layout(
 
         // Keep the assignment head when the value fits by breaking solely
         // at its own operators. Moving the value would undo that layout.
-        const bool operatorBreaksFit = firstBreak >= 0 && ! valueOperators.isEmpty()
+        const bool operatorBreaksFit = firstBreak >= 0
+            && ! valueOperators.isEmpty()
             && ! isMemberAccess(m_document->token(valueOperators.first()))
             && right.operatorLinesFit(
-                assignment + 1, last, valueOperators, endColumn + 1, trailing
+                assignment + 1,
+                last,
+                valueOperators,
+                endColumn + 1,
+                trailing
             );
 
         // Moves the value one step below an `=` that stands at or past
@@ -341,7 +421,10 @@ QByteArray FormatExpressionLayout::layout(
         ) {
             const QByteArray belowPad = continuationPad(textWidth(this->pad()));
             FormatExpressionLayout below(
-                m_document, m_conditions, textWidth(belowPad), false
+                m_document,
+                m_conditions,
+                textWidth(belowPad),
+                false
             );
             const QByteArray moved = below.layout(
                 assignment + 1,
@@ -350,7 +433,8 @@ QByteArray FormatExpressionLayout::layout(
                 trailing
             );
             if (moved.count('\n') < value.count('\n')
-                || ( ! value.contains('\n') && ! moved.contains('\n'))
+                || ( ! value.contains('\n')
+                    && ! moved.contains('\n'))
             ) {
                 m_brokeUngrouped |= below.brokeUngrouped();
                 return head + "\n" + belowPad + moved;
@@ -375,13 +459,15 @@ QByteArray FormatExpressionLayout::layout(
     // `Info(...).path()` when that call does not fit its line, and keeps the
     // members after it on its closing line; hence the members of the
     // argument stay together.
+    const bool builderChain = ! operators.isEmpty()
+        && this->isBuilderMemberChain(first, last, operators);
     if ( ! operators.isEmpty()
         && isMemberAccess(m_document->token(operators.first()))
     ) {
         // Takes the call before the first member access when that call does
         // not fit its line, else the one before the second member access.
-        const bool leadsWithCall = m_document->token(operators.first() - 1)
-            == RPAREN
+        const bool leadsWithCall =
+            m_document->token(operators.first() - 1) == RPAREN
             && m_document->match(operators.first() - 1) > first
             && ! this->fits(
                 column,
@@ -401,7 +487,8 @@ QByteArray FormatExpressionLayout::layout(
             hasAdjacentLiterals |= m_document->token(k - 1) == STRING_LITERAL
                 && m_document->token(k) == STRING_LITERAL;
         }
-        if (callEnd > 0 && ! hasAdjacentLiterals
+        if (callEnd > 0
+            && ! hasAdjacentLiterals
             && m_document->token(callEnd) == RPAREN
             && callOpen > (leadsWithCall ? first : operators.first())
             && this->isListOpen(callOpen)
@@ -409,9 +496,9 @@ QByteArray FormatExpressionLayout::layout(
                 || m_document->token(nextEnd) != RPAREN
                 || m_conditions->argsOver(
                     callOpen,
-                    splitArguments(m_document, callOpen, callEnd).size()
-                ))
-            && column + textWidth(this->oneLine(first, callOpen)) <= wrap
+                    splitArguments(m_document, callOpen, callEnd).size()))
+            && column + textWidth(this->oneLine(first, callOpen))
+                <= ( ! builderChain ? wrapMax : wrap)
         ) {
             const QByteArray call = this->layoutList(
                 first,
@@ -421,8 +508,14 @@ QByteArray FormatExpressionLayout::layout(
             );
             if (call.contains('\n')) {
                 return call + this->layoutChainRest(
-                    first, last, operators.mid(callIndex), column, trailing,
-                    false, this->chainStepsIn(first, callEnd, call), false,
+                    first,
+                    last,
+                    operators.mid(callIndex),
+                    column,
+                    trailing,
+                    false,
+                    this->chainStepsIn(first, callEnd, call),
+                    false,
                     call
                 );
             }
@@ -470,7 +563,8 @@ QByteArray FormatExpressionLayout::layout(
     }
     const Token closer = m_document->token(last);
     const int open = m_document->match(last);
-    if ((closer == RPAREN || closer == RBRACE)
+    if ((closer == RPAREN
+            || closer == RBRACE)
         && open > first
         && this->isListOpen(open)
     ) {
@@ -489,30 +583,38 @@ QByteArray FormatExpressionLayout::layout(
         const bool startsStatement = m_document->headStart(first) == first;
         const bool followsAssignment =
             isAssignmentOperator(m_document->token(first - 1));
-        const int headLimit = startsStatement ? wrapMax : wrap;
+        const int headLimit = ! builderChain || startsStatement ? wrapMax
+                                                                : wrap;
         if (closer == RPAREN
             && ! operators.isEmpty()
             && isMemberAccess(m_document->token(operators.first()))
             && ! chainedCall
-            && (startsStatement || followsAssignment
-                || (operators.size() == 1 && ! isBroken))
+            && (startsStatement
+                || followsAssignment
+                || ! builderChain
+                || (operators.size() == 1
+                    && ! isBroken)
+            )
             && column + textWidth(this->oneLine(first, open)) <= headLimit
         ) {
             return this->layoutList(first, open, last, column);
         }
         const QList<QPair<int, int > > items =
             splitArguments(m_document, open, last);
-        if (items.size() == 1 && items.first().first == items.first().second
-            && m_document->token(items.first().first) == STRING_LITERAL)
-        {
+        if (items.size() == 1
+            && items.first().first == items.first().second
+            && m_document->token(items.first().first) == STRING_LITERAL
+        ) {
             return text;
         }
-        if (operators.isEmpty() && items.size() == 1
+        if (operators.isEmpty()
+            && items.size() == 1
             && column + textWidth(this->oneLine(first, open)) < wrap
         ) {
             const QPair<int, int > item = items.first();
             const QList<int > nestedOperators = this->chainOperators(
-                item.first, item.second
+                item.first,
+                item.second
             );
             const bool isMemberChain = ! nestedOperators.isEmpty()
                 && isMemberAccess(m_document->token(nestedOperators.first()));
@@ -522,14 +624,13 @@ QByteArray FormatExpressionLayout::layout(
                 && nestedOpen > item.first
                 ? splitArguments(m_document, nestedOpen, item.second)
                 : QList<QPair<int, int > >();
-            const bool endsWithChain = nestedItems.size() > 1
-                && this->hasChain(
+            const bool endsWithChain = nestedItems.size() > 1 && this->hasChain(
                     nestedItems.last().first,
                     nestedItems.last().second)
                 && ! this->hasChain(
-                        nestedItems.first().first,
-                        nestedItems.first().second
-                    );
+                    nestedItems.first().first,
+                    nestedItems.first().second
+                );
             if (isMemberChain && ! endsWithChain) {
                 const QByteArray head = this->oneLine(first, open);
                 const QByteArray nested = this->layout(
@@ -543,37 +644,51 @@ QByteArray FormatExpressionLayout::layout(
                     // closes this call on a line of its own, when that call
                     // leads the argument's member chain.
                     const int itemOperator = nestedOperators.first();
-                    const int itemCall = m_document->match(itemOperator - 1);
+                    const int itemCall = m_document->match(
+                        itemOperator - 1
+                    );
                     if (m_document->token(itemOperator - 1) == RPAREN
                         && itemCall > item.first
                         && nested.left(nested.indexOf('\n')).endsWith('(')
                     ) {
                         ++m_paddingLevel;
                         const QByteArray deeper = this->layout(
-                            item.first, item.second,
-                            column + textWidth(head), 0
+                            item.first,
+                            item.second,
+                            column + textWidth(head),
+                            0
                         );
                         --m_paddingLevel;
-                        return head + deeper + '\n' + this->pad()
+                        return head
+                            + deeper
+                            + '\n'
+                            + this->pad()
                             + m_document->lexem(last);
                     }
                     return head + nested + m_document->lexem(last);
                 }
             }
         }
-        const bool endsInChain = ! items.isEmpty() && this->hasChain(
-            items.last().first,
-            items.last().second
-        );
+        const bool endsInChain = ! items.isEmpty()
+            && this->hasChain(items.last().first, items.last().second);
         const bool chainMayBreak = endsInChain
             && (m_document->symbolLine(open) == m_document->symbolLine(last)
-                || m_document->symbolLine(items.first().first) > m_document
-                    ->symbolLine(open))
+                || m_document->symbolLine(items.first().first) > m_document->symbolLine(
+                    open))
             && (m_document->configAt(offset).wrapArgsOverCondition.isEmpty()
                 || m_conditions->argsOver(open, items.size()));
-        if (chainMayBreak
-            || (this->mayBreakList(open, items.size())
-                && (operators.isEmpty() || items.size() > 1)
+        const bool chainHeadFits = column
+            + textWidth(this->oneLine(first, open)) <= wrap;
+        if ((operators.isEmpty()
+                || ! (builderChain
+                    && chainedCall
+                    && ! chainHeadFits)
+            )
+            && (chainMayBreak
+                || (this->mayBreakList(open, items.size())
+                    && (operators.isEmpty()
+                        || items.size() > 1)
+                )
             )
         ) {
             const QByteArray list = this->layoutList(
@@ -647,13 +762,19 @@ QByteArray FormatExpressionLayout::layoutList(
         int joinCount,
         int extraPad)
 {
-    const int wrap = wrapColumn(m_document, m_document->symbols().at(first).from);
+    const int offset = m_document->symbols().at(first).from;
+    const int wrap = wrapColumn(m_document, offset);
     const QList<QPair<int, int > > items =
         splitArguments(m_document, open, close);
     const bool isBrace = m_document->token(open) == LBRACE;
-    QByteArray head = open > first
-        ? this->oneLine(first, open - 1)
-        : QByteArray();
+    const LogicalLimitGuard limitGuard(
+        &m_logicalBundleLimit,
+        ! isBrace
+            && conditionsPerAt(m_document, offset) != QLL("pair-root")
+            ? 0 : m_logicalBundleLimit
+    );
+    QByteArray head = open > first ? this->oneLine(first, open - 1)
+                                   : QByteArray();
     if (isBrace && ! head.isEmpty() && ! head.endsWith(' ')) {
         head += ' ';
     }
@@ -662,26 +783,31 @@ QByteArray FormatExpressionLayout::layoutList(
     if (items.isEmpty()) {
         return head + closer;
     }
+    const Token afterClose = close + 1 < m_document->symbols().size()
+        ? m_document->token(close + 1) : NOTOKEN;
+    const bool conditionCloser = ! isBrace
+        && afterClose != DOT
+        && afterClose != ARROW
+        && ! m_document->hasCommentBetween(
+            m_document->symbolEnd(items.last().second),
+            m_document->symbols().at(close).from)
+        && isCallInConditionChain(m_document, open);
 
     int question = -1;
     int colon = -1;
     const QPair<int, int > firstItem = items.first();
-    if ( ! isBrace && ! m_conditions->argsOver(
-            open,
-            items.size()
-        ) && findTernary(
+    if ( ! isBrace
+        && ! m_conditions->argsOver(open, items.size())
+        && findTernary(
             m_document,
             firstItem.first,
             firstItem.second,
             &question,
-            &colon
-        )
-        && question > firstItem.first && column + textWidth(head) + textWidth(
-            this->oneLine(
-                firstItem.first,
-                question - 1
-            )
-        ) <= wrap
+            &colon)
+        && question > firstItem.first
+        && column + textWidth(head) + textWidth(
+            this->oneLine(firstItem.first, question - 1))
+            <= wrap
     ) {
         m_paddingLevel += extraPad;
         if (items.size() > 1) {
@@ -702,21 +828,25 @@ QByteArray FormatExpressionLayout::layoutList(
         ) {
             QByteArray text = head + item;
             if (items.size() > 1) {
-                text += ',' + this->layoutArray(
-                    open,
-                    close,
-                    items.mid(1),
-                    false,
-                    1,
-                    0
-                );
+                text += ','
+                    + this->layoutArray(
+                        open,
+                        close,
+                        items.mid(1),
+                        false,
+                        1,
+                        0
+                    );
             }
             m_paddingLevel -= extraPad;
-            const int suffixWidth = m_document->token(close + 1) == SEMIC
-                ? 1 : 0;
-            if (items.size() == 1
-                && lastLineWidth(text) + textWidth(closer) + suffixWidth
-                    <= wrapMaxAt(m_document, m_document->symbols().at(open).from)
+            const int suffixWidth = afterClose == SEMIC ? 1 : 0;
+            if (conditionCloser
+                || (items.size() == 1
+                    && lastLineWidth(text) + textWidth(closer) + suffixWidth
+                        <= wrapMaxAt(
+                            m_document,
+                            m_document->symbols().at(open).from)
+                )
             ) {
                 return text + closer;
             }
@@ -736,9 +866,8 @@ QByteArray FormatExpressionLayout::layoutList(
     for (int i = 0; i < items.size(); ++i) {
         const QPair<int, int > & item = items.at(i);
         isWhole = isWhole
-            && m_document->symbolLine(item.first) == m_document->symbolEndLine(
-                item.second
-            );
+            && m_document->symbolLine(item.first)
+                == m_document->symbolEndLine(item.second);
     }
     m_paddingLevel += extraPad;
     const QByteArray body = head + this->layoutArray(
@@ -750,9 +879,11 @@ QByteArray FormatExpressionLayout::layoutList(
         joinCount
     );
     m_paddingLevel -= extraPad;
-    if (precedingChainOperator(m_document, close + 1) >= 0
-        && lastLineWidth(body) + textWidth(closer)
-            <= wrapColumn(m_document, m_document->symbols().at(open).from)
+    if (conditionCloser
+        || (precedingChainOperator(m_document, close + 1) >= 0
+            && lastLineWidth(body) + textWidth(closer)
+                <= wrapColumn(m_document, m_document->symbols().at(open).from)
+        )
     ) {
         return body + closer;
     }
@@ -771,13 +902,11 @@ QByteArray FormatExpressionLayout::oneLine(int first, int last) const
         const int from = m_document->symbols().at(i).from;
         if (i > first) {
             const int gapFrom = m_document->symbolEnd(i - 1);
-            QByteArray gap = m_document->text().mid(
-                gapFrom,
-                from - gapFrom
-            );
+            QByteArray gap = m_document->codeSlice(gapFrom, from);
             const Token before = m_document->token(i - 1);
             const Token after = m_document->token(i);
-            if ((isMemberAccess(before) || isMemberAccess(after))
+            if ((isMemberAccess(before)
+                    || isMemberAccess(after))
                 && gap.trimmed().isEmpty()
             ) {
                 gap.clear();
@@ -827,7 +956,8 @@ bool FormatExpressionLayout::hasOuterChain(int first, int last) const
     }
     const Token closer = m_document->token(last);
     const int open = m_document->match(last);
-    if ((closer != RPAREN && closer != RBRACE)
+    if ((closer != RPAREN
+            && closer != RBRACE)
         || open <= first
         || ! this->isListOpen(open)
     ) {
@@ -835,10 +965,8 @@ bool FormatExpressionLayout::hasOuterChain(int first, int last) const
     }
     const QList<QPair<int, int > > items =
         splitArguments(m_document, open, last);
-    return ! items.isEmpty() && this->hasOuterChain(
-        items.last().first,
-        items.last().second
-    );
+    return ! items.isEmpty()
+        && this->hasOuterChain(items.last().first, items.last().second);
 }
 
 /*!
@@ -856,7 +984,9 @@ QList<int > FormatExpressionLayout::chainOperators(int first, int last) const
     for (int i = first; i <= last; ++i) {
         const Token token = m_document->token(i);
         const int match = m_document->match(i);
-        if ((token == LPAREN || token == LBRACK || token == LBRACE)
+        if ((token == LPAREN
+                || token == LBRACK
+                || token == LBRACE)
             && match > i
         ) {
             i = match;
@@ -893,9 +1023,8 @@ QList<int > FormatExpressionLayout::chainOperators(int first, int last) const
         if (assignment >= 0) {
             continue;
         }
-        const int rank = isMemberAccess(token)
-            ? MemberAccessRank
-            : operatorPrecedence(token);
+        const int rank = isMemberAccess(token) ? MemberAccessRank
+                                               : operatorPrecedence(token);
         if (rank == 0
             || i == first
             || ! isOperandEnd(m_document->token(i - 1))
@@ -914,19 +1043,72 @@ QList<int > FormatExpressionLayout::chainOperators(int first, int last) const
 }
 
 /*!
+    Tells whether the member access chain from @p first up to @p last, whose
+    operators are @p operators, should use builder-style breaking before
+    `.` / `->`: true for 3+ member accesses, for 2 member accesses when both
+    are method calls, or when the receiver before the first `.` / `->` is a
+    method or constructor call exceeding 15 columns. A single member call or a
+    2-member access containing a variable is not a builder chain.
+*/
+bool FormatExpressionLayout::isBuilderMemberChain(
+        int first, int last, const QList<int > & operators) const
+{
+    if (operators.isEmpty()
+        || ! isMemberAccess(m_document->token(operators.first()))
+    ) {
+        return false;
+    }
+    int memberCount = 0;
+    while (memberCount < operators.size()
+        && isMemberAccess(m_document->token(operators.at(memberCount)))
+    ) {
+        ++memberCount;
+    }
+    const int receiverLast = operators.first() - 1;
+    const int receiverOpen = m_document->match(receiverLast);
+    if (m_document->token(receiverLast) == RPAREN
+        && receiverOpen > first
+        && this->isListOpen(receiverOpen)
+        && textWidth(this->oneLine(first, receiverLast)) > 15
+    ) {
+        return true;
+    }
+    if (memberCount >= 3) {
+        return true;
+    }
+    if (memberCount < 2) {
+        return false;
+    }
+    for (int i = 0; i < memberCount; ++i) {
+        const int segLast = i + 1 < operators.size() ? operators.at(i + 1) - 1
+                                                     : last;
+        const int segOpen = m_document->match(segLast);
+        if (m_document->token(segLast) != RPAREN
+            || segOpen <= operators.at(i)
+            || ! this->isListOpen(segOpen)
+        ) {
+            return false;
+        }
+    }
+    return true;
+}
+
+/*!
     Finds the opening parenthesis when the entire operand is a call, including
     calls through a member, so that its arguments can wrap at this level.
 */
 int FormatExpressionLayout::operandCall(int first, int last) const
 {
     const int open = m_document->match(last);
-    if (m_document->token(last) != RPAREN || open <= first
+    if (m_document->token(last) != RPAREN
+        || open <= first
         || ! this->isListOpen(open)
     ) {
         return -1;
     }
     const QList<int > operators = this->chainOperators(first, last);
-    return operators.isEmpty() || isMemberAccess(m_document->token(operators.first()))
+    return operators.isEmpty()
+        || isMemberAccess(m_document->token(operators.first()))
         ? open : -1;
 }
 
@@ -934,9 +1116,107 @@ int FormatExpressionLayout::operandCall(int first, int last) const
     Checks the width of each operand with its operator on a continuation
     line and the first operand at the original column.
 */
+bool FormatExpressionLayout::logicalGroupNeedsBreak(
+        int first, int last, int column) const
+{
+    if (first < 0 || last <= first) {
+        return false;
+    }
+    const int offset = m_document->symbols().at(first).from;
+    if ( ! codeTargetAnyAt(m_document, offset)) {
+        return false;
+    }
+    int innerFirst = first;
+    int innerLast = last;
+    while (innerFirst < innerLast
+        && m_document->token(innerFirst) == NOT
+    ) {
+        ++innerFirst;
+    }
+    if (m_document->token(innerFirst) == LPAREN
+        && m_document->match(innerFirst) == innerLast
+        && ! this->isListOpen(innerFirst)
+    ) {
+        ++innerFirst;
+        --innerLast;
+    }
+    const QList<int > ops = this->chainOperators(innerFirst, innerLast);
+    if (ops.isEmpty()
+        || ! isLogicalBundleOperator(m_document->token(ops.first()))
+    ) {
+        return false;
+    }
+    const QString per = conditionsPerAt(m_document, offset);
+    if (per == QLL("line")) {
+        return false;
+    }
+    const bool hasOuterPair = innerFirst > first
+        && m_document->token(innerFirst - 1) == LPAREN;
+    if (m_logicalBundleLimit == 1
+        && (per == QLL("pair-root")
+            || (per == QLL("pair-bundle")
+                && ! hasOuterPair)
+        )
+    ) {
+        return true;
+    }
+    const int wrapMax = wrapMaxAt(m_document, offset);
+    const qreal remaining = 100.0 * (wrapMax - column) / wrapMax;
+    const int queryToken = innerFirst > first
+        && m_document->token(innerFirst - 1) == LPAREN
+        ? innerFirst - 1 : first;
+    const int opsCount = ops.size() + 1;
+    const int limit = m_conditions->conditionsLimit(
+        queryToken,
+        opsCount,
+        remaining
+    );
+    if (limit <= 0) {
+        return false;
+    }
+    qreal count = opsCount;
+    m_conditions->conditionCount(queryToken, per, &opsCount, &count);
+    return count > limit;
+}
+
+int FormatExpressionLayout::bundleForceLimit(
+        int first, const QList<int > & operators, int column) const
+{
+    if (operators.isEmpty()
+        || ! isLogicalBundleOperator(m_document->token(operators.first()))
+    ) {
+        return m_logicalBundleLimit;
+    }
+    const int offset = m_document->symbols().at(first).from;
+    if ( ! codeTargetAnyAt(m_document, offset)) {
+        return m_logicalBundleLimit;
+    }
+    const QString per = conditionsPerAt(m_document, offset);
+    if (m_logicalBundleLimit == 1
+        && (per == QLL("pair-bundle")
+            || per == QLL("pair-root"))
+    ) {
+        return 1;
+    }
+    const int wrapMax = wrapMaxAt(m_document, offset);
+    const qreal remaining = 100.0 * (wrapMax - column) / wrapMax;
+    const int opsCount = operators.size() + 1;
+    const int limit = m_conditions->conditionsLimit(
+        first,
+        opsCount,
+        remaining
+    );
+    qreal count = opsCount;
+    m_conditions->conditionCount(first, per, &opsCount, &count);
+    return limit > 0 && count > limit ? 1 : m_logicalBundleLimit;
+}
+
 bool FormatExpressionLayout::operatorLinesFit(
-        int first, int last, const QList<int > & operators,
-        int column, int trailing) const
+        int first,
+        int last,
+        const QList<int > & operators,
+        int column,
+        int trailing) const
 {
     const int firstOperator = operators.first();
     bool breaksFit = this->fits(
@@ -973,6 +1253,10 @@ QByteArray FormatExpressionLayout::layoutChain(
         int trailing,
         bool forceMath)
 {
+    const LogicalLimitGuard limitGuard(
+        &m_logicalBundleLimit,
+        this->bundleForceLimit(first, operators, column)
+    );
     const int offset = m_document->symbols().at(first).from;
     const int wrap = wrapColumn(m_document, offset);
     const int wrapMax = wrapMaxAt(m_document, offset);
@@ -983,8 +1267,10 @@ QByteArray FormatExpressionLayout::layoutChain(
         && m_document->token(first) == LPAREN
         && m_document->match(first) == groupClose
     ) {
-        const QList<int > inner =
-            this->chainOperators(first + 1, groupClose - 1);
+        const QList<int > inner = this->chainOperators(
+            first + 1,
+            groupClose - 1
+        );
         const QByteArray suffix = this->oneLine(firstMember, last);
         if ( ! inner.isEmpty()
             && operatorPrecedence(m_document->token(inner.first())) > 0
@@ -1026,11 +1312,11 @@ QByteArray FormatExpressionLayout::layoutChain(
     // breaking before the operators leaves a line too long. Its argument
     // list may break even when the usual argument thresholds do not ask for
     // it, provided the call head itself fits on the line.
-    const int firstOperandLast = operators.size() > 1
-        ? operators.at(1) - 1
-        : last;
+    const int firstOperandLast = operators.size() > 1 ? operators.at(1) - 1
+                                                      : last;
     const int callOpen = m_document->match(firstOperandLast);
-    if ( ! forceMath && ! breaksFit
+    if ( ! forceMath
+        && ! breaksFit
         && ! isMemberAccess(m_document->token(firstOperator))
         && m_document->symbolLine(firstOperator)
             == m_document->symbolLine(first)
@@ -1045,13 +1331,14 @@ QByteArray FormatExpressionLayout::layoutChain(
             column,
             this->oneLine(first, firstOperandLast),
             operators.size() == 1 ? trailing : 0,
-            first
-        )
+            first)
     ) {
         const Token chainOperator = m_document->token(firstOperator);
         const bool controlHead = isControlHead(m_document, firstOperator);
         const bool logical = chainOperator == ANDAND || chainOperator == OROR;
-        const int extraPad = operators.size() > 1 && ! (controlHead && logical)
+        const int extraPad = operators.size() > 1
+            && ! (controlHead
+                && logical)
             ? m_conditions->operatorPadding(firstOperator) : 0;
         const QByteArray head = this->layoutList(
             first,
@@ -1066,15 +1353,23 @@ QByteArray FormatExpressionLayout::layoutChain(
             return head;
         }
         return head + this->layoutChainRest(
-            first, last, operators.mid(1), column, trailing, false,
-            this->chainStepsIn(first, firstOperandLast, head), false, head
+            first,
+            last,
+            operators.mid(1),
+            column,
+            trailing,
+            false,
+            this->chainStepsIn(first, firstOperandLast, head),
+            false,
+            head
         );
     }
 
     // Keeps a chain of one operator on its line up to the `(` of its right
     // operand when the opening of that group shares the head line.
     const int right = operators.first() + 1;
-    if ( ! forceMath && operators.size() == 1
+    if ( ! forceMath
+        && operators.size() == 1
         && m_document->symbolLine(first) == m_document->symbolLine(right)
         && m_document->token(right) == LPAREN
         && m_document->match(right) == last
@@ -1098,15 +1393,19 @@ QByteArray FormatExpressionLayout::layoutChain(
     }
 
     if ( ! isMemberAccess(m_document->token(firstOperator))
-        && ! (forceMath && isMathOperator(m_document->token(firstOperator)))
+        && ! (forceMath
+            && isMathOperator(m_document->token(firstOperator)))
         && isNumberMathChain(m_document, firstOperator + 1, firstOperandLast)
     ) {
         const QByteArray head = this->oneLine(first, firstOperator) + ' ';
         const int valueColumn = column + textWidth(head);
         if (valueColumn <= wrap) {
             const QByteArray value = this->layout(
-                firstOperator + 1, firstOperandLast, valueColumn,
-                operators.size() == 1 ? trailing : 0, forceMath
+                firstOperator + 1,
+                firstOperandLast,
+                valueColumn,
+                operators.size() == 1 ? trailing : 0,
+                forceMath
             );
             const int split = value.indexOf('\n');
             if (split >= 0
@@ -1117,9 +1416,16 @@ QByteArray FormatExpressionLayout::layoutChain(
                     return prefix;
                 }
                 return prefix + this->layoutChainRest(
-                    first, last, operators.mid(1), column, trailing, false,
-                    this->chainStepsIn(first, firstOperandLast, prefix), false,
-                    prefix, forceMath
+                    first,
+                    last,
+                    operators.mid(1),
+                    column,
+                    trailing,
+                    false,
+                    this->chainStepsIn(first, firstOperandLast, prefix),
+                    false,
+                    prefix,
+                    forceMath
                 );
             }
         }
@@ -1183,15 +1489,23 @@ QByteArray FormatExpressionLayout::layoutChainRest(
         const QByteArray & head,
         bool forceMath)
 {
+    const LogicalLimitGuard limitGuard(
+        &m_logicalBundleLimit,
+        this->bundleForceLimit(first, operators, column)
+    );
     const int offset = m_document->symbols().at(first).from;
     const int wrapMax = wrapMaxAt(m_document, offset);
     const bool isBroken = m_document->symbolLine(first)
         != m_document->symbolEndLine(last);
     const bool forceHere = forceMath
         && isMathOperator(m_document->token(operators.first()));
-    const QList<QList<int > > groups = isBroken && ! forceHere
-        ? this->lineGroups(operators)
-        : QList<QList<int > >();
+    const bool isLogicalChain = m_document->token(operators.first()) == ANDAND
+        || m_document->token(operators.first()) == OROR;
+    const bool keepBrokenGroups = isBroken
+        && ! forceHere
+        && ! (isLogicalChain && m_logicalBundleLimit == 1);
+    const QList<QList<int > > groups = keepBrokenGroups
+        ? this->lineGroups(operators) : QList<QList<int > >();
     const QByteArray space =
         isMemberAccess(m_document->token(operators.first()))
         ? QByteArray() : QByteArray(" ");
@@ -1199,7 +1513,9 @@ QByteArray FormatExpressionLayout::layoutChainRest(
     bool afterClosingLine = endsWithClosingLine(head);
     bool subChain = false;
     const QString subChainMode = settingValueAt(
-        m_document, offset, QString(QLL("structure.wrapSubChain")),
+        m_document,
+        offset,
+        QString(QLL("structure.wrapSubChain")),
         m_document->configAt(offset).wrapSubChain
     ).toString();
     int at = 0;
@@ -1207,6 +1523,11 @@ QByteArray FormatExpressionLayout::layoutChainRest(
     // Keeps the leading operators of a chain written on one line on its
     // first line, while `[Structure] wrapChainAt` does not hold where they
     // start and that line fits.
+    const bool isMemberChain = isMemberAccess(m_document->token(
+        operators.first()
+    ));
+    const bool builderChain = isMemberChain
+        && this->isBuilderMemberChain(first, last, operators);
     if (keepsLeading && ! isBroken && ! afterClosingLine) {
         int end = 0;
         while (end < operators.size()) {
@@ -1216,22 +1537,30 @@ QByteArray FormatExpressionLayout::layoutChainRest(
             const qreal percentUsed = start * 100.0 / wrapMax;
             const int operandLast = end + 1 < operators.size()
                 ? operators.at(end + 1) - 1 : last;
-            if (m_conditions->holds(
-                    QString(QLL("structure.wrapChainAt")),
-                    m_document->configAt(
-                        m_document->symbols().at(operators.at(end)).from
-                    ).wrapChainAt,
-                    operators.at(end),
-                    percentUsed,
-                    FormatFileConfig::schema()
-                        ->programFor(QString(QLL("structure.wrapChainAt")))
-                )
+            const int logicalLimit = isLogicalChain
+                ? m_conditions->conditionsLimit(
+                    first,
+                    operators.size() + 1,
+                    100.0 * (wrapMax - start) / wrapMax)
+                : 0;
+            const bool checkWrapAt = ! isMemberChain || builderChain;
+            if ((checkWrapAt
+                    && m_conditions->holds(
+                        QString(QLL("structure.wrapChainAt")),
+                        m_document->configAt(
+                            m_document->symbols().at(operators.at(end)).from
+                        ).wrapChainAt,
+                        operators.at(end),
+                        percentUsed,
+                        FormatFileConfig::schema()
+                            ->programFor(QString(QLL("structure.wrapChainAt")))))
+                || (logicalLimit > 0
+                    && end + 1 >= logicalLimit)
                 || ! this->fits(
                     column,
                     this->oneLine(first, operandLast),
                     end + 1 < operators.size() ? 0 : trailing,
-                    first
-                )
+                    first)
             ) {
                 break;
             }
@@ -1247,7 +1576,7 @@ QByteArray FormatExpressionLayout::layoutChainRest(
 
     // Keeps the operators the user left on the chain's first line there,
     // while that line fits.
-    if (isBroken && ! afterClosingLine && ! forceHere) {
+    if (keepBrokenGroups && ! afterClosingLine) {
         const int firstLine = m_document->symbolLine(first);
         int end = at;
         while (end < operators.size()
@@ -1258,8 +1587,8 @@ QByteArray FormatExpressionLayout::layoutChainRest(
         if (end > 0) {
             const int lastOfLine = end < operators.size()
                 ? operators.at(end) - 1 : last;
-            const QByteArray more =
-                space + this->oneLine(operators.first(), lastOfLine);
+            const QByteArray more = space
+                + this->oneLine(operators.first(), lastOfLine);
             if (this->fits(
                 column,
                 this->oneLine(first, operators.first() - 1) + more,
@@ -1315,7 +1644,8 @@ QByteArray FormatExpressionLayout::layoutChainRest(
         if (group.isEmpty()) {
             group << operators.at(at);
         }
-        if ((afterClosingLine || subChain)
+        if ((afterClosingLine
+                || subChain)
             && isMemberAccess(m_document->token(group.first()))
             && group.size() > 1
         ) {
@@ -1361,19 +1691,28 @@ QByteArray FormatExpressionLayout::layoutChainRest(
                 subChain = false;
             }
             const int previousOpen = m_document->match(op - 1);
-            const bool isCall = member && (op + 2 <= last)
+            const bool isCall = member
+                && (op + 2 <= last)
                 && m_document->token(op + 2) == LPAREN;
             const bool followsCall = isCall
                 && m_document->token(op - 1) == RPAREN
                 && previousOpen >= operators.first()
                 && this->isListOpen(previousOpen);
-            if (((afterClosingLine && ! followsCall && (member || operators.size() == 1 || operatorsInMiddleAt(m_document, offset))) || (subChain && member
-                        && subChainMode != QLL("always")))
+            if (((afterClosingLine
+                        && ! followsCall
+                        && (member
+                            || operators.size() == 1
+                            || operatorsInMiddleAt(m_document, offset))
+                    )
+                    || (subChain
+                        && member
+                        && subChainMode != QLL("always"))
+                )
                 && m_document->token(op) != ANDAND
                 && m_document->token(op) != OROR
             ) {
-                const int operatorColumn =
-                    lastLineWidth(head + text) + space.size();
+                const int operatorColumn = lastLineWidth(head + text)
+                    + space.size();
                 const QByteArray operand = this->layout(
                     op + 1,
                     operandLast,
@@ -1383,8 +1722,7 @@ QByteArray FormatExpressionLayout::layoutChainRest(
                 );
                 const int firstBreak = operand.indexOf('\n');
                 const int width = textWidth(firstBreak < 0
-                    ? operand : operand.left(firstBreak)
-                );
+                    ? operand : operand.left(firstBreak));
                 int limit = wrapMax;
                 if (subChain
                     && ! afterClosingLine
@@ -1392,9 +1730,11 @@ QByteArray FormatExpressionLayout::layoutChainRest(
                 ) {
                     limit = wrapColumn(m_document, offset);
                 }
-                if ((subChain && ! afterClosingLine && subChainMode == QLL("never"))
-                    || operatorColumn + textWidth(lead) + width
-                        + (firstBreak < 0 ? extra : 0) <= limit
+                if ((subChain
+                        && ! afterClosingLine
+                        && subChainMode == QLL("never"))
+                    || operatorColumn + textWidth(lead) + width + (firstBreak < 0 ? extra : 0)
+                        <= limit
                 ) {
                     text += space + lead + operand;
                     joined = true;
@@ -1402,10 +1742,12 @@ QByteArray FormatExpressionLayout::layoutChainRest(
                 }
             }
             if ( ! joined) {
-                const QByteArray operatorPad = subChain && member && ! steps
+                const QByteArray operatorPad = subChain
+                    && member
+                    && ! steps
                     ? continuationPad(textWidth(this->pad())) : this->pad();
-                const int operandColumn =
-                    textWidth(operatorPad) + textWidth(lead);
+                const int operandColumn = textWidth(operatorPad)
+                    + textWidth(lead);
                 const QByteArray oneLine = this->oneLine(
                     op + 1,
                     operandLast
@@ -1416,6 +1758,10 @@ QByteArray FormatExpressionLayout::layoutChainRest(
                     ? wrapColumn(m_document, offset) : wrapMax;
                 if (( ! forceMath
                         || member)
+                    && ! this->logicalGroupNeedsBreak(
+                        op + 1,
+                        operandLast,
+                        operandColumn)
                     && operandColumn + textWidth(oneLine) + extra
                         <= operandLimit
                 ) {
@@ -1471,7 +1817,8 @@ int FormatExpressionLayout::chainStepsIn(
             headLast + 1,
             false
         );
-        if (previous >= 0 && m_document->token(previous) != QUESTION
+        if (previous >= 0
+            && m_document->token(previous) != QUESTION
             && m_document->firstSymbolOfLine(m_document->symbolLine(previous))
                 != previous
         ) {
@@ -1508,16 +1855,33 @@ QByteArray FormatExpressionLayout::layoutGroup(
         m_document->symbols().at(open).from
     );
     const QByteArray text = this->oneLine(open, close);
-    if (this->fits(column, text, trailing, open) || close <= open + 1) {
+    if ((this->fits(column, text, trailing, open)
+            && ! this->logicalGroupNeedsBreak(open, close, column))
+        || close <= open + 1
+    ) {
         return text;
     }
     const QList<int > operators = this->chainOperators(open + 1, close - 1);
+    const LogicalLimitGuard limitGuard(
+        &m_logicalBundleLimit, m_logicalBundleLimit
+    );
+    const int innerOffset = m_document->symbols().at(open).from;
+    if (conditionsPerAt(m_document, innerOffset) != QLL("pair-root")) {
+        m_logicalBundleLimit = 0;
+        if ( ! operators.isEmpty()) {
+            m_logicalBundleLimit = this->bundleForceLimit(
+                open,
+                operators,
+                column
+            );
+        }
+    }
     if (operators.isEmpty()) {
         return '(' + this->layout(
-            open + 1,
-            close - 1,
-            column + 1,
-            trailing + 1)
+                open + 1,
+                close - 1,
+                column + 1,
+                trailing + 1)
             + ')';
     }
     const QByteArray lead = this->layout(
@@ -1541,9 +1905,11 @@ QByteArray FormatExpressionLayout::layoutGroup(
         );
     const Token firstOperator = m_document->token(operators.first());
     const Token afterClose = m_document->token(close + 1);
-    if ((firstOperator == ANDAND || firstOperator == OROR)
+    if ((firstOperator == ANDAND
+            || firstOperator == OROR)
         && (afterClose == ANDAND
             || afterClose == OROR
+            || afterClose == RPAREN
             || afterClose == SEMIC)
         && m_document->symbolEndLine(close - 1) == m_document->symbolLine(close)
         && lastLineWidth(group) + 1 + trailing <= wrapMax
@@ -1561,9 +1927,14 @@ QByteArray FormatExpressionLayout::layoutGroup(
     group fits on its line.
 */
 QList<QByteArray > FormatExpressionLayout::layoutDeclaration(
-        int open, const QByteArray & prefix, const QByteArray & suffix,
-        bool breaksAfterOpen, bool wrapping, const QByteArray & pad,
-        int limit, bool *fits)
+        int open,
+        const QByteArray & prefix,
+        const QByteArray & suffix,
+        bool breaksAfterOpen,
+        bool wrapping,
+        const QByteArray & pad,
+        int limit,
+        bool *fits)
 {
     const int close = m_document->match(open);
     LineLayout layout;
@@ -1575,8 +1946,14 @@ QList<QByteArray > FormatExpressionLayout::layoutDeclaration(
     layout.wrapItems = false;
     *fits = true;
     const QByteArray text = this->listLines(
-        open, close, splitArguments(m_document, open, close), ! wrapping, 0, 0,
-        layout, fits
+        open,
+        close,
+        splitArguments(m_document, open, close),
+        ! wrapping,
+        0,
+        0,
+        layout,
+        fits
     );
     return text.split('\n');
 }
@@ -1596,8 +1973,12 @@ QList<QByteArray > FormatExpressionLayout::layoutDeclaration(
     fits; an item the user grouped with others stays with its group.
 */
 QByteArray FormatExpressionLayout::layoutArray(
-        int open, int close, const QList<QPair<int, int > > & items,
-        bool keepsGroups, int firstItem, int joinCount)
+        int open,
+        int close,
+        const QList<QPair<int, int > > & items,
+        bool keepsGroups,
+        int firstItem,
+        int joinCount)
 {
     ++m_paddingLevel;
     const QByteArray lead = "\n" + this->pad();
@@ -1612,25 +1993,36 @@ QByteArray FormatExpressionLayout::layoutArray(
     layout.wrapItems = true;
     bool fits = true;
     const QByteArray text = this->listLines(
-        open, close, items, keepsGroups, firstItem, joinCount, layout, &fits
+        open,
+        close,
+        items,
+        keepsGroups,
+        firstItem,
+        joinCount,
+        layout,
+        &fits
     );
     --m_paddingLevel;
     return text;
 }
 
 QByteArray FormatExpressionLayout::listLines(
-        int open, int close, const QList<QPair<int, int > > & items,
-        bool keepsGroups, int firstItem, int joinCount,
-        const LineLayout & layout, bool *fits)
+        int open,
+        int close,
+        const QList<QPair<int, int > > & items,
+        bool keepsGroups,
+        int firstItem,
+        int joinCount,
+        const LineLayout & layout,
+        bool *fits)
 {
     const bool hasTrailingComma = m_document->token(close - 1) == COMMA;
     QList<int > starts;
     for (int i = 0; i < items.size(); ++i) {
         starts << items.at(i).first;
     }
-    const QList<QList<int > > groups = keepsGroups
-        ? this->lineGroups(starts)
-        : QList<QList<int > >();
+    const QList<QList<int > > groups = keepsGroups ? this->lineGroups(starts)
+                                                   : QList<QList<int > >();
     QByteArray text;
     int at = 0;
     // The items before this index lay out as `joinArgs` allows, without the
@@ -1688,21 +2080,31 @@ QByteArray FormatExpressionLayout::listLines(
             const bool isLast = at + 1 == items.size() && ! hasTrailingComma;
             line = layout.wrapItems
                 ? this->itemText(
-                    items.at(at).first, items.at(at).second,
-                    column, isLast ? 0 : 1)
-                : sourceText(m_document, items.at(at).first, items.at(at).second);
+                    items.at(at).first,
+                    items.at(at).second,
+                    column,
+                    isLast ? 0 : 1)
+                : sourceText(
+                    m_document,
+                    items.at(at).first,
+                    items.at(at).second
+                );
             // Keeps the lines of an item the user broke in a commented list,
             // one step past the item's own column.
-            if ( ! layout.preserveText && m_keepsCommentedLines
+            if ( ! layout.preserveText
+                && m_keepsCommentedLines
                 && m_document->symbolLine(items.at(at).first)
                     < m_document->symbolEndLine(items.at(at).second)
             ) {
                 const QList<QByteArray > sourceLines = sourceText(
-                    m_document, items.at(at).first, items.at(at).second
+                    m_document,
+                    items.at(at).first,
+                    items.at(at).second
                 ).split('\n');
                 line = sourceLines.first().trimmed();
                 for (int l = 1; l < sourceLines.size(); ++l) {
-                    line += "\n" + QByteArray(column + 4, ' ')
+                    line += "\n"
+                        + QByteArray(column + 4, ' ')
                         + sourceLines.at(l).trimmed();
                 }
             }
@@ -1733,26 +2135,32 @@ QByteArray FormatExpressionLayout::listLines(
             if (nextSize > 1) {
                 break;
             }
-            const int allowed = joinCount > 0 ? joinCount : m_document->joinArgsAt(
-                open,
-                firstItem + last,
-                column + textWidth(line),
-                isWrapping
-            );
+            const int allowed = joinCount > 0
+                ? joinCount
+                : m_document->joinArgsAt(
+                    open,
+                    firstItem + last,
+                    column + textWidth(line),
+                    isWrapping
+                );
             if (last + 2 - at > allowed) {
                 break;
             }
             const bool nextIsLast = last + 2 == items.size()
                 && ! hasTrailingComma;
-            const QByteArray joined = line + ", " + (layout.preserveText
-                ? sourceText(
-                    m_document, items.at(last + 1).first,
-                    items.at(last + 1).second)
-                : this->oneLine(items.at(last + 1).first,
-                                items.at(last + 1).second));
-            const QByteArray tail = nextIsLast
-                ? layout.suffix
-                : QByteArray(",");
+            const QByteArray joined =
+                line + ", "
+                + (layout.preserveText
+                    ? sourceText(
+                        m_document,
+                        items.at(last + 1).first,
+                        items.at(last + 1).second)
+                    : this->oneLine(
+                        items.at(last + 1).first,
+                        items.at(last + 1).second
+                    ));
+            const QByteArray tail = nextIsLast ? layout.suffix
+                                               : QByteArray(",");
             if (joined.contains('\n')
                 || column + textWidth(joined + tail) > layout.limit
             ) {
@@ -1764,11 +2172,13 @@ QByteArray FormatExpressionLayout::listLines(
         const bool isLast = last + 1 == items.size() && ! hasTrailingComma;
         // Keeps a comma that the user wrote at the start of the next item's
         // line there.
-        commaLeads = ! isLast && layout.preserveText
+        commaLeads = ! isLast
+            && layout.preserveText
             && this->commaStartsNextLine(items, last);
-        const QByteArray tail = isLast ? layout.suffix
-            : commaLeads ? QByteArray() : QByteArray(",");
-        *fits = *fits && ! line.contains('\n')
+        const QByteArray tail = isLast
+            ? layout.suffix : commaLeads ? QByteArray() : QByteArray(",");
+        *fits = *fits
+            && ! line.contains('\n')
             && column + textWidth(line + tail) <= layout.limit;
         text += lead + line + tail;
         at = last + 1;
@@ -1804,10 +2214,12 @@ QByteArray FormatExpressionLayout::itemText(
         first,
         last,
         &question,
-        &colon
-    )
-        && this->chainOperators(first, last).isEmpty() && m_document->token(last) != RPAREN && m_document->token(last) != RBRACE;
-    if ( ! (isPlain || this->breaksOnlyBetweenLiterals(first, last))
+        &colon)
+        && this->chainOperators(first, last).isEmpty()
+        && m_document->token(last) != RPAREN
+        && m_document->token(last) != RBRACE;
+    if ( ! (isPlain
+            || this->breaksOnlyBetweenLiterals(first, last))
         || m_document->symbolLine(first) == m_document->symbolEndLine(last)
     ) {
         return this->layout(first, last, column, trailing);
@@ -1820,8 +2232,8 @@ QByteArray FormatExpressionLayout::itemText(
             continue;
         }
         const Token end = m_document->token(i - 1);
-        const bool adjacentStrings =
-            end == STRING_LITERAL && startsWithStringLiteral(m_document, i);
+        const bool adjacentStrings = end == STRING_LITERAL
+            && startsWithStringLiteral(m_document, i);
         const bool keepsPadding = ! adjacentStrings && (end == STRING_LITERAL
             || closesEarlierLine(m_document, i - 1)
             || startsWithStringLiteral(m_document, lineFirst));
@@ -1852,8 +2264,9 @@ bool FormatExpressionLayout::commaStartsNextLine(
     }
     const int comma = items.at(last + 1).first - 1;
     return m_document->token(comma) == COMMA
-        && m_document->symbolLine(comma)
-            > m_document->symbolEndLine(items.at(last).second);
+        && m_document->symbolLine(comma) > m_document->symbolEndLine(
+            items.at(last).second
+        );
 }
 
 /*!
@@ -1884,8 +2297,9 @@ bool FormatExpressionLayout::breaksOnlyBetweenLiterals(
 */
 bool FormatExpressionLayout::mayBreakList(int open, int itemCount) const
 {
-    const FormatFileConfig &fileConfig =
-        m_document->configAt(m_document->symbols().at(open).from);
+    const FormatFileConfig &fileConfig = m_document->configAt(
+        m_document->symbols().at(open).from
+    );
     if ( ! fileConfig.wrapArgsOverCondition.isEmpty()) {
         return m_conditions->argsOver(open, itemCount);
     }

@@ -21,6 +21,7 @@
 class FormatResult
 {
 public:
+
     inline FormatResult() : changed(false) {}
 
     QByteArray text;

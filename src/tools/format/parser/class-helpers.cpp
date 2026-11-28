@@ -89,7 +89,8 @@ QList<int > classBodyTokens(const FormatDocument *document, int brace)
     qualifiers and without its template arguments (`QHash` of
     `public QHash<K, V >`).
 */
-static void readClassHead(const FormatDocument *document, int brace,
+static void readClassHead(const FormatDocument *document,
+                          int brace,
                           FormatClassMembers *members)
 {
     const int start = document->headStart(brace);
@@ -140,8 +141,7 @@ static void readClassHead(const FormatDocument *document, int brace,
     template (see FormatClassMembers).
 */
 FormatClassMembers collectMembers(
-        const FormatDocument *document, int brace,
-        const QByteArray & className)
+        const FormatDocument *document, int brace, const QByteArray & className)
 {
     FormatClassMembers members;
     readClassHead(document, brace, &members);
@@ -178,8 +178,12 @@ FormatClassMembers collectMembers(
         }
         const QByteArray name = document->lexem(i);
         const Token after = document->token(i + 1);
-        const bool declares = after == LPAREN || after == SEMIC || after == EQ || after == LBRACK
-            || after == COLON || after == COMMA;
+        const bool declares = after == LPAREN
+            || after == SEMIC
+            || after == EQ
+            || after == LBRACK
+            || after == COLON
+            || after == COMMA;
         if ( ! declares
             || name == className
             || isMacroName(name)
@@ -239,8 +243,7 @@ bool isMacroArgument(const FormatDocument *document, int index)
     Finds the body of the class named @a className in @a document, and builds
     the index of its `{`, or -1 when the document defines no such class.
 */
-int findClassBody(const FormatDocument *document,
-                  const QByteArray & className)
+int findClassBody(const FormatDocument *document, const QByteArray & className)
 {
     for (int i = 0; i < document->symbols().size(); ++i) {
         if (document->token(i) == LBRACE
@@ -291,7 +294,8 @@ QByteArray classNameOf(const FormatDocument *document, int brace)
             --templateDepth;
         } else if (token == GTGT) {
             templateDepth -= 2;
-        } else if (templateDepth == 0 && (token == CLASS
+        } else if (templateDepth == 0
+            && (token == CLASS
                 || token == STRUCT)
             && document->token(k + 1) == IDENTIFIER
         ) {
@@ -322,57 +326,6 @@ int contentEndOf(const FormatDocument *document, int index)
 }
 
 /*!
-    Adds `inline` in front of the declaration that starts at the token
-    @a start of @a document, and moves its head's later lines right as far,
-    up to the line that closes its parameters; hence the parameters stay
-    lined up under the `(`.
-*/
-void addInlineKeyword(
-        FormatDocument *document,
-        int start)
-{
-    const QByteArray keyword("inline ");
-    document->replace(document->symbols().at(start).from, 0, keyword);
-    const int line = document->symbolLine(start);
-    int open = start;
-    while (open < document->symbols().size()
-        && document->token(open) != LPAREN
-    ) {
-        ++open;
-    }
-    const int close = open < document->symbols().size()
-        ? document->match(open) : -1;
-    const int last = close >= 0 ? document->symbolLine(close) : line;
-    const int indent = textWidth(document->indentOf(line));
-    for (int l = line + 1; l <= last; ++l) {
-        if (textWidth(document->indentOf(l)) > indent) {
-            document->replace(document->lineStart(l), 0, QByteArray(
-                keyword.size(), ' '
-            ));
-        }
-    }
-}
-
-/*!
-    Puts @a marker in place of the `override` or `Q_DECL_OVERRIDE` at
-    @a overrideToken of @a document; an empty @a marker removes that marker
-    together with the space before it.
-*/
-void setOverrideMarker(
-        FormatDocument *document,
-        int overrideToken, const QString & marker)
-{
-    const int end = document->symbolEnd(overrideToken);
-    if (marker.isEmpty()) {
-        const int from = document->symbolEnd(overrideToken - 1);
-        document->replace(from, end - from, QByteArray());
-        return;
-    }
-    const int from = document->symbols().at(overrideToken).from;
-    document->replace(from, end - from, marker.toLatin1());
-}
-
-/*!
     Builds the index of the first token of the declaration whose body opens
     at @a body of @a document (after an access specifier and a template
     head, and the macros that lead it), and sets @a hasInline when it says
@@ -382,8 +335,11 @@ void setOverrideMarker(
     after its parameters.
 */
 int functionDeclarationStart(
-        const FormatDocument *document, int body,
-        bool *hasInline, bool *exempt, int *overrideToken)
+        const FormatDocument *document,
+        int body,
+        bool *hasInline,
+        bool *exempt,
+        int *overrideToken)
 {
     int start = document->headStart(body);
 
@@ -399,7 +355,8 @@ int functionDeclarationStart(
         const int before = start;
         for (;;) {
             const Token token = document->token(start);
-            const bool isAccess = token == PUBLIC || token == PRIVATE
+            const bool isAccess = token == PUBLIC
+                || token == PRIVATE
                 || token == PROTECTED;
             int label = start + (isAccess ? 1 : 0);
             const Token kind = document->token(label);
@@ -419,8 +376,7 @@ int functionDeclarationStart(
                 for (++start; start < body; ++start) {
                     const Token inner = document->token(start);
                     depth += inner == LANGLE
-                        ? 1
-                        : (inner == RANGLE ? -1 : (inner == GTGT ? -2 : 0));
+                        ? 1 : (inner == RANGLE ? -1 : (inner == GTGT ? -2 : 0));
                     if (depth <= 0) {
                         break;
                     }
@@ -434,7 +390,8 @@ int functionDeclarationStart(
         // them tokens of their own): one that expands to a template head, and a
         // statement-like macro call that ends its line (such as
         // `Q_DECLARE_FLAGS(...)`, which takes no `;`).
-        while (start < body && isMacroName(document->lexem(start))
+        while (start < body
+            && isMacroName(document->lexem(start))
             && document->token(start + 1) != SCOPE
         ) {
             const QByteArray name = document->lexem(start);
@@ -466,12 +423,14 @@ int functionDeclarationStart(
             parameters = i;
             break;
         }
-        const QByteArray name = token == IDENTIFIER
-            ? document->lexem(i) : QByteArray();
+        const QByteArray name = token == IDENTIFIER ? document->lexem(i)
+                                                    : QByteArray();
         if (token == INLINE || name.contains("INLINE")) {
             *hasInline = true;
         }
-        if (token == FRIEND || name == "constexpr" || name == "Q_DECL_CONSTEXPR"
+        if (token == FRIEND
+            || name == "constexpr"
+            || name == "Q_DECL_CONSTEXPR"
             || name == "Q_DECL_RELAXED_CONSTEXPR"
         ) {
             *exempt = true;
@@ -490,8 +449,8 @@ int functionDeclarationStart(
 }
 
 /*!
-    Tells whether the lambda capture list that the `[` at \a bracket of
-    \a document opens captures `this`: it names `this` or `*this`, or it
+    Tells whether the lambda capture list that the `[` at @a bracket of
+    @a document opens captures `this`: it names `this` or `*this`, or it
     starts with the default capture `=` or `&`.
 */
 static bool capturesThis(const FormatDocument *document, int bracket)
@@ -500,7 +459,9 @@ static bool capturesThis(const FormatDocument *document, int bracket)
     const Token first = document->token(bracket + 1);
     if (first == EQ
         || (first == AND
-            && (bracket + 2 == close || document->token(bracket + 2) == COMMA))
+            && (bracket + 2 == close
+                || document->token(bracket + 2) == COMMA)
+        )
     ) {
         return true;
     }
@@ -539,14 +500,13 @@ bool insideUncapturedLambda(const FormatDocument *document, int body, int index)
 }
 
 /*!
-    Builds the names that the tokens from \a from up to \a to of \a document
+    Builds the names that the tokens from @a from up to @a to of @a document
     declare: a name right after a type, followed by what may end a
     declaration (`;`, `=`, `,`, `)`, `(`, `[`, or a range-for's `:`), and
     the names that declaration lists after commas.
 */
 QSet<QByteArray > declaredLocalNames(
-        const FormatDocument *document, int from,
-        int to)
+        const FormatDocument *document, int from, int to)
 {
     QSet<QByteArray > names;
     for (int i = from; i < to; ++i) {

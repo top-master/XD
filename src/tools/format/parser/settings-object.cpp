@@ -28,6 +28,7 @@ class PercentContext : public FormatConditionContext
 {
     typedef FormatConditionContext super;
 public:
+
     inline PercentContext(const FormatConditionContext *place, qreal percent)
         : m_place(place), m_percent(percent)
     {
@@ -48,6 +49,10 @@ public:
     inline bool argumentCount(
             int depth, int argument, qreal *count) const Q_DECL_OVERRIDE_IL
     { return m_place->argumentCount(depth, argument, count); }
+
+    inline bool conditionCount(
+            const QString & per, qreal *count) const Q_DECL_OVERRIDE_IL
+    { return m_place->conditionCount(per, count); }
 
     inline bool hasMoreArgs(bool *value) const Q_DECL_OVERRIDE_IL
     { return m_place->hasMoreArgs(value); }

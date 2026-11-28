@@ -19,6 +19,7 @@ class FormatDocument;
 class FormatScopeConditions
 {
 public:
+
     explicit FormatScopeConditions(const FormatDocument *document);
 
     static QStringList names();
@@ -26,10 +27,17 @@ public:
     inline const FormatDocument *document() const { return m_document; }
 
     bool holds(const QString & key, const QStringList & program, int token);
-    bool holds(const QString & key, const QStringList & program, int token,
-               const QStringList & fallback);
-    bool holds(const QString & key, const QStringList & program, int token,
-               qreal percentUsed, const QStringList & fallback);
+    bool holds(
+            const QString & key,
+            const QStringList & program,
+            int token,
+            const QStringList & fallback);
+    bool holds(
+            const QString & key,
+            const QStringList & program,
+            int token,
+            qreal percentUsed,
+            const QStringList & fallback);
     int operatorPadding(int token);
     bool argsOver(int token, int count);
     bool argsOver(int token, int count, qreal spaceRemaining);
@@ -37,12 +45,17 @@ public:
     bool conditionsOver(int token, int count, qreal spaceRemaining);
     int conditionsLimit(int token, int count);
     int conditionsLimit(int token, int count, qreal spaceRemaining);
-    QVariant resolveAt(
-            const QString & key, const QStringList & program,
-            int token);
+    QVariant resolveAt(const QString & key,
+                       const QStringList & program,
+                       int token);
     QVariant settingAt(const QString & key, int token);
     int argumentCount(int token, int depth, int argument = 0) const;
     int conditionArgumentCount(int token, int depth, int argument = 0) const;
+    bool conditionCount(
+            int token,
+            const QString & per,
+            const int *knownCount,
+            qreal *count) const;
     void reserve(int token, int column);
     qreal spaceRemaining(int token) const;
     bool nameHolds(int token, const QString & name, bool *value);
@@ -52,10 +65,18 @@ public:
     FormatMemberScope functionScope(int brace);
 
 private:
-    bool holdsAt(const QString & key, const QStringList & program, int token,
-                 const qreal *spaceRemaining, const QStringList & fallback);
-    bool countOver(int token, int count, const qreal *spaceRemaining,
-                   bool condition);
+
+    bool holdsAt(
+            const QString & key,
+            const QStringList & program,
+            int token,
+            const qreal *spaceRemaining,
+            const QStringList & fallback);
+    bool countOver(
+            int token,
+            int count,
+            const qreal *spaceRemaining,
+            bool condition);
     int limitOf(int token, int count, const qreal *spaceRemaining);
     int countTargets(int target, int depth, int argument, bool condition) const;
     int argumentTarget(int token) const;

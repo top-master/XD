@@ -10,6 +10,7 @@ class FormatUsSpellingRule : public FormatProseRule
 {
     typedef FormatProseRule super;
 public:
+
     FormatUsSpellingRule();
 };
 

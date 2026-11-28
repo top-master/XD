@@ -7,9 +7,10 @@
 #include "./parser/layout-helpers.h"
 #include "./parser/scope-conditions.h"
 
+#include "./lexer/format-lexer.h"
+
 #include "config-cache.h"
 #include "config-condition.h"
-#include "preprocessor.h"
 
 #include <QtCore/QDir>
 #include <QtCore/QFileInfo>
@@ -21,15 +22,12 @@
     @class FormatDocument
     @internal
 
-    Holds one file under formatting as text plus moc's tokens of it, and
+    Holds one file under formatting as text plus its lexed tokens, and
     queues the edits and issues that the formatting rules find.
 
-    The tokens come from Preprocessor::tokenize() in its preprocess-only mode
-    with Preprocessor::keepComments set, which keeps every token's offset into
-    the text and emits the comments as tokens too; hence the document lists
-    comments() without a parser of its own. Edits apply only to the selected
-    lines (see setLineRanges()), and applyEdits() tokenizes the new text again
-    for the next rule.
+    The tokens come from FormatLexer::tokenize(), which keeps every token's
+    offset into the text and emits comments as tokens too; hence the document
+    lists comments() directly without external preprocessor state.
 */
 
 /*!
@@ -37,12 +35,10 @@
     rules that look at the file's folder use, and which may be empty).
 */
 FormatDocument::FormatDocument(const QByteArray & text, const QString & path)
-    : m_editorChanged(false), m_text(text), m_path(path)
+    : m_text(text), m_path(path), m_language(FormatLanguage::Cpp)
     , m_inlineConfigured(false), m_pass(0), m_agentMode(false)
+    , m_commentChanged(false)
 {
-    static const bool tokenizerConfigured =
-        (Preprocessor::preprocessOnly = true, Preprocessor::keepComments = true, true);
-    Q_UNUSED(tokenizerConfigured);
     this->analyze();
 }
 
@@ -90,14 +86,20 @@ class JoinArgsContext : public FormatConditionContext
 {
     typedef FormatConditionContext super;
 public:
-    inline JoinArgsContext(FormatScopeConditions *conditions, int open,
-                           int argument, int last, bool isWrapping)
+
+    inline JoinArgsContext(
+            FormatScopeConditions *conditions,
+            int open,
+            int argument,
+            int last,
+            bool isWrapping)
         : m_conditions(conditions), m_open(open), m_argument(argument)
         , m_last(last), m_isWrapping(isWrapping)
     {
     }
 
-    bool argumentCount(int depth, int argument,
+    bool argumentCount(int depth,
+                       int argument,
                        qreal *count) const Q_DECL_OVERRIDE;
 
     inline QStringList onNames() const Q_DECL_OVERRIDE_IL
@@ -149,6 +151,7 @@ public:
     }
 
 private:
+
     int count() const;
 
     FormatScopeConditions *m_conditions;
@@ -164,11 +167,8 @@ private:
 int JoinArgsContext::count() const
 {
     const FormatDocument *document = this->m_conditions->document();
-    return splitArguments(
-        document,
-        this->m_open,
-        document->match(this->m_open)
-    ).size();
+    return splitArguments(document, this->m_open, document->match(this->m_open))
+        .size();
 }
 
 /*!
@@ -176,9 +176,7 @@ int JoinArgsContext::count() const
     positive depth without an argument selects the argument in question; at
     depth 1, an argument that holds no call takes no arguments.
 */
-bool JoinArgsContext::argumentCount(
-        int depth, int argument,
-        qreal *count) const
+bool JoinArgsContext::argumentCount(int depth, int argument, qreal *count) const
 {
     if (depth > 0 && argument == 0) {
         argument = this->m_argument + 1;
@@ -212,7 +210,9 @@ bool JoinArgsContext::argumentCount(
     `,`. A condition that misses a value gives 1.
 */
 int FormatDocument::joinArgsAt(
-        int open, int argument, int column,
+        int open,
+        int argument,
+        int column,
         bool isWrapping) const
 {
     const FormatFileConfig &fileConfig = this->configAt(
@@ -221,11 +221,8 @@ int FormatDocument::joinArgsAt(
     if (fileConfig.joinArgsCondition.isEmpty()) {
         return isWrapping ? qMax(1, fileConfig.joinArgs) : 1;
     }
-    const QList<QPair<int, int > > items = splitArguments(
-        this,
-        open,
-        this->match(open)
-    );
+    const QList<QPair<int, int > > items =
+        splitArguments(this, open, this->match(open));
     if (argument < 0 || argument >= items.size()) {
         return 1;
     }
@@ -237,8 +234,11 @@ int FormatDocument::joinArgsAt(
     conditions.reserve(last, column + (hasComma ? 1 : 0));
 
     const JoinArgsContext context(
-        &conditions, open, argument,
-        last, isWrapping
+        &conditions,
+        open,
+        argument,
+        last,
+        isWrapping
     );
     const QSharedPointer<Config::Scopes::Scope > scope =
         FormatConditionContext::pushCountScope();
@@ -258,8 +258,7 @@ int FormatDocument::joinArgsAt(
     @a error.
 */
 bool FormatDocument::setInlineConfiguration(
-        const FormatConfig &config,
-        QString *error)
+        const FormatConfig &config, QString *error)
 {
     const QList<FormatConfigDirective > directives = configDirectives(this);
     if (directives.isEmpty()) {
@@ -416,13 +415,15 @@ QList<FormatIssue > FormatDocument::inlineWarnings(bool verbose) const
                 || directive.kind == FormatConfigDirective::Begin
             ) {
                 const int line = this->lineOf(directive.offset);
-                warnings.append(FormatIssue(
-                    line,
-                    "format-warning",
-                    QString(
-                        QLL("#: format warning: configuration applied inside an off region at line %1.")
-                    ).arg(line)
-                ));
+                warnings.append(
+                    FormatIssue(
+                        line,
+                        "format-warning",
+                        QString(
+                            QLL("#: format warning: configuration applied inside an off region at line %1.")
+                        ).arg(line)
+                    )
+                );
             }
         }
         if (directive.kind == FormatConfigDirective::Invalid) {
@@ -438,13 +439,15 @@ QList<FormatIssue > FormatDocument::inlineWarnings(bool verbose) const
         } else if (directive.kind == FormatConfigDirective::End) {
             if (openings.isEmpty()) {
                 const int line = this->lineOf(directive.offset);
-                warnings.append(FormatIssue(
-                    line,
-                    "format-warning",
-                    QString(
-                        QLL("#: format warning: unmatched \"Format rule end.\" at line %1")
-                    ).arg(line)
-                ));
+                warnings.append(
+                    FormatIssue(
+                        line,
+                        "format-warning",
+                        QString(
+                            QLL("#: format warning: unmatched \"Format rule end.\" at line %1")
+                        ).arg(line)
+                    )
+                );
             } else {
                 openings.removeLast();
             }
@@ -483,10 +486,13 @@ void FormatDocument::analyze()
         }
     }
 
-    // Splits moc's tokens into comments and code, leaving out whitespace,
-    // newlines, and the tokens moc adds without text (such as
-    // the `PP_IF` of an `#ifdef`).
-    const Symbols all = qMove(Preprocessor::tokenize(this->m_text));
+    m_language = FormatLanguageInfo::detect(this->m_path, this->m_text);
+    const FormatCommentStyle commentStyle =
+        FormatLanguageInfo::commentStyle(m_language);
+    const Symbols all = qMove(FormatLexer::tokenize(
+        this->m_text,
+        FormatLexer::Options(true, m_language)
+    ));
     int previousCodeLine = 0;
     for (int i = 0; i < all.size(); ++i) {
         const Symbol & symbol = all.at(i);
@@ -503,12 +509,56 @@ void FormatDocument::analyze()
             this->appendComment(symbol, previousCodeLine);
             continue;
         }
+        if (commentStyle.supportsTripleDocstring
+            && symbol.token == STRING_LITERAL
+            && symbol.len >= 6
+            && this->lineOf(symbol.from) > previousCodeLine
+        ) {
+            const char q = this->m_text.at(symbol.from);
+            if ((q == '"'
+                    || q == '\'')
+                && this->m_text.mid(symbol.from, 3) == QByteArray(3, q)
+            ) {
+                FormatComment docComment;
+                docComment.offset = symbol.from;
+                docComment.length = symbol.len;
+                docComment.kind = FormatComment::BlockDoc;
+                docComment.trailing = false;
+                this->m_comments.append(docComment);
+                previousCodeLine = this->lineOf(
+                    symbol.from + symbol.len - 1
+                );
+                continue;
+            }
+        }
         this->m_symbols.append(symbol);
         previousCodeLine = this->lineOf(symbol.from + symbol.len - 1);
     }
 
     this->analyzeLines();
     this->analyzeBrackets();
+}
+
+/*!
+    Parses the analyzed token and comment streams into an AST in @a arena and
+    marks protected comments.
+*/
+AstParseResult FormatDocument::buildAst(AstArena *arena) const
+{
+    AstParseResult ast = AstParser::parse(
+        m_text,
+        m_symbols,
+        m_comments,
+        m_lineStarts,
+        m_directiveLines,
+        m_matches,
+        m_language,
+        arena
+    );
+    for (int i = 0; i < ast.comments.size(); ++i) {
+        ast.comments.at(i)->isProtected = this->isProtectedComment(i);
+    }
+    return ast;
 }
 
 /*!
@@ -523,13 +573,17 @@ void FormatDocument::appendComment(const Symbol & symbol, int previousCodeLine)
     comment.length = symbol.len;
     const QByteArray head = this->m_text.mid(symbol.from, 4);
     if (symbol.token == CPP_COMMENT) {
-        const bool doc = head.startsWith("///") || head.startsWith("//!");
-        comment.kind = doc && ! head.startsWith("////")
-            ? FormatComment::LineDoc : FormatComment::Line;
+        if (head.startsWith('#')) {
+            comment.kind = FormatComment::Line;
+        } else {
+            const bool doc = head.startsWith("///") || head.startsWith("//!");
+            comment.kind = doc && ! head.startsWith("////")
+                ? FormatComment::LineDoc : FormatComment::Line;
+        }
     } else {
         const bool doc = head.startsWith("/**") || head.startsWith("/*!");
-        comment.kind = doc && head != "/**/"
-            ? FormatComment::BlockDoc : FormatComment::Block;
+        comment.kind = doc && head != "/**/" ? FormatComment::BlockDoc
+                                             : FormatComment::Block;
     }
     comment.trailing = previousCodeLine > 0
         && this->lineOf(symbol.from) == previousCodeLine;
@@ -582,8 +636,7 @@ void FormatDocument::analyzeBrackets()
     QVector<int > scopes;
     for (int i = 0; i < count; ++i) {
         const Token token = this->m_symbols.at(i).token;
-        this->m_scopes[i] = scopes.isEmpty()
-            ? int(FileScope) : scopes.last();
+        this->m_scopes[i] = scopes.isEmpty() ? int(FileScope) : scopes.last();
         if (this->isDirectiveLine(this->symbolLine(i))) {
             continue;
         }
@@ -622,8 +675,7 @@ void FormatDocument::analyzeBrackets()
             }
             open.removeLast();
         }
-        this->m_scopes[i] = scopes.isEmpty()
-            ? int(FileScope) : scopes.last();
+        this->m_scopes[i] = scopes.isEmpty() ? int(FileScope) : scopes.last();
     }
 }
 
@@ -645,14 +697,18 @@ int FormatDocument::headStart(int index) const
                 continue;
             }
         }
-        if (before == SEMIC || before == LBRACE || before == RBRACE
+        if (before == SEMIC
+            || before == LBRACE
+            || before == RBRACE
             || this->isAccessLabel(start - 1)
             || this->isDirectiveLine(this->symbolLine(start - 1))
         ) {
             break;
         }
         const int opener = this->match(start - 1);
-        start = (before == RPAREN || before == RBRACK) && opener >= 0
+        start = (before == RPAREN
+                || before == RBRACK)
+            && opener >= 0
             ? opener : start - 1;
     }
     return start;
@@ -688,8 +744,7 @@ bool FormatDocument::isAccessLabel(int colon) const
     statement before them.
 */
 FormatDocument::Scope FormatDocument::classifyBrace(
-        int index,
-        Scope enclosing) const
+        int index, Scope enclosing) const
 {
     if (enclosing == EnumScope || enclosing == InitScope) {
         return InitScope;
@@ -716,8 +771,7 @@ FormatDocument::Scope FormatDocument::classifyBrace(
             for (++i; i < index; ++i) {
                 const Token inner = this->token(i);
                 depth += inner == LANGLE
-                    ? 1
-                    : (inner == RANGLE ? -1 : (inner == GTGT ? -2 : 0));
+                    ? 1 : (inner == RANGLE ? -1 : (inner == GTGT ? -2 : 0));
                 if (depth <= 0) {
                     break;
                 }
@@ -1046,8 +1100,30 @@ bool FormatDocument::isProtectedComment(int index) const
         return true;
     }
     const QByteArray text = this->commentText(index);
-    return text.contains("TRACE/") || text.contains("$QT_BEGIN_LICENSE")
-        || text.contains("SPDX-License-Identifier:") || text.startsWith("/****");
+    return text.startsWith("#!")
+        || text.contains("TRACE/")
+        || text.contains("$QT_BEGIN_LICENSE")
+        || text.contains("SPDX-License-Identifier:")
+        || text.startsWith("/****");
+}
+
+/*!
+    Builds the index in comments() of the first comment that starts at or
+    after @a offset, or the count of comments() when none does.
+*/
+int FormatDocument::commentAfter(int offset) const
+{
+    int low = 0;
+    int high = this->m_comments.size();
+    while (low < high) {
+        const int middle = low + (high - low) / 2;
+        if (this->m_comments.at(middle).offset < offset) {
+            low = middle + 1;
+        } else {
+            high = middle;
+        }
+    }
+    return low;
 }
 
 /*!
@@ -1055,9 +1131,51 @@ bool FormatDocument::isProtectedComment(int index) const
 */
 bool FormatDocument::hasCommentBetween(int from, int to) const
 {
-    for (int i = 0; i < this->m_comments.size(); ++i) {
-        const int offset = this->m_comments.at(i).offset;
-        if (offset >= from && offset < to) {
+    if (to <= from) {
+        return false;
+    }
+    const int first = this->commentAfter(from);
+    return first < this->m_comments.size()
+        && this->m_comments.at(first).offset < to;
+}
+
+/*!
+    Tells whether a protected comment starts between the offsets @a from
+    and @a to.
+*/
+bool FormatDocument::hasProtectedCommentBetween(int from, int to) const
+{
+    if (to <= from) {
+        return false;
+    }
+    for (int i = this->commentAfter(from); i < this->m_comments.size() && this->m_comments.at(i).offset < to; ++i)
+    {
+        if (this->isProtectedComment(i)) {
+            return true;
+        }
+    }
+    return false;
+}
+
+/*!
+    Tells whether any comment partially crosses either boundary of the
+    half-open byte range [@a from, @a to).
+*/
+bool FormatDocument::overlapsComment(int from, int to) const
+{
+    const int first = this->commentAfter(from);
+    if (first > 0) {
+        const FormatComment & previous = this->m_comments.at(first - 1);
+        if (previous.offset < from
+            && previous.offset + previous.length > from
+        ) {
+            return true;
+        }
+    }
+    for (int i = first; i < this->m_comments.size() && this->m_comments.at(i).offset < to; ++i)
+    {
+        const FormatComment & entry = this->m_comments.at(i);
+        if (entry.offset + entry.length > to) {
             return true;
         }
     }
@@ -1077,6 +1195,174 @@ bool FormatDocument::isOnlyWhitespace(int from, int to) const
         }
     }
     return true;
+}
+
+/*!
+    Tells whether [@a from, @a to) holds only horizontal whitespace (plus line
+    breaks when @a allowNewlines is set) and unprotected comments.
+*/
+bool FormatDocument::isCodeWhitespace(
+        int from, int to, bool allowNewlines) const
+{
+    int comment = this->commentAfter(from);
+    if (comment > 0
+        && this->m_comments.at(comment - 1).offset + this->m_comments.at(
+            comment - 1
+        ).length
+            > from
+    ) {
+        --comment;
+    }
+    int offset = from;
+    while (offset < to) {
+        while (comment < this->m_comments.size()
+            && this->m_comments.at(comment).offset + this->m_comments.at(comment).length
+                <= offset
+        ) {
+            ++comment;
+        }
+        if (comment < this->m_comments.size()
+            && this->m_comments.at(comment).offset <= offset
+            && ! this->isProtectedComment(comment)
+        ) {
+            const int end = qMin(
+                to,
+                this->m_comments.at(comment).offset
+                    + this->m_comments.at(comment).length
+            );
+            while (offset < end) {
+                const char c = this->m_text.at(offset);
+                if ( ! allowNewlines && (c == '\r' || c == '\n')) {
+                    return false;
+                }
+                ++offset;
+            }
+            continue;
+        }
+        const char c = this->m_text.at(offset);
+        if (c != ' '
+            && c != '\t'
+            && ( ! allowNewlines
+                || (c != '\r'
+                    && c != '\n')
+            )
+        ) {
+            return false;
+        }
+        ++offset;
+    }
+    return true;
+}
+
+/*!
+    Builds the slice [@a from, @a to) with unprotected comments hidden from
+    code layout: when @a keepWidth is set, comment bytes become spaces so
+    column widths stay intact; otherwise unprotected comments are omitted.
+*/
+QByteArray FormatDocument::codeSlice(int from, int to, bool keepWidth) const
+{
+    from = qBound(0, from, this->m_text.size());
+    to = qBound(from, to, this->m_text.size());
+    int comment = this->commentAfter(from);
+    if (comment > 0
+        && this->m_comments.at(comment - 1).offset + this->m_comments.at(
+            comment - 1
+        ).length
+            > from
+    ) {
+        --comment;
+    }
+    if (comment >= this->m_comments.size()
+        || this->m_comments.at(comment).offset >= to
+    ) {
+        return this->m_text.mid(from, to - from);
+    }
+
+    QByteArray result;
+    result.reserve(to - from);
+    int offset = from;
+    while (offset < to) {
+        while (comment < this->m_comments.size()
+            && this->m_comments.at(comment).offset + this->m_comments.at(comment).length
+                <= offset
+        ) {
+            ++comment;
+        }
+        if (comment >= this->m_comments.size()
+            || this->m_comments.at(comment).offset >= to
+        ) {
+            result += this->m_text.mid(offset, to - offset);
+            break;
+        }
+        const FormatComment & entry = this->m_comments.at(comment);
+        if (offset < entry.offset) {
+            result += this->m_text.mid(offset, entry.offset - offset);
+            offset = entry.offset;
+        }
+        const int end = qMin(to, entry.offset + entry.length);
+        if (this->isProtectedComment(comment)) {
+            result += this->m_text.mid(offset, end - offset);
+            offset = end;
+            continue;
+        }
+        if (keepWidth) {
+            for (; offset < end; ++offset) {
+                const char c = this->m_text.at(offset);
+                result += (c == '\r' || c == '\n') ? c : ' ';
+            }
+            continue;
+        }
+        const bool internalNewline =
+            this->m_text.mid(offset, end - offset).contains('\n');
+        if ( ! internalNewline
+            && end < to
+            && ! result.isEmpty()
+            && ! QByteArray(" \t\r\n([{").contains(
+                result.at(result.size() - 1))
+            && ! QByteArray(" \t\r\n)]},;").contains(this->m_text.at(end))
+        ) {
+            result += ' ';
+        }
+        if (internalNewline) {
+            for (int k = offset; k < end; ++k) {
+                const char c = this->m_text.at(k);
+                if (c == '\r' || c == '\n') {
+                    result += c;
+                }
+            }
+        }
+        offset = end;
+        if ( ! internalNewline
+            && ! result.isEmpty()
+            && (result.endsWith(' ')
+                || result.endsWith('\t'))
+        ) {
+            while (offset < to
+                && (this->m_text.at(offset) == ' '
+                    || this->m_text.at(offset) == '\t')
+            ) {
+                ++offset;
+            }
+        }
+    }
+    return result;
+}
+
+/*!
+    Builds the 1-based @a line with unprotected comments replaced by spaces,
+    keeping line width unchanged while hiding comment text from line checks.
+*/
+QByteArray FormatDocument::codeLineText(int line) const
+{
+    if (line < 1 || line > this->m_lineStarts.size()) {
+        return QByteArray();
+    }
+    const int start = this->lineStart(line);
+    int end = this->lineEnd(line);
+    if (end > start && this->m_text.at(end - 1) == '\r') {
+        --end;
+    }
+    return this->codeSlice(start, end, true);
 }
 
 /*!
@@ -1121,52 +1407,7 @@ bool FormatDocument::isFormattingDisabled(int offset) const
     return low > 0 && offset < m_disabledRanges.at(low - 1).second;
 }
 
-/*!
-    Queues the replacement of the @a length bytes at @a offset with @a text,
-    and returns whether it was queued: an edit on a line that is not selected,
-    or one that overlaps an edit queued before it, is dropped (a later pass of
-    the rule may make it once the queued edits are applied).
-*/
-bool FormatDocument::replace(int offset, int length, const QByteArray & text)
-{
-    if ( ! this->canReplace(offset, length)) {
-        return false;
-    }
-    this->m_edits.append(Edit(offset, length, text));
-    return true;
-}
-
-/*!
-    Queues two replacements that only make sense together, such as a token
-    removed from one line and put on the next one: the @a length bytes at
-    @a offset with @a text, and the @a otherLength bytes at @a otherOffset
-    with @a otherText. Returns whether both were queued: neither one is when
-    either would be dropped (see the one-edit replace()), or when they overlap.
-*/
-bool FormatDocument::replace(
-        int offset, int length, const QByteArray & text,
-        int otherOffset, int otherLength,
-        const QByteArray & otherText)
-{
-    const bool apart = offset + length <= otherOffset
-        || otherOffset + otherLength <= offset;
-    if ( ! apart || (offset == otherOffset && length == 0 && otherLength == 0)
-        || ! this->canReplace(offset, length)
-        || ! this->canReplace(otherOffset, otherLength)
-    ) {
-        return false;
-    }
-    this->m_edits.append(Edit(offset, length, text));
-    this->m_edits.append(Edit(otherOffset, otherLength, otherText));
-    return true;
-}
-
-/*!
-    Tells whether an edit of the @a length bytes at @a offset may be queued:
-    its line is selected, and it overlaps no edit queued before it (two
-    insertions at the same offset count as overlapping).
-*/
-bool FormatDocument::canReplace(int offset, int length) const
+bool FormatDocument::isOffsetEditable(int offset, int length) const
 {
     if ( ! this->isLineSelected(this->lineOf(offset))) {
         return false;
@@ -1182,8 +1423,10 @@ bool FormatDocument::canReplace(int offset, int length) const
         }
     }
     if (low < m_inlineRanges.size()) {
-        const QPair<int, int > &range = m_inlineRanges.at(low);
-        if ((length == 0 && offset > range.first && offset < range.second)
+        const QPair<int, int > & range = m_inlineRanges.at(low);
+        if ((length == 0
+                && offset > range.first
+                && offset < range.second)
             || (length > 0
                 && offset < range.second
                 && offset + length > range.first)
@@ -1191,15 +1434,254 @@ bool FormatDocument::canReplace(int offset, int length) const
             return false;
         }
     }
-    for (int i = 0; i < this->m_edits.size(); ++i) {
-        const Edit & edit = this->m_edits.at(i);
-        const bool apart = offset + length <= edit.offset || edit.offset
-            + edit.length <= offset;
-        const bool sameInsertion = length == 0 && edit.length == 0
-            && offset == edit.offset;
-        if ( ! apart || sameInsertion) {
-            return false;
+    return true;
+}
+
+/*!
+    Tells whether [@a offset, @a offset + @a length) lies on a selected line
+    and outside disabled or inline-configuration ranges.
+*/
+bool FormatDocument::isSpanEditable(int offset, int length) const
+{
+    if (offset < 0 || length < 0 || offset > m_text.size() - length) {
+        return false;
+    }
+    if (this->isFormattingDisabled(offset)
+        || (length > 0
+            && this->isFormattingDisabled(offset + length - 1))
+    ) {
+        return false;
+    }
+    return this->isOffsetEditable(offset, length);
+}
+
+/*!
+    Replaces the buffer with @a text after code formatting finishes and
+    optionally refreshes tokens and comments once for comment checks.
+*/
+void FormatDocument::resetTextAndAnalyze(
+        const QByteArray & text, bool reanalyze)
+{
+    if (m_text == text) {
+        return;
+    }
+    m_text = text;
+    m_ruleCaches.clear();
+    m_commentChanged = false;
+    if (reanalyze) {
+        this->analyze();
+        if (text.contains("Format rule") || text.contains('@')) {
+            QString ignoredError;
+            this->setInlineConfiguration(m_config, &ignoredError);
         }
+    }
+}
+
+void FormatDocument::spliceTextKeepTokens(
+        int offset, int length, const QByteArray & text)
+{
+    if (offset < 0 || length < 0 || offset > m_text.size() - length) {
+        return;
+    }
+    if (m_text.mid(offset, length) == text) {
+        return;
+    }
+
+    const int line = this->lineOf(offset);
+    const int oldLineStart = this->lineStart(line);
+    const int oldEnd = offset + length;
+    const int deltaBytes = text.size() - length;
+    const int removedNewlines = m_text.mid(offset, length).count('\n');
+    const int deltaLines = text.count('\n') - removedNewlines;
+
+    m_text.replace(offset, length, text);
+
+    // Updates line starts around `[offset, offset + text.size())` without
+    // scanning the full file again.
+    QVector<int > insertedStarts;
+    for (int i = 0; i < text.size(); ++i) {
+        if (text.at(i) == '\n') {
+            insertedStarts.append(offset + i + 1);
+        }
+    }
+    if (removedNewlines > 0 && line < m_lineStarts.size()) {
+        const int eraseCount = qMin(
+            removedNewlines,
+            m_lineStarts.size() - line
+        );
+        m_lineStarts.remove(line, eraseCount);
+    }
+    for (int i = 0; i < insertedStarts.size(); ++i) {
+        m_lineStarts.insert(line + i, insertedStarts.at(i));
+    }
+    for (int k = line + insertedStarts.size(); k < m_lineStarts.size(); ++k) {
+        m_lineStarts[k] += deltaBytes;
+    }
+
+    if (deltaLines != 0) {
+        const int symLinePos = (offset == oldLineStart && deltaLines > 0)
+            ? line : qMin(line + 1, m_lineFirstSymbols.size());
+        if (deltaLines > 0) {
+            m_lineFirstSymbols.insert(symLinePos, deltaLines, -1);
+            m_lineLastSymbols.insert(symLinePos, deltaLines, -1);
+            m_directiveLines.insert(symLinePos, deltaLines, false);
+        } else {
+            const int eraseAt = qMin(line + 1, m_lineFirstSymbols.size());
+            const int count = qMin(
+                -deltaLines,
+                m_lineFirstSymbols.size() - eraseAt
+            );
+            if (count > 0) {
+                m_lineFirstSymbols.remove(eraseAt, count);
+                m_lineLastSymbols.remove(eraseAt, count);
+                m_directiveLines.remove(eraseAt, count);
+            }
+        }
+        const int shiftLine = (offset == oldLineStart) ? line - 1 : line;
+        for (int r = 0; r < m_ranges.size(); ++r) {
+            QPair<int, int > *range = &(m_ranges[r]);
+            if (shiftLine < range->first) {
+                range->first += deltaLines;
+                range->second += deltaLines;
+            } else if (shiftLine <= range->second) {
+                range->second += deltaLines;
+            }
+        }
+        FormatDocument::shiftIssues(&m_issues, shiftLine, deltaLines);
+        FormatDocument::shiftIssues(&m_requests, shiftLine, deltaLines);
+    }
+
+    for (int s = 0; s < m_symbols.size(); ++s) {
+        Symbol *sym = &(m_symbols[s]);
+        sym->source = m_text;
+        if (sym->from >= oldEnd || (length == 0 && sym->from >= offset)) {
+            sym->from += deltaBytes;
+            sym->lineNum += deltaLines;
+        }
+    }
+
+    for (int c = 0; c < m_comments.size(); ++c) {
+        FormatComment *comment = &(m_comments[c]);
+        if (comment->offset >= oldEnd
+            || (length == 0
+                && comment->offset >= offset)
+        ) {
+            comment->offset += deltaBytes;
+        } else if (comment->offset <= offset
+            && oldEnd <= comment->offset + comment->length
+        ) {
+            comment->length += deltaBytes;
+        }
+    }
+
+    for (int i = 0; i < m_fileConfigRegions.size(); ++i) {
+        if (m_fileConfigRegions.at(i).first >= oldEnd
+            || (length == 0
+                && m_fileConfigRegions.at(i).first >= offset)
+        ) {
+            m_fileConfigRegions[i].first += deltaBytes;
+        }
+    }
+    QVector<QPair<int, int > > *inlineLists[] =
+        { &m_inlineRanges, &m_disabledRanges };
+    for (int l = 0; l < 2; ++l) {
+        for (int i = 0; i < inlineLists[l]->size(); ++i) {
+            QPair<int, int > *range = &((*inlineLists[l])[i]);
+            if (range->first > offset
+                || (range->first == offset
+                    && length == 0)
+            ) {
+                range->first += deltaBytes;
+            }
+            if (range->second >= oldEnd) {
+                range->second += deltaBytes;
+            }
+        }
+    }
+    m_ruleCaches.clear();
+    m_commentChanged = true;
+}
+
+/*!
+    Rewrites the @a length bytes inside a comment at @a offset with @a text
+    without queueing delayed edits or re-lexing C++ code tokens.
+*/
+bool FormatDocument::rewriteCommentSpan(
+        int offset, int length, const QByteArray & text)
+{
+    if ( ! this->isOffsetEditable(offset, length)) {
+        return false;
+    }
+    if (m_text.mid(offset, length) == text) {
+        return false;
+    }
+    this->spliceTextKeepTokens(offset, length, text);
+    return true;
+}
+
+/*!
+    Moves a trailing comment removed at @a removeFrom .. @a removeLength onto
+    its own line at @a insertOffset as @a leadingLine without re-lexing code.
+*/
+bool FormatDocument::promoteTrailingComment(
+        int removeFrom,
+        int removeLength,
+        int insertOffset,
+        const QByteArray & leadingLine)
+{
+    if (insertOffset > removeFrom
+        || ! this->isOffsetEditable(removeFrom, removeLength)
+        || ! this->isOffsetEditable(insertOffset, 0)
+    ) {
+        return false;
+    }
+    int movedIndex = -1;
+    for (int i = 0; i < m_comments.size(); ++i) {
+        const FormatComment & c = m_comments.at(i);
+        if (c.offset >= removeFrom
+            && c.offset < removeFrom + removeLength
+        ) {
+            movedIndex = i;
+            break;
+        }
+    }
+    if (movedIndex < 0) {
+        return false;
+    }
+    const FormatComment::Kind movedKind = m_comments.at(movedIndex).kind;
+    this->spliceTextKeepTokens(removeFrom, removeLength, QByteArray());
+
+    // Parks the removed entry at `insertOffset` before splicing the
+    // leading line so later offset shifts do not double-count it, then
+    // places it in order.
+    m_comments[movedIndex].offset = insertOffset;
+    m_comments[movedIndex].length = 0;
+    this->spliceTextKeepTokens(insertOffset, 0, leadingLine);
+
+    int ws = 0;
+    while (ws < leadingLine.size()
+        && (leadingLine.at(ws) == ' '
+            || leadingLine.at(ws) == '\t')
+    ) {
+        ++ws;
+    }
+    int cleanLen = leadingLine.size() - ws;
+    while (cleanLen > 0
+        && (leadingLine.at(ws + cleanLen - 1) == '\n'
+            || leadingLine.at(ws + cleanLen - 1) == '\r')
+    ) {
+        --cleanLen;
+    }
+    m_comments[movedIndex].offset = insertOffset + ws;
+    m_comments[movedIndex].length = cleanLen;
+    m_comments[movedIndex].kind = movedKind;
+    m_comments[movedIndex].trailing = false;
+    while (movedIndex > 0
+        && m_comments.at(movedIndex - 1).offset
+            > m_comments.at(movedIndex).offset
+    ) {
+        m_comments.swap(movedIndex - 1, movedIndex);
+        --movedIndex;
     }
     return true;
 }
@@ -1209,8 +1691,11 @@ bool FormatDocument::canReplace(int offset, int length) const
     own, with @a message, which prints to the error output when @a isError
     is set; an issue on a line that is not selected is dropped.
 */
-void FormatDocument::report(int offset, const char *rule,
-                            const QString & message, bool isError)
+void FormatDocument::report(
+        int offset,
+        const char *rule,
+        const QString & message,
+        bool isError)
 {
     const int line = this->lineOf(offset);
     if (this->isFormattingDisabled(offset)
@@ -1228,18 +1713,17 @@ void FormatDocument::report(int offset, const char *rule,
     the @a lineCount lines from the one at @a offset, as the rule @a rule
     names, each line within @a columnLimit columns when it is not 0; a
     request already asked for the same lines is not asked again.
-
-    A request outlives the passes of its rule, unlike an issue, which the
-    next pass reports again: it often concerns a change the rule made, which
-    no later pass sees to ask about again. Its lines move with the edits that
-    later rules make (see applyEdits()).
 */
 void FormatDocument::request(
-        int offset, const char *rule, const QString & message,
-        int lineCount, int columnLimit)
+        int offset,
+        const char *rule,
+        const QString & message,
+        int lineCount,
+        int columnLimit)
 {
     const int line = this->lineOf(offset);
-    if ( ! this->m_agentMode || this->isFormattingDisabled(offset)
+    if ( ! this->m_agentMode
+        || this->isFormattingDisabled(offset)
         || ! this->isLineSelected(line)
     ) {
         return;
@@ -1253,7 +1737,8 @@ void FormatDocument::request(
     );
     for (int i = 0; i < this->m_requests.size(); ++i) {
         const FormatIssue & other = this->m_requests.at(i);
-        if (other.line == asked.line && other.rule == asked.rule
+        if (other.line == asked.line
+            && other.rule == asked.rule
             && other.message == asked.message
         ) {
             return;
@@ -1273,140 +1758,6 @@ void FormatDocument::truncateIssues(int count)
 }
 
 /*!
-    Orders @a edits from the last offset to the first, with a replacement
-    before an insertion at the same offset.
-*/
-void FormatDocument::sortEdits(QList<Edit > *edits)
-{
-    for (int i = 1; i < edits->size(); ++i) {
-        for (int j = i; j > 0
-            && (edits->at(j - 1).offset < edits->at(j).offset
-                || (edits->at(j - 1).offset == edits->at(j).offset
-                    && edits->at(j - 1).length < edits->at(j).length)); --j)
-        {
-            edits->swap(j - 1, j);
-        }
-    }
-}
-
-/*!
-    Applies the queued edits, moves the selected line ranges and the issues
-    along with the lines that the edits add or remove, then tokenizes the new
-    text; returns whether any edit changed the text.
-*/
-bool FormatDocument::applyEdits()
-{
-    if (this->m_edits.isEmpty()) {
-        const bool changed = m_editorChanged;
-        m_editorChanged = false;
-        return changed;
-    }
-
-    // Applies the edits from the last one to the first one, so that each
-    // offset still points into the text it was found in.
-    QList<Edit > edits = this->m_edits;
-    this->m_edits.clear();
-    FormatDocument::sortEdits(&edits);
-    QByteArray text = this->m_text;
-    for (int i = 0; i < edits.size(); ++i) {
-        const Edit & edit = edits.at(i);
-        const int line = this->lineOf(edit.offset);
-        const int delta = edit.text.count('\n')
-            - this->m_text.mid(edit.offset, edit.length).count('\n');
-        text.replace(edit.offset, edit.length, edit.text);
-        if (delta == 0) {
-            continue;
-        }
-
-        // Moves the ranges and the issues below the edit.
-        for (int r = 0; r < this->m_ranges.size(); ++r) {
-            QPair<int, int > *range = &(this->m_ranges[r]);
-            if (line < range->first) {
-                range->first += delta;
-                range->second += delta;
-            } else if (line <= range->second) {
-                range->second += delta;
-            }
-        }
-        FormatDocument::shiftIssues(&this->m_issues, line, delta);
-        FormatDocument::shiftIssues(&this->m_requests, line, delta);
-    }
-
-    const bool changed = m_editorChanged || text != this->m_text;
-    m_editorChanged = false;
-    this->m_text = text;
-    this->analyze();
-
-    if (m_inlineConfigured) {
-        this->moveInlineConfiguration(edits);
-    }
-    return changed;
-}
-
-/*!
-    Moves the offsets that setInlineConfiguration() found by @a edits (each
-    one against the text before any of them); the rules' caches go with the
-    old text.
-
-    No edit changes a configuration comment, or a part where formatting is
-    off, as replace() refuses one inside a protected range (see
-    canReplace()); hence the configuration itself stays as it was, and only
-    moves with the text around it.
-*/
-void FormatDocument::moveInlineConfiguration(const QList<Edit > & edits)
-{
-    for (int i = 0; i < m_fileConfigRegions.size(); ++i) {
-        int *offset = &(m_fileConfigRegions[i].first);
-        *offset = FormatDocument::movedOffset(*offset, false, edits);
-    }
-    QVector<QPair<int, int > > *ranges[] = {
-        &m_inlineRanges,
-        &m_disabledRanges
-    };
-    for (int k = 0; k < 2; ++k) {
-        for (int i = 0; i < ranges[k]->size(); ++i) {
-            QPair<int, int > *range = &((*ranges[k])[i]);
-            range->first = FormatDocument::movedOffset(
-                range->first,
-                true,
-                edits
-            );
-            range->second = FormatDocument::movedOffset(
-                range->second,
-                false,
-                edits
-            );
-        }
-    }
-    m_ruleCaches.clear();
-}
-
-/*!
-    Builds @a offset moved by the edits of @a edits that end before it,
-    each by the bytes it adds or removes. A text inserted right at
-    @a offset comes before a part that starts there, when @a isStart is
-    set, and after a part that ends there, else.
-*/
-int FormatDocument::movedOffset(
-        int offset, bool isStart, const QList<Edit > & edits)
-{
-    int moved = offset;
-    for (int i = 0; i < edits.size(); ++i) {
-        const Edit & edit = edits.at(i);
-        const int end = edit.offset + edit.length;
-        if (end < offset
-            || (end == offset
-                && (edit.length > 0
-                    || isStart)
-            )
-        ) {
-            moved += edit.text.size() - edit.length;
-        }
-    }
-    return moved;
-}
-
-/*!
     Starts the pass @a pass of a rule over the document (0 for the first
     one); the first pass also forgets the lines that the previous rule's
     replacements took (see onSetting()).
@@ -1422,19 +1773,11 @@ void FormatDocument::setPass(int pass)
 /*!
     Builds the spacing to follow at the token at @a index for @a setting; a
     null spacing (see FormatSpacing::isNull()) means a replacement by
-    regular expression took the token's line, hence the caller skips it.
-    Otherwise the result is never null: @a setting itself, or, for a choice
-    by regular expression whose pattern matches nothing on that line, its
-    fallback (such as `keep-as-is`).
-
-    Only the first pass of a rule (see pass()) runs a replacement, on each
-    line whose text the pattern matches; a later pass leaves exactly those
-    lines to it. Hence the fallback never changes a replaced line again, and
-    a pattern that matches its own result runs once.
+    regular expression took the token's line (stored into @a replacedLine when
+    non-null), hence the caller skips it.
 */
 FormatSpacing FormatDocument::onSetting(
-        const FormatSpacing & setting,
-        int index)
+        const FormatSpacing & setting, int index, QByteArray *replacedLine)
 {
     if ( ! setting.isRegExp()) {
         return setting;
@@ -1458,8 +1801,8 @@ FormatSpacing FormatDocument::onSetting(
         setting.pattern,
         decoded
     );
-    if (replaced != decoded) {
-        this->replace(this->lineStart(line), text.size(), replaced.toUtf8());
+    if (replaced != decoded && replacedLine) {
+        *replacedLine = replaced.toUtf8();
     }
     this->m_replacedLines.insert(line);
     return FormatSpacing();
@@ -1471,8 +1814,7 @@ FormatSpacing FormatDocument::onSetting(
     or shrinks with it.
 */
 void FormatDocument::shiftIssues(
-        QList<FormatIssue > *issues, int line,
-        int delta)
+        QList<FormatIssue > *issues, int line, int delta)
 {
     for (int k = 0; k < issues->size(); ++k) {
         FormatIssue *issue = &((*issues)[k]);
@@ -1493,8 +1835,12 @@ void FormatDocument::shiftIssues(
 bool FormatDocument::isHeader() const
 {
     const QString suffix = QFileInfo(this->m_path).suffix().toLower();
-    return suffix.isEmpty() || suffix == QLL("h") || suffix == QLL("hh") || suffix == QLL("hpp")
-        || suffix == QLL("hxx") || suffix == QLL("h++");
+    return suffix.isEmpty()
+        || suffix == QLL("h")
+        || suffix == QLL("hh")
+        || suffix == QLL("hpp")
+        || suffix == QLL("hxx")
+        || suffix == QLL("h++");
 }
 
 /*!
@@ -1529,420 +1875,11 @@ QStringList FormatDocument::quotedIncludes() const
         QString(QLL("^\\s*#\\s*include\\s*\"([^\"]+)\"")),
         QRegularExpression::MultilineOption
     );
-    QRegularExpressionMatchIterator found =
-        include.globalMatch(QString::fromUtf8(this->m_text));
+    QRegularExpressionMatchIterator found = include.globalMatch(
+        QString::fromUtf8(this->m_text)
+    );
     while (found.hasNext()) {
         names << found.next().captured(1);
     }
     return names;
-}
-
-/*!
-    Backs up the half-open byte range [@a start, @a end) for code edits.
-    The editor publishes its changes on apply() or scope exit. Token and
-    byte offsets in the editor refer to the document at construction.
-*/
-CodeEditor FormatDocument::edit(int start, int end)
-{
-    return CodeEditor(this, start, end);
-}
-
-/*!
-    Builds a private working copy with comments hidden from code helpers.
-
-    Comment bytes become spaces while newlines and token offsets stay in
-    place. Their widths still count when a layout measures a line. Protected
-    comments remain visible and retain their usual edit restrictions.
-*/
-CodeEditor::CodeEditor(FormatDocument *document, int start, int end)
-    : m_target(document), m_backup(*document), m_original(document->text())
-    , m_start(start), m_end(end)
-{
-    m_backup.m_edits.clear();
-    m_backup.m_editorChanged = false;
-    if (start < 0 || end < start || end > m_original.size()) {
-        m_target = Q_NULLPTR;
-        return;
-    }
-    QList<FormatComment > visible;
-    for (int index = 0; index < document->comments().size(); ++index) {
-        const FormatComment &comment = document->comments().at(index);
-        if (comment.offset < start || comment.offset + comment.length > end
-            || document->isProtectedComment(index))
-        {
-            visible.append(comment);
-            continue;
-        }
-        m_comments.append(comment);
-        for (int offset = comment.offset;
-             offset < comment.offset + comment.length; ++offset)
-        {
-            if (m_backup.m_text.at(offset) != '\n'
-                && m_backup.m_text.at(offset) != '\r')
-            {
-                m_backup.m_text[offset] = ' ';
-            }
-        }
-    }
-    m_backup.m_comments = visible;
-}
-
-/*!
-    Transfers publication ownership so that only one editor applies a copy.
-*/
-CodeEditor::CodeEditor(CodeEditor &&other)
-    : m_target(other.m_target), m_backup(qMove(other.m_backup))
-    , m_original(qMove(other.m_original)), m_comments(qMove(other.m_comments))
-    , m_start(other.m_start), m_end(other.m_end)
-{
-    other.m_target = Q_NULLPTR;
-}
-
-/*!
-    Publishes any edits left in the working copy.
-*/
-CodeEditor::~CodeEditor()
-{
-    this->apply();
-}
-
-/*!
-    Restores comments between their neighboring code tokens in a replacement.
-    Line comments retain a newline, and comment-only lines follow the indent
-    of the code below them. Comment contents are copied byte for byte.
-*/
-QByteArray CodeEditor::restore(
-        int offset, int length, const QByteArray &requested) const
-{
-    QList<FormatComment > comments;
-    for (int index = 0; index < m_comments.size(); ++index) {
-        const FormatComment &comment = m_comments.at(index);
-        if (comment.offset >= offset
-            && comment.offset + comment.length <= offset + length)
-        {
-            comments.append(comment);
-        }
-    }
-    if (comments.isEmpty()) {
-        return requested;
-    }
-    QByteArray text = requested;
-    const FormatDocument provided(requested);
-    QList<FormatComment > unmatched = comments;
-    for (int index = provided.comments().size() - 1; index >= 0; --index) {
-        const FormatComment &candidate = provided.comments().at(index);
-        for (int original = unmatched.size() - 1; original >= 0; --original) {
-            const FormatComment &comment = unmatched.at(original);
-            if (requested.mid(candidate.offset, candidate.length)
-                == m_original.mid(comment.offset, comment.length))
-            {
-                text.remove(candidate.offset, candidate.length);
-                unmatched.removeAt(original);
-                break;
-            }
-        }
-    }
-    const FormatDocument before(m_backup.text().mid(offset, length));
-    const FormatDocument after(text);
-    QVector<int > destinations(before.symbols().size(), -1);
-    QVector<QByteArray > beforeTokens;
-    QVector<QByteArray > afterTokens;
-    for (int index = 0; index < before.symbols().size(); ++index) {
-        beforeTokens.append(before.lexem(index));
-    }
-    for (int index = 0; index < after.symbols().size(); ++index) {
-        afterTokens.append(after.lexem(index));
-    }
-    int prefix = 0;
-    while (prefix < beforeTokens.size() && prefix < afterTokens.size()
-        && beforeTokens.at(prefix) == afterTokens.at(prefix))
-    {
-        destinations[prefix] = prefix;
-        ++prefix;
-    }
-    int beforeEnd = beforeTokens.size();
-    int afterEnd = afterTokens.size();
-    while (beforeEnd > prefix && afterEnd > prefix
-        && beforeTokens.at(beforeEnd - 1) == afterTokens.at(afterEnd - 1))
-    {
-        destinations[--beforeEnd] = --afterEnd;
-    }
-    const int beforeCount = beforeEnd - prefix;
-    const int afterCount = afterEnd - prefix;
-    QVector<QVector<int > > shared(beforeCount + 1, QVector<int >(afterCount + 1, 0));
-    for (int beforeIndex = beforeCount - 1; beforeIndex >= 0; --beforeIndex) {
-        for (int afterIndex = afterCount - 1; afterIndex >= 0; --afterIndex) {
-            shared[beforeIndex][afterIndex] = beforeTokens.at(prefix + beforeIndex)
-                == afterTokens.at(prefix + afterIndex)
-                    ? shared.at(beforeIndex + 1).at(afterIndex + 1) + 1
-                    : qMax(shared.at(beforeIndex + 1).at(afterIndex),
-                           shared.at(beforeIndex).at(afterIndex + 1));
-        }
-    }
-    int beforeIndex = 0;
-    int afterIndex = 0;
-    while (beforeIndex < beforeCount && afterIndex < afterCount) {
-        if (beforeTokens.at(prefix + beforeIndex) == afterTokens.at(prefix + afterIndex)) {
-            destinations[prefix + beforeIndex++] = prefix + afterIndex++;
-        } else if (shared.at(beforeIndex + 1).at(afterIndex)
-                   >= shared.at(beforeIndex).at(afterIndex + 1))
-        {
-            ++beforeIndex;
-        } else {
-            ++afterIndex;
-        }
-    }
-    QMap<int, QList<FormatComment > > gaps;
-    for (int index = 0; index < comments.size(); ++index) {
-        const FormatComment &comment = comments.at(index);
-        int following = 0;
-        while (following < before.symbols().size()
-            && before.symbols().at(following).from < comment.offset - offset)
-        {
-            ++following;
-        }
-        int gap = after.symbols().size();
-        if (comment.trailing && following > 0
-            && destinations.at(following - 1) >= 0)
-        {
-            gap = destinations.at(following - 1) + 1;
-        } else {
-            for (int token = following; token < destinations.size(); ++token) {
-                if (destinations.at(token) >= 0) {
-                    gap = destinations.at(token);
-                    break;
-                }
-            }
-        }
-        gaps[gap].append(comment);
-    }
-    QByteArray restored = text;
-    QMap<int, QList<FormatComment > >::const_iterator gap = gaps.constEnd();
-    while (gap != gaps.constBegin()) {
-        --gap;
-        const int beforeEnd = gap.key() > 0 ? after.symbolEnd(gap.key() - 1) : 0;
-        const int afterStart = gap.key() < after.symbols().size()
-            ? after.symbols().at(gap.key()).from : text.size();
-        const QByteArray whitespace = text.mid(beforeEnd, afterStart - beforeEnd);
-        const int newline = whitespace.lastIndexOf('\n');
-        QByteArray padding = newline >= 0 ? whitespace.mid(newline + 1)
-            : after.indentOf(after.lineOf(afterStart));
-        if (after.lineOf(afterStart) == 1 && newline < 0) {
-            padding = m_target->indentOf(m_target->lineOf(offset));
-        }
-        const int outside = m_backup.symbolAfter(offset + length);
-        const bool tokenAtEnd = gap.key() == after.symbols().size()
-            && outside < m_backup.symbols().size()
-            && m_backup.symbols().at(outside).from == offset + length;
-        if (tokenAtEnd && newline < 0) {
-            padding = m_target->indentOf(m_target->symbolLine(outside));
-        }
-        QByteArray replacement;
-        for (int index = 0; index < gap.value().size(); ++index) {
-            const FormatComment &comment = gap.value().at(index);
-            QByteArray body = m_original.mid(comment.offset, comment.length);
-            const int commentEnd = comment.offset + comment.length;
-            const bool followingContent = gap.key() < after.symbols().size()
-                || index + 1 < gap.value().size();
-            const QByteArray trailing = m_original.mid(commentEnd, offset + length - commentEnd);
-            const bool atRangeEnd = ! followingContent
-                && ! trailing.contains('\n') && trailing.trimmed().isEmpty();
-            const bool newlineOutside = atRangeEnd
-                && offset + length < m_original.size()
-                && (m_original.at(offset + length) == '\n'
-                    || (offset + length + 1 < m_original.size()
-                        && m_original.at(offset + length) == '\r'
-                        && m_original.at(offset + length + 1) == '\n'));
-            const bool eofOutside = atRangeEnd
-                && offset + length == m_original.size();
-            if (comment.isLine() && body.endsWith('\r')
-                && ! newlineOutside && commentEnd < m_original.size()
-                && m_original.at(commentEnd) == '\n')
-            {
-                body.chop(1);
-            }
-            const int lineEnd = m_backup.lineEnd(
-                m_backup.lineOf(comment.offset + comment.length - 1));
-            const int newlineOffset = lineEnd < m_original.size()
-                ? lineEnd : m_original.lastIndexOf('\n', comment.offset - 1);
-            const bool crlf = newlineOffset > 0 && m_original.at(newlineOffset - 1) == '\r';
-            const QByteArray lineBreak = crlf && ! (comment.isLine() && body.endsWith('\r'))
-                ? "\r\n" : "\n";
-            const int following = m_backup.symbolAfter(comment.offset + comment.length);
-            const int preceding = m_backup.symbolAfter(comment.offset) - 1;
-            const bool alone = ! comment.trailing
-                && (following == m_backup.symbols().size()
-                    || m_backup.symbolLine(following)
-                        > m_backup.lineOf(comment.offset + comment.length - 1));
-            const bool leads = ( ! comment.trailing && ! alone)
-                || ( ! comment.isLine() && preceding >= 0
-                    && m_backup.token(preceding) == LPAREN
-                    && m_backup.symbolEnd(preceding) == comment.offset)
-                || ( ! comment.isLine() && preceding >= 0
-                    && m_backup.token(preceding) == COMMA
-                    && following < m_backup.symbols().size()
-                    && m_backup.symbolLine(following)
-                        == m_backup.lineOf(comment.offset + comment.length - 1));
-            if (leads && replacement.isEmpty()) {
-                const bool nextToOpen = comment.offset > 0
-                    && m_original.at(comment.offset - 1) == '('
-                    && gap.key() > 0 && after.token(gap.key() - 1) == LPAREN;
-                replacement = newline >= 0 ? whitespace
-                    : nextToOpen ? QByteArray() : QByteArray(" ");
-            }
-            if (alone) {
-                if (replacement.isEmpty()) {
-                    if (newline >= 0) {
-                        replacement = whitespace.left(newline + 1) + padding;
-                    } else if (beforeEnd == 0 && gap.key() == 0
-                        && m_backup.lineOf(offset) == m_backup.lineOf(comment.offset))
-                    {
-                        const int existing = offset - m_backup.lineStart(m_backup.lineOf(offset));
-                        replacement = padding.mid(qMin(existing, padding.size()));
-                    } else {
-                        replacement = lineBreak + padding;
-                    }
-                } else if ( ! replacement.endsWith(padding) || ! replacement.contains('\n')) {
-                    replacement += lineBreak + padding;
-                }
-            } else if ( ! leads && (replacement.isEmpty() || ! replacement.endsWith(' '))) {
-                replacement += ' ';
-            }
-            replacement += body;
-            if (newlineOutside && trailing.endsWith('\r') && ! body.endsWith('\r')) {
-                replacement += '\r';
-            }
-            const bool needsNewline = followingContent || newline >= 0
-                || (lineEnd < m_original.size() && m_original.at(lineEnd) == '\n');
-            if ((comment.isLine() || alone) && needsNewline && ! newlineOutside) {
-                replacement += lineBreak;
-                if (followingContent || tokenAtEnd) {
-                    replacement += padding;
-                }
-            } else if ( ! comment.isLine() && ! alone
-                && ! newlineOutside && ! eofOutside
-            ) {
-                replacement += ' ';
-            }
-        }
-        if (newline >= 0 && ! replacement.contains('\n')) {
-            replacement = replacement.trimmed();
-            replacement.prepend(' ');
-            replacement += whitespace;
-        } else if (newline < 0 && gap.key() < after.symbols().size()
-            && ! replacement.contains('\n')
-            && (after.token(gap.key()) == COMMA
-                || after.token(gap.key()) == RPAREN
-                || after.token(gap.key()) == SEMIC))
-        {
-            while (replacement.endsWith(' ')) {
-                replacement.chop(1);
-            }
-        }
-        restored.replace(beforeEnd, afterStart - beforeEnd, replacement);
-    }
-    return restored;
-}
-
-/*!
-    Publishes the working edits together, then closes the editor. A stale
-    target or an edit outside the backed-up range rejects the whole batch.
-    Repeated calls and destruction after apply() do nothing.
-*/
-bool CodeEditor::apply()
-{
-    if ( ! m_target) {
-        return false;
-    }
-    FormatDocument *target = m_target;
-    if (target->text() != m_original) {
-        m_target = Q_NULLPTR;
-        return false;
-    }
-    QList<FormatDocument::Edit > edits = m_backup.m_edits;
-    if (edits.isEmpty()) {
-        target->m_issues = m_backup.m_issues;
-        target->m_requests = m_backup.m_requests;
-        target->m_replacedLines = m_backup.m_replacedLines;
-        target->m_ruleCaches = m_backup.m_ruleCaches;
-        m_target = Q_NULLPTR;
-        return false;
-    }
-    bool movedComments = false;
-    for (int index = 0; index < edits.size(); ++index) {
-        FormatDocument::Edit &edit = edits[index];
-        if (edit.offset < m_start || edit.length < 0
-            || edit.offset > m_end - edit.length
-            || ! target->canReplace(edit.offset, edit.length))
-        {
-            m_target = Q_NULLPTR;
-            return false;
-        }
-        for (int comment = 0; comment < m_comments.size(); ++comment) {
-            const FormatComment &entry = m_comments.at(comment);
-            if (entry.offset >= edit.offset
-                && entry.offset + entry.length <= edit.offset + edit.length)
-            {
-                movedComments = true;
-            }
-            if ((edit.offset > entry.offset
-                    && edit.offset < entry.offset + entry.length)
-                || (edit.offset + edit.length > entry.offset
-                    && edit.offset + edit.length < entry.offset + entry.length))
-            {
-                m_target = Q_NULLPTR;
-                return false;
-            }
-        }
-        edit.text = this->restore(edit.offset, edit.length, edit.text);
-    }
-    m_target = Q_NULLPTR;
-    // Keeps unrelated queued edits until the document applies them.
-    QList<FormatDocument::Edit > pending = target->m_edits;
-    FormatDocument::sortEdits(&pending);
-    target->m_edits = edits;
-    target->m_issues = m_backup.m_issues;
-    target->m_requests = m_backup.m_requests;
-    target->m_replacedLines = m_backup.m_replacedLines;
-    target->m_ruleCaches = m_backup.m_ruleCaches;
-    const bool earlierChange = target->m_editorChanged;
-    target->m_editorChanged = false;
-    bool changed = target->applyEdits();
-    for (int index = 0; index < pending.size(); ++index) {
-        pending[index].offset = FormatDocument::movedOffset(
-            pending.at(index).offset, pending.at(index).length > 0, edits);
-    }
-    target->m_edits = pending;
-    const int end = FormatDocument::movedOffset(m_end, false, edits);
-    for (int index = 0; movedComments && index < target->comments().size(); ++index) {
-        const FormatComment &comment = target->comments().at(index);
-        if (comment.trailing || comment.offset < m_start
-            || comment.offset + comment.length > end
-            || target->isProtectedComment(index))
-        {
-            continue;
-        }
-        const int next = target->symbolAfter(comment.offset + comment.length);
-        if (next < 0 || next >= target->symbols().size()) {
-            continue;
-        }
-        const int line = target->commentLine(index);
-        const int start = target->lineStart(line);
-        const QByteArray padding = target->indentOf(target->symbolLine(next));
-        if (start >= m_start && target->isOnlyWhitespace(start, comment.offset)
-            && target->text().mid(start, comment.offset - start) != padding)
-        {
-            target->replace(start, comment.offset - start, padding);
-        }
-    }
-    const QList<FormatDocument::Edit > paddingEdits = target->m_edits.mid(pending.size());
-    target->m_edits = paddingEdits;
-    changed = target->applyEdits() || changed;
-    for (int index = 0; index < pending.size(); ++index) {
-        pending[index].offset = FormatDocument::movedOffset(
-            pending.at(index).offset, pending.at(index).length > 0, paddingEdits);
-    }
-    target->m_edits = pending;
-    target->m_editorChanged = earlierChange || changed;
-    return changed;
 }

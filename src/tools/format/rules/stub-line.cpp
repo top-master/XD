@@ -26,8 +26,7 @@
     and code are left out.
 */
 void FormatStubLineRule::runGroup(
-        FormatDocument *document,
-        const QList<int > & group) const
+        FormatDocument *document, const QList<int > & group) const
 {
     const QList<FormatCommentLine > lines = groupLines(document, group);
     if (lines.size() < 2 || looksLikeCode(lines)) {
@@ -54,8 +53,7 @@ void FormatStubLineRule::runGroup(
         }
         const int length = QString::fromUtf8(text).size();
         if (length <= 17) {
-            document->report(lines.at(i).offset, "stub-line",
-                             QString(QLL("rewrap the comment: this line has only %1 characters"))
+            document->report(lines.at(i).offset, "stub-line", QString(QLL("rewrap the comment: this line has only %1 characters"))
                              .arg(length));
         }
     }

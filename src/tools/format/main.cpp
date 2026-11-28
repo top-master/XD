@@ -70,9 +70,11 @@ static QString logicalPath(const QString & path)
         return path;
     }
     const QString shellFolder = QDir::fromNativeSeparators(
-        QString::fromLocal8Bit(qgetenv("PWD")));
+        QString::fromLocal8Bit(qgetenv("PWD"))
+    );
     const QString workingFolder = QDir::currentPath();
-    if (shellFolder.isEmpty() || ! QFileInfo(shellFolder).isAbsolute()
+    if (shellFolder.isEmpty()
+        || ! QFileInfo(shellFolder).isAbsolute()
         || shellFolder == workingFolder
         || QFileInfo(shellFolder).canonicalFilePath()
             != QFileInfo(workingFolder).canonicalFilePath()
@@ -80,14 +82,15 @@ static QString logicalPath(const QString & path)
         return path;
     }
     QString logical = QDir::cleanPath(
-        shellFolder + QLatin1Char('/')
-            + QDir::fromNativeSeparators(path)
+        shellFolder + QLatin1Char('/') + QDir::fromNativeSeparators(path)
     );
     const QFileInfo logicalInfo(logical);
     const QFileInfo workingInfo(path);
     if ( ! logicalInfo.exists()
         || (workingInfo.exists()
-            && workingInfo.canonicalFilePath() == logicalInfo.canonicalFilePath())
+            && workingInfo.canonicalFilePath()
+                == logicalInfo.canonicalFilePath()
+        )
     ) {
         return path;
     }
@@ -112,13 +115,16 @@ static QStringList logicalPaths(const QStringList & paths)
 class FileSelectionContext : public FormatConditionContext
 {
 public:
-    inline FileSelectionContext(const QString & path, const FormatFileConfig *config)
+
+    inline FileSelectionContext(
+            const QString & path, const FormatFileConfig *config)
         : m_document(QByteArray(), path), m_config(config) {}
 
     inline const FormatFileConfig *fileConfig() const Q_DECL_OVERRIDE_IL
     { return m_config; }
 
-    inline bool predicate(const QString & name, bool *value) const Q_DECL_OVERRIDE_IL
+    inline bool predicate(const QString & name,
+                          bool *value) const Q_DECL_OVERRIDE_IL
     {
         if (name == QLL("always") || name == QLL("never")) {
             *value = name == QLL("always");
@@ -137,9 +143,12 @@ private:
     const FormatFileConfig *m_config;
 };
 
-static bool matchesSource(const QString &path, const FormatConfig &config,
-                          QHash<QString, FormatFileConfig > *cache,
-                          bool *matches, QString *error)
+static bool matchesSource(
+        const QString &path,
+        const FormatConfig &config,
+        QHash<QString, FormatFileConfig > *cache,
+        bool *matches,
+        QString *error)
 {
     const QString directory = QFileInfo(path).absolutePath();
     if ( ! cache->contains(directory)) {
@@ -158,7 +167,10 @@ static bool matchesSource(const QString &path, const FormatConfig &config,
     const QString key = QString(QLL("general.extensions"));
     if (fileConfig.hasExpression(key)) {
         const FileSelectionContext context(path, &fileConfig);
-        const QVariant extensions = fileConfig.resolveSetting(key, &context);
+        const QVariant extensions = fileConfig.resolveSetting(
+            key,
+            &context
+        );
         if (extensions.isValid()) {
             fileConfig.extensions = extensions.toString();
         }
@@ -228,7 +240,8 @@ static QString runtimeSpec()
     keep and that @a known does not hold yet.
 */
 static QStringList keptProjectFiles(
-        const QStringList & taken, IgnoreParser *ignores,
+        const QStringList & taken,
+        IgnoreParser *ignores,
         const QStringList & known)
 {
     QStringList kept;
@@ -269,9 +282,14 @@ static QStringList gitDiffArguments(const QString & range)
     }
     const QString command = isCommand && ! words.isEmpty()
         ? words.takeFirst() : QString(QLL("diff"));
-    return QStringList() << QString(QLL("-c")) << QString(QLL("core.quotePath=false"))
-        << command << QString(QLL("--no-color")) << QString(QLL("--no-ext-diff"))
-        << QString(QLL("--unified=0")) << words << QString(QLL("--"));
+    return QStringList() << QString(QLL("-c"))
+        << QString(QLL("core.quotePath=false"))
+        << command
+        << QString(QLL("--no-color"))
+        << QString(QLL("--no-ext-diff"))
+        << QString(QLL("--unified=0"))
+        << words
+        << QString(QLL("--"));
 }
 
 /*!
@@ -279,7 +297,8 @@ static QStringList gitDiffArguments(const QString & range)
     prints to @p output. Returns false, with @p error, when git fails to
     start or exits with an error.
 */
-static bool runGit(const QStringList & arguments, QByteArray *output,
+static bool runGit(const QStringList & arguments,
+                   QByteArray *output,
                    QString *error)
 {
 #ifndef QT_NO_PROCESS
@@ -297,8 +316,10 @@ static bool runGit(const QStringList & arguments, QByteArray *output,
     ) {
         const QString diagnostics =
             QString::fromLocal8Bit(process.readAllStandardError());
-        *error = QString(QLL("--git: git %1 failed: %2"))
-            .arg(arguments.join(QLatin1Char(' ')), diagnostics.trimmed());
+        *error = QString(QLL("--git: git %1 failed: %2")).arg(
+            arguments.join(QLatin1Char(' ')),
+            diagnostics.trimmed()
+        );
         output->clear();
         return false;
     }
@@ -375,13 +396,12 @@ static bool readGitChanges(const QStringList & arguments,
                            QString *error)
 {
     QByteArray topLevel;
-    if ( ! runGit(QStringList() << QString(QLL("rev-parse")) << QString(QLL("--show-toplevel")),
-                  &topLevel, error)
-    ) {
+    if ( ! runGit(QStringList() << QString(QLL("rev-parse")) << QString(QLL("--show-toplevel")), &topLevel, error)) {
         return false;
     }
-    const QString root = QDir::fromNativeSeparators(
-        QString::fromLocal8Bit(topLevel).trimmed()
+    const QString root = QDir::fromNativeSeparators(QString::fromLocal8Bit(
+            topLevel
+        ).trimmed()
     );
     QByteArray diff;
     if ( ! runGit(arguments, &diff, error)) {
@@ -420,8 +440,9 @@ static bool readGitChanges(const QStringList & arguments,
             continue;
         }
         inHeader = false;
-        const QRegularExpressionMatch found =
-            hunk.match(QString::fromLatin1(line));
+        const QRegularExpressionMatch found = hunk.match(
+            QString::fromLatin1(line)
+        );
         if (file.isEmpty() || ! found.hasMatch()) {
             continue;
         }
@@ -458,7 +479,8 @@ static bool isTerminal(int fd)
 */
 static QString agentRequests(
         const QList<FormatFileResult > & results,
-        FormatAgentGuides *guides, QStringList *asked)
+        FormatAgentGuides *guides,
+        QStringList *asked)
 {
     QString text;
     for (int i = 0; i < results.size(); ++i) {
@@ -470,7 +492,8 @@ static QString agentRequests(
                 : QString::number(request.line);
             const QString prompt = guides->write(result.path, request);
             const QString message = prompt.isEmpty()
-                ? request.message : QString(QLL("Run prompt at: \"%1\"")).arg(prompt);
+                ? request.message
+                : QString(QLL("Run prompt at: \"%1\"")).arg(prompt);
             text += QString(QLL("#: %1:%2: %3: %4\n")).arg(
                 QDir::fromNativeSeparators(result.path),
                 lines,
@@ -508,8 +531,12 @@ class FormatLogListener : public FormatFileListener
 {
     typedef FormatFileListener super;
 public:
-    inline FormatLogListener(Logger *logger, QFile *output, bool check,
-                             bool worker)
+
+    inline FormatLogListener(
+            Logger *logger,
+            QFile *output,
+            bool check,
+            bool worker)
         : code(0), m_logger(logger), m_output(output), m_check(check)
         , m_worker(worker)
     {
@@ -531,7 +558,8 @@ private:
     bool m_worker;
 };
 
-static int logResults(Logger *logger, const QList<FormatFileResult > & results,
+static int logResults(Logger *logger,
+                      const QList<FormatFileResult > & results,
                       bool check);
 
 /*!
@@ -559,7 +587,8 @@ void FormatLogListener::fileFinished(const FormatFileResult & result)
     and returns the exit code they add up to; @a check tells whether the
     run only checked the files.
 */
-static int logResults(Logger *logger, const QList<FormatFileResult > & results,
+static int logResults(Logger *logger,
+                      const QList<FormatFileResult > & results,
                       bool check)
 {
     int code = ExitClean;
@@ -567,17 +596,15 @@ static int logResults(Logger *logger, const QList<FormatFileResult > & results,
         const FormatFileResult & result = results.at(i);
         const QString path = QDir::fromNativeSeparators(result.path);
         if ( ! result.error.isEmpty()) {
-            logger->logDiagnostic(QString(QLL("%1: error: %2")).arg(
-                path,
-                result.error
-            ));
+            logger->logDiagnostic(
+                QString(QLL("%1: error: %2")).arg(path, result.error)
+            );
             code = ExitError;
             continue;
         }
         if (result.changed) {
             logger->logLine(
-                path
-                    + (check ? QLL(": needs formatting") : QLL(": formatted"))
+                path + (check ? QLL(": needs formatting") : QLL(": formatted"))
             );
             code = qMax(code, int(ExitDirty));
         }
@@ -627,8 +654,7 @@ int main(int argc, char *argv[])
 
     // Declares the options.
     QCommandLineParser parser;
-    parser.setApplicationDescription(QString(QLL(
-            "Applies the formatting rules to C, C++ and Objective-C files, and reports\n"
+    parser.setApplicationDescription(QString(QLL("Applies the formatting rules to C, C++ and Objective-C files, and reports\n"
             "what a rule cannot fix on its own. A path that ends with / or \\ is a\n"
             "directory, which is searched for the files that its .gitignore and\n"
             ".formatignore files keep; any other path is a file.")));
@@ -808,7 +834,9 @@ int main(int argc, char *argv[])
         const QString usage = guides.writeUsage();
         if ( ! usage.isEmpty()) {
             logger.logDiagnostic(
-                QString(QLL("Read this tool's usage instructions at: \"%1\"")).arg(usage));
+                QString(QLL("Read this tool's usage instructions at: \"%1\""))
+                    .arg(usage)
+            );
         }
     }
 
@@ -830,7 +858,8 @@ int main(int argc, char *argv[])
         const QList<const FormatRule * > all = formatter.rules();
         for (int i = 0; i < all.size(); ++i) {
             logger.logLine(
-                QString::fromLatin1(all.at(i)->name()) + QLatin1Char('\t')
+                QString::fromLatin1(all.at(i)->name())
+                    + QLatin1Char('\t')
                     + all.at(i)->summary()
             );
         }
@@ -930,10 +959,9 @@ int main(int argc, char *argv[])
 
     // Checks the settings once, before any file is read.
     Config::Parser configCheck(FormatFileConfig::schema());
-    if (( ! config.file.isEmpty() && ! configCheck.readFile(
-            config.file,
-            &error
-        )) || ! FormatFileConfig::readConfig(&configCheck, config, &error)
+    if (( ! config.file.isEmpty()
+            && ! configCheck.readFile(config.file, &error))
+        || ! FormatFileConfig::readConfig(&configCheck, config, &error)
     ) {
         logger.logError(error);
         return ExitError;
@@ -947,8 +975,10 @@ int main(int argc, char *argv[])
     const QStringList dirs = logicalPaths(parser.values(dirOption));
     for (int i = 0; i < dirs.size(); ++i) {
         if ( ! QFileInfo(dirs.at(i)).isDir()) {
-            logger.logError(QString(QLL("not a directory: %1"))
-                           .arg(QDir::fromNativeSeparators(dirs.at(i))));
+            logger.logError(
+                QString(QLL("not a directory: %1"))
+                    .arg(QDir::fromNativeSeparators(dirs.at(i)))
+            );
             return ExitError;
         }
         folders << dirs.at(i);
@@ -961,8 +991,10 @@ int main(int argc, char *argv[])
             QString dir = path;
             dir.chop(1);
             if ( ! QFileInfo(dir.isEmpty() ? path : dir).isDir()) {
-                logger.logError(QString(QLL("not a directory: %1"))
-                           .arg(QDir::fromNativeSeparators(path)));
+                logger.logError(
+                    QString(QLL("not a directory: %1"))
+                        .arg(QDir::fromNativeSeparators(path))
+                );
                 return ExitError;
             }
             folders << (dir.isEmpty() ? path : dir);
@@ -1020,7 +1052,8 @@ int main(int argc, char *argv[])
 
     // Warns about each named path that the ignore files leave out, and asks
     // whether to format it anyway.
-    if ( ! parser.isSet(headlessOption) && ! parser.isSet(workerOption)
+    if ( ! parser.isSet(headlessOption)
+        && ! parser.isSet(workerOption)
         && ! parser.isSet(skipIgnoredOption)
     ) {
         QStringList named = files;
@@ -1060,9 +1093,8 @@ int main(int argc, char *argv[])
         );
 
         // Names the files the way the folder was named on the command line.
-        const QString absolute = QDir::cleanPath(
-            QFileInfo(root).absoluteFilePath()
-        );
+        const QString absolute = QDir::cleanPath(QFileInfo(root)
+            .absoluteFilePath());
         for (int f = 0; f < found.size(); ++f) {
             bool matches = false;
             if ( ! matchesSource(
@@ -1082,9 +1114,8 @@ int main(int argc, char *argv[])
     }
 
     // Adds the projects' files that the ignore files keep.
-    const QStringList projectSources = keptProjectFiles(
-        projectFiles.takeUnparsed(false), &ignores, files
-    );
+    const QStringList projectSources =
+        keptProjectFiles(projectFiles.takeUnparsed(false), &ignores, files);
     for (int i = 0; i < projectSources.size(); ++i) {
         bool matches = false;
         if ( ! matchesSource(
@@ -1126,7 +1157,9 @@ int main(int argc, char *argv[])
         }
         files << keptProjectFiles(sources, &ignores, files);
     }
-    if (files.isEmpty() && folders.isEmpty() && projects.isEmpty()
+    if (files.isEmpty()
+        && folders.isEmpty()
+        && projects.isEmpty()
         && parser.isSet(gitOption)
     ) {
         return ExitClean;
@@ -1148,9 +1181,8 @@ int main(int argc, char *argv[])
     options.lineSpecs = parser.isSet(snapshotOption)
         ? config.lineSpecs : parser.values(lineOption);
     options.git = parser.value(gitOption);
-    options.fileLineSpecs = parser.isSet(snapshotOption)
-        ? config.fileLineSpecs
-        : gitLineSpecs;
+    options.fileLineSpecs = parser.isSet(snapshotOption) ? config.fileLineSpecs
+                                                         : gitLineSpecs;
     options.rules = rules;
     options.config = config;
     options.config.verbose = parser.isSet(verboseOption);
@@ -1165,16 +1197,19 @@ int main(int argc, char *argv[])
         bool ok = false;
         options.jobs = parser.value(jobsOption).toInt(&ok);
         if ( ! ok || options.jobs < 1) {
-            logger
-                .logError(QString(QLL("not a job count: %1")).arg(parser.value(jobsOption)));
+            logger.logError(
+                QString(QLL("not a job count: %1"))
+                    .arg(parser.value(jobsOption))
+            );
             return ExitError;
         }
     }
-    QScopedPointer<FormatRunner > runner(FormatRunner::create(
-        parser.value(runnerOption),
-        &formatter,
-        options
-    ));
+    QScopedPointer<FormatRunner > runner(
+            FormatRunner::create(
+                parser.value(runnerOption),
+                &formatter,
+                options
+            ));
     FormatLogListener listener(
         &logger,
         &output,
@@ -1182,8 +1217,12 @@ int main(int argc, char *argv[])
         parser.isSet(workerOption)
     );
     if (runner.isNull()) {
-        logger.logError(QString(QLL("unknown runner: %1 (this build has: %2)"))
-                   .arg(parser.value(runnerOption), FormatRunner::kinds().join(QString(QLL(", ")))));
+        logger.logError(
+            QString(QLL("unknown runner: %1 (this build has: %2)")).arg(
+                parser.value(runnerOption),
+                FormatRunner::kinds().join(QString(QLL(", ")))
+            )
+        );
         return ExitError;
     }
 
@@ -1217,8 +1256,7 @@ int main(int argc, char *argv[])
         }
         output.flush();
         console.page(
-            requests
-                + QLL("#: Handle every request above, then type q.\n")
+            requests + QLL("#: Handle every request above, then type q.\n")
         );
         answered = true;
         QStringList changed;

@@ -19,6 +19,7 @@ class FormatProjectReader
     typedef QThread super;
 #endif
 public:
+
     FormatProjectReader(
         FormatProjectFiles *files,
         const QStringList & projects,
@@ -32,6 +33,7 @@ public:
 
 #ifndef QT_NO_THREAD
 protected:
+
     void run() Q_DECL_OVERRIDE;
 #endif
 

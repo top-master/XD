@@ -19,6 +19,7 @@
 class FormatThreadQueue
 {
 public:
+
     inline explicit FormatThreadQueue(const QStringList & files)
         : files(files), next(0), told(0)
     {
@@ -54,12 +55,14 @@ class FormatThread : public QThread
 {
     typedef QThread super;
 public:
+
     inline FormatThread(const FormatRunner *runner, FormatThreadQueue *queue)
         : m_runner(runner), m_queue(queue)
     {
     }
 
 protected:
+
     void run() Q_DECL_OVERRIDE;
 
 private:
@@ -93,8 +96,9 @@ void FormatThread::run()
         while (this->m_queue->told < this->m_queue->files.size()
             && this->m_queue->done.at(this->m_queue->told)
         ) {
-            this->m_runner
-                ->tellFinished(this->m_queue->results.at(this->m_queue->told));
+            this->m_runner->tellFinished(
+                this->m_queue->results.at(this->m_queue->told)
+            );
             ++this->m_queue->told;
         }
     }
@@ -110,7 +114,8 @@ void FormatThread::run()
 /*!
     Builds the runner that formats with @a formatter as @a options say.
 */
-FormatThreadRunner::FormatThreadRunner(const Formatter *formatter, const FormatOptions & options)
+FormatThreadRunner::FormatThreadRunner(
+        const Formatter *formatter, const FormatOptions & options)
     : super(formatter, options)
 {
 }

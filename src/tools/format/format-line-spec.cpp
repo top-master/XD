@@ -30,8 +30,10 @@
     returns false, with @a error naming the bad spec, when one cannot resolve.
 */
 bool FormatLineSpec::resolveAll(
-        const QStringList & specs, const QList<QByteArray > & lines,
-        QVector<QPair<int, int > > *ranges, QString *error)
+        const QStringList & specs,
+        const QList<QByteArray > & lines,
+        QVector<QPair<int, int > > *ranges,
+        QString *error)
 {
     ranges->clear();
     int anchor = 1;
@@ -60,8 +62,12 @@ bool FormatLineSpec::resolveAll(
     false, with @a error saying why, when it cannot.
 */
 bool FormatLineSpec::resolve(
-        const QString & spec, const QList<QByteArray > & lines, int anchor,
-        int *first, int *last, QString *error)
+        const QString & spec,
+        const QList<QByteArray > & lines,
+        int anchor,
+        int *first,
+        int *last,
+        QString *error)
 {
     const int count = lines.size();
 
@@ -109,8 +115,7 @@ bool FormatLineSpec::resolve(
             lines,
             anchor,
             &start,
-            error
-        )
+            error)
     ) {
         return false;
     }
@@ -144,8 +149,7 @@ bool FormatLineSpec::resolve(
             lines,
             start + 1,
             &end,
-            error
-        )
+            error)
     ) {
         return false;
     }
@@ -165,8 +169,11 @@ bool FormatLineSpec::resolve(
     returns false, with @a error saying why, when it cannot.
 */
 bool FormatLineSpec::parseLine(
-        const QString & token, const QList<QByteArray > & lines, int from,
-        int *line, QString *error)
+        const QString & token,
+        const QList<QByteArray > & lines,
+        int from,
+        int *line,
+        QString *error)
 {
     QString pattern = token;
     int searchFrom = from;
@@ -236,6 +243,8 @@ bool FormatLineSpec::isFunctionLine(const QByteArray & line)
         return false;
     }
     const char c = line.at(0);
-    return (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || c == '_'
+    return (c >= 'a' && c <= 'z')
+        || (c >= 'A' && c <= 'Z')
+        || c == '_'
         || c == '$';
 }

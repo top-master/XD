@@ -38,7 +38,8 @@ QVariant FormatRule::cache(const FormatDocument *document,
     return document->ruleCache(this, key);
 }
 
-void FormatRule::setCache(FormatDocument *document, const QByteArray &key,
+void FormatRule::setCache(FormatDocument *document,
+                          const QByteArray &key,
                           const QVariant &value) const
 {
     document->setRuleCache(this, key, value);

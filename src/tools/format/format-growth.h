@@ -14,6 +14,7 @@
 class FormatGrowth
 {
 public:
+
     inline FormatGrowth() : index(0), column(0), delta(0) {}
     inline FormatGrowth(int index, int column, int delta)
         : index(index), column(column), delta(delta)

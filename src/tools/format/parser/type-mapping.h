@@ -19,14 +19,23 @@ QStringList visibleScopes(const FormatDocument *document, int index);
 QStringList candidates(const QString &written, const QStringList &scopes);
 bool isCall(const FormatDocument *document, int index);
 QStringList callArguments(const FormatDocument *document, int open, int close);
-int mappingOf(const QList<QPair<QString, QString > > &mappings,
-              const QStringList &names, const QStringList &arguments,
-              QString *capture, QStringList *bound);
-bool replacement(const QList<QPair<QString, QString > > &mappings, int index,
-                 QString capture, QStringList arguments, QStringList bound,
-                 const FormatConditionContext *place, QString *head,
-                 QString *call, QString *error);
+int mappingOf(
+        const QList<QPair<QString, QString > > &mappings,
+        const QStringList &names,
+        const QStringList &arguments,
+        QString *capture,
+        QStringList *bound);
+bool replacement(
+        const QList<QPair<QString, QString > > &mappings,
+        int index,
+        QString capture,
+        QStringList arguments,
+        QStringList bound,
+        const FormatConditionContext *place,
+        QString *head,
+        QString *call,
+        QString *error);
 QString shortestName(const QString &name, const QStringList &scopes);
-}
+} // Namespace `FormatTypeMapping`.
 
 #endif // PARSER_TYPE_MAPPING_H

@@ -86,7 +86,14 @@ static const char *const commandNames[] = {
     "reentrant",
     "nonreentrant",
     "target",
-    "keyword", "title", "page", "todo", "pre", "post", "invariant", "throws",
+    "keyword",
+    "title",
+    "page",
+    "todo",
+    "pre",
+    "post",
+    "invariant",
+    "throws",
     "exception",
     "details",
     "image",
@@ -103,7 +110,9 @@ static const char *const commandNames[] = {
     "endlegalese",
     "quotation",
     "endquotation",
-    "dontinclude", "headerfile", "inheaderfile"
+    "dontinclude",
+    "headerfile",
+    "inheaderfile"
 };
 
 /*!
@@ -124,8 +133,7 @@ static bool isCommand(const QByteArray & word)
     from the sign the class picks for it.
 */
 void FormatDocTagSignRule::runGroup(
-        FormatDocument *document,
-        const QList<int > & group) const
+        FormatDocument *document, const QList<int > & group) const
 {
     // Picks the sign: the setting's for a doc-comment whose lines are all
     // selected while others are not, else the file's.
@@ -148,19 +156,27 @@ void FormatDocTagSignRule::runGroup(
     const int offset = comments.at(group.first()).offset;
     const char fallback = document->configAt(offset).docTagSign;
     const QString configured = settingValueAt(
-        document, offset, QString(QLL("comments.docTagSign")),
+        document,
+        offset,
+        QString(QLL("comments.docTagSign")),
         QString(QLatin1Char(fallback))
     ).toString();
-    const char setting = configured.isEmpty() ? fallback : configured.at(0).toLatin1();
-    const char sign = isNew && isRanged
-        ? setting : this->fileSign(document, setting);
+    const char setting = configured.isEmpty() ? fallback
+                                              : configured.at(0).toLatin1();
+    const char sign = isNew && isRanged ? setting
+                                        : this->fileSign(document, setting);
 
-    // Writes each command of the group with that sign.
-    for (int k = 0; k < group.size(); ++k) {
+    // Writes each command of the group with that sign from back to front so
+    // earlier offsets stay valid.
+    for (int k = group.size() - 1; k >= 0; --k) {
         const QList<int > offsets = this->tags(document, group.at(k));
-        for (int t = 0; t < offsets.size(); ++t) {
+        for (int t = offsets.size() - 1; t >= 0; --t) {
             if (document->text().at(offsets.at(t)) != sign) {
-                document->replace(offsets.at(t), 1, QByteArray(1, sign));
+                document->rewriteCommentSpan(
+                    offsets.at(t),
+                    1,
+                    QByteArray(1, sign)
+                );
             }
         }
     }
@@ -193,15 +209,22 @@ QList<int > FormatDocTagSignRule::tags(
             continue;
         }
         const char before = i > entry.offset ? text.at(i - 1) : ' ';
-        if (before != ' ' && before != '\t' && before != '(' && before != '!'
-            && before != '*' && before != '/'
+        if (before != ' '
+            && before != '\t'
+            && before != '('
+            && before != '!'
+            && before != '*'
+            && before != '/'
         ) {
             continue;
         }
         int end = i + 1;
         while (end < entry.offset + entry.length
-            && ((text.at(end) >= 'a' && text.at(end) <= 'z')
-                || (text.at(end) >= '0' && text.at(end) <= '9'))
+            && ((text.at(end) >= 'a'
+                && text.at(end) <= 'z')
+                || (text.at(end) >= '0'
+                    && text.at(end) <= '9')
+            )
         ) {
             ++end;
         }

@@ -13,6 +13,7 @@ class FormatNamedRule : public FormatRule
 {
     typedef FormatRule super;
 public:
+
     FormatNamedRule(const char *name, const char *summary);
 
     QByteArray name() const Q_DECL_OVERRIDE;

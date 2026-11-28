@@ -23,8 +23,7 @@
     trailing doc-comment (`///<`) becomes a leading one (`///`).
 */
 void FormatTrailingCommentRule::runGroup(
-        FormatDocument *document,
-        const QList<int > & group) const
+        FormatDocument *document, const QList<int > & group) const
 {
     const int index = group.first();
     const FormatComment & comment = document->comments().at(index);
@@ -35,8 +34,11 @@ void FormatTrailingCommentRule::runGroup(
     const int end = comment.offset + comment.length;
     const int lineEnd = document->lineEnd(line);
     if (document->commentEndLine(index) != line) {
-        document->report(comment.offset, "trailing-comment",
-                         QString(QLL("move the comment onto the line above its code")));
+        document->report(
+            comment.offset,
+            "trailing-comment",
+            QString(QLL("move the comment onto the line above its code"))
+        );
         return;
     }
     if ( ! document->isOnlyWhitespace(end, lineEnd)) {
@@ -57,7 +59,8 @@ void FormatTrailingCommentRule::runGroup(
         const int close = document->match(i);
         if (close > i
             && document->symbols().at(i).from < comment.offset
-            && document->symbols().at(close).from >= comment.offset + comment.length
+            && document->symbols().at(close).from
+                >= comment.offset + comment.length
         ) {
             return;
         }
@@ -98,8 +101,10 @@ void FormatTrailingCommentRule::runGroup(
     }
     const QByteArray newline = document->text().mid(lineEnd - 1, 1) == "\r"
         ? "\r\n" : "\n";
-    document->replace(
-        from, end - from, QByteArray(),
-        document->lineStart(line), 0, document->indentOf(line) + text + newline
+    document->promoteTrailingComment(
+        from,
+        end - from,
+        document->lineStart(line),
+        document->indentOf(line) + text + newline
     );
 }

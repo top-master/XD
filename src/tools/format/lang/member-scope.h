@@ -23,6 +23,7 @@
 class FormatMemberScope
 {
 public:
+
     inline FormatMemberScope()
         : body(-1), params(-1), memberToken(-1)
         , isOutline(false), isTemplate(false), isStatic(false)

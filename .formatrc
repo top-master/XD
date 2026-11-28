@@ -22,3 +22,57 @@ compilers = win32-msvc2010
 # MSVC 2010 rejects `override` next to `inline`; hence an inline override
 # takes XD's Q_DECL_OVERRIDE_IL, which expands to nothing on that compiler.
 inlineOverride = hasCompiler("win32-msvc2010") ? "Q_DECL_OVERRIDE_IL" : "override"
+
+# MARK: defaults.
+
+[General]
+extensions = h,hh,hpp,hxx,h++,c,cc,cpp,cxx,c++,m,mm
+
+[Types]
+# refSuffix = " "
+# moveSuffix = keep-as-is
+
+[Structure]
+typedefSuper = isNewClass() && isNeeded() ? always : never
+replaceSuperSites = isNewClass() && hasSuperTypedef()
+wrapBegin = 75
+wrapMax = 80
+wrapChainAt = spaceUsed > 40%
+wrapArgsAt = spaceUsed > 40%
+wrapSignatureAt = spaceUsed > cfg.wrapArgsAt * 0.875
+wrapArgsOver = 3
+wrapConditionsOver = spaceRemaining < 20% || count(cfg.wrapConditionsPer) > 2 ? 1 : 2
+wrapConditionsPer = pair-bundle
+joinArgs = 1
+operatorPadding = cfg.operatorPlacement == "middle" ? 0 : 1
+operatorPlacement = start
+wrapSubChain = always
+target = long
+# compact = never
+wrapMistakes = is(array) ? "average" : "never"
+bodyBraces = true
+
+[Comments]
+wrapBegin = 75
+wrapMax = 80
+wrapExtendsForKeywords = 20
+wrapEmptyLimit = 8
+wrapComma = soft
+target = long
+docTagSign = @
+
+[Relations]
+thisMode = is-base-member | already-existing | (is-outline & is-header)
+
+[Replace.types]
+target = isNew
+action = replace
+
+[Code]
+nameMismatch = warn
+# compilers =
+
+[Lint]
+standards = c++11
+byRefVariable = hasStd("C++11") ? warn : ignore
+# inlineOverride = override

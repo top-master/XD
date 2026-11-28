@@ -12,6 +12,7 @@ class FormatCommentRule : public FormatNamedRule
 {
     typedef FormatNamedRule super;
 public:
+
     inline FormatCommentRule(const char *name, const char *summary)
         : super(name, summary)
     {
@@ -20,6 +21,7 @@ public:
     void run(FormatDocument *document) const Q_DECL_OVERRIDE;
 
 protected:
+
     virtual void runGroup(FormatDocument *document,
                           const QList<int > & group) const = 0;
 };

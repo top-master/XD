@@ -14,6 +14,7 @@ class FormatCountObject : public Config::Object
     typedef Config::Object super;
     Q_PROPERTY(QVariant value READ value)
 public:
+
     QVariant value() const;
 };
 

@@ -13,6 +13,7 @@ class FormatProcessRunner : public FormatRunner
 {
     typedef FormatRunner super;
 public:
+
     FormatProcessRunner(const Formatter *formatter,
                         const FormatOptions & options);
 
@@ -24,9 +25,11 @@ public:
     static bool decodeEnd(const QByteArray & line, QString *path);
 
 private:
+
     QStringList workerArguments() const;
     static QByteArray encodeIssue(
-            const char *kind, const QByteArray & path,
+            const char *kind,
+            const QByteArray & path,
             const FormatIssue & issue);
 };
 #endif // QT_NO_PROCESS

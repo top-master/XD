@@ -43,7 +43,8 @@
 /*!
     Builds the runner that formats with @a formatter as @a options say.
 */
-FormatRunner::FormatRunner(const Formatter *formatter, const FormatOptions & options)
+FormatRunner::FormatRunner(const Formatter *formatter,
+                           const FormatOptions & options)
     : m_formatter(formatter), m_options(options), m_listener(0), m_prepared(false)
 {
 }
@@ -93,11 +94,11 @@ QString FormatRunner::defaultKind()
     or returns null for a kind this build lacks.
 */
 FormatRunner *FormatRunner::create(
-        const QString & kind, const Formatter *formatter,
+        const QString & kind,
+        const Formatter *formatter,
         const FormatOptions & options)
 {
-    const QString name = kind.isEmpty()
-        ? FormatRunner::defaultKind() : kind;
+    const QString name = kind.isEmpty() ? FormatRunner::defaultKind() : kind;
     if (name == QLL("serial")) {
         return new FormatRunner(formatter, options);
     }
@@ -149,9 +150,7 @@ static bool snapshotFile(const QString &original, const QString &copy)
 #elif defined(Q_OS_WIN) && !defined(Q_OS_WINRT)
         const QString sourceName = QDir::toNativeSeparators(original);
         const QString copyName = QDir::toNativeSeparators(copy);
-        if (CreateHardLinkW(reinterpret_cast<LPCWSTR >(copyName.utf16()),
-                            reinterpret_cast<LPCWSTR >(sourceName.utf16()), Q_NULLPTR)
-        ) {
+        if (CreateHardLinkW(reinterpret_cast<LPCWSTR >(copyName.utf16()), reinterpret_cast<LPCWSTR >(sourceName.utf16()), Q_NULLPTR)) {
             return true;
         }
 #endif
@@ -186,8 +185,8 @@ bool FormatRunner::prepareRun(const QStringList &files, QString *error)
         ? this->m_formatter->selectedRules() : this->m_formatter->rules();
     for (int i = 0; i < rules.size(); ++i) {
         if (config.checks.isEmpty()
-            || config.checks.contains(QString::fromLatin1(rules.at(i)->name())))
-        {
+            || config.checks.contains(QString::fromLatin1(rules.at(i)->name()))
+        ) {
             readsOtherFiles = readsOtherFiles || rules.at(i)->readsOtherFiles();
         }
     }
@@ -204,7 +203,8 @@ bool FormatRunner::prepareRun(const QStringList &files, QString *error)
                 config.scheduledFiles.at(i)
             ).absoluteFilePath()
         );
-        const QString copy = this->m_snapshotDirectory->path() + QLatin1Char('/')
+        const QString copy = this->m_snapshotDirectory->path()
+            + QLatin1Char('/')
             + QString::number(i);
         QFile input(original);
         if ( ! input.open(QIODevice::ReadOnly)) {
@@ -237,8 +237,7 @@ bool FormatRunner::prepareRun(const QStringList &files, QString *error)
 }
 
 QList<FormatFileResult > FormatRunner::runFailure(
-        const QStringList &files,
-        const QString &error) const
+        const QStringList &files, const QString &error) const
 {
     QList<FormatFileResult > results;
     for (int i = 0; i < files.size(); ++i) {

@@ -20,6 +20,7 @@
 class FormatFileResult
 {
 public:
+
     inline FormatFileResult() : changed(false) {}
 
     QString path;

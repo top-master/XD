@@ -5,6 +5,7 @@
 
 #include "../format-document.h"
 #include "./code-helpers.h"
+#include "./comment-layout.h"
 #include "./condition-context.h"
 #include "./expression-layout.h"
 #include "./scope-conditions.h"
@@ -13,7 +14,9 @@
 class FormatOffsetContext : public FormatConditionContext
 {
 public:
-    inline FormatOffsetContext(const FormatDocument *document, int offset, int token)
+
+    inline FormatOffsetContext(
+            const FormatDocument *document, int offset, int token)
         : m_document(document), m_offset(offset), m_token(token) {}
 
     inline QStringList onNames() const Q_DECL_OVERRIDE_IL
@@ -22,7 +25,8 @@ public:
     inline const FormatFileConfig *fileConfig() const Q_DECL_OVERRIDE_IL
     { return &m_document->configAt(m_offset); }
 
-    bool predicate(const QString & name, bool *value) const Q_DECL_OVERRIDE
+    inline bool predicate(const QString & name,
+                          bool *value) const Q_DECL_OVERRIDE_IL
     {
         Config::Cache::skip();
         if (name == QLL("isNew")) {
@@ -44,7 +48,8 @@ public:
         return conditions.nameHolds(m_token, name, value);
     }
 
-    bool argumentCount(int depth, int argument, qreal *count) const Q_DECL_OVERRIDE
+    inline bool argumentCount(
+            int depth, int argument, qreal *count) const Q_DECL_OVERRIDE_IL
     {
         if (m_token >= m_document->symbols().size()) {
             return false;
@@ -54,12 +59,22 @@ public:
         return true;
     }
 
-    bool value(qreal *count) const Q_DECL_OVERRIDE
+    inline bool conditionCount(
+            const QString & per, qreal *count) const Q_DECL_OVERRIDE_IL
+    {
+        if (m_token >= m_document->symbols().size()) {
+            return false;
+        }
+        FormatScopeConditions conditions(m_document);
+        return conditions.conditionCount(m_token, per, Q_NULLPTR, count);
+    }
+
+    inline bool value(qreal *count) const Q_DECL_OVERRIDE_IL
     {
         return this->argumentCount(0, 0, count);
     }
 
-    bool spaceRemaining(qreal *percent) const Q_DECL_OVERRIDE
+    inline bool spaceRemaining(qreal *percent) const Q_DECL_OVERRIDE_IL
     {
         if (m_token >= m_document->symbols().size()) {
             return false;
@@ -69,7 +84,8 @@ public:
         return true;
     }
 
-    bool isTarget(const QString & kind, bool *value) const Q_DECL_OVERRIDE
+    inline bool isTarget(const QString & kind,
+                         bool *value) const Q_DECL_OVERRIDE_IL
     {
         if (m_token >= m_document->symbols().size()) {
             return false;
@@ -93,10 +109,12 @@ int wrapColumn(const FormatDocument *document, int offset)
 {
     const FormatFileConfig & fileConfig = document->configAt(offset);
     const int maximum = wrapMaxAt(document, offset);
-    int begin = fileConfig.wrapBegin.isEmpty()
-        ? maximum : fileConfig.wrapBegin.first();
+    int begin = fileConfig.wrapBegin.isEmpty() ? maximum
+                                               : fileConfig.wrapBegin.first();
     const QString key = QString(QLL("structure.wrapBegin"));
-    begin = FormatFileConfig::countOf(settingValueAt(document, offset, key, begin));
+    begin = FormatFileConfig::countOf(
+        settingValueAt(document, offset, key, begin)
+    );
     return qMin(begin, maximum);
 }
 
@@ -108,12 +126,20 @@ int wrapMaxAt(const FormatDocument *document, int offset)
 {
     const FormatFileConfig &config = document->configAt(offset);
     const QString key = QString(QLL("structure.wrapMax"));
-    const QVariant value = settingValueAt(document, offset, key, config.wrapMax);
+    const QVariant value = settingValueAt(
+        document,
+        offset,
+        key,
+        config.wrapMax
+    );
     return qMax(1, FormatFileConfig::countOf(value));
 }
 
-QVariant settingValueAt(const FormatDocument *document, int offset,
-                        const QString & key, const QVariant & fallback)
+QVariant settingValueAt(
+        const FormatDocument *document,
+        int offset,
+        const QString & key,
+        const QVariant & fallback)
 {
     const FormatFileConfig &config = document->configAt(offset);
     if ( ! config.hasExpression(key)) {
@@ -141,22 +167,39 @@ QVariant settingValueAt(const FormatDocument *document, int offset,
 bool operatorsInMiddleAt(const FormatDocument *document, int offset)
 {
     const bool middle = document->configAt(offset).operatorsInMiddle;
-    return settingValueAt(document, offset, QString(QLL("structure.operatorPlacement")),
-        QString(middle ? QLL("middle") : QLL("start"))).toString() == QLL("middle");
+    return settingValueAt(
+        document,
+        offset,
+        QString(QLL("structure.operatorPlacement")),
+        QString(middle ? QLL("middle") : QLL("start"))
+    ).toString()
+        == QLL("middle");
 }
 
 bool codeTargetAnyAt(const FormatDocument *document, int offset)
 {
-    const bool any = document->configAt(offset).codeTarget == FormatFileConfig::CodeTargetAny;
-    return settingValueAt(document, offset, QString(QLL("structure.target")),
-        QString(any ? QLL("any") : QLL("long"))).toString() == QLL("any");
+    const bool any = document->configAt(offset).codeTarget
+        == FormatFileConfig::CodeTargetAny;
+    return settingValueAt(
+        document,
+        offset,
+        QString(QLL("structure.target")),
+        QString(any ? QLL("any") : QLL("long"))
+    ).toString()
+        == QLL("any");
 }
 
 bool compactAlwaysAt(const FormatDocument *document, int offset)
 {
-    const bool always = document->configAt(offset).compact == FormatFileConfig::CompactAlways;
-    return settingValueAt(document, offset, QString(QLL("structure.compact")),
-        QString(always ? QLL("always") : QLL("never"))).toString() == QLL("always");
+    const bool always = document->configAt(offset).compact
+        == FormatFileConfig::CompactAlways;
+    return settingValueAt(
+        document,
+        offset,
+        QString(QLL("structure.compact")),
+        QString(always ? QLL("always") : QLL("never"))
+    ).toString()
+        == QLL("always");
 }
 
 /*!
@@ -233,8 +276,9 @@ bool isControlHead(const FormatDocument *document, int index)
     @a document is a call or parenthesized group in the same binary or
     conditional chain.
 */
-int precedingChainOperator(
-        const FormatDocument *document, int next, bool respectPlacement)
+int precedingChainOperator(const FormatDocument *document,
+                           int next,
+                           bool respectPlacement)
 {
     const Token token = document->token(next);
     const int close = next - 1;
@@ -246,7 +290,8 @@ int precedingChainOperator(
     // Include the qualified name of a call in the operand.
     if (document->token(first - 1) == IDENTIFIER) {
         --first;
-        while ((document->token(first - 1) == DOT || document->token(first - 1) == ARROW
+        while ((document->token(first - 1) == DOT
+                || document->token(first - 1) == ARROW
                 || document->token(first - 1) == SCOPE)
             && (document->token(first - 2) == IDENTIFIER
                 || document->token(first - 2) == THIS)
@@ -263,7 +308,9 @@ int precedingChainOperator(
         && ! (controlHead && (token == ANDAND || token == OROR))
         && operatorPrecedence(lead) == rank
         && ( ! respectPlacement
-            || ! operatorsInMiddleAt(document, document->symbols().at(next).from))
+            || ! operatorsInMiddleAt(
+                document,
+                document->symbols().at(next).from))
         && isOperandEnd(document->token(previous - 1));
     return conditional || binary ? previous : -1;
 }
@@ -279,8 +326,11 @@ bool isClosingLine(const QByteArray & text)
     }
     for (int i = 0; i < line.size(); ++i) {
         const char character = line.at(i);
-        if (character != ')' && character != ']' && character != '}'
-            && character != ' ' && character != '\t'
+        if (character != ')'
+            && character != ']'
+            && character != '}'
+            && character != ' '
+            && character != '\t'
         ) {
             return false;
         }
@@ -320,8 +370,12 @@ bool closesEarlierLine(const FormatDocument *document, int bracket)
     binary operator, right below another one that does, sits at that
     line's indent; hence the operator lines of one chain line up.
 */
-bool hasMisplacedLines(const FormatDocument *document, int open, int close,
-                       int indent, int extraPad)
+bool hasMisplacedLines(
+        const FormatDocument *document,
+        int open,
+        int close,
+        int indent,
+        int extraPad)
 {
     const int firstLine = document->symbolLine(open);
     const int lastLine = document->symbolLine(close);
@@ -334,8 +388,10 @@ bool hasMisplacedLines(const FormatDocument *document, int open, int close,
     int aboveIndent = -1;
     for (int l = firstLine; l <= lastLine; ++l) {
         // Closes the ranges whose closing brackets lead the line.
-        while (k <= close && document->symbolLine(k) == l
-            && ! ranges.isEmpty() && ranges.last().first == k
+        while (k <= close
+            && document->symbolLine(k) == l
+            && ! ranges.isEmpty()
+            && ranges.last().first == k
         ) {
             ranges.removeLast();
             ++k;
@@ -372,8 +428,11 @@ bool hasMisplacedLines(const FormatDocument *document, int open, int close,
             const Token token = document->token(k);
             const int other = document->match(k);
             last = k;
-            if ((token == LPAREN || token == LBRACK || token == LBRACE)
-                && other > k && document->symbolLine(other) > l
+            if ((token == LPAREN
+                    || token == LBRACK
+                    || token == LBRACE)
+                && other > k
+                && document->symbolLine(other) > l
             ) {
                 ranges.append(qMakePair(other, false));
                 opened = true;
@@ -394,9 +453,11 @@ bool hasMisplacedLines(const FormatDocument *document, int open, int close,
             && startsWithStringLiteral(document, last + 1)
         ) {
             ranges.last().second = true;
-        } else if ( ! opened && ! closesEarlierLine(document, last)
+        } else if ( ! opened
+            && ! closesEarlierLine(document, last)
             && end != STRING_LITERAL
-            && lead >= 0 && ! startsWithStringLiteral(document, lead)
+            && lead >= 0
+            && ! startsWithStringLiteral(document, lead)
         ) {
             ranges.last().second = true;
         }
@@ -418,9 +479,8 @@ bool startsWithStringLiteral(const FormatDocument *document, int token)
     if (document->token(token) == STRING_LITERAL) {
         return true;
     }
-    static const char *const prefixes[] = {
-        "u8", "u", "U", "L", "R", "u8R", "uR", "UR", "LR"
-    };
+    static const char *const prefixes[] =
+        { "u8", "u", "U", "L", "R", "u8R", "uR", "UR", "LR" };
     if (document->token(token) != IDENTIFIER
         || token + 1 >= document->symbols().size()
         || document->token(token + 1) != STRING_LITERAL
@@ -447,7 +507,7 @@ QByteArray sourceText(const FormatDocument *document, int first, int last)
         return QByteArray();
     }
     const int from = document->symbols().at(first).from;
-    return document->text().mid(from, document->symbolEnd(last) - from);
+    return document->codeSlice(from, document->symbolEnd(last));
 }
 
 /*!
@@ -455,8 +515,12 @@ QByteArray sourceText(const FormatDocument *document, int first, int last)
     @a first up to @a last of @a document, outside of every bracket pair,
     and its matching `:`. Returns false when either token is absent.
 */
-bool findTernary(const FormatDocument *document, int first, int last,
-                 int *question, int *colon)
+bool findTernary(
+        const FormatDocument *document,
+        int first,
+        int last,
+        int *question,
+        int *colon)
 {
     *question = -1;
     *colon = -1;
@@ -489,8 +553,12 @@ bool findTernary(const FormatDocument *document, int first, int last,
 */
 static bool opensTemplate(Token token)
 {
-    return token == IDENTIFIER || token == STATIC_CAST || token == DYNAMIC_CAST
-        || token == CONST_CAST || token == REINTERPRET_CAST || token == TEMPLATE;
+    return token == IDENTIFIER
+        || token == STATIC_CAST
+        || token == DYNAMIC_CAST
+        || token == CONST_CAST
+        || token == REINTERPRET_CAST
+        || token == TEMPLATE;
 }
 
 /*!
@@ -539,8 +607,12 @@ int templateClose(const FormatDocument *document, int angle, int end)
     hold together least.
 */
 QList<int > loosestOperators(
-        const FormatDocument *document, int first, int last,
-        int (*rankOf)(Token), int fromRank, int *rank)
+        const FormatDocument *document,
+        int first,
+        int last,
+        int (*rankOf)(Token),
+        int fromRank,
+        int *rank)
 {
     QList<int > found;
     int best = -1;
@@ -549,13 +621,15 @@ QList<int > loosestOperators(
         if (token == LBRACE) {
             return QList<int >();
         }
-        if ((token == LPAREN || token == LBRACK)
+        if ((token == LPAREN
+                || token == LBRACK)
             && document->match(k) > k
         ) {
             k = document->match(k);
             continue;
         }
-        if (token == LANGLE && k > first
+        if (token == LANGLE
+            && k > first
             && opensTemplate(document->token(k - 1))
         ) {
             const int close = templateClose(document, k, last + 1);
@@ -566,7 +640,8 @@ QList<int > loosestOperators(
         }
         const int tokenRank = rankOf(token);
         if (tokenRank < fromRank
-            || (best >= 0 && tokenRank > best)
+            || (best >= 0
+                && tokenRank > best)
             || k == first
             || ! isOperandEnd(document->token(k - 1))
         ) {
@@ -592,10 +667,12 @@ QList<int > loosestOperators(
     A list may break after such a `(`; a value may move below such an `=`.
 */
 bool reachesWrapArgsAt(const FormatDocument *document,
-                       FormatScopeConditions *conditions, int token)
+                       FormatScopeConditions *conditions,
+                       int token)
 {
-    const FormatFileConfig &fileConfig =
-        document->configAt(document->symbols().at(token).from);
+    const FormatFileConfig &fileConfig = document->configAt(
+        document->symbols().at(token).from
+    );
     return conditions->holds(
         QString(QLL("structure.wrapArgsAt")),
         fileConfig.wrapArgsAt,
@@ -634,15 +711,25 @@ int comparisonRank(Token token)
     @a step columns past @a indent.
 */
 QList<QByteArray > comparisonLines(
-        const FormatDocument *document, int first,
-        int last, int column, int indent, int step)
+        const FormatDocument *document,
+        int first,
+        int last,
+        int column,
+        int indent,
+        int step)
 {
     const QByteArray text = sourceText(document, first, last);
-    const QList<int > operators = loosestOperators(
-        document, first, last, &comparisonRank, 0, Q_NULLPTR
-    );
+    const QList<int > operators =
+        loosestOperators(
+            document,
+            first,
+            last,
+            &comparisonRank,
+            0,
+            Q_NULLPTR
+        );
     if (column + textWidth(text)
-        <= wrapMaxAt(document, document->symbols().at(first).from)
+            <= wrapMaxAt(document, document->symbols().at(first).from)
         || operators.isEmpty()
     ) {
         return QList<QByteArray >() << text;
@@ -651,8 +738,8 @@ QList<QByteArray > comparisonLines(
     QList<QByteArray > lines;
     lines << sourceText(document, first, operators.first() - 1);
     for (int k = 0; k < operators.size(); ++k) {
-        const int end = k + 1 < operators.size()
-            ? operators.at(k + 1) - 1 : last;
+        const int end = k + 1 < operators.size() ? operators.at(k + 1) - 1
+                                                 : last;
         lines << pad + sourceText(document, operators.at(k), end);
     }
     return lines;
@@ -667,8 +754,7 @@ QList<QByteArray > comparisonLines(
     argument, and adds no empty one.
 */
 QList<QPair<int, int > > splitArguments(
-        const FormatDocument *document,
-        int open, int close)
+        const FormatDocument *document, int open, int close)
 {
     QList<QPair<int, int > > arguments;
     if (close <= open + 1) {
@@ -677,7 +763,9 @@ QList<QPair<int, int > > splitArguments(
     int from = open + 1;
     for (int i = open + 1; i < close; ++i) {
         const Token token = document->token(i);
-        if ((token == LPAREN || token == LBRACK || token == LBRACE)
+        if ((token == LPAREN
+                || token == LBRACK
+                || token == LBRACE)
             && document->match(i) > i
         ) {
             i = document->match(i);
@@ -709,8 +797,12 @@ QList<QPair<int, int > > splitArguments(
     then at `?`, then at both signs on continuation lines.
 */
 QList<QByteArray > ternaryLines(
-        const QByteArray & head, const QByteArray & middle,
-        const QByteArray & tail, int indent, int column, int trailing,
+        const QByteArray & head,
+        const QByteArray & middle,
+        const QByteArray & tail,
+        int indent,
+        int column,
+        int trailing,
         int wrap)
 {
     const QByteArray oneLine = head + ' ' + middle + ' ' + tail;
@@ -738,9 +830,7 @@ QList<QByteArray > ternaryLines(
     a destructor, or an operator, such as `operator==`, `operator()`,
     or a conversion (`operator bool`, `operator QString`).
 */
-bool isDeclarationParen(
-        const FormatDocument *document,
-        int paren)
+bool isDeclarationParen(const FormatDocument *document, int paren)
 {
     const FormatDocument::Scope scope = document->scopeOf(paren);
     if (scope != FormatDocument::FileScope
@@ -749,6 +839,10 @@ bool isDeclarationParen(
         && scope != FormatDocument::FunctionScope
         && scope != FormatDocument::BlockScope
     ) {
+        return false;
+    }
+
+    if (controlKeywordFor(document, paren) >= 0) {
         return false;
     }
 
@@ -769,9 +863,25 @@ bool isDeclarationParen(
             || token == LBRACE
             || token == RBRACE
             || token == COLON
-            || ((token == LPAREN || token == RPAREN) && k < paren - 2)
+            || ((token == LPAREN
+                || token == RPAREN)
+                && k < paren - 2
+            )
         ) {
             break;
+        }
+    }
+    if ( ! isOperator && document->token(name) == RPAREN) {
+        const int pointerOpen = document->match(name);
+        if (pointerOpen >= 1 && pointerOpen < name) {
+            bool hasStar = false;
+            for (int t = pointerOpen + 1; t < name; ++t) {
+                hasStar |= document->token(t) == STAR;
+            }
+            const Token before = document->token(pointerOpen - 1);
+            if (hasStar && (isTypeEnd(before) || before == AND)) {
+                return true;
+            }
         }
     }
     if ( ! isOperator && document->token(name) != IDENTIFIER) {
@@ -789,6 +899,77 @@ bool isDeclarationParen(
     }
     const Token typeEnd = document->token(name - 1);
     if (isTypeEnd(typeEnd) || typeEnd == AND) {
+        if (typeEnd == RANGLE || typeEnd == GTGT) {
+            int depth = 0;
+            bool closed = false;
+            for (int k = name - 1; k >= 0; --k) {
+                const Token tok = document->token(k);
+                if (tok == SEMIC
+                    || tok == LBRACE
+                    || tok == RBRACE
+                    || tok == LPAREN
+                    || tok == RPAREN
+                ) {
+                    break;
+                }
+                depth += tok == RANGLE
+                    ? 1 : (tok == GTGT ? 2 : (tok == LANGLE ? -1 : 0));
+                if (depth <= 0) {
+                    closed = tok == LANGLE;
+                    break;
+                }
+            }
+            if ( ! closed) {
+                return false;
+            }
+        }
+        if (scope == FormatDocument::FunctionScope
+            || scope == FormatDocument::BlockScope
+        ) {
+            int angleDepth = 0;
+            for (int k = name - 1; k >= 0; --k) {
+                const Token tok = document->token(k);
+                if (tok == SEMIC
+                    || tok == LBRACE
+                    || tok == RBRACE
+                    || tok == COLON
+                ) {
+                    break;
+                }
+                if (tok == RANGLE || tok == GTGT) {
+                    angleDepth += tok == GTGT ? 2 : 1;
+                    continue;
+                }
+                if (tok == LANGLE && angleDepth > 0) {
+                    --angleDepth;
+                    continue;
+                }
+                if (angleDepth > 0) {
+                    continue;
+                }
+                if (tok == LPAREN
+                    || tok == RPAREN
+                    || tok == RETURN
+                    || tok == EQ
+                    || tok == ANDAND
+                    || tok == OROR
+                    || tok == NOT
+                    || tok == QUESTION
+                    || tok == EQEQ
+                    || tok == NE
+                    || tok == LANGLE
+                    || tok == LE
+                    || tok == GE
+                    || tok == PLUS
+                    || tok == MINUS
+                    || tok == SLASH
+                    || tok == PERCENT
+                    || tok == COMMA
+                ) {
+                    return false;
+                }
+            }
+        }
         return true;
     }
 
@@ -799,9 +980,12 @@ bool isDeclarationParen(
             || document->lexem(paren - 1) == document->lexem(paren - 3);
     }
     const bool afterAccess = document->isAccessLabel(name - 1);
-    return scope == FormatDocument::ClassScope
-        && (typeEnd == SEMIC || typeEnd == LBRACE || typeEnd == RBRACE || afterAccess
-            || typeEnd == EXPLICIT || typeEnd == INLINE);
+    return scope == FormatDocument::ClassScope && (typeEnd == SEMIC
+        || typeEnd == LBRACE
+        || typeEnd == RBRACE
+        || afterAccess
+        || typeEnd == EXPLICIT
+        || typeEnd == INLINE);
 }
 
 /*!
@@ -812,7 +996,8 @@ static bool isTernaryColon(const FormatDocument *document, int index)
 {
     for (int k = index - 1; k >= 0; --k) {
         const Token token = document->token(k);
-        if ((token == RPAREN || token == RBRACK)
+        if ((token == RPAREN
+                || token == RBRACK)
             && document->match(k) >= 0
         ) {
             k = document->match(k);
@@ -834,7 +1019,10 @@ static bool isTernaryColon(const FormatDocument *document, int index)
     operand keeps its own closing layout.
 */
 bool layoutChainOperand(
-        FormatDocument *document, FormatScopeConditions *conditions, int next)
+        const FormatDocument *document,
+        FormatScopeConditions *conditions,
+        int next,
+        QVector<AstTransformState::SpanRewrite > *edits)
 {
     const int close = next - 1;
     if ( ! closesEarlierLine(document, close)) {
@@ -848,7 +1036,7 @@ bool layoutChainOperand(
     const int open = document->match(close);
     const int from = document->symbolEnd(previous - 1);
     const int end = document->symbols().at(next).from;
-    if (document->hasCommentBetween(from, end)
+    if (document->hasProtectedCommentBetween(from, end)
         || document->spansDirective(from, end)
     ) {
         return false;
@@ -858,8 +1046,7 @@ bool layoutChainOperand(
     const bool conditional = document->token(previous) == QUESTION;
     const QByteArray pad = startsLine
         ? document->indentOf(line)
-        : continuationPad(textWidth(document->indentOf(line)),
-                          conditional ? 1 : conditions->operatorPadding(previous));
+        : continuationPad(textWidth(document->indentOf(line)), conditional ? 1 : conditions->operatorPadding(previous));
     const QByteArray newline = document->text().mid(
         document->lineEnd(line) - 1,
         1
@@ -870,21 +1057,19 @@ bool layoutChainOperand(
     if (first < open) {
         const bool keepInline = ! startsLine && ! conditional;
         const int layoutIndent = keepInline
-            ? textWidth(document->indentOf(line))
-            : textWidth(pad);
+            ? textWidth(document->indentOf(line)) : textWidth(pad);
         FormatExpressionLayout layout(document, conditions, layoutIndent);
         const int lineStart = document->lineStart(line);
         const int operatorColumn = keepInline
-            ? textWidth(document->text().mid(lineStart, from - lineStart)) + 1
+            ? textWidth(document->codeSlice(lineStart, from)) + 1
             : textWidth(pad);
         const int column = operatorColumn
             + document->lexem(previous).size()
             + 1;
         const QByteArray flat = layout.oneLine(first, close);
         QByteArray operand = flat;
-        const int limit = conditional
-            ? wrapMaxAt(document, from)
-            : wrapColumn(document, from);
+        const int limit = conditional ? wrapMaxAt(document, from)
+                                      : wrapColumn(document, from);
         if (column + textWidth(flat) > limit) {
             const int extraPad = keepInline
                 ? conditions->operatorPadding(previous) : 0;
@@ -908,11 +1093,37 @@ bool layoutChainOperand(
             + ' '
             + operand
             + gap;
-        if (replacement != document->text().mid(from, end - from)) {
-            document->replace(from, end - from, replacement);
+        if (replacement != document->codeSlice(from, end)) {
+            if (edits) {
+                edits->append(
+                    AstTransformState::SpanRewrite(
+                        from,
+                        end,
+                        restoreCommentsInReplacement(
+                            document,
+                            from,
+                            end - from,
+                            replacement
+                        )
+                    )
+                );
+            }
         }
-    } else if (document->text().mid(closeEnd, end - closeEnd) != gap) {
-        document->replace(closeEnd, end - closeEnd, gap);
+    } else if (document->codeSlice(closeEnd, end) != gap) {
+        if (edits) {
+            edits->append(
+                AstTransformState::SpanRewrite(
+                    closeEnd,
+                    end,
+                    restoreCommentsInReplacement(
+                        document,
+                        closeEnd,
+                        end - closeEnd,
+                        gap
+                    )
+                )
+            );
+        }
     }
     return true;
 }
@@ -925,7 +1136,9 @@ bool layoutChainOperand(
     statement (whose body follows it) keep their lines. Returns whether the
     edit was queued.
 */
-bool joinsClosingLine(FormatDocument *document, int index)
+bool joinsClosingLine(const FormatDocument *document,
+                      int index,
+                      QVector<AstTransformState::SpanRewrite > *edits)
 {
     const Token token = document->token(index);
     // Keeps logical operators on their own continuation lines.
@@ -933,14 +1146,22 @@ bool joinsClosingLine(FormatDocument *document, int index)
         return false;
     }
     const Token next = document->token(index + 1);
-    const bool isPostfix = (token == INCR || token == DECR)
-        && (next == SEMIC || next == RPAREN || next == RBRACK || next == COMMA);
-    const bool isTight = isPostfix || token == DOT || token == ARROW
-        || token == DOTSTAR || token == ARROW_STAR;
+    const bool isPostfix = (token == INCR || token == DECR) && (next == SEMIC
+        || next == RPAREN
+        || next == RBRACK
+        || next == COMMA);
+    const bool isTight = isPostfix
+        || token == DOT
+        || token == ARROW
+        || token == DOTSTAR
+        || token == ARROW_STAR;
     // Joins expression operators, leaving labels and prefix increments alone.
-    if ( ! isTight && ! isAssignmentOperator(token)
+    if ( ! isTight
+        && ! isAssignmentOperator(token)
         && ( ! isBinaryOperator(token)
-            || (token == COLON && ! isTernaryColon(document, index)))
+            || (token == COLON
+                && ! isTernaryColon(document, index))
+        )
     ) {
         return false;
     }
@@ -957,24 +1178,26 @@ bool joinsClosingLine(FormatDocument *document, int index)
         || ! isClosingLine(document->lineText(line - 1))
         || document->hasCommentBetween(
             document->symbolEnd(before),
-            document->lineEnd(line)
-        )
+            document->lineEnd(line))
     ) {
         return false;
     }
     const int open = document->match(before);
     const Token closer = document->token(before);
-    if ((token == DOT || token == ARROW)
-        && closer == RPAREN && open > 1
+    if ((token == DOT
+            || token == ARROW)
+        && closer == RPAREN
+        && open > 1
         && document->token(open - 1) == IDENTIFIER
         && (document->token(open - 2) == DOT
-            || document->token(open - 2) == ARROW))
-    {
+            || document->token(open - 2) == ARROW)
+    ) {
         return false;
     }
     // Joins initializer braces, leaving block braces on their own lines.
     if (closer == RBRACE
-        && (open < 0 || document->braceScope(open) != FormatDocument::InitScope)
+        && (open < 0
+            || document->braceScope(open) != FormatDocument::InitScope)
     ) {
         return false;
     }
@@ -999,22 +1222,25 @@ bool joinsClosingLine(FormatDocument *document, int index)
     const QByteArray joined = document->text().mid(
         previousStart,
         previousEnd - previousStart
-    ) + space + text;
+    ) + space
+        + text;
     // Keeps the break when the joined line would exceed `wrapMax`.
-    if (textWidth(joined)
-            > wrapMaxAt(document, document->lineStart(line))
-    ) {
+    if (textWidth(joined) > wrapMaxAt(document, document->lineStart(line))) {
         return false;
     }
     const int from = document->lineStart(line);
     const int lineEnd = document->lineEnd(line);
     const bool hasNewline = lineEnd < document->text().size();
-    return document->replace(
-        previousEnd,
-        from - previousEnd,
-        space + text + (hasNewline ? "\n" : ""),
-        from, lineEnd - from + (hasNewline ? 1 : 0), QByteArray()
-    );
+    if (edits) {
+        edits->append(
+            AstTransformState::SpanRewrite(
+                previousEnd,
+                lineEnd + (hasNewline ? 1 : 0),
+                space + text + (hasNewline ? QByteArray("\n") : QByteArray())
+            )
+        );
+    }
+    return true;
 }
 
 /*!
@@ -1055,7 +1281,7 @@ bool keepsUserLines(
     // Takes a line past the wrap column as lines that do not fit.
     for (int l = firstLine; l <= lastLine; ++l) {
         if (textWidth(document->lineText(l))
-            > wrapColumn(document, document->lineStart(l))
+                > wrapColumn(document, document->lineStart(l))
         ) {
             return false;
         }
@@ -1078,7 +1304,8 @@ bool keepsUserLines(
             )
         );
         if (itemLine > firstLine
-            && column > textWidth(document->lineText(itemLine - 1).trimmed())
+            && column > textWidth(
+                document->lineText(itemLine - 1).trimmed())
                 + textWidth(document->indentOf(itemLine - 1))
         ) {
             return false;
@@ -1163,14 +1390,17 @@ bool isAlignedUnderFirst(
     calls to their own layouts.
 */
 bool logicalBreakBeforeCall(
-        const FormatDocument *document, int open,
-        int *operatorIndex, QByteArray *indent)
+        const FormatDocument *document,
+        int open,
+        int *operatorIndex,
+        QByteArray *indent)
 {
     *operatorIndex = -1;
     indent->clear();
     const int close = document->match(open);
     const int line = document->symbolLine(open);
-    if (close <= open || document->symbolEndLine(close) != line
+    if (close <= open
+        || document->symbolEndLine(close) != line
         || document->isDirectiveLine(line)
     ) {
         return false;
@@ -1190,15 +1420,21 @@ bool logicalBreakBeforeCall(
             op = match - 1;
             continue;
         }
-        if (token == COMMA || token == SEMIC || token == QUESTION
-            || token == COLON || token == EQ || token == LBRACE
-            || token == RBRACE || operatorPrecedence(token) > 0
+        if (token == COMMA
+            || token == SEMIC
+            || token == QUESTION
+            || token == COLON
+            || token == EQ
+            || token == LBRACE
+            || token == RBRACE
+            || operatorPrecedence(token) > 0
         ) {
             return false;
         }
         --op;
     }
-    if (op <= lineFirst || (document->token(op) != ANDAND
+    if (op <= lineFirst
+        || (document->token(op) != ANDAND
             && document->token(op) != OROR)
     ) {
         return false;
@@ -1206,15 +1442,16 @@ bool logicalBreakBeforeCall(
     const int from = document->symbolEnd(op - 1);
     const int at = document->symbols().at(op).from;
     const int end = contentEnd(document, line);
-    if (document->hasCommentBetween(from, end)
+    if (document->hasProtectedCommentBetween(from, end)
         || document->spansDirective(from, end)
     ) {
         return false;
     }
-    const QByteArray prefix = document->text().mid(
-        document->lineStart(line), from - document->lineStart(line)
+    const QByteArray prefix = document->codeSlice(
+        document->lineStart(line),
+        from
     );
-    const QByteArray tail = document->text().mid(at, end - at);
+    const QByteArray tail = document->codeSlice(at, end);
     const QByteArray padding = continuationPad(
         textWidth(document->indentOf(line))
     );
@@ -1236,9 +1473,7 @@ bool logicalBreakBeforeCall(
     -1 for any other list. Such a body opens and closes on the list's line,
     right after the function's head.
 */
-int inlineFunctionBody(
-        const FormatDocument *document,
-        int paren)
+int inlineFunctionBody(const FormatDocument *document, int paren)
 {
     // Finds the brace that holds the list.
     int brace = -1;
@@ -1263,7 +1498,8 @@ int inlineFunctionBody(
     // Measures the body on a line of its own.
     const int from = document->symbols().at(brace).from;
     const QByteArray text = document->text().mid(
-        from, document->symbolEnd(document->match(brace)) - from
+        from,
+        document->symbolEnd(document->match(brace)) - from
     );
     const int width = textWidth(document->indentOf(line)) + textWidth(text);
     if (width > wrapColumn(document, from)) {
@@ -1277,9 +1513,38 @@ int inlineFunctionBody(
     a call inside a function body: a name comes before it, other than
     `connect` and `disconnect`.
 */
-bool isFunctionCallParen(
-        const FormatDocument *document,
-        int paren)
+static bool isMemberInitializerParen(const FormatDocument *document, int paren)
+{
+    for (int k = paren - 2; k >= 1; --k) {
+        const Token token = document->token(k);
+        if (token == SEMIC || token == LBRACE || token == RBRACE) {
+            return false;
+        }
+        if ((token == RPAREN
+                || token == RBRACE
+                || token == RBRACK)
+            && document->match(k) >= 0
+        ) {
+            k = document->match(k);
+            continue;
+        }
+        if (token == COLON) {
+            return document->token(k - 1) == RPAREN;
+        }
+        if (token != COMMA
+            && token != IDENTIFIER
+            && token != SCOPE
+            && token != LANGLE
+            && token != RANGLE
+            && token != GTGT
+        ) {
+            return false;
+        }
+    }
+    return false;
+}
+
+bool isFunctionCallParen(const FormatDocument *document, int paren)
 {
     if (document->token(paren - 1) != IDENTIFIER) {
         return false;
@@ -1288,6 +1553,7 @@ bool isFunctionCallParen(
     if (scope != FormatDocument::FunctionScope
         && scope != FormatDocument::BlockScope
         && scope != FormatDocument::InitScope
+        && ! isMemberInitializerParen(document, paren)
     ) {
         return false;
     }
@@ -1295,12 +1561,76 @@ bool isFunctionCallParen(
     return name != "connect" && name != "disconnect";
 }
 
+bool isCallInConditionChain(const FormatDocument *document, int open)
+{
+    const int close = document->match(open);
+    if (open < 1 || close <= open) {
+        return false;
+    }
+    bool leftHasLogical = false;
+    bool enclosedInParen = false;
+    int left = open - 1;
+    while (left >= 0) {
+        const Token tok = document->token(left);
+        if (tok == ANDAND || tok == OROR) {
+            leftHasLogical = true;
+        } else if (tok == RPAREN || tok == RBRACK || tok == RBRACE) {
+            const int m = document->match(left);
+            if (m < 0 || m >= left) {
+                break;
+            }
+            left = m - 1;
+            continue;
+        } else if (tok == LPAREN) {
+            enclosedInParen = true;
+            break;
+        } else if (tok == LBRACK
+            || tok == LBRACE
+            || tok == SEMIC
+            || tok == COMMA
+            || tok == QUESTION
+            || tok == COLON
+        ) {
+            break;
+        }
+        --left;
+    }
+    bool rightHasLogical = false;
+    int right = close + 1;
+    while (right < document->symbols().size()) {
+        const Token tok = document->token(right);
+        if (tok == ANDAND || tok == OROR) {
+            rightHasLogical = true;
+            break;
+        }
+        if (tok == LPAREN || tok == LBRACK || tok == LBRACE) {
+            const int m = document->match(right);
+            if (m <= right) {
+                break;
+            }
+            right = m + 1;
+            continue;
+        }
+        if (tok == RPAREN
+            || tok == RBRACK
+            || tok == RBRACE
+            || tok == SEMIC
+            || tok == COMMA
+            || tok == QUESTION
+            || tok == COLON
+        ) {
+            break;
+        }
+        ++right;
+    }
+    return rightHasLogical || (leftHasLogical && enclosedInParen);
+}
+
 /*!
     Builds the index of the `if`, `while`, `for`, or `switch` whose head holds
     the `(` at @a paren of @a document, or -1 when it sits in no such head.
 */
-int controlKeywordFor(
-        const FormatDocument *document, int paren)
+int controlKeywordFor(const FormatDocument *document, int paren)
 {
     for (int k = paren - 1; k > 0; --k) {
         const Token token = document->token(k);
@@ -1314,7 +1644,9 @@ int controlKeywordFor(
         }
         if (token == LPAREN) {
             const Token keyword = document->token(k - 1);
-            if (keyword == IF || keyword == WHILE || keyword == FOR
+            if (keyword == IF
+                || keyword == WHILE
+                || keyword == FOR
                 || keyword == SWITCH
             ) {
                 return k - 1;
@@ -1332,8 +1664,10 @@ int controlKeywordFor(
     holds no comment, and is no control statement.
 */
 bool findWholeStatement(
-        const FormatDocument *document, int line,
-        int *first, int *last)
+        const FormatDocument *document,
+        int line,
+        int *first,
+        int *last)
 {
     *first = document->firstSymbolOfLine(line);
     *last = document->lastSymbolOfLine(line);
@@ -1353,22 +1687,37 @@ bool findWholeStatement(
         }
     }
     const Token lead = document->token(*first);
-    if (lead == IF || lead == ELSE || lead == WHILE || lead == FOR || lead == DO
-        || lead == SWITCH || lead == CASE
+    if (lead == IF
+        || lead == ELSE
+        || lead == WHILE
+        || lead == FOR
+        || lead == DO
+        || lead == SWITCH
+        || lead == CASE
+        || document->isAccessLabel(*last)
     ) {
         return false;
     }
     const int end = statementEnd(document, *first);
-    if (end >= *first && document->token(end) == SEMIC
-        && end == document->lastSymbolOfLine(document->symbolLine(end)))
-    {
+    if (end >= *first
+        && document->token(end) == SEMIC
+        && end == document->lastSymbolOfLine(document->symbolLine(end))
+    ) {
         *last = end;
     }
     bool hasBinaryOperator = false;
     // Skip nested expressions while checking the statement boundary.
     for (int i = *first; i <= *last; ++i) {
         const Token token = document->token(i);
-        if ((token == LPAREN || token == LBRACK || token == LBRACE)
+        if (document->isAccessLabel(i)) {
+            return false;
+        }
+        if (token == LPAREN && isDeclarationParen(document, i)) {
+            return false;
+        }
+        if ((token == LPAREN
+                || token == LBRACK
+                || token == LBRACE)
             && document->match(i) > i
         ) {
             i = document->match(i);
@@ -1383,7 +1732,8 @@ bool findWholeStatement(
             }
             continue;
         }
-        hasBinaryOperator |= operatorPrecedence(token) > 0 && i > *first
+        hasBinaryOperator |= operatorPrecedence(token) > 0
+            && i > *first
             && isOperandEnd(document->token(i - 1));
         if ((token == SEMIC && i < *last) || token == RBRACE) {
             return false;
@@ -1407,17 +1757,19 @@ bool findWholeStatement(
     comment of its own.
 */
 bool expandInlineBody(
-        FormatDocument *document, int keyword,
-        int brace)
+        const FormatDocument *document,
+        int keyword,
+        int brace,
+        QVector<AstTransformState::SpanRewrite > *edits)
 {
     const int close = document->match(brace);
     const int line = document->symbolLine(brace);
-    if (close <= brace + 1 || document->symbolLine(close) != line
+    if (close <= brace + 1
+        || document->symbolLine(close) != line
         || document->symbolLine(keyword) != line
-        || document->hasCommentBetween(
+        || document->hasProtectedCommentBetween(
             document->symbolEnd(brace),
-            document->symbols().at(close).from
-        )
+            document->symbols().at(close).from)
     ) {
         return false;
     }
@@ -1428,12 +1780,36 @@ bool expandInlineBody(
     }
     const QByteArray indent = document->indentOf(line);
     const int from = document->symbolEnd(brace);
+    const int to1 = document->symbols().at(brace + 1).from;
     const int last = document->symbolEnd(close - 1);
-    return document->replace(
-        from, document->symbols().at(brace + 1).from - from,
-        "\n" + continuationPad(indent.size()),
-        last, document->symbols().at(close).from - last, "\n" + indent
-    );
+    const int to2 = document->symbols().at(close).from;
+    if (edits) {
+        edits->append(
+            AstTransformState::SpanRewrite(
+                from,
+                to1,
+                restoreCommentsInReplacement(
+                    document,
+                    from,
+                    to1 - from,
+                    "\n" + continuationPad(indent.size())
+                )
+            )
+        );
+        edits->append(
+            AstTransformState::SpanRewrite(
+                last,
+                to2,
+                restoreCommentsInReplacement(
+                    document,
+                    last,
+                    to2 - last,
+                    "\n" + indent
+                )
+            )
+        );
+    }
+    return true;
 }
 
 /*!
@@ -1442,9 +1818,7 @@ bool expandInlineBody(
     keyword (or the keyword governs no body of its own, as `else if` and the
     `while` of a `do` loop do not).
 */
-int controlBodyStart(
-        const FormatDocument *document,
-        int keyword)
+int controlBodyStart(const FormatDocument *document, int keyword)
 {
     const Token token = document->token(keyword);
     if (token == ELSE) {
@@ -1479,13 +1853,16 @@ int controlBodyStart(
 }
 
 /*!
-    Queues the braces around the one-statement body starting at the token
-    @a body of @a document, whose control statement starts at @a keyword and
-    whose head ends at the token @a head.
+    Records the brace insertion spans around the one-statement body starting
+    at the token @a body of @a document, whose control statement starts at
+    @a keyword and whose head ends at the token @a head.
 */
 void braceStatementBody(
-        FormatDocument *document, int keyword,
-        int head, int body)
+        FormatDocument *document,
+        int keyword,
+        int head,
+        int body,
+        QVector<AstTransformState::SpanRewrite > *edits)
 {
     const int end = statementEnd(document, body);
     if (end < 0) {
@@ -1495,8 +1872,11 @@ void braceStatementBody(
     const int endLine = document->symbolEndLine(end);
     for (int line = headLine; line <= endLine; ++line) {
         if (document->isDirectiveLine(line)) {
-            document->report(document->symbols().at(keyword).from, "control-braces",
-                             QString(QLL("brace the body by hand: a directive splits it")));
+            document->report(
+                document->symbols().at(keyword).from,
+                "control-braces",
+                QString(QLL("brace the body by hand: a directive splits it"))
+            );
             return;
         }
     }
@@ -1506,38 +1886,78 @@ void braceStatementBody(
     const bool followedOnLine = end + 1 < document->symbols().size()
         && document->symbolLine(end + 1) == endLine;
     if (document->symbolLine(body) == headLine) {
-        if (followedOnLine && after != ELSE && after != WHILE
-            && (document->isHeader() || document->hasCommentBetween(
-                document->symbolEnd(end), document->symbols().at(end + 1).from
-            ))
+        if (followedOnLine
+            && after != ELSE
+            && after != WHILE
+            && (document->isHeader()
+                || document->hasProtectedCommentBetween(
+                    document->symbolEnd(end),
+                    document->symbols().at(end + 1).from))
         ) {
             return;
         }
         if (document->isHeader()) {
-            document->replace(
-                document->symbolEnd(head), 0, " {",
-                document->symbolEnd(end), 0, " }"
-            );
+            if (edits) {
+                edits->append(
+                    AstTransformState::SpanRewrite(
+                        document->symbolEnd(head),
+                        document->symbolEnd(head),
+                        " {"
+                    )
+                );
+                edits->append(
+                    AstTransformState::SpanRewrite(
+                        document->symbolEnd(end),
+                        document->symbolEnd(end),
+                        " }"
+                    )
+                );
+            }
             return;
         }
 
         // Moves the body to a line of its own, and closes it on the next.
-        const QByteArray indent =
-            document->indentOf(document->symbolLine(keyword));
+        const QByteArray indent = document->indentOf(
+            document->symbolLine(keyword)
+        );
         const int from = document->symbolEnd(head);
+        const int bodyStart = document->symbols().at(body).from;
         const int endFrom = document->symbolEnd(end);
         const bool movesNext = followedOnLine
             && after != ELSE
             && after != WHILE;
         const int endLength = movesNext
             ? document->symbols().at(end + 1).from - endFrom : 0;
-        const QByteArray endText = "\n" + indent + "}"
+        const QByteArray endText = "\n"
+            + indent
+            + "}"
             + (movesNext ? "\n" + indent : QByteArray());
-        document->replace(
-            from, document->symbols().at(body).from - from,
-            " {\n" + continuationPad(indent.size()),
-            endFrom, endLength, endText
-        );
+        if (edits) {
+            edits->append(
+                AstTransformState::SpanRewrite(
+                    from,
+                    bodyStart,
+                    restoreCommentsInReplacement(
+                        document,
+                        from,
+                        bodyStart - from,
+                        " {\n" + continuationPad(indent.size())
+                    )
+                )
+            );
+            edits->append(
+                AstTransformState::SpanRewrite(
+                    endFrom,
+                    endFrom + endLength,
+                    restoreCommentsInReplacement(
+                        document,
+                        endFrom,
+                        endLength,
+                        endText
+                    )
+                )
+            );
+        }
         return;
     }
 
@@ -1547,26 +1967,58 @@ void braceStatementBody(
         return;
     }
     const QByteArray indent = document->indentOf(document->symbolLine(keyword));
-    const bool joins = (after == ELSE || (after == WHILE && document->token(keyword) == DO))
-        && ! document->hasCommentBetween(
+    const bool joins = (after == ELSE
+        || (after == WHILE && document->token(keyword) == DO))
+        && ! document->hasProtectedCommentBetween(
             document->symbolEnd(end),
-            document->symbols().at(end + 1).from
-        ) && ! document->spansDirective(
+            document->symbols().at(end + 1).from)
+        && ! document->spansDirective(
             document->symbolEnd(end),
             document->symbols().at(end + 1).from
         );
-    int closeFrom = contentEnd(document, endLine);
-    int closeLength = 0;
-    QByteArray closeText = "\n" + indent + "}";
     if (joins) {
-        closeFrom = document->symbolEnd(end);
-        closeLength = document->symbols().at(end + 1).from - closeFrom;
-        closeText += ' ';
+        const int closeFrom = document->symbolEnd(end);
+        const int closeLength = document->symbols().at(end + 1).from
+            - closeFrom;
+        if (edits) {
+            edits->append(
+                AstTransformState::SpanRewrite(
+                    document->symbolEnd(head),
+                    document->symbolEnd(head),
+                    " {"
+                )
+            );
+            edits->append(
+                AstTransformState::SpanRewrite(
+                    closeFrom,
+                    closeFrom + closeLength,
+                    restoreCommentsInReplacement(
+                        document,
+                        closeFrom,
+                        closeLength,
+                        "\n" + indent + "} "
+                    )
+                )
+            );
+        }
+        return;
     }
-    document->replace(
-        document->symbolEnd(head), 0, " {",
-        closeFrom, closeLength, closeText
-    );
+    if (edits) {
+        edits->append(
+            AstTransformState::SpanRewrite(
+                document->symbolEnd(head),
+                document->symbolEnd(head),
+                " {"
+            )
+        );
+        edits->append(
+            AstTransformState::SpanRewrite(
+                contentEnd(document, endLine),
+                contentEnd(document, endLine),
+                "\n" + indent + "}"
+            )
+        );
+    }
 }
 
 /*!
@@ -1609,8 +2061,12 @@ static bool groupKeepsIndent(const FormatDocument *document, int group)
         return true;
     }
     const Token opener = document->token(group - 1);
-    return opener == IDENTIFIER || opener == RANGLE || opener == GTGT
-        || opener == RBRACK || opener == RPAREN || opener == STATIC_CAST
+    return opener == IDENTIFIER
+        || opener == RANGLE
+        || opener == GTGT
+        || opener == RBRACK
+        || opener == RPAREN
+        || opener == STATIC_CAST
         || opener == SIZEOF;
 }
 
@@ -1628,7 +2084,8 @@ static int statementLine(const FormatDocument *document, int from)
             continue;
         }
         const Token token = document->token(k);
-        if ((token == RPAREN || token == RBRACK)
+        if ((token == RPAREN
+                || token == RBRACK)
             && document->match(k) >= 0
         ) {
             k = document->match(k);
@@ -1657,8 +2114,11 @@ static int statementLine(const FormatDocument *document, int from)
     and gives the line that opened the group to @a base; sets
     @a keepsIndent for a group whose lines align under its first item.
 */
-int continuationGroup(const FormatDocument *document, int index, int *base,
-                   bool *keepsIndent)
+int continuationGroup(
+        const FormatDocument *document,
+        int index,
+        int *base,
+        bool *keepsIndent)
 {
     *base = -1;
     *keepsIndent = false;
@@ -1724,7 +2184,9 @@ bool isForCondition(const FormatDocument *document, int group, int index)
             continue;
         }
         const Token token = document->token(k);
-        if ((token == LPAREN || token == LBRACK || token == LBRACE)
+        if ((token == LPAREN
+                || token == LBRACK
+                || token == LBRACE)
             && document->match(k) > k
         ) {
             k = document->match(k);
@@ -1735,8 +2197,11 @@ bool isForCondition(const FormatDocument *document, int group, int index)
     return semicolons == 1;
 }
 
-int conditionSteps(const FormatDocument *document, int group, int base,
-                          int index)
+int conditionSteps(
+        const FormatDocument *document,
+        int group,
+        int base,
+        int index)
 {
     int steps = 0;
     int bracket = group;
@@ -1745,8 +2210,10 @@ int conditionSteps(const FormatDocument *document, int group, int base,
             ++steps;
         }
         const Token opener = document->token(bracket - 1);
-        if (opener == IF || opener == WHILE
-            || (opener == FOR && isForCondition(document, bracket, index))
+        if (opener == IF
+            || opener == WHILE
+            || (opener == FOR
+                && isForCondition(document, bracket, index))
         ) {
             if (bracket != group
                 && document->symbolLine(bracket) != base
@@ -1758,7 +2225,12 @@ int conditionSteps(const FormatDocument *document, int group, int base,
         }
         int outerBase = -1;
         bool keepsIndent = false;
-        bracket = continuationGroup(document, bracket, &outerBase, &keepsIndent);
+        bracket = continuationGroup(
+            document,
+            bracket,
+            &outerBase,
+            &keepsIndent
+        );
         if (keepsIndent) {
             return 0;
         }

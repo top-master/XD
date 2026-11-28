@@ -28,7 +28,10 @@
 class FormatCheckDescription : public FormatNamedRule
 {
 public:
-    FormatCheckDescription(const char *name, const char *summary, bool readsOtherFiles = false)
+
+    FormatCheckDescription(const char *name,
+                           const char *summary,
+                           bool readsOtherFiles = false)
         : FormatNamedRule(name, summary), m_readsOtherFiles(readsOtherFiles) {}
     void run(FormatDocument *) const Q_DECL_OVERRIDE {}
     bool readsOtherFiles() const Q_DECL_OVERRIDE { return m_readsOtherFiles; }
@@ -39,53 +42,97 @@ private:
 static QList<FormatRule * > formatCreateCodeRules()
 {
     QList<FormatRule * > rules;
-    rules << new FormatCheckDescription("moc-run-macro",
-            "Spells moc macro Q_MOC_RUN.") << new FormatCheckDescription("replace-types",
-            "Writes mapped type names.") << new FormatCheckDescription("relative-include",
-            "Writes a relative path for a nearby quoted header.")
-        << new FormatCheckDescription("inline-keyword",
-            "Spells out inline on in-class definitions.")
-        << new FormatCheckDescription("not-space",
-            "Puts a space on each side of a logical not (!).") << new FormatCheckDescription("line-join",
-            "Joins the lines of each expression when [Structure] target is any, for the layout rules to lay it out anew.")
-        << new FormatCheckDescription("control-braces",
-            "Wraps control statement bodies in braces.") << new FormatCheckDescription("namespace-braces",
-            "Formats namespace braces and labels.")
-        << new FormatCheckDescription("operator-wrap",
-            "Breaks long expressions before their operators.")
-        << new FormatCheckDescription("condition-wrap",
-            "Breaks long conditions by nesting level.") << new FormatCheckDescription("ternary-wrap",
-            "Breaks long conditional expressions.")
-        << new FormatCheckDescription("chain-members-first",
-            "Joins member access after closing brackets when it fits.")
-        << new FormatCheckDescription("init-list-lead",
-            "Leads member-initializer lines with separators.") << new FormatCheckDescription("param-wrap",
-            "Wraps the parameters of a declaration.") << new FormatCheckDescription("args-wrap",
-            "Breaks wrapped calls and brace lists.")
-        << new FormatCheckDescription("operator-first",
-            "Breaks a long expression before an operator.")
-        << new FormatCheckDescription("continuation-indent",
-            "Indents operator-led continuation lines.")
-        << new FormatCheckDescription("condition-close",
-            "Closes multiline conditions beside the opening brace.")
-        << new FormatCheckDescription("template-close-space",
-            "Spaces closing template brackets.") << new FormatCheckDescription("reference-space",
-            "Writes a named reference declaration as Type & name.")
-        << new FormatCheckDescription("one-statement",
-            "Puts one statement on each line.");
-    rules << new FormatCheckDescription("super-typedef",
-        "Adds and uses a configured super typedef.", true);
-    rules << new FormatCheckDescription("no-lambda",
-            "Reports lambdas in XD source and nested lambdas.") << new FormatCheckDescription("member-init",
-            "Reports data members initialized in the class body.") << new FormatCheckDescription("global-static",
-            "Reports static objects and local static variables.")
-        << new FormatCheckDescription("q-d-macro",
-            "Reports d_func() and q_func() calls where Q_D or Q_Q fit.")
-        << new FormatCheckDescription("excludes",
-            "Reports negated includes checks.") << new FormatCheckDescription("code-shape",
-            "Reports code shapes that need a manual rewrite.")
-        << new FormatCheckDescription("reference-local",
-            "Reports non-const local references.");
+    rules << new FormatCheckDescription(
+        "moc-run-macro",
+        "Spells moc macro Q_MOC_RUN."
+    ) << new FormatCheckDescription(
+        "replace-types",
+        "Writes mapped type names."
+    ) << new FormatCheckDescription(
+        "relative-include",
+        "Writes a relative path for a nearby quoted header."
+    ) << new FormatCheckDescription(
+        "inline-keyword",
+        "Spells out inline on in-class definitions."
+    ) << new FormatCheckDescription(
+        "not-space",
+        "Puts a space on each side of a logical not (!)."
+    ) << new FormatCheckDescription(
+        "line-join",
+        "Joins the lines of each expression when [Structure] target is any, for the layout rules to lay it out anew."
+    ) << new FormatCheckDescription(
+        "control-braces",
+        "Wraps control statement bodies in braces."
+    ) << new FormatCheckDescription(
+        "namespace-braces",
+        "Formats namespace braces and labels."
+    ) << new FormatCheckDescription(
+        "operator-wrap",
+        "Breaks long expressions before their operators."
+    ) << new FormatCheckDescription(
+        "condition-wrap",
+        "Breaks long conditions by nesting level."
+    ) << new FormatCheckDescription(
+        "ternary-wrap",
+        "Breaks long conditional expressions."
+    ) << new FormatCheckDescription(
+        "chain-members-first",
+        "Joins member access after closing brackets when it fits."
+    ) << new FormatCheckDescription(
+        "init-list-lead",
+        "Leads member-initializer lines with separators."
+    ) << new FormatCheckDescription(
+        "param-wrap",
+        "Wraps the parameters of a declaration."
+    ) << new FormatCheckDescription(
+        "args-wrap",
+        "Breaks wrapped calls and brace lists."
+    ) << new FormatCheckDescription(
+        "operator-first",
+        "Breaks a long expression before an operator."
+    ) << new FormatCheckDescription(
+        "continuation-indent",
+        "Indents operator-led continuation lines."
+    ) << new FormatCheckDescription(
+        "condition-close",
+        "Closes multiline conditions beside the opening brace."
+    ) << new FormatCheckDescription(
+        "template-close-space",
+        "Spaces closing template brackets."
+    ) << new FormatCheckDescription(
+        "reference-space",
+        "Writes a named reference declaration as Type & name."
+    ) << new FormatCheckDescription(
+        "one-statement",
+        "Puts one statement on each line."
+    );
+    rules << new FormatCheckDescription(
+        "super-typedef",
+        "Adds and uses a configured super typedef.",
+        true
+    );
+    rules << new FormatCheckDescription(
+        "no-lambda",
+        "Reports lambdas in XD source and nested lambdas."
+    ) << new FormatCheckDescription(
+        "member-init",
+        "Reports data members initialized in the class body."
+    ) << new FormatCheckDescription(
+        "global-static",
+        "Reports static objects and local static variables."
+    ) << new FormatCheckDescription(
+        "q-d-macro",
+        "Reports d_func() and q_func() calls where Q_D or Q_Q fit."
+    ) << new FormatCheckDescription(
+        "excludes",
+        "Reports negated includes checks."
+    ) << new FormatCheckDescription(
+        "code-shape",
+        "Reports code shapes that need a manual rewrite."
+    ) << new FormatCheckDescription(
+        "reference-local",
+        "Reports non-const local references."
+    );
     return rules;
 }
 
@@ -95,12 +142,20 @@ static QList<FormatRule * > formatCreateCodeRules()
 static QList<FormatRule * > formatCreateClassRules()
 {
     QList<FormatRule * > rules;
-    rules << new FormatCheckDescription("outline-this",
-            "Qualifies member access where configured.") << new FormatCheckDescription("connect-layout",
-            "Lays out connection arguments in pairs.");
-    rules << new FormatCheckDescription("const-overload-order",
-            "Reports mutable overloads before their const counterparts.") << new FormatCheckDescription("qpointer-getter",
-            "Reports raw pointers returned from QPointer fields.");
+    rules << new FormatCheckDescription(
+        "outline-this",
+        "Qualifies member access where configured."
+    ) << new FormatCheckDescription(
+        "connect-layout",
+        "Lays out connection arguments in pairs."
+    );
+    rules << new FormatCheckDescription(
+        "const-overload-order",
+        "Reports mutable overloads before their const counterparts."
+    ) << new FormatCheckDescription(
+        "qpointer-getter",
+        "Reports raw pointers returned from QPointer fields."
+    );
     return rules;
 }
 
@@ -114,9 +169,12 @@ static QList<FormatRule * > formatCreateCommentRules()
     QList<FormatRule * > rules;
     rules << new FormatMarkBannerRule << new FormatTrailingCommentRule;
     rules << new FormatAsWithRule << new FormatUsSpellingRule;
-    rules << new FormatCodeBackticksRule << new FormatCommentCaseRule
-        << new FormatCommentPeriodRule << new FormatDocTagSignRule;
-    rules << new FormatCommentWidthRule << new FormatStubLineRule
+    rules << new FormatCodeBackticksRule
+        << new FormatCommentCaseRule
+        << new FormatCommentPeriodRule
+        << new FormatDocTagSignRule;
+    rules << new FormatCommentWidthRule
+        << new FormatStubLineRule
         << new FormatDocPlacementRule;
     rules << new FormatPatternReportRule(
         "so-hence",
@@ -190,8 +248,10 @@ QList<FormatRule * > formatCreateRules()
     rules << formatCreateCodeRules();
     rules << formatCreateClassRules();
     rules << formatCreateCommentRules();
-    rules << new FormatCheckDescription("body-braces",
-            "Gives body braces their own lines.");
+    rules << new FormatCheckDescription(
+        "body-braces",
+        "Gives body braces their own lines."
+    );
     return rules;
 }
 
@@ -212,70 +272,6 @@ bool formatIsInXdTree(const QString & path)
         }
         if ( ! dir.cdUp()) {
             return false;
-        }
-    }
-}
-
-/*!
-    Moves the continuation lines of each statement in @a document along with
-    the @a growths queued on its lines: a later line of the statement whose
-    indent reaches past a growth's column (such as an argument aligned under
-    a call's first one) gets that growth's characters added to its
-    indent, or taken from it.
-*/
-void formatShiftContinuations(
-        FormatDocument *document,
-        const QList<FormatGrowth > & growths)
-{
-    QMap<int, QList<FormatGrowth > > byLine;
-    for (int i = 0; i < growths.size(); ++i) {
-        byLine[document->symbolLine(growths.at(i).index)].append(growths.at(i));
-    }
-    QMap<int, QList<FormatGrowth > >::const_iterator it = byLine.constBegin();
-    for (; it != byLine.constEnd(); ++it) {
-        const int line = it.key();
-        const QList<FormatGrowth > & onLine = it.value();
-
-        // Finds the statement's last line.
-        int endLine = line;
-        int depth = 0;
-        for (int k = onLine.first().index; k < document->symbols().size(); ++k) {
-            const Token token = document->token(k);
-            depth += token == LPAREN || token == LBRACK ? 1 : 0;
-            depth -= token == RPAREN || token == RBRACK ? 1 : 0;
-            const bool ends = token == SEMIC || token == LBRACE
-                || token == RBRACE;
-            if (depth < 0 || (ends && depth == 0)) {
-                endLine = document->symbolLine(k);
-                break;
-            }
-        }
-
-        // Shifts each later line whose indent reaches past a growth.
-        for (int other = line + 1; other <= endLine; ++other) {
-            if (document->firstSymbolOfLine(other) < 0) {
-                continue;
-            }
-            const QByteArray indent = document->indentOf(other);
-            int shift = 0;
-            for (int g = 0; g < onLine.size(); ++g) {
-                if (onLine.at(g).column < indent.size()) {
-                    shift += onLine.at(g).delta;
-                }
-            }
-            if (shift > 0) {
-                document->replace(
-                    document->lineStart(other),
-                    0,
-                    QByteArray(shift, ' ')
-                );
-            } else if (shift < 0 && indent.size() + shift > 0) {
-                document->replace(
-                    document->lineStart(other),
-                    -shift,
-                    QByteArray()
-                );
-            }
         }
     }
 }

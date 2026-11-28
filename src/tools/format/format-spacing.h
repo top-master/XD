@@ -26,6 +26,7 @@
 class FormatSpacing
 {
 public:
+
     inline FormatSpacing() : keepAsIs(false), m_null(true) {}
     inline explicit FormatSpacing(const QByteArray & spacing)
         : keepAsIs(false), text(spacing), m_null(false)

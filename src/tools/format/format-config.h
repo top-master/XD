@@ -33,6 +33,7 @@
 class FormatConfig
 {
 public:
+
     inline FormatConfig() : verbose(false) {}
 
     QStringList checks;

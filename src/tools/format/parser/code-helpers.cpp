@@ -41,26 +41,30 @@ bool isTypeEnd(Token token)
 */
 bool isBuiltinType(Token token)
 {
-    return token == CHAR || token == WCHAR || token == BOOL || token == SHORT || token == INT
-        || token == LONG || token == SIGNED || token == UNSIGNED || token == FLOAT
-        || token == DOUBLE || token == VOID;
+    return token == CHAR
+        || token == WCHAR
+        || token == BOOL
+        || token == SHORT
+        || token == INT
+        || token == LONG
+        || token == SIGNED
+        || token == UNSIGNED
+        || token == FLOAT
+        || token == DOUBLE
+        || token == VOID;
 }
 
 /*!
     Tells whether the gap between the tokens at @a before and @a after of
-    @a document holds only spaces and tabs (no newline and no comment).
+    @a document holds only spaces, tabs, and unprotected inline comments.
 */
 bool isSameLineGap(const FormatDocument *document, int before, int after)
 {
-    const int from = document->symbolEnd(before);
-    const int to = document->symbols().at(after).from;
-    for (int i = from; i < to; ++i) {
-        const char c = document->text().at(i);
-        if (c != ' ' && c != '\t') {
-            return false;
-        }
-    }
-    return true;
+    return document->isCodeWhitespace(
+        document->symbolEnd(before),
+        document->symbols().at(after).from,
+        false
+    );
 }
 
 /*!
@@ -122,8 +126,12 @@ int lambdaBody(const FormatDocument *document, int bracket)
         return -1;
     }
     const Token before = document->token(bracket - 1);
-    if (before != EQ && before != LPAREN && before != COMMA && before != RETURN
-        && before != LBRACE && before != SEMIC
+    if (before != EQ
+        && before != LPAREN
+        && before != COMMA
+        && before != RETURN
+        && before != LBRACE
+        && before != SEMIC
     ) {
         return -1;
     }
@@ -131,8 +139,10 @@ int lambdaBody(const FormatDocument *document, int bracket)
     if (document->token(body) == LPAREN && document->match(body) >= 0) {
         body = document->match(body) + 1;
     }
-    while (body < document->symbols().size() && document->token(body) != LBRACE
-        && document->token(body) != SEMIC && document->token(body) != RPAREN
+    while (body < document->symbols().size()
+        && document->token(body) != LBRACE
+        && document->token(body) != SEMIC
+        && document->token(body) != RPAREN
     ) {
         ++body;
     }
@@ -148,9 +158,19 @@ int lambdaBody(const FormatDocument *document, int bracket)
 */
 bool isLeadingOperator(Token token)
 {
-    return token == ANDAND || token == OROR || token == LTLT || token == PLUS || token == MINUS
-        || token == OR || token == HAT || token == QUESTION || token == STAR
-        || token == SLASH || token == PERCENT || token == EQEQ || token == NE;
+    return token == ANDAND
+        || token == OROR
+        || token == LTLT
+        || token == PLUS
+        || token == MINUS
+        || token == OR
+        || token == HAT
+        || token == QUESTION
+        || token == STAR
+        || token == SLASH
+        || token == PERCENT
+        || token == EQEQ
+        || token == NE;
 }
 
 /*!
@@ -158,10 +178,17 @@ bool isLeadingOperator(Token token)
 */
 bool isAssignmentOperator(Token token)
 {
-    return token == EQ || token == PLUS_EQ || token == MINUS_EQ
-        || token == STAR_EQ || token == SLASH_EQ || token == PERCENT_EQ
-        || token == AND_EQ || token == OR_EQ || token == HAT_EQ
-        || token == LTLT_EQ || token == GTGT_EQ;
+    return token == EQ
+        || token == PLUS_EQ
+        || token == MINUS_EQ
+        || token == STAR_EQ
+        || token == SLASH_EQ
+        || token == PERCENT_EQ
+        || token == AND_EQ
+        || token == OR_EQ
+        || token == HAT_EQ
+        || token == LTLT_EQ
+        || token == GTGT_EQ;
 }
 
 /*!
@@ -170,9 +197,15 @@ bool isAssignmentOperator(Token token)
 */
 bool isOperandEnd(Token token)
 {
-    return token == IDENTIFIER || token == INTEGER_LITERAL || token == FLOATING_LITERAL
-        || token == CHARACTER_LITERAL || token == STRING_LITERAL || token == BOOLEAN_LITERAL
-        || token == RPAREN || token == RBRACK || token == THIS;
+    return token == IDENTIFIER
+        || token == INTEGER_LITERAL
+        || token == FLOATING_LITERAL
+        || token == CHARACTER_LITERAL
+        || token == STRING_LITERAL
+        || token == BOOLEAN_LITERAL
+        || token == RPAREN
+        || token == RBRACK
+        || token == THIS;
 }
 
 /*!
@@ -225,8 +258,7 @@ int textWidth(const QByteArray & text)
     it is a parameter of a function's declaration or definition (a list whose
     name follows a type, or a constructor's own class name).
 */
-bool isReferenceDeclaration(
-        const FormatDocument *document, int ampersand)
+bool isReferenceDeclaration(const FormatDocument *document, int ampersand)
 {
     // Walks back over the type's tokens.
     int start = ampersand - 1;
@@ -317,8 +349,7 @@ bool isReferenceDeclaration(
     if (name < paren - 1) {
         return document->lexem(paren - 1) == document->lexem(paren - 3);
     }
-    return (typeEnd == SEMIC || typeEnd == LBRACE || typeEnd == RBRACE || typeEnd == COLON
-        || typeEnd == EXPLICIT || typeEnd == INLINE)
+    return (typeEnd == SEMIC || typeEnd == LBRACE || typeEnd == RBRACE || typeEnd == COLON || typeEnd == EXPLICIT || typeEnd == INLINE)
         && document->scopeOf(paren) == FormatDocument::ClassScope;
 }
 
@@ -339,13 +370,21 @@ bool isStaticVariable(const FormatDocument *document, int index)
         } else if (depth <= 0 && token == IDENTIFIER) {
             const Token next = document->token(k + 1);
             if (k > index + 1
-                && (next == SEMIC || next == EQ || next == LBRACK
-                    || next == LBRACE || next == LPAREN)
+                && (next == SEMIC
+                    || next == EQ
+                    || next == LBRACK
+                    || next == LBRACE
+                    || next == LPAREN)
             ) {
                 return true;
             }
-        } else if (depth <= 0 && token != SCOPE && token != STAR && token != AND
-            && token != CONST && token != VOLATILE && ! isBuiltinType(token)
+        } else if (depth <= 0
+            && token != SCOPE
+            && token != STAR
+            && token != AND
+            && token != CONST
+            && token != VOLATILE
+            && ! isBuiltinType(token)
         ) {
             return false;
         }
@@ -357,9 +396,7 @@ bool isStaticVariable(const FormatDocument *document, int index)
     Reports a dereferenced call result and a direct-initialized local in the
     statement that starts at the token @a start of @a document.
 */
-void reportStatementShapes(
-        FormatDocument *document,
-        int start)
+void reportStatementShapes(FormatDocument *document, int start)
 {
     const FormatDocument::Scope scope = document->scopeOf(start);
     if (scope != FormatDocument::FunctionScope
@@ -377,7 +414,8 @@ void reportStatementShapes(
         ) {
             k += 2;
         }
-        if (document->token(k) == IDENTIFIER && document->token(k + 1) == LPAREN
+        if (document->token(k) == IDENTIFIER
+            && document->token(k + 1) == LPAREN
             && document->match(k + 1) > 0
         ) {
             const Token after = document->token(document->match(k + 1) + 1);
@@ -439,23 +477,27 @@ void reportStatementShapes(
     // Takes one argument that is a member call, such as `server->url(x)`,
     // and leaves out the types that cannot be copied, and the ones built
     // from a path or a pattern.
-    static const char *const uncopyable[] = {
-        "QFile", "QSaveFile", "QScopedPointer", "QMutexLocker", "QReadLocker",
-        "QWriteLocker",
-        "QDirIterator",
-        "QTextStream",
-        "QDataStream",
-        "QProcess",
-        "QSettings",
-        "QEventLoop",
-        "QFileInfo",
-        "QDir",
-        "QRegularExpression",
-        "QRegExp"
-    };
+    static const char *const uncopyable[] =
+        {
+            "QFile",
+            "QSaveFile",
+            "QScopedPointer",
+            "QMutexLocker",
+            "QReadLocker",
+            "QWriteLocker",
+            "QDirIterator",
+            "QTextStream",
+            "QDataStream",
+            "QProcess",
+            "QSettings",
+            "QEventLoop",
+            "QFileInfo",
+            "QDir",
+            "QRegularExpression",
+            "QRegExp"
+        };
     const QByteArray type = document->lexem(document->token(start) == CONST
-        ? start + 1 : start
-    );
+        ? start + 1 : start);
     for (size_t u = 0; u < sizeof(uncopyable) / sizeof(uncopyable[0]); ++u) {
         if (type == uncopyable[u]) {
             return;
@@ -480,10 +522,8 @@ void reportStatementShapes(
     if (isMemberCall
         && document->token(document->match(last) - 1) == IDENTIFIER
     ) {
-        document->report(document->symbols().at(start).from, "code-shape",
-                         QString(QLL("when the call returns the local's type, copy-initialize "
-                                     "it: <Type> %1 = qMove(...);"))
-                         .arg(QString::fromLatin1(document->lexem(k))));
+        document->report(document->symbols().at(start).from, "code-shape", QString(QLL("when the call returns the local's type, copy-initialize "
+                                     "it: <Type> %1 = qMove(...);")).arg(QString::fromLatin1(document->lexem(k))));
     }
 }
 
@@ -497,7 +537,8 @@ void reportLongInlineBody(FormatDocument *document, int brace)
     bool isInline = document->scopeOf(brace) == FormatDocument::ClassScope;
     for (int i = document->headStart(brace); i < brace && ! isInline; ++i) {
         isInline = document->token(i) == INLINE
-            || (document->token(i) == IDENTIFIER && document->lexem(i) == "Q_ALWAYS_INLINE");
+            || (document->token(i) == IDENTIFIER
+                && document->lexem(i) == "Q_ALWAYS_INLINE");
     }
     const int close = document->match(brace);
     if ( ! isInline || close < 0) {
@@ -510,8 +551,7 @@ void reportLongInlineBody(FormatDocument *document, int brace)
         }
     }
     if (lines > 5) {
-        document->report(document->symbols().at(brace).from, "code-shape",
-                         QString(QLL("define the function in its source file: the inline "
+        document->report(document->symbols().at(brace).from, "code-shape", QString(QLL("define the function in its source file: the inline "
                                      "body has %1 lines (at most 5)")).arg(lines));
     }
 }

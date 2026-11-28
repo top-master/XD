@@ -125,6 +125,22 @@ QVariant FormatConditionObject::argCount(int depth, int argument)
 }
 
 /*!
+    Builds the number of `&&` and `||` operands in the range named by @a per
+    (such as `pair-bundle`), or an invalid value where the place has none.
+*/
+QVariant FormatConditionObject::count(const QString & per)
+{
+    Config::Cache::skip();
+    const FormatConditionContext *format =
+        static_cast<const FormatConditionContext * >(this->context());
+    qreal operands = 0;
+    if ( ! format || ! format->conditionCount(per, &operands)) {
+        return QVariant();
+    }
+    return operands;
+}
+
+/*!
     Builds whether the project targets the C++ standard @a standard, such as
     `C++11`, in any case, or an invalid value where the place does not know
     the project's standards.
@@ -161,8 +177,7 @@ QVariant FormatConditionObject::is(const QString & kind)
     the context does not know the answer.
 */
 QVariant FormatConditionObject::ask(
-        Question question,
-        const QString & name) const
+        Question question, const QString & name) const
 {
     const FormatConditionContext *format =
         static_cast<const FormatConditionContext * >(this->context());

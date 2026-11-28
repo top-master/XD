@@ -7,6 +7,7 @@
 class FormatComment
 {
 public:
+
     enum Kind { Line, LineDoc, Block, BlockDoc };
 
     inline FormatComment()

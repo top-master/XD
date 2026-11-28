@@ -11,6 +11,7 @@ class FormatThreadRunner : public FormatRunner
 {
     typedef FormatRunner super;
 public:
+
     FormatThreadRunner(const Formatter *formatter,
                        const FormatOptions & options);
 

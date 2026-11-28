@@ -1,10 +1,9 @@
 # Copyright (C) 2015 The XD Company Ltd.
 # SPDX-License-Identifier: Apache-2.0
 
-# Builds the formatter's logic on top of moc's tokenizer and the ignore-file
-# parser, for the `format` tool and for the tests that link the formatter's
-# rules directly.
-include($$PWD/../moc/moc.pri)
+# Builds the formatter's logic with its self-contained lexer and the
+# ignore-file parser, for the `format` tool and for the tests that link the
+# formatter's rules directly.
 STATIC_PLUGINS += config-parser ignore-parser project-parser console
 
 INCLUDEPATH += $$PWD
@@ -31,9 +30,19 @@ HEADERS += \
     $$PWD/format-spacing.h \
     $$PWD/format-thread-runner.h \
     $$PWD/formatter.h \
+    $$PWD/ast/ast-node.h \
+    $$PWD/ast/ast-parser.h \
+    $$PWD/ast/ast-printer.h \
+    $$PWD/ast/ast-transforms.h \
+    $$PWD/ast/comment-attacher.h \
+    $$PWD/doc/doc-node.h \
+    $$PWD/doc/doc-printer.h \
     $$PWD/lang/class-members.h \
     $$PWD/lang/comment-line.h \
     $$PWD/lang/member-scope.h \
+    $$PWD/lexer/format-language.h \
+    $$PWD/lexer/format-lexer.h \
+    $$PWD/lexer/format-token.h \
     $$PWD/parser/class-helpers.h \
     $$PWD/parser/class-relations.h \
     $$PWD/parser/code-helpers.h \
@@ -43,6 +52,7 @@ HEADERS += \
     $$PWD/parser/settings-object.h \
     $$PWD/parser/condition-layout.h \
     $$PWD/parser/comment-helpers.h \
+    $$PWD/parser/comment-layout.h \
     $$PWD/parser/expression-layout.h \
     $$PWD/parser/layout-helpers.h \
     $$PWD/parser/type-mapping.h \
@@ -79,6 +89,15 @@ SOURCES += \
     $$PWD/format-file-config.cpp \
     $$PWD/format-thread-runner.cpp \
     $$PWD/formatter.cpp \
+    $$PWD/ast/ast-node.cpp \
+    $$PWD/ast/ast-parser.cpp \
+    $$PWD/ast/ast-printer.cpp \
+    $$PWD/ast/ast-transforms.cpp \
+    $$PWD/ast/comment-attacher.cpp \
+    $$PWD/doc/doc-node.cpp \
+    $$PWD/doc/doc-printer.cpp \
+    $$PWD/lexer/format-language.cpp \
+    $$PWD/lexer/format-lexer.cpp \
     $$PWD/parser/class-helpers.cpp \
     $$PWD/parser/class-relations.cpp \
     $$PWD/parser/code-helpers.cpp \
@@ -88,6 +107,7 @@ SOURCES += \
     $$PWD/parser/settings-object.cpp \
     $$PWD/parser/condition-layout.cpp \
     $$PWD/parser/comment-helpers.cpp \
+    $$PWD/parser/comment-layout.cpp \
     $$PWD/parser/expression-layout.cpp \
     $$PWD/parser/layout-helpers.cpp \
     $$PWD/parser/type-mapping.cpp \

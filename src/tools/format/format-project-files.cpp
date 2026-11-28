@@ -20,8 +20,7 @@
     @a includePaths not known yet, then wakes a takeUnparsed() that waits.
 */
 void FormatProjectFiles::add(
-        const QStringList & files,
-        const QStringList & includePaths)
+        const QStringList & files, const QStringList & includePaths)
 {
     QMutexLocker locker(&this->m_mutex);
     for (int i = 0; i < files.size(); ++i) {

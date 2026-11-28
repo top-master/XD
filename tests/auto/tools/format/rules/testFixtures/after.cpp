@@ -39,8 +39,7 @@ void update()
                 {
                     c->m_linkLocalIPv4 = (val.compare(
                         QLL("true"),
-                        Qt::CaseInsensitive
-                    ) == 0
+                        Qt::CaseInsensitive) == 0
                         || val.toInt() != 0);
                 }
             }
@@ -1666,14 +1665,13 @@ QString markerOf(const QString & text, Context *context)
         QStringList(),
         context,
         &marker,
-        &error
-    )) {
+        &error)
+    ) {
         return marker;
     }
     if ( ! Config::Choice::resolve(
             text, QStringList(), QStringList(),
-            context, &marker, &error
-        )
+            context, &marker, &error)
         && isReady
     ) {
         return QString();

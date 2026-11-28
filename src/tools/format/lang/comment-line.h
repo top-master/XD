@@ -16,6 +16,7 @@
 class FormatCommentLine
 {
 public:
+
     inline FormatCommentLine() : offset(0) {}
     inline FormatCommentLine(int offset, const QByteArray & text)
         : offset(offset), text(text)

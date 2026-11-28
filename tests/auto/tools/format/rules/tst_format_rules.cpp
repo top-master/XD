@@ -15,8 +15,13 @@
 #include "parser/condition-context.h"
 #include "parser/scope-conditions.h"
 #include "parser/comment-helpers.h"
+#include "parser/comment-layout.h"
 #include "parser/layout-helpers.h"
-#include "preprocessor.h"
+#include "ast/ast-parser.h"
+#include "ast/ast-printer.h"
+#include "ast/ast-transforms.h"
+#include "doc/doc-printer.h"
+#include "lexer/format-lexer.h"
 
 #include <QtCore/QDir>
 #include <QtCore/QLockFile>
@@ -82,22 +87,32 @@ public:
     mutable int calls;
 };
 
-/// Tests the formatter's logic, linked in directly: moc's comment tokens,
-/// the document under formatting, the git-blame style line ranges, the
-/// worker results, and each formatting rule.
+/// Tests the formatter's logic, linked in directly: the multi-language
+/// lexer, layout IR printer, the document under formatting, the git-blame
+/// style line ranges, the worker results, and each formatting rule.
 class tst_FormatRules : public QObject
 {
     Q_OBJECT
     typedef QObject super;
 private slots:
-    /// Moc's tokenizer.
+    /// Lexer.
     void testTokenize_shouldDropCommentsByDefault();
     void testTokenize_shouldEmitCommentsWhenKept();
     void testTokenize_shouldKeepRawStringWhole();
 
+    /// Layout printer.
+    void testDocPrinter_shouldWrapAndAlignGroups();
+    void testDocPrinter_shouldFlushLineSuffixBeforeNewline();
+    void testDocPrinter_shouldPackFillAndConditionalGroups();
+    void testDocPrinter_shouldPreserveVerbatimSpan();
+
+    /// Syntax tree and comment attachment.
+    void testAstParser_shouldBuildSyntaxTreeAndAttachComments();
+    void testAstPrinter_shouldFormatAstAndPreserveCommentsAndRanges();
+    void testAst_shouldScanMultiLanguageComments();
+
     /// Document.
-    void testEditor_shouldPublishOnApplyAndScopeExit();
-    void testEditor_shouldPreserveCommentsAndRange();
+    void testComments_shouldAttachAndPreserveOnReplace();
     void testComments_shouldTellEachKind_data();
     void testComments_shouldTellEachKind();
     void testComments_shouldTellTrailingFromOwnLine();
@@ -284,8 +299,7 @@ void tst_FormatRules::testInlineSettings_shouldFollowNestedRegions()
     QCOMPARE(document.configAt(text.indexOf("int after")).wrapMax, 70);
     QCOMPARE(document.configAt(text.indexOf("int after")).wrapBegin.first(), 40);
     QCOMPARE(document.configAt(text.indexOf("int unclosed")).wrapMax, 70);
-    QVERIFY(document.replace(0, 0, "int inserted;\n"));
-    QVERIFY(document.applyEdits());
+    document.resetTextAndAnalyze("int inserted;\n" + text, true);
     QVERIFY(document.inlineConfigurationError().isEmpty());
     QCOMPARE(document.configAt(document.text().indexOf("int inside")).wrapMax, 50);
     QCOMPARE(document.configAt(document.text().indexOf("int after")).wrapMax, 70);
@@ -757,19 +771,14 @@ void tst_FormatRules::testLayeredParser_shouldReadIndentedIni()
 }
 
 /// Tokenizes `text` the way the formatter does, with comment tokens only
-/// when `keepComments` is set, and restores moc's switches afterwards.
+/// when `keepComments` is set.
 Symbols tst_FormatRules::tokenize(
         const QByteArray & text,
         bool keepComments) const
 {
-    const bool preprocessOnly = Preprocessor::preprocessOnly;
-    const bool keep = Preprocessor::keepComments;
-    Preprocessor::preprocessOnly = true;
-    Preprocessor::keepComments = keepComments;
-    const Symbols symbols = qMove(Preprocessor::tokenize(text));
-    Preprocessor::preprocessOnly = preprocessOnly;
-    Preprocessor::keepComments = keep;
-    return symbols;
+    return qMove(FormatLexer::tokenize(
+        text, FormatLexer::Options(keepComments)
+    ));
 }
 
 /// Formats `text`, the file at `path`, with the rules that `rule` names,
@@ -968,6 +977,170 @@ void tst_FormatRules::testTokenize_shouldKeepRawStringWhole()
     QCOMPARE(nextLine, 3);
 }
 
+void tst_FormatRules::testDocPrinter_shouldWrapAndAlignGroups()
+{
+    DocArena doc;
+    QVector<const DocNode * > args;
+    args.append(doc.text("firstArg"));
+    args.append(doc.text("secondArg"));
+    const DocNode *argSep = doc.concat(doc.text(","), doc.line());
+    const DocNode *call = doc.group(doc.concat(
+        doc.text("call("),
+        doc.indent(doc.concat(doc.softline(), doc.join(argSep, args))),
+        doc.softline(),
+        doc.text(");")
+    ));
+
+    DocPrinter::Options wide;
+    wide.printWidth = 40;
+    QCOMPARE(
+        DocPrinter::print(call, wide),
+        QByteArray("call(firstArg, secondArg);")
+    );
+
+    DocPrinter::Options narrow;
+    narrow.printWidth = 20;
+    QCOMPARE(
+        DocPrinter::print(call, narrow),
+        QByteArray("call(\n    firstArg,\n    secondArg\n);")
+    );
+}
+
+void tst_FormatRules::testDocPrinter_shouldFlushLineSuffixBeforeNewline()
+{
+    DocArena doc;
+    const DocNode *tree = doc.concat(
+        doc.text("int x = 1"),
+        doc.lineSuffix(doc.text(" // note")),
+        doc.text(";"),
+        doc.hardline()
+    );
+    QCOMPARE(DocPrinter::print(tree), QByteArray("int x = 1; // note\n"));
+}
+
+void tst_FormatRules::testDocPrinter_shouldPackFillAndConditionalGroups()
+{
+    DocArena doc;
+    QVector<const DocNode * > words;
+    words.append(doc.text("alpha"));
+    words.append(doc.line());
+    words.append(doc.text("beta"));
+    words.append(doc.line());
+    words.append(doc.text("gamma"));
+    const DocNode *filled = doc.fill(words);
+
+    DocPrinter::Options opts;
+    opts.printWidth = 11;
+    QCOMPARE(DocPrinter::print(filled, opts), QByteArray("alpha beta\ngamma"));
+
+    QVector<const DocNode * > states;
+    states.append(doc.text("oneLineVeryLongCall()"));
+    states.append(doc.concat(doc.text("splitLine("), doc.hardline(), doc.text(")")));
+    const DocNode *cond = doc.conditionalGroup(states);
+    opts.printWidth = 15;
+    QCOMPARE(DocPrinter::print(cond, opts), QByteArray("splitLine(\n)"));
+}
+
+void tst_FormatRules::testDocPrinter_shouldPreserveVerbatimSpan()
+{
+    DocArena doc;
+    const DocNode *tree = doc.concat(
+        doc.verbatim("  // kept as-is\n  int   x=1;"),
+        doc.indent(doc.concat(doc.hardline(), doc.text("int y = 2;")))
+    );
+    QCOMPARE(
+        DocPrinter::print(tree),
+        QByteArray("  // kept as-is\n  int   x=1;\n    int y = 2;")
+    );
+}
+
+void tst_FormatRules::testAstParser_shouldBuildSyntaxTreeAndAttachComments()
+{
+    const QByteArray code =
+        "// Leading namespace comment.\n"
+        "namespace Demo {\n"
+        "// Class doc.\n"
+        "class Widget {\n"
+        "public:\n"
+        "    // Control comment.\n"
+        "    void paint(int w) {\n"
+        "        if (w > 0)\n"
+        "            draw(w); // Trailing draw note.\n"
+        "    }\n"
+        "};\n"
+        "}\n";
+    FormatDocument doc(code, QString(QLL("widget.cpp")));
+    AstArena arena;
+    const AstParseResult ast = doc.buildAst(&arena);
+    QVERIFY(ast.root != Q_NULLPTR);
+    QCOMPARE(ast.root->children.size(), 1);
+
+    const AstNode *ns = ast.root->children.at(0);
+    QCOMPARE(ns->kind, AstNode::NamespaceDecl);
+    QCOMPARE(ns->name, QByteArray("Demo"));
+    QCOMPARE(ast.comments.size(), 4);
+    QCOMPARE(ast.comments.at(0)->placement, AstComment::Leading);
+    QCOMPARE(ast.comments.at(0)->followingNode, ns);
+    QCOMPARE(ast.comments.at(3)->placement, AstComment::Trailing);
+    QVERIFY(ast.comments.at(3)->trailingHint);
+}
+
+void tst_FormatRules::testAstPrinter_shouldFormatAstAndPreserveCommentsAndRanges()
+{
+    const QByteArray code =
+        "// Preserved banner.\n"
+        "namespace App\n"
+        "{\n"
+        "void run()\n"
+        "{\n"
+        "    if (ready)\n"
+        "        step(1, 2);\n"
+        "}\n"
+        "}\n";
+    FormatDocument doc(code, QString(QLL("app.cpp")));
+    AstArena arena;
+    AstParseResult ast = doc.buildAst(&arena);
+    AstTransforms::Options xformOpts;
+    xformOpts.braceControls = true;
+    xformOpts.labelNamespaces = true;
+    AstTransforms::apply(
+        ast.root, &ast.comments, doc.text(), doc.symbols(),
+        doc.disabledRanges(), doc.lineRanges(), doc.lineStarts(), xformOpts
+    );
+
+    const QByteArray printed = AstPrinter::print(
+        ast.root, doc.text(), doc.symbols(), doc.lineStarts(), doc.config()
+    );
+    QVERIFY(printed.contains("// Preserved banner."));
+    QVERIFY(printed.contains("// Namespace `App`."));
+    QVERIFY(printed.contains("if (ready) {"));
+}
+
+void tst_FormatRules::testAst_shouldScanMultiLanguageComments()
+{
+    const QByteArray py =
+        "def greet():\n"
+        "    \"\"\"Says hello cleanly.\"\"\"\n"
+        "    # Inline helper note.\n"
+        "    return 1\n";
+    const QList<FormatComment > pyComments = FormatLexer::scanComments(
+        py, FormatLanguage::Python
+    );
+    QCOMPARE(pyComments.size(), 2);
+    QCOMPARE(pyComments.at(0).kind, FormatComment::BlockDoc);
+    QCOMPARE(pyComments.at(1).kind, FormatComment::Line);
+
+    const QByteArray sh =
+        "#!/bin/sh\n"
+        "# Starts build.\n"
+        "echo ok\n";
+    const QList<FormatComment > shComments = FormatLexer::scanComments(
+        sh, FormatLanguage::Shell
+    );
+    QCOMPARE(shComments.size(), 2);
+    QCOMPARE(shComments.at(1).kind, FormatComment::Line);
+}
+
 void tst_FormatRules::testComments_shouldTellEachKind_data()
 {
     QTest::addColumn<QByteArray >("text");
@@ -1026,60 +1199,101 @@ void tst_FormatRules::testSymbols_shouldLeaveOutCommentsAndWhitespace()
 
 void tst_FormatRules::testReplace_shouldDropEditOutsideRanges()
 {
+    FormatDocument document("int a=1;\nvoid f()\n{\n    if(!x)\n        return;\n}\n");
+    document.setLineRanges(LineRanges() << qMakePair(4, 4));
+    qExpect(document.isSpanEditable(0, 8))->toBeFalsy();
+    qExpect(document.isSpanEditable(document.text().indexOf('!'), 1))->toBeTruthy();
+
     Formatter formatter;
-    FormatDocument document("a\nb\nc\n");
-    document.setLineRanges(LineRanges() << qMakePair(2, 2));
-    qExpect(document.replace(0, 1, "x"))->toBeFalsy();
-    qExpect(document.replace(2, 1, "y"))->toBeTruthy();
-    qExpect(document.applyEdits())->toBeTruthy();
-    qExpect(document.text())->toEqual(QByteArray("a\ny\nc\n"));
+    FormatConfig config;
+    config.checks << QLL("not-space") << QLL("control-braces");
+    const FormatResult result = formatter.format(
+        document.text(),
+        QString(QLL("sample.cpp")),
+        QStringList() << QString(QLL("4,4")),
+        config
+    );
+    QVERIFY2(result.error.isEmpty(), qPrintable(result.error));
+    QVERIFY(result.text.contains("if( ! x)\n        return;"));
+    QVERIFY(result.text.contains("int a=1;"));
 }
 
 void tst_FormatRules::testReplace_shouldDropOverlappingEdit()
 {
-    Formatter formatter;
     FormatDocument document("abcdef\n");
-    qExpect(document.replace(1, 3, "X"))->toBeTruthy();
-    qExpect(document.replace(2, 1, "Y"))->toBeFalsy();
-    qExpect(document.replace(4, 0, "Z"))->toBeTruthy();
-    qExpect(document.replace(4, 0, "W"))->toBeFalsy();
-    document.applyEdits();
-    qExpect(document.text())->toEqual(QByteArray("aXZef\n"));
+    AstTransformState state;
+    state.spanRewrites.append(AstTransformState::SpanRewrite(1, 4, "X"));
+    state.spanRewrites.append(AstTransformState::SpanRewrite(4, 4, "Z"));
+    AstArena arena;
+    const AstParseResult ast = document.buildAst(&arena);
+    const QByteArray out = AstPrinter::print(ast.root, state, document);
+    qExpect(out)->toEqual(QByteArray("aXZef\n"));
+
+    // Multi-language Python comment formatting works via single-pass comment buffer.
+    Formatter formatter;
+    FormatConfig config;
+    config.checks << QLL("comment-case") << QLL("comment-period");
+    const FormatResult pyResult = formatter.format(
+        "#!/usr/bin/env python3\n"
+        "def run():\n"
+        "    # normalize this note\n"
+        "    return 0\n",
+        QString(QLL("tool.py")),
+        QStringList(),
+        config
+    );
+    QVERIFY2(pyResult.error.isEmpty(), qPrintable(pyResult.error));
+    QVERIFY(pyResult.text.startsWith("#!/usr/bin/env python3\n"));
+    QVERIFY(pyResult.text.contains("# Normalize this note."));
 }
 
 void tst_FormatRules::testReplace_shouldQueueBothEditsOrNeither()
 {
     Formatter formatter;
-    FormatDocument document("a,\nb\nc,\nd\n");
-    document.setLineRanges(LineRanges() << qMakePair(2, 4));
+    FormatConfig config;
+    config.checks << QLL("control-braces");
+    const QByteArray src(
+        "void f(bool ok)\n"
+        "{\n"
+        "    if (ok)\n"
+        "        run();\n"
+        "}\n"
+    );
+    // Selecting only the `if` head line leaves both head and body unbraced.
+    const FormatResult headOnly = formatter.format(
+        src, QString(QLL("sample.cpp")),
+        QStringList() << QString(QLL("3,3")), config
+    );
+    qExpect(headOnly.text)->toEqual(src);
 
-    // Moving the comma of the unselected line 1 leaves both lines as they are.
-    qExpect(document.replace(1, 1, QByteArray(), 3, 0, ","))->toBeFalsy();
-
-    // Two edits that overlap each other are not queued either.
-    qExpect(document.replace(5, 2, QByteArray(), 6, 0, ","))->toBeFalsy();
-
-    // Moving the comma of line 3 to line 4 queues both edits.
-    qExpect(document.replace(6, 1, QByteArray(), 8, 0, ", "))->toBeTruthy();
-    qExpect(document.applyEdits())->toBeTruthy();
-    qExpect(document.text())->toEqual(QByteArray("a,\nb\nc\n, d\n"));
+    // Selecting both head and body lines braces the control statement atomically.
+    const FormatResult whole = formatter.format(
+        src, QString(QLL("sample.cpp")),
+        QStringList() << QString(QLL("3,4")), config
+    );
+    QVERIFY(whole.text.contains("if (ok) {\n        run();\n    }"));
 }
 
 void tst_FormatRules::testApplyEdits_shouldMoveRangesAndIssues()
 {
-    Formatter formatter;
-    FormatDocument document("a\nb\nc\nd\n");
-    document.setLineRanges(LineRanges() << qMakePair(1, 1) << qMakePair(
-        4,
-        4
+    FormatDocument document(
+        "// header note.\n"
+        "// next comment\n"
+        "void f()\n"
+        "{\n"
+        "    return;\n"
+        "}\n"
+    );
+    document.setLineRanges(LineRanges() << qMakePair(1, 1) << qMakePair(5, 5));
+    document.report(document.lineStart(5), "test-rule", QString(QLL("on return")));
+    const int offset = document.comments().at(0).offset;
+    QVERIFY(document.promoteTrailingComment(
+        offset, document.comments().at(0).length,
+        document.lineStart(1), "// Promoted.\n"
     ));
-    document.report(6, "test-rule", QString(QLL("on d")));
-    qExpect(document.replace(1, 0, "\nnew"))->toBeTruthy();
-    document.applyEdits();
-    qExpect(document.text())->toEqual(QByteArray("a\nnew\nb\nc\nd\n"));
-    qExpect(document.issues().at(0).line)->toEqual(5);
-    qExpect(document.isLineSelected(5))->toBeTruthy();
-    qExpect(document.isLineSelected(4))->toBeFalsy();
+    QCOMPARE(document.issues().at(0).line, 6);
+    QVERIFY(document.isLineSelected(6));
+    QVERIFY( ! document.isLineSelected(5));
 }
 
 void tst_FormatRules::testResolve_shouldFollowGitBlame_data()
@@ -4241,6 +4455,469 @@ void tst_FormatRules::testRules_shouldRewriteFile_data()
                       "                || before == RBRACK)\n"
                       "            && opener >= 0\n"
                       "            ? opener : start - 1;\n}\n");
+    QTest::newRow("condition-wrap breaks before args-wrap splits inner call")
+        << QString(QLL("line-join,condition-wrap,args-wrap,condition-close")) << QString(QLL("a.cpp"))
+        << QByteArray("// @formatter:\n// ```\n// [Structure]\n// target = any\n// ```\n"
+                      "void f()\n{\n    if (source->token(candidate) != IDENTIFIER\n"
+                      "        || source->lexem(candidate) != \"QPointer\"\n"
+                      "        || source->token(candidate + 1) != LANGLE) {\n        g();\n    }\n}\n")
+        << QByteArray("// @formatter:\n// ```\n// [Structure]\n// target = any\n// ```\n"
+                      "void f()\n{\n    if (source->token(candidate) != IDENTIFIER\n"
+                      "        || source->lexem(candidate) != \"QPointer\"\n"
+                      "        || source->token(candidate + 1) != LANGLE\n    ) {\n        g();\n    }\n}\n");
+    QTest::newRow("param-wrap ignores right-hand call of > inside condition")
+        << QString(QLL("line-join,param-wrap,condition-wrap,args-wrap,condition-close")) << QString(QLL("a.cpp"))
+        << QByteArray("// @formatter:\n// ```\n// [Structure]\n// target = any\n// ```\n"
+                      "void f()\n{\n    if ((after == DOT || after == ARROW)\n"
+                      "        && textWidth(source->lineText(source->symbolEndLine(cursor)))"
+                      " > wrapMaxAt(source, source->symbols().at(cursor).from)) {\n        g();\n    }\n}\n")
+        << QByteArray("// @formatter:\n// ```\n// [Structure]\n// target = any\n// ```\n"
+                      "void f()\n{\n    if ((after == DOT\n"
+                      "            || after == ARROW)\n"
+                      "        && textWidth(source->lineText(source->symbolEndLine(cursor)))\n"
+                      "            > wrapMaxAt(source, source->symbols().at(cursor).from)\n    ) {\n        g();\n    }\n}\n");
+    QTest::newRow("condition-wrap re-wraps split condition when && shares over-80 line")
+        << QString(QLL("condition-wrap,args-wrap,condition-close")) << QString(QLL("a.cpp"))
+        << QByteArray("void f()\n{\n    if (nextComment < comments.size() && comments.at(nextComment).isDoc() && isOnlyWhitespace(\n"
+                      "            end,\n            comments.at(nextComment).offset\n        )\n"
+                      "        && comments.at(nextComment).offset < limit\n    ) {\n        g();\n    }\n}\n")
+        << QByteArray("void f()\n{\n    if (nextComment < comments.size()\n"
+                      "        && comments.at(nextComment).isDoc()\n"
+                      "        && isOnlyWhitespace(\n"
+                      "            end,\n"
+                      "            comments.at(nextComment).offset)\n"
+                      "        && comments.at(nextComment).offset < limit\n"
+                      "    ) {\n        g();\n    }\n}\n");
+    QTest::newRow("param-wrap wraps constructor signature with next-line initializer colon and member function typedef")
+        << QString(QLL("param-wrap")) << QString(QLL("a.cpp"))
+        << QByteArray(
+            "class Reader {\n    typedef bool (FormatConditionContext::*Question)(const QString & name, bool *value) const;\n"
+                "    inline Reader(FormatProjectFiles *files, const QStringList & projects, const QString & qmake, const QStringList & specs)\n"
+                "        : m_files(files)\n    {\n    }\n};\n")
+        << QByteArray(
+            "class Reader {\n    typedef bool (FormatConditionContext::*Question)(\n"
+                "            const QString & name, bool *value) const;\n"
+                "    inline Reader(\n"
+                "            FormatProjectFiles *files,\n"
+                "            const QStringList & projects,\n"
+                "            const QString & qmake,\n"
+                "            const QStringList & specs)\n"
+                "        : m_files(files)\n    {\n    }\n};\n"
+        );
+    QTest::newRow("args-wrap wraps operator chain inside constructor member initializer")
+        << QString(QLL("args-wrap")) << QString(QLL("a.cpp"))
+        << QByteArray(
+            "FormatAgentGuides::FormatAgentGuides()\n"
+                "    : m_folder(QDir::tempPath() + QLatin1Char('/') + FormatAgentGuides::folderPrefix() + QString::number(QCoreApplication::applicationPid()))\n"
+                "    , m_count(0)\n{\n}\n")
+        << QByteArray(
+            "FormatAgentGuides::FormatAgentGuides()\n"
+                "    : m_folder(\n"
+                "        QDir::tempPath() + QLatin1Char('/')\n"
+                "            + FormatAgentGuides::folderPrefix()\n"
+                "            + QString::number(QCoreApplication::applicationPid())\n"
+                "    )\n"
+                "    , m_count(0)\n{\n}\n"
+        );
+    QTest::newRow("line-join keeps multiline for-loop header and macro tuple exceeding wrapMax")
+        << QString(QLL("line-join")) << QString(QLL("a.cpp"))
+        << QByteArray(
+            "// @formatter:\n// ```\n// [Structure]\n// target = any\n// ```\n"
+                "Q_GLOBAL_STATIC_WITH_ARGS(QRegularExpression, pattern, (\n"
+                "    QString(QLL(\"^[a-zA-Z0-9_]+(?:\\\\s+[a-zA-Z0-9_]+)*$\")),\n"
+                "    QRegularExpression::CaseInsensitiveOption\n))\n"
+                "void f()\n{\n    for (int candidate = 0;\n"
+                "         candidate + 1 < source->symbols().size() && ! guarded;\n"
+                "         ++candidate) {\n    }\n}\n")
+        << QByteArray(
+            "// @formatter:\n// ```\n// [Structure]\n// target = any\n// ```\n"
+                "Q_GLOBAL_STATIC_WITH_ARGS(QRegularExpression, pattern, (\n"
+                "    QString(QLL(\"^[a-zA-Z0-9_]+(?:\\\\s+[a-zA-Z0-9_]+)*$\")),\n"
+                "    QRegularExpression::CaseInsensitiveOption\n))\n"
+                "void f()\n{\n    for (int candidate = 0;\n"
+                "         candidate + 1 < source->symbols().size() && ! guarded;\n"
+                "         ++candidate) {\n    }\n}\n"
+        );
+    QTest::newRow("args-wrap wraps overflowing ternary condition inside call argument")
+        << QString(QLL("args-wrap")) << QString(QLL("a.cpp"))
+        << QByteArray(
+            "void f()\n{\n    AstNode *leaf = m_arena->createNode("
+                "(t == INTEGER_LITERAL || t == FLOATING_LITERAL || t == STRING_LITERAL || t == CHARACTER_LITERAL || t == BOOLEAN_LITERAL)"
+                " ? AstNode::LiteralExpr : AstNode::IdentExpr);\n}\n")
+        << QByteArray(
+            "void f()\n{\n    AstNode *leaf = m_arena->createNode(\n"
+                "        (t == INTEGER_LITERAL\n"
+                "                || t == FLOATING_LITERAL\n"
+                "                || t == STRING_LITERAL\n"
+                "                || t == CHARACTER_LITERAL\n"
+                "                || t == BOOLEAN_LITERAL)\n"
+                "            ? AstNode::LiteralExpr : AstNode::IdentExpr\n    );\n}\n"
+        );
+    QTest::newRow("ternary-wrap wraps nested ternary when keeping branches inline exceeds wrapMax")
+        << QString(QLL("ternary-wrap")) << QString(QLL("a.cpp"))
+        << QByteArray(
+            "void f()\n{\n    const QString fallback = config.byRefVariable == FormatFileConfig::LintIgnore ? QLL(\"ignore\") : config.byRefVariable == FormatFileConfig::LintError ? QLL(\"error\") : QLL(\"warn\");\n}\n"
+        )
+        << QByteArray(
+            "void f()\n{\n    const QString fallback = config.byRefVariable\n"
+                "            == FormatFileConfig::LintIgnore\n"
+                "        ? QLL(\"ignore\")\n"
+                "        : config.byRefVariable == FormatFileConfig::LintError\n"
+                "            ? QLL(\"error\") : QLL(\"warn\");\n}\n"
+        );
+    QTest::newRow("one-statement separates access labels from declarations with blank line for non-variables")
+        << QString(QLL("one-statement")) << QString(QLL("a.h"))
+        << QByteArray(
+            "class Demo\n{\n"
+                "public: static const DocNode * buildDoc(int value);\n"
+                "private: void helper();\n"
+                "protected: int m_count;\n"
+                "private: Q_DISABLE_COPY(Demo)\n"
+                "};\n"
+                "class AST\n{\n"
+                "public:\n    AST(int x);\n"
+                "};\n")
+        << QByteArray(
+            "class Demo\n{\n"
+                "public:\n\n    static const DocNode * buildDoc(int value);\n"
+                "private:\n\n    void helper();\n"
+                "protected:\n    int m_count;\n"
+                "private:\n    Q_DISABLE_COPY(Demo)\n"
+                "};\n"
+                "class AST\n{\n"
+                "public:\n\n    AST(int x);\n"
+                "};\n"
+        );
+    QTest::newRow("one-statement keeps at most one empty line after access label for variables and macros in change mode")
+        << QString(QLL("one-statement")) << QString(QLL("a.h"))
+        << QByteArray(
+            "class AstArena\n{\n"
+                "public:\n\n\n    void *allocate();\n"
+                "private:\n    Q_DISABLE_COPY(AstArena)\n"
+                "    int m_direct;\n"
+                "protected:\n\n    int m_single;\n"
+                "private:\n\n\n    Q_DISABLE_COPY_MOVE(AstArena)\n"
+                "};\n")
+        << QByteArray(
+            "class AstArena\n{\n"
+                "public:\n\n    void *allocate();\n"
+                "private:\n    Q_DISABLE_COPY(AstArena)\n"
+                "    int m_direct;\n"
+                "protected:\n\n    int m_single;\n"
+                "private:\n\n    Q_DISABLE_COPY_MOVE(AstArena)\n"
+                "};\n"
+        );
+    QTest::newRow("one-statement removes empty lines after access label for variables and macros when target is any")
+        << QString(QLL("one-statement")) << QString(QLL("a.h"))
+        << QByteArray(
+            "// @formatter:\n// ```\n// [Structure]\n// target = any\n// ```\n"
+                "class AstArena\n{\n"
+                "public:\n\n\n    void *allocate();\n"
+                "protected:\n\n    int m_single;\n"
+                "private:\n\n\n    Q_DISABLE_COPY(AstArena)\n"
+                "};\n")
+        << QByteArray(
+            "// @formatter:\n// ```\n// [Structure]\n// target = any\n// ```\n"
+                "class AstArena\n{\n"
+                "public:\n\n    void *allocate();\n"
+                "protected:\n    int m_single;\n"
+                "private:\n    Q_DISABLE_COPY(AstArena)\n"
+                "};\n"
+        );
+    QTest::newRow("operator-wrap preserves access label separate from return pointer declaration")
+        << QString(QLL("operator-wrap")) << QString(QLL("a.h"))
+        << QByteArray(
+            "class AstPrinter\n{\n"
+                "public:\n\n"
+                "    static const DocNode * buildDoc(\n"
+                "        const AstNode *root,\n"
+                "        const QByteArray & source);\n"
+                "private:\n\n"
+                "    static void resetState();\n"
+                "};\n")
+        << QByteArray(
+            "class AstPrinter\n{\n"
+                "public:\n\n"
+                "    static const DocNode * buildDoc(\n"
+                "        const AstNode *root,\n"
+                "        const QByteArray & source);\n"
+                "private:\n\n"
+                "    static void resetState();\n"
+                "};\n"
+        );
+    QTest::newRow("condition-wrap, line-join, and args-wrap keep call closer inline in condition chains and unwrapped calls")
+        << QString(QLL("condition-wrap,line-join,args-wrap"))
+        << QString(QLL("a.cpp"))
+        << QByteArray(
+            "// @formatter:\n// ```\n// [Structure]\n// target = any\n// ```\n"
+                "void f()\n{\n"
+                "    foo(a, b\n    );\n"
+                "    foo(veryLongArgumentOne, veryLongArgumentTwo, veryLongArgumentThree, veryLongArgumentFour\n    );\n"
+                "    if (end > last\n"
+                "        && findTernary(source, first, end - 1, &question, &colon\n        )\n"
+                "        && end < limit) {\n"
+                "        g();\n"
+                "    }\n"
+                "    if (end > last\n"
+                "        && findTernary(veryLongSourceObjectNameHere, firstArgumentIndexName, endIndexName - 1, &questionMarkOffset, &colonMarkOffset\n        )\n"
+                "        && end < limit) {\n"
+                "        g();\n"
+                "    }\n}\n")
+        << QByteArray(
+            "// @formatter:\n// ```\n// [Structure]\n// target = any\n// ```\n"
+                "void f()\n{\n"
+                "    foo(a, b);\n"
+                "    foo(\n"
+                "        veryLongArgumentOne,\n"
+                "        veryLongArgumentTwo,\n"
+                "        veryLongArgumentThree,\n"
+                "        veryLongArgumentFour\n    );\n"
+                "    if (end > last\n"
+                "        && findTernary(source, first, end - 1, &question, &colon)\n"
+                "        && end < limit\n    ) {\n"
+                "        g();\n"
+                "    }\n"
+                "    if (end > last\n"
+                "        && findTernary(\n"
+                "            veryLongSourceObjectNameHere,\n"
+                "            firstArgumentIndexName,\n"
+                "            endIndexName - 1,\n"
+                "            &questionMarkOffset,\n"
+                "            &colonMarkOffset)\n"
+                "        && end < limit\n    ) {\n"
+                "        g();\n"
+                "    }\n}\n"
+        );
+    QTest::newRow("operator-wrap breaks logical return chains past two bundle conditions onto one condition per line")
+        << QString(QLL("operator-wrap")) << QString(QLL("a.cpp"))
+        << QByteArray(
+            "bool isTypeKeyword(Token token)\n{\n"
+                "    return token == CHAR || token == WCHAR || token == BOOL || token == SHORT || token == INT || token == LONG || token == SIGNED || token == UNSIGNED || token == FLOAT || token == DOUBLE || token == VOID;\n"
+                "}\n")
+        << QByteArray(
+            "bool isTypeKeyword(Token token)\n{\n"
+                "    return token == CHAR\n"
+                "        || token == WCHAR\n"
+                "        || token == BOOL\n"
+                "        || token == SHORT\n"
+                "        || token == INT\n"
+                "        || token == LONG\n"
+                "        || token == SIGNED\n"
+                "        || token == UNSIGNED\n"
+                "        || token == FLOAT\n"
+                "        || token == DOUBLE\n"
+                "        || token == VOID;\n"
+                "}\n"
+        );
+    QTest::newRow("operator-wrap and args-wrap keep non-builder member calls with their owner")
+        << QString(QLL("operator-wrap,args-wrap")) << QString(QLL("a.cpp"))
+        << QByteArray(
+            "// @formatter:\n// ```\n// [Structure]\n// target = any\n// ```\n"
+                "void f()\n{\n"
+                "    {\n"
+                "        if (node->needsBraces && node->body && ! node->body->isBlock) {\n"
+                "            if (true) {\n"
+                "                bodyDoc = m_arena->concat(\n"
+                "                    m_arena->text(\"{\"),\n"
+                "                    m_arena->indent(m_arena->concat(m_arena->hardline(), bodyDoc)),\n"
+                "                    m_arena->hardline(),\n"
+                "                    m_arena->text(\"}\")\n"
+                "                );\n"
+                "            }\n"
+                "        }\n"
+                "    }\n"
+                "    bodyDoc = m_arena->m_sub->indent(m_arena->concat(m_arena->hardline(), bodyDoc));\n"
+                "    bodyDoc = createLongArenaBuilder(ctx)->indent(firstVeryLongArgumentNameHere);\n"
+                "    bodyDoc = createLongArenaBuilder(ctx)->m_sub->indent(firstLongArgName, secondArg);\n"
+                "    bodyDoc = createVeryLongArenaBuilderFactory(ctx, config, flags)->m_sub->indent(firstLongArgName, secondArg);\n"
+                "}\n")
+        << QByteArray(
+            "// @formatter:\n// ```\n// [Structure]\n// target = any\n// ```\n"
+                "void f()\n{\n"
+                "    {\n"
+                "        if (node->needsBraces && node->body && ! node->body->isBlock) {\n"
+                "            if (true) {\n"
+                "                bodyDoc = m_arena->concat(\n"
+                "                    m_arena->text(\"{\"),\n"
+                "                    m_arena->indent(\n"
+                "                        m_arena->concat(m_arena->hardline(), bodyDoc)\n"
+                "                    ),\n"
+                "                    m_arena->hardline(),\n"
+                "                    m_arena->text(\"}\")\n"
+                "                );\n"
+                "            }\n"
+                "        }\n"
+                "    }\n"
+                "    bodyDoc = m_arena->m_sub->indent(\n"
+                "        m_arena->concat(m_arena->hardline(), bodyDoc)\n"
+                "    );\n"
+                "    bodyDoc = createLongArenaBuilder(ctx)\n"
+                "        ->indent(firstVeryLongArgumentNameHere);\n"
+                "    bodyDoc = createLongArenaBuilder(ctx)->m_sub->indent(\n"
+                "        firstLongArgName,\n"
+                "        secondArg\n"
+                "    );\n"
+                "    bodyDoc = createVeryLongArenaBuilderFactory(ctx, config, flags)\n"
+                "        ->m_sub\n"
+                "        ->indent(firstLongArgName, secondArg);\n"
+                "}\n"
+        );
+    QTest::newRow("args-wrap keeps chain head within wrapBegin for chained calls")
+        << QString(QLL("line-join,operator-wrap,args-wrap"))
+        << QString(QLL("a.cpp"))
+        << QByteArray(
+            "// @formatter:\n// ```\n// [Structure]\n// target = any\n// ```\n"
+                "void f()\n{\n"
+                "    const QStringList compiled = parser.schema().compile(\n"
+                "        key,\n"
+                "        parser.rawValue(key),\n"
+                "        &context\n"
+                "    );\n"
+                "    if (true) {\n"
+                "        const QString candidate = info.dir().filePath(\n"
+                "            stem + QLatin1Char('.') + QString::fromLatin1(sources[i])\n"
+                "        );\n"
+                "        const QStringList names = specLists.at(i).split(\n"
+                "            QLatin1Char(','),\n"
+                "            QString::SkipEmptyParts\n"
+                "        );\n"
+                "    }\n"
+                "}\n")
+        << QByteArray(
+            "// @formatter:\n// ```\n// [Structure]\n// target = any\n// ```\n"
+                "void f()\n{\n"
+                "    const QStringList compiled = parser.schema().compile(\n"
+                "        key,\n"
+                "        parser.rawValue(key),\n"
+                "        &context\n"
+                "    );\n"
+                "    if (true) {\n"
+                "        const QString candidate = info.dir().filePath(\n"
+                "            stem + QLatin1Char('.') + QString::fromLatin1(sources[i])\n"
+                "        );\n"
+                "        const QStringList names = specLists.at(i).split(\n"
+                "            QLatin1Char(','),\n"
+                "            QString::SkipEmptyParts\n"
+                "        );\n"
+                "    }\n"
+                "}\n"
+        );
+    QTest::newRow("operator-wrap breaks nested logical bundle in expression chain under target=any")
+        << QString(QLL("line-join,operator-wrap")) << QString(QLL("a.cpp"))
+        << QByteArray(
+            "// @formatter:\n// ```\n// [Structure]\n// target = any\n// ```\n"
+                "void f()\n{\n"
+                "    {\n"
+                "        const bool mayBreak = hasMultipleOrChain\n"
+                "            && (fileConfig.wrapArgsOverCondition.isEmpty()\n"
+                "                ? isBrace\n"
+                "                    || (endsInChain && ( ! isSplit || argumentsBelow))\n"
+                "                    || over\n"
+                "                    || reachesWrapArgsAt(source, &conditions, i)\n"
+                "                : over);\n"
+                "    }\n"
+                "}\n")
+        << QByteArray(
+            "// @formatter:\n// ```\n// [Structure]\n// target = any\n// ```\n"
+                "void f()\n{\n"
+                "    {\n"
+                "        const bool mayBreak = hasMultipleOrChain\n"
+                "            && (fileConfig.wrapArgsOverCondition.isEmpty()\n"
+                "                ? isBrace\n"
+                "                    || (endsInChain\n"
+                "                        && ( ! isSplit || argumentsBelow))\n"
+                "                    || over\n"
+                "                    || reachesWrapArgsAt(source, &conditions, i)\n"
+                "                : over);\n"
+                "    }\n"
+                "}\n"
+        );
+    QTest::newRow("condition-wrap keeps 1 condition per line across inner pair under target=any")
+        << QString(QLL("line-join,condition-wrap,condition-close"))
+        << QString(QLL("a.cpp"))
+        << QByteArray(
+            "// @formatter:\n// ```\n// [Structure]\n// target = any\n// ```\n"
+                "void f()\n{\n"
+                "    if ((name == \"d_func\"\n"
+                "            || name == \"q_func\")\n"
+                "        && ! isTypeEnd(previous)\n"
+                "        && previous != AND\n"
+                "    ) {\n"
+                "        if (true) {\n"
+                "        } else if ((t == RANGLE || t == GTGT)\n"
+                "            && angleDepth > 0 && parenDepth == 0 && braceDepth == 0) {\n"
+                "        }\n"
+                "    }\n"
+                "}\n")
+        << QByteArray(
+            "// @formatter:\n// ```\n// [Structure]\n// target = any\n// ```\n"
+                "void f()\n{\n"
+                "    if ((name == \"d_func\"\n"
+                "            || name == \"q_func\")\n"
+                "        && ! isTypeEnd(previous)\n"
+                "        && previous != AND\n"
+                "    ) {\n"
+                "        if (true) {\n"
+                "        } else if ((t == RANGLE\n"
+                "                || t == GTGT)\n"
+                "            && angleDepth > 0\n"
+                "            && parenDepth == 0\n"
+                "            && braceDepth == 0\n"
+                "        ) {\n"
+                "        }\n"
+                "    }\n"
+                "}\n"
+        );
+    QTest::newRow("ternary-wrap and continuation-indent keep inner pair at 2 steps under target=any")
+        << QString(
+            QLL("line-join,ternary-wrap,operator-wrap,continuation-indent")
+        )
+        << QString(QLL("a.cpp"))
+        << QByteArray(
+            "// @formatter:\n// ```\n// [Structure]\n// target = any\n// ```\n"
+                "void f()\n{\n"
+                "        start = (before == RPAREN\n"
+                "            || before == RBRACK)\n"
+                "            && opener >= 0\n"
+                "            ? opener : start - 1;\n"
+                "}\n")
+        << QByteArray(
+            "// @formatter:\n// ```\n// [Structure]\n// target = any\n// ```\n"
+                "void f()\n{\n"
+                "        start = (before == RPAREN\n"
+                "                || before == RBRACK)\n"
+                "            && opener >= 0\n"
+                "            ? opener : start - 1;\n"
+                "}\n"
+        );
+    QTest::newRow("args-wrap keeps fitting logical argument inline under target=any")
+        << QString(QLL("line-join,operator-wrap,args-wrap"))
+        << QString(QLL("a.cpp"))
+        << QByteArray(
+            "// @formatter:\n// ```\n// [Structure]\n// target = any\n// ```\n"
+                "void f()\n{\n"
+                "    const QByteArray body = this->listLines(\n"
+                "        open,\n"
+                "        close,\n"
+                "        items,\n"
+                "        isWhole && (isBroken || (keepsLines && spansLines)),\n"
+                "        0,\n"
+                "        joinCount\n"
+                "    );\n"
+                "}\n")
+        << QByteArray(
+            "// @formatter:\n// ```\n// [Structure]\n// target = any\n// ```\n"
+                "void f()\n{\n"
+                "    const QByteArray body = this->listLines(\n"
+                "        open,\n"
+                "        close,\n"
+                "        items,\n"
+                "        isWhole && (isBroken || (keepsLines && spansLines)),\n"
+                "        0,\n"
+                "        joinCount\n"
+                "    );\n"
+                "}\n"
+        );
 }
 
 /// Formats each row's input as the file named in the row, of a project with
@@ -4270,15 +4947,19 @@ void tst_FormatRules::testRules_shouldRewriteFile()
 /// Builds the file of the `thisMode` tests: a base class `B`, then a class
 /// `W` with the inline method body `get` and the outline method body `run`,
 /// then a class template `V` with the outline method body `templateRun`.
-static QByteArray thisModeFile(const QByteArray & get, const QByteArray & run,
-                               const QByteArray & templateRun)
+static QByteArray thisModeFile(
+        const QByteArray & get, const QByteArray & run,
+        const QByteArray & templateRun)
 {
     return "class B\n{\npublic:\n    void base();\n    int m_b;\n};\n"
-           "class W : public B\n{\npublic:\n    void run();\n"
-           "    inline int get() const { " + get + " }\n    int m_x;\n};\n"
-           "template <typename T>\nclass V : public B\n{\npublic:\n    void run();\n    T m_v;\n};\n"
-           "void W::run()\n{\n" + run + "}\n"
-           "template <typename T>\nvoid V<T>::run()\n{\n" + templateRun + "}\n";
+        "class W : public B\n{\npublic:\n    void run();\n"
+        "    inline int get() const { "
+        + get
+        + " }\n    int m_x;\n};\n"
+            "template <typename T>\nclass V : public B\n{\npublic:\n    void run();\n    T m_v;\n};\n"
+            "void W::run()\n{\n"
+        + run + "}\n" "template <typename T>\nvoid V<T>::run()\n{\n"
+        + templateRun + "}\n";
 }
 
 void tst_FormatRules::testThisMode_shouldFollowSettings_data()
@@ -4741,19 +5422,44 @@ void tst_FormatRules::testScopeConditions_shouldCountConditionOperands()
 }
 
 /// Asks `wrapConditionsOver` for the limit of a range: the default gives two
-/// operands while a fifth of `wrapMax` is left, else one; a condition that
-/// holds gives 1, and one that does not gives 0.
+/// operands while a fifth of `wrapMax` is left and the targeted range holds
+/// at most two operands, else one; a condition that holds gives 1, and one
+/// that does not gives 0.
 void tst_FormatRules::testScopeConditions_shouldLimitConditionRanges()
 {
     FormatDocument document(
-        "void check() { if (ready() && valid() && safe()) {} }\n"
+        "void check() {\n"
+        "    if (ready() && valid() && safe()) {}\n"
+        "    if (ready() && valid()) {}\n"
+        "    if (ready() && (a || b)) {}\n"
+        "}\n"
     );
-    const int open = symbolIndex(document, "if") + 1;
+    const int openThree = symbolIndex(document, "if") + 1;
+    const int openTwo = symbolIndex(document, "if", 1) + 1;
+    const int openBundle = symbolIndex(document, "if", 2) + 1;
     FormatScopeConditions conditions(&document);
-    QCOMPARE(conditions.conditionsLimit(open, 3, 20), 2);
-    QCOMPARE(conditions.conditionsLimit(open, 3, 19), 1);
-    FormatFileConfig config;
+
+    // New default: > 2 conditions in pair-bundle limits to 1 even at 20% left.
+    QCOMPARE(conditions.conditionsLimit(openThree, 3, 20), 1);
+    QCOMPARE(conditions.conditionsLimit(openThree, 3, 19), 1);
+    QCOMPARE(conditions.conditionsLimit(openTwo, 2, 20), 2);
+    QCOMPARE(conditions.conditionsLimit(openTwo, 2, 19), 1);
+    QCOMPARE(conditions.conditionsLimit(openBundle, 3, 50), 1);
+
+    // Explicit legacy condition: `spaceRemaining < 20% ? 1 : 2`.
+    Config::Parser legacyParser(FormatFileConfig::schema());
+    FormatFileConfig legacyConfig;
     QString error;
+    QVERIFY2(legacyParser.readData(
+        "[Structure]\nwrapConditionsOver=spaceRemaining < 20% ? 1 : 2\n",
+        QLL("inline"), &error
+    ), qPrintable(error));
+    QVERIFY(readSettings(legacyParser, &legacyConfig));
+    document.setConfig(legacyConfig);
+    QCOMPARE(conditions.conditionsLimit(openThree, 3, 20), 2);
+    QCOMPARE(conditions.conditionsLimit(openThree, 3, 19), 1);
+
+    FormatFileConfig config;
     const QSharedPointer<Config::Scopes::Scope > scope =
         FormatConditionContext::pushCountScope();
     QVERIFY2(compileConditionForTest(
@@ -4761,12 +5467,12 @@ void tst_FormatRules::testScopeConditions_shouldLimitConditionRanges()
         &config.wrapConditionsOverCondition, &error
     ), qPrintable(error));
     document.setConfig(config);
-    QCOMPARE(conditions.conditionsLimit(open, 3, 50), 1);
-    QCOMPARE(conditions.conditionsLimit(open, 2, 50), 0);
+    QCOMPARE(conditions.conditionsLimit(openThree, 3, 50), 1);
+    QCOMPARE(conditions.conditionsLimit(openThree, 2, 50), 0);
     config.wrapConditionsOverCondition.clear();
     config.wrapConditionsOver = 3;
     document.setConfig(config);
-    QCOMPARE(conditions.conditionsLimit(open, 3, 50), 3);
+    QCOMPARE(conditions.conditionsLimit(openThree, 3, 50), 3);
 }
 
 /// Breaks a signature past 87.5% of the share `wrapArgsAt` gives at its `(`
@@ -5511,144 +6217,67 @@ QTEST_APPLESS_MAIN(tst_FormatRules)
 #include "tst_format_rules.moc"
 
 
-/// Keeps the document unchanged until publication, including moved editors.
-void tst_FormatRules::testEditor_shouldPublishOnApplyAndScopeExit()
-{
-    FormatDocument document("int value = 1;\n");
-    {
-        CodeEditor editor = document.edit(0, document.text().size());
-        QVERIFY(editor.replace(12, 1, "2"));
-        QCOMPARE(document.text(), QByteArray("int value = 1;\n"));
-        QCOMPARE(editor.get(0, document.text().size()), QByteArray("int value = 2;\n"));
-        QCOMPARE(editor.get(12, 13), QByteArray("2"));
-        CodeEditor moved(qMove(editor));
-        QVERIFY(moved.apply());
-        QCOMPARE(document.text(), QByteArray("int value = 2;\n"));
-        QVERIFY( ! moved.apply());
-    }
-    {
-        CodeEditor editor = document.edit(12, 13);
-        QVERIFY(editor.replace(12, 1, "2"));
-        QVERIFY( ! editor.apply());
-    }
-    QVERIFY(document.applyEdits());
-    QVERIFY( ! document.applyEdits());
-    {
-        CodeEditor editor = document.edit(12, 13);
-        QVERIFY( ! editor.replace(0, 3, "long"));
-        QVERIFY(editor.replace(12, 1, "3"));
-    }
-    QCOMPARE(document.text(), QByteArray("int value = 3;\n"));
-
-    for (int order = 0; order < 2; ++order) {
-        FormatDocument combined("abc");
-        {
-            CodeEditor editor = combined.edit(0, combined.text().size());
-            if (order == 0) {
-                QVERIFY(editor.add(0, "X"));
-                QVERIFY(editor.set(0, 1, "Y"));
-            } else {
-                QVERIFY(editor.set(0, 1, "Y"));
-                QVERIFY(editor.add(0, "X"));
-            }
-            QCOMPARE(editor.get(0, 3), QByteArray("XYbc"));
-            QVERIFY(editor.apply());
-        }
-        QCOMPARE(combined.text(), QByteArray("XYbc"));
-    }
-    FormatDocument appended("abc");
-    {
-        CodeEditor editor = appended.edit(0, appended.text().size());
-        QVERIFY(editor.add(3, "!"));
-        QCOMPARE(editor.get(0, 3), QByteArray("abc!"));
-    }
-    QCOMPARE(appended.text(), QByteArray("abc!"));
-
-    FormatDocument queued("first second");
-    QVERIFY(queued.replace(6, 6, "SECOND"));
-    {
-        CodeEditor editor = queued.edit(0, 5);
-        QVERIFY(editor.set(0, 5, "longer"));
-        QVERIFY(editor.apply());
-    }
-    QCOMPARE(queued.text(), QByteArray("longer second"));
-    QVERIFY(queued.applyEdits());
-    QCOMPARE(queued.text(), QByteArray("longer SECOND"));
-
-    FormatDocument adjacent("abcdef");
-    QVERIFY(adjacent.replace(2, 0, "X"));
-    QVERIFY(adjacent.replace(4, 0, "Y"));
-    {
-        CodeEditor editor = adjacent.edit(2, 4);
-        QVERIFY(editor.set(2, 4, QByteArray()));
-        QVERIFY(editor.apply());
-    }
-    QCOMPARE(adjacent.text(), QByteArray("abef"));
-    QVERIFY(adjacent.applyEdits());
-    QCOMPARE(adjacent.text(), QByteArray("abXYef"));
-}
-
-/// Moves comments with code while protecting text outside the selected range.
-void tst_FormatRules::testEditor_shouldPreserveCommentsAndRange()
+/// Attaches comments by placement and preserves them across range replacements.
+void tst_FormatRules::testComments_shouldAttachAndPreserveOnReplace()
 {
     const QByteArray original("before();\ncall(first, // Keep.\n  second);\nafter();\n");
     FormatDocument document(original);
     const int start = original.indexOf("call");
     const int end = original.indexOf("after");
-    {
-        CodeEditor editor = document.edit(start, end);
-        QVERIFY( ! editor.hasCommentBetween(start, end));
-        QCOMPARE(editor.get(start, end), QByteArray("call(first, \n  second);\n"));
-        QCOMPARE(editor.sourceText(document.symbolAfter(start), document.symbolAfter(end) - 1),
-                 QByteArray("call(first, \n  second);"));
-        QVERIFY(editor.replace(start, end - start,
-                               "call(\n    first,\n    second\n);\n"));
-        QCOMPARE(document.text(), original);
+    const int firstToken = document.symbolAfter(start);
+    int lastToken = document.symbolAfter(end);
+    while (lastToken > firstToken && document.symbolEnd(lastToken - 1) > end) {
+        --lastToken;
     }
-    QCOMPARE(document.text(), QByteArray(
-        "before();\ncall(\n    first, // Keep.\n    second\n);\nafter();\n"));
+    const QList<AttachedComment > attached = attachComments(
+        &document, start, end - start, firstToken, lastToken - firstToken);
+    QCOMPARE(attached.size(), 1);
+    QCOMPARE(attached.at(0).placement, AttachedComment::EndOfLine);
+    QCOMPARE(attached.at(0).role, AttachedComment::Trailing);
+
+    QVERIFY( ! document.hasProtectedCommentBetween(start, end));
+    QCOMPARE(document.codeSlice(start, end), QByteArray("call(first, \n  second);\n"));
+    QCOMPARE(sourceText(&document, firstToken, lastToken - 1),
+             QByteArray("call(first, \n  second);"));
+    QCOMPARE(restoreCommentsInReplacement(
+                 &document, start, end - start,
+                 "call(\n    first,\n    second\n);\n"),
+             QByteArray("call(\n    first, // Keep.\n    second\n);\n"));
 
     const QByteArray repeated("call(x /* Keep. */ + x);\n");
     FormatDocument changed(repeated);
-    {
-        CodeEditor editor = changed.edit(0, repeated.size());
-        QVERIFY(editor.set(0, repeated.size(), "call(y + x);\n"));
-    }
-    QCOMPARE(changed.text(), QByteArray("call(y /* Keep. */ + x);\n"));
+    QCOMPARE(restoreCommentsInReplacement(&changed, 0, repeated.size(), "call(y + x);\n"),
+             QByteArray("call(y /* Keep. */ + x);\n"));
 
     const QByteArray leading("call(first, /* Next. */ second);\n");
     FormatDocument arguments(leading);
-    {
-        CodeEditor editor = arguments.edit(0, leading.size());
-        QVERIFY(editor.set(0, leading.size(), "call(\n    first,\n    second\n);\n"));
-    }
-    QCOMPARE(arguments.text(), QByteArray(
-        "call(\n    first,\n    /* Next. */ second\n);\n"));
+    const QList<AttachedComment > leadingAttached = attachComments(
+        &arguments, 0, leading.size(), 0, arguments.symbols().size());
+    QCOMPARE(leadingAttached.size(), 1);
+    QCOMPARE(leadingAttached.at(0).placement, AttachedComment::Inline);
+    QCOMPARE(leadingAttached.at(0).role, AttachedComment::Leading);
+    QCOMPARE(restoreCommentsInReplacement(
+                 &arguments, 0, leading.size(),
+                 "call(\n    first,\n    second\n);\n"),
+             QByteArray("call(\n    first,\n    /* Next. */ second\n);\n"));
 
     const QByteArray mixed("before();\r\ncall(first, // Keep.\n second);\n");
     FormatDocument endings(mixed);
     const int call = mixed.indexOf("call");
-    {
-        CodeEditor editor = endings.edit(call, mixed.size());
-        QVERIFY(editor.set(call, mixed.size(), "call(\n    first,\n    second\n);\n"));
-    }
-    QCOMPARE(endings.text(), QByteArray(
-        "before();\r\ncall(\n    first, // Keep.\n    second\n);\n"));
+    QCOMPARE(restoreCommentsInReplacement(
+                 &endings, call, mixed.size() - call,
+                 "call(\n    first,\n    second\n);\n"),
+             QByteArray("call(\n    first, // Keep.\n    second\n);\n"));
 
     const QByteArray windows("call(first, // Keep.\r\n second);\r\n");
     FormatDocument carriageReturns(windows);
-    {
-        CodeEditor editor = carriageReturns.edit(0, windows.size());
-        QVERIFY(editor.set(0, windows.size(), "call(\r\n    first,\r\n    second\r\n);\r\n"));
-    }
-    QCOMPARE(carriageReturns.text(), QByteArray(
-        "call(\r\n    first, // Keep.\r\n    second\r\n);\r\n"));
+    QCOMPARE(restoreCommentsInReplacement(
+                 &carriageReturns, 0, windows.size(),
+                 "call(\r\n    first,\r\n    second\r\n);\r\n"),
+             QByteArray("call(\r\n    first, // Keep.\r\n    second\r\n);\r\n"));
 
     FormatDocument tokens("int/* Type. */value;\n");
-    {
-        CodeEditor editor = tokens.edit(0, tokens.text().size());
-        QCOMPARE(editor.get(0, tokens.text().size()), QByteArray("int value;\n"));
-    }
+    QCOMPARE(tokens.codeSlice(0, tokens.text().size()), QByteArray("int value;\n"));
 
     const QList<QByteArray > commentLines = QList<QByteArray >()
         << "    // Note." << "    // Note.\n" << "    // Note.\r\n"
@@ -5657,30 +6286,28 @@ void tst_FormatRules::testEditor_shouldPreserveCommentsAndRange()
         const QByteArray onlyComment = commentLines.at(line);
         for (int begin = 0; begin <= 4; begin += 4) {
             FormatDocument standalone(onlyComment);
-            {
-                CodeEditor editor = standalone.edit(begin, onlyComment.size());
-                QVERIFY(editor.set(begin, onlyComment.size(), QByteArray()));
-            }
-            QCOMPARE(standalone.text(), onlyComment);
+            QCOMPARE(restoreCommentsInReplacement(
+                         &standalone, begin, onlyComment.size() - begin, QByteArray()),
+                     onlyComment.mid(begin));
         }
     }
     const QByteArray boundary("    // Note.\r\nint value;\r\n");
     FormatDocument trailingNewline(boundary);
     {
         const int newline = boundary.indexOf('\n');
-        CodeEditor editor = trailingNewline.edit(4, newline);
-        QVERIFY(editor.set(4, newline, QByteArray()));
+        QCOMPARE(restoreCommentsInReplacement(
+                     &trailingNewline, 4, newline - 4, QByteArray()),
+                 QByteArray("// Note.\r"));
     }
-    QCOMPARE(trailingNewline.text(), boundary);
 
     const QByteArray blockBoundary("    /* Note. */  \r\nint value;\r\n");
     FormatDocument trailingBlockNewline(blockBoundary);
     {
         const int newline = blockBoundary.indexOf('\n');
-        CodeEditor editor = trailingBlockNewline.edit(4, newline);
-        QVERIFY(editor.set(4, newline, QByteArray()));
+        QCOMPARE(restoreCommentsInReplacement(
+                     &trailingBlockNewline, 4, newline - 4, QByteArray()),
+                 QByteArray("/* Note. */\r"));
     }
-    QCOMPARE(trailingBlockNewline.text(), QByteArray("    /* Note. */\r\nint value;\r\n"));
 
     const QList<QByteArray > trailingBlocks = QList<QByteArray >()
         << "call(); /* Note. */\n"
@@ -5688,16 +6315,13 @@ void tst_FormatRules::testEditor_shouldPreserveCommentsAndRange()
         << "call(); /* Note. */";
     for (int index = 0; index < trailingBlocks.size(); ++index) {
         const QByteArray sample = trailingBlocks.at(index);
-        const int end = sample.endsWith('\n')
+        const int endPos = sample.endsWith('\n')
             ? sample.size() - (sample.endsWith("\r\n") ? 2 : 1)
             : sample.size();
         FormatDocument trailingInlineBlock(sample);
-        {
-            CodeEditor editor = trailingInlineBlock.edit(0, end);
-            QVERIFY(editor.set(0, end, "next();"));
-        }
-        QCOMPARE(trailingInlineBlock.text(),
-                 QByteArray("next(); /* Note. */") + sample.mid(end));
+        QCOMPARE(restoreCommentsInReplacement(
+                     &trailingInlineBlock, 0, endPos, "next();"),
+                 QByteArray("next(); /* Note. */"));
     }
 
     const QByteArray gapText("call(first, // Keep.\n    second);\n");
@@ -5705,8 +6329,15 @@ void tst_FormatRules::testEditor_shouldPreserveCommentsAndRange()
     {
         const int from = gapText.indexOf(',') + 1;
         const int to = gapText.indexOf("second");
-        CodeEditor editor = gap.edit(from, to);
-        QVERIFY(editor.set(from, to, " "));
+        QCOMPARE(restoreCommentsInReplacement(&gap, from, to - from, " "),
+                 gapText.mid(from, to - from));
     }
-    QCOMPARE(gap.text(), gapText);
+
+    const QByteArray ownLineText("call();\n    // Own line.\nnext();\n");
+    FormatDocument ownLine(ownLineText);
+    const QList<AttachedComment > ownAttached = attachComments(
+        &ownLine, 0, ownLineText.size(), 0, ownLine.symbols().size());
+    QCOMPARE(ownAttached.size(), 1);
+    QCOMPARE(ownAttached.at(0).placement, AttachedComment::OwnLine);
+    QCOMPARE(ownAttached.at(0).role, AttachedComment::Leading);
 }

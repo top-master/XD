@@ -1562,6 +1562,7 @@ void dispatch()
 // [Structure]
 // target = any
 // wrapBegin = 50
+// wrapConditionsOver = spaceRemaining < 20% ? 1 : 2
 // wrapConditionsPer = line
 // ```
 void dispatch()

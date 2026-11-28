@@ -19,18 +19,22 @@ class FormatConditionObject : public Config::Object
     Q_PROPERTY(QVariant hasMoreArgs READ hasMoreArgs)
     Q_PROPERTY(QVariant isWrapping READ isWrapping)
 public:
+
     QVariant spaceRemaining() const;
     QVariant spaceUsed() const;
     QVariant hasMoreArgs() const;
     QVariant isWrapping() const;
 
 public slots:
+
     QVariant argCount(int depth, int argument = 0);
+    QVariant count(const QString & per);
     QVariant hasStd(const QString & standard);
     QVariant hasCompiler(const QString & compiler);
     QVariant is(const QString & kind);
 
 private:
+
     typedef bool (FormatConditionContext::*Question)(
             const QString & name, bool *value) const;
 

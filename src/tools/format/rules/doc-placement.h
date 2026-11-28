@@ -13,17 +13,19 @@ class FormatDocPlacementRule : public FormatCommentRule
 {
     typedef FormatCommentRule super;
 public:
+
     inline FormatDocPlacementRule()
-        : super("doc-placement",
-                "Reports misplaced docs: // on symbols, header docs, orphans.")
+        : super("doc-placement", "Reports misplaced docs: // on symbols, header docs, orphans.")
     {
     }
 
 protected:
+
     void runGroup(FormatDocument *document,
                   const QList<int > & group) const Q_DECL_OVERRIDE;
 
 private:
+
     QString headerSource(const QString & path) const;
 };
 

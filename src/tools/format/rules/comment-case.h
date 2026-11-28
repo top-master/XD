@@ -12,13 +12,14 @@ class FormatCommentCaseRule : public FormatCommentRule
 {
     typedef FormatCommentRule super;
 public:
+
     inline FormatCommentCaseRule()
-        : super("comment-case",
-                "Starts each comment with an upper-case letter.")
+        : super("comment-case", "Starts each comment with an upper-case letter.")
     {
     }
 
 protected:
+
     void runGroup(FormatDocument *document,
                   const QList<int > & group) const Q_DECL_OVERRIDE;
 };

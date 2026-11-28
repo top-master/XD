@@ -24,22 +24,19 @@ struct FormatConfigDirective
 QList<FormatConfigDirective > configDirectives(const FormatDocument *document);
 
 QList<FormatCommentLine > commentLines(
-        const FormatDocument *document,
-        int index);
+        const FormatDocument *document, int index);
 QList<FormatCommentLine > groupLines(
-        const FormatDocument *document,
-        const QList<int > & group);
+        const FormatDocument *document, const QList<int > & group);
 bool isNamespaceLabel(const QByteArray &comment);
 bool commentNamesNamespace(const QByteArray &comment, const QByteArray &name);
 bool isSingleWord(const QList<FormatCommentLine > & lines);
 bool looksLikeCode(const QList<FormatCommentLine > & lines);
 QVector<bool > fencedLines(const QList<FormatCommentLine > & lines);
-QString mapProse(
-        const QString & text, QString (*map)(const QString &, const void *),
-        const void *context);
+QString mapProse(const QString & text,
+                 QString (*map)(const QString &, const void *),
+                 const void *context);
 QList<QList<int > > commentGroups(
-        const FormatDocument *document,
-        bool splitProtected = true);
+        const FormatDocument *document, bool splitProtected = true);
 bool isClosingLabel(const FormatDocument *document, int index);
 bool isInlineLabel(const FormatDocument *document, int index);
 QList<QPair<int, int > > tableRanges(const FormatDocument *document);

@@ -18,6 +18,7 @@ class QTemporaryDir;
 class FormatFileListener
 {
 public:
+
     virtual ~FormatFileListener();
     virtual void fileFinished(const FormatFileResult & result) = 0;
 };
@@ -25,13 +26,15 @@ public:
 class FormatRunner
 {
 public:
+
     FormatRunner(const Formatter *formatter, const FormatOptions & options);
     virtual ~FormatRunner();
 
     static QStringList kinds();
     static QString defaultKind();
     static FormatRunner *create(
-            const QString & kind, const Formatter *formatter,
+            const QString & kind,
+            const Formatter *formatter,
             const FormatOptions & options);
 
     virtual QList<FormatFileResult > run(const QStringList & files);
@@ -40,11 +43,11 @@ public:
     void tellFinished(const FormatFileResult & result) const;
 
 protected:
+
     int jobCount(int fileCount) const;
     bool prepareRun(const QStringList &files, QString *error);
     QList<FormatFileResult > runFailure(
-            const QStringList &files,
-            const QString &error) const;
+            const QStringList &files, const QString &error) const;
 
     const Formatter *m_formatter;
     FormatOptions m_options;

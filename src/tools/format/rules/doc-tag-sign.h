@@ -13,17 +13,19 @@ class FormatDocTagSignRule : public FormatCommentRule
 {
     typedef FormatCommentRule super;
 public:
+
     inline FormatDocTagSignRule()
-        : super("doc-tag-sign",
-                "Writes the commands of doc-comments with one sign.")
+        : super("doc-tag-sign", "Writes the commands of doc-comments with one sign.")
     {
     }
 
 protected:
+
     void runGroup(FormatDocument *document,
                   const QList<int > & group) const Q_DECL_OVERRIDE;
 
 private:
+
     QList<int > tags(const FormatDocument *document, int comment) const;
     char fileSign(const FormatDocument *document, char fallback) const;
 };

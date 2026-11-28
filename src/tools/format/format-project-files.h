@@ -13,6 +13,7 @@
 class FormatProjectFiles
 {
 public:
+
     inline FormatProjectFiles() : m_finished(false) {}
 
     void add(const QStringList & files, const QStringList & includePaths);

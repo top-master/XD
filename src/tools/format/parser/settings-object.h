@@ -14,8 +14,10 @@ class FormatConditionContext;
 class FormatPercentResolver
 {
 public:
+
     static QVariant resolve(const QStringList & program,
-                            const FormatConditionContext *place, int percent);
+                            const FormatConditionContext *place,
+                            int percent);
 };
 
 #endif // PARSER_SETTINGS_OBJECT_H

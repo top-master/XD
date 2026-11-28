@@ -16,11 +16,15 @@
 /*!
     Builds the comment settings at @a offset in @a document.
 */
-static FormatFileConfig commentSettingsAt(const FormatDocument *document, int offset)
+static FormatFileConfig commentSettingsAt(
+        const FormatDocument *document, int offset)
 {
     FormatFileConfig config = document->configAt(offset);
     const QVariant begin = settingValueAt(
-        document, offset, QString(QLL("comments.wrapBegin")), QVariant()
+        document,
+        offset,
+        QString(QLL("comments.wrapBegin")),
+        QVariant()
     );
     if (begin.isValid()) {
         config.commentWrapBegin.clear();
@@ -29,28 +33,49 @@ static FormatFileConfig commentSettingsAt(const FormatDocument *document, int of
             config.commentWrapBegin << FormatFileConfig::countOf(columns.at(i));
         }
     }
-    config.commentWrapMax = FormatFileConfig::countOf(settingValueAt(
-        document, offset, QString(QLL("comments.wrapMax")), config.commentWrapMax
-    ));
-    config.wrapExtendsForKeywords = FormatFileConfig::countOf(settingValueAt(
-        document, offset, QString(QLL("comments.wrapExtendsForKeywords")),
-        config.wrapExtendsForKeywords
-    ));
-    config.wrapEmptyLimit = FormatFileConfig::countOf(settingValueAt(
-        document, offset, QString(QLL("comments.wrapEmptyLimit")), config.wrapEmptyLimit
-    ));
+    config.commentWrapMax = FormatFileConfig::countOf(
+        settingValueAt(
+            document,
+            offset,
+            QString(QLL("comments.wrapMax")),
+            config.commentWrapMax
+        )
+    );
+    config.wrapExtendsForKeywords = FormatFileConfig::countOf(
+        settingValueAt(
+            document,
+            offset,
+            QString(QLL("comments.wrapExtendsForKeywords")),
+            config.wrapExtendsForKeywords
+        )
+    );
+    config.wrapEmptyLimit = FormatFileConfig::countOf(
+        settingValueAt(
+            document,
+            offset,
+            QString(QLL("comments.wrapEmptyLimit")),
+            config.wrapEmptyLimit
+        )
+    );
     const QString comma = settingValueAt(
-        document, offset, QString(QLL("comments.wrapComma")),
-        QString(config.wrapComma == FormatFileConfig::WrapCommaHard ? QLL("hard") : QLL("soft"))
+        document,
+        offset,
+        QString(QLL("comments.wrapComma")),
+        QString(config.wrapComma == FormatFileConfig::WrapCommaHard
+            ? QLL("hard") : QLL("soft"))
     ).toString();
     config.wrapComma = comma == QLL("hard") ? FormatFileConfig::WrapCommaHard
-                                             : FormatFileConfig::WrapCommaSoft;
+                                            : FormatFileConfig::WrapCommaSoft;
     const QString target = settingValueAt(
-        document, offset, QString(QLL("comments.target")),
-        QString(config.commentTarget == FormatFileConfig::CommentTargetAny ? QLL("any") : QLL("long"))
+        document,
+        offset,
+        QString(QLL("comments.target")),
+        QString(config.commentTarget == FormatFileConfig::CommentTargetAny
+            ? QLL("any") : QLL("long"))
     ).toString();
-    config.commentTarget = target == QLL("any") ? FormatFileConfig::CommentTargetAny
-                                                  : FormatFileConfig::CommentTargetLong;
+    config.commentTarget = target == QLL("any")
+        ? FormatFileConfig::CommentTargetAny
+        : FormatFileConfig::CommentTargetLong;
     return config;
 }
 
@@ -73,7 +98,9 @@ Q_GLOBAL_STATIC_WITH_ARGS(QRegularExpression, separatorPattern, (QString(QLL("^[
 */
 static bool isParagraphBreak(const QByteArray & text)
 {
-    return text.isEmpty() || text.startsWith('\\') || text.startsWith('@')
+    return text.isEmpty()
+        || text.startsWith('\\')
+        || text.startsWith('@')
         || separatorPattern()->match(QString::fromUtf8(text)).hasMatch();
 }
 
@@ -147,7 +174,8 @@ static int nextSpace(const QString & text, int from)
     for (int i = from + 1; i < text.size(); ++i) {
         if (text.at(i) == QLatin1Char('`')) {
             inCode = ! inCode;
-        } else if (text.at(i) == QLatin1Char(' ') && ! inCode
+        } else if (text.at(i) == QLatin1Char(' ')
+            && ! inCode
             && ! endsWithDocWordCommand(text.left(i))
         ) {
             return i;
@@ -163,8 +191,11 @@ static int nextSpace(const QString & text, int from)
     FormatCommentWidthRule).
 */
 QStringList FormatCommentWidthRule::wrap(
-        const QString & text, int firstWidth, int nextWidth,
-        int column, const FormatFileConfig & fileConfig)
+        const QString & text,
+        int firstWidth,
+        int nextWidth,
+        int column,
+        const FormatFileConfig & fileConfig)
 {
     const int limit = fileConfig.commentWrapMax;
     QStringList lines;
@@ -184,7 +215,9 @@ QStringList FormatCommentWidthRule::wrap(
                 inCode = ! inCode;
                 continue;
             }
-            if (c != QLatin1Char(' ') || inCode || i == 0
+            if (c != QLatin1Char(' ')
+                || inCode
+                || i == 0
                 || endsWithDocWordCommand(rest.left(i))
             ) {
                 continue;
@@ -194,18 +227,22 @@ QStringList FormatCommentWidthRule::wrap(
                 break;
             }
             const QChar before = rest.at(i - 1);
-            const bool afterPunctuation = before == QLatin1Char(',') || before == QLatin1Char(';')
-                || before == QLatin1Char(')') || before == QLatin1Char('.');
+            const bool afterPunctuation = before == QLatin1Char(',')
+                || before == QLatin1Char(';')
+                || before == QLatin1Char(')')
+                || before == QLatin1Char('.');
             const bool beforeParenthesis = i + 1 < rest.size()
                 && rest.at(i + 1) == QLatin1Char('(');
             const bool wordComma = before == QLatin1Char(',')
                 && (i < 2 || rest.at(i - 2) != QLatin1Char(')'))
                 && fileConfig.wrapComma == FormatFileConfig::WrapCommaSoft;
             const int window = wordComma ? fileConfig.wrapEmptyLimit : 25;
-            if ((afterPunctuation || beforeParenthesis)
+            if ((afterPunctuation
+                    || beforeParenthesis)
                 && end >= column - window
                 && (punctuation < 0
-                    || qAbs(end - column) < qAbs(width + punctuation - column))
+                    || qAbs(end - column) < qAbs(
+                        width + punctuation - column))
             ) {
                 punctuation = i;
             }
@@ -214,7 +251,8 @@ QStringList FormatCommentWidthRule::wrap(
             } else if (plainAfter < 0) {
                 plainAfter = i;
             }
-            if (end <= column && end >= column - fileConfig.wrapEmptyLimit
+            if (end <= column
+                && end >= column - fileConfig.wrapEmptyLimit
                 && pointsAhead(rest.mid(wordStart, i - wordStart))
             ) {
                 pointing = i;
@@ -223,7 +261,8 @@ QStringList FormatCommentWidthRule::wrap(
         }
         int at = punctuation >= 0
             ? punctuation
-            : pointing >= 0 ? pointing : plainBefore >= 0 ? plainBefore : plainAfter;
+            : pointing >= 0
+                ? pointing : plainBefore >= 0 ? plainBefore : plainAfter;
 
         // Gives a word too long for any line (such as a long code keyword)
         // a line of its own.
@@ -284,7 +323,8 @@ QStringList FormatCommentWidthRule::wrap(
                 space = i;
             }
         }
-        const QString moved = before.mid(space + 1) + QLatin1Char(' ')
+        const QString moved = before.mid(space + 1)
+            + QLatin1Char(' ')
             + lines.last();
         if (space <= 17 || nextWidth + moved.size() > limit) {
             break;
@@ -301,19 +341,20 @@ QStringList FormatCommentWidthRule::wrap(
     (see isCodeWord()), within `wrapMax` and `wrapExtendsForKeywords` columns.
 */
 bool FormatCommentWidthRule::fits(
-        const QString & line,
-        const FormatFileConfig & fileConfig)
+        const QString & line, const FormatFileConfig & fileConfig)
 {
     if (line.size() <= fileConfig.commentWrapMax) {
         return true;
     }
-    if (line.size()
-            > fileConfig.commentWrapMax + fileConfig.wrapExtendsForKeywords
+    if (line.size() > fileConfig.commentWrapMax
+            + fileConfig.wrapExtendsForKeywords
     ) {
         return false;
     }
     const QString trimmed = line.trimmed();
-    return isCodeWord(trimmed.mid(trimmed.lastIndexOf(QLatin1Char(' ')) + 1));
+    return isCodeWord(
+        trimmed.mid(trimmed.lastIndexOf(QLatin1Char(' ')) + 1)
+    );
 }
 
 /*!
@@ -321,8 +362,7 @@ bool FormatCommentWidthRule::fits(
     and reports each such line that no wrap fixes.
 */
 void FormatCommentWidthRule::runGroup(
-        FormatDocument *document,
-        const QList<int > & group) const
+        FormatDocument *document, const QList<int > & group) const
 {
     bool trailing = false;
     for (int g = 0; g < group.size(); ++g) {
@@ -336,26 +376,27 @@ void FormatCommentWidthRule::runGroup(
     int i = trailing ? lines.size() : 0;
     while (i < lines.size()) {
         const QByteArray & text = lines.at(i).text;
-        const int start = document
-            ->lineStart(document->lineOf(lines.at(i).offset));
+        const int start = document->lineStart(
+            document->lineOf(lines.at(i).offset)
+        );
         const QByteArray prefix = document->text().mid(
             start,
-            lines.at(i).offset
-                - start
+            lines.at(i).offset - start
         );
         if (fenced.at(i) || isParagraphBreak(text)) {
             ++i;
             continue;
         }
-        const QRegularExpressionMatch item =
-            itemPattern()->match(QString::fromUtf8(text));
+        const QRegularExpressionMatch item = itemPattern()
+            ->match(QString::fromUtf8(text));
         const QByteArray nextPrefix = item.hasMatch()
             ? prefix + QByteArray(item.capturedLength(), ' ') : prefix;
         int count = 1;
         while (i + count < lines.size()) {
             const FormatCommentLine & next = lines.at(i + count);
-            const int nextStart =
-                document->lineStart(document->lineOf(next.offset));
+            const int nextStart = document->lineStart(
+                document->lineOf(next.offset)
+            );
             if (fenced.at(i + count)
                 || isParagraphBreak(next.text)
                 || itemPattern()->match(QString::fromUtf8(next.text)).hasMatch()
@@ -416,10 +457,13 @@ void FormatCommentWidthRule::runGroup(
 bool FormatCommentWidthRule::rewrap(
         FormatDocument *document,
         const QList<FormatCommentLine > & lines,
-        int first, int count, const QByteArray & nextPrefix) const
+        int first,
+        int count,
+        const QByteArray & nextPrefix) const
 {
     // Checks for a line past the column limit.
-    const FormatFileConfig fileConfig = commentSettingsAt(document, lines.at(first).offset);
+    const FormatFileConfig fileConfig =
+        commentSettingsAt(document, lines.at(first).offset);
     const int firstLine = document->lineOf(lines.at(first).offset);
     bool tooLong = false;
     for (int k = 0; k < count && ! tooLong; ++k) {
@@ -444,12 +488,16 @@ bool FormatCommentWidthRule::rewrap(
     bool underfilled = false;
     for (int k = 0; anyTarget && k + 1 < count && ! tooLong && ! underfilled; ++k) {
         const QString text = QString::fromUtf8(lines.at(first + k).text);
-        const QString next = QString::fromUtf8(lines.at(first + k + 1).text);
-        const int width = (k == 0 ? firstPrefix : QString::fromUtf8(nextPrefix).size())
+        const QString next = QString::fromUtf8(
+            lines.at(first + k + 1).text
+        );
+        const int width = (k == 0 ? firstPrefix
+                                  : QString::fromUtf8(nextPrefix).size())
             + text.size();
         const QString word = next.left(nextSpace(next, -1));
         const int room = isCodeWord(word)
-            ? fileConfig.commentWrapMax + fileConfig.wrapExtendsForKeywords : column;
+            ? fileConfig.commentWrapMax + fileConfig.wrapExtendsForKeywords
+            : column;
         underfilled = column - width >= fileConfig.wrapEmptyLimit
             && width + 1 + word.size() <= room;
     }
@@ -462,8 +510,11 @@ bool FormatCommentWidthRule::rewrap(
     QString text;
     for (int k = 0; k < count; ++k) {
         const QString part = QString::fromUtf8(lines.at(first + k).text);
-        const bool hyphenated = text.size() >= 2 && text.endsWith(QLatin1Char('-'))
-            && text.at(text.size() - 2).isLetter() && ! part.isEmpty() && part.at(0).isLetter();
+        const bool hyphenated = text.size() >= 2
+            && text.endsWith(QLatin1Char('-'))
+            && text.at(text.size() - 2).isLetter()
+            && ! part.isEmpty()
+            && part.at(0).isLetter();
         if ( ! text.isEmpty() && ! hyphenated) {
             text += QLatin1Char(' ');
         }
@@ -489,10 +540,9 @@ bool FormatCommentWidthRule::rewrap(
             column,
             fileConfig
         );
-        const int room = column
-            - (wrapped.size() == 1 ? firstWidth : nextWidth);
-        const double fill = room > 0
-            ? double(wrapped.last().size()) / room : 1;
+        const int room = column - (wrapped.size() == 1 ? firstWidth
+                                                       : nextWidth);
+        const double fill = room > 0 ? double(wrapped.last().size()) / room : 1;
         if (fill > bestFill) {
             best = wrapped;
             bestFill = fill;
@@ -503,10 +553,9 @@ bool FormatCommentWidthRule::rewrap(
     }
 
     // Writes the lines, unless they are the ones there already.
-    const QByteArray newline = document->text().mid(
-        document->lineEnd(firstLine) - 1,
-        2
-    ).startsWith('\r') ? QByteArray("\r\n") : QByteArray("\n");
+    const QByteArray newline =
+        document->text().mid(document->lineEnd(firstLine) - 1, 2).startsWith('\r')
+        ? QByteArray("\r\n") : QByteArray("\n");
     QByteArray replacement;
     for (int k = 0; k < best.size(); ++k) {
         if (k > 0) {
@@ -520,5 +569,5 @@ bool FormatCommentWidthRule::rewrap(
     if (document->text().mid(from, to - from) == replacement) {
         return false;
     }
-    return document->replace(from, to - from, replacement);
+    return document->rewriteCommentSpan(from, to - from, replacement);
 }

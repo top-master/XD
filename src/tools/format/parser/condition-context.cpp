@@ -26,7 +26,10 @@ QStringList FormatReplaceTypesContext::onNames() const
 bool FormatReplaceTypesContext::predicate(
         const QString & name, bool *value) const
 {
-    if ( ! m_document || m_token < 0 || m_token >= m_document->symbols().size()) {
+    if ( ! m_document
+        || m_token < 0
+        || m_token >= m_document->symbols().size()
+    ) {
         return false;
     }
     Config::Cache::skip();
@@ -34,9 +37,13 @@ bool FormatReplaceTypesContext::predicate(
     return conditions.nameHolds(m_token, name, value);
 }
 
-bool FormatReplaceTypesContext::argumentCount(int depth, int argument, qreal *count) const
+bool FormatReplaceTypesContext::argumentCount(
+        int depth, int argument, qreal *count) const
 {
-    if ( ! m_document || m_token < 0 || m_token >= m_document->symbols().size()) {
+    if ( ! m_document
+        || m_token < 0
+        || m_token >= m_document->symbols().size()
+    ) {
         return false;
     }
     FormatScopeConditions conditions(m_document);
@@ -46,7 +53,10 @@ bool FormatReplaceTypesContext::argumentCount(int depth, int argument, qreal *co
 
 bool FormatReplaceTypesContext::spaceRemaining(qreal *percent) const
 {
-    if ( ! m_document || m_token < 0 || m_token >= m_document->symbols().size()) {
+    if ( ! m_document
+        || m_token < 0
+        || m_token >= m_document->symbols().size()
+    ) {
         return false;
     }
     FormatScopeConditions conditions(m_document);
@@ -54,9 +64,13 @@ bool FormatReplaceTypesContext::spaceRemaining(qreal *percent) const
     return true;
 }
 
-bool FormatReplaceTypesContext::isTarget(const QString & kind, bool *value) const
+bool FormatReplaceTypesContext::isTarget(
+        const QString & kind, bool *value) const
 {
-    if ( ! m_document || m_token < 0 || m_token >= m_document->symbols().size()) {
+    if ( ! m_document
+        || m_token < 0
+        || m_token >= m_document->symbols().size()
+    ) {
         return false;
     }
     FormatScopeConditions conditions(m_document);
@@ -97,6 +111,16 @@ bool FormatConditionContext::argumentCount(int, int, qreal *) const
 }
 
 /*!
+    Builds in @a count the number of `&&` and `||` operands in the range
+    named by @a per at the place; returns false when @a per is unknown or
+    no target exists there.
+*/
+bool FormatConditionContext::conditionCount(const QString &, qreal *) const
+{
+    return false;
+}
+
+/*!
     Builds in @a percent the share of `[Structure] wrapMax`, from 0 to 100,
     that is left on the line after the place; returns false when the place
     has no line to measure.
@@ -129,10 +153,12 @@ bool FormatConditionContext::isWrapping(bool *) const
     Tells in @a value whether @a context's setting @a key holds @a name,
     in any case; @a list is its loaded fallback. Returns false without settings.
 */
-static bool listsName(const FormatConditionContext *context,
-                      QStringList FormatFileConfig::*list,
-                      const QString & key,
-                      const QString & name, bool *value)
+static bool listsName(
+        const FormatConditionContext *context,
+        QStringList FormatFileConfig::*list,
+        const QString & key,
+        const QString & name,
+        bool *value)
 {
     const FormatFileConfig *config = context->fileConfig();
     if ( ! config) {
@@ -262,8 +288,7 @@ void FormatConditionContext::setGlobalObjects(Config::Scopes::Scope *scope)
 */
 QSharedPointer<Config::Scopes::Scope > FormatConditionContext::pushCountScope()
 {
-    const QSharedPointer<Config::Scopes::Scope > scope =
-        Config::Scopes::push();
+    const QSharedPointer<Config::Scopes::Scope > scope = Config::Scopes::push();
     FormatConditionContext::setCountObjects(scope.data());
     return scope;
 }

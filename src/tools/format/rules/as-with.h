@@ -10,6 +10,7 @@ class FormatAsWithRule : public FormatProseRule
 {
     typedef FormatProseRule super;
 public:
+
     FormatAsWithRule();
 };
 

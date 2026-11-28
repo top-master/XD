@@ -12,12 +12,14 @@ class FormatCommentPeriodRule : public FormatCommentRule
 {
     typedef FormatCommentRule super;
 public:
+
     inline FormatCommentPeriodRule()
         : super("comment-period", "Ends each comment with a period.")
     {
     }
 
 protected:
+
     void runGroup(FormatDocument *document,
                   const QList<int > & group) const Q_DECL_OVERRIDE;
 };

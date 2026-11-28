@@ -16,8 +16,10 @@ class FormatConditionContext : public Config::Evaluator::Context
 {
     typedef Config::Evaluator::Context super;
 public:
+
     virtual bool value(qreal *value) const;
     virtual bool argumentCount(int depth, int argument, qreal *count) const;
+    virtual bool conditionCount(const QString & per, qreal *count) const;
     virtual bool spaceRemaining(qreal *percent) const;
     virtual bool hasMoreArgs(bool *value) const;
     virtual bool isWrapping(bool *value) const;
@@ -39,14 +41,18 @@ class FormatReplaceTypesContext : public FormatConditionContext
 {
     typedef FormatConditionContext super;
 public:
-    inline FormatReplaceTypesContext(const FormatDocument *document = Q_NULLPTR,
-                                     int token = -1,
-                                     const FormatFileConfig *config = Q_NULLPTR)
+
+    inline FormatReplaceTypesContext(
+            const FormatDocument *document = Q_NULLPTR,
+            int token = -1,
+            const FormatFileConfig *config = Q_NULLPTR)
         : m_document(document), m_token(token), m_config(config) {}
 
     QStringList onNames() const Q_DECL_OVERRIDE;
     bool predicate(const QString & name, bool *value) const Q_DECL_OVERRIDE;
-    bool argumentCount(int depth, int argument, qreal *count) const Q_DECL_OVERRIDE;
+    bool argumentCount(int depth,
+                       int argument,
+                       qreal *count) const Q_DECL_OVERRIDE;
     bool spaceRemaining(qreal *percent) const Q_DECL_OVERRIDE;
     bool isTarget(const QString & kind, bool *value) const Q_DECL_OVERRIDE;
     inline const FormatFileConfig *fileConfig() const Q_DECL_OVERRIDE_IL

@@ -25,6 +25,7 @@
 class FormatOptions
 {
 public:
+
     inline FormatOptions() : check(false), agent(false), jobs(0) {}
 
     QStringList lineSpecs;

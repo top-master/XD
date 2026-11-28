@@ -12,12 +12,14 @@ class FormatMarkBannerRule : public FormatCommentRule
 {
     typedef FormatCommentRule super;
 public:
+
     inline FormatMarkBannerRule()
         : super("mark-banner", "Writes a section divider as // MARK: <label>.")
     {
     }
 
 protected:
+
     void runGroup(FormatDocument *document,
                   const QList<int > & group) const Q_DECL_OVERRIDE;
 };

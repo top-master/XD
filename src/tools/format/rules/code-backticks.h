@@ -12,14 +12,15 @@ class FormatCodeBackticksRule : public FormatCommentRule
 {
     typedef FormatCommentRule super;
 public:
+
     inline FormatCodeBackticksRule()
-        : super("code-backticks",
-                "Wraps each code name of a plain comment, and each access chain of "
+        : super("code-backticks", "Wraps each code name of a plain comment, and each access chain of "
                 "a doc-comment, in backticks.")
     {
     }
 
 protected:
+
     void runGroup(FormatDocument *document,
                   const QList<int > & group) const Q_DECL_OVERRIDE;
 };
